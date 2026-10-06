@@ -492,3 +492,192 @@ it("a rejected renderer releases the request gate without resetting a draft", as
   await expect(coordinator.request(request)).rejects.toThrow("renderer failed");
   expect(d.value).toBe("edited");
 });
+
+for (const decision of ["keep", "discard"] as const) {
+  it(`an application-wide ${decision} covers independent drafts and descendants once`, async () => {
+    const f = fixture(decision);
+    const page = draft(f.coordinator, "page saved");
+    const modal = draft(f.coordinator, "modal saved");
+    const child = draft(f.coordinator, "child saved", { parent: modal.id });
+    const clean = draft(f.coordinator, "clean");
+    page.set("page edited");
+    child.set("child edited");
+    let proceeds = 0;
+    const result = await f.coordinator.request({
+      scopes: "all",
+      reason: "signout",
+      proceed: () => {
+        proceeds++;
+      },
+    });
+    expect(f.questions.map(({ dirtyScopes }) => dirtyScopes)).toEqual([[page.id, child.id]]);
+    expect(result).toBe(decision === "keep" ? "kept" : "proceeded");
+    expect(proceeds).toBe(decision === "keep" ? 0 : 1);
+    expect(page.value).toBe(decision === "keep" ? "page edited" : "page saved");
+    expect(child.value).toBe(decision === "keep" ? "child edited" : "child saved");
+    expect(page.restored).toEqual(decision === "keep" ? [] : ["page saved"]);
+    expect(child.restored).toEqual(decision === "keep" ? [] : ["child saved"]);
+    expect(modal.restored).toEqual([]);
+    expect(clean.restored).toEqual([]);
+  });
+}
+for (const action of ["edit", "commit", "dispose", "register"] as const) {
+  it(`${action} invalidates an application-wide pending leave`, async () => {
+    const f = fixture();
+    const d = draft(f.coordinator, "saved");
+    d.set("edited");
+    f.defer();
+    let proceeds = 0;
+    const pending = f.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed: () => {
+        proceeds++;
+      },
+    });
+    expect(f.questions).toHaveLength(1);
+    if (action === "edit") d.set("new edit");
+    else if (action === "commit") d.scope.commit("edited");
+    else if (action === "dispose") d.scope.dispose();
+    else draft(f.coordinator, "new owner");
+    expect(await pending).toBe("stale");
+    expect(f.questions[0]!.signal.aborted).toBe(true);
+    f.answer("discard");
+    expect(proceeds).toBe(0);
+    expect(d.restored).toEqual([]);
+  });
+}
+it("an empty scope selection stays distinct from an application-wide leave", async () => {
+  const f = fixture();
+  const d = draft(f.coordinator, "saved");
+  d.set("edited");
+  expect(await f.request([])).toBe("proceeded");
+  expect(f.questions).toEqual([]);
+  expect(d.value).toBe("edited");
+  d.set("saved");
+  let proceeds = 0;
+  expect(
+    await f.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed: () => {
+        proceeds++;
+      },
+    }),
+  ).toBe("proceeded");
+  expect(proceeds).toBe(1);
+  expect(f.questions).toEqual([]);
+});
+
+it("an application-wide discard retains explicitly excluded owners and their descendants", async () => {
+  const f = fixture("discard");
+  const page = draft(f.coordinator, "page");
+  const retained = draft(f.coordinator, "retained");
+  const child = draft(f.coordinator, "child", { parent: retained.id });
+  page.set("page edit");
+  retained.set("retained edit");
+  child.set("child edit");
+  let proceeds = 0;
+  expect(
+    await f.coordinator.request({
+      scopes: "all",
+      except: [retained.id],
+      reason: "navigation",
+      proceed: () => {
+        proceeds++;
+      },
+    }),
+  ).toBe("proceeded");
+  expect(f.questions[0]!.dirtyScopes).toEqual([page.id]);
+  expect(proceeds).toBe(1);
+  expect(page.value).toBe("page");
+  expect(retained.value).toBe("retained edit");
+  expect(child.value).toBe("child edit");
+  expect(retained.restored).toEqual([]);
+  expect(child.restored).toEqual([]);
+  expect(unload(f.target).defaultPrevented).toBe(true);
+});
+it("a retained owner change does not invalidate another page's pending decision", async () => {
+  const f = fixture();
+  const page = draft(f.coordinator, "page");
+  const retained = draft(f.coordinator, "retained");
+  page.set("page edit");
+  f.defer();
+  let proceeds = 0;
+  const pending = f.coordinator.request({
+    scopes: "all",
+    except: [retained.id],
+    reason: "navigation",
+    proceed: () => {
+      proceeds++;
+    },
+  });
+  retained.set("retained edit");
+  const child = draft(f.coordinator, "child", { parent: retained.id });
+  child.set("child edit");
+  expect(f.questions[0]!.signal.aborted).toBe(false);
+  f.answer("discard");
+  expect(await pending).toBe("proceeded");
+  expect(proceeds).toBe(1);
+  expect(retained.value).toBe("retained edit");
+  expect(child.value).toBe("child edit");
+});
+it("retained dirty scopes alone do not ask when the departing scopes are clean", async () => {
+  const f = fixture();
+  const retained = draft(f.coordinator, "retained");
+  retained.set("retained edit");
+  let proceeds = 0;
+  expect(
+    await f.coordinator.request({
+      scopes: "all",
+      except: [retained.id],
+      reason: "navigation",
+      proceed: () => {
+        proceeds++;
+      },
+    }),
+  ).toBe("proceeded");
+  expect(f.questions).toEqual([]);
+  expect(proceeds).toBe(1);
+  expect(retained.value).toBe("retained edit");
+});
+
+it("disposing an old handle twice cannot unregister its replacement owner", async () => {
+  const f = fixture();
+  const old = draft(f.coordinator, "old");
+  old.scope.dispose();
+  const replacement = draft(f.coordinator, "new", { id: old.id });
+  replacement.set("new edit");
+  old.scope.dispose();
+  expect(await f.request([old.id])).toBe("kept");
+  expect(f.questions[0]!.dirtyScopes).toEqual([old.id]);
+  expect(replacement.value).toBe("new edit");
+  expect(replacement.scope.isDirty()).toBe(true);
+  expect(unload(f.target).defaultPrevented).toBe(true);
+});
+it("aborting a request after acceptance does not cancel its asynchronous continuation", async () => {
+  const f = fixture("discard");
+  const d = draft(f.coordinator, "saved");
+  d.set("edited");
+  const controller = new AbortController();
+  let finish!: () => void;
+  let started = false;
+  const pending = f.coordinator.request({
+    scopes: [d.id],
+    reason: "navigation",
+    signal: controller.signal,
+    proceed: () =>
+      new Promise<void>((resolve) => {
+        started = true;
+        finish = resolve;
+      }),
+  });
+  await expect.poll(() => started).toBe(true);
+  controller.abort();
+  expect(f.questions[0]!.signal.aborted).toBe(false);
+  expect(d.restored).toEqual(["saved"]);
+  expect(await f.request([d.id])).toBe("busy");
+  finish();
+  expect(await pending).toBe("proceeded");
+  expect(await f.request([d.id])).toBe("proceeded");
+});

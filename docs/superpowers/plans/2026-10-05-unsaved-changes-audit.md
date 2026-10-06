@@ -2,6 +2,46 @@
 
 > 2026-10-06: Hours (A261 step 5) deleted `station-hours-form` and added the Hours page's own editors (`packages/venue-service/src/dashboard/hours-screen.ts`), which this document does not list.
 
+## 2026-10-06 dashboard logout and language checkpoint
+
+Dashboard voluntary logout and a language change now request the shared coordinator before their
+API calls. `dashboard-app.unsaved-changes.test.ts` mounts the real profile editor and dispatches the
+shell actions with its telephone field edited. The language cases additionally register a test-only
+input inside the departing main screen; they do not stand in for individual page-owner tests.
+Keep preserves the selected inputs and URL; Discard restores the departing inputs before accepting
+the original action once. A language change leaves the profile editor and its telephone value
+mounted, so that owner is explicitly excluded. The suite checks concurrent attempts,
+reverts, successful child saves, coordinator reset, forced expiry, disconnect and reconnect, and
+late logout/language responses. These profile-based shell cases do not establish every page owner
+or a pointer click through a modal backdrop. The sidebar/link/history and other app shells remain
+unwired.
+
+`LeaveRequest.scopes` now also accepts `"all"` for an action that leaves the entire application.
+An explicit ID list retains its scoped meaning, and `[]` still selects nothing. The optional
+`except` ID list retains those owners and their descendants. Core tests cover
+independent roots and descendants, clean/reverted scopes, one restoration per dirty owner and
+invalidation after an affected owner changes, commits, disposes or registers. Retained-owner
+changes and new retained descendants leave another page’s question valid. The shell uses `[]` when
+you choose its current language, because persisting that preference does not recreate the screen.
+An explicit login language choice still increments its existing choice generation even when the
+language is already active, so a pending browser-default response cannot overwrite your choice.
+
+The final dashboard/profile family ran 460 cases; the final coordinator run passed 45, with focused
+coverage of `unsaved-changes.ts` at 100% statements/lines/functions and 96.36% branches. Thirteen
+independent installed-clone deletions failed their intended case while a clean control passed;
+restoring the clone passed 17 shell and 45 core cases. Sixteen visual flows passed 32 scoped axe
+scans in EN/ES, both themes and 390/1280 px; their 32 final captures were inspected. UI consumers
+passed 48 cases, the packed core consumer passed one, and the unedited fiscal pair passed 20.
+Three types, scoped lint, formatting and diff checks passed. This is focused evidence, not
+package-wide coverage or current-head CI. The two added lifecycle tests cover duplicate disposal
+without unregistering a replacement and an abort after accepted asynchronous work starts; each
+also failed its intended deletion control.
+
+Logs, installed-clone deletion controls and visual captures are retained locally under Lane E's
+`receipts/w69-shell-actions-20261006`. This checkpoint supersedes the logout status in the earlier history receipt. The shared history
+and remaining owner audit described below
+are still incomplete W69 work. No existing test assertion changed in this checkpoint.
+
 ## 2026-10-06 shared history checkpoint
 
 `NavigationGuard` and opt-in `UrlStateController` integration are implemented on the W69 branch.

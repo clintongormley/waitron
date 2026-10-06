@@ -836,6 +836,7 @@ export class DashboardApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.sessionGeneration += 1;
     this.liveUpdates?.stop();
     this.#breakpoint?.removeEventListener("change", this.#onBreakpointChange);
     this.#breakpoint = undefined;
@@ -1232,19 +1233,21 @@ export class DashboardApp extends LitElement {
   }
 
   async #onLogout(): Promise<void> {
-    try {
-      await this.api.logout();
-    } catch {
-      // A failed logout must still drop to login; the reason it failed is not actionable here.
-    }
-    this.#returnToLogin(null);
+    const generation = this.sessionGeneration;
+    await this.leave.coordinator.request({
+      scopes: "all",
+      reason: "signout",
+      proceed: async () => {
+        try {
+          await this.api.logout();
+        } catch {
+          // The local session is cleared even when the logout request is refused.
+        }
+        if (this.isConnected && generation === this.sessionGeneration) this.#returnToLogin(null);
+      },
+    });
   }
 
-  /**
-   * Before login a pick only switches the UI: there is no session to attach it to. Signed in, the
-   * preference is saved first and the UI switches only after, so a failed save leaves the language
-   * unchanged.
-   */
   async #onLocaleSelected(event: CustomEvent<{ code: string }>): Promise<void> {
     const { code } = event.detail;
     if (this.screen === "login") {
@@ -1252,19 +1255,26 @@ export class DashboardApp extends LitElement {
       setLocale(code);
       return;
     }
-    // Bumped twice on purpose. The first invalidates a probe already in flight; the second
-    // invalidates one that started while the write was still going, whose answer also predates the
-    // choice. Nothing orders the two replies, so without the second the probe can answer last and
-    // put the old language back for good.
-    this.#sessionLocaleChoice += 1;
-    try {
-      await this.api.putLocale(code);
-      if (!this.isConnected) return;
-      this.#sessionLocaleChoice += 1;
-      setLocale(code);
-    } catch {
-      // Leave the language unchanged on a failed save — the switch is gated behind the durable write.
-    }
+    const generation = this.sessionGeneration;
+    await this.leave.coordinator.request({
+      scopes: code === currentLocale() ? [] : "all",
+      except: [this.renderRoot.querySelector("dashboard-profile-screen")].filter(
+        (profile): profile is ProfileScreen => profile !== null,
+      ),
+      reason: "navigation",
+      proceed: async () => {
+        // Probes from before or during this write must not restore the old preference.
+        this.#sessionLocaleChoice += 1;
+        try {
+          await this.api.putLocale(code);
+          if (!this.isConnected || generation !== this.sessionGeneration) return;
+          this.#sessionLocaleChoice += 1;
+          setLocale(code);
+        } catch {
+          // A refused preference write leaves the active language unchanged.
+        }
+      },
+    });
   }
 
   private readonly leave = new LeaveController(this);

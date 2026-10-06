@@ -1176,8 +1176,13 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 The shared history adapter is implemented on the branch, with an opt-in URL-controller host.
 Its focused Chromium cases cover holding edited routes, indexed Back/Forward restoration,
 unindexed and old-epoch fallback, one pending destination, multiple controllers and abandoned
-requests. Application shells do not yet install it: sidebar, links, logout, direct receipt/login
-history calls, page/setup owners and native reload remain open. Lane C's pending Hours change
+requests. Application shells do not yet install it: sidebar, links, direct receipt/login
+history calls, page/setup owners and native reload remain open. Dashboard voluntary logout and
+a language change now request the shared warning before their API calls. Keep retains the
+selected inputs; Discard accepts the pending action once. Language changes exclude the retained
+profile editor and its descendants. Selecting the current language saves its preference without
+restoring unrelated drafts. Forced expiry and disconnection invalidate old answers and responses. Focused real-profile shell cases cover these action boundaries;
+this does not yet establish every page owner or navigation path. Lane C's pending Hours change
 replaces the audited station-hours form; reconcile its editors after that branch lands.
 The A279 rebase also required comparing the effective delete contents value after a fresh
 summary hides that choice. Its new browser case failed at the retained unload listener before

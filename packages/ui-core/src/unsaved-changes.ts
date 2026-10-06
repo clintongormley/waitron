@@ -20,8 +20,9 @@ export interface DraftScope<T> {
 }
 
 export interface LeaveRequest {
-  scopes: readonly object[];
+  scopes: readonly object[] | "all";
   reason: LeaveReason;
+  except?: readonly object[];
   signal?: AbortSignal;
   proceed(): void | Promise<void>;
 }
@@ -48,7 +49,8 @@ interface RegisteredDraft {
 }
 
 interface PendingLeave {
-  roots: readonly object[];
+  roots: readonly object[] | undefined;
+  except: readonly object[];
   controller: AbortController;
   deciding: boolean;
 }
@@ -70,8 +72,10 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
     return false;
   }
 
-  function selected(roots?: readonly object[]): RegisteredDraft[] {
-    return [...owners.values()].filter((owner) => !roots || within(owner.id, roots));
+  function selected(roots?: readonly object[], except: readonly object[] = []): RegisteredDraft[] {
+    return [...owners.values()].filter(
+      (owner) => (!roots || within(owner.id, roots)) && !within(owner.id, except),
+    );
   }
 
   function beforeUnload(event: Event): void {
@@ -88,7 +92,10 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
   }
 
   function invalidate(id?: object): void {
-    if (pending?.deciding && (!id || within(id, pending.roots))) {
+    if (
+      pending?.deciding &&
+      (!id || ((!pending.roots || within(id, pending.roots)) && !within(id, pending.except)))
+    ) {
       pending.controller.abort();
     }
   }
@@ -118,7 +125,7 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
           baseline = undefined;
         },
       };
-      invalidate(id);
+      if (owners.has(id)) invalidate(id);
       owners.get(id)?.release();
       owners.set(id, record);
       invalidate(id);
@@ -151,7 +158,8 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
       if (disposed || request.signal?.aborted) return "stale";
       if (pending) return "busy";
       const attempt: PendingLeave = {
-        roots: [...request.scopes],
+        roots: request.scopes === "all" ? undefined : [...request.scopes],
+        except: [...(request.except ?? [])],
         controller: new AbortController(),
         deciding: true,
       };
@@ -162,7 +170,7 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
       request.signal?.addEventListener("abort", cancel, { once: true });
       let onAbort: (() => void) | undefined;
       try {
-        const affected = selected(attempt.roots);
+        const affected = selected(attempt.roots, attempt.except);
         const dirty = affected.filter((owner) => owner.dirty());
         if (dirty.length) {
           const aborted = new Promise<"stale">((resolve) => {

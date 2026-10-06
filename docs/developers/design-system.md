@@ -1482,6 +1482,14 @@ Dispose each form scope when its owner leaves. The controller disposes its regis
 disconnect and creates a new one on reconnect. Call its `forceReset()` for a forced security exit;
 that call also tolerates a shell whose teardown has already run.
 
+For an action that leaves every registered editor, call
+`coordinator.request({ scopes: "all", reason, proceed })`. Keep editing preserves every selected
+input; Discard restores only dirty inputs before your continuation runs. An explicit ID list
+selects those owners and their descendants, while `[]` selects none. Supply `except: [retainedOwner]`
+when the action keeps an editor mounted; its descendants are retained too. A new or changed
+affected owner invalidates an unanswered question. Dashboard logout and language changes use
+these selections on the W69 branch; sidebar/history/page-owner rollout remains incomplete.
+
 The controller renders one `wt-unsaved-changes` per application, supplying `heading`, `message`,
 `keepLabel` and `discardLabel` from that application's translations. The compact confirmation focuses Keep
 editing, offers a danger-styled Discard changes action and emits `wt-unsaved-choice` with
