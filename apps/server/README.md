@@ -427,7 +427,8 @@ things — three visible in the body above without needing the logs, one that ne
   all — a rejected or held fiscal record is a different, already-persisted signal, deliberately not
   fed into `/health`: the record that caused a hold, or that AEAT rejected, gets a row in the
   `incidents` table and a filing case in `filing_cases` (open ones raise the `fiscal.filing_cases_open`
-  alert); a record held behind it gets neither, and shows in the `fiscal.submission_stopped` alert
+  alert), except that the hourly retry of a chain held by a run of rejections, rejected again with
+  the run's code, gets the filing case and no incident; a record held behind it gets neither, and shows in the `fiscal.submission_stopped` alert
   (and, when a run of rejections with one error code holds its chain, in the
   `fiscal.refusals_repeated` alert) and in `recordsHalted` in `drain.complete`; see
   the opening section above. Find a park via the error-level `reconcile.run_parked` log line, which

@@ -166,8 +166,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "{count} registro(s) fiscal(es) han sido rechazados por la Agencia Tributaria o no coinciden con el registro que tiene, y alguien tiene que decidir qué hacer. Contacta con soporte.",
   },
   "fiscal.refusals_repeated": {
-    en: "The tax agency (AEAT) rejected {count} fiscal records in a row with the same error code ({codigo}). Sending has stopped for the records after them until someone decides what to do. Contact support.",
-    es: "La AEAT ha rechazado {count} registros fiscales seguidos con el mismo código de error ({codigo}). El envío de los registros posteriores se ha detenido hasta que alguien decida qué hacer. Contacta con soporte.",
+    en: "The tax agency (AEAT) rejected {count} fiscal records in a row with the same error code ({codigo}), so Waitron has stopped sending the records after them. Waitron retries the first stopped record once an hour, except in a few cases support has to handle. If the tax agency accepts it, or rejects it for a different reason, sending restarts on its own. Contact support.",
+    es: "La AEAT ha rechazado {count} registros fiscales seguidos con el mismo código de error ({codigo}), así que Waitron ha detenido el envío de los registros posteriores. Waitron reintenta el primer registro detenido una vez por hora, salvo en algunos casos que debe resolver soporte. Si la AEAT lo acepta, o lo rechaza por otro motivo, el envío se reanuda solo. Contacta con soporte.",
   },
   "fiscal.awaiting_certificate": {
     en: "Fiscal records are waiting because no valid tax certificate is installed. Upload the certificate to resume submitting.",

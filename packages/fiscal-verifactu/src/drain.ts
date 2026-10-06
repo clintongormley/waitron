@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident } from "@waitron/core";
@@ -16,7 +16,7 @@ import type {
   VerifactuClient,
   RegistroAlta,
 } from "@waitron/verifactu";
-import { writeAck } from "./acks.js";
+import { deleteAck, writeAck } from "./acks.js";
 import { openFilingCase, type FilingCaseCause } from "./filing-cases.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
@@ -49,13 +49,19 @@ const MAX_CONSULTA_PAGES = 10;
 
 /** How many records immediately before a never-sent record on its chain must all be refused
  * with one code for `haltOpenChainClaims` to hold it. A record still awaiting its answer among
- * them breaks the run. */
+ * them breaks the run. The chain's first held record is sent hourly when `claimProbes` finds it
+ * due, and the hold is lifted once that send breaks the run (`releaseSettledBrakeHolds`). */
 export const SAME_CODE_REFUSAL_LIMIT = 3;
 
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
 export const BACKOFF_BASE_MS = 60_000;
 /** The retry ceiling: a batch that keeps failing retries hourly, as art. 16.4 requires. */
 export const BACKOFF_MAX_MS = 3_600_000;
+
+/** How long a brake-held chain's first held record waits before it is sent again
+ * (`claimProbes`), counted from the later of when it was held or last probed and when the record
+ * before it was sent. */
+export const BRAKE_PROBE_INTERVAL_MS = BACKOFF_MAX_MS;
 
 /**
  * Exponential backoff for the `intentos`-th attempt. `intentos` is 1-indexed — `claimBatch`
@@ -89,12 +95,15 @@ export interface DrainDeps {
   maxRegistrosPorEnvio?: number;
 }
 
-/** A due `envios` row joined to enough of its registro to rebuild and order it. */
-type DueRow = RegistroRow & { intentos: number };
+/** A due `envios` row joined to enough of its registro to rebuild and order it. `probe` marks a
+ * brake-held record `claimProbes` sent while it stays `detenido`, with the code of the run that
+ * holds it. */
+type DueRow = RegistroRow & { intentos: number; probe?: { runCode: string } };
 
 /**
  * Is there anything to send, read before the drain opens its own transaction? Lone stale claims
- * count, so `drainDue` can recover them even with no pending row.
+ * count, so `drainDue` can recover them even with no pending row, and so does a brake hold
+ * `drainDue` would release.
  *
  * - `proximo_intento_en <= now` is INCLUSIVE. A due successor can still wait for an earlier
  *   record's retry or in-flight answer.
@@ -104,15 +113,16 @@ type DueRow = RegistroRow & { intentos: number };
  * Timestamps are compared as TEXT, as everywhere in this file: the `ts` column writes
  * `Date.prototype.toISOString`, fixed-width UTC, so lexical order is chronological order.
  */
-async function workIsDue(db: Database, now: Date): Promise<boolean> {
+async function workIsDue(db: Database, now: Date, environment: Entorno): Promise<boolean> {
   const staleCutoff = new Date(now.getTime() - RECUPERACION_ENVIANDO_MS).toISOString();
   const rows = await db.execute<{ due: number }>(sql`
-    select 1 as due from envios
-    where (estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()})
-       or (estado = 'enviando' and enviado_en < ${staleCutoff})
-    limit 1
+    select (exists (
+      select 1 from envios
+      where (estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()})
+         or (estado = 'enviando' and enviado_en < ${staleCutoff})
+    ) or exists (${dueProbes(now, environment)}) or exists (${releasableHeads()})) as due
   `);
-  return rows.rows.length > 0;
+  return rows.rows[0]!.due === 1;
 }
 
 export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
@@ -129,17 +139,20 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
     }
   }
   const maxPorEnvio = deps.maxRegistrosPorEnvio ?? MAX_REGISTROS_POR_ENVIO;
-  if (await workIsDue(deps.db, now)) {
+  if (await workIsDue(deps.db, now, deps.environment)) {
     // Counted before `resolveClient`: a pass skipped for a missing certificate still had due work,
     // and the host's awaiting-certificate flag must tell that apart from a pass with none.
     result.tenantsWithWork += 1;
     try {
       const client = await deps.resolveClient();
       await drainDue(deps.db, client, deps.environment, now, result, maxPorEnvio, deps.skipRetryMs);
+      bumpNextDue(result, await nextProbeAt(deps.db, now, deps.environment));
     } catch (error) {
       // Contained: reported in `skipped` rather than thrown, so the host still schedules a retry.
       result.skipped.push({ errorCode: codeOf(error) });
     }
+  } else {
+    bumpNextDue(result, await nextProbeAt(deps.db, now, deps.environment));
   }
   // A pass that failed before `drainDue` scheduled anything must still report a future instant,
   // or a long-running host stops polling while a `pendiente` row sits past its art. 16.4 hour.
@@ -178,11 +191,14 @@ async function drainDue(
 ): Promise<void> {
   // Commits before anything else in this pass reads `envios`, so a recovered row is an ordinary
   // `pendiente` row to the later transactions.
-  await withTransaction(db, (tx) => recoverStaleClaims(tx, now));
+  await withTransaction(db, async (tx) => {
+    await recoverStaleClaims(tx, now);
+    await releaseSettledBrakeHolds(tx, now);
+  });
 
   const { flujo, dueCount0 } = await withTransaction(db, async (tx) => ({
     flujo: await readFlujo(tx),
-    dueCount0: await countDue(tx, now),
+    dueCount0: await countDue(tx, now, environment),
   }));
   if (dueCount0 === 0) return;
 
@@ -208,14 +224,15 @@ async function drainDue(
       claimed = await countOnCommit(db, result, async (tx, counts) => {
         const c = await claimBatch(tx, now, environment, counts, blockedSifIds, maxPorEnvio);
         const kept = await haltOpenChainClaims(tx, c.sendable, now, counts);
-        return { sendable: kept, rawCount: c.rawCount };
+        const probes = await claimProbes(tx, now, environment, maxPorEnvio - kept.length);
+        return { sendable: [...kept, ...probes], rawCount: c.rawCount };
       });
       if (claimed.sendable.length > 0 || claimed.rawCount === 0) break;
     }
     const batch = claimed.sendable;
     // Due work can wait for an earlier retry or an unresolved original invoice.
     if (batch.length === 0) {
-      const next = await withTransaction(db, (tx) => nextClaimOpportunity(tx, now));
+      const next = await withTransaction(db, (tx) => nextClaimOpportunity(tx, now, environment));
       bumpNextDue(result, next ?? new Date(now.getTime() + skipRetryMs));
       if (result.batchesSent === 0) return;
       break;
@@ -232,7 +249,7 @@ async function drainDue(
 
       dueCount = await countOnCommit(db, result, async (tx, counts) => {
         await persistResponse(tx, batch, lines, respuesta.CSV ?? null, now, counts);
-        return countDue(tx, now);
+        return countDue(tx, now, environment);
       });
       // `@waitron/verifactu` leaves the wait undefined when AEAT's reply has no usable one. The
       // reply above is saved either way; nothing more is sent this pass, and the gate keeps the
@@ -243,8 +260,11 @@ async function drainDue(
       if (dueCount < maxPorEnvio) break;
     } catch {
       // The claim is committed, so back the batch off rather than leave it stuck `enviando`, and
-      // stop: each row's own `proximo_intento_en` schedules the retry.
+      // stop. A probe's next send is an hour after its stamped `enviado_en`, so it leaves the
+      // count; the batch's ordinary rows stay counted, so the next sending slot is still reported
+      // unless a retry instant `backoffBatch` recorded is earlier.
       await countOnCommit(db, result, (tx, counts) => backoffBatch(tx, batch, now, counts));
+      dueCount = Math.max(0, dueCount - batch.filter((row) => row.probe !== undefined).length);
       break;
     }
   }
@@ -292,16 +312,23 @@ async function readFlujo(
     : { proximoEnvioEn: null, tiempoEsperaSeg: 0 };
 }
 
-/** How many rows are due now, including successors held behind an earlier retry. */
-async function countDue(tx: Transaction, now: Date): Promise<number> {
+/** How many rows are due now, including successors held behind an earlier retry, and the probes
+ * due now. */
+async function countDue(tx: Transaction, now: Date, environment: Entorno): Promise<number> {
   const rows = await tx.execute<{ count: number }>(sql`
-    select count(*) as count from envios
-    where estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
+    select (
+      select count(*) from envios
+      where estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
+    ) + (select count(*) from (${dueProbes(now, environment)})) as count
   `);
   return rows.rows[0]!.count;
 }
 
-async function nextClaimOpportunity(tx: Transaction, now: Date): Promise<Date | null> {
+async function nextClaimOpportunity(
+  tx: Transaction,
+  now: Date,
+  environment: Entorno,
+): Promise<Date | null> {
   const rows = await tx.execute<{ next_retry: string | null; oldest_claim: string | null }>(sql`
     select
       min(case when estado = 'pendiente' and proximo_intento_en > ${now.toISOString()}
@@ -313,6 +340,7 @@ async function nextClaimOpportunity(tx: Transaction, now: Date): Promise<Date | 
   const candidates = [
     row?.next_retry ? new Date(row.next_retry).getTime() : null,
     row?.oldest_claim ? new Date(row.oldest_claim).getTime() + RECUPERACION_ENVIANDO_MS + 1 : null,
+    (await nextProbeAt(tx, now, environment))?.getTime() ?? null,
   ].filter((value): value is number => value !== null);
   return candidates.length > 0 ? new Date(Math.min(...candidates)) : null;
 }
@@ -535,6 +563,9 @@ async function claimBatch(
  * No incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each held record
  * beside the case that holds it. A `halted` ack is written per held id, because this
  * bulk UPDATE bypasses `setEstado`'s `writeAck`.
+ *
+ * Of these holds, only the run's is lifted by the drain: `claimProbes` sends its first held record
+ * hourly and `releaseSettledBrakeHolds` releases the chain once that send breaks the run.
  */
 async function haltOpenChainClaims(
   tx: Transaction,
@@ -563,20 +594,7 @@ async function haltOpenChainClaims(
           and original_envio.estado = 'rechazado'
       )) or (exists (
         select 1 from envios own where own.registro_id = r.id and own.intentos = 1
-      ) and (
-        select count(run.codigo_error) = ${SAME_CODE_REFUSAL_LIMIT}
-          and count(distinct run.codigo_error) = 1
-          and sum(run.estado = 'rechazado') = ${SAME_CODE_REFUSAL_LIMIT}
-        from (
-          select preceding_envio.estado, preceding_envio.codigo_error
-          from registros_facturacion preceding
-          left join envios preceding_envio on preceding_envio.registro_id = preceding.id
-          where preceding.node_id = r.node_id and preceding.sif_id = r.sif_id
-            and preceding.secuencia < r.secuencia
-          order by preceding.secuencia desc
-          limit ${SAME_CODE_REFUSAL_LIMIT}
-        ) run
-      )))
+      ) and ${sameCodeRunBefore("r")}))
   `);
   if (blocked.rows.length === 0) return claimed;
   const blockedIds = new Set(blocked.rows.map((row) => row.id));
@@ -604,9 +622,201 @@ async function haltOpenChainClaims(
 }
 
 /**
+ * True when the `SAME_CODE_REFUSAL_LIMIT` records immediately before `record` on its chain are all
+ * `rechazado` with one and the same code: the run rule, for the alias `record` names in the
+ * enclosing query.
+ */
+function sameCodeRunBefore(record: "r" | "d" | "p"): SQL {
+  const alias = sql.raw(record);
+  return sql`(
+    select count(run.codigo_error) = ${SAME_CODE_REFUSAL_LIMIT}
+      and count(distinct run.codigo_error) = 1
+      and sum(run.estado = 'rechazado') = ${SAME_CODE_REFUSAL_LIMIT}
+    from (
+      select preceding_envio.estado, preceding_envio.codigo_error
+      from registros_facturacion preceding
+      left join envios preceding_envio on preceding_envio.registro_id = preceding.id
+      where preceding.node_id = ${alias}.node_id and preceding.sif_id = ${alias}.sif_id
+        and preceding.secuencia < ${alias}.secuencia
+      order by preceding.secuencia desc
+      limit ${SAME_CODE_REFUSAL_LIMIT}
+    ) run
+  )`;
+}
+
+/**
+ * Each chain's earliest `detenido` record `d`, with its envío `de`, the record immediately before
+ * it `p` and that record's envío `p_envio`, where `d` has no case of its own and is not a
+ * cancellation whose original (same chain, same invoice identity) is `rechazado`.
+ */
+const HELD_HEADS = sql`
+  from envios de
+  join registros_facturacion d on d.id = de.registro_id
+  join registros_facturacion p on p.id = (
+    select previous.id from registros_facturacion previous
+    where previous.node_id = d.node_id and previous.sif_id = d.sif_id
+      and previous.secuencia < d.secuencia
+    order by previous.secuencia desc
+    limit 1
+  )
+  join envios p_envio on p_envio.registro_id = p.id
+  where de.estado = 'detenido'
+    and not exists (
+      select 1 from envios earlier_envio
+      join registros_facturacion earlier on earlier.id = earlier_envio.registro_id
+      where earlier.sif_id = d.sif_id and earlier.secuencia < d.secuencia
+        and earlier_envio.estado = 'detenido'
+    )
+    and not exists (select 1 from filing_cases own where own.registro_id = d.id)
+    and not (d.tipo_registro = 'anulacion' and exists (
+      select 1 from registros_facturacion original
+      join envios original_envio on original_envio.registro_id = original.id
+      where original.tipo_registro = 'alta'
+        and original.sif_id = d.sif_id
+        and original.id_emisor_factura = d.id_emisor_factura
+        and original.num_serie_factura = d.num_serie_factura
+        and original.fecha_expedicion_factura = d.fecha_expedicion_factura
+        and original_envio.estado = 'rechazado'
+    ))
+`;
+
+/**
+ * The first held record of each chain the same-code run still holds, for this host's environment,
+ * with the instant of the chain's last send: when it was held or last probed, or when the record
+ * before it was sent, whichever is later. After a refused probe, the record before it is that probe.
+ * A chain with an earlier record still awaiting its answer (`pendiente` or `enviando`) is left out;
+ * a record `claimBatch` claimed in the same transaction already reads `enviando`.
+ */
+function brakeHeldHeads(environment: Entorno): SQL {
+  return sql`
+    select d.id, max(de.enviado_en, p_envio.enviado_en) as last_sent,
+      p_envio.codigo_error as run_code
+    ${HELD_HEADS}
+      and d.entorno = ${environment}
+      and ${sameCodeRunBefore("d")}
+      and not exists (
+        select 1 from envios awaited_envio
+        join registros_facturacion awaited on awaited.id = awaited_envio.registro_id
+        where awaited.sif_id = d.sif_id and awaited.secuencia < d.secuencia
+          and awaited_envio.estado in ('pendiente', 'enviando')
+      )
+  `;
+}
+
+/** The brake-held heads due a probe at `now`: the chain's last send is at least
+ * `BRAKE_PROBE_INTERVAL_MS` ago. */
+function dueProbes(now: Date, environment: Entorno): SQL {
+  const cutoff = new Date(now.getTime() - BRAKE_PROBE_INTERVAL_MS).toISOString();
+  return sql`
+    select heads.id, heads.run_code from (${brakeHeldHeads(environment)}) heads
+    where heads.last_sent <= ${cutoff}
+  `;
+}
+
+/** When the next probe falls due after `now`, or null when none does. */
+async function nextProbeAt(
+  reader: Database | Transaction,
+  now: Date,
+  environment: Entorno,
+): Promise<Date | null> {
+  const cutoff = new Date(now.getTime() - BRAKE_PROBE_INTERVAL_MS).toISOString();
+  const { rows } = await reader.execute<{ last_sent: string | null }>(sql`
+    select min(heads.last_sent) as last_sent from (${brakeHeldHeads(environment)}) heads
+    where heads.last_sent > ${cutoff}
+  `);
+  const lastSent = rows[0]?.last_sent;
+  return lastSent ? new Date(new Date(lastSent).getTime() + BRAKE_PROBE_INTERVAL_MS) : null;
+}
+
+/**
+ * Claims the due probes, at most `room`, in the claim's own transaction: each stays `detenido`,
+ * with `enviado_en` stamped and `intentos` incremented, so a restart's reset (which touches only
+ * `enviando`) never resends it and its next probe is `BRAKE_PROBE_INTERVAL_MS` after this one.
+ * A probe whose record's `entorno` is not this host's environment is never selected, and raises no
+ * incident of its own.
+ */
+async function claimProbes(
+  tx: Transaction,
+  now: Date,
+  environment: Entorno,
+  room: number,
+): Promise<DueRow[]> {
+  const { rows } = await tx.execute<Record<string, unknown>>(sql`
+    select r.*, e.intentos, due.run_code as probe_run_code
+    from (${dueProbes(now, environment)}) due
+    join registros_facturacion r on r.id = due.id
+    join envios e on e.registro_id = r.id
+    order by r.sif_id
+    limit ${room}
+  `);
+  if (rows.length === 0) return [];
+  const probes = rows.map(({ probe_run_code, ...row }) => ({
+    ...decodeRegistroRow<DueRow>(row),
+    probe: { runCode: probe_run_code as string },
+  }));
+  const ids = probes.map((row) => row.id);
+  await tx.execute(sql`
+    update envios set enviado_en = ${now.toISOString()}, intentos = intentos + 1
+    where registro_id in ${ids}
+  `);
+  return probes.map((row) => ({ ...row, intentos: row.intentos + 1 }));
+}
+
+/**
+ * The held heads where the record before them is settled, the `SAME_CODE_REFUSAL_LIMIT` records
+ * before THAT record are a same-code run, and the ones before the head are not.
+ */
+function releasableHeads(): SQL {
+  return sql`
+    select d.id, d.node_id, d.sif_id, d.secuencia
+    ${HELD_HEADS}
+      and p_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado')
+      and ${sameCodeRunBefore("p")}
+      and not ${sameCodeRunBefore("d")}
+  `;
+}
+
+/**
+ * Releases each `releasableHeads` chain: its head and the `detenido` records after it go back to
+ * `pendiente`, due `now`, up to the first `detenido` record with a case of its own. Each one's
+ * claim is given back (`intentos - 1`), so a first claim after the release still reads 1 in
+ * `haltOpenChainClaims`. Its ack is deleted, as `pendiente` carries none.
+ */
+async function releaseSettledBrakeHolds(tx: Transaction, now: Date): Promise<void> {
+  const heads = await tx.execute<{
+    id: string;
+    node_id: string;
+    sif_id: string;
+    secuencia: number;
+  }>(releasableHeads());
+  for (const head of heads.rows) {
+    const released = await tx.execute<{ registro_id: string }>(sql`
+      update envios set estado = 'pendiente', proximo_intento_en = ${now.toISOString()},
+        intentos = max(intentos - 1, 0)
+      where estado = 'detenido' and registro_id in (
+        select r.id from registros_facturacion r
+        where r.node_id = ${head.node_id} and r.sif_id = ${head.sif_id}
+          and r.secuencia >= ${head.secuencia}
+          and not exists (
+            select 1 from registros_facturacion stop
+            join envios stop_envio on stop_envio.registro_id = stop.id
+            join filing_cases stop_case on stop_case.registro_id = stop.id
+            where stop.node_id = r.node_id and stop.sif_id = r.sif_id
+              and stop.secuencia > ${head.secuencia} and stop.secuencia <= r.secuencia
+              and stop_envio.estado = 'detenido'
+          )
+      )
+      returning registro_id
+    `);
+    for (const { registro_id } of released.rows) await deleteAck(tx, registro_id);
+  }
+}
+
+/**
  * Backs a failed batch off: `enviando` -> `pendiente`, `incidencia = true`, and each row's own
  * `proximo_intento_en` pushed out by `backoffMs(row.intentos)`. The whole batch is treated as
- * "retry later": there is no persisted response to read per-line outcomes from.
+ * "retry later": there is no persisted response to read per-line outcomes from. A probe stays
+ * `detenido`: its stamped `enviado_en` schedules the next one.
  */
 async function backoffBatch(
   tx: Transaction,
@@ -615,6 +825,7 @@ async function backoffBatch(
   result: CommittedCounts,
 ): Promise<void> {
   for (const row of batch) {
+    if (row.probe !== undefined) continue;
     const next = new Date(now.getTime() + backoffMs(row.intentos));
     await tx.execute(sql`
       update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${next.toISOString()}
@@ -665,7 +876,8 @@ async function resolveLines(
   for (const linea of respuesta.RespuestaLinea) {
     // Skipped rather than thrown: one unmatched line must not back the whole batch off and discard
     // every other line of this response. The skipped row stays `enviando` until
-    // `recoverStaleClaims` or a restart requeues it.
+    // `recoverStaleClaims` or a restart requeues it; a probe left without a line stays `detenido`
+    // and is sent again at its next hourly probe.
     const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
     if (row === undefined) continue;
     const resolved = resolveEstadoEfectivo(linea);
@@ -715,6 +927,7 @@ async function persistResponse(
   for (const line of lines) {
     await applyOutcome(tx, line, csv, now, result, sentIds);
   }
+  await releaseSettledBrakeHolds(tx, now);
 }
 
 /** Routes one resolved line to its estado transition + side effects. `sentIds` is the envío's
@@ -759,14 +972,18 @@ async function applyOutcome(
         mensajeError: mensaje,
         incidencia: true,
       });
-      await raiseIncident(
-        tx,
-        row,
-        "error",
-        new AppError("fiscal.registro_rechazado", { registroId: row.id, codigo, mensaje }),
-        now,
-        result,
-      );
+      // A probe refused with its run's code lengthens the run that `fiscal.refusals_repeated`
+      // already reports; an incident would add a new alert for each such refusal.
+      if (row.probe === undefined || String(codigo) !== row.probe.runCode) {
+        await raiseIncident(
+          tx,
+          row,
+          "error",
+          new AppError("fiscal.registro_rechazado", { registroId: row.id, codigo, mensaje }),
+          now,
+          result,
+        );
+      }
       await openCase(tx, row, "fiscal.registro_rechazado", linea, csv, now);
       result.recordsHalted += 1;
       return;
@@ -791,7 +1008,7 @@ async function applyOutcome(
   }
 }
 
-/** The case a person decides, opened in the same transaction as the outcome and its incident. */
+/** The case a person decides, opened in the same transaction as the outcome. */
 async function openCase(
   tx: Transaction,
   row: DueRow,
@@ -814,8 +1031,9 @@ async function openCase(
 
 /**
  * An unreadable reply, or a duplicate lookup that failed or did not settle whose record AEAT holds,
- * stays pending for a later send. The incident keeps the envío's CSV, which AEAT never returns
- * again. `lookupFailed` is given only when a duplicate lookup ran.
+ * stays pending for a later send; a probe stays `detenido` for its next probe instead. The incident
+ * keeps the envío's CSV, which AEAT never returns again. `lookupFailed` is given only when a
+ * duplicate lookup ran.
  */
 async function awaitReadableAnswer(
   tx: Transaction,
@@ -826,12 +1044,14 @@ async function awaitReadableAnswer(
   result: CommittedCounts,
   lookupFailed?: boolean,
 ): Promise<void> {
-  const next = new Date(now.getTime() + backoffMs(row.intentos));
-  await tx.execute(sql`
-    update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${next.toISOString()}
-    where registro_id = ${row.id}
-  `);
-  bumpNextDue(result, next);
+  if (row.probe === undefined) {
+    const next = new Date(now.getTime() + backoffMs(row.intentos));
+    await tx.execute(sql`
+      update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${next.toISOString()}
+      where registro_id = ${row.id}
+    `);
+    bumpNextDue(result, next);
+  }
   await raiseIncident(
     tx,
     row,
@@ -1002,18 +1222,18 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
  *     `fiscal.duplicado_anulado` rather than retrying forever.
  *   - Route B (all other duplicates): a consulta reads the record AEAT holds under this identity.
  *     A matching fingerprint and installation confirm our record. A mismatch halts; missing
- *     evidence leaves the row pending. An anulación belongs here because `Anulada` on a resent anulación
- *     is most likely AEAT holding that very anulación: the verifactu library's live preproduction
- *     check asserts that the final consulta "reports the invoice as `Anulado` with the cancellation
- *     record's hash" (`sources/README.md`; the "final cancelled-record consulta" stage in
- *     `scripts/live-aeat.mjs`), no recorded run of it is cited here, and the library's fake does the
- *     same.
+ *     evidence leaves the row pending, or a probe `detenido` for its next probe. An anulación
+ *     belongs here because `Anulada` on a resent anulación is most likely AEAT holding that very
+ *     anulación: the verifactu library's live preproduction check asserts that the final consulta
+ *     "reports the invoice as `Anulado` with the cancellation record's hash" (`sources/README.md`;
+ *     the "final cancelled-record consulta" stage in `scripts/live-aeat.mjs`), no recorded run of
+ *     it is cited here, and the library's fake does the same.
  *
  * `resolveLines` makes Route B's consulta before this transaction opens; a failed one leaves this
  * record unknown, as missing evidence does.
  *
- * A conflict opens a case and holds this chain's records not yet sent (`haltSuccessors`): no probe
- * has sent a successor after one (design §5, "Implemented, 2026-10-06"). Design:
+ * A conflict opens a case and holds this chain's records not yet sent (`haltSuccessors`): no live
+ * AEAT test has sent a successor after one (design §5, "Implemented, 2026-10-06"). Design:
  * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md.
  */
 async function handleDuplicate(

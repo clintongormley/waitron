@@ -243,8 +243,8 @@ declare module "@waitron/shared" {
     "fiscal.submission_delayed": { count: number; hours: number };
 
     /**
-     * The same ongoing check: `count` records have stopped submitting (`envios.estado = detenido`)
-     * and need a human — a halted chain never drains itself. Never thrown.
+     * The same ongoing check: `count` records have stopped submitting (`envios.estado = detenido`).
+     * Never thrown.
      */
     "fiscal.submission_stopped": { count: number };
 
@@ -256,7 +256,7 @@ declare module "@waitron/shared" {
 
     /**
      * The same ongoing check, one per chain: AEAT refused `count` records of the chain in a row
-     * with the code `codigo`, and the chain's next records are held unsent (./drain.ts,
+     * with the code `codigo`, and the chain's next records are held (./drain.ts,
      * `SAME_CODE_REFUSAL_LIMIT`). Never thrown.
      */
     "fiscal.refusals_repeated": { codigo: string; count: number };
