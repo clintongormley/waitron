@@ -208,6 +208,45 @@ export class ReceiptsScreen extends LitElement {
 
   #trimScope?: DraftScope<{ shown: Trim; body: ReceiptConfig }>;
   #trimConnection = 0;
+  #languageScope?: DraftScope<string>;
+  #descriptionScope?: DraftScope<string>;
+
+  #shownLanguage(): string {
+    return this.pickedLanguage ?? this.receiptLanguage!.language;
+  }
+
+  #registerLanguage(): void {
+    if (this.#languageScope) return;
+    this.#languageScope = leaveCoordinatorFor(this)?.register({
+      id: {},
+      parent: this,
+      current: () => this.#shownLanguage(),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.pickedLanguage = value === this.receiptLanguage!.language ? null : value;
+        this.languageRefusal = "";
+        this.languageError = null;
+        this.#redrawInSavedLanguage();
+      },
+    });
+  }
+
+  #registerDescription(): void {
+    if (this.#descriptionScope) return;
+    this.#descriptionScope = leaveCoordinatorFor(this)?.register({
+      id: {},
+      parent: this,
+      current: () => this.description,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.description = value;
+        this.#dirty = false;
+        this.refusal = "";
+      },
+    });
+  }
 
   #trimSnapshot(): { shown: Trim; body: ReceiptConfig } {
     return { shown: this.#shown(), body: this.#trim() };
@@ -331,6 +370,15 @@ export class ReceiptsScreen extends LitElement {
     this.#trimConnection++;
     this.#trimScope?.dispose();
     this.#trimScope = undefined;
+    this.#languageScope?.dispose();
+    this.#languageScope = undefined;
+    this.#descriptionScope?.dispose();
+    this.#descriptionScope = undefined;
+    this.pickedLanguage = null;
+    this.receiptLanguage = null;
+    this.description = "";
+    this.locationLoaded = false;
+    this.#dirty = false;
     this.#draft = new DraftRows<Trim & { id: string }>();
     this.receiptLoaded = false;
     this.saving = false;
@@ -410,6 +458,8 @@ export class ReceiptsScreen extends LitElement {
         },
         ({ saves, value }) => {
           if (saves !== this.#languageSaves) return;
+          const wasClean = this.#languageScope !== undefined && !this.#languageScope.isDirty();
+          const previousLanguage = this.receiptLanguage === null ? null : this.#shownLanguage();
           const savedElsewhere =
             this.receiptLanguage !== null && this.receiptLanguage.language !== value.language;
           this.receiptLanguage = value;
@@ -420,6 +470,12 @@ export class ReceiptsScreen extends LitElement {
             this.pickedLanguage = null;
             this.languageRefusal = "";
           }
+          this.#registerLanguage();
+          if (
+            (wasClean && previousLanguage !== this.#shownLanguage()) ||
+            (value.fixed !== null && this.#languageScope?.isDirty())
+          )
+            this.#languageScope?.commit(this.#shownLanguage());
           if ((savedElsewhere || droppedPick) && this.receiptLoaded && this.pickedLanguage === null)
             this.#redrawInSavedLanguage();
         },
@@ -482,7 +538,7 @@ export class ReceiptsScreen extends LitElement {
           this.#schedulePreview();
         } else if (changed) this.#schedulePreview();
         this.#registerTrim();
-        if (wasClean) this.#trimScope?.commit(this.#trimSnapshot());
+        if (wasClean && changed) this.#trimScope?.commit(this.#trimSnapshot());
       });
     } catch (error) {
       this.receiptLoadError = codeOf(error);
@@ -504,8 +560,14 @@ export class ReceiptsScreen extends LitElement {
         },
         ({ saves, value }) => {
           this.name = value.name;
-          if (!this.#dirty && !this.saving && saves === this.#saves)
-            this.description = value.operationDescription;
+          const wasClean =
+            this.#descriptionScope !== undefined && !this.#descriptionScope.isDirty();
+          const previousDescription = this.description;
+          const adopt = !this.#dirty && !this.saving && saves === this.#saves;
+          if (adopt) this.description = value.operationDescription;
+          this.#registerDescription();
+          if (adopt && wasClean && previousDescription !== this.description)
+            this.#descriptionScope?.commit(this.description);
           this.locationLoaded = true;
           this.locationLoadFailed = false;
         },
@@ -625,6 +687,7 @@ export class ReceiptsScreen extends LitElement {
     this.pickedLanguage = language === this.receiptLanguage!.language ? null : language;
     this.languageRefusal = "";
     this.saved = false;
+    this.#languageScope?.changed();
     this.#previewActive = true;
     void this.#sendPreview();
   }
@@ -645,12 +708,17 @@ export class ReceiptsScreen extends LitElement {
 
   /** Whether the language was saved; a refusal is shown where it belongs. */
   async #sendLanguage(language: string): Promise<boolean> {
+    const connection = this.#trimConnection;
+    const scope = this.#languageScope;
     try {
       await this.api.putReceiptLanguage(language);
     } catch (error) {
+      if (connection !== this.#trimConnection) return false;
       this.#languageRefused(error);
       return false;
     }
+    if (connection !== this.#trimConnection) return false;
+    const picked = this.pickedLanguage;
     this.receiptLanguage = { ...this.receiptLanguage!, language };
     this.#languageSaves += 1;
     // A picked language was already drawn; one saved without a pick (Use Catalan) was not.
@@ -658,18 +726,20 @@ export class ReceiptsScreen extends LitElement {
       this.#previewActive = true;
       this.#redrawInSavedLanguage();
     }
-    this.pickedLanguage = null;
+    if (picked === language) this.pickedLanguage = null;
+    if (scope === this.#languageScope) scope?.commit(language);
     return true;
   }
 
   async #useFixedLanguage(locale: string): Promise<void> {
     if (this.saving) return;
+    const connection = this.#trimConnection;
     this.saving = true;
     this.saved = false;
     this.languageRefusal = "";
     this.languageError = null;
     await this.#sendLanguage(locale);
-    this.saving = false;
+    if (connection === this.#trimConnection) this.saving = false;
   }
 
   #validate(): string {
@@ -733,6 +803,7 @@ export class ReceiptsScreen extends LitElement {
     // Sent alone and first, so a refused language never leaves the other settings saved without it.
     const language = this.#changedLanguage();
     if (language !== null && !(await this.#sendLanguage(language))) {
+      if (trimConnection !== this.#trimConnection) return;
       this.saving = false;
       await this.updateComplete;
       await focusFirstInvalid(this.#form());
@@ -741,21 +812,25 @@ export class ReceiptsScreen extends LitElement {
     if (trimConnection !== this.#trimConnection) return;
     const submittedTrim = this.#trimSnapshot();
     const trimScope = this.#trimScope;
+    const description = this.description;
+    const descriptionScope = this.#descriptionScope;
     const [trim, location] = await Promise.allSettled([
       this.api.putReceipt(submittedTrim.body).then(() => {
         if (trimConnection === this.#trimConnection && trimScope === this.#trimScope)
           trimScope?.commit(submittedTrim);
       }),
-      this.api.putLocationSettings(this.description),
+      this.api.putLocationSettings(description).then(() => {
+        if (trimConnection !== this.#trimConnection || descriptionScope !== this.#descriptionScope)
+          return;
+        descriptionScope?.commit(description);
+        this.#dirty = this.description !== description;
+        this.#saves += 1;
+      }),
     ]);
     if (trimConnection !== this.#trimConnection) return;
     this.saving = false;
     if (trim.status === "rejected") this.#receiptRefused(trim.reason);
     if (location.status === "rejected") this.#locationRefused(location.reason);
-    else {
-      this.#dirty = false;
-      this.#saves += 1;
-    }
     if (trim.status === "fulfilled" && location.status === "fulfilled") {
       this.saved = true;
       this.attempted = false;
@@ -992,7 +1067,8 @@ export class ReceiptsScreen extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.description = event.detail.value;
-            this.#dirty = true;
+            this.#descriptionScope?.changed();
+            this.#dirty = this.#descriptionScope?.isDirty() ?? true;
             this.refusal = "";
             this.saved = false;
           }}

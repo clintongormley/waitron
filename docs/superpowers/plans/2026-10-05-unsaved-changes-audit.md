@@ -1,5 +1,45 @@
 # W69 editable-form inventory
 
+## 2026-10-06 receipt language and operation-description checkpoint
+
+The receipt page registers language and operation description independently beneath the page,
+beside its appearance scope. Language compares the selected value; description compares the exact
+existing request text, including whitespace and invalid empty values. Keep retains both controls;
+Discard restores their captured local values. Each accepted write commits its submitted snapshot
+before pending sibling writes settle. A refused part or later input stays dirty; successful writes
+invalidate unanswered leave questions. Disconnect disposes all three scopes and resets their loaded
+values. Replies from an earlier connection cannot update language values or refusal messages.
+
+Clean live values establish their new baseline. Unchanged live values leave a pending question
+open, and dirty live values retain the original baseline. The existing region-fixed-language path
+still drops a pick when that choice becomes read-only; it clears that choice without committing
+another receipt part. Preview selectors and immediate fixed-language correction remain exempt.
+
+The initial owner suite reported 12 failures and 19 passes. The unchanged-live-question cases
+then reported two failures, and the region-fixed exemption reported one failure before their fixes.
+The final command over all seven `receipts-screen*.test.ts` suites reported 223 passes. Dashboard
+typecheck, scoped ESLint, source formatting and `git diff --check` passed; golden huella and
+`inmutabilidad` remained unedited and reported 20 passes. No existing test assertion changed.
+
+Ten independent mutations in an installed disposable clone failed their intended behavior beside
+a passing clean-page control: missing registration, missing write commits, old language results,
+newer language selection replacement, unchanged receipt/description reads and fixed-language
+exemption. The final restored language/owner pair reported 69 passes; both source files matched
+byte for byte before the owned clone was removed. An earlier comparison used files formatted after
+copying and failed; the final comparison copied the final formatted files first. Exact commands,
+logs and outcomes: Lane E `receipts/w69-receipt-parts-20261006/`.
+
+Eight native combobox/description Keep/Discard flows cover EN/ES, light/dark and measured 390/1280
+widths. They reported 16 axe scans; 16 captures were inspected in four contact sheets. These use a
+minimal real LeaveController shell with synthetic API replies. Receipt-page sidebar/history
+integration, actual API writes, hover colours and activated native reload remain unverified.
+Phone captures show the controls and warning but clip some preview content below the form.
+
+Receipt page registration is implemented on the branch; its real route/tab/context coverage and
+the other page/till owners remain open. Tasks 1/4/5/6 remain partial and W69 is not ready for
+finish-branch or landing. This dated entry supersedes the earlier receipt checkpoint's open-scope
+status, preserving its historical receipts.
+
 ## 2026-10-06 receipt appearance checkpoint
 
 Receipt header/footer, phone/email, address switch and logo register one appearance scope under
