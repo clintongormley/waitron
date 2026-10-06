@@ -1,16 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
   locations,
+  tenants,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
+import { readHolidayFacts } from "./holidays.js";
 import { replaceWeekHours, saveSpecialDate } from "./hours.js";
 import { weekdayOf } from "./hours-rules.js";
 import { WEEK_DISPLAY_ORDER, type DateCell, type WeekCell, type WeekDay } from "./hours-types.js";
@@ -844,6 +846,73 @@ describe("station status across a clock change", () => {
       expect(await statusAt(tx, f.cfg, f.upstairs, second(15))).toEqual(inHours);
       expect(await statusAt(tx, f.cfg, f.upstairs, first(45))).toEqual(outOfHours);
       expect(await statusAt(tx, f.cfg, f.upstairs, second(45))).toEqual(outOfHours);
+    });
+  });
+});
+
+describe("station times on a public holiday", () => {
+  // The file shares one taxpayer row; put back whatever it held before a case placed it in Spain.
+  let tenantBefore: (typeof tenants.$inferSelect)[] = [];
+  beforeAll(async () => {
+    tenantBefore = await db.transaction((tx) => tx.select().from(tenants));
+  });
+  afterEach(async () => {
+    await db.transaction(async (tx) => {
+      await tx.delete(tenants);
+      if (tenantBefore.length > 0) await tx.insert(tenants).values(tenantBefore);
+    });
+  });
+
+  /** The fixture's venue, in Seville, Spain. */
+  async function sevilleVenue(tx: Transaction) {
+    const f = await fixture(tx);
+    await tx
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "X0000000", legalName: "Invented SL" })
+      .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
+    await tx
+      .update(locations)
+      .set({ province: "Sevilla", city: "Sevilla" })
+      .where(eq(locations.id, f.cfg.locationId));
+    return f;
+  }
+
+  // Monday 12 October 2026, Spain's national day, against the ordinary Monday a week before, at
+  // 12:00, 18:00, 22:59 and 23:00 in Seville (two hours ahead of UTC).
+  const HOLIDAY = "2026-10-12";
+  const ORDINARY = "2026-10-05";
+  const TIMES = ["10:00", "16:00", "20:59", "21:00"];
+
+  it("follows only the station's own Hours on a Spanish national holiday, as on an ordinary Monday", async () => {
+    await db.transaction(async (tx) => {
+      const f = await sevilleVenue(tx);
+      expect(await readHolidayFacts(tx, f.cfg, HOLIDAY, HOLIDAY)).toEqual([
+        expect.objectContaining({ date: HOLIDAY, scope: "national" }),
+      ]);
+      expect(await readHolidayFacts(tx, f.cfg, ORDINARY, ORDINARY)).toEqual([]);
+      await saveWeek(tx, f.cfg, f.upstairs, configuredWeek({ 1: periodsCell(["18:00", "23:00"]) }));
+      await setStationFallback(tx, f.cfg, f.upstairs, f.downstairs);
+
+      const times = async (date: string, time: string) =>
+        (await routingModel(tx, f.cfg, new Date(`${date}T${time}:00Z`))).stationTimes;
+      for (const time of TIMES)
+        expect(await times(HOLIDAY, time)).toEqual(await times(ORDINARY, time));
+      expect(await statusAt(tx, f.cfg, f.upstairs, `${HOLIDAY}T18:00:00Z`)).toEqual(inHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, `${HOLIDAY}T10:00:00Z`)).toEqual(outOfHours);
+      expect(
+        (await times(HOLIDAY, "18:00")).find((row) => row.stationId === f.upstairs)
+          ?.specialDateRestricts,
+      ).toBe(false);
+    });
+  });
+
+  it("closes a station on the holiday only once the venue saves a special date there", async () => {
+    await db.transaction(async (tx) => {
+      const f = await sevilleVenue(tx);
+      await saveWeek(tx, f.cfg, f.upstairs, configuredWeek({ 1: periodsCell(["18:00", "23:00"]) }));
+      await saveDate(tx, f.cfg, HOLIDAY, [[f.upstairs, closedDate]]);
+      expect(await statusAt(tx, f.cfg, f.upstairs, `${HOLIDAY}T18:00:00Z`)).toEqual(outOfHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, `${ORDINARY}T18:00:00Z`)).toEqual(inHours);
     });
   });
 });

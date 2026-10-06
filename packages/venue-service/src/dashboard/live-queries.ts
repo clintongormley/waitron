@@ -51,7 +51,11 @@ export const QUERY_DEPENDENCIES = {
     "special_date_hours_periods",
     "station_day_states",
     "station_fallbacks",
+    "tenants",
+    "holiday_geographies",
+    "local_holidays",
   ],
+  holidays: ["tenants", "locations", "holiday_geographies", "local_holidays"],
   operations: [
     "departments",
     "zone_service_policies",

@@ -8,13 +8,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.src.json",
     "lint": "eslint ."
   },
   "dependencies": {
     "@waitron/country": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^4.1.11",
     "typescript": "^7.0.0",
     "vitest": "^4.1.11"

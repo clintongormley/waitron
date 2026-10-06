@@ -448,6 +448,7 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   "sales.total": [0n],
   // The CHECK wants a bare `YYYY-MM-DD`, a shape none of the generic text values has.
   "special_dates.date": ["2026-01-01", "2026-01-02"],
+  "local_holidays.date": ["2026-01-01", "2026-01-02"],
 };
 
 /** Tables filled with one row rather than two, each with its reason. */

@@ -1,3 +1,4 @@
+import { findAdministrativeArea } from "@waitron/country";
 import { describe, expect, it } from "vitest";
 import {
   COUNTRY_PACKS,
@@ -175,5 +176,22 @@ describe("receipt labels", () => {
   it("prints Spain's Spanish labels for a locale no installed pack labels", () => {
     for (const locale of ["en-GB", "es", "fr-FR"])
       expect(receiptLabelsFor(locale)).toBe(spain["es-ES"]);
+  });
+});
+
+describe("holiday calendars", () => {
+  it("installs Spain's holiday data and two local holidays a year, and none for Great Britain", () => {
+    const spain = getCountryPack("ES")!;
+    expect(spain.holidayCalendar?.localEntryLimit).toBe(2);
+    expect(getCountryPack("GB")!.holidayCalendar).toBeUndefined();
+  });
+
+  it("finds a stored province's region through the installed pack", () => {
+    const spain = getCountryPack("es")!;
+    for (const stored of ["Sevilla", "41"]) {
+      const code = findAdministrativeArea(spain, stored)!.code;
+      expect(spain.holidayCalendar!.regionForProvince(code)).toBe("01");
+    }
+    expect(findAdministrativeArea(spain, "Nowhere")).toBeUndefined();
   });
 });

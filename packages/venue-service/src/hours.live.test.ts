@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { afterEach, beforeAll, expect, it } from "vitest";
+import { afterEach, beforeAll, expect, it, onTestFinished } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_CHANGE_SOURCES,
@@ -9,6 +9,7 @@ import {
   kitchenStations,
   locations,
   subscribeToChanges,
+  tenants,
   withTransaction,
   type Database,
   type Transaction,
@@ -16,6 +17,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
+import { deleteRetainedHolidayGeography, saveHolidayArea, saveLocalHoliday } from "./holidays.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import {
   deleteSpecialDate,
@@ -167,4 +169,53 @@ it("refreshes Hours and routing after every schedule, date, clock, subject and o
   const unrelated = await announced((tx) => writeEditSentLines(tx, false));
   expect(unrelated.size).toBeGreaterThan(0);
   expect(reaches(unrelated, hours)).toEqual([]);
+});
+
+it("refreshes Hours and the local holidays after every holiday, area, address and country change", async () => {
+  const before = await db.select().from(tenants);
+  onTestFinished(() =>
+    withTransaction(db, async (tx) => {
+      await tx.delete(tenants);
+      if (before.length > 0) await tx.insert(tenants).values(before);
+    }),
+  );
+  const cfg = await withTransaction(db, async (tx) => {
+    await tx
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Invented SL" })
+      .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
+    const [location] = await tx
+      .insert(locations)
+      .values({
+        name: `Venue ${randomUUID()}`,
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+        timeZone: "Europe/Madrid",
+        province: "Lleida",
+        city: "Vielha",
+      })
+      .returning();
+    return { locationId: locationId(location!.id) } as VenueScope;
+  });
+  const hours = QUERY_DEPENDENCIES.hours;
+  const holidays = QUERY_DEPENDENCIES.holidays;
+  const both = (types: Set<string>) => [reaches(types, hours), reaches(types, holidays)];
+
+  let geographyId = "";
+  const entry = await announced(async (tx) => {
+    geographyId = (await saveLocalHoliday(tx, cfg, null, { date: "2026-06-17", name: "Arán" }))
+      .geographyId;
+  });
+  const created = ["holiday_geographies", "local_holidays"];
+  expect(both(entry)).toEqual([created, created]);
+  const area = await announced((tx) => saveHolidayArea(tx, cfg, { areaKey: "aran" }));
+  expect(both(area)).toEqual([["holiday_geographies"], ["holiday_geographies"]]);
+  const moved = await announced((tx) =>
+    tx.update(locations).set({ city: "Lleida" }).where(eq(locations.id, cfg.locationId)),
+  );
+  expect(both(moved)).toEqual([["locations"], ["locations"]]);
+  const country = await announced((tx) => tx.update(tenants).set({ country: "PT" }));
+  expect(both(country)).toEqual([["tenants"], ["tenants"]]);
+  const removed = await announced((tx) => deleteRetainedHolidayGeography(tx, cfg, geographyId));
+  expect(both(removed)).toEqual([created, created]);
 });

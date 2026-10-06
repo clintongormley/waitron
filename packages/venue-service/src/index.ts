@@ -24,6 +24,7 @@ export {
   readHoursModel,
   readSpecialDate,
   readWeekHours,
+  renameSpecialDate,
   replaceWeekHours,
   resolveOpeningDateHours,
   saveSpecialDate,
@@ -31,6 +32,18 @@ export {
   type SpecialDateParticipant,
 } from "./hours.js";
 export { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
+export {
+  deleteLocalHoliday,
+  deleteRetainedHolidayGeography,
+  duplicateHolidayNamedSpecialDates,
+  readHolidayFacts,
+  readHolidays,
+  readLocalHolidayModel,
+  saveHolidayArea,
+  saveLocalHoliday,
+} from "./holidays.js";
+export type * from "./holiday-types.js";
+export { LOCAL_HOLIDAY_NAME_MAX } from "./holiday-types.js";
 export { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
 export type * from "./hours-types.js";
 export { CALENDAR_COLOURS, HOURS_RANGE_MAX_DAYS, WEEK_DISPLAY_ORDER } from "./hours-types.js";

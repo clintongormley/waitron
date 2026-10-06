@@ -244,6 +244,15 @@ const en = {
   "hours.date_taken": "{date} already has special hours.",
   "hours.date_not_found": "This special date no longer exists.",
   "hours.always_open": "The default station is always open, so its hours cannot change.",
+  "holidays.not_found": "This local holiday no longer exists.",
+  "holidays.geography_not_found": "These local holidays have already been removed.",
+  "holidays.date_taken": "{date} already has a local holiday.",
+  "holidays.local_limit": "You can enter at most {limit} local holidays for {year}.",
+  "holidays.local_limit_one": "You can enter at most 1 local holiday for {year}.",
+  "holidays.local_limit_any": "You can enter at most {limit} local holidays a year.",
+  "holidays.local_limit_any_one": "You can enter at most 1 local holiday a year.",
+  "holidays.geography_current":
+    "These local holidays are for the venue's current address, so they cannot be removed together.",
   "venue.department_last_active": "You cannot disable the last active department.",
   "venue.table_in_use": "Table {table} has an open tab. Close it before disabling this department.",
   "venue.active_tables": "{count} active tables",
@@ -481,7 +490,8 @@ const en = {
   "hours.delete": "Delete",
   "hours.no_dates": "No special dates yet.",
   "hours.duplicate_heading": "Duplicate {name}",
-  "hours.duplicate_note": "Copies the name, the colour and every cell to each date.",
+  "hours.duplicate_note":
+    "Copies the colour and every cell to each date. A date that is a public holiday, local ones included, takes the holiday's name; any other date keeps this name.",
   "hours.target_date": "Date {n}",
   "hours.add_target": "Add another date",
   "hours.remove_target": "Remove date {n}",
@@ -500,10 +510,74 @@ const en = {
   "hours.calendar.pick": "Choose a date to see its hours.",
   "hours.calendar.special_closed": "{name} · Closed",
   "hours.calendar.holiday_standard": "{name} · standard hours",
-  "hours.calendar.holiday": "Public holiday: {name}",
   "hours.calendar.subject": "Department or prep station",
   "hours.calendar.hours": "Hours",
   "hours.make_special": "Make this a special date",
+  "hours.calendar.scope.national": "National holiday",
+  "hours.calendar.scope.regional": "Regional holiday",
+  "hours.calendar.scope.local": "Local holiday",
+  "hours.calendar.source": "Source:",
+  "hours.calendar.source_owner": "Entered by you for {city}",
+  "hours.calendar.coverage.complete":
+    "{year}: official national and regional holidays are included.",
+  "hours.calendar.coverage.missing_year":
+    "{year}: official holidays are not available yet, so none are shown.",
+  "hours.calendar.coverage.unknown_region":
+    "{year}: the venue's province is not recognised, so official holidays are not shown.",
+  "hours.calendar.coverage.area_required":
+    "{year}: only official holidays for the whole province are shown until the holiday area is chosen under Special dates.",
+  "hours.calendar.coverage.unsupported_country":
+    "{year}: official holidays are not available for this country.",
+  "hours.calendar.coverage.unknown": "{year}: which official holidays apply could not be read.",
+  "hours.calendar.local.address_unresolved":
+    "{year}: local holidays need the venue's city and a recognised province; set them in Venue details.",
+  "hours.calendar.local.unsupported_country":
+    "{year}: local holidays cannot be entered for a venue in this country.",
+  "hours.calendar.local.none_entered": "{year}: no local holidays entered.",
+  "hours.calendar.local.owner_entered": "{year}: local holidays are the ones you entered.",
+  "holidays.heading": "Local holidays",
+  "holidays.loading": "Loading local holidays…",
+  "holidays.load_error": "Local holidays could not be loaded.",
+  "holidays.address":
+    "Local holidays for {city}: up to {limit} dates a year. They are your own entries, not checked against an official list.",
+  "holidays.address_one":
+    "Local holidays for {city}: up to 1 date a year. They are your own entries, not checked against an official list.",
+  "holidays.unsupported": "Local holidays cannot be entered for a venue in this country.",
+  "holidays.needs_city": "Local holidays need the venue's city. Add it in Venue details.",
+  "holidays.needs_city_area":
+    "Local holidays and the holiday area need the venue's city. Add it in Venue details.",
+  "holidays.needs_province":
+    "Local holidays need a recognised province. Correct it in Venue details.",
+  "holidays.needs_address":
+    "Local holidays need the venue's city and a recognised province. Set them in Venue details.",
+  "holidays.allowance": "{year}: {count} of {limit} local holidays entered.",
+  "holidays.allowance_one": "{year}: {count} of 1 local holiday entered.",
+  "holidays.empty": "No local holidays entered.",
+  "holidays.add": "Add a local holiday",
+  "holidays.add_heading": "Add a local holiday",
+  "holidays.add_heading_city": "Add a local holiday for {city}",
+  "holidays.address_moved":
+    "The venue's address has changed to {city}, so this holiday will be saved for {city}. Press Save again to save it.",
+  "holidays.edit_heading": "Edit local holiday",
+  "holidays.name_hint": "As your town council publishes it",
+  "holidays.name_too_long": "Use at most {max} characters.",
+  "holidays.check_date": "Check the date.",
+  "holidays.check_name": "Check the name.",
+  "holidays.stale_id": "This local holiday belongs to an earlier address, so it cannot be changed.",
+  "holidays.remove_heading": "Remove local holiday",
+  "holidays.remove_confirm": "Remove the local holiday {name} on {date}?",
+  "holidays.retained": "These local holidays were for {city}.",
+  "holidays.forget_label": "Remove the local holidays for {city}",
+  "holidays.forget_heading": "Remove earlier local holidays",
+  "holidays.forget_confirm":
+    "Remove every local holiday entered for {city}? The current address's holidays stay.",
+  "holidays.area": "Holiday area",
+  "holidays.area_hint": "Choose the area",
+  "holidays.area_note":
+    "Some official holidays here apply only in part of the province. Choose the area the venue is in.",
+  "holidays.area_chosen": "Holiday area: {name}",
+  "holidays.area_none": "Holiday area: not chosen",
+  "holidays.area_refused": "Choose one of the areas offered.",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -755,6 +829,15 @@ const es: Record<keyof typeof en, string> = {
   "hours.date_not_found": "Esta fecha especial ya no existe.",
   "hours.always_open":
     "La estación predeterminada siempre está abierta; su horario no se puede cambiar.",
+  "holidays.not_found": "Este festivo local ya no existe.",
+  "holidays.geography_not_found": "Estos festivos locales ya se han quitado.",
+  "holidays.date_taken": "El {date} ya tiene un festivo local.",
+  "holidays.local_limit": "Puedes introducir como máximo {limit} festivos locales en {year}.",
+  "holidays.local_limit_one": "Puedes introducir como máximo 1 festivo local en {year}.",
+  "holidays.local_limit_any": "Puedes introducir como máximo {limit} festivos locales al año.",
+  "holidays.local_limit_any_one": "Puedes introducir como máximo 1 festivo local al año.",
+  "holidays.geography_current":
+    "Estos festivos locales son de la dirección actual del local, así que no se pueden eliminar juntos.",
   "venue.department_last_active": "No puedes deshabilitar el último departamento activo.",
   "venue.table_in_use":
     "La mesa {table} tiene una cuenta abierta. Ciérrala antes de deshabilitar este departamento.",
@@ -998,7 +1081,8 @@ const es: Record<keyof typeof en, string> = {
   "hours.delete": "Borrar",
   "hours.no_dates": "Todavía no hay fechas especiales.",
   "hours.duplicate_heading": "Duplicar {name}",
-  "hours.duplicate_note": "Copia el nombre, el color y cada celda en cada fecha.",
+  "hours.duplicate_note":
+    "Copia el color y cada celda en cada fecha. Una fecha que es festivo, también local, toma el nombre del festivo; cualquier otra fecha conserva este nombre.",
   "hours.target_date": "Fecha {n}",
   "hours.add_target": "Añadir otra fecha",
   "hours.remove_target": "Quitar la fecha {n}",
@@ -1018,10 +1102,76 @@ const es: Record<keyof typeof en, string> = {
   "hours.calendar.pick": "Elige una fecha para ver su horario.",
   "hours.calendar.special_closed": "{name} · Cerrado",
   "hours.calendar.holiday_standard": "{name} · horario habitual",
-  "hours.calendar.holiday": "Festivo: {name}",
   "hours.calendar.subject": "Departamento o estación de preparación",
   "hours.calendar.hours": "Horario",
   "hours.make_special": "Convertir en fecha especial",
+  "hours.calendar.scope.national": "Festivo nacional",
+  "hours.calendar.scope.regional": "Festivo autonómico",
+  "hours.calendar.scope.local": "Festivo local",
+  "hours.calendar.source": "Fuente:",
+  "hours.calendar.source_owner": "Introducido por ti para {city}",
+  "hours.calendar.coverage.complete":
+    "{year}: se incluyen los festivos oficiales nacionales y autonómicos.",
+  "hours.calendar.coverage.missing_year":
+    "{year}: los festivos oficiales aún no están disponibles, así que no se muestra ninguno.",
+  "hours.calendar.coverage.unknown_region":
+    "{year}: no se reconoce la provincia del local, así que no se muestran los festivos oficiales.",
+  "hours.calendar.coverage.area_required":
+    "{year}: solo se muestran los festivos oficiales de toda la provincia hasta que se elija la zona de festivos en Fechas especiales.",
+  "hours.calendar.coverage.unsupported_country":
+    "{year}: no hay festivos oficiales disponibles para este país.",
+  "hours.calendar.coverage.unknown": "{year}: no se pudo leer qué festivos oficiales se aplican.",
+  "hours.calendar.local.address_unresolved":
+    "{year}: los festivos locales necesitan la ciudad y una provincia reconocida; indícalas en Datos del local.",
+  "hours.calendar.local.unsupported_country":
+    "{year}: no se pueden introducir festivos locales para un local de este país.",
+  "hours.calendar.local.none_entered": "{year}: no hay festivos locales introducidos.",
+  "hours.calendar.local.owner_entered": "{year}: los festivos locales son los que introdujiste.",
+  "holidays.heading": "Festivos locales",
+  "holidays.loading": "Cargando festivos locales…",
+  "holidays.load_error": "No se pudieron cargar los festivos locales.",
+  "holidays.address":
+    "Festivos locales de {city}: hasta {limit} fechas al año. Los introduces tú y no se comprueban con ninguna lista oficial.",
+  "holidays.address_one":
+    "Festivos locales de {city}: hasta 1 fecha al año. Los introduces tú y no se comprueban con ninguna lista oficial.",
+  "holidays.unsupported": "No se pueden introducir festivos locales para un local de este país.",
+  "holidays.needs_city":
+    "Los festivos locales necesitan la ciudad del local. Añádela en Datos del local.",
+  "holidays.needs_city_area":
+    "Los festivos locales y la zona de festivos necesitan la ciudad del local. Añádela en Datos del local.",
+  "holidays.needs_province":
+    "Los festivos locales necesitan una provincia reconocida. Corrígela en Datos del local.",
+  "holidays.needs_address":
+    "Los festivos locales necesitan la ciudad y una provincia reconocida. Indícalas en Datos del local.",
+  "holidays.allowance": "{year}: {count} de {limit} festivos locales introducidos.",
+  "holidays.allowance_one": "{year}: {count} de 1 festivo local introducido.",
+  "holidays.empty": "No hay festivos locales introducidos.",
+  "holidays.add": "Añadir un festivo local",
+  "holidays.add_heading": "Añadir un festivo local",
+  "holidays.add_heading_city": "Añadir un festivo local en {city}",
+  "holidays.address_moved":
+    "La dirección del local ha cambiado a {city}, así que este festivo se guardará para {city}. Pulsa Guardar otra vez para guardarlo.",
+  "holidays.edit_heading": "Editar festivo local",
+  "holidays.name_hint": "Como lo publica tu ayuntamiento",
+  "holidays.name_too_long": "Usa como máximo {max} caracteres.",
+  "holidays.check_date": "Revisa la fecha.",
+  "holidays.check_name": "Revisa el nombre.",
+  "holidays.stale_id":
+    "Este festivo local es de una dirección anterior, así que no se puede cambiar.",
+  "holidays.remove_heading": "Quitar festivo local",
+  "holidays.remove_confirm": "¿Quitar el festivo local {name} del {date}?",
+  "holidays.retained": "Estos festivos locales eran de {city}.",
+  "holidays.forget_label": "Quitar los festivos locales de {city}",
+  "holidays.forget_heading": "Quitar festivos locales anteriores",
+  "holidays.forget_confirm":
+    "¿Quitar todos los festivos locales introducidos para {city}? Los de la dirección actual se mantienen.",
+  "holidays.area": "Zona de festivos",
+  "holidays.area_hint": "Elige la zona",
+  "holidays.area_note":
+    "Algunos festivos oficiales solo se aplican en parte de la provincia. Elige la zona en la que está el local.",
+  "holidays.area_chosen": "Zona de festivos: {name}",
+  "holidays.area_none": "Zona de festivos: sin elegir",
+  "holidays.area_refused": "Elige una de las zonas ofrecidas.",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };

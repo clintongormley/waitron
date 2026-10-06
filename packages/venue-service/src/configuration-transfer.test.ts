@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
   VENUE_SERVICE_CONFIGURATION_TRANSFER,
+  validateHolidayConfiguration,
   validateHoursConfiguration,
 } from "./configuration-transfer.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
@@ -108,8 +110,24 @@ function refusal(field: string) {
 }
 
 describe("validateHoursConfiguration", () => {
-  it("is the venue-service transfer's validate callback", () => {
-    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.validate).toBe(validateHoursConfiguration);
+  it("is run by the venue-service transfer's validate callback, with the export's date and zone", () => {
+    const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
+    const badTime = validTables();
+    badTime.hours_week_periods![0]!.opens_at = "12:00";
+    expect(() => validate(badTime)).toThrowError(refusal("hours_week_periods.opens_at"));
+    // 25 December 2020 opens 00:00–06:00, under the night before; only an export before it refuses.
+    const clash = validTables();
+    clash.special_dates![0]!.date = "2020-12-25";
+    clash.special_date_hours![0]!.mode = "periods";
+    clash.special_date_hours_periods!.push(periodRow("sdh-restaurant", 0, "00:00:00", "06:00:00"));
+    const at = (createdAt: string) => ({
+      createdAt: new Date(createdAt),
+      timeZone: "Europe/Madrid",
+    });
+    expect(() => validate(clash, at("2026-10-06T10:00:00Z"))).not.toThrow();
+    expect(() => validate(clash, at("2020-12-01T12:00:00Z"))).toThrowError(
+      refusal("special_date_hours"),
+    );
   });
 
   it("accepts every cell mode, a subject with no hours and a default station's retained cell", () => {
@@ -470,5 +488,346 @@ describe("validateHoursConfiguration", () => {
     tables.special_date_hours![0]!.mode = "periods";
     tables.special_date_hours_periods!.push(periodRow("sdh-restaurant", 0, "00:00:00", "06:00:00"));
     expect(() => validateHoursConfiguration(tables)).not.toThrow();
+  });
+});
+
+/** An invented country, so no expectation below depends on any real country's allowance. */
+function holidayPack(localEntryLimit: number): CountryPack {
+  return {
+    countryCode: "ZZ",
+    defaultLocale: "en-GB",
+    defaultTimeZone: "Europe/Madrid",
+    invoiceLocales: ["en-GB"],
+    moduleIds: [],
+    availableForVenueSetup: false,
+    fiscalJurisdictions: [],
+    administrativeAreas: [
+      { code: "10", name: "Northshire", aliases: ["North"], postalPrefixes: [] },
+      { code: "30", name: "Isleshire", postalPrefixes: [] },
+    ],
+    holidayCalendar: createHolidayCalendar({
+      localEntryLimit,
+      sources: [
+        {
+          id: "ZZ-ANNEX",
+          title: "Invented annex",
+          url: "https://example.test",
+          sha256: "a".repeat(64),
+        },
+      ],
+      provinceRegions: { "10": "R1", "30": "R3" },
+      areas: [
+        { key: "isle-a", name: "Isle A", provinces: ["30"] },
+        { key: "isle-b", name: "Isle B", provinces: ["30"] },
+      ],
+      years: [
+        {
+          year: 2026,
+          dataVersion: "ZZ-2026.1",
+          sourceIds: ["ZZ-ANNEX"],
+          rows: [
+            {
+              key: "isle-a-day",
+              date: "2026-07-01",
+              name: "Isle A day",
+              scope: "regional",
+              regions: ["R3"],
+              onlyAreas: ["isle-a"],
+              sourceId: "ZZ-ANNEX",
+            },
+          ],
+        },
+      ],
+    }),
+  };
+}
+
+const WITHOUT_CALENDAR: CountryPack = { ...holidayPack(0), countryCode: "ZY" };
+delete (WITHOUT_CALENDAR as { holidayCalendar?: unknown }).holidayCalendar;
+
+const packs = (limit: number) => (country: string) =>
+  country === "ZZ" ? holidayPack(limit) : country === "ZY" ? WITHOUT_CALENDAR : undefined;
+
+const NORTH = "g-north";
+const ISLE = "g-isle";
+
+/**
+ * Two geographies of one venue, as an export carries them: the North one, and a retained Isle one
+ * with its area chosen. Each has two entries in 2026 and one in 2027.
+ */
+function holidayTables(): Tables {
+  const entry = (geographyId: string, date: string, name = `Fiesta ${date}`): Row => ({
+    id: randomUUID(),
+    geography_id: geographyId,
+    date,
+    name,
+  });
+  return {
+    holiday_geographies: [
+      {
+        id: NORTH,
+        location_id: "location",
+        country: "ZZ",
+        province_code: "10",
+        city: "Villa  Real",
+        city_key: "villa real",
+        area_key: null,
+      },
+      {
+        id: ISLE,
+        location_id: "location",
+        country: "ZZ",
+        province_code: "30",
+        city: "Puerto Ísla",
+        city_key: "puerto ísla",
+        area_key: "isle-a",
+      },
+    ],
+    local_holidays: [
+      entry(NORTH, "2026-05-15"),
+      entry(NORTH, "2026-09-08"),
+      entry(NORTH, "2027-05-15"),
+      entry(ISLE, "2026-05-15"),
+      entry(ISLE, "2026-06-24"),
+      entry(ISLE, "2027-06-24"),
+    ],
+  };
+}
+
+describe("validateHolidayConfiguration", () => {
+  it("accepts every geography's entries at the allowance, and a bundle with no holiday tables", () => {
+    expect(() => validateHolidayConfiguration(holidayTables(), packs(2))).not.toThrow();
+    expect(() => validateHolidayConfiguration({}, packs(2))).not.toThrow();
+  });
+
+  it("accepts a geography with no entries whose country has no holiday capability", () => {
+    const tables: Tables = {
+      holiday_geographies: [{ ...holidayTables().holiday_geographies![0]!, country: "ZY" }],
+    };
+    expect(() => validateHolidayConfiguration(tables, packs(2))).not.toThrow();
+  });
+
+  describe.each([1, 3])("with an allowance of %i", (limit) => {
+    const days = (geographyId: string, year: number, count: number): Row[] =>
+      Array.from({ length: count }, (_, index) => ({
+        id: randomUUID(),
+        geography_id: geographyId,
+        date: `${year}-03-${String(index + 1).padStart(2, "0")}`,
+        name: `Day ${index + 1}`,
+      }));
+    const places = [
+      [NORTH, 2026],
+      [NORTH, 2027],
+      [ISLE, 2026],
+      [ISLE, 2027],
+    ] as const;
+
+    it("accepts every geography and year holding exactly that many", () => {
+      const tables = holidayTables();
+      tables.local_holidays = places.flatMap(([geography, year]) => days(geography, year, limit));
+      expect(() => validateHolidayConfiguration(tables, packs(limit))).not.toThrow();
+    });
+
+    it.each(places)(
+      "refuses one more for %s in %i, the retained geography included",
+      (over, overYear) => {
+        const tables = holidayTables();
+        tables.local_holidays = places.flatMap(([geography, year]) =>
+          days(geography, year, geography === over && year === overYear ? limit + 1 : limit),
+        );
+        expect(() => validateHolidayConfiguration(tables, packs(limit))).toThrowError(
+          refusal("local_holidays"),
+        );
+      },
+    );
+  });
+
+  it("refuses any entry of a geography whose country has no holiday capability", () => {
+    const tables = holidayTables();
+    tables.holiday_geographies![0]!.country = "ZY";
+    tables.holiday_geographies![1]!.country = "ZY";
+    tables.holiday_geographies![1]!.area_key = null;
+    tables.local_holidays = tables.local_holidays!.slice(0, 1);
+    expect(() => validateHolidayConfiguration(tables, packs(2))).toThrowError(
+      refusal("local_holidays"),
+    );
+  });
+
+  it("lets a Spanish geography carry Spain's two local days a year, and refuses a third", () => {
+    const sevilla: Tables = {
+      holiday_geographies: [
+        {
+          id: "g-sevilla",
+          location_id: "location",
+          country: "ES",
+          province_code: "41",
+          city: "Sevilla",
+          city_key: "sevilla",
+          area_key: null,
+        },
+      ],
+      local_holidays: ["2026-05-28", "2026-06-04"].map((date) => ({
+        id: randomUUID(),
+        geography_id: "g-sevilla",
+        date,
+        name: "Fiesta local",
+      })),
+    };
+    expect(() => validateHolidayConfiguration(sevilla)).not.toThrow();
+    sevilla.local_holidays!.push({
+      id: randomUUID(),
+      geography_id: "g-sevilla",
+      date: "2026-10-12",
+      name: "Fiesta local",
+    });
+    expect(() => validateHolidayConfiguration(sevilla)).toThrowError(refusal("local_holidays"));
+  });
+
+  it.each<[string, (tables: Tables) => void, string]>([
+    [
+      "a geography id used twice",
+      (t) => (t.holiday_geographies![1]!.id = NORTH),
+      "holiday_geographies.id",
+    ],
+    [
+      "a country no installed pack knows",
+      (t) => (t.holiday_geographies![0]!.country = "QQ"),
+      "holiday_geographies.country",
+    ],
+    [
+      "a country not spelled as its pack's code",
+      (t) => (t.holiday_geographies![0]!.country = "zz"),
+      "holiday_geographies.country",
+    ],
+    [
+      "a province the pack does not list",
+      (t) => (t.holiday_geographies![0]!.province_code = "99"),
+      "holiday_geographies.province_code",
+    ],
+    [
+      "a province given by name rather than code",
+      (t) => (t.holiday_geographies![0]!.province_code = "Northshire"),
+      "holiday_geographies.province_code",
+    ],
+    ["a blank city", (t) => (t.holiday_geographies![0]!.city = "  "), "holiday_geographies.city"],
+    [
+      "a city with the spaces around it the writer trims",
+      (t) => (t.holiday_geographies![0]!.city = "  Villa  Real "),
+      "holiday_geographies.city",
+    ],
+    [
+      "a city key that is not the city's normalized form",
+      (t) => (t.holiday_geographies![0]!.city_key = "Villa  Real"),
+      "holiday_geographies.city_key",
+    ],
+    [
+      "two geographies for one place",
+      (t) => {
+        t.holiday_geographies![1]!.province_code = "10";
+        t.holiday_geographies![1]!.city = "VILLA REAL";
+        t.holiday_geographies![1]!.city_key = "villa real";
+        t.holiday_geographies![1]!.area_key = null;
+      },
+      "holiday_geographies.city_key",
+    ],
+    [
+      "an area nobody sourced for its province",
+      (t) => (t.holiday_geographies![1]!.area_key = "isle-z"),
+      "holiday_geographies.area_key",
+    ],
+    [
+      "an area on a province that has none",
+      (t) => (t.holiday_geographies![0]!.area_key = "isle-a"),
+      "holiday_geographies.area_key",
+    ],
+    [
+      "an area of a country with no holiday capability",
+      (t) => {
+        t.holiday_geographies![1]!.country = "ZY";
+        t.local_holidays = [];
+      },
+      "holiday_geographies.area_key",
+    ],
+    [
+      "an entry id used twice",
+      (t) => (t.local_holidays![1]!.id = t.local_holidays![0]!.id),
+      "local_holidays.id",
+    ],
+    [
+      "an entry whose geography is not in the bundle",
+      (t) => (t.local_holidays![0]!.geography_id = "g-elsewhere"),
+      "local_holidays.geography_id",
+    ],
+    [
+      "an impossible date",
+      (t) => (t.local_holidays![0]!.date = "2026-02-30"),
+      "local_holidays.date",
+    ],
+    [
+      "a date not written as YYYY-MM-DD",
+      (t) => (t.local_holidays![0]!.date = "2026-5-15"),
+      "local_holidays.date",
+    ],
+    [
+      "two entries of one geography on one date, under different names",
+      (t) => (t.local_holidays![1]!.date = "2026-05-15"),
+      "local_holidays.date",
+    ],
+    ["a blank name", (t) => (t.local_holidays![0]!.name = " "), "local_holidays.name"],
+    [
+      "a name the writer would have trimmed",
+      (t) => (t.local_holidays![0]!.name = " Fiesta "),
+      "local_holidays.name",
+    ],
+    [
+      "a name past the limit",
+      (t) => (t.local_holidays![0]!.name = "x".repeat(201)),
+      "local_holidays.name",
+    ],
+  ])("refuses %s", (_, edit, field) => {
+    const tables = holidayTables();
+    edit(tables);
+    expect(() => validateHolidayConfiguration(tables, packs(2))).toThrowError(refusal(field));
+  });
+
+  it("accepts a city of any length, as setup stores one and the writer copies it", () => {
+    const tables = holidayTables();
+    tables.holiday_geographies![0]!.city = "V".repeat(5000);
+    tables.holiday_geographies![0]!.city_key = "v".repeat(5000);
+    expect(() => validateHolidayConfiguration(tables, packs(2))).not.toThrow();
+  });
+
+  it("accepts the same date for two geographies", () => {
+    const tables = holidayTables();
+    expect(tables.local_holidays!.filter((row) => row.date === "2026-05-15")).toHaveLength(2);
+    expect(() => validateHolidayConfiguration(tables, packs(2))).not.toThrow();
+  });
+
+  it("is run by the venue-service transfer's validate callback, beside the Hours check", () => {
+    const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
+    const both = { ...validTables(), ...holidayTables() };
+    // The installed packs know no country ZZ.
+    expect(() => validate(both)).toThrowError(refusal("holiday_geographies.country"));
+    for (const row of both.holiday_geographies!) row.country = "ES";
+    both.holiday_geographies![0]!.province_code = "41";
+    both.holiday_geographies![1]!.province_code = "25";
+    both.holiday_geographies![1]!.area_key = "aran";
+    expect(() => validate(both)).not.toThrow();
+    both.local_holidays![0]!.date = "2026-02-30";
+    expect(() => validate(both)).toThrowError(refusal("local_holidays.date"));
+  });
+
+  it("declares geographies after the location they remap to, and entries after their geography", () => {
+    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    expect(names.slice(-3)).toEqual([
+      "special_date_hours_periods",
+      "holiday_geographies",
+      "local_holidays",
+    ]);
+    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.at(-2)).toEqual({
+      name: "holiday_geographies",
+      locationColumns: ["location_id"],
+    });
+    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.at(-1)).toEqual({ name: "local_holidays" });
   });
 });

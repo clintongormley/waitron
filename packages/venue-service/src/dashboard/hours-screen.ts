@@ -16,6 +16,8 @@ import {
   HOURS_RANGE_MAX_DAYS,
   WEEK_DISPLAY_ORDER,
   type CalendarColour,
+  type CalendarDay,
+  type HolidayFact,
   type DateHoursCell,
   type HoursModel,
   type HoursModelSubject,
@@ -25,6 +27,7 @@ import {
   type WeekCell,
   type WeekDay,
 } from "../hours-types.js";
+import { holidayDateName } from "../holiday-naming.js";
 import { repeatedTimes } from "../hours-occurrences.js";
 import { addDays, isLocalDate, weekdayOf } from "../hours-rules.js";
 import type { HoursApi } from "./hours-client.js";
@@ -39,6 +42,7 @@ import "./hours-cell-editor.js";
 import type { CalendarAction } from "./hours-calendar.js";
 import "./hours-calendar.js";
 import { datesListStyles, renderDatesList } from "./hours-dates-list.js";
+import "./local-holidays-editor.js";
 import {
   browserToday,
   format,
@@ -92,6 +96,10 @@ type Editor =
       stored: DateHoursCell[];
       /** Cells of subjects the editor does not show, sent back as they were. */
       hidden: DateHoursCell[];
+      /**
+       * A new date's name taken from `date`'s holidays, followed until the name is edited at all.
+       */
+      suggested?: { date: LocalDate; name: string };
     }
   | {
       kind: "duplicate";
@@ -307,6 +315,7 @@ export class HoursScreen extends LitElement {
   #apply(model: HoursModel): void {
     this.model = model;
     this.readError = "";
+    this.#followHolidays(model.days);
     void this.#focusLinked();
   }
 
@@ -407,7 +416,13 @@ export class HoursScreen extends LitElement {
     special: SpecialDate | null,
     heading: Key,
     returnTo: () => HTMLElement | null,
-    options: { closeWholeVenue?: boolean; cells?: DateHoursCell[]; date?: LocalDate } = {},
+    options: {
+      closeWholeVenue?: boolean;
+      cells?: DateHoursCell[];
+      date?: LocalDate;
+      /** The date's holidays, which name a new date. */
+      holidays?: readonly HolidayFact[];
+    } = {},
   ): void {
     const stored = special === null ? [] : (options.cells ?? storedCells(this.model!, special.id));
     const shown = this.model!.subjects.filter(
@@ -424,6 +439,13 @@ export class HoursScreen extends LitElement {
     });
     const defaults = new Set(this.model!.subjects.filter(isDefaultStation).map(keyOf));
     const kept = stored.filter((entry) => !defaults.has(keyOf(entry.subject)));
+    const suggested =
+      special === null && options.holidays !== undefined && options.date !== undefined
+        ? {
+            date: options.date,
+            name: holidayDateName(options.holidays, options.date, options.date),
+          }
+        : undefined;
     this.#open(
       {
         kind: "date",
@@ -431,16 +453,33 @@ export class HoursScreen extends LitElement {
         heading,
         draft: {
           date: special?.date ?? options.date ?? "",
-          name: special?.name ?? "",
+          name: special?.name ?? suggested?.name ?? "",
           colour: special?.colour ?? "",
           closeWholeVenue: special?.closeWholeVenue ?? options.closeWholeVenue ?? false,
           cells,
         },
         stored: kept,
         hidden: kept.filter((entry) => !shownKeys.has(keyOf(entry.subject))),
+        suggested,
       },
       returnTo,
     );
+  }
+
+  /** A new read of `days`: a new date's suggested name follows its holidays. */
+  #followHolidays(days: readonly CalendarDay[]): void {
+    const editor = this.editor;
+    if (editor?.kind !== "date" || editor.suggested === undefined) return;
+    const { date, name } = editor.suggested;
+    const day = days.find((entry) => entry.date === date);
+    if (day === undefined) return;
+    const next = holidayDateName(day.holidays, date, date);
+    if (next === name) return;
+    this.editor = {
+      ...editor,
+      draft: { ...editor.draft, name: next },
+      suggested: { date, name: next },
+    };
   }
 
   /** Every field the editor's own checks find wrong, by field name. */
@@ -715,7 +754,11 @@ export class HoursScreen extends LitElement {
 
   #setDate(patch: Partial<DateDraft>, name: string): void {
     const editor = this.editor as Extract<Editor, { kind: "date" }>;
-    this.#changed(name, { ...editor, draft: { ...editor.draft, ...patch } });
+    const draft = { ...editor.draft, ...patch };
+    // The suggestion names the date it was taken from; on any other date it would rename wrongly.
+    const suggested =
+      "name" in patch || draft.date !== editor.suggested?.date ? undefined : editor.suggested;
+    this.#changed(name, { ...editor, draft, suggested });
   }
 
   #content(editor: Editor, errors: Record<string, string>) {
@@ -1216,7 +1259,11 @@ export class HoursScreen extends LitElement {
 
   #calendarAction(event: CustomEvent<CalendarAction>): void {
     const { kind, special, cells, date, returnTo } = event.detail;
-    if (kind === "make_special") this.#openDate(null, "hours.add_heading", returnTo, { date });
+    if (kind === "make_special")
+      this.#openDate(null, "hours.add_heading", returnTo, {
+        date,
+        holidays: event.detail.holidays ?? [],
+      });
     else if (kind === "edit") this.#openDate(special!, "hours.edit_heading", returnTo, { cells });
     else if (kind === "duplicate")
       this.#open({ kind: "duplicate", source: special!, dates: [""], cells }, returnTo);
@@ -1265,7 +1312,18 @@ export class HoursScreen extends LitElement {
                 }}
               >
                 <div slot="week">${this.view === "week" ? this.#week() : nothing}</div>
-                <div slot="dates">${this.view === "dates" ? this.#dates() : nothing}</div>
+                <div slot="dates">
+                  ${
+                    this.view === "dates"
+                      ? html`${this.#dates()}
+                          <local-holidays-editor
+                            .api=${this.api}
+                            ?readOnly=${this.readOnly}
+                            .today=${model.civilDate}
+                          ></local-holidays-editor>`
+                      : nothing
+                  }
+                </div>
                 <div slot="calendar">
                   ${
                     this.view === "calendar"
@@ -1274,6 +1332,8 @@ export class HoursScreen extends LitElement {
                           ?readOnly=${this.readOnly}
                           .today=${model.civilDate}
                           @hours-calendar-action=${this.#calendarAction}
+                          @hours-calendar-read=${(event: CustomEvent<{ days: CalendarDay[] }>) =>
+                            this.#followHolidays(event.detail.days)}
                         ></hours-calendar>`
                       : nothing
                   }

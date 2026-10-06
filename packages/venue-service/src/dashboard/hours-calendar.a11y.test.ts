@@ -74,6 +74,8 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
     ],
     days,
     specialDates: SPECIALS,
+    holidayCoverage: [],
+    holidaySources: [],
     specialCells: SPECIALS.map((special) => ({
       specialDateId: special.id,
       cells: [
@@ -86,15 +88,56 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
   };
 }
 
+/** 21 October gets three holidays, two sharing a name, sourced and covered as a whole year. */
+function withHolidays(model: HoursModel): void {
+  const on = (date: LocalDate) => model.days.find((day) => day.date === date);
+  on("2026-10-21")?.holidays.push(
+    { id: "n", date: "2026-10-21", name: "Fiesta común", scope: "national", sourceId: "boe" },
+    { id: "r", date: "2026-10-21", name: "Día de la región", scope: "regional", sourceId: "boe" },
+    { id: "l", date: "2026-10-21", name: "Día de la región", scope: "local", sourceId: "owner:g" },
+  );
+  on("2026-10-12")?.holidays.push({
+    id: "p",
+    date: "2026-10-12",
+    name: "Fiesta Nacional de España",
+    scope: "national",
+    sourceId: "boe",
+  });
+  model.holidaySources = [
+    {
+      id: "boe",
+      kind: "official",
+      title: "BOE-A-2025-21667",
+      url: "https://www.boe.es/buscar/doc.php?id=BOE-A-2025-21667",
+      sha256: "abc",
+    },
+    { id: "owner:g", kind: "owner", title: "Sevilla", url: null, sha256: null },
+  ];
+  model.holidayCoverage = [
+    {
+      year: 2026,
+      country: "ES",
+      provinceCode: "41",
+      regionCode: "01",
+      nationalRegional: "area_required",
+      local: "owner_entered",
+      dataVersion: "ES-2026.1",
+      sourceIds: ["boe"],
+    },
+  ];
+}
+
 async function mount(
   theme: "light" | "dark",
-  options: { readOnly?: boolean; failRead?: boolean } = {},
+  options: { readOnly?: boolean; failRead?: boolean; holidays?: boolean } = {},
 ): Promise<HoursCalendar> {
   await mountThemed("<div></div>", theme);
   const request = async (path: string) => {
     if (options.failRead) throw { code: "connection.failed" };
     const query = new URL(path, location.origin).searchParams;
-    return rangeModel(query.get("from")!, query.get("to")!);
+    const model = rangeModel(query.get("from")!, query.get("to")!);
+    if (options.holidays) withHolidays(model);
+    return model;
   };
   const el = document.createElement("hours-calendar");
   el.api = new HoursApi(request as unknown as DashboardRequest);
@@ -138,6 +181,23 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursCalendar>
     return el;
   },
   "a failed read": (theme) => mount(theme, { failRead: true }),
+  "a holiday with several labels, sources and coverage open": async (theme) => {
+    const el = await mount(theme, { holidays: true });
+    await open(el, "2026-10-21");
+    return el;
+  },
+  "a special date on a holiday, open": async (theme) => {
+    const el = await mount(theme, { holidays: true });
+    await open(el, "2026-10-12");
+    return el;
+  },
+  "a phone's width with a holiday open": async (theme) => {
+    await page.viewport(390, 800);
+    const el = await mount(theme, { holidays: true });
+    expect(window.innerWidth).toBe(390);
+    await open(el, "2026-10-21");
+    return el;
+  },
   "a phone's width with a date open": async (theme) => {
     await page.viewport(390, 800);
     const el = await mount(theme);

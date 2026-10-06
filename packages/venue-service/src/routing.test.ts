@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getCountryPack } from "@waitron/country-packs";
 import {
   chooseMaker,
   chooseExtraMaker,
@@ -967,6 +968,72 @@ describe("chooseExtraMaker", () => {
     expect(chooseExtraMaker(extrasRules, chips, null, null, null).outcome).toEqual({
       kind: "made",
       stationId: "fryer",
+    });
+  });
+});
+
+describe("a public holiday", () => {
+  const MON = 1;
+  // Monday 12 October 2026 is Spain's national day; Monday 5 October is an ordinary Monday.
+  const HOLIDAY = "2026-10-12";
+  const ORDINARY = "2026-10-05";
+  const on = (civilDate: string, timeOfDay: string): RoutingMoment => ({
+    civilDate,
+    weekday: MON,
+    timeOfDay,
+  });
+  const timing: StationTiming = {
+    fallbackId: "mainBar",
+    hours: [{ weekday: MON, opensAt: "18:00", closesAt: "23:00" }],
+    today: null,
+    weekSet: true,
+  };
+  const rules: RoutingRules = { ...base, timing: new Map([["cocktailBar", timing]]) };
+
+  it("is a national holiday in Seville through the real Spanish pack, and the ordinary Monday is not", () => {
+    const spain = getCountryPack("ES")!.holidayCalendar!;
+    const facts = (date: string) =>
+      spain.read({ provinceCode: "41", areaKey: null, from: date, to: date }).facts;
+    expect(facts(HOLIDAY)).toEqual([expect.objectContaining({ date: HOLIDAY, scope: "national" })]);
+    expect(facts(ORDINARY)).toEqual([]);
+  });
+
+  it("leaves a station on its Monday hours, and every route as on an ordinary Monday", () => {
+    for (const time of ["12:00", "18:00", "22:59", "23:00"]) {
+      expect(stationStatus(rules, "cocktailBar", on(HOLIDAY, time))).toEqual(
+        stationStatus(rules, "cocktailBar", on(ORDINARY, time)),
+      );
+      expect(chooseMaker(rules, mojito, "terrace", on(HOLIDAY, time))).toEqual(
+        chooseMaker(rules, mojito, "terrace", on(ORDINARY, time)),
+      );
+    }
+    expect(stationStatus(rules, "cocktailBar", on(HOLIDAY, "20:00"))).toEqual({
+      open: true,
+      why: "in_hours",
+    });
+    expect(chooseMaker(rules, mojito, null, on(HOLIDAY, "20:00")).route).toEqual(
+      station("cocktailBar"),
+    );
+    expect(chooseMaker(rules, mojito, null, on(HOLIDAY, "12:00")).route).toEqual(
+      station("mainBar"),
+    );
+  });
+
+  it("closes a station on the holiday only through a special date the venue saved", () => {
+    const closedHoliday: RoutingRules = {
+      ...base,
+      timing: new Map([["cocktailBar", { ...timing, dates: new Map([[HOLIDAY, []]]) }]]),
+    };
+    expect(stationStatus(closedHoliday, "cocktailBar", on(HOLIDAY, "20:00"))).toEqual({
+      open: false,
+      why: "out_of_hours",
+    });
+    expect(chooseMaker(closedHoliday, mojito, null, on(HOLIDAY, "20:00")).route).toEqual(
+      station("mainBar"),
+    );
+    expect(stationStatus(closedHoliday, "cocktailBar", on(ORDINARY, "20:00"))).toEqual({
+      open: true,
+      why: "in_hours",
     });
   });
 });

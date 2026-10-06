@@ -2,6 +2,7 @@
 import { AppError, isUuid } from "@waitron/shared";
 import {
   CALENDAR_COLOURS,
+  HOURS_RANGE_MAX_DAYS,
   type CalendarColour,
   type CalendarTone,
   type DateCell,
@@ -34,6 +35,18 @@ export function isLocalDate(value: unknown): value is LocalDate {
   const [y, m, d] = value.split("-").map(Number) as [number, number, number];
   const date = new Date(Date.UTC(y, m - 1, d));
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
+/** Every date from `from` to `to`, both included: real dates, in order, at most a leap year. */
+export function rangeDates(from: unknown, to: unknown): LocalDate[] {
+  if (!isLocalDate(from)) invalidHours("from");
+  if (!isLocalDate(to) || to < from) invalidHours("to");
+  const dates: LocalDate[] = [];
+  for (let date = from; date <= to; date = addDays(date, 1)) {
+    if (dates.length === HOURS_RANGE_MAX_DAYS) invalidHours("to");
+    dates.push(date);
+  }
+  return dates;
 }
 
 export function addDays(date: LocalDate, days: number): LocalDate {
@@ -197,12 +210,18 @@ export function parseWeek(value: unknown): ParsedWeek {
   return { cells, indexOf };
 }
 
+/** A special date's name, trimmed; a blank one is refused. */
+export function specialDateName(value: unknown): string {
+  if (typeof value !== "string" || value.trim() === "") invalidHours("name");
+  return value.trim();
+}
+
 /** A special date's own fields and cells, structurally; ownership and clashes are the writer's. */
 export function parseSpecialDateInput(value: unknown): SpecialDateInput {
   if (typeof value !== "object" || value === null) invalidHours("input");
   const { date, name, colour, closeWholeVenue, cells } = value as Record<string, unknown>;
   if (!isLocalDate(date)) invalidHours("date");
-  if (typeof name !== "string" || name.trim() === "") invalidHours("name");
+  const trimmed = specialDateName(name);
   if (!CALENDAR_COLOURS.includes(colour as CalendarColour)) invalidHours("colour");
   if (typeof closeWholeVenue !== "boolean") invalidHours("closeWholeVenue");
   if (!Array.isArray(cells)) invalidHours("cells");
@@ -226,7 +245,7 @@ export function parseSpecialDateInput(value: unknown): SpecialDateInput {
   );
   return {
     date,
-    name: name.trim(),
+    name: trimmed,
     colour: colour as CalendarColour,
     closeWholeVenue,
     cells: parsed,

@@ -15,13 +15,14 @@ import {
   parseSubject,
   pairMatters,
   parseWeek,
+  rangeDates,
+  specialDateName,
   tailOverlaps,
   weekdayOf,
   type DateState,
   type Interval,
 } from "./hours-rules.js";
 import {
-  HOURS_RANGE_MAX_DAYS,
   type CalendarDay,
   type DateCell,
   type DateHoursCell,
@@ -753,6 +754,28 @@ export async function saveSpecialDate(
   return { id: specialDateId, ...values };
 }
 
+/** Renames a special date and changes nothing else about it. */
+export async function renameSpecialDate(
+  tx: Transaction,
+  cfg: VenueScope,
+  id: string,
+  name: string,
+): Promise<SpecialDate> {
+  const [row] = await tx
+    .update(specialDates)
+    .set({ name: specialDateName(name) })
+    .where(and(eq(specialDates.id, id), eq(specialDates.locationId, cfg.locationId)))
+    .returning();
+  if (row === undefined) throw new AppError("special_date.not_found", { specialDateId: id });
+  return {
+    id: row.id,
+    date: row.date,
+    name: row.name,
+    colour: row.colour,
+    closeWholeVenue: row.closeWholeVenue,
+  };
+}
+
 /**
  * A module that keeps its own rows per special date, such as a menu timetable's overrides. It
  * works inside the caller's transaction and never opens its own. `copy` runs after the target date
@@ -974,18 +997,6 @@ export async function resolveOpeningDateHours(
   return (await resolveSubjects(tx, cfg, [parsed], defaults, openingDate)).resolved[0]!;
 }
 
-/** Every date from `from` to `to`, both included: real dates, in order, at most a leap year. */
-function rangeDates(from: unknown, to: unknown): LocalDate[] {
-  if (!isLocalDate(from)) invalidHours("from");
-  if (!isLocalDate(to) || to < from) invalidHours("to");
-  const dates: LocalDate[] = [];
-  for (let date = from; date <= to; date = addDays(date, 1)) {
-    if (dates.length === HOURS_RANGE_MAX_DAYS) invalidHours("to");
-    dates.push(date);
-  }
-  return dates;
-}
-
 /**
  * The venue's subjects, their standard weeks and the special dates in `dates`, and any from
  * `listFrom` onward, with their cells, in a fixed number of reads however many dates, subjects and
@@ -1177,7 +1188,7 @@ export async function readHoursModel(
   to: LocalDate,
   at: Date,
   holidays?: HolidayReader,
-): Promise<HoursModel> {
+): Promise<Omit<HoursModel, "holidayCoverage" | "holidaySources">> {
   const dates = rangeDates(from, to);
   const clock = await readLocationClock(tx, cfg.locationId);
   const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;

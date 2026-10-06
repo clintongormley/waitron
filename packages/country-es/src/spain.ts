@@ -5,6 +5,7 @@ import type {
   ValidationResult,
 } from "@waitron/country";
 
+import { SPAIN_HOLIDAY_CALENDAR } from "./holidays.js";
 import { SPAIN_RECEIPT_LABELS } from "./receipt-labels.js";
 
 export type SpanishNifKind = "personal" | "foreigner" | "tax-assigned-personal" | "entity";
@@ -291,4 +292,5 @@ export const SPAIN: CountryPack = {
   taxIdentifier: { label: "NIF", validate: validateSpanishNif },
   postalCode: { validate: validateSpanishPostalCode },
   telephone: { validate: validateSpanishPhone },
+  holidayCalendar: SPAIN_HOLIDAY_CALENDAR,
 };

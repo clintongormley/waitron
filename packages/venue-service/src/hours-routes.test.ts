@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
   locations,
+  tenants,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -306,6 +307,20 @@ describe("reading Hours", () => {
           cells: [{ subject: fx.deli, cell: { mode: "closed", periods: [] } }],
         },
       ],
+      // No tenant row is stored here, so there is no country to read holidays for.
+      holidayCoverage: [
+        {
+          year: 2030,
+          country: "",
+          provinceCode: null,
+          regionCode: null,
+          nationalRegional: "unsupported_country",
+          local: "address_unresolved",
+          dataVersion: null,
+          sourceIds: [],
+        },
+      ],
+      holidaySources: [],
     });
     expect((await send(fx, "GET", "/hours?from=2030-10-14&to=2030-10-16", fx.manager)).status).toBe(
       200,
@@ -553,6 +568,37 @@ describe("writing Hours", () => {
     );
     expect(await venueDates(fx)).toEqual([
       { id: source.id, date: "2030-10-15", name: "Staff party" },
+    ]);
+  });
+
+  it("names a copy on a holiday after the holiday, from target dates alone", async () => {
+    const fx = await fixture();
+    const tenantBefore = await db.select().from(tenants);
+    onTestFinished(() =>
+      withTransaction(db, async (tx) => {
+        await tx.delete(tenants);
+        if (tenantBefore.length > 0) await tx.insert(tenants).values(tenantBefore);
+      }),
+    );
+    await withTransaction(db, async (tx) => {
+      await tx
+        .insert(tenants)
+        .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Invented SL" })
+        .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
+      await tx
+        .update(locations)
+        .set({ province: "Sevilla", city: "Sevilla" })
+        .where(eq(locations.id, fx.cfg.locationId));
+    });
+    const source = await createDate(fx, input());
+    const copied = await send(fx, "POST", `/special-dates/${source.id}/duplicate`, fx.manager, {
+      dates: ["2026-12-25", "2030-10-22"],
+    });
+    expect(copied.status).toBe(201);
+    // Spain's 2026 data lists 25 December as "Natividad del Señor", a national holiday.
+    expect(((await copied.json()) as SpecialDate[]).map(({ date, name }) => [date, name])).toEqual([
+      ["2026-12-25", "Natividad del Señor"],
+      ["2030-10-22", "Staff party"],
     ]);
   });
 

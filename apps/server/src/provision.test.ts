@@ -18,7 +18,14 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import type { VenueRequest } from "@waitron/provisioning";
 import { isAppError } from "@waitron/shared";
 import { parseModuleConfig } from "@waitron/module";
-import { replaceWeekHours, saveSpecialDate } from "@waitron/venue-service";
+import {
+  readHolidays,
+  readLocalHolidayModel,
+  replaceWeekHours,
+  saveHolidayArea,
+  saveLocalHoliday,
+  saveSpecialDate,
+} from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { readModuleConfig } from "./module-config.js";
@@ -111,6 +118,44 @@ function ownerDb(): Database {
 }
 
 describe("provisionVenue", () => {
+  it("leaves holiday storage empty, while the stored address reads its shipped holidays at once", async () => {
+    const db = ownerDb();
+    const result = await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    );
+    const cfg = { locationId: brandLocationId(result.locationId) };
+
+    const { rows } = await db.execute<Record<string, number>>(sql`
+      select
+        (select cast(count(*) as int) from holiday_geographies) as geographies,
+        (select cast(count(*) as int) from local_holidays) as entries`);
+    expect(rows[0]).toEqual({ geographies: 0, entries: 0 });
+    const read = await withTransaction(db, async (tx) => ({
+      may: await readHolidays(tx, cfg, "2026-05-01", "2026-05-31"),
+      model: await readLocalHolidayModel(tx, cfg),
+    }));
+    // Madrid's 2026: 1 May everywhere, and 2 May, the Comunidad de Madrid's own day.
+    expect(read.may.facts.map(({ date, scope }) => ({ date, scope }))).toEqual([
+      { date: "2026-05-01", scope: "national" },
+      { date: "2026-05-02", scope: "regional" },
+    ]);
+    expect(read.may.coverage).toEqual([
+      expect.objectContaining({
+        provinceCode: "28",
+        regionCode: "13",
+        nationalRegional: "complete",
+        local: "none_entered",
+      }),
+    ]);
+    expect(read.model).toMatchObject({
+      venue: { country: "ES", provinceCode: "28", city: "Madrid" },
+      localEntryLimit: 2,
+      geographies: [],
+      entries: [],
+    });
+  });
+
   it.each(["preproduction", "production"] as const)(
     "names the default department, and its trading name, after the location when provisioning under %s",
     async (environment) => {
@@ -344,6 +389,31 @@ describe("provisionVenue", () => {
 });
 
 describe("clearProvisionFixture", () => {
+  it("clears a venue's local holidays and their geographies before the venue", async () => {
+    const db = ownerDb();
+    const request = venueRequest(nextNif());
+    request.location.city = "Vielha e Mijaran";
+    request.location.province = "Lleida";
+    const result = await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      { environment: "preproduction", venue: request },
+    );
+    const cfg = { locationId: brandLocationId(result.locationId) };
+    await withTransaction(db, async (tx) => {
+      await saveHolidayArea(tx, cfg, { areaKey: "aran" });
+      await saveLocalHoliday(tx, cfg, null, { date: "2026-07-20", name: "Santa Margarida" });
+    });
+
+    await clearProvisionFixture(db);
+
+    const { rows } = await db.execute<Record<string, number>>(sql`
+      select
+        (select cast(count(*) as int) from local_holidays) as entries,
+        (select cast(count(*) as int) from holiday_geographies) as geographies,
+        (select cast(count(*) as int) from locations) as locations`);
+    expect(rows[0]).toEqual({ entries: 0, geographies: 0, locations: 0 });
+  });
+
   it("clears a venue holding opening hours, periods before their cells and dates before their owners", async () => {
     const db = ownerDb();
     const result = await provisionVenue(

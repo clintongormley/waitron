@@ -1,4 +1,5 @@
 // Browser-safe: types and constants only, no database or server imports.
+import type { HolidayCoverage, HolidaySource } from "./holiday-types.js";
 
 /** A real venue-local calendar date, `YYYY-MM-DD`. */
 export type LocalDate = string;
@@ -112,6 +113,9 @@ export interface HoursModel {
    * cell inherits.
    */
   specialCells: { specialDateId: string; cells: DateHoursCell[] }[];
+  /** One entry per civil year the range touches, from the same read as `days[].holidays`. */
+  holidayCoverage: readonly HolidayCoverage[];
+  holidaySources: readonly HolidaySource[];
 }
 
 /** The most dates one Hours read covers: a whole leap year. */

@@ -3,9 +3,12 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import type { HolidayCoverage } from "../holiday-types.js";
+import { holidayDateName } from "../holiday-naming.js";
 import type {
   CalendarDay,
   DateHoursCell,
+  HolidayFact,
   HoursModel,
   LocalDate,
   SpecialDate,
@@ -35,7 +38,18 @@ export interface CalendarAction {
   date: LocalDate;
   special?: SpecialDate;
   cells?: DateHoursCell[];
+  /** The date's public holidays, which name a date made special from the panel. */
+  holidays?: HolidayFact[];
   returnTo: () => HTMLElement | null;
+}
+
+type Key = Parameters<typeof t>[0];
+
+/** The national and regional sentence for a year's coverage, or the unknown one without it. */
+function nationalCoverage(year: number, coverage: HolidayCoverage | undefined): string {
+  return format(`hours.calendar.coverage.${coverage?.nationalRegional ?? "unknown"}` as Key, {
+    year: String(year),
+  });
 }
 
 export function addMonths(month: Month, months: number): Month {
@@ -269,6 +283,26 @@ export class HoursCalendar extends LitElement {
       .visually-hidden {
         ${visuallyHiddenStyles}
       }
+      .facts,
+      .coverage {
+        margin: 0 0 var(--wt-space-2);
+        padding: 0;
+        list-style: none;
+      }
+      .facts li {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--wt-space-2);
+        margin-block-end: var(--wt-space-1);
+        overflow-wrap: anywhere;
+      }
+      .source {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .source a {
+        color: var(--wt-color-primary-text);
+      }
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -326,6 +360,13 @@ export class HoursCalendar extends LitElement {
     this.model = model;
     this.#days = new Map(model.days.map((day) => [day.date, day]));
     this.readError = "";
+    this.dispatchEvent(
+      new CustomEvent("hours-calendar-read", {
+        detail: { days: model.days },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     // A panel action the new read takes away, such as Delete once the date is ordinary, would
     // otherwise drop focus to the page.
     const date = this.selected;
@@ -397,6 +438,7 @@ export class HoursCalendar extends LitElement {
       ...(special === undefined
         ? {}
         : { special, cells: structuredClone(storedCells(this.model!, special.id)) }),
+      holidays: structuredClone(this.#dayOf(date).holidays),
       returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
     };
     this.dispatchEvent(
@@ -419,11 +461,12 @@ export class HoursCalendar extends LitElement {
           : special.name,
       );
     else if (day.tone === "closed") words.push(t("hours.closed"));
-    for (const holiday of day.holidays)
+    const name = holidayDateName(day.holidays, day.date, "");
+    if (name !== "")
       words.push(
         special === null && day.tone !== "closed"
-          ? format("hours.calendar.holiday_standard", { name: holiday.name })
-          : holiday.name,
+          ? format("hours.calendar.holiday_standard", { name })
+          : name,
       );
     return words;
   }
@@ -532,15 +575,7 @@ export class HoursCalendar extends LitElement {
           >${special === null ? formatDate(date) : `${formatDate(date)} · ${special.name}`}</span
         >
       </h2>
-      ${
-        day.holidays.length === 0
-          ? nothing
-          : html`<p class="note" data-test="holidays">
-              ${day.holidays
-                .map((holiday) => format("hours.calendar.holiday", { name: holiday.name }))
-                .join(" ")}
-            </p>`
-      }
+      ${this.#holidays(model, day)}
       <table class="hours">
         <thead class="visually-hidden">
           <tr>
@@ -583,6 +618,78 @@ export class HoursCalendar extends LitElement {
       }`;
   }
 
+  #coverage(model: HoursModel, year: number): HolidayCoverage | undefined {
+    return model.holidayCoverage.find((coverage) => coverage.year === year);
+  }
+
+  /** Each of the date's holidays with its scope and source, then what its year's coverage says. */
+  #holidays(model: HoursModel, day: CalendarDay) {
+    const year = Number(day.date.slice(0, 4));
+    const coverage = this.#coverage(model, year);
+    const source = (holiday: HolidayFact) => {
+      const found = model.holidaySources.find(({ id }) => id === holiday.sourceId);
+      if (found === undefined) return nothing;
+      if (found.kind === "owner")
+        return html`<span class="source"
+          >${format("hours.calendar.source_owner", { city: found.title })}</span
+        >`;
+      const title =
+        found.url === null
+          ? found.title
+          : html`<a href=${found.url} target="_blank" rel="noopener noreferrer">${found.title}</a>`;
+      return html`<span class="source">${t("hours.calendar.source")} ${title}</span>`;
+    };
+    return html`${
+        day.holidays.length === 0
+          ? nothing
+          : html`<ul class="facts" data-test="holidays">
+              ${[...day.holidays].map(
+                (holiday) =>
+                  html`<li>
+                    <span
+                      >${t(`hours.calendar.scope.${holiday.scope}` as Key)}:
+                      <strong>${holiday.name}</strong></span
+                    >
+                    ${source(holiday)}
+                  </li>`,
+              )}
+            </ul>`
+      }
+      <ul class="note coverage" data-test="coverage">
+        <li>${nationalCoverage(year, coverage)}</li>
+        ${
+          coverage === undefined
+            ? nothing
+            : html`<li>
+                ${format(
+                  `hours.calendar.local.${
+                    coverage.nationalRegional === "unsupported_country"
+                      ? "unsupported_country"
+                      : coverage.local
+                  }` as Key,
+                  { year: String(year) },
+                )}
+              </li>`
+        }
+      </ul>`;
+  }
+
+  /** A line for each year the month shows whose official holidays are not known to be complete. */
+  #monthCoverage() {
+    const model = this.model;
+    if (model === undefined) return nothing;
+    const dates = monthGrid(this.month);
+    const years = [...new Set(dates.map((date) => Number(date.slice(0, 4))))];
+    const lines = years
+      .map((year) => [year, this.#coverage(model, year)] as const)
+      .filter(([, coverage]) => coverage?.nationalRegional !== "complete")
+      .map(([year, coverage]) => nationalCoverage(year, coverage));
+    if (lines.length === 0) return nothing;
+    return html`<ul class="note coverage" data-test="month-coverage">
+      ${lines.map((line) => html`<li>${line}</li>`)}
+    </ul>`;
+  }
+
   override render() {
     const nav = (test: string, label: Parameters<typeof t>[0], glyph: string, months: number) =>
       html`<wt-button
@@ -619,6 +726,7 @@ export class HoursCalendar extends LitElement {
             ><span class="swatch" data-colour="amber"></span>${t("hours.calendar.legend_special")}
           </li>
         </ul>
+        ${this.#monthCoverage()}
         ${this.readError ? html`<p role="alert">${this.readError}</p>` : nothing} ${this.#grid()}
       </div>
       <section class="panel" data-test="date-panel">${this.#panel()}</section>
@@ -632,5 +740,7 @@ declare global {
   }
   interface HTMLElementEventMap {
     "hours-calendar-action": CustomEvent<CalendarAction>;
+    /** The calendar read its month: `days` are that read's days. */
+    "hours-calendar-read": CustomEvent<{ days: CalendarDay[] }>;
   }
 }
