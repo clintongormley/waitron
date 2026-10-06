@@ -320,19 +320,29 @@ The dashboard does the same with such a value: the swatches in the Products
 tree and a menu's Structure tree draw it as no colour, and the colour chooser's "Use category
 colour" choice says the category has none (`apps/dashboard/src/widgets/color-field.ts`).
 
-A sold-out till tile, painted or not, is drawn grey (`--wt-color-border`) at full strength instead
-of taking `wt-button`'s usual disabled fade, its name, price and "Sold out" in `--wt-color-text`; a
-painted one keeps its colour as a stripe along its start edge, `--wt-space-2` wide (W92a). The
-button stays disabled, so a tap adds nothing. The "tile colours" cases in
-`apps/till/src/widgets/menu-browser.test.ts` work out each label's contrast as it is seen, the
-button's opacity included, and hold it at 4.5:1 or more in both themes; they also pin the grey, the
-stripe's colour and that it is wider than the tile's opposite edge, the disabled button and the
-language of "Sold out". axe does not check this: the case "home, with a plain and two painted (dark
-and pale) sold-out tiles and a weighed product's tile, has no violations" in
+A sold-out till tile, painted or not, is filled `--wt-color-surface-sunken` at full strength
+instead of taking `wt-button`'s usual disabled fade — the light grey of `--wt-color-border` in the
+light theme, and the page's own `--wt-color-bg` in the dark, a level below an available tile's
+`--wt-color-surface` — its name, price and "Sold out" in `--wt-color-text`. A painted one keeps
+its colour as a stripe along its left edge, `--wt-space-1` wide, with a one-pixel `--wt-color-text`
+line on the tile's side of the stripe (W92a, A292). Both are inset shadows, which take no layout
+width, so the labels stay centred; a shadow's offset is physical, so the stripe would stay on the
+left in a right-to-left language, and the till has none (`catalogues`,
+`apps/till/src/i18n/strings.ts`). The button stays disabled, so a tap adds nothing. The "tile
+colours" cases in `apps/till/src/widgets/menu-browser.test.ts` work out each label's contrast as it
+is seen, the button's opacity included, and hold it at 4.5:1 or more in both themes; they also pin
+the fill, the stripe's colour and width, that each sold-out tile's name and label block are centred
+within 1px of its button's centre, that in the dark theme the fill is no lighter than the page, the
+disabled button and the language of "Sold out". One case mounts a sold-out tile in each of the 24
+`CATEGORY_PALETTE` colours in both themes and requires each stripe to reach 3:1 against the tile's
+fill or, where it does not, the line beside it to reach 3:1 against both the fill and the stripe.
+Measured in Chromium on 2026-10-06, the stripe alone falls short for 19 colours in the light theme
+(lowest 1.02:1) and 2 in the dark (lowest 2.03:1), and for those colours the line's lowest is
+4.23:1 in the light theme and 5.72:1 in the dark; with the line deleted that case failed in both
+themes, naming those 21 colours. axe does not check any of this: the case "home, with a plain and
+two painted (dark and pale) sold-out tiles and a weighed product's tile, has no violations" in
 `menu-browser.a11y.test.ts` passed on the old fade, under which the painted tiles' labels read at
-2.16:1 to 3.49:1. On the grey, a pale colour's stripe is faint in the light theme (about 1.35:1 for `#edabab`) and a
-dark one's in the dark theme (about 2.11:1 for `#256bb1`); the name and "Sold out" still say what
-the tile is.
+2.16:1 to 3.49:1.
 
 ## Variants
 

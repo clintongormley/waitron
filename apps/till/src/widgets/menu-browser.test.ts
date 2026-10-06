@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { setContentLanguages } from "@waitron/ui";
+import { CATEGORY_PALETTE, setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import type {
   DocumentMember,
@@ -1405,7 +1405,11 @@ describe("till-menu-browser", () => {
 
     /** The computed value of `property: value` on an element beside the widget, so a neutral tile is
      * compared with the theme's own tokens rather than with another tile. */
-    function token(el: TillMenuBrowser, property: "color" | "background-color", value: string) {
+    function token(
+      el: TillMenuBrowser,
+      property: "color" | "background-color" | "width",
+      value: string,
+    ) {
       const probe = document.createElement("span");
       probe.style.setProperty(property, value);
       el.parentElement!.appendChild(probe);
@@ -1450,13 +1454,51 @@ describe("till-menu-browser", () => {
       return contrast(over(text, page, fade), over(fill, page, fade));
     }
 
+    type Shadow = {
+      color: string;
+      x: number;
+      y: number;
+      blur: number;
+      spread: number;
+      inset: boolean;
+    };
+
+    /** The inner button's box shadows, top first: on a sold-out painted tile, the stripe and then
+     * the edge line drawn beneath it. */
+    function shadows(tile: Button): Shadow[] {
+      const value = getComputedStyle(inner(tile)).boxShadow;
+      if (value === "none") return [];
+      return value.split(/,(?![^(]*\))/).map((shadow) => {
+        const color = shadow.match(/rgba?\([^)]*\)/)![0];
+        const lengths = shadow
+          .replace(color, "")
+          .match(/-?[\d.]+px/g)!
+          .map(parseFloat);
+        expect(lengths).toHaveLength(4);
+        const [x, y, blur, spread] = lengths;
+        return {
+          color,
+          x: x!,
+          y: y!,
+          blur: blur!,
+          spread: spread!,
+          inset: shadow.includes("inset"),
+        };
+      });
+    }
+
+    /** Drawn inside the tile as a solid band from its left edge, `x` wide. */
+    const flat = (shadow?: Shadow): shadow is Shadow =>
+      !!shadow &&
+      shadow.inset &&
+      shadow.x > 0 &&
+      shadow.y === 0 &&
+      shadow.blur === 0 &&
+      shadow.spread === 0;
+
     const stripe = (tile: Button) => {
-      const style = getComputedStyle(inner(tile));
-      return {
-        color: style.borderInlineStartColor,
-        width: parseFloat(style.borderInlineStartWidth),
-        oppositeEdge: parseFloat(style.borderInlineEndWidth),
-      };
+      const [band, edge] = shadows(tile);
+      return { color: band?.color, band, edge };
     };
 
     const SOLD_OUT = ["Blue gone", "Pink gone", "Plain gone"];
@@ -1480,23 +1522,89 @@ describe("till-menu-browser", () => {
         expect(stripe(entry(el, "structure", "Pink gone")).color).toBe("rgb(237, 171, 171)");
       });
 
-      it("draws every sold-out tile on the neutral grey, never its colour or an available tile's surface", async () => {
+      it("draws every sold-out tile on the sunken surface, never its colour or an available tile's surface", async () => {
         const el = await mountPainted(theme);
-        const grey = token(el, "background-color", "var(--wt-color-border)");
+        const sunken = token(el, "background-color", "var(--wt-color-surface-sunken)");
         const surface = token(el, "background-color", "var(--wt-color-surface)");
-        expect(grey).not.toBe(surface);
-        for (const name of SOLD_OUT) expect(background(entry(el, "structure", name))).toBe(grey);
+        expect(sunken).not.toBe(surface);
+        if (theme === "light")
+          expect(sunken).toBe(token(el, "background-color", "var(--wt-color-border)"));
+        for (const name of SOLD_OUT) expect(background(entry(el, "structure", name))).toBe(sunken);
       });
 
-      it("keeps a sold-out painted tile's colour as a stripe wider than its opposite edge, and gives a plain one none", async () => {
+      it("keeps a sold-out painted tile's colour as a stripe one --wt-space-1 wide, and gives a plain one none", async () => {
         const el = await mountPainted(theme);
+        const space1 = parseFloat(token(el, "width", "var(--wt-space-1)"));
+        expect(space1).toBe(4);
         for (const name of ["Blue gone", "Pink gone"]) {
-          const { width, oppositeEdge } = stripe(entry(el, "structure", name));
-          expect(width).toBeGreaterThanOrEqual(oppositeEdge + 2);
+          const { band } = stripe(entry(el, "structure", name));
+          expect(band, name).toMatchObject({ x: space1, y: 0, blur: 0, spread: 0, inset: true });
         }
-        const plain = stripe(entry(el, "structure", "Plain gone"));
-        expect(plain.width).toBe(plain.oppositeEdge);
+        expect(shadows(entry(el, "structure", "Plain gone"))).toEqual([]);
       });
+
+      it("centres a striped sold-out tile's labels on the tile, as on a plain one", async () => {
+        const el = await mountPainted(theme);
+        const centre = (box: DOMRect) => box.left + box.width / 2;
+        const offsets = SOLD_OUT.flatMap((name) => {
+          const tile = entry(el, "structure", name);
+          const middle = centre(inner(tile).getBoundingClientRect());
+          return [".label", ".name"].map((part) => ({
+            part: `${name} ${part}`,
+            off: Math.abs(centre(tile.querySelector(part)!.getBoundingClientRect()) - middle),
+          }));
+        });
+        expect(offsets.filter(({ off }) => off > 1)).toEqual([]);
+      });
+
+      it("keeps every palette colour's stripe at 3:1 on a sold-out tile, or edged by a line that is", async () => {
+        const gone = CATEGORY_PALETTE.map((color, i) =>
+          product(`gone${i}`, `Gone ${color}`, { color, available: false }),
+        );
+        const { el } = await mountWidget<TillMenuBrowser>(
+          "till-menu-browser",
+          {
+            menu: lunch({
+              structure: { members: gone.map((_, i) => member(`gone${i}`)) },
+              ...withShortcuts([]),
+            }),
+            products: gone,
+            store: new WorkingOrderStore(),
+          },
+          theme,
+        );
+        const page = rgba(getComputedStyle(el.parentElement!).backgroundColor);
+        const unseen = CATEGORY_PALETTE.flatMap((color) => {
+          const tile = entry(el, "structure", `Gone ${color}`);
+          const fill = over(rgba(background(tile)), page);
+          const { band: drawn, edge } = stripe(tile);
+          if (!flat(drawn)) return [color];
+          const band = over(rgba(drawn.color), fill);
+          if (contrast(band, fill) >= 3) return [];
+          if (!flat(edge)) return [color];
+          const line = over(rgba(edge.color), fill);
+          const shown = edge.x - drawn.x;
+          return shown >= 1 && contrast(line, fill) >= 3 && contrast(line, band) >= 3
+            ? []
+            : [color];
+        });
+        expect(unseen).toEqual([]);
+      });
+
+      if (theme === "dark")
+        it("sinks a sold-out tile to the page's own level in the dark theme, edged apart from it", async () => {
+          const el = await mountPainted(theme);
+          const black: Rgba = [0, 0, 0, 1];
+          const page = rgba(token(el, "background-color", "var(--wt-color-bg)"));
+          for (const name of SOLD_OUT) {
+            const tile = entry(el, "structure", name);
+            // Contrast against black rises with lightness, so this reads "no lighter than".
+            expect(contrast(rgba(background(tile)), black)).toBeLessThanOrEqual(
+              contrast(page, black),
+            );
+            expect(getComputedStyle(inner(tile)).borderTopColor).not.toBe(background(tile));
+          }
+        });
 
       it("reads a sold-out tile's name, price and Sold out at 4.5:1 or more where it is seen", async () => {
         const el = await mountPainted(theme);
