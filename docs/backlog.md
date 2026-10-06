@@ -1345,9 +1345,19 @@ through Cancel/native Escape. The comparison uses the exact emitted intervals an
 clean/reverted rows close directly. Accepted writes commit before refresh, newer delivered input
 stays dirty, refusals retain the draft and pending writes block dismissal. Departed controls/replies
 leave a replacement editor alone, including its busy state. Focused cases are in
-`packages/venue-service/src/dashboard/station-hours-form.unsaved.test.ts`. Exceptions, watchers,
-department/zone forms and the remaining dashboard/till modal owners still need Task 4 work;
-page/history/native reload remain Tasks 5–6.
+`packages/venue-service/src/dashboard/station-hours-form.unsaved.test.ts`.
+Exception Add/Edit now protects subject, zone and destination through Cancel/native Escape. The
+scope survives routing preview, whose Cancel returns to the retained draft without another question.
+Confirmed writes commit their captured body before refresh; refusals keep the draft. Clean/reverted
+values close directly, including Add's initially empty destination; a cleared saved destination stays
+dirty. Pending preview reads block dismissal. Disconnect aborts the question and invalidates old
+preview/write replies. Focused cases are in
+`packages/venue-service/src/dashboard/prep-exceptions.unsaved.test.ts`. Watchers, department/zone
+forms, other station-action drafts and the remaining dashboard/till modal owners still need Task 4
+work; page/history/native reload remain Tasks 5–6. The existing station keyboard-reorder focus
+check failed in a filtered run and in the preceding checkpoint's installed measurement checkout;
+its cause remains unverified. The dated W69 audit records the reproduction for follow-up before
+branch finishing.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

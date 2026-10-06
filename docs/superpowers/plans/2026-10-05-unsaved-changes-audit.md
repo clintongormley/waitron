@@ -525,3 +525,35 @@ host and its submitted bodies alongside the unchanged hours and prep-station sui
 The EN/ES, light/dark, 390/1280 matrix covers this editor and the shared confirmation. Synthetic
 unload checks establish listener cancellation only; actual navigation/reload and inline hours
 remain Tasks 5–6. Exceptions, watchers, department/zone and remaining modal owners remain Task 4.
+
+## 2026-10-06 Exception Add/Edit modal checkpoint
+
+Exception subject, zone and destination now use the shared scope through Cancel and native Escape.
+Keep retains the fields; Discard closes without a write. Clean/reverted values close directly.
+Add's empty destination compares as unset even though its existing field handler encodes an empty
+station id; the submission guard still refuses that destination. Clearing a saved destination remains
+dirty. No request body or domain validation changed.
+
+The scope survives routing preview. Preview Cancel returns to the edited form without abandoning
+its values or asking a second question. Confirm writes the captured body and commits that snapshot
+before refresh; newer input delivered during the preview read remains dirty and visible. Preview and
+confirmed-write refusals retain the draft. Preview reads and confirmed writes block dismissal. Disconnect aborts the question and invalidates old preview/save replies; detached controls
+and close reports cannot edit or close a replacement form, including the form restored by preview
+Cancel. `packages/venue-service/src/dashboard/prep-exceptions.unsaved.test.ts` checks these paths.
+
+The EN/ES, light/dark, 390/1280 rendered matrix exercises Add/Edit and the shared question. Synthetic
+unload checks establish listener cancellation only. Watchers, department/zone, remaining station
+actions and other modal owners still need Task 4 work; page/history/native reload remain Tasks 5–6.
+
+An additional filtered consumer run failed the existing station keyboard-reorder focus assertion
+at `packages/venue-service/src/dashboard/prep-stations-screen.test.ts:3914`. In an independently
+installed checkout at the preceding checkpoint `f8cbc0caa16baa41d3d798d47c7bfc5b6880ccc9`,
+the following command failed that same assertion:
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.test.ts src/dashboard/prep-stations-screen.settings.test.ts -t 'exception|preview|claim|assignment|routing'
+```
+
+The single-case selection passed in both checkouts. The broader family
+passed before the close-report guard addition; the cause of the filtered focus failure remains
+unverified. Preserve the assertion and investigate it before branch finishing.

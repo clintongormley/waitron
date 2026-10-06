@@ -62,6 +62,8 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {
     t(key) as string,
   );
 
+type ExceptionDraft = { input: ExceptionInput; target: string };
+
 type Editor =
   | { kind: "station" }
   | { kind: "claim"; stationId: string | null }
@@ -362,6 +364,7 @@ export class PrepStationsScreen extends LitElement {
     save: () => Promise<unknown>;
     closeEditor: boolean;
     field?: string;
+    isCurrent: () => boolean;
   };
   #pointerChanged = false;
   readonly #reorder = new ReorderController(
@@ -391,6 +394,9 @@ export class PrepStationsScreen extends LitElement {
       if (this.#readErrorShown) this.#showError("");
     },
   );
+  #exceptionScope?: DraftScope<ExceptionDraft>;
+  #exceptionIdentity?: object;
+  #exceptionRun = 0;
   #stationScope?: DraftScope<StationInput>;
   #renameScope?: DraftScope<{ name: string }>;
   #stationIdentity?: object;
@@ -398,6 +404,34 @@ export class PrepStationsScreen extends LitElement {
   #leave?: LeaveCoordinator;
 
   #syncStationDrafts(): void {
+    if (this.editor?.kind !== "exception") {
+      this.#exceptionScope?.dispose();
+      this.#exceptionScope = undefined;
+      this.#exceptionIdentity = undefined;
+    } else if (this.#exceptionIdentity !== this.editor) {
+      this.#exceptionScope?.dispose();
+      const id = (this.#exceptionIdentity = this.editor);
+      this.#leave ??= leaveCoordinatorFor(this);
+      this.#exceptionScope = this.#leave?.register({
+        id,
+        current: () => ({ input: this.exceptionDraft, target: this.exceptionTarget }),
+        snapshot: (value) => structuredClone(value),
+        equal: (a, b) =>
+          a.target === b.target &&
+          a.input.zoneId === b.input.zoneId &&
+          a.input.categoryId === b.input.categoryId &&
+          a.input.productId === b.input.productId &&
+          (a.target === "" ||
+            (a.input.target.kind === b.input.target.kind &&
+              (a.input.target.kind !== "station" ||
+                (b.input.target.kind === "station" &&
+                  a.input.target.stationId === b.input.target.stationId)))),
+        restore: (value) => {
+          this.exceptionDraft = structuredClone(value.input);
+          this.exceptionTarget = value.target;
+        },
+      });
+    }
     if (this.editor?.kind !== "station") {
       this.#stationScope?.dispose();
       this.#stationScope = undefined;
@@ -452,6 +486,15 @@ export class PrepStationsScreen extends LitElement {
     );
   }
 
+  readonly #beforeExceptionClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.busy) return false;
+    const identity = this.#exceptionIdentity;
+    const scope = this.#exceptionScope;
+    if (!scope) return true;
+    const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed() {} });
+    return identity === this.#exceptionIdentity && outcome === "proceeded";
+  };
+
   readonly #beforeAddClose = (reason: LeaveReason) =>
     this.#beforeStationClose(reason, false, this.#stationIdentity);
   readonly #beforeRenameClose = (reason: LeaveReason) =>
@@ -485,9 +528,14 @@ export class PrepStationsScreen extends LitElement {
     }
   }
   override disconnectedCallback() {
-    if (this.#stationIdentity || this.#renameIdentity) this.busy = false;
+    this.#exceptionRun++;
+    if (this.pending?.change.kind === "exception") this.pending = undefined;
+    if (this.#stationIdentity || this.#renameIdentity || this.#exceptionIdentity) this.busy = false;
     this.#stationScope?.dispose();
     this.#renameScope?.dispose();
+    this.#exceptionScope?.dispose();
+    this.#exceptionScope = undefined;
+    this.#exceptionIdentity = undefined;
     this.#stationScope = undefined;
     this.#renameScope = undefined;
     this.#stationIdentity = undefined;
@@ -626,6 +674,7 @@ export class PrepStationsScreen extends LitElement {
     save: () => Promise<unknown>,
     closeEditor = false,
     field?: string,
+    isCurrent: () => boolean = () => true,
   ) {
     if (this.busy || this.pending) return;
     this.busy = true;
@@ -633,8 +682,10 @@ export class PrepStationsScreen extends LitElement {
     this.claimError = "";
     try {
       const moves = await this.api.preview(change);
-      this.pending = { change, moves, save, closeEditor, field };
+      if (!isCurrent()) return;
+      this.pending = { change, moves, save, closeEditor, field, isCurrent };
     } catch (e) {
+      if (!isCurrent()) return;
       const rejectedField = (e as { params?: { field?: unknown } } | undefined)?.params?.field;
       if (rejectedField === "condition") this.exceptionFieldError = t("prep.exception_condition");
       else if (codeOf(e) === "route.station_inactive" && field) {
@@ -645,7 +696,7 @@ export class PrepStationsScreen extends LitElement {
       else this.#showError(t("prep.save_error"));
       this.#restoreOrder();
     } finally {
-      this.busy = false;
+      if (isCurrent()) this.busy = false;
     }
   }
   #restoreOrder() {
@@ -659,10 +710,12 @@ export class PrepStationsScreen extends LitElement {
     this.busy = true;
     try {
       await pending.save();
+      if (!pending.isCurrent()) return;
       this.pending = undefined;
       if (pending.closeEditor) this.editor = undefined;
       await this.#load();
     } catch (e) {
+      if (!pending.isCurrent()) return;
       const rejectedField = (e as { params?: { field?: unknown } } | undefined)?.params?.field;
       if (rejectedField === "condition") this.exceptionFieldError = t("prep.exception_condition");
       else if (codeOf(e) === "route.station_inactive" && pending.field) {
@@ -674,7 +727,7 @@ export class PrepStationsScreen extends LitElement {
       this.pending = undefined;
       this.#restoreOrder();
     } finally {
-      this.busy = false;
+      if (pending.isCurrent()) this.busy = false;
     }
   }
   #cancelRouting() {
@@ -1316,6 +1369,7 @@ export class PrepStationsScreen extends LitElement {
     );
   }
   #openException(exception?: RouteException) {
+    this.#exceptionRun++;
     this.exceptionDraft = exception
       ? {
           zoneId: exception.zoneId,
@@ -1335,7 +1389,11 @@ export class PrepStationsScreen extends LitElement {
   }
   async #saveException() {
     if (this.busy || this.editor?.kind !== "exception") return;
-    const input = this.exceptionDraft;
+    const scope = this.#exceptionScope;
+    const run = this.#exceptionRun;
+    const isCurrent = () => this.isConnected && this.#exceptionRun === run;
+    const input = structuredClone(this.exceptionDraft);
+    const target = this.exceptionTarget;
     if (!input.zoneId && !input.categoryId && !input.productId) {
       this.exceptionFieldError = t("prep.exception_condition");
       this.#showError(t("prep.fix_fields"));
@@ -1348,8 +1406,16 @@ export class PrepStationsScreen extends LitElement {
     const id = this.editor.id;
     await this.#preview(
       { kind: "exception", id: id ?? null, input },
-      () => (id ? this.api.updateException(id, input) : this.api.createException(input)),
-      true,
+      async () => {
+        if (id) await this.api.updateException(id, input);
+        else await this.api.createException(input);
+        if (!isCurrent()) return;
+        scope?.commit({ input, target });
+        if (!scope?.isDirty()) this.editor = undefined;
+      },
+      false,
+      undefined,
+      isCurrent,
     );
   }
   #exceptionTargetOptions() {
@@ -2864,14 +2930,15 @@ export class PrepStationsScreen extends LitElement {
     return keyed(
       editor.kind === "station" ? this.#stationIdentity : editor,
       html`<wt-modal
-        .dismissible=${editor.kind !== "station" || !this.busy}
-        .beforeClose=${editor.kind === "station" ? this.#beforeAddClose : undefined}
+        .dismissible=${(editor.kind !== "station" && editor.kind !== "exception") || !this.busy}
+        .beforeClose=${editor.kind === "station" ? this.#beforeAddClose : editor.kind === "exception" ? this.#beforeExceptionClose : undefined}
         size=${editor.kind === "claim" || editor.kind === "exception_delete" ? "compact" : "standard"}
         open
         heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.kind === "exception_delete" ? t("prep.confirm_delete_exception") : editor.kind === "exception" ? (editor.id ? t("prep.edit_exception") : t("prep.add_exception")) : t("prep.new_station")}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
-          if (this.editor === editor) this.editor = undefined;
+          if (this.editor === editor && (event.currentTarget as HTMLElement).isConnected)
+            this.editor = undefined;
         }}
         ><div class="form">
           ${
@@ -2889,6 +2956,13 @@ export class PrepStationsScreen extends LitElement {
                         .options=${this.#exceptionOptions()}
                         .value=${this.exceptionDraft.categoryId ? `category:${this.exceptionDraft.categoryId}` : this.exceptionDraft.productId ? `product:${this.exceptionDraft.productId}` : ""}
                         @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                          e.stopPropagation();
+                          if (
+                            !this.isConnected ||
+                            this.editor !== editor ||
+                            !(e.currentTarget as HTMLElement).isConnected
+                          )
+                            return;
                           const value = e.detail.value;
                           this.exceptionDraft = {
                             ...this.exceptionDraft,
@@ -2896,6 +2970,7 @@ export class PrepStationsScreen extends LitElement {
                             productId: value.startsWith("product:") ? value.slice(8) : null,
                           };
                           this.exceptionFieldError = "";
+                          this.#exceptionScope?.changed();
                           this.#showError("");
                         }}
                       ></wt-combobox
@@ -2909,11 +2984,19 @@ export class PrepStationsScreen extends LitElement {
                       .options=${[{ value: "", label: t("prep.any_zone") }, ...(this.view?.zones.filter((z) => z.active !== false).map((z) => ({ value: z.id, label: z.name })) ?? [])]}
                       .value=${this.exceptionDraft.zoneId ?? ""}
                       @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                        e.stopPropagation();
+                        if (
+                          !this.isConnected ||
+                          this.editor !== editor ||
+                          !(e.currentTarget as HTMLElement).isConnected
+                        )
+                          return;
                         this.exceptionDraft = {
                           ...this.exceptionDraft,
                           zoneId: e.detail.value || null,
                         };
                         this.exceptionFieldError = "";
+                        this.#exceptionScope?.changed();
                         this.#showError("");
                       }}
                     ></wt-combobox
@@ -2925,11 +3008,19 @@ export class PrepStationsScreen extends LitElement {
                       .options=${this.#exceptionTargetOptions()}
                       .value=${this.exceptionTarget}
                       @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                        e.stopPropagation();
+                        if (
+                          !this.isConnected ||
+                          this.editor !== editor ||
+                          !(e.currentTarget as HTMLElement).isConnected
+                        )
+                          return;
                         this.exceptionTarget = e.detail.value;
                         this.exceptionDraft = {
                           ...this.exceptionDraft,
                           target: targetFor(e.detail.value),
                         };
+                        this.#exceptionScope?.changed();
                         this.#showError("");
                       }}
                     ></wt-combobox>`
