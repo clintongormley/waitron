@@ -9038,6 +9038,79 @@ describe("till-app", () => {
       },
     );
 
+    it("commits collection before a failed following refresh while retaining the exact tender", async () => {
+      let answer!: (result: TillSaleResult) => void;
+      const { el } = await mountApp({
+        lookUpBills: vi.fn().mockResolvedValue({
+          bills: [
+            {
+              workingOrderId: "wo-debt",
+              orderNumber: 12,
+              label: null,
+              partyName: null,
+              tables: [],
+              invoiceNumber: "A/12",
+              openedAt: "2026-10-01T18:00:00.000Z",
+              departedAt: null,
+              status: "waiting_for_payment",
+              stillOwed: "30.00",
+            },
+          ],
+        }),
+        collectOrder: vi.fn(
+          () =>
+            new Promise<TillSaleResult>((resolve) => {
+              answer = resolve;
+            }),
+        ),
+      });
+      await toCounter(el);
+      el.shadowRoot!.querySelector("till-tab-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      const form = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      await form.updateComplete;
+      const fill = async (name: string, value: string) => {
+        const field = form.shadowRoot!.querySelector<WtInput>(`[name=${name}]`)!;
+        await field.updateComplete;
+        const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+        await userEvent.fill(page.elementLocator(input), value);
+        await form.updateComplete;
+      };
+      await fill("bill-search", "A/12");
+      form.shadowRoot!.querySelector<HTMLElement>("[data-search]")!.click();
+      await expect.poll(() => form.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
+      form.shadowRoot!.querySelector<HTMLElement>("[data-bill]")!.click();
+      await form.updateComplete;
+      await fill("cash-received", "40.00");
+      const unload = () => {
+        const event = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      expect(unload()).toBe(true);
+      form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
+      await el.updateComplete;
+      expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
+        method: "cash",
+        amount: "40.00",
+      });
+      const protectionAtRefresh: boolean[] = [];
+      vi.mocked(currentApi.listStations).mockImplementationOnce(async () => {
+        protectionAtRefresh.push(unload());
+        throw new Error("refresh refused");
+      });
+      answer(saleResult);
+      await flush(el);
+      expect(protectionAtRefresh).toEqual([false]);
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+      expect(ticket(el)!.originalReceiptAvailable).toBe(false);
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+      expect(unload()).toBe(false);
+      expect(currentApi.collectOrder).toHaveBeenCalledOnce();
+    });
+
     it("keeps Find a bill open with a refusal when collection fails", async () => {
       const { el } = await mountApp({
         collectOrder: vi.fn().mockRejectedValue({ code: "fiscal.foreign_recipient_unsupported" }),

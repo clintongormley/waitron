@@ -3210,6 +3210,7 @@ export class TillApp extends LitElement {
     try {
       const result = await this.api.collectOrder(workingOrderId, tender);
       if (session !== this.#operatorSession) return;
+      this.shadowRoot!.querySelector("till-find-bill-dialog")?.closeSaved();
       this.result = result;
       this.findingBill = false;
       this.#showTicket(workingOrderId, !invoiced);

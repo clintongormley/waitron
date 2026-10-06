@@ -1189,7 +1189,12 @@ have a separate scope, so cancelling cash entry preserves those retained card ch
 cash/card/hold/weight actions still submit directly; provider waiting, cancellation and retry
 remain exempt. Focused widget and real counter suites cover these boundaries, reconnect,
 departed controls and replacement of a staged weight. Shell navigation is still pending.
-Bill payment, collection and remaining modal owners, followed by page/history/navigation work,
+Find a bill now protects edited collection cash and terminal references through Back and native
+Escape on the branch. Keep retains the inputs; Discard changes only local entry. Search text and
+result selection remain exempt. Collection success releases the draft before the following
+station read, including when that read fails. Focused widget and real till-app checks cover these
+boundaries, busy input, reconnect and stale answers.
+Bill payment and remaining modal owners, followed by page/history/navigation work,
 still keep W69 incomplete.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark

@@ -1285,3 +1285,44 @@ captures were inspected. Logs, visual probe and captures stay outside product so
 `receipts/w69-tender-20261006`. Synthetic unload events establish registration/cancellation, not
 that a browser-native reload prompt appeared. Bill payment, collection, remaining modal owners
 and Tasks 5–6 remain open; neither W69 PR is ready for finishing.
+
+## Find a bill collection checkpoint — 2026-10-06
+
+On the W69 branch, edited collection cash and terminal references share the existing dirty
+registry. Back and native Escape ask before leaving; Keep retains raw input and focus, and
+Discard changes only local entry. Search text and result choices remain exempt. The comparison
+uses the existing cash conversion or trimmed terminal reference, ignoring the dormant method's
+fields. Returning to a selected bill seeds its existing cash default. Invalid cash stays dirty.
+
+Busy collection blocks entry, method changes and dismissal. Starting a request invalidates an
+earlier leave answer without accepting its draft. A refusal retains protection. Disconnect
+aborts an outstanding question; reconnect compares against the opening baseline. Departed
+controls cannot collect or change that retained draft. A successful collection retires the scope
+before the following station read, including when that read fails, without another submission.
+
+The corrected initial widget run failed six assertions and passed the search exemption. The busy
+case initially dereferenced a missing control; an explicit presence check then failed for the
+expected missing busy gate. The successful-close case failed on the missing acceptance API.
+The real till-app case first observed no queue read because the fixture uses prepay; tracing
+`#loadStationQueue` moved the probe to the station-list read. It then observed unload protection
+still active at that read, and passed after the success boundary retired the collection scope.
+A final added case failed because starting collection left an earlier Discard question open.
+No existing assertion changed; the existing tender body checks remain.
+
+The final focused five-suite command ran 808 browser cases:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/find-bill-dialog.unsaved.test.ts src/widgets/find-bill-dialog.test.ts src/widgets/find-bill-dialog.a11y.test.ts src/till-app.test.ts src/till-app-boot-and-counter.test.ts
+```
+
+Six separate removals in an independently installed disposable checkout each failed its targeted
+case while a clean search or existing collection control passed: Back gating, Escape gating,
+input notification, reconnect baseline, busy invalidation and the host success boundary.
+Restoration passed 15 selected cases. Eight temporary EN/ES, light/dark, 390/1280 visual flows
+ran 16 axe checks; all 16 editor/warning captures were inspected. The temporary probe and captures
+are archived outside source in Lane E's `receipts/w69-collection-20261006`. Till types, changed-file
+lint and formatting passed. The unedited fiscal write-path and immutability suites ran 20 cases.
+Synthetic unload events check registration/cancellation, not a browser-native reload prompt.
+
+Task 4 remains partial: bill payment and other audited modal owners are still open. Tasks 5–6
+remain open. Neither W69 PR is ready for finishing.

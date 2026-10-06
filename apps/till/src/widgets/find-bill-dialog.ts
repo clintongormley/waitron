@@ -1,7 +1,15 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { formatMoney, stringToCents } from "@waitron/shared";
-import { baseStyles } from "@waitron/ui";
+import {
+  baseStyles,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+  type WtDialog,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-price-input.js";
@@ -16,6 +24,8 @@ export interface FindBillPayDetail {
   tender: Tender;
   invoiced: boolean;
 }
+
+type CollectionDraft = { method: "cash" | "card"; cash: string; externalRef: string };
 
 @customElement("till-find-bill-dialog")
 export class TillFindBillDialog extends LitElement {
@@ -79,13 +89,103 @@ export class TillFindBillDialog extends LitElement {
   @state() private cash = "";
   @state() private cashError = false;
   @state() private externalRef = "";
+  @state() private active = true;
   #generation = 0;
+  #scope?: DraftScope<CollectionDraft>;
+  #leave?: LeaveCoordinator;
+  #baseline?: CollectionDraft;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    this.#generation++;
+    super.disconnectedCallback();
+  }
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("busy") && this.busy && this.#baseline) this.#scope?.commit(this.#baseline);
+    if (!this.isConnected || !this.active || this.selected === null || this.#scope) return;
+    this.#baseline ??= this.#draft();
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<CollectionDraft>({
+      id: this,
+      current: () => this.#draft(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => this.#comparable(a) === this.#comparable(b),
+      restore: (value) => {
+        this.method = value.method;
+        this.cash = value.cash;
+        this.externalRef = value.externalRef;
+        this.cashError = false;
+      },
+    });
+    this.#scope?.commit(this.#baseline);
+  }
+
+  #draft(): CollectionDraft {
+    return { method: this.method, cash: this.cash, externalRef: this.externalRef };
+  }
+
+  #comparable(value: CollectionDraft): string {
+    if (value.method === "card")
+      return JSON.stringify({ method: "card", externalRef: value.externalRef.trim() });
+    let amount: string | { invalid: string };
+    try {
+      amount = stringToCents(value.cash).toString();
+    } catch {
+      amount = { invalid: value.cash };
+    }
+    return JSON.stringify({ method: "cash", amount });
+  }
+
+  #closed(event?: Event): void {
+    event?.stopPropagation();
+    if (event && event.target !== event.currentTarget) return;
+    if (!this.isConnected || !this.active || this.busy) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#emit("find-bill-close");
+  }
+
+  closeSaved(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.active = false;
+    this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.closeAfter("saved");
+  }
+
+  #back(): void {
+    if (!this.isConnected || !this.active || this.busy) return;
+    if (this.selected === null) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+      return;
+    }
+    const proceed = () => {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#baseline = undefined;
+      this.selected = null;
+    };
+    if (this.#scope) void this.#leave!.request({ scopes: [this], reason: "cancel", proceed });
+    else proceed();
+  }
 
   #emit(type: string, detail?: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
   async #search(): Promise<void> {
+    if (!this.isConnected || !this.active || this.busy) return;
     const q = this.query.trim();
     const generation = ++this.#generation;
     this.results = null;
@@ -113,6 +213,10 @@ export class TillFindBillDialog extends LitElement {
   }
 
   #select(row: BillLookupRow): void {
+    if (!this.isConnected || !this.active || this.busy) return;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#baseline = undefined;
     this.selected = row;
     this.cash = row.stillOwed;
     this.cashError = false;
@@ -121,7 +225,7 @@ export class TillFindBillDialog extends LitElement {
 
   #collect(): void {
     const bill = this.selected;
-    if (bill === null || this.busy) return;
+    if (!this.isConnected || !this.active || bill === null || this.busy) return;
     if (this.method === "cash") {
       let enough = false;
       try {
@@ -155,10 +259,11 @@ export class TillFindBillDialog extends LitElement {
     const amount = bill ? formatMoney(bill.stillOwed, currentLocale()) : "";
     return html`<wt-dialog
       ${trackDialog()}
-      .open=${true}
+      .open=${this.active}
       .heading=${t("find_bill.title")}
       .dismissible=${!this.busy}
-      @wt-close=${() => this.#emit("find-bill-close")}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      @wt-close=${this.#closed}
     >
       <div class="body">
         ${
@@ -270,16 +375,22 @@ export class TillFindBillDialog extends LitElement {
                 <div class="methods">
                   <wt-button
                     variant=${this.method === "cash" ? "primary" : "secondary"}
+                    .disabled=${this.busy}
                     @click=${() => {
+                      if (!this.isConnected || !this.active || this.busy) return;
                       this.method = "cash";
+                      this.#scope?.changed();
                     }}
                     >${t("find_bill.cash")}</wt-button
                   >
                   <wt-button
                     data-card
                     variant=${this.method === "card" ? "primary" : "secondary"}
+                    .disabled=${this.busy}
                     @click=${() => {
+                      if (!this.isConnected || !this.active || this.busy) return;
                       this.method = "card";
+                      this.#scope?.changed();
                     }}
                     >${t("find_bill.card")}</wt-button
                   >
@@ -291,21 +402,27 @@ export class TillFindBillDialog extends LitElement {
                         .label=${t("find_bill.cash_received")}
                         unit="€"
                         .fixedUnit=${true}
-                        .value=${this.cash}
+                        .value=${live(this.cash)}
+                        .disabled=${this.busy}
                         .error=${this.cashError ? t("find_bill.cash_short").replace("{amount}", amount) : ""}
                         @wt-change=${(event: CustomEvent<{ value: string }>) => {
                           event.stopPropagation();
+                          if (!this.isConnected || !this.active || this.busy) return;
                           this.cash = event.detail.value;
                           this.cashError = false;
+                          this.#scope?.changed();
                         }}
                       ></wt-price-input>`
                     : html`<wt-input
                         name="terminal-reference"
                         .label=${t("find_bill.card_reference")}
-                        .value=${this.externalRef}
+                        .value=${live(this.externalRef)}
+                        .disabled=${this.busy}
                         @wt-change=${(event: CustomEvent<{ value: string }>) => {
                           event.stopPropagation();
+                          if (!this.isConnected || !this.active || this.busy) return;
                           this.externalRef = event.detail.value;
+                          this.#scope?.changed();
                         }}
                       ></wt-input>`
                 }
@@ -314,12 +431,7 @@ export class TillFindBillDialog extends LitElement {
         <wt-form-actions
           .error=${this.error ? t(this.error) : this.queryError || this.cashError ? t("form.fix_fields") : ""}
         >
-          <wt-button
-            slot="cancel"
-            variant="secondary"
-            .disabled=${this.busy}
-            @click=${() => (bill === null ? this.#emit("find-bill-close") : (this.selected = null))}
-          >
+          <wt-button slot="cancel" variant="secondary" .disabled=${this.busy} @click=${this.#back}>
             ${bill === null ? t("find_bill.close") : t("find_bill.back")}</wt-button
           >
           ${
