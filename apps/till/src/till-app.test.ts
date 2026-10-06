@@ -5901,6 +5901,24 @@ describe("till-app", () => {
       expect(counter(el)).not.toBeNull();
     });
 
+    it("selects the canvas's tab of that name when the canvas has the screen as a tab", async () => {
+      const withScheduleTab = {
+        ...till.canvas,
+        tabs: [...till.canvas.tabs, { key: "schedule", title: "Horario", columns: 24, cards: [] }],
+      };
+      const { el } = await mountApp({
+        ...rosterApi,
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          canvas: withScheduleTab,
+          startingScreen: "show-schedule",
+        }),
+      });
+      await toCounter(el);
+      expect(shell(el)!.activeTabKey).toBe("schedule");
+      expect(schedule(el)).toBeNull();
+    });
+
     it("opens again for the next person after a logout", async () => {
       const { el } = await mountApp({
         ...rosterApi,
@@ -14563,6 +14581,43 @@ describe("switching the device's profile from the header", () => {
     expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
     expect(counter(el)).not.toBeNull();
     expect(lock(el)).toBeNull();
+  });
+
+  it("a switch opens the new profile's starting screen, in place of the screen open before it", async () => {
+    const getTill = vi
+      .fn()
+      .mockResolvedValueOnce(till)
+      .mockResolvedValue({ ...till, startingScreen: "show-schedule" });
+    const { el } = await openProfile({
+      getTill,
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+      listMyAbsences: vi.fn().mockResolvedValue([]),
+    });
+    emit(counter(el)!, "show-expo");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    await flush(el);
+
+    expect(schedule(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
+  });
+
+  it("a switch to a profile with no starting screen lands on the canvas's first tab", async () => {
+    const { el } = await openProfile();
+    emit(counter(el)!, "show-expo");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
+    expect(counter(el)).not.toBeNull();
   });
 
   it("a switch starts at the new profile's starting zone, not the zone the same person left", async () => {

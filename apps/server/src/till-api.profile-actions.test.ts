@@ -2,26 +2,44 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, devices, kitchenStations } from "@waitron/db";
+import { deviceProfiles, devices, kitchenStations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
 import { hashPin, persons, type PersonRoleValue } from "@waitron/identity";
-import { CAPABILITY_FLAGS, type CapabilityFlag, type ProfileAction } from "@waitron/layouts";
+import {
+  CAPABILITY_FLAGS,
+  type CapabilityFlag,
+  type FormFactor,
+  type ProfileAction,
+} from "@waitron/layouts";
 import { SimulatorPaymentProvider } from "@waitron/payments";
+import {
+  createDepartment,
+  createServiceZone,
+  setProfileServiceAccess,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { counterOrder, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import {
+  counterOrder,
+  order,
+  seat,
+  setupPartyVenue,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 
 /*
  * Route-to-action map. Each row is the profile action a till or kitchen-display route needs, besides
  * whatever person permission it already checked; a refusal is `device.forbidden_action` naming the
  * `action` shown (cash is `device.cash_not_allowed`). The case that fails without each gate is the
- * row's own `refuses <METHOD> <path> ...` case in ROUTES below.
+ * row's own `refuses <METHOD> <path> ...` case in ROUTES below, or for refunds in "a refund checks
+ * the action its payment was taken with".
  *
  * | Route                                                     | Action                     | `action` param        |
  * | --------------------------------------------------------- | -------------------------- | --------------------- |
@@ -39,6 +57,7 @@ import { counterOrder, setupPartyVenue, type PartyVenue } from "./testing/party-
  * | POST /api/working-orders/:id/adjustments                  | take-orders                | take-orders           |
  * | POST /api/working-orders/:id/collect, tender cash / card  | take-cash / hand-keyed-card-payment | (cash code) / hand-keyed-card-payment |
  * | POST /api/working-orders/:id/payments, cash / manual card / reader | take-cash / hand-keyed-card-payment / integrated-card-payment | (cash code) / hand-keyed-card-payment / pay |
+ * | POST /api/working-orders/:id/payments/:paymentId/refunds, by how the payment was taken | take-cash / hand-keyed-card-payment / integrated-card-payment | (cash code) / hand-keyed-card-payment / pay |
  * | POST /api/orders/:id/courses/:courseId/fire               | take-orders                | take-orders           |
  * | POST /api/orders/:id/courses/:courseId/ready              | prepare-orders             | prepare-orders        |
  * | POST /api/orders/:id/courses/:courseId/away               | hand-over-orders           | hand-over-orders      |
@@ -71,11 +90,14 @@ import { counterOrder, setupPartyVenue, type PartyVenue } from "./testing/party-
  * Not action-gated, so a signed-in person (or, for a display's reads, the device) is enough: every
  * read, including the POST previews (`/payments/preview`, `/adjustments/preview`) and the dead-end
  * checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-printer
- * routes; `/api/sales/:id/receipt/handover`, which records a printed receipt handed over; the table
- * status and cleared marks; table placement, which needs `venue.configure`; the watcher "done"
- * marks (`/api/watchers/:id/done`, `/api/device/watcher/done`), which are a watcher's own record
- * rather than preparing or handing over; and refunds, whose method is the original payment's and is
- * read only inside `refundBillPayment`.
+ * routes; and table placement, which needs `venue.configure`. Left ungated by decision, each with
+ * its reason:
+ * - the watcher "done" marks (`/api/watchers/:id/done`, `/api/device/watcher/done`): a watcher is
+ *   watched from a shared display, which is allowed only `prepare-orders`, and the mark is the
+ *   watcher's own record of what it has seen, not preparing or handing over;
+ * - the table status and cleared marks, and `/api/sales/:id/receipt/handover` (a printed receipt
+ *   handed over): none is an ordering, payment or drawer write;
+ * - `/api/demo-reader/cancel`: mounted only when the card provider is the simulator.
  *
  * A shared display (`kds`) may only prepare, whatever its stored list says (`profileAllows`).
  */
@@ -104,7 +126,7 @@ async function person(role: PersonRoleValue): Promise<string> {
   return row!.id;
 }
 
-async function profile(capabilities: readonly string[], formFactor = "till" as const) {
+async function profile(capabilities: readonly string[], formFactor: FormFactor = "till") {
   const [row] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Profile ${randomUUID()}`, formFactor, capabilities: [...capabilities] })
@@ -118,9 +140,16 @@ async function signIn(
   capabilities: readonly string[],
   role: PersonRoleValue = "admin",
 ): Promise<{ cookie: string; deviceId: string }> {
+  return signInOn(await profile(capabilities), role);
+}
+
+async function signInOn(
+  profileId: string,
+  role: PersonRoleValue = "admin",
+): Promise<{ cookie: string; deviceId: string }> {
   const device = await enrolDeviceForTest(suite.db, v.cfg, {
     name: `Till ${randomUUID()}`,
-    profileId: await profile(capabilities),
+    profileId,
   });
   const login = await app.request("/api/session", {
     method: "POST",
@@ -138,7 +167,7 @@ async function signIn(
 async function display(capabilities: readonly string[]): Promise<string> {
   const device = await enrolDeviceForTest(suite.db, v.cfg, {
     name: `Display ${randomUUID()}`,
-    profileId: await profile(capabilities, "kds" as "till"),
+    profileId: await profile(capabilities, "kds"),
     stationId,
   });
   return `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
@@ -414,6 +443,41 @@ describe("screens and actions are separate", () => {
   });
 });
 
+describe("the order of a sale's refusals", () => {
+  it("refuses a profile that takes no orders for that, before checking the zone it names", async () => {
+    const deli = await withTransaction(suite.db, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: `Deli ${randomUUID()}`,
+        defaultServiceMode: "prepay",
+      });
+      return createServiceZone(tx, v.cfg, {
+        name: `Deli ${randomUUID()}`,
+        departmentId: department.id,
+      });
+    });
+    const restaurantOnly = await profile(allBut("take-orders"));
+    await withTransaction(suite.db, async (tx) => {
+      const [policy] = await tx
+        .select({ departmentId: zoneServicePolicies.departmentId })
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.zoneId, v.counter.zoneId));
+      await setProfileServiceAccess(tx, v.cfg, restaurantOnly, {
+        departmentId: policy!.departmentId,
+        allowedZoneIds: null,
+        startingZoneId: v.counter.zoneId,
+        stationIds: [],
+        watcherIds: [],
+      });
+    });
+    const { cookie } = await signInOn(restaurantOnly);
+    const sale = await send(cookie, "POST", "/api/sales", {
+      lines: [{ menuItemId: v.counterItem("Caña"), quantity: "1" }],
+      zoneId: deli.id,
+    });
+    expect({ status: sale.status, error: sale.body.error }).toEqual(forbidden("take-orders"));
+  });
+});
+
 describe("the person's permission and the profile's action are both needed", () => {
   it("refuses a staff member the drawer on a profile that opens it, for want of cash.drawer", async () => {
     const { cookie } = await signIn(CAPABILITY_FLAGS, "staff");
@@ -450,7 +514,7 @@ describe("the person's permission and the profile's action are both needed", () 
 describe("a shared kitchen display", () => {
   it("is refused ordering, payment and the drawer even when its stored list names them", async () => {
     const { cookie, deviceId } = await signIn(CAPABILITY_FLAGS);
-    const kds = await profile(CAPABILITY_FLAGS, "kds" as "till");
+    const kds = await profile(CAPABILITY_FLAGS, "kds");
     await suite.db
       .update(devices)
       .set({ deviceProfileId: kds, stationId })
@@ -517,4 +581,59 @@ describe("the till's boot read", () => {
     const cookieless = await app.request("/api/till");
     expect(await cookieless.json()).not.toHaveProperty("startingScreen");
   });
+});
+
+describe("a refund checks the action its payment was taken with", () => {
+  let bill: string;
+  const paid: Partial<Record<"cash" | "manual" | "reader", string>> = {};
+
+  beforeAll(async () => {
+    const { cookie } = await signIn(CAPABILITY_FLAGS);
+    const { tabId } = await seat(v, await v.table(`R ${randomUUID()}`));
+    bill = tabId;
+    await order(v, bill, "Paella", "Paella", "Paella");
+    const take = async (body: Record<string, unknown>) => {
+      const answer = await send(cookie, "POST", `/api/working-orders/${bill}/payments`, {
+        kind: "contribution",
+        amount: "1.00",
+        submissionId: randomUUID(),
+        applied: "1.00",
+        tip: "0.00",
+        ...body,
+      });
+      expect(answer.status).toBe(200);
+      return (answer.body as { payment: { id: string } }).payment.id;
+    };
+    paid.cash = await take({ method: "cash", tendered: "1.00" });
+    paid.manual = await take({ method: "card", entry: "manual" });
+    paid.reader = await take({ method: "card", entry: "reader", simulationOutcome: "captured" });
+  }, 120_000);
+
+  for (const [kind, lacking, expected] of [
+    ["cash", "take-cash", { status: 403, error: { code: "device.cash_not_allowed", params: {} } }],
+    ["manual", "hand-keyed-card-payment", forbidden("hand-keyed-card-payment")],
+    ["reader", "integrated-card-payment", forbidden("pay")],
+  ] as const) {
+    it(`refuses POST /api/working-orders/:id/payments/:paymentId/refunds of a ${kind} payment without ${lacking}`, async () => {
+      const { cookie } = await signIn(allBut(lacking));
+      const answer = await send(
+        cookie,
+        "POST",
+        `/api/working-orders/${bill}/payments/${paid[kind]}/refunds`,
+        {},
+      );
+      expect({ status: answer.status, error: answer.body.error }).toEqual(expected);
+    });
+
+    it(`reaches the refund's own checks for a ${kind} payment on a profile with ${lacking}`, async () => {
+      const { cookie } = await signIn(CAPABILITY_FLAGS);
+      const answer = await send(
+        cookie,
+        "POST",
+        `/api/working-orders/${bill}/payments/${paid[kind]}/refunds`,
+        {},
+      );
+      expect(answer.body.error?.code).toBe("management.request_invalid");
+    });
+  }
 });

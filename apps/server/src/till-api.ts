@@ -1486,6 +1486,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
+      // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
+      // the profile lacks; both before the zone, so a profile that cannot sell is told so.
+      assertTakesTender(session.device, body.tender);
+      assertProfileAction(session.device, "take-orders");
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -1496,10 +1500,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ),
       );
       const saleCfg = sendingCfg(cfg, c, session.device);
-      // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
-      // the profile lacks.
-      assertTakesTender(session.device, body.tender);
-      assertProfileAction(session.device, "take-orders");
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         saleCfg,

@@ -11,7 +11,7 @@ import {
   takeReaderBillPayment,
 } from "./bill-payments.js";
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
-import { refundBillPayment, refundProvidersOf } from "./bill-refunds.js";
+import { refundBillPayment, refundProvidersOf, refundTender } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertDeviceCapability, assertProfileAction, assertTakesCash } from "./device-session.js";
 import type { Logger } from "./logger.js";
@@ -272,6 +272,13 @@ export function mountBillPaymentsApi(
       const id = requireBillParam(c.req.param("id"));
       await gateZones(deps, session, [{ orderId: id }]);
       const paymentId = c.req.param("paymentId");
+      // The tender the payment was taken with, as a payment of it would need.
+      const tender = await refundTender(deps.db, id, paymentId);
+      if (tender === "cash") assertTakesCash(session.device);
+      if (tender === "hand-keyed-card")
+        assertProfileAction(session.device, "hand-keyed-card-payment");
+      if (tender === "reader-card")
+        assertProfileAction(session.device, "integrated-card-payment", "pay");
       const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
       const saleCfg = sendingCfg(cfg, c, session.device);
       return c.json(

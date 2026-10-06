@@ -314,17 +314,21 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         .returning({ id: locations.id });
       const locationId = brandLocationId(location!.id);
       const node = { locationId, nodeId: await seedNode(db, locationId) };
-      const profile = async (formFactor: "till" | "phone-portrait" | "kds") =>
+      const profile = async (
+        formFactor: "till" | "phone-portrait" | "tablet-landscape" | "kds",
+        capabilities: string[],
+      ) =>
         (
           await db
             .insert(deviceProfiles)
-            .values({ name: `${formFactor} ${randomUUID()}`, formFactor, capabilities: [] })
+            .values({ name: `${formFactor} ${randomUUID()}`, formFactor, capabilities })
             .returning({ id: deviceProfiles.id })
         )[0]!.id;
       const profiles = {
-        till: await profile("till"),
-        phone: await profile("phone-portrait"),
-        kitchen: await profile("kds"),
+        till: await profile("till", ["take-orders", "take-cash"]),
+        phone: await profile("phone-portrait", ["take-orders"]),
+        kitchen: await profile("kds", ["act-as-kds", "prepare-orders"]),
+        pass: await profile("tablet-landscape", ["show-expo", "hand-over-orders"]),
       };
       const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
       const access = (id: string) =>
@@ -338,7 +342,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       return { locationId, profiles, runSeed, access, defaults };
     }
 
-    it("puts each ordering profile in the default department, every zone, starting at the counter, and leaves the kitchen display without one", async () => {
+    it("puts each profile that takes orders in the counter's department, every zone, starting at the counter, and leaves the kitchen display and a profile that takes no orders without one", async () => {
       const { profiles, runSeed, access, defaults } = await venue();
 
       await runSeed();
@@ -354,6 +358,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         });
       }
       expect((await access(profiles.kitchen)).departmentId).toBeNull();
+      expect((await access(profiles.pass)).departmentId).toBeNull();
     });
 
     it("leaves a profile's scope alone on a re-run", async () => {

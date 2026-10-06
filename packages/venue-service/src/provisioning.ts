@@ -15,7 +15,7 @@ import { serviceSettings } from "./schema/settings.js";
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
-      "Create the default department, counter zone and service settings, and give each ordering profile that department",
+      "Create the default department, counter zone and service settings, and give each profile that takes orders that department",
     async run(tx, node) {
       const location = await tx
         .select({ name: locations.name, catalogueId: locations.catalogueId })
@@ -117,22 +117,25 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             ),
           );
       }
-      // An ordering profile with no scope yet orders in the counter's department, starting there. A
-      // kitchen display takes no orders, so it gets none. A scope already saved is left alone.
-      const unscoped = await tx
-        .select({ id: deviceProfiles.id })
-        .from(deviceProfiles)
-        .leftJoin(
-          deviceProfileServiceAccess,
-          eq(deviceProfileServiceAccess.deviceProfileId, deviceProfiles.id),
-        )
-        .where(
-          and(
-            isNull(deviceProfiles.retiredAt),
-            ne(deviceProfiles.formFactor, "kds"),
-            isNull(deviceProfileServiceAccess.deviceProfileId),
-          ),
-        );
+      // A profile that takes orders and has no scope yet orders in the counter's department,
+      // starting there. A kitchen display takes no orders, so it gets none. A scope already saved
+      // is left alone.
+      const unscoped = (
+        await tx
+          .select({ id: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
+          .from(deviceProfiles)
+          .leftJoin(
+            deviceProfileServiceAccess,
+            eq(deviceProfileServiceAccess.deviceProfileId, deviceProfiles.id),
+          )
+          .where(
+            and(
+              isNull(deviceProfiles.retiredAt),
+              ne(deviceProfiles.formFactor, "kds"),
+              isNull(deviceProfileServiceAccess.deviceProfileId),
+            ),
+          )
+      ).filter(({ capabilities }) => (capabilities as string[]).includes("take-orders"));
       for (const { id } of unscoped) {
         const kept = await readProfileServiceAccess(tx, node, id);
         await setProfileServiceAccess(tx, node, id, {

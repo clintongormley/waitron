@@ -32,8 +32,8 @@ export const CARD_TYPES = [
 export type CardType = (typeof CARD_TYPES)[number];
 
 /** Carried by a device profile, not a canvas. Each flag is either a {@link ProfileAction}, which
- * the server checks on the operation itself, or a {@link ProfileScreen}, which only decides what the
- * till shows. Showing a screen never permits an action on it. */
+ * the server checks on the routes the map in `apps/server/src/till-api.profile-actions.test.ts`
+ * lists, or a {@link ProfileScreen}, which only decides what the till shows. */
 export const CAPABILITY_FLAGS = [
   "integrated-card-payment",
   "open-cash-drawer",

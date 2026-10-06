@@ -2,6 +2,7 @@ import {
   CORE_MIGRATIONS,
   captureError,
   deviceProfilePrinters,
+  deviceProfiles,
   devices,
   locations,
   printers,
@@ -802,6 +803,28 @@ describe("a profile's starting screen and shared-display actions", () => {
       const plain = await till("Plain", ["show-expo"]);
       expect(await inTx((tx) => readProfileStartingScreen(tx, expo.id))).toBe("show-expo");
       expect(await inTx((tx) => readProfileStartingScreen(tx, plain.id))).toBeNull();
+    } finally {
+      await purgeProfiles();
+    }
+  });
+
+  it("reads null for a stored starting screen that is not a navigation screen", async () => {
+    try {
+      const [row] = await suite.db
+        .insert(deviceProfiles)
+        .values({
+          name: "Written directly",
+          formFactor: "till",
+          capabilities: ["show-expo", "act-as-kds"],
+          startingScreen: "act-as-kds",
+        })
+        .returning({ id: deviceProfiles.id });
+      const [other] = await suite.db
+        .insert(deviceProfiles)
+        .values({ name: "Unknown screen", formFactor: "till", startingScreen: "counter" })
+        .returning({ id: deviceProfiles.id });
+      expect(await inTx((tx) => readProfileStartingScreen(tx, row!.id))).toBeNull();
+      expect(await inTx((tx) => readProfileStartingScreen(tx, other!.id))).toBeNull();
     } finally {
       await purgeProfiles();
     }

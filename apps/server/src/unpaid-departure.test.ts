@@ -43,10 +43,13 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { cancelBody, giveAway } from "./testing/cancel-line.js";
-import { revokedDeviceSessionCookie, seedSessionDevice } from "./testing/session-device.js";
+import {
+  BASIC_ACTIONS,
+  revokedDeviceSessionCookie,
+  seedSessionDevice,
+} from "./testing/session-device.js";
 import "./errors.js";
 import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
-import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),

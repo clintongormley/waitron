@@ -1683,7 +1683,8 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** Through `#pushDrill`, which opens only a screen `#affordances` offers. */
+  /** A canvas tab of the screen's name is selected; otherwise the screen opens through `#pushDrill`,
+   * which opens only one `#affordances` offers. */
   #openStartingScreen(): void {
     const screen = this.#startingScreen;
     if (screen === null) return;
@@ -1692,7 +1693,12 @@ export class TillApp extends LitElement {
       "show-expo": "expo",
       "show-schedule": "schedule",
     } as const satisfies Record<NavigationScreen, TillDestination>;
-    this.#pushDrill({ kind: destinations[screen] });
+    const destination = destinations[screen];
+    if (this.canvas?.tabs.some((tab) => tab.key === destination)) {
+      if (this.capabilities.includes(screen)) this.#onTabSelect(destination);
+      return;
+    }
+    this.#pushDrill({ kind: destination });
   }
 
   #restoreDestination(): void {
@@ -1904,11 +1910,11 @@ export class TillApp extends LitElement {
     await this.#enterSignedIn(signedIn);
   }
 
-  async #enterSignedIn({
-    personId,
-    displayName,
-    permissions,
-  }: Omit<LoggedInDetail, "locale">): Promise<void> {
+  /** `switched`: a profile switch, which leaves the screen the old profile was on. */
+  async #enterSignedIn(
+    { personId, displayName, permissions }: Omit<LoggedInDetail, "locale">,
+    switched = false,
+  ): Promise<void> {
     this.#loginPending = true;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
@@ -1983,7 +1989,9 @@ export class TillApp extends LitElement {
     // History may change while login data loads and the lock screen still owns the page.
     this.#setActiveTab(this.#requestedTab(), true, true);
     this.#setScreen(landsOnFloor ? "floor" : "counter");
-    this.#restoreDestination();
+    if (switched)
+      this.#url.write({ "till-view": null, "till-station": null, "till-watcher": null }, true);
+    else this.#restoreDestination();
     if (this.drill === undefined) this.#openStartingScreen();
     const showsCounterLists = this.#showsCounterLists();
     if (showsCounterLists) {
@@ -3924,11 +3932,14 @@ export class TillApp extends LitElement {
     await this.#readPrinters();
     if (session !== this.#operatorSession) return;
     this.#browsing = undefined;
-    await this.#enterSignedIn({
-      personId: this.operatorPersonId,
-      displayName: this.operatorName,
-      permissions: this.permissions,
-    });
+    await this.#enterSignedIn(
+      {
+        personId: this.operatorPersonId,
+        displayName: this.operatorName,
+        permissions: this.permissions,
+      },
+      true,
+    );
   }
 
   #onPrintersChange(event: CustomEvent<DevicePrintersChange>): Promise<void> {

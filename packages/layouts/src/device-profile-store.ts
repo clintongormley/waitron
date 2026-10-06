@@ -17,6 +17,7 @@ import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, isNull } from "drizzle-orm";
+import { NAVIGATION_SCREENS } from "./canvas.js";
 import type { CapabilityFlag, FormFactor, NavigationScreen } from "./canvas.js";
 import {
   validateCapabilities,
@@ -185,7 +186,11 @@ export async function readProfileStartingScreen(
     .select({ startingScreen: deviceProfiles.startingScreen })
     .from(deviceProfiles)
     .where(and(eq(deviceProfiles.id, id), live));
-  return (row?.startingScreen ?? null) as NavigationScreen | null;
+  // The column has no CHECK, so a value not written through this store is not validated.
+  const stored = row?.startingScreen ?? null;
+  return (NAVIGATION_SCREENS as readonly (string | null)[]).includes(stored)
+    ? (stored as NavigationScreen)
+    : null;
 }
 
 export async function createDeviceProfile(
