@@ -74,6 +74,8 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
     ],
     days,
     specialDates: SPECIALS,
+    holidayCoverage: [],
+    holidaySources: [],
     specialCells: SPECIALS.map((special) => ({
       specialDateId: special.id,
       cells: [

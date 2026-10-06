@@ -307,6 +307,20 @@ describe("reading Hours", () => {
           cells: [{ subject: fx.deli, cell: { mode: "closed", periods: [] } }],
         },
       ],
+      // No tenant row is stored here, so there is no country to read holidays for.
+      holidayCoverage: [
+        {
+          year: 2030,
+          country: "",
+          provinceCode: null,
+          regionCode: null,
+          nationalRegional: "unsupported_country",
+          local: "address_unresolved",
+          dataVersion: null,
+          sourceIds: [],
+        },
+      ],
+      holidaySources: [],
     });
     expect((await send(fx, "GET", "/hours?from=2030-10-14&to=2030-10-16", fx.manager)).status).toBe(
       200,

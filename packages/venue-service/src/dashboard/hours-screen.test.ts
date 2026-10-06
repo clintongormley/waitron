@@ -102,6 +102,8 @@ function model(): HoursModel {
     ],
     days: [day("2026-10-07", null), day("2026-10-12", FIESTA), day("2026-10-13", STAFF)],
     specialDates: [FIESTA, STAFF],
+    holidayCoverage: [],
+    holidaySources: [],
     specialCells: [
       {
         specialDateId: "fiesta",

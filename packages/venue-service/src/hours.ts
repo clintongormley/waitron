@@ -1188,7 +1188,7 @@ export async function readHoursModel(
   to: LocalDate,
   at: Date,
   holidays?: HolidayReader,
-): Promise<HoursModel> {
+): Promise<Omit<HoursModel, "holidayCoverage" | "holidaySources">> {
   const dates = rangeDates(from, to);
   const clock = await readLocationClock(tx, cfg.locationId);
   const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;

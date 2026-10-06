@@ -65,6 +65,8 @@ function model(clockReadable = true): HoursModel {
     ],
     days: [{ date: special.date, specialDate: special, holidays: [], tone: "red" }],
     specialDates: [special],
+    holidayCoverage: [],
+    holidaySources: [],
     specialCells: [
       {
         specialDateId: "fiesta",

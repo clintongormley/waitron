@@ -203,6 +203,8 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       week: [{ subject: { kind: "department", id: "d1" }, days: [] }],
       days: [],
       specialDates: [],
+      holidayCoverage: [],
+      holidaySources: [],
       specialCells: [],
     };
     const fetchImpl = vi.fn(() =>
