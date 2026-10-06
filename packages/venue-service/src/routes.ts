@@ -557,7 +557,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           throw new AppError("management.request_invalid", { field: "active" });
         }
         const active = body.active;
-        // `active` may come alone; without it, or beside any edit field, the edit is the whole one.
         const edit =
           active === undefined ||
           body.name !== undefined ||
