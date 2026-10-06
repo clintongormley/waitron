@@ -28,6 +28,21 @@ submitted commits before refresh and delivered newer input are exercised in
 `apps/dashboard/src/screens/staff-create.unsaved.test.ts`. Edit staff and credential subforms in
 the staff row below remain pending; this checkpoint covers creation only.
 
+## 2026-10-06 retired Printing rules owner
+
+A261 step 8 removed the Printing rules page in [#1288](https://github.com/clintongormley/waitron/pull/1288),
+main `822d242f499a64dfed359ef52a2c41f6f43609a7`. The baseline's `DS printing-rules-screen`
+row below is historical: it has no remaining form or suite to cover. Its bookmark now goes to
+Prep stations Tickets with manage permission, Prep stations Stations with read-only permission,
+or Overview when the module is unavailable. The existing
+`apps/dashboard/src/dashboard-app.test.ts` retirement cases exercise those three destinations
+and assert that neither the old navigation entry nor the page is drawn.
+
+Keep the surviving station/watch forms, department/zone receipt settings and printer calibration
+in the inventory. The retired location drawer policy adds no draft; device/profile/printer gates
+and the manual drawer command retain their own behavior. This reconciliation does not complete
+bill payment, collection, the other pending modal owners or page/navigation protection.
+
 ## How to reproduce discovery
 
 Run each command separately and inspect its exit status. The broad search deliberately includes helpers before classifying their owners.

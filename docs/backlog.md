@@ -1192,6 +1192,10 @@ departed controls and replacement of a staged weight. Shell navigation is still 
 Bill payment, collection and remaining modal owners, followed by page/history/navigation work,
 still keep W69 incomplete.
 
+The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
+redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue
+receipt settings and printer calibration remain in W69's inventory.
+
 A separate finding remains: entering `05,50` for an amount discount and pressing Continue raises
 `shared.invalid_decimal` from the existing amount check. The W69 adjustment checkpoint reproduced
 it before implementation (`red.log`, campaign receipts `w69-adjustment-20261006`);
