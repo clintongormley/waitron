@@ -91,7 +91,9 @@ interface CustomerMenuRenderInput {
 }
 ```
 
-`label` is supplied by a dashboard adapter mapping the renderer's literal label keys to
+`label("amount", { amount })` supplies display formatting for each frozen effective price;
+the dashboard adapter formats that value with `formatMoney` rather than translating an amount.
+Other literal label keys are supplied by a dashboard adapter mapping the renderer's literal label keys to
 typed `StringKey`s; never pass an unchecked arbitrary server string to `t`. The renderer
 owns no global controller, API, router or persistent state. Its stylesheet travels with
 the templates. `dashboard-customer-menu` exports class `CustomerMenu` with properties
@@ -259,7 +261,7 @@ Source receipts: frozen values `menu-document.ts:314`, images
 `device-home-preview.ts:32`, fill `device-home.ts:68`, declarations `menu-types.ts:46`,
 limits `extra-contract.ts:238`, option shape `modifier-list-types.ts:13`.
 
-- [ ] In `customer-menu.test.ts`, mount the host with injected labels/media and a frozen
+- [x] In `customer-menu.test.ts`, mount the host with injected labels/media and a frozen
       format-3 document. Write red tests for nested/repeated/empty sections, image URLs,
       EN/ES names/descriptions, individual variant prices/range, units, allergens and dietary
       unknowns, modifier order/limits/preselection/defaults. Use conspicuously different
@@ -280,21 +282,21 @@ limits `extra-contract.ts:238`, option shape `modifier-list-types.ts:13`.
   descriptions disappear unless explicitly targeted; no staff/kitchen/VAT text appears
   as customer content. Root title has the labelled internal-title fallback.
 
-- [ ] Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/customer-menu.test.ts`.
+- [x] Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/customer-menu.test.ts`.
       Expected red: element/rendered hierarchy absent, then correct-node values/controls absent.
-- [ ] Implement the isolated renderer and host using shared primitives. Details are inline,
+- [x] Implement the isolated renderer and host using shared primitives. Details are inline,
       read-only inspection: local variant, option and extra-count controls; no Save/Add to order
       or totals. Enforce summed counts against `maxPicks` and `maxQuantity`, show unmet
       `minPicks`; a stored cap 0, null cap and conflicting preselection remain explained and
       inspectable. Render frozen portions verbatim, and option choices without surcharge.
       Label all controls via injected interface copy. Use frozen fields only.
-- [ ] Add red cases for two extras lists using the same product with different prices/caps,
+- [x] Add red cases for two extras lists using the same product with different prices/caps,
       a variant image versus a parent image, failed/missing image, ordering inspection,
       null allergens versus reviewed empty allergens and pending diet. Assert the second
       list's control changes only its own native value. Assert failed image keeps name and
       focusable detail; assert null does not display a positive absence/suitability claim.
       Attach image errors as local render state, not mutations to the document.
-- [ ] Add token-painting and `customer-menu.a11y.test.ts` cases for closed/expanded hierarchy,
+- [x] Add token-painting and `customer-menu.a11y.test.ts` cases for closed/expanded hierarchy,
       detail, missing translations, image failure and unmet limits in both themes. Rerun
       `pnpm --filter @waitron/dashboard exec vitest run src/widgets/customer-menu.test.ts src/widgets/customer-menu.a11y.test.ts`.
       Commit signed off.
