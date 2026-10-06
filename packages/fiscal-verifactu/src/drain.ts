@@ -5,12 +5,13 @@ import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
 import { emptyDrainResult, type DrainResult } from "@waitron/fiscal";
 import { AppError, isAppError, jobOrigin } from "@waitron/shared";
-import type { SaleId } from "@waitron/shared";
+import type { ErrorParams, SaleId } from "@waitron/shared";
 import { MAX_REGISTROS_POR_ENVIO, resolveEstadoEfectivo } from "@waitron/verifactu";
 import type {
   Cabecera,
   EnvioRegistro,
   EstadoEfectivo,
+  IDFactura,
   RespuestaConsulta,
   RespuestaLinea,
   VerifactuClient,
@@ -228,10 +229,10 @@ async function drainDue(
       // Counted as soon as AEAT has answered: the envío was sent whether or not its reply is kept.
       result.batchesSent += 1;
       result.recordsSubmitted += batch.length;
-      const lines = await resolveLines(client, batch, respuesta);
+      const resolved = await resolveLines(client, batch, registros, respuesta);
 
       dueCount = await countOnCommit(db, result, async (tx, counts) => {
-        await persistResponse(tx, batch, lines, respuesta.CSV ?? null, now, counts);
+        await persistResponse(tx, batch, resolved, respuesta.CSV ?? null, now, counts);
         return countDue(tx, now);
       });
       // `@waitron/verifactu` leaves the wait undefined when AEAT's reply has no usable one. The
@@ -650,23 +651,77 @@ interface ResolvedLine {
   duplicateAcceptedWithErrors: boolean;
 }
 
+/** A claimed row the reply gave no line that can be applied to it. */
+interface UnmatchedRow {
+  row: DueRow;
+  identidadEnviada: IDFactura;
+  candidates: RespuestaLinea[];
+}
+
+interface ResolvedReply {
+  lines: ResolvedLine[];
+  unmatched: UnmatchedRow[];
+}
+
+/** The invoice a record names on the wire; an anulación names it under the `...Anulada` fields. */
+function sentIdentityOf(registro: EnvioRegistro): IDFactura {
+  if ("RegistroAlta" in registro) {
+    const { IDEmisorFactura, NumSerieFactura, FechaExpedicionFactura } =
+      registro.RegistroAlta.IDFactura;
+    return { IDEmisorFactura, NumSerieFactura, FechaExpedicionFactura };
+  }
+  const id = registro.RegistroAnulacion.IDFactura;
+  return {
+    IDEmisorFactura: id.IDEmisorFacturaAnulada,
+    NumSerieFactura: id.NumSerieFacturaAnulada,
+    FechaExpedicionFactura: id.FechaExpedicionFacturaAnulada,
+  };
+}
+
+function sameFactura(a: IDFactura, b: IDFactura): boolean {
+  return (
+    a.IDEmisorFactura === b.IDEmisorFactura &&
+    a.NumSerieFactura === b.NumSerieFactura &&
+    a.FechaExpedicionFactura === b.FechaExpedicionFactura
+  );
+}
+
 /**
- * Matches each response line to its claimed row by `RefExterna`, in AEAT's order, and makes Route
- * B's lookups one at a time. A lookup's failure is kept rather than thrown, so it leaves only its
- * own record unknown (`handleDuplicate`).
+ * Pairs each claimed row with the one reply line it can trust: a row's candidates are the lines
+ * carrying its `RefExterna` or naming the invoice it was sent as, and a line is applied only when
+ * it is the row's sole candidate and does both. Any other row is unmatched, its outcome unknown:
+ * a reply whose references and invoices disagree cannot say which record AEAT accepted. Matched
+ * lines keep AEAT's order, and Route B's lookups run one at a time. A lookup's failure is kept
+ * rather than thrown, so it leaves only its own record unknown (`handleDuplicate`).
  */
 async function resolveLines(
   client: VerifactuClient,
   batch: DueRow[],
+  registros: EnvioRegistro[],
   respuesta: Awaited<ReturnType<VerifactuClient["submit"]>>,
-): Promise<ResolvedLine[]> {
-  const byId = new Map(batch.map((row) => [row.id, row]));
+): Promise<ResolvedReply> {
+  const matchedRow = new Map<RespuestaLinea, DueRow>();
+  const unmatched: UnmatchedRow[] = [];
+  batch.forEach((row, i) => {
+    const identidadEnviada = sentIdentityOf(registros[i]!);
+    const candidates = respuesta.RespuestaLinea.filter(
+      (linea) => linea.RefExterna === row.id || sameFactura(linea.IDFactura, identidadEnviada),
+    );
+    const [only] = candidates;
+    if (
+      candidates.length === 1 &&
+      only!.RefExterna === row.id &&
+      sameFactura(only!.IDFactura, identidadEnviada)
+    ) {
+      matchedRow.set(only!, row);
+    } else {
+      unmatched.push({ row, identidadEnviada, candidates });
+    }
+  });
+
   const lines: ResolvedLine[] = [];
   for (const linea of respuesta.RespuestaLinea) {
-    // Skipped rather than thrown: one unmatched line must not back the whole batch off and discard
-    // every other line of this response. The skipped row stays `enviando` until
-    // `recoverStaleClaims` or a restart requeues it.
-    const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
+    const row = matchedRow.get(linea);
     if (row === undefined) continue;
     const resolved = resolveEstadoEfectivo(linea);
     const efectivo =
@@ -686,7 +741,7 @@ async function resolveLines(
         linea.CodigoErrorRegistro === 3000 && resolved === "accepted_with_errors",
     });
   }
-  return lines;
+  return { lines, unmatched };
 }
 
 async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
@@ -705,7 +760,7 @@ async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
 async function persistResponse(
   tx: Transaction,
   batch: DueRow[],
-  lines: ResolvedLine[],
+  { lines, unmatched }: ResolvedReply,
   csv: string | null,
   now: Date,
   result: CommittedCounts,
@@ -714,6 +769,23 @@ async function persistResponse(
 
   for (const line of lines) {
     await applyOutcome(tx, line, csv, now, result, sentIds);
+  }
+  for (const { row, identidadEnviada, candidates } of unmatched) {
+    await awaitReadableAnswer(tx, row, csv, now, result, {
+      estado: null,
+      codigo: null,
+      mensaje: null,
+      identidadEnviada,
+      lineasRespuesta: candidates.map((linea) => ({
+        refExterna: linea.RefExterna ?? null,
+        idFactura: {
+          IDEmisorFactura: linea.IDFactura.IDEmisorFactura,
+          NumSerieFactura: linea.IDFactura.NumSerieFactura,
+          FechaExpedicionFactura: linea.IDFactura.FechaExpedicionFactura,
+        },
+        ...answerOf(linea),
+      })),
+    });
   }
 }
 
@@ -772,7 +844,7 @@ async function applyOutcome(
       return;
     }
     case "status_unknown":
-      await awaitReadableAnswer(tx, row, linea, csv, now, result);
+      await awaitReadableAnswer(tx, row, csv, now, result, answerOf(linea));
       return;
     // duplicate_annulled / duplicate_unknown — error 3000; see `handleDuplicate`.
     default:
@@ -812,19 +884,28 @@ async function openCase(
   });
 }
 
+type UnknownAnswer = Omit<ErrorParams["fiscal.estado_desconocido"], "registroId" | "csv">;
+
+function answerOf(linea: RespuestaLinea): Pick<UnknownAnswer, "estado" | "codigo" | "mensaje"> {
+  return {
+    estado: linea.EstadoRegistro ?? null,
+    codigo: linea.CodigoErrorRegistro ?? null,
+    mensaje: linea.DescripcionErrorRegistro ?? null,
+  };
+}
+
 /**
- * An unreadable reply, or a duplicate lookup that failed or did not settle whose record AEAT holds,
- * stays pending for a later send. The incident keeps the envío's CSV, which AEAT never returns
- * again. `lookupFailed` is given only when a duplicate lookup ran.
+ * An unreadable reply, a duplicate lookup that failed or did not settle whose record AEAT holds,
+ * or a reply with no line to trust for this record, stays pending for a later send. The incident
+ * keeps the envío's CSV, which AEAT never returns again.
  */
 async function awaitReadableAnswer(
   tx: Transaction,
   row: DueRow,
-  linea: RespuestaLinea,
   csv: string | null,
   now: Date,
   result: CommittedCounts,
-  lookupFailed?: boolean,
+  answer: UnknownAnswer,
 ): Promise<void> {
   const next = new Date(now.getTime() + backoffMs(row.intentos));
   await tx.execute(sql`
@@ -836,14 +917,7 @@ async function awaitReadableAnswer(
     tx,
     row,
     "warning",
-    new AppError("fiscal.estado_desconocido", {
-      registroId: row.id,
-      estado: linea.EstadoRegistro ?? null,
-      codigo: linea.CodigoErrorRegistro ?? null,
-      mensaje: linea.DescripcionErrorRegistro ?? null,
-      csv,
-      ...(lookupFailed === undefined ? {} : { lookupFailed }),
-    }),
+    new AppError("fiscal.estado_desconocido", { registroId: row.id, csv, ...answer }),
     now,
     result,
   );
@@ -1031,7 +1105,10 @@ async function handleDuplicate(
   const annulled = efectivo === "duplicate_annulled";
   if (lookup !== null) {
     if ("failed" in lookup) {
-      await awaitReadableAnswer(tx, row, linea, csv, now, result, true);
+      await awaitReadableAnswer(tx, row, csv, now, result, {
+        ...answerOf(linea),
+        lookupFailed: true,
+      });
       return;
     }
     if (lookup.matched) {
@@ -1060,7 +1137,10 @@ async function handleDuplicate(
       return;
     }
     if (lookup.matched === null) {
-      await awaitReadableAnswer(tx, row, linea, csv, now, result, false);
+      await awaitReadableAnswer(tx, row, csv, now, result, {
+        ...answerOf(linea),
+        lookupFailed: false,
+      });
       return;
     }
   }

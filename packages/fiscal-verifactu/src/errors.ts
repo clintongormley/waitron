@@ -2,6 +2,13 @@
 // declare a fresh ambient module of the same name.
 import "@waitron/shared";
 
+/** An invoice as AEAT's `IDFactura` names it; the date is `DD-MM-YYYY`. */
+interface FacturaIdentity {
+  IDEmisorFactura: string;
+  NumSerieFactura: string;
+  FechaExpedicionFactura: string;
+}
+
 /** This package's codes, added to the shared registry by declaration merging (see the design note
  * atop packages/shared/src/errors.ts). */
 declare module "@waitron/shared" {
@@ -105,11 +112,16 @@ declare module "@waitron/shared" {
 
     /**
      * `./drain.ts`: whether AEAT stored this record is unknown — its reply line has a missing or
-     * unrecognised status, or the line is a duplicate (error 3000) whose lookup failed or did not
-     * settle whose record AEAT holds. A warning: the record waits for a later send. `estado` is the
-     * line's raw status text; `csv` is the envío's, kept because AEAT never returns it again.
-     * `lookupFailed` is present only when a duplicate lookup ran: `true` when it failed, `false`
-     * when it answered without settling it.
+     * unrecognised status; the line is a duplicate (error 3000) whose lookup failed or did not
+     * settle whose record AEAT holds; or the reply has no line that both carries this record's
+     * reference and names the invoice it was sent as, and no other line naming either. A warning:
+     * the record waits for a later send. `estado` is the line's raw status text; `csv` is the
+     * envío's, kept because AEAT never returns it again. `lookupFailed` is present only when a
+     * duplicate lookup ran: `true` when it failed, `false` when it answered without settling it.
+     * `identidadEnviada` and `lineasRespuesta` are present only for the third cause: the invoice
+     * this record was sent as, and every reply line naming its reference or that invoice (empty
+     * when none did); `estado`, `codigo` and `mensaje` are then `null`, since such a line may
+     * describe another invoice.
      */
     "fiscal.estado_desconocido": {
       registroId: string;
@@ -118,6 +130,14 @@ declare module "@waitron/shared" {
       mensaje: string | null;
       csv: string | null;
       lookupFailed?: boolean;
+      identidadEnviada?: FacturaIdentity;
+      lineasRespuesta?: {
+        refExterna: string | null;
+        idFactura: FacturaIdentity;
+        estado: string | null;
+        codigo: number | null;
+        mensaje: string | null;
+      }[];
     };
 
     /**
