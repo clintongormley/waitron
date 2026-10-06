@@ -1546,8 +1546,11 @@ export class HoursScreen extends LitElement {
                   { key: "calendar", label: t("hours.tab.calendar") },
                 ]}
                 @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
-                  this.view = event.detail.value;
-                  this.#url.write({ dashboard: "hours", view: this.view });
+                  if (event.target !== event.currentTarget) return;
+                  (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.view;
+                  void this.#url.write({ dashboard: "hours", view: event.detail.value });
+                  const view = this.#url.read("view");
+                  this.view = view === "dates" || view === "calendar" ? view : "week";
                 }}
               >
                 <div slot="week">${this.view === "week" ? this.#week() : nothing}</div>

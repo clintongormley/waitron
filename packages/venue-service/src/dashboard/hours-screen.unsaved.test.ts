@@ -28,6 +28,8 @@ const model: HoursModel = {
   days: [],
   specialDates: [],
   specialCells: [],
+  holidayCoverage: [],
+  holidaySources: [],
 };
 class HoursLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
@@ -50,6 +52,16 @@ async function mount(
   let reads = 0;
   const request = async (path: string, method: string, body?: unknown) => {
     if (method === "GET") {
+      if (path.endsWith("/local-holidays"))
+        return {
+          venue: { country: "ES", provinceCode: "41", city: "Sevilla" },
+          localEntryLimit: 2,
+          areaOptions: [],
+          areaRequired: false,
+          geographies: [],
+          entries: [],
+        };
+      if (path.includes("/holidays?")) return { facts: [], coverage: [], sources: [] };
       if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
       return structuredClone(initialModel);
     }

@@ -1173,6 +1173,14 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Local holiday Add/Edit now uses the shared protection on the branch. Cancel and native Escape
+retain the entry until you choose Discard; trimmed reverts and accepted saves stay clean. Hours
+keeps the Dates tab and its local entry visible while navigation is being decided. Refusals retain
+the values, and live reads do not replace the opening baseline. Remove confirmations and immediate
+holiday-area writes remain exempt. The dated audit records browser tests, deletion controls and
+EN/ES, light/dark, phone/desktop captures. Device-profile integration and the remaining navigation
+and advancing-owner audit still keep W69 incomplete.
+
 Venue details and its containing Venue settings tabs now use the shared protection on the branch.
 Cancel keeps your edited venue values until you choose Discard; normalized reverts stay clean.
 Accepted saves close the editor before a refresh, so a failed read does not make it dirty again.

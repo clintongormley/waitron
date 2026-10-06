@@ -3051,3 +3051,58 @@ establish native prompting for other form owners, tab close, external navigation
 or mobile process termination. The remaining configuration/device-profile owners, page and till
 route matrices and advancing-source inventory still keep Tasks 1/4/5/6 partial. W69 remains
 incomplete and is not ready for finish-branch or landing.
+
+
+## 2026-10-07: advancing Local holidays owner and Hours tab checkpoint
+
+The candidate rebased onto `bb7453d5daad49e51558369e8a40bdd276b41603`. That tree adds
+`packages/venue-service/src/dashboard/local-holidays-editor.ts` beneath Hours' Dates tab.
+Add/Edit is a protected owner: its date compares exactly, and its name compares after the
+existing submitter's trim. The address acknowledgement is not a separately authored value.
+Remove/forget confirmations and the holiday-area choice are exempt; choosing an area writes
+immediately. The new owner uses the existing coordinator, without a second warning mechanism.
+
+Cancel and native Escape keep the entry open until a decision. Keep retains its fields; Discard
+restores only the affected scope and closes or continues. Reverted edits are clean. Accepted writes
+commit the captured date/name before closing and rereading. Refusals retain the entry. A changed
+live holiday list does not replace the opening baseline or cancel its question. Disconnect releases
+and clears the local editor; retained controls and departed write replies cannot change or commit
+its replacement. Busy saves retain their existing nondismissible behavior.
+
+The first actual Hours tab case failed because the view was assigned before the guarded URL write,
+removing the local editor before the question. The tab now restores its accepted value before
+requesting navigation, and reads the accepted URL. The real Hours/URL-guard case asserts the Dates
+selection, connected editor, native dialog and URL through Keep, then Calendar after Discard.
+Its shell uses the real shared controllers with a synthetic API; it is not the full DashboardApp.
+
+Local receipts: `~/waitron-campaign-e/receipts/w69-holidays-20261007/`.
+
+- Initial owner RED: seven failed/one passed. The actual Hours tab RED then failed its missing
+  warning assertion. Existing behavioral assertions remain unchanged.
+- Final five-suite browser command: `pnpm --filter @waitron/venue-service exec vitest run
+  src/dashboard/local-holidays-editor.unsaved.test.ts src/dashboard/local-holidays-editor.test.ts
+  src/dashboard/local-holidays-editor.a11y.test.ts src/dashboard/hours-screen.unsaved.test.ts
+  src/dashboard/hours-screen.test.ts` reports 251 passes. The new owner suite contains 17 cases.
+- Hours' existing unsaved fixture gained holiday coverage/source arrays and separate local/official
+  holiday read responses. The first integration run reported three calendar failures and 87
+  unhandled errors because the fixture returned an HoursModel to the new local-holiday reader.
+  The added fields preserve every existing assertion; they change no production response.
+- Five independent deletions in an installed disposable candidate fail the intended assertions:
+  registration, change notification, native close gate, tab selection reset and input generation.
+  Each final deletion has a passing clean control. The initial registration control also tested an
+  edit and failed; the final run uses a separate unchanged-entry control. The first input-generation
+  replacement matched nothing; its corrected run fails with Old holiday instead of New holiday.
+  Restoring the candidate reports 17 passes, and all four copied source/test files match byte for byte.
+- Eight temporary native Escape/Keep/Discard flows cover EN/ES, light/dark, measured 390/1280
+  viewports. Sixteen axe scans pass; sixteen captures are retained and representative warning and
+  kept-entry images were inspected. The fixture supplies translated warning copy, not DashboardApp.
+  These flows do not establish the full dashboard shell, provider writes or browser-native unload.
+- The rebase retains main's product-image entry points, menu read consolidation and category delete
+  labels beside W69. Five affected dashboard suites report 566 passes. Venue-service/dashboard
+  typechecks, focused ESLint, source formatting and diff checks pass. No migration or fiscal test
+  changed in this checkpoint.
+
+Configuration exemptions, device-profile integration after W97, remaining actual dashboard/till
+route matrices and the final advancing-owner inventory remain open. Inspect A303's newly added
+catalogue colour route's successful-write boundary during that inventory. Tasks 2/3 stay complete;
+Tasks 1/4/5/6 stay partial. W69 is not ready for finish-branch or landing.

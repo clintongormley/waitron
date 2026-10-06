@@ -2,7 +2,16 @@ import { codeOf } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  leaveCoordinatorFor,
+  type DataTableColumn,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -129,6 +138,9 @@ export class LocalHolidaysEditor extends LitElement {
   #generation = 0;
   #areaGeneration = 0;
   #returnTo?: ReturnTo;
+  #leave?: LeaveCoordinator;
+  #scope?: DraftScope<{ date: string; name: string }>;
+  #beforeClose?: (reason: LeaveReason) => Promise<boolean>;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -155,6 +167,9 @@ export class LocalHolidaysEditor extends LitElement {
     super.disconnectedCallback();
     this.#detach?.();
     this.#detach = undefined;
+    this.#close();
+    this.#areaGeneration++;
+    this.areaBusy = false;
   }
 
   #resolved(model: LocalHolidayModel): boolean {
@@ -172,6 +187,20 @@ export class LocalHolidaysEditor extends LitElement {
   // --- Editors -------------------------------------------------------------------------------
 
   #open(editor: Editor, returnTo: ReturnTo): void {
+    if (!this.isConnected || this.busy) return;
+    const scope = this.#scope;
+    if (scope) {
+      void this.#leave!.request({
+        scopes: [scope.id],
+        reason: "navigation",
+        proceed: () => this.#begin(editor, returnTo),
+      });
+    } else this.#begin(editor, returnTo);
+  }
+
+  #begin(editor: Editor, returnTo: ReturnTo): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
     this.#generation++;
     this.#returnTo = returnTo;
     this.editor = editor;
@@ -179,9 +208,39 @@ export class LocalHolidaysEditor extends LitElement {
     this.refused = {};
     this.bottomRefusal = "";
     this.busy = false;
+    const generation = this.#generation;
+    this.#leave = leaveCoordinatorFor(this);
+    if (editor.kind === "entry") {
+      this.#scope = this.#leave?.register({
+        id: {},
+        parent: this,
+        current: () => {
+          const entry = this.editor as Extract<Editor, { kind: "entry" }>;
+          return { date: entry.date, name: entry.name };
+        },
+        snapshot: (value) => ({ ...value }),
+        equal: (a, b) => a.date === b.date && a.name.trim() === b.name.trim(),
+        restore: (value) => {
+          this.editor = { ...editor, ...value };
+        },
+      });
+    }
+    this.#beforeClose = async (reason) => {
+      if (!this.isConnected || generation !== this.#generation || this.busy) return false;
+      const scope = this.#scope;
+      return (
+        !scope ||
+        (await this.#leave!.request({ scopes: [scope.id], reason, proceed: () => {} })) ===
+          "proceeded"
+      );
+    };
   }
 
   #close(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    this.#beforeClose = undefined;
     this.#generation++;
     this.editor = undefined;
     this.attempted = false;
@@ -254,6 +313,7 @@ export class LocalHolidaysEditor extends LitElement {
 
   async #write(editor: Editor): Promise<void> {
     const generation = this.#generation;
+    const scope = this.#scope;
     this.busy = true;
     try {
       await this.#send(editor);
@@ -263,7 +323,10 @@ export class LocalHolidaysEditor extends LitElement {
       this.#refuse(editor, error);
       return;
     }
-    if (generation === this.#generation) this.#close();
+    if (generation === this.#generation) {
+      if (editor.kind === "entry") scope?.commit({ date: editor.date, name: editor.name.trim() });
+      this.#close();
+    }
     this.api.rereadWatches();
   }
 
@@ -311,16 +374,25 @@ export class LocalHolidaysEditor extends LitElement {
     await focusFirstInvalid(this.renderRoot.querySelector("wt-modal")!);
   }
 
-  #setEntry(patch: { date?: string; name?: string }, name: string): void {
+  #setEntry(patch: { date?: string; name?: string }, name: string, generation: number): void {
+    if (
+      !this.isConnected ||
+      generation !== this.#generation ||
+      this.busy ||
+      this.editor?.kind !== "entry"
+    )
+      return;
     const editor = this.editor as Extract<Editor, { kind: "entry" }>;
     if (name in this.refused)
       this.refused = Object.fromEntries(
         Object.entries(this.refused).filter(([field]) => field !== name),
       );
     this.editor = { ...editor, ...patch };
+    this.#scope?.changed();
   }
 
   #content(editor: Editor, errors: Record<string, string>) {
+    const generation = this.#generation;
     switch (editor.kind) {
       case "entry": {
         const city = this.model!.venue.city;
@@ -340,7 +412,7 @@ export class LocalHolidaysEditor extends LitElement {
               error=${errors.holidayDate ?? ""}
               ?disabled=${this.busy}
               @wt-change=${(event: CustomEvent<{ value: string }>) =>
-                this.#setEntry({ date: event.detail.value }, "holidayDate")}
+                this.#setEntry({ date: event.detail.value }, "holidayDate", generation)}
             ></wt-input>
             <wt-input
               name="holidayName"
@@ -351,7 +423,7 @@ export class LocalHolidaysEditor extends LitElement {
               error=${errors.holidayName ?? ""}
               ?disabled=${this.busy}
               @wt-change=${(event: CustomEvent<{ value: string }>) =>
-                this.#setEntry({ name: event.detail.value }, "holidayName")}
+                this.#setEntry({ name: event.detail.value }, "holidayName", generation)}
             ></wt-input>`,
           save: t("hours.save"),
           danger: false,
@@ -387,6 +459,7 @@ export class LocalHolidaysEditor extends LitElement {
     const own = this.attempted ? this.#check(editor) : {};
     const errors = { ...this.refused, ...own };
     const content = this.#content(editor, errors);
+    const generation = this.#generation;
     const marked = Object.keys(errors).length > 0;
     return keyed(
       this.#generation,
@@ -395,7 +468,11 @@ export class LocalHolidaysEditor extends LitElement {
         size="compact"
         heading=${content.heading}
         .dismissible=${!this.busy}
-        @wt-close=${() => this.#close()}
+        .beforeClose=${this.#beforeClose}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (generation === this.#generation) this.#close();
+        }}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-local"]'))}
       >
@@ -412,7 +489,9 @@ export class LocalHolidaysEditor extends LitElement {
             data-test="cancel-local"
             ?disabled=${this.busy}
             @click=${() => {
-              if (!this.busy) this.#close();
+              if (!this.isConnected || generation !== this.#generation || this.busy) return;
+              if (!this.#scope) this.#close();
+              else void this.renderRoot.querySelector("wt-modal")?.requestClose("cancel");
             }}
             >${t("hours.cancel")}</wt-button
           >
@@ -420,7 +499,9 @@ export class LocalHolidaysEditor extends LitElement {
             data-test="save-local"
             variant=${content.danger ? "danger" : "primary"}
             ?disabled=${this.busy || Object.keys(own).length > 0}
-            @click=${() => this.#submit()}
+            @click=${() => {
+              if (this.isConnected && generation === this.#generation && !this.busy) this.#submit();
+            }}
             >${content.save}</wt-button
           >
         </wt-form-actions>

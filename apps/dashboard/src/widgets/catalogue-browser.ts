@@ -636,15 +636,15 @@ export class CatalogueBrowser extends LitElement {
                                   value="move_up"
                                   .checked=${this.contents === "move_up"}
                                   @change=${(event: Event) => {
-                                if (
-                                  !(event.currentTarget as HTMLElement).isConnected ||
-                                  this.operationBusy ||
-                                  !this.operation
-                                )
-                                  return;
-                                this.contents = "move_up";
-                                this.#operationScope?.changed();
-                              }}
+                                    if (
+                                      !(event.currentTarget as HTMLElement).isConnected ||
+                                      this.operationBusy ||
+                                      !this.operation
+                                    )
+                                      return;
+                                    this.contents = "move_up";
+                                    this.#operationScope?.changed();
+                                  }}
                                 />${keepLabel}</label
                               >
                               <label class="radio"
@@ -655,15 +655,15 @@ export class CatalogueBrowser extends LitElement {
                                   value="delete"
                                   .checked=${this.contents === "delete"}
                                   @change=${(event: Event) => {
-                                if (
-                                  !(event.currentTarget as HTMLElement).isConnected ||
-                                  this.operationBusy ||
-                                  !this.operation
-                                )
-                                  return;
-                                this.contents = "delete";
-                                this.#operationScope?.changed();
-                              }}
+                                    if (
+                                      !(event.currentTarget as HTMLElement).isConnected ||
+                                      this.operationBusy ||
+                                      !this.operation
+                                    )
+                                      return;
+                                    this.contents = "delete";
+                                    this.#operationScope?.changed();
+                                  }}
                                 />${deleteLabel}</label
                               >
                             </fieldset>`
