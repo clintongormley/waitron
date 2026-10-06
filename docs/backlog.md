@@ -1870,7 +1870,7 @@ Left open:
   that product's own colour while it is open. I believe this predates the last review round; not
   checked against earlier commits.
 
-**Each menu has one Device Home Page, shown two ways — DONE (W93, 2026-10-06).** A menu's one
+**Each menu has one Device Home Page, shown two ways — DONE (W93, #1287, 2026-10-06).** A menu's one
 Device Home Page is the first row of its Structure tab, and the Home page tab sets a Handheld and a
 Till display for it; named home layouts and the device profile's layout choice are gone. A till
 canvas card that sets no column count of its own follows the menu's setting, and a configuration
@@ -6193,10 +6193,8 @@ bump it when a fixed version is published, and run the certificate suites in tho
   `PATCH /management-api/venue-service/departments/:departmentId`
   (`packages/venue-service/src/routes.ts`), and floor tables need a list that includes disabled
   tables plus `active` on `PATCH /management-api/tables/:id` (`apps/server/src/management-api.ts`,
-  `apps/dashboard/src/api/client.ts`). Lane B's W93 branch (`feat/device-home-page`)
-  changes `apps/server/src/management-api.ts`, `apps/dashboard/src/api/client.ts`,
-  `apps/dashboard/src/api/live-queries.ts` and `packages/venue-service/src/operations.ts`, so they
-  are a follow-up to take once W93 lands. Found along the way, each left as it is: enabling a zone
+  `apps/dashboard/src/api/client.ts`). They were held back while W93 changed the same
+  files; W93 landed (#1287, 2026-10-06), so they can be taken now. Found along the way, each left as it is: enabling a zone
   leaves its tables disabled, and its routing exceptions, watcher zones and till starting zones
   gone, because disabling deleted or switched those off and Enable does not restore them;
   `PATCH /management-api/zones/:id` sets `active: true` on a zone whose department is disabled,
