@@ -480,7 +480,8 @@ because it was already ordered. The server refuses a new standalone line for suc
 hides the dishes it rejects. A section it leaves with nothing keeps its place, faded and not
 openable, reading "Nothing matches the filter" (`unfilteredProducts`,
 `apps/till/src/widgets/menu-browser.ts`) — in the full menu, as a shortcut and inside an open
-section. One that cannot be sold now keeps its button, greyed, and a tap on it
+section; if the filter empties the section that is open, the till says "Not found" and shows home.
+A dish that cannot be sold now keeps its button, greyed, and a tap on it
 does nothing (`hasSomethingToSell`, `apps/till/src/widgets/product-pick.ts`), so the buttons around
 it do not move; the till's
 menu-state poll greys and restores it without reloading the offers (`apps/till/src/till-app.ts`). A
