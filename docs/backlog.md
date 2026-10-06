@@ -1871,6 +1871,11 @@ Left open:
   that product's own colour while it is open. I believe this predates the last review round; not
   checked against earlier commits.
 
+**Menu search lists the shown menu first, then each other menu the device is served — DONE (W94,
+#PR, 2026-10-06).** The till's menu search groups matches by menu, the shown one first, each tile
+that menu's own offer and price; [design-system.md](developers/design-system.md), _The till's menu
+search_.
+
 **Each menu has one Device Home Page, shown two ways — DONE (W93, #1287, 2026-10-06).** A menu's one
 Device Home Page is the first row of its Structure tab, and the Home page tab sets a Handheld and a
 Till display for it; named home layouts and the device profile's layout choice are gone. A till
