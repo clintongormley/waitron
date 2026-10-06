@@ -6169,6 +6169,33 @@ test("revealRow straight after a sticky table's headings grow lands the row belo
   await revealFromEnd(el, scroll);
 });
 
+test("revealRow keeps a row of a fractional height wholly below the headings, never a part of a pixel under them", async () => {
+  // Each row is 0.3 px off a whole pixel more than the one above, so the rows' tops cover every
+  // fraction, and a scroll position the browser rounds to a whole pixel can land a row under them.
+  const { el, scroll } = await stickyTable({
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        cell: (r) => html`<div style="block-size: 30.3px">${r.name}</div>`,
+      },
+    ],
+  });
+  await settle();
+  const products = stickyRows.filter((r) => r.kind === "product").map((r) => r.id);
+  const under: string[] = [];
+  for (const key of products) {
+    scroll.scrollTop = scroll.scrollHeight;
+    await settle();
+    await el.revealRow(key);
+    await settle();
+    const row = el.shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!.getBoundingClientRect();
+    if (row.top < stickyHeadings(el)[0]!.getBoundingClientRect().bottom) under.push(key);
+  }
+  expect(products.length).toBeGreaterThan(10);
+  expect(under).toEqual([]);
+});
+
 test("revealRow straight after a sticky table's rows come back from loading lands the row below the headings", async () => {
   const { el } = await stickyTable();
   el.loading = true;
