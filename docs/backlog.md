@@ -2031,8 +2031,13 @@ Left open:
   selected by counting the active menus' structure nodes, recorded four menu GETs after a shortcut
   removal on Structure and four after a Home columns edit: Home was read twice on each tab.
   The last GET finished about 34 ms / 32 ms after the respective input event in that single run;
-  these are baseline observations, not a comparison or a latency bound. Implementation and the
-  after measurement remain open. Consolidation must retain shortcut-name refreshes from `products`
+  these are baseline observations, not a comparison or a latency bound. The branch now has a
+  tested shared GET endpoint (`/management-api/catalogues/:id/read?part=…`) for Structure, Home,
+  status and Preview, with each part's result or refusal returned separately. The client is not
+  connected to it yet: the two one-GET tests remain red. Transport batching prototypes did not
+  satisfy both cases and were removed; they are not the proposed implementation. The shared
+  screen subscription, refresh/feed coordination and after measurement remain open. Consolidation
+  must retain shortcut-name refreshes from `products`
   (the dependency is pinned in `apps/dashboard/src/api/live-queries.test.ts`) and the existing
   old-response, error and publish-hash checks.
 

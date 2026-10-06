@@ -6043,3 +6043,161 @@ it("refuses format-2 menus through management status, preview and publish routes
     (await suite.db.select().from(menuVersions).where(eq(menuVersions.menuId, menuId))).length,
   ).toBe(2);
 });
+
+describe("shared menu reads", () => {
+  it("refuses staff before reading any part", async () => {
+    const app = mountApp();
+    const id = await createCatalogueVia(app, "Manager only");
+    const response = await send(
+      app,
+      "GET",
+      `/management-api/catalogues/${id}/read?part=structure&part=home&part=preview`,
+      { cookie: staffCookie },
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: { code: "authorization.not_permitted", params: { permission: "person.manage" } },
+    });
+  });
+
+  it("rejects a malformed menu id before reading its parts", async () => {
+    const response = await send(
+      mountApp(),
+      "GET",
+      "/management-api/catalogues/nope/read?part=home",
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "shared.invalid_id", params: { kind: "MenuId", value: "nope" } },
+    });
+  });
+
+  it("carries each missing menu refusal with its HTTP status", async () => {
+    const id = crypto.randomUUID();
+    const response = await send(
+      mountApp(),
+      "GET",
+      `/management-api/catalogues/${id}/read?part=structure&part=home&part=status&part=preview`,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(
+      Object.fromEntries(
+        ["structure", "home", "status", "preview"].map((part) => [
+          part,
+          {
+            status: 404,
+            body: { error: { code: "catalogue.not_found", params: { catalogueId: id } } },
+          },
+        ]),
+      ),
+    );
+  });
+
+  it("returns current home settings alongside publication status", async () => {
+    const app = mountApp();
+    const id = await createCatalogueVia(app, "Edited home");
+    const path = `/management-api/catalogues/${id}`;
+    expect(
+      (
+        await send(app, "PATCH", `${path}/home-display`, {
+          body: { device: "handheld", columns: 5 },
+        })
+      ).status,
+    ).toBe(204);
+    const response = await send(app, "GET", `${path}/read?part=home&part=status`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      home: { status: 200, body: { handheld: { columns: 5 } } },
+      status: { status: 200, body: { state: "unpublished", clashes: 0 } },
+    });
+  });
+
+  it("returns home and structure even when the publication requires a reset", async () => {
+    const app = mountApp();
+    const id = await createCatalogueVia(app, "Old publication with usable editor");
+    const path = `/management-api/catalogues/${id}`;
+    const preview = (await (await send(app, "GET", `${path}/preview`)).json()) as MenuPreview;
+    expect(
+      (await send(app, "POST", `${path}/publish`, { body: { expectedHash: preview.hash } })).status,
+    ).toBe(200);
+    const [row] = await suite.db.select().from(menuVersions).where(eq(menuVersions.menuId, id));
+    const [old] = await suite.db
+      .insert(menuVersions)
+      .values({
+        ...row!,
+        id: crypto.randomUUID(),
+        number: 2,
+        document: {
+          ...row!.document,
+          format: 2,
+          home: undefined,
+        } as unknown as typeof row.document,
+        contentHash: "old-editor-document-hash",
+      })
+      .returning({ id: menuVersions.id });
+    await suite.db
+      .update(menuPublications)
+      .set({ versionId: old!.id })
+      .where(eq(menuPublications.menuId, id));
+    const response = await send(
+      app,
+      "GET",
+      `${path}/read?part=structure&part=home&part=preview&part=status`,
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.structure).toMatchObject({
+      status: 200,
+      body: { root: { internalName: "Old publication with usable editor" } },
+    });
+    expect(body.home).toMatchObject({ status: 200, body: { shortcuts: [] } });
+    const refusal = {
+      status: 400,
+      body: { error: { code: "menu.reset_required", params: { menuId: id } } },
+    };
+    expect(body.preview).toEqual(refusal);
+    expect(body.status).toEqual(refusal);
+  });
+
+  it("returns structure, home and preview from one authorised request", async () => {
+    const app = mountApp();
+    const id = await createCatalogueVia(app, "Shared menu");
+    const path = `/management-api/catalogues/${id}`;
+    const response = await send(app, "GET", `${path}/read?part=structure&part=home&part=preview`);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    for (const part of ["structure", "home", "preview"]) {
+      const single = await send(app, "GET", `${path}/${part}`);
+      expect(body[part]).toEqual({ status: 200, body: await single.json() });
+    }
+    expect(Object.keys(body)).toEqual(["structure", "home", "preview"]);
+  });
+
+  it.each(["", "?part=prices", "?part=home&part=home"])(
+    "refuses an invalid shared read selection %s",
+    async (query) => {
+      const app = mountApp();
+      const id = await createCatalogueVia(app, "Selection");
+      const response = await send(app, "GET", `/management-api/catalogues/${id}/read${query}`);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "part" },
+        },
+      });
+    },
+  );
+
+  it("requires a management session before reading any part", async () => {
+    const app = mountApp();
+    const id = await createCatalogueVia(app, "Private");
+    const response = await send(app, "GET", `/management-api/catalogues/${id}/read?part=home`, {
+      cookie: null,
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: { code: "management_session.required", params: {} },
+    });
+  });
+});

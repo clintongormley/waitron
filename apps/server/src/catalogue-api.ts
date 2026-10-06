@@ -899,6 +899,37 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
+  app.get("/management-api/catalogues/:id/read", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const parts = c.req.queries("part") ?? [];
+      if (
+        parts.length === 0 ||
+        new Set(parts).size !== parts.length ||
+        parts.some((part) => !["structure", "home", "status", "preview"].includes(part))
+      )
+        throw new AppError("management.request_invalid", { field: "part" });
+      const result = await gated(sessionId, async (tx) => {
+        const responses: Record<string, { status: number; body: unknown }> = {};
+        for (const part of parts) {
+          const response = await run(c, log, async () => {
+            if (part === "structure") return c.json(await readMenuStructure(tx, menuId));
+            if (part === "home") return c.json(await readMenuHome(tx, menuId));
+            if (part === "preview") return c.json(await previewMenu(tx, menuId));
+            const status = (await menuStatus(tx, [menuId])).get(menuId);
+            if (status === undefined)
+              throw new AppError("catalogue.not_found", { catalogueId: menuId });
+            return c.json(status);
+          });
+          responses[part] = { status: response.status, body: await response.json() };
+        }
+        return responses;
+      });
+      return c.json(result);
+    }),
+  );
+
   app.get("/management-api/catalogues/:id/structure", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
