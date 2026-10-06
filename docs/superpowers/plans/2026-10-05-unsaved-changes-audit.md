@@ -3346,3 +3346,57 @@ three candidate files byte-matched. No existing assertion, fiscal routine or mig
 Full-document Prettier checks find formatting differences in both backlog and this audit on the
 unchanged checkpoint HEAD too; their baseline comparison is retained. This checkpoint leaves
 those unrelated historical formatting differences in place.
+
+## Login owner and dashboard container checkpoint, 2026-10-07
+
+The login owner now registers the active step's submitted inputs through the shared coordinator.
+Email uses the existing Continue normalization; password and PIN remain exact, and code/name use
+their existing input/write normalization. Continue accepts the email step; method selection,
+read-only notices and the native passkey ceremony add no independent draft. A required factor
+starts with an empty code. The existing failed-login code clearing remains unchanged.
+
+Change account, alternative password/passkey/Google paths, the reset link, factor Back/mode,
+optional passkey Skip and account-link Cancel request leave before dropping the current inputs.
+Account-link navigation preserves unrelated history state. A delayed Google authorization reply
+rechecks newer input before redirecting. Account completion and passkey verification commit the
+submitted snapshot and retain later input. Accepted authentication releases its credential scope
+before the authenticated event. Typed values notify during their input event; comparing the last
+notified payload prevents the subsequent render from cancelling the same leave question.
+
+The existing `waitron-session-invalid` producer (`apps/dashboard/src/main.ts`) and shell consumer
+were traced before adding the login owner listener. The listener clears retained controls and
+credentials on expiry, required-session refusal or suspension, cancels ceremonies and invalidates
+older replies. Disconnect releases the registration and clears secrets. A cancelled account read
+and departed login resolve/refusal cannot replace the reconnected draft in the new cases.
+
+Focused command: `pnpm --filter @waitron/dashboard exec vitest run src/screens/login-screen.unsaved.test.ts src/screens/login-screen.test.ts src/dashboard-app.login-unsaved.test.ts src/dashboard-app.test.ts src/dashboard-app.unsaved-changes.test.ts`.
+The final run passes 647 cases across five files, including 39 owner and six actual-container cases.
+The new same-event cases also request navigation before a render and keep that question alive.
+Actual dashboard routes cover action-link Cancel, indexed Back/Forward, retained language input and
+all three forced invalidation codes. None of the existing tests or their assertions changed.
+
+The installed disposable checkout deletes eleven guards separately: registration, notifications,
+method gating, request generation, account commit, passkey commit, preservation of newer passkey
+input, the late Google leave gate, the security listener, control clearing and autofill release.
+Each target fails an assertion beside a passing login/action-link control; restored selection passes
+12. `deletions.json`, verbose logs and byte comparison are under Lane E's
+`receipts/w69-login-20261007`. The measuring checkout is removed after verification.
+
+Eight native EN/ES, light/dark, 390/1280 flows assert Keep/Escape/Discard, initial Keep focus,
+return focus and retained native values. Eight scoped confirmation axe scans pass; sixteen
+warning/kept captures were inspected in contact sheets without clipping. These captures use the
+minimal login host and synthetic API/hardware boundaries; they are not a full-shell accessibility,
+real identity-server, live WebAuthn-device or native reload-prompt receipt.
+
+Initial failures and corrections remain in the receipt folder: render-wide notifications cancelled
+questions; a new refusal assertion used the general code wording instead of the sign-in wording;
+the accepted-account continuation checked the generation it had intentionally reset; and an
+asynchronous method continuation briefly held the coordinator while it attempted a second request.
+One intermediate run was edited before completion and is not used as final evidence. A source
+format check failed before the container suite was formatted again. The registration deletion initially removed an adjacent helper too and loaded no tests;
+its boundary was corrected and the intended assertion then failed beside the passing control.
+Image composition used the
+workspace's installed sharp after the host Python had no Pillow. No repository dependency changed.
+
+Tasks 1/4/5/6 remain partial. Till schedule/enrolment, till shell and retained-order behavior,
+and the final advancing-owner inventory still need work. W69 is not ready for finish/land.

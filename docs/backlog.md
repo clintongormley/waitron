@@ -1173,6 +1173,14 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Login forms now protect your typed email, password, factor code, account-link credentials and
+optional passkey name on the branch. Change account, method switches, the reset link and Cancel
+keep those inputs until you choose Discard. Accepted credential writes commit their submitted
+values; later input remains protected. The actual dashboard checks cover account-link navigation,
+Back/Forward, a language change that retains the same form and immediate security invalidation.
+The dated audit records same-event input protection, native confirmation and focus checks,
+scoped accessibility scans, and the installed deletion controls.
+
 Backup/export now protects your archive settings, pasted recovery key and export credentials on
 the branch. Cancel keeps edited settings until you choose Discard. An accepted archive write and
 an accepted export each clear only their own draft; newer input remains protected. Focused cases
@@ -1191,8 +1199,8 @@ scoped accessibility scans are recorded in the dated audit.
 
 The service setting switches/dropdowns, bump mode and fire control remain immediate writes.
 Their pending and refused writes do not acquire discard protection or clear a different draft's
-question in the new tests. Login credentials, till schedule/enrolment and the till
-shell/order-state acceptance audit still need work. W69 is not ready for finishing or landing.
+question in the new tests. Till schedule/enrolment and the till shell/order-state acceptance
+audit still need work. W69 is not ready for finishing or landing.
 
 W97 (#1311) is integrated on the branch. Device Edit now protects its approved-profile choices,
 including a revert and edits made while a write is pending. Accepted device values stay clean if
