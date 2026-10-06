@@ -8,6 +8,7 @@ import {
   businessDayRangeWindow,
   businessDayStart,
   businessDayWindow,
+  civilDateOf,
   currentBusinessDay,
   readLocationClock,
   validateBusinessDay,
@@ -68,6 +69,20 @@ describe("venueMomentAt", () => {
     expect(venueMomentAt(new Date(), { timeZone: "Mars/Base", dayCutover: "06:00" })).toBeNull();
     expect(venueMomentAt(new Date(), { timeZone: "+02:00", dayCutover: "06:00" })).toBeNull();
     expect(venueMomentAt(new Date(), { timeZone: "Europe/Madrid", dayCutover: "6am" })).toBeNull();
+  });
+});
+
+describe("civilDateOf", () => {
+  it("gives the venue's calendar date, which turns at midnight and not at the cutover", () => {
+    const madrid = { timeZone: "Europe/Madrid", dayCutover: "06:00" };
+    const at = new Date("2026-10-02T22:30:00Z");
+    expect(civilDateOf(at, "Europe/Madrid")).toBe("2026-10-03");
+    expect(venueMomentAt(at, madrid)?.businessDay).toBe("2026-10-02");
+  });
+
+  it("rolls the year in the venue's zone, not in UTC's", () => {
+    expect(civilDateOf(new Date("2026-12-31T23:30:00Z"), "Europe/Madrid")).toBe("2027-01-01");
+    expect(civilDateOf(new Date("2027-01-01T03:00:00Z"), "America/New_York")).toBe("2026-12-31");
   });
 });
 

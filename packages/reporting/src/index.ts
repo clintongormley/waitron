@@ -1,5 +1,6 @@
 export {
   businessDayStart,
+  civilDateOf,
   currentBusinessDay,
   readLocationClock,
   validateBusinessDay,
