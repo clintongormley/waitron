@@ -6112,6 +6112,61 @@ describe("the Home page tab", () => {
     });
   });
 
+  it.each([
+    ["home-order", "home_first", "menu_first"],
+    ["home-tiles", "colours", "thumbnails"],
+  ])(
+    "shows the %s choice just made while its save is out, and keeps it once saved",
+    async (name, saved, chosen) => {
+      const out = deferred<void>();
+      const client = api();
+      const el = await mountHome(client);
+      client.setHomeDisplay.mockImplementationOnce(() => out.promise);
+      const after = menuHome();
+      after.handheld = { ...after.handheld, [name === "home-order" ? "order" : "tiles"]: chosen };
+      client.getMenuHome.mockResolvedValue(after);
+      await choose(el, name, chosen);
+      expect(client.setHomeDisplay).toHaveBeenCalledTimes(1);
+      expect(radio(el, name, chosen).checked).toBe(true);
+      expect(radio(el, name, saved).checked).toBe(false);
+      out.resolve();
+      await vi.waitFor(() => expect(radio(el, name, chosen).disabled).toBe(false));
+      expect(radio(el, name, chosen).checked).toBe(true);
+      expect(radio(el, name, saved).checked).toBe(false);
+    },
+  );
+
+  it("shows the choice just made while its save is out, and the saved one again once it is refused", async () => {
+    const out = deferred<void>();
+    const client = api();
+    const el = await mountHome(client);
+    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
+    await choose(el, "home-order", "menu_first");
+    expect(radio(el, "home-order", "menu_first").checked).toBe(true);
+    out.reject({ code: "server.internal" });
+    await vi.waitFor(() => expect(radio(el, "home-order", "menu_first").disabled).toBe(false));
+    expect(radio(el, "home-order", "home_first").checked).toBe(true);
+    expect(radio(el, "home-order", "menu_first").checked).toBe(false);
+  });
+
+  it("shows the column count just chosen while its save is out, and the saved one again once it is refused", async () => {
+    const out = deferred<void>();
+    const client = api();
+    const el = await mountHome(client);
+    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
+    await slide(el, 5);
+    await slider(el).updateComplete;
+    const shadow = slider(el).shadowRoot!;
+    expect(slider(el).value).toBe(5);
+    expect(shadow.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("5");
+    expect(text(shadow.querySelector('[part="value"]'))).toBe("5");
+    out.reject({ code: "server.internal" });
+    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
+    await slider(el).updateComplete;
+    expect(slider(el).value).toBe(3);
+    expect(shadow.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("3");
+  });
+
   it("shows the saved column count again after a refused change", async () => {
     const client = api();
     const el = await mountHome(client);

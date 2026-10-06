@@ -566,6 +566,12 @@ export class MenusScreen extends LitElement {
   @state() private homeDevice: HomeDevice = "handheld";
   /** A display setting's save is out. */
   @state() private homeSaving = false;
+  /** The setting whose save is out, shown over the saved one until the save is answered. */
+  @state() private homePending: {
+    menuId: string;
+    device: HomeDevice;
+    patch: Partial<HomeDisplay>;
+  } | null = null;
   @state() private homeFieldErrors: Partial<Record<keyof HomeDisplay, string>> = {};
   /** The shortcut picker while it is open. */
   @state() private addingShortcut: "product" | "section" | null = null;
@@ -1548,6 +1554,7 @@ export class MenusScreen extends LitElement {
     const device = this.homeDevice;
     const fields = Object.keys(patch) as (keyof HomeDisplay)[];
     this.homeSaving = true;
+    this.homePending = { menuId, device, patch };
     this.homeError = null;
     this.homeFieldErrors = Object.fromEntries(
       Object.entries(this.homeFieldErrors).filter(
@@ -1558,6 +1565,7 @@ export class MenusScreen extends LitElement {
       await this.api.setHomeDisplay(menuId, device, patch);
     } catch (error) {
       this.homeSaving = false;
+      this.homePending = null;
       if (this.menuId !== menuId) return;
       const code = codeOf(error);
       const params = (error as { params?: { device?: unknown; field?: unknown } } | undefined)
@@ -1574,6 +1582,7 @@ export class MenusScreen extends LitElement {
       return;
     }
     this.homeSaving = false;
+    this.homePending = null;
     if (this.menuId === menuId && this.menuHome !== null)
       this.menuHome = { ...this.menuHome, [device]: { ...this.menuHome[device], ...patch } };
     await this.#rereadHome(menuId);
@@ -2154,7 +2163,11 @@ export class MenusScreen extends LitElement {
           : html`<p role="status" data-test="home-loading">${t("home.loading")}</p>`
       }`;
     const device = this.homeDevice;
-    const display = home[device];
+    const pending = this.homePending;
+    const display =
+      pending?.menuId === this.menuId && pending.device === device
+        ? { ...home[device], ...pending.patch }
+        : home[device];
     const range = HOME_COLUMN_RANGE[device];
     return html`${error}${loadError}
       <fieldset>
@@ -2221,7 +2234,7 @@ export class MenusScreen extends LitElement {
 
   /** One display setting as a group of radios, its refusal beneath it. These radios and the slider
    * bind through `live`: a refused change leaves the saved value unchanged, and without it the
-   * refused choice would stay showing. */
+   * refused choice would stay showing once its save is answered. */
   #homeChoice(
     field: "tiles" | "order",
     legend: string,
