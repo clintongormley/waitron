@@ -274,7 +274,12 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     expect(await envioOf(first!)).toMatchObject({ estado: "rechazado" });
     expect(await estados([second!, third!])).toEqual(["pendiente", "pendiente"]);
     expect((await cases()).map((c) => c.registroId)).toEqual([...seeded.registroIds, first]);
-    expect(await incidentCodes()).toHaveLength(4);
+    expect(await incidentCodes()).toEqual([
+      "fiscal.registro_rechazado",
+      "fiscal.registro_rechazado",
+      "fiscal.registro_rechazado",
+      "fiscal.registro_rechazado",
+    ]);
     expect(await refusalAlerts(at(HOUR))).toEqual([]);
 
     await drain(deps(wire.client), at(HOUR + MINUTE));
