@@ -2009,6 +2009,13 @@ shown. An event from the table for "these branches changed" would be cleaner; it
 other items in the tree's row menus are greyed out while a change is out; the link to the included
 menu's own editor is a link, which has no greyed-out state, so it stays live.
 
+**Inspect the proposed menu and follow every change — PLANNED (W95, 2026-10-06).**
+The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
+[implementation plan](superpowers/plans/2026-10-06-w95-menu-preview.md) define a customer-language
+hierarchy, product inspection and linked before/after changes, with explicit translation
+fallbacks. Implementation remains pending. It includes W89's obsolete Preview clash label and
+the phone overflow below; neither is marked fixed by the planning work.
+
 **A menu's Preview tab is wider than a phone for a one-word menu name — OPEN (found by W88).** At
 390 px, with a menu named as one word longer than the screen, the page scrolls sideways on the
 Preview tab: the page measured 658 px wide on 2026-10-05 (a throwaway test with the heading suite's
