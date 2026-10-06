@@ -2,21 +2,24 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: PLAN ONLY, waiting for the owner's review (W109, 2026-10-06).** Nothing here is built.
-The questions the owner has to answer before any task starts are in "Owner decisions" below; each
-has a recommended default.
+**Status: the owner answered the six decisions on 2026-10-06 (~08:19, amended ~08:21); this plan
+is amended to those answers (W109, lane A).** Nothing here is built. Two points the answers do not
+settle are open, both about a country with no demo data (Task 2): see "Open points" below. Task 2
+waits for them; Tasks 1, 3, 4 and 5 do not.
 
 **Goal:** A demo venue's menus, floor, staff and example data belong to its country, the way its
-company name and tax number already do (W108, #1276), and the demo's customer-facing text is
-written in every language a venue in that area starts with — in Barcelona Catalan, Spanish and
-English.
+company name and tax number already do (W108, #1276). A Spanish demo's customer-facing text is in
+Spanish and English, with Spanish the default; where the area requires Catalan or Galician, that
+language is the default and Spanish and English come with it — in Barcelona Catalan, Spanish and
+English. A country whose pack has no demo data gets the existing demo data in English.
 
 **Architecture:** The data the demo seed writes today (menus, products, option lists, floor, staff,
 adjustment reasons, a few names written inline) becomes one value, a _demo data set_, kept on the
 server beside the seed code. The country pack names its data set by a plain string id, the way a
 fiscal jurisdiction names its filing module. The seed code stays shared: it reads whichever data
-set the venue's country names. The demo stops choosing its own content languages: it keeps the ones
-setup already gave the venue for its area, and writes every customer-facing text in each of them.
+set the venue's country names, or the fallback set when the pack names none. The demo works out its
+content languages from the data set's own base languages and the area's required languages in the
+pack, and writes every customer-facing text in each of them.
 
 **Tech Stack:** TypeScript, Vitest, the venue database through `useVenueDb`, Lit for the setup
 wizard.
@@ -31,6 +34,19 @@ wizard.
   behave, reusing the pack's area rules rather than a second list; how the venue's content
   languages are switched on to match; who writes the Catalan (and other) text and how a speaker
   checks it; every existing test the plan would change; and the order of steps.
+
+**The owner's answers (2026-10-06, said in the watcher session; recorded in
+`~/waitron-campaign-c/questions.md`, "OWNER ANSWER … W109" ~08:19 and "OWNER AMENDMENT" ~08:21):**
+
+- Decisions 1, 4 and 5 as recommended (below).
+- Decisions 2 and 3, changed: _every Spanish demo carries Spanish and English, with Spanish the
+  default content language, plus Catalan or Galician only where the area requires it._ Then, at
+  ~08:21: _"For Catalan and Galician, that language would be the default, plus Spanish and
+  English."_ An English-language setup in Madrid gets Spanish as its default content language;
+  staff names stay English.
+- Decision 6, changed: a Demo for a country whose pack has no demo data is not refused; it _"falls
+  back to the existing demo data in English"_ (owner: _"fall back to English if there is no other
+  demo data"_).
 
 ---
 
@@ -67,7 +83,11 @@ So today:
   llevar and Menú del Día as absent (printed by the same probe for Madrid).
 - The seed's text exists only in English and Spanish (`SeedLocale = "en" | "es"`,
   `apps/server/scripts/demo-seed/menu.ts:8`).
-
+- **A Demo for a country whose pack has no `demo` provisions the venue and then stops**:
+  `seedInstalledDemo` throws (`apps/server/src/demo-seed.ts:21-24`), after `provision` has written
+  the venue (`apps/server/src/setup-api.ts`, the `seedDemo` call after `provision`). The wizard
+  cannot reach it today: it offers only setup-ready packs, and Spain is the only one (the United
+  Kingdom pack says `availableForVenueSetup: false`, `packages/country-gb/src/united-kingdom.ts:13`).
 
 ## How it works after this plan
 
@@ -95,33 +115,48 @@ menus, products and their prices and VAT classes, option lists, units, floor (zo
 statuses, department internal names), staff names, adjustment reasons, the watcher's name, the
 Drinks menu's name.
 
-**A country with no demo data.** A pack with no `demo` offers no Demo: the wizard's venue screen,
-in Demo, lists only countries whose pack has one, and the server refuses a Demo request for any
-other country before writing anything (Task 2 — W108's open question, built as the owner answers
-it). A pack whose `demo.dataSet` names nothing fails a test at build time, so it never ships.
+**A country with no demo data (decision 6, Task 2).** Its Demo is not refused. The venue is seeded
+from the existing data set, `casa-delgado-es`, in English: content languages English (default),
+staff names in English whatever the person setting it up speaks. **This plan's own choice, not the
+owner's:** an area that requires a language also gets that language switched on beside English,
+because `writeContentLanguages` refuses a list that leaves a required language out
+(`content-languages.ts:185-186`); the text stays English only, so that language is listed as
+missing translations. No pack today has such an area without demo data (the only other pack, the
+United Kingdom's, has no areas). The wizard keeps offering Demo for every setup-ready country. Two things the
+answer does not settle are the open points below: what identity such a demo carries (the pack has
+no made-up company or tax number for it), and whether it gets practice sales. A pack whose
+`demo.dataSet` names nothing still fails a test at build time, so it never ships.
 
-**Languages follow the area, through setup's own list.** The demo writes no content-language row
-of its own. It keeps the row setup wrote for the venue's area and writes every customer-facing text
-in each language that row enables. Setup's list is Spain's starting list (`es, ca, en`) plus the
-area's required languages from the pack, with the area's default where the pack names one
-(`packages/catalogue/src/provisioning.ts`, through `contentLanguageRules`). The demo keeps no
-second list: the day the backlog's "Product languages are hard-coded at setup" entry is fixed, the
-demo follows with no change here. By area, today (the measurement above and
-`packages/country-es/src/spain.ts`):
+**Languages follow the area, through the pack's own rules.** The demo writes its own
+content-language row, replacing the one setup wrote (as it does today), but now derived from the
+area rather than from the seed language. The data set names its _base languages_ — for Casa
+Delgado `es` then `en`. The area's _required_ languages come from the pack, through
+`resolveInstalledContentLanguageRules` (`packages/country-packs/src/registry.ts:89`, reading each
+area's `requiredContentLocales`, `packages/country-es/src/spain.ts:194, 209, 223`). The required
+languages that are not base languages are the area's regional languages; the demo's languages are
+the regional ones first, then the base ones, and the first is the default. No second list: which
+areas require what is read from the pack, and the owner's "Spanish and English" is the data set's
+base list. By area, today (`spain.ts:164-237`):
 
-| Area | Demo content languages (default first) | Receipt | Notes |
-| --- | --- | --- | --- |
-| Catalonia (Barcelona, Girona, Lleida, Tarragona) | **ca**, es, en | Catalan (fixed) | The owner's example. Practice sale lines print in Catalan (Task 5). |
-| Valencian Community (Alicante, Castellón, Valencia) | **es**, ca, en | as chosen | Valencian is written under `ca`; the demo's Catalan text is used. English is the foreign language the area's notice asks for (Waitron shows the notice, it does not check it). |
-| Balearic Islands | **es**, ca, en | as chosen | No required languages; Catalan comes from Spain's starting list. |
-| Galicia (A Coruña, Lugo, Ourense, Pontevedra) | **es**, ca, en, gl | as chosen | The Content languages page still shows the two-foreign-language notice (it applies only to restaurants rated three forks or more); the demo carries one foreign language. |
-| Basque Country, Navarre, Canary Islands, Ceuta, Melilla | — | — | No venue can be set up there: setup refuses an unsupported fiscal jurisdiction (`apps/server/src/setup-api.ts:381`). No Basque text is written. If the Basque Country became supported as the pack stands, setup would start it with `es, ca, en` — the pack gives its provinces a Basque display language (`spain.ts:170-175`) but no required content language — so Basque would arrive with that pack change, not by itself. |
-| Everywhere else (single-language) | **es**, ca, en | as chosen | Catalan is there because Spain's starting list holds it for every venue (the backlog entry above). |
+| Area | Pack's required languages | Demo content languages (default first) | Setup's row, for comparison | Notes |
+| --- | --- | --- | --- | --- |
+| Catalonia (Barcelona, Girona, Lleida, Tarragona) | `ca, es` | **ca**, es, en | **ca**, es, en | The owner's example. Practice sales print in Catalan (Task 5): the receipt is fixed to Catalan there. |
+| Valencian Community (Alicante, Castellón, Valencia) | `ca, es` | **ca**, es, en | **es**, ca, en | The area requires Catalan (written under `ca`; Valencian forms are not written separately), so by the owner's ~08:21 answer Catalan is the default — where setup itself keeps Spanish, because the pack names no default there. English is the foreign language the area's notice asks for. |
+| Galicia (A Coruña, Lugo, Ourense, Pontevedra) | `gl, es` | **gl**, es, en | **es**, ca, en, gl | Galician is the default, by the same answer; setup keeps Spanish. The Content languages page still shows the two-foreign-language notice (it applies only to restaurants rated three forks or more); the demo carries one foreign language. |
+| Balearic Islands | none | **es**, en | **es**, ca, en | Catalan is co-official there, but the pack requires no language, so the demo carries none (the owner: regional languages "only where the area requires it"). |
+| Basque Country, Navarre, Canary Islands, Ceuta, Melilla | — | — | — | No venue can be set up there: setup refuses an unsupported fiscal jurisdiction (`apps/server/src/setup-api.ts:381`). No Basque text is written (decision 5). The pack gives the Basque provinces a display language (`spain.ts:170-175`) but no required content language, so if one became supported as the pack stands, its demo would be Spanish and English. |
+| Everywhere else (single-language) | none | **es**, en | **es**, ca, en | Spain's starting list gives every venue Catalan; the demo drops it. |
 
 So the Spanish data set carries text in **Spanish, English, Catalan and Galician**. Every
 customer-facing text in it is typed `Readonly<Record<"es" | "en" | "ca" | "gl", string>>`, so a
-missing translation fails the typecheck; a test then checks that every language setup can enable,
-in an area where a venue can be set up, is one the data set carries.
+missing translation fails the typecheck; a test then checks that every language the demo can
+enable, in an area where a venue can be set up, is one the data set carries.
+
+The demo writes its row through `writeContentLanguages` with the area's required languages
+(`packages/catalogue/src/content-languages.ts:169-186`), so the required-language check the demo
+skips today runs. Setup's own row is unchanged by this plan: the backlog's "Product languages are
+hard-coded at setup" entry stays open, and the day it is fixed, setup's and the demo's rows may
+agree; nothing here depends on it.
 
 **Staff-facing names follow the person setting up, not the area.** Staff names of products, menus
 and sections, kitchen names, department and zone names, table statuses and the watcher are plain
@@ -131,49 +166,63 @@ admin's display language (`admin.locale`) is Spanish, English otherwise. Setup n
 `admin.locale` empty: it takes the browser's language when that is English or Spanish, and
 otherwise the area's or country's supported language (`apps/server/src/setup-api.ts:428-435`) — so
 in Spain a browser set to Catalan alone gets Spanish staff names. Today the staff language is read
-from the receipt language instead, which is why Barcelona's demo is English.
+from the receipt language instead, which is why Barcelona's demo is English. The fallback for a
+country with no demo data always uses English (decision 6).
 
 **Practice sales print in the venue's receipt language.** Today a sale line's words are resolved in
 `en-GB` or `es-ES` from the seed language (`seed-sales.ts:167`); after Task 5 they are resolved in
 the location's own receipt language, so a Barcelona demo's practice receipts read in Catalan.
 
-**Who writes the new text, and how a speaker checks it.** Claude drafts the Catalan and Galician in
-Task 3 (about 80 short texts per language: product, variant, section, unit and option names, two
-descriptions, seven adjustment reasons, four menu names). The PR carries a side-by-side table
-(English, Spanish, Catalan, Galician) for a speaker to read, and the backlog records the text as
-unchecked until one has. Whether the PR waits for that check is the owner's choice (decision 4).
+**Who writes the new text, and how a speaker checks it (decision 4, answered as recommended).**
+Claude drafts the Catalan and Galician in Task 3 (about 80 short texts per language: product,
+variant, section, unit and option names, two descriptions, seven adjustment reasons, four menu
+names). The PR carries a side-by-side table (English, Spanish, Catalan, Galician) for a speaker to
+read, and the backlog records the text as unchecked until one has. The PR does not wait for that
+check.
 
-## Owner decisions (each with the recommended default)
+## Owner decisions (answered 2026-10-06)
 
-1. **Where the data lives and how the pack names it.** Recommended: server-side data set named by
-   the pack's `demo.dataSet` string (above). Alternative: no pack field; the server finds the data
-   set by country code. The named id follows the fiscal-filing pattern and lets the pack, not the
-   server, say whether a country has a demo.
-2. **Every Spanish demo carries Catalan** (Madrid gets `es, ca, en`), because setup's starting list
-   does. Recommended: follow setup's list, as asked ("rather than a second list"). Alternative: a
-   demo-only list per area — rejected by the brief.
-3. **An English demo in Madrid gets Spanish as its default content language** (today English):
-   the default comes from the area, so customer-facing names fall back to Spanish, while staff
-   names stay English. Recommended: accept — it is what a real Madrid venue starts with.
-4. **Speaker check of the Catalan and Galician.** (a) Land Task 3 with Claude's draft, the
-   side-by-side table in the PR, and a backlog entry saying the text is unchecked (recommended,
-   since the whole-app translations, C125, are parked "for much later"); (b) park Task 3's PR until
-   a speaker has read it. Valencian forms are not written separately, the same as C125 leaves them.
-5. **Basque.** Recommended: not written now — no venue can be set up in the Basque Country, and
-   setup would not switch Basque on there even if one could (table above). Alternative: write it
-   now beside Catalan and Galician, and have Task 3's test demand every one of the pack's official
-   languages (`officialLocales`) rather than the reachable ones.
-6. **A country with no demo data — W108's open question** (`questions.md`, "should the server
-   refuse a Demo for a country whose pack has no demo business?"). Task 2 builds the answer; it is
-   written for the recommended option (a): refuse up front and change that one test to `prepare`.
+1. **Where the data lives and how the pack names it** — as recommended: a server-side data set
+   named by the pack's `demo.dataSet` string (above).
+2. and 3. **Content languages** — changed from the recommendation ("follow setup's whole starting
+   list"): Spanish and English, Spanish the default; where the area requires Catalan or Galician,
+   that language is the default, plus Spanish and English. An English-language setup in Madrid gets
+   Spanish as its default; staff names stay English.
+4. **Speaker check of the Catalan and Galician** — as recommended: Task 3 lands with Claude's
+   draft, the side-by-side table in the PR, and a backlog entry saying the text is unchecked.
+5. **Basque** — as recommended: not written now.
+6. **A country with no demo data** (W108's open question) — changed: not refused; it falls back to
+   the existing demo data in English (Task 2). The W108 test that sends a Demo for a mocked UK pack
+   (`apps/server/src/setup-api.country-pack.test.ts`, "keeps the typed tax id, postcode and
+   province when the country has no rules for them") stays as it is: it stubs the seed
+   (`seedDemo: vi.fn(…)`, `:63`), so it passes through the setup route with the fallback in place.
+
+## Open points (asked in lane A's `questions.md`, "W109 — two open points"; Task 2 waits for them)
+
+- **A. The identity of a fallback demo.** A pack with no `demo` has no made-up company, tax number,
+  location name or trading names, and the wizard's Demo form hides the tax ID and legal name fields
+  (`DEMO_HIDDEN`, `apps/setup/src/screens/venue-screen.ts:76-84`), so today the operator could not
+  get past the venue screen. The same list hides the operation description, which Demo fills only
+  from the filing module's default — and the United Kingdom pack files with `none`. **Recommended:**
+  in Demo, a pack with no `demo` shows the tax ID and legal name fields (validated by the pack's
+  own tax-ID rule, as in Prepare), and the operation description too where the filing module
+  supplies no default; the location name starts empty; the summary drops its "fixed demo values"
+  note for such a demo; and the two department trading names come from the data set
+  (`fallbackTradingNames`, `Bar Casa Delgado` and `Deli Delgado`). Alternative: give the pack a
+  made-up identity after all (only the pack can make a tax number its own rule accepts).
+- **B. Practice sales in a fallback demo.** `seed-sales.ts` records every practice sale through
+  `VerifactuBackend` (`seed-sales.ts:14, 170`) and places it in a Madrid business day, whatever the
+  venue's filing module — so a non-Spanish venue would get Spanish fiscal records. **Recommended:**
+  no practice sales in a fallback demo (`salesDays: 0`) until the seed records through the venue's
+  own fiscal module (a known limit below). Alternative: build that first, as part of Task 2.
 
 ---
 
 ## Global Constraints
 
-- Lane C's "⚠ THE RULE" for these items applies, with the owner's 2026-09-27 and 2026-10-05 test
-  rules: an existing test changes only where this plan lists it (table at the end); any other
-  existing test that goes red is a STOP, not a fix.
+- The "⚠ THE RULE" block carried with W109 into lane A's queue applies, with the owner's 2026-09-27
+  and 2026-10-05 test rules: an existing test changes only where this plan lists it (table at the
+  end); any other existing test that goes red is a STOP, not a fix.
 - The golden huella test (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`) and
   `inmutabilidad` pass **unedited** in every task. Task 5 changes the words on demo practice sales
   (fiscal-adjacent); no task touches `computeHuella`, the chain, numbering, `registros_facturacion`
@@ -187,23 +236,27 @@ unchecked until one has. Whether the PR waits for that check is the owner's choi
   tags.
 - Every product keeps three DIFFERENT names — staff, customer-facing, kitchen — in every language
   (CLAUDE.md §3, `docs/developers/products.md`).
-- Each task is its own PR with a backlog entry update; branches `feat/demo-data-<slug>`. Tasks 1,
-  3, 4 and 5 run in that order; Task 2 depends on none of them.
-- Look at anything visual in both themes and at phone width (CLAUDE.md §4): Task 2's venue screen,
+- Each task is its own PR with a backlog entry update; branches `feat/demo-data-<slug>`. **Order:
+  Tasks 1, 3, 4, 5, then 2.** Task 2 needs the data set (Task 1), the language rule (Tasks 3 and 4)
+  and Task 5's staff-language change, which it overrides for the fallback; it also waits for open
+  points A and B.
+- Look at anything visual in both themes and at phone width (CLAUDE.md §4): Task 2's venue screen
+  (in the browser harness — no setup-ready pack without demo data exists to open it in the app),
   and in Task 4 the Content languages page of a Barcelona demo.
 
 ## Review Focus
 
 1. **A Barcelona demo set up from a Spanish-language browser** — content default Catalan, Catalan,
-   Spanish and English all enabled, staff names in Spanish, practice receipts in Catalan, Missing
+   Spanish and English enabled, staff names in Spanish, practice receipts in Catalan, Missing
    translations empty. Pinned in Task 4 (languages, gaps) and Task 5 (staff names, receipts).
-2. **A Galician demo** — Galician stays enabled (its area requires it) and every customer-facing
-   text has it. Pinned in Task 4.
-3. **A Demo request for a country with no demo data** sent straight to the server — refused before
-   anything is provisioned, not halfway through the seed. Pinned in Task 2.
-4. **`wa-wt reset demo` in English** — still seeds, staff names English, content default Spanish.
+2. **A Galician demo** — Galician the default, Spanish and English enabled, every customer-facing
+   text has all three. Pinned in Task 4.
+3. **A Madrid or Balearic demo** — Spanish default, English, no Catalan. Pinned in Task 4.
+4. **A Demo for a country with no demo data** — seeds the existing data in English with no practice
+   sales (as open point B is answered), staff names English; nothing refused. Pinned in Task 2.
+5. **`wa-wt reset demo` in English** — still seeds, staff names English, content default Spanish.
    Pinned in Task 4 (dev path case).
-5. **A data set that misses one language for one text** — the typecheck fails, and the
+6. **A data set that misses one language for one text** — the typecheck fails, and the
    reachability test fails for an area whose languages the set does not carry. Pinned in Task 3.
 
 ---
@@ -374,74 +427,116 @@ And in `apps/server/src/demo-seed.test.ts`, a new case: `seedInstalledDemo` pass
 
 ---
 
-### Task 2: A country with no demo data offers no Demo
+### Task 2: A country with no demo data gets the existing demo data in English
 
-Branch `feat/demo-data-no-demo-country`. Independent of the other tasks. Built only as the owner
-answers W108's open question; written here for option (a).
+Branch `feat/demo-data-english-fallback`. **Built last, after Task 5, and only once open points A
+and B are answered;** written here for their recommended defaults.
 
 **Files:**
-- Modify: `apps/server/src/setup-api.ts` (`parseProvisionPayload`, after `parseVenue` and the
-  fiscal selection at `:467-471`: in Demo mode, refuse a country whose pack has no `demo`).
-  `parseVenue` itself is not told the mode (`:346`), and placing the refusal at its country check
-  (`:358`) would change the answer of two existing Demo-mode cases in
-  `setup-api.country-pack.test.ts` (the time-zone case and the `ZZ` case).
-- Modify: `apps/setup/src/screens/venue-screen.ts` (in Demo, the country list is
-  `VENUE_SETUP_COUNTRY_PACKS.filter((pack) => pack.demo !== undefined)`)
-- Keep: `apps/server/src/demo-seed.ts`'s own refusal, as the second line.
-- Test: `apps/server/src/setup-api.country-pack.test.ts` (new case; it already mocks a
-  setup-ready GB pack with no `demo`), `apps/setup/src/screens/venue-screen.test.ts`
-- Test change: in `setup-api.country-pack.test.ts`, "keeps the typed tax id, postcode and province
-  when the country has no rules for them" sends `mode: "prepare"` instead of `"demo"` (it tests
-  tax ID, postcode and province handling, not Demo).
+- Modify: `apps/server/scripts/demo-seed/data-set.ts` (`FALLBACK_DEMO_DATA_SET_ID =
+  "casa-delgado-es"`; `DemoDataSet` gains `fallbackTradingNames`; `demoContentLanguages` gains the
+  no-demo branch)
+- Modify: `apps/server/scripts/demo-seed/data-sets/casa-delgado-es.ts` (`fallbackTradingNames:
+  { restaurant: "Bar Casa Delgado", deli: "Deli Delgado" }`)
+- Modify: `apps/server/src/demo-seed.ts` (`seedInstalledDemo`: a pack with no `demo` no longer
+  throws; it seeds the fallback set with staff language `"en"`, the data set's trading names and
+  `salesDays: 0`)
+- Modify: `apps/setup/src/screens/venue-screen.ts` (in Demo, a pack with no `demo` shows the tax ID
+  and legal name fields — `#shows` stops hiding them for that pack — and the location name is not
+  prefilled; `#next` sends the typed values. Demo also hides the operation description
+  (`DEMO_HIDDEN`, `:76-84`), fills it only from the filing module's default
+  (`#descriptionDefault`, `:224-229`) and refuses Next while it is empty (`:483-486`); the United
+  Kingdom pack's filing is `none` (`packages/country-gb/src/united-kingdom.ts:21`), so the field is
+  also shown in Demo whenever the filing module supplies no default)
+- Modify: `apps/setup/src/screens/review-screen.ts` and the `review.demo_defaults` strings
+  (`apps/setup/src/i18n/strings/venue.ts:98`, `:283`): the summary's note that the legal name and
+  tax ID are "Waitron's fixed demo values" (`review-screen.ts:150`) is shown only when the pack
+  has a `demo`; a fallback demo, whose operator typed them, gets no such note. Spain's note and its
+  pin (`review-screen.test.ts:374-387`) are unchanged.
+- Test: `apps/server/src/demo-seed.test.ts`, `apps/server/scripts/demo-seed/data-set.test.ts`,
+  `apps/server/scripts/demo-seed/seed.test.ts`, `apps/setup/src/screens/venue-screen.test.ts`,
+  `apps/setup/src/screens/review-screen.test.ts`
+- Test change: `apps/server/src/demo-seed.test.ts:78-85`, "refuses, seeding nothing, a venue whose
+  country has no demo identity" becomes the fallback case (table at the end).
+- Unchanged: `apps/server/src/setup-api.ts` (no refusal is added) and
+  `setup-api.country-pack.test.ts`.
 
 **Interfaces:**
-- Consumes: `CountryPack.demo` (already on `main`, `packages/country/src/country.ts:102`).
-- Produces: the refusal `setup.request_invalid` with `params.field = "country"`, the code and field
-  W108 tried (`questions.md`, W108 entry).
+- Consumes: `DemoDataSet`, `demoDataSet`, `demoContentLanguages` (Tasks 1 and 3), `demoSeedLocale`
+  (Task 5).
+- Produces:
 
-- [ ] **Step 1: Write the failing tests.** In `setup-api.country-pack.test.ts`, send a Demo
-  provision for the mocked GB pack and assert a 400 with `code: "setup.request_invalid"`,
-  `params.field: "country"`, and that neither the stubbed provisioner nor `seedDemo` was called.
-  In `venue-screen.test.ts`, with a second setup pack lacking `demo`, the Demo form's country
-  choices are only the packs with one, and Prepare still lists both.
+```ts
+// data-set.ts
+export const FALLBACK_DEMO_DATA_SET_ID = "casa-delgado-es";
+// DemoDataSet gains:
+readonly fallbackTradingNames: { readonly restaurant: string; readonly deli: string };
+// demoContentLanguages: when getCountryPack(country)?.demo is undefined, the languages are
+// ["en", ...required.filter((language) => language !== "en")], default "en".
+```
+
+- [ ] **Step 1: Write the failing tests.**
+  - `demo-seed.test.ts`: a `GB` venue (whose pack has no `demo`) calls `seedDemoRestaurant` once
+    with `dataSet: DEMO_DATA_SETS["casa-delgado-es"]`, `locale: "en"` even when `admin.locale` is
+    `es-ES`, `salesDays: 0`, and `departmentTradingNames: { restaurant: "Bar Casa Delgado", deli:
+    "Deli Delgado" }` — the replacement for the refusal case (table).
+  - `data-set.test.ts`: `demoContentLanguages(set, { country: "GB", area: null })` is
+    `{ defaultLanguage: "en", languages: ["en"], required: [] }` (the real GB pack has no `demo`).
+  - `seed.test.ts`, real database: provision the helper's venue, set its tenant's `country` to `GB`
+    and its location's `province` to null (a fixture growing — the GB pack has no provinces), run
+    `seedDemoRestaurant` with the fallback set, `locale: "en"`, `salesDays: 0`: content languages
+    `{ defaultLanguage: "en", languages: ["en"] }`, no missing translations, a product's stored
+    customer name is `{ en: … }` only.
+  - `venue-screen.test.ts`: with a setup-ready pack lacking `demo` AND whose filing is `none` (not
+    `SPARSE_PACK`, `:1192`, whose filing is `verifactu` and would pass either way), the Demo form
+    shows the tax ID, legal name and operation description fields, refuses Next while they are
+    empty, and sends the typed values; Spain's Demo still hides them and sends its demo identity
+    (the existing cases at `:802` and `:941`, unchanged).
+  - `review-screen.test.ts`: a Demo for a pack lacking `demo` shows no "fixed demo values" note.
 - [ ] **Step 2: Run and watch them fail.**
-  Run: `pnpm --filter @waitron/server exec vitest run src/setup-api.country-pack.test.ts` and
-  `pnpm --filter @waitron/setup exec vitest run src/screens/venue-screen.test.ts`
-  Expected: FAIL — the Demo provision succeeds; both packs are listed.
-- [ ] **Step 3: Implement** the refusal and the filtered list.
-- [ ] **Step 4: Make the listed `setup-api.country-pack.test.ts` change; run both commands and
-  `src/setup-api.test.ts` again.** Expected: PASS.
-- [ ] **Step 5: Prove by deletion**: remove the refusal; the new server case fails. Restore.
-- [ ] **Step 6: Look** at the venue screen in Demo, light and dark, 1280 and 390 px.
-- [ ] **Step 7: Commit, backlog entry, `finish-branch`.**
+  Run: `pnpm --filter @waitron/server exec vitest run src/demo-seed.test.ts scripts/demo-seed/data-set.test.ts scripts/demo-seed/seed.test.ts`
+  and `pnpm --filter @waitron/setup exec vitest run src/screens/venue-screen.test.ts src/screens/review-screen.test.ts`
+  Expected: FAIL — `seedInstalledDemo` throws for GB; the GB languages are `es, en`; the Demo form
+  hides the three fields; the summary shows the fixed-values note.
+- [ ] **Step 3: Implement** the four changes above.
+- [ ] **Step 4: Make the listed `demo-seed.test.ts` change**; run Step 2's commands again and
+  `pnpm --filter @waitron/server exec vitest run src/setup-api.test.ts src/setup-api.country-pack.test.ts src/demo-seed.db.test.ts`.
+  Expected: PASS, with a `Tests` count printed.
+- [ ] **Step 5: Prove by deletion**: put the throw back in `seedInstalledDemo`; the GB case fails.
+  Make the no-demo branch of `demoContentLanguages` return the base languages; the GB language
+  cases fail. Restore both.
+- [ ] **Step 6: Look** at the venue screen and the summary in Demo for a pack without demo data, in
+  the browser harness (no such pack is setup-ready in the app), light and dark, 1280 and 390 px.
+- [ ] **Step 7: Commit, backlog entry** (W108's open question closed by decision 6; the practice
+  sales limit stays recorded), **`finish-branch`**.
 
 ---
 
-### Task 3: Catalan and Galician text, and a test that every reachable area is covered (no output change)
+### Task 3: Catalan and Galician text, the demo's language rule, and a test that every reachable area is covered (no output change)
 
-Branch `feat/demo-data-catalan-galician`. The data set gains the text; the seed still writes the
-same languages as before, so every demo venue is seeded exactly as before.
+Branch `feat/demo-data-catalan-galician`. The data set gains the text and the rule; the seed still
+writes the same languages as before, so every demo venue is seeded exactly as before.
 
 **Files:**
 - Modify: `apps/server/scripts/demo-seed/data-set.ts` — the content types move here from `menu.ts`
   and become generic over the data set's languages (below); `DemoDataSet` gains
-  `contentLanguages` and the menus' customer-facing names
+  `contentLanguages`, `baseLanguages` and the menus' customer-facing names; new
+  `demoContentLanguages`
 - Modify: `apps/server/scripts/demo-seed/menu.ts` (re-exports the moved types for its own data;
   every customer-facing text gains `ca` and `gl`; each catalogue gains `customerName`),
   `seed-adjustments.ts` (each reason's `names` gains `ca` and `gl`),
-  `data-sets/casa-delgado-es.ts` (`contentLanguages`, `drinksCustomerName`)
+  `data-sets/casa-delgado-es.ts` (`contentLanguages`, `baseLanguages`, `drinksCustomerName`)
 - Modify: `apps/server/scripts/demo-seed/seed-catalogue.ts` (the Drinks menu's `SeedCatalogue`
   literal at `:190-193` gains `customerName: dataSet.menus.drinksCustomerName`, or the typecheck
   stops on it; nothing writes a menu's customer name until Task 4)
-- Modify: `packages/catalogue/src/provisioning.ts` — move the language computation (the
-  `starting` / `withRequired` / `defaultLanguage` lines, `:58-81`) into an exported pure function
-  `provisionedContentLanguages`, called from the same place (no behaviour change; catalogue's
-  provisioning tests unchanged); `packages/catalogue/src/index.ts` exports it
-- Test: `apps/server/scripts/demo-seed/data-set.test.ts`, `packages/catalogue/src/provisioning.test.ts`
-  (a new case for the pure function)
+- Modify: `packages/country-packs/src/registry.ts` — export the `VenueGeography` type (declared
+  without `export` at `:75`; `index.ts` re-exports `registry.js`)
+- Test: `apps/server/scripts/demo-seed/data-set.test.ts`
 
 **Interfaces:**
-- Consumes: `DemoDataSet`, `demoDataSet`, `inLanguages` (Task 1).
+- Consumes: `DemoDataSet`, `demoDataSet`, `inLanguages` (Task 1);
+  `resolveInstalledContentLanguageRules` and the `VenueGeography` input it takes
+  (`@waitron/country-packs`, `packages/country-packs/src/registry.ts:75, 89`).
 - Produces:
 
 ```ts
@@ -459,40 +554,61 @@ export type DemoText<L extends string> = Readonly<Record<L | SeedLocale, string>
 
 export interface DemoDataSet<L extends string = string> {
   // ...Task 1's fields, with the content types instantiated at L...
+  /** Every language this set has text in. */
   readonly contentLanguages: readonly L[];
+  /** The languages every demo from this set carries, default first, before the area's own. */
+  readonly baseLanguages: readonly [L, ...L[]];
   readonly menus: { /* ... */ readonly drinksCustomerName: DemoText<L> };
+}
+
+export interface DemoLanguages {
+  readonly defaultLanguage: string;
+  readonly languages: readonly string[];
+  /** The area's required languages, for writeContentLanguages' check. */
+  readonly required: readonly string[];
+}
+
+/** The area's required languages that are not base languages come first; the first is the default. */
+export function demoContentLanguages(set: DemoDataSet, geography: VenueGeography): DemoLanguages {
+  const { required } = resolveInstalledContentLanguageRules(geography);
+  const regional = required.filter((language) => !set.baseLanguages.includes(language));
+  const languages = [...regional, ...set.baseLanguages];
+  return { defaultLanguage: languages[0]!, languages, required };
 }
 
 // data-sets/casa-delgado-es.ts
 export const CASA_DELGADO_LANGUAGES = ["es", "en", "ca", "gl"] as const;
 export type CasaDelgadoLanguage = (typeof CASA_DELGADO_LANGUAGES)[number];
 export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage>; // a missing language is a type error
-
-// packages/catalogue/src/provisioning.ts
-export function provisionedContentLanguages(geography: {
-  readonly country: string | undefined;
-  readonly area: string | null | undefined;
-}): ContentLanguages; // { defaultLanguage, languages }, exactly what setup writes today
+// with contentLanguages: CASA_DELGADO_LANGUAGES and baseLanguages: ["es", "en"]
 ```
 
   The registry stays `Readonly<Record<string, DemoDataSet>>`; the writers read texts as
   `Readonly<Record<string, string>>`, which every `DemoText<L>` is assignable to; staff-name reads
   stay typed through `SeedLocale`, which `DemoText` always contains.
 
-- [ ] **Step 1: Write the failing tests.**
+- [ ] **Step 1: Write the failing tests** in `data-set.test.ts`:
 
 ```ts
-// data-set.test.ts
 import { resolveFiscalJurisdiction } from "@waitron/country";
-import { provisionedContentLanguages } from "@waitron/catalogue";
 
-it("carries every language setup can enable where a venue can be set up", () => {
+it.each([
+  ["Madrid", { defaultLanguage: "es", languages: ["es", "en"], required: [] }],
+  ["07", { defaultLanguage: "es", languages: ["es", "en"], required: [] }], // Balearic Islands
+  ["08", { defaultLanguage: "ca", languages: ["ca", "es", "en"], required: ["ca", "es"] }], // Barcelona
+  ["46", { defaultLanguage: "ca", languages: ["ca", "es", "en"], required: ["ca", "es"] }], // Valencia
+  ["15", { defaultLanguage: "gl", languages: ["gl", "es", "en"], required: ["gl", "es"] }], // A Coruña
+])("gives a Casa Delgado demo in %s these content languages", (area, expected) => {
+  expect(demoContentLanguages(demoDataSet("casa-delgado-es"), { country: "ES", area })).toEqual(expected);
+});
+
+it("carries every language the demo can enable where a venue can be set up", () => {
   for (const pack of COUNTRY_PACKS) {
     if (pack.demo === undefined) continue;
     const set = demoDataSet(pack.demo.dataSet);
     for (const area of pack.administrativeAreas) {
       if (resolveFiscalJurisdiction(pack, area.code)?.supported !== true) continue;
-      const { languages } = provisionedContentLanguages({ country: pack.countryCode, area: area.code });
+      const { languages } = demoContentLanguages(set, { country: pack.countryCode, area: area.code });
       const missing = languages.filter((language) => !set.contentLanguages.includes(language));
       expect(missing, `${pack.countryCode} ${area.name}`).toEqual([]);
     }
@@ -507,23 +623,14 @@ it("gives every Casa Delgado customer-facing text a value of its own in every la
 });
 ```
 
-```ts
-// packages/catalogue/src/provisioning.test.ts — one new case, values from the 2026-10-06 measurement
-it.each([
-  ["Madrid", { defaultLanguage: "es", languages: ["es", "ca", "en"] }],
-  ["08", { defaultLanguage: "ca", languages: ["ca", "es", "en"] }],
-  ["15", { defaultLanguage: "es", languages: ["es", "ca", "en", "gl"] }],
-])("starts a venue in %s with these content languages", (area, expected) => {
-  expect(provisionedContentLanguages({ country: "ES", area })).toEqual(expected);
-});
-```
+  (Measured 2026-10-06 with a throwaway `tsx` probe by the amendment's reviewer: `Madrid`, `07`,
+  `08`, `46` and `15` all resolve through `findAdministrativeArea`, and the five expected rows,
+  `required` order included, come out exactly as written above.)
 
 - [ ] **Step 2: Run and watch them fail.**
-  Run: `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/data-set.test.ts` and
-  `pnpm --filter @waitron/catalogue exec vitest run src/provisioning.test.ts`
-  Expected: FAIL — `provisionedContentLanguages` is not exported; `contentLanguages` undefined.
-- [ ] **Step 3: Extract `provisionedContentLanguages`** and call it from the provisioning seed.
-  Run catalogue's provisioning suite: PASS, no existing case changed.
+  Run: `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/data-set.test.ts`
+  Expected: FAIL — `demoContentLanguages` is not exported; `contentLanguages` undefined.
+- [ ] **Step 3: Add `demoContentLanguages`, `baseLanguages` and `contentLanguages`.**
 - [ ] **Step 4: Make the types generic and write the Catalan and Galician text** into `menu.ts`,
   the reasons, and the four menus' customer names. The three-names rule holds per language. A dish
   whose name a speaker would leave untranslated goes in the test's allowance.
@@ -543,35 +650,43 @@ it.each([
 
 ---
 
-### Task 4: The demo keeps the area's content languages and writes every text in them
+### Task 4: The demo's content languages follow the area, and every text is written in them
 
 Branch `feat/demo-data-area-languages`. This is the task that changes what a demo looks like.
 
 **Files:**
-- Modify: `apps/server/scripts/demo-seed/seed-catalogue.ts` (delete the `writeContentLanguages`
-  call at `:91-94`; read the row setup wrote; cut every map to it; pass each menu's
-  `customerName` as `names` to `createCatalogue` / `updateMenuDetails`)
-- Modify: `apps/server/scripts/demo-seed/seed.ts` (read the languages BEFORE `seedCatalogues`, not
-  after)
+- Modify: `apps/server/scripts/demo-seed/seed-catalogue.ts` — replace the literal pair at `:91-94`:
+  read the venue's country and province (the same read the provisioning seed makes,
+  `select l.province, t.country from locations l cross join tenants t where l.id = …`,
+  `packages/catalogue/src/provisioning.ts`), compute `demoContentLanguages(dataSet, { country,
+  area: province })`, and write it with `writeContentLanguages(tx, { defaultLanguage, languages },
+  defaultLanguage, undefined, required)` so the required-language check runs; cut every map to the
+  languages; pass each menu's `customerName` as `names` to `createCatalogue` /
+  `updateMenuDetails`
+- Unchanged: `seed.ts` — since Task 1 it reads the languages after `seedCatalogues` has written
+  them and passes them to `seedOptionLists` and `seedAdjustmentReasons`
 - Test: `apps/server/scripts/demo-seed/seed.test.ts` (new cases), `seed-catalogue.test.ts`
-  (listed changes)
+  (one listed change)
 - Test helper: `apps/server/scripts/demo-seed/testing/provision-venue.ts` gains optional
   `province`, `postalCode` and `city` (a fixture growing; Madrid stays the default)
 
 **Interfaces:**
-- Consumes: `inLanguages`, `DemoDataSet.contentLanguages`, the menus' `customerName` (Tasks 1, 3).
+- Consumes: `inLanguages`, `demoContentLanguages`, the menus' `customerName` (Tasks 1, 3).
 - Produces: nothing new for later tasks.
 
 - [ ] **Step 1: Write the failing tests** in `seed.test.ts`, one per area, each provisioning
   through `createDemoVenueProvisioner` with the province, running `seedDemoRestaurant` with
-  `salesDays: 0`, then reading `readContentLanguages` and `listTranslationGapReport`:
+  `locale: "es"` and `salesDays: 0`, then reading `readContentLanguages` and
+  `listTranslationGapReport`:
 
 ```ts
 it.each([
   ["Barcelona", "08001", "ca-ES", { defaultLanguage: "ca", languages: ["ca", "es", "en"] }],
-  ["A Coruña", "15001", "es-ES", { defaultLanguage: "es", languages: ["es", "ca", "en", "gl"] }],
-  ["Madrid", "28013", "es-ES", { defaultLanguage: "es", languages: ["es", "ca", "en"] }],
-])("a demo in %s keeps the area's languages and misses no translation", async (province, postalCode, invoiceLocale, expected) => {
+  ["Valencia", "46001", "es-ES", { defaultLanguage: "ca", languages: ["ca", "es", "en"] }],
+  ["A Coruña", "15001", "es-ES", { defaultLanguage: "gl", languages: ["gl", "es", "en"] }],
+  ["Illes Balears", "07001", "es-ES", { defaultLanguage: "es", languages: ["es", "en"] }],
+  ["Madrid", "28013", "es-ES", { defaultLanguage: "es", languages: ["es", "en"] }],
+])("a demo in %s takes the area's languages and misses no translation", async (province, postalCode, invoiceLocale, expected) => {
   // provision, seed, then:
   expect(languages).toEqual(expected);
   expect(gaps.flatMap((language) => language.gaps)).toEqual([]);
@@ -579,37 +694,52 @@ it.each([
 });
 ```
 
-  And the dev path (Review Focus 4): `seedDemoRestaurant` with `locale: "en"` on a Madrid venue
-  leaves the default `es` and writes staff names in English (`"Mixed salad"` as a product's staff
-  name, as `seed-catalogue.test.ts` already pins).
+  And the dev path (Review Focus 5): `seedDemoRestaurant` with `locale: "en"` on a Madrid venue
+  writes default `es` and staff names in English (`"Mixed salad"` as a product's staff name, as
+  `seed-catalogue.test.ts` already pins).
 - [ ] **Step 2: Run and watch them fail.**
   Run: `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.test.ts`
   Expected: FAIL — languages are `[en, es]` / `[es, en]`; four menus listed as missing.
-- [ ] **Step 3: Implement.** Remove the `writeContentLanguages` call; read the languages once with
-  `readContentLanguages(tx, locale)` before the first write. The writers' fallback-language
-  argument (`createSectionIn`, `createUnit`, `setProductVariants`, `createOptionList`) needs no
-  change: `readContentLanguages` uses its fallback only when no row is saved
-  (`contentLanguagesOr`, `packages/catalogue/src/content-languages.ts:154-167`), and setup always
-  saves one; the writers require text only in the saved default
-  (`content-languages.ts:34-47`).
-- [ ] **Step 4: Make the listed changes** to `seed-catalogue.test.ts` (four places); run the seed
-  folder and the installed path:
+- [ ] **Step 3: Implement.** The writers' fallback-language argument (`createSectionIn`,
+  `createUnit`, `setProductVariants`, `createOptionList`) needs no change: `readContentLanguages`
+  uses its fallback only when no row is saved (`contentLanguagesOr`,
+  `packages/catalogue/src/content-languages.ts:154-167`), and the demo saves one before its first
+  text write; the writers require text only in the saved default (`content-languages.ts:34-47`).
+  Changing the default runs a gap check in the new default (`content-languages.ts:188-198`) over
+  what setup provisioned. Measured 2026-10-06 by the amendment's reviewer with a throwaway Vitest
+  probe on venues provisioned through `applyVenue(planVenue(…))`: in Valencia (setup's row `es`;
+  `es, ca, en`) `listContentTranslationGaps(tx, "ca")` returned no gaps and
+  `writeContentLanguages(tx, { defaultLanguage: "ca", languages: ["ca", "es", "en"] }, "ca",
+  undefined, ["ca", "es"])` stored exactly that; in A Coruña (setup's row `es`; `es, ca, en, gl`)
+  there were no gaps in `gl` and the write stored `gl` with `gl, es, en`. (The provisioned units
+  already carry `ca` and `gl`, `packages/catalogue/src/provisioning.ts:28-40`.) If a case is
+  refused all the same, that is a STOP: record it in `questions.md` and mark the task `blocked`.
+- [ ] **Step 4: Make the listed change** to `seed-catalogue.test.ts`; run the seed folder and the
+  installed path:
   `pnpm --filter @waitron/server exec vitest run scripts/demo-seed src/demo-seed scripts/dev-setup.test.ts`.
   Expected: PASS. Any other red is a STOP. (`seed-option-lists.test.ts` and
-  `seed-adjustments.test.ts` stay unchanged: they pass their own `[en, es]` list since Task 1.)
-- [ ] **Step 5: Prove by deletion**: put the `writeContentLanguages` call back; the Barcelona and
-  A Coruña cases fail. Remove it again.
+  `seed-adjustments.test.ts` stay unchanged: they pass their own `[en, es]` list since Task 1. The
+  three stored maps pinned whole in `seed-catalogue.test.ts` stay `{ en, es }`: the Madrid test
+  venue carries those two languages.)
+- [ ] **Step 5: Prove by deletion**: put the literal pair back; the Barcelona, Valencia and A Coruña
+  cases fail. Restore. (Passing `required` to `writeContentLanguages` is a guard against a later
+  edit to the rule: the demo's list is built from the required languages, so no case here can make
+  that check refuse, and no test shows it running.)
 - [ ] **Step 6: Look** at a Barcelona demo's Content languages page and a product in the
   dashboard and on the till, both themes, phone width (`wa-wt demo` cannot pick a province — set
   one up through the wizard in a worktree's dev stack).
 - [ ] **Step 7: Commit, backlog** (also update "Product languages are hard-coded at setup": the
-  demo seed no longer skips the required-language check), **`finish-branch`**.
+  demo seed now runs the required-language check, and its languages differ from setup's by design
+  — table above), **`finish-branch`**.
 
 ---
 
 ### Task 5: Staff names in the setup person's language; practice sales in the receipt language
 
 Branch `feat/demo-data-staff-language`.
+
+A demo for a country with no demo data keeps English staff names whatever the admin's language;
+that is Task 2's, built after this one.
 
 **Files:**
 - Modify: `apps/server/src/demo-seed.ts` (`demoSeedLocale` reads `venue.admin.locale`, not the
@@ -662,54 +792,63 @@ export function demoSeedLocale(venue: VenueRequest): SeedLocale {
 ## Existing tests this plan changes
 
 Every change below is the whole list; any other existing test that has to change is a STOP. Line
-numbers are from `main` at `3137f5838`.
+numbers are from `main` at `3137f5838`; the files they point into were unchanged at `401ecd27c`
+(checked with `git diff --stat 3137f5838 401ecd27c` over them on 2026-10-06). **Re-check them
+before each task:** no task starts until lane C's A261-5 Hours has landed, and that branch changes
+`seed-floor.ts`, so the plan's `seed-floor.ts` line numbers (and maybe others) will have moved.
 
 | Task | File | What changes | Kind |
 | --- | --- | --- | --- |
 | 1 | `packages/country-es/src/spain.test.ts` ~279-286 | `SPAIN.demo` `toEqual` gains `dataSet: "casa-delgado-es"` | whole-shape pin gains a key (owner rule 2026-09-27) |
 | 1 | `apps/server/src/demo-seed.test.ts` ~49-58 | the `toStrictEqual` on the seed call's input gains `dataSet` | whole-shape pin gains a key |
 | 1 | `apps/server/scripts/demo-seed/` — `seed-catalogue.test.ts` (6 `seedCatalogues`), `seed-media.test.ts` (2 `seedCatalogues`), `seed-option-lists.test.ts` (1 `seedCatalogues`, 1 `seedOptionLists`), `seed-floor.test.ts` (3), `seed-adjustments.test.ts` (5), `seed-staff.test.ts` (2), `seed-watchers.test.ts` (1), `seed.test.ts` (5 `seedDemoRestaurant`), `seed.integration.test.ts` (1) | each call gains `dataSet`; the `seedOptionLists` and `seedAdjustmentReasons` calls also gain `languages`, the literal pair the test's seed language gives today (counts are call sites, from `grep` on 2026-10-06) | call-site arguments; no assertion changes |
-| 2 | `apps/server/src/setup-api.country-pack.test.ts`, "keeps the typed tax id, postcode and province when the country has no rules for them" | sends `mode: "prepare"` instead of `"demo"` | W108's option (a) |
-| 4 | `apps/server/scripts/demo-seed/seed-catalogue.test.ts:111-114` | the lunch menu's section-name maps gain their `ca` text | assertion change — decision 2 |
-| 4 | `seed-catalogue.test.ts:286-289` | content languages `{ defaultLanguage: "en", languages: ["en", "es"] }` → `{ defaultLanguage: "es", languages: ["es", "ca", "en"] }` (the Madrid test venue as setup provisions it) | assertion change — decisions 2 and 3 |
-| 4 | `seed-catalogue.test.ts:318-331` | the coffee's description map gains its `ca` text | assertion change — decision 2 |
-| 4 | `seed-catalogue.test.ts:336-342` | the custom unit's name and abbreviation maps gain their `ca` text | assertion change — decision 2 |
+| 4 | `apps/server/scripts/demo-seed/seed-catalogue.test.ts:286-289` | content languages `{ defaultLanguage: "en", languages: ["en", "es"] }` → `{ defaultLanguage: "es", languages: ["es", "en"] }` (the Madrid test venue under the area rule) | assertion change — decisions 2 and 3 |
 | 5 | `apps/server/src/demo-seed.test.ts:10-12` | the `venueWithLocales` helper also sets `admin.locale` to its first receipt language, so the existing cases keep their values | fixture grows |
 | 5 | `apps/server/src/demo-seed.test.ts:22-30` | the `demoSeedLocale` table's title says it reads the admin's language (its rows keep their values through the helper above); new rows are added in Step 1 | test title change |
 | 5 | `apps/server/scripts/demo-seed/seed-sales.test.ts` (4), `seed-sales.dated.test.ts` (1) | `locale: "es"` → `invoiceLocale: "es-ES"` | call-site argument; no assertion changes |
+| 2 | `apps/server/src/demo-seed.test.ts:78-85`, "refuses, seeding nothing, a venue whose country has no demo identity" | becomes "seeds a venue whose country has no demo data from the existing set, in English, without practice sales": instead of a rejection and no seed call, exactly one seed call whose input is pinned whole (data set, `locale: "en"`, `salesDays: 0`, trading names) | assertion change — decision 6 (as strict: the whole input is pinned) |
 
-Checked and NOT changed (read on 2026-10-06 by the plan's reviewer): `seed-option-lists.test.ts:57`
-is `toMatchObject`; `seed.test.ts`, `seed.integration.test.ts`, `seed-media.test.ts`,
-`dev-setup.test.ts` and `demo-seed.db.test.ts` assert nothing about content languages or whole
-customer-name maps (`demo-seed.db.test.ts`'s staff language flips from `es` to `en` in Task 5,
-since its venue has no admin locale, and nothing there reads it).
-`management-api.membership.test.ts` and `mirror-bundle-api.test.ts` call a local `seedStaff`
-(`:97`, `:158`), not the demo writer.
+Checked and NOT changed: `seed-option-lists.test.ts:57` is `toMatchObject`; `seed.test.ts`,
+`seed.integration.test.ts`, `seed-media.test.ts`, `dev-setup.test.ts` and `demo-seed.db.test.ts`
+assert nothing about content languages or whole customer-name maps (read on 2026-10-06 by the first
+draft's reviewer; `demo-seed.db.test.ts`'s staff language flips from `es` to `en` in Task 5, since
+its venue has no admin locale, and nothing there reads it). The three stored maps pinned whole in
+`seed-catalogue.test.ts` (`:111-114`, `:318-331`, `:336-342`) stay `{ en, es }` in every task: the
+Madrid test venue carries Spanish and English only. `boot.test.ts` (`:2036`, `:3677`) and
+`dev-setup.test.ts` (`:218`) run the real seed on Madrid venues and assert nothing about languages
+(grep by the amendment's reviewer). `setup-api.country-pack.test.ts`'s Demo cases for the mocked UK
+pack stay as they are: they stub the seed, so nothing tests the path from the setup route into
+`seedInstalledDemo` for such a country end to end — Task 2's `demo-seed.test.ts` and `seed.test.ts`
+cases cover the two halves separately. `management-api.membership.test.ts`
+and `mirror-bundle-api.test.ts` call a local `seedStaff` (`:97`, `:158`), not the demo writer.
 
 ## Known limits this plan leaves (recorded in the backlog, not built)
 
 - **Practice sales are Spain-only.** `seed-sales.ts` files through `VerifactuBackend` directly and
-  places sales in a Madrid business day; a second country's demo needs it to record through the
-  venue's own fiscal module first.
+  places sales in a Madrid business day; a second country's demo, or a fallback demo with practice
+  sales (open point B), needs it to record through the venue's own fiscal module first.
 - **One photo folder.** The 45 photographs stay where they are (`deploy/Dockerfile` copies that
   folder); a second data set with its own photos moves them into per-set folders then.
 - **Two departments, `restaurant` and `deli`,** fixed by `CountryDemoIdentity`'s type.
+- **The demo's languages differ from setup's** in most areas (table above): setup still starts
+  every Spanish venue with Catalan, the demo does not. Settled by decisions 2 and 3; the backlog's
+  "Product languages are hard-coded at setup" entry covers setup's side.
 - Staff-facing names a demo writes in English whatever the staff language — reporting categories
   (`seed-catalogue.ts:113`) and the four kitchen stations (`seed-catalogue.ts:56-67`) — stay as
   they are.
 
 ## Self-review notes
 
-- Brief coverage: where the data lives, no-demo country (Task 2), shared vs per-country, W108's
-  identity, each co-official area and the single-language areas (table), how languages are switched
-  on (setup's own row, kept), who writes and checks the text (Task 3, decision 4), every test
-  changed (table), order (Tasks 1, 3, 4, 5, each green on its own; Task 2 any time).
-- The order keeps `main` working after each task: Task 1 changes no output; Task 3 adds text the
-  writers still cut to `[en, es]`; Task 4 is the first to change output and needs that text present
-  for Barcelona's Catalan default.
-- A fresh-context review on 2026-10-06 (reading only) found twelve problems in the first draft —
-  among them a Task 3 step that would have turned `seed-adjustments.test.ts` red, three missed
-  pins in `seed-catalogue.test.ts`, a refusal placed where it changed two other tests' answers, and
-  a false claim that a test would make Basque due. All are corrected above. A second round on the
-  corrections found two more in Task 3 (a missing file, and a text type that did not guarantee
-  English and Spanish), also corrected.
+- Brief coverage: where the data lives, no-demo country (Task 2, decision 6), shared vs
+  per-country, W108's identity, each co-official area and the single-language areas (table), how
+  languages are switched on (the area's required languages from the pack plus the data set's base
+  list), who writes and checks the text (Task 3, decision 4), every test changed (table), order
+  (Tasks 1, 3, 4, 5, 2, each green on its own).
+- The order keeps `main` working after each task: Task 1 changes no output; Task 3 adds text and
+  the language rule while the writers still cut to `[en, es]`; Task 4 is the first to change output
+  and needs that text present for the Catalan and Galician defaults; Task 5 changes the staff and
+  receipt language; Task 2 adds the fallback on top of all of them.
+- The first draft was reviewed by a fresh-context reader in two rounds (2026-10-06, reading only);
+  its findings were corrected before the owner's answers. The amendment to the answers replaced the
+  "follow setup's list" rule (and with it the extracted `provisionedContentLanguages` and three
+  changed checks in Task 4), the refusal in Task 2, and the order of tasks.
