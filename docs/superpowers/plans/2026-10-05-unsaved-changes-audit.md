@@ -1,6 +1,53 @@
 # W69 editable-form inventory
 
-> 2026-10-06: Hours (A261 step 5) deleted `station-hours-form` and added the Hours page's own editors (`packages/venue-service/src/dashboard/hours-screen.ts`), which this document does not list.
+## 2026-10-06 advancing Hours owner audit
+
+Hours #1298 is included in the candidate after the rebase onto `ac861b774d9d368d8435b0b06f1467ef89f9386e`.
+It retired `station-hours-form` and the old hours APIs. The baseline row and earlier station-hours
+receipts below are historical; they do not establish protection of the replacement editors.
+The obsolete W69 component suite was removed with its component. The remaining prep-station
+fallback, exception and watcher protection stays in the candidate.
+
+Current source owners in `packages/venue-service/src/dashboard/hours-screen.ts`:
+
+| Owner | Draft and leave boundary | Existing suites; W69 work still required |
+| --- | --- | --- |
+| Weekday cell | `Editor.kind=cell`: selected mode and ordered periods; Cancel/native Escape, ancestor leave/unload. | `hours-screen.test.ts`, `hours-cell-editor.test.ts`, `hours-screen.unsaved.test.ts`; weekday protection implemented and checked below. |
+| Configure hours | `Editor.kind=configure`: seven ordered day drafts. The confirmation stage shares this draft; Back from that stage retains it. | `hours-screen.test.ts`; protect actual dismissal, not the confirmation-stage Back. |
+| Special-date Add/Edit and calendar Create/Edit/Close venue | `Editor.kind=date`: date, trimmed name, colour, whole-venue closure and each shown subject cell. Hidden/stored cells travel with the opening. | `hours-screen.test.ts`, `hours-calendar.test.ts`; keep invalid raw input and commit the captured date payload. |
+| Special-date Duplicate from list/calendar | `Editor.kind=duplicate`: ordered target dates; source/cells identify the opening. | `hours-screen.test.ts`, `hours-calendar.test.ts`; protect target entry through dismissal/ancestor leave. |
+| Clear standard week/Delete special date | Safety confirmations without edited values. | Existing direct cancellation remains exempt. |
+| Week/Dates/Calendar tabs, inactive filter, month navigation | View controls; `#url` restores views and calendar emits actions to the same date editor. | Do not mark filters dirty; intercept replacement before removing an edited owner. |
+
+The weekday-cell owner is now registered against the canonical `wire` cell, comparing its
+mode and ordered period IDs/times by values. Cancel/native Escape and another editor opening
+ask through the shared registry. A successful write commits the captured cell before refreshing;
+newer input stays dirty. Disconnect removes unload protection and invalidates the question/write
+generation; reconnect registers the retained draft against its original baseline and redraws its
+controls. Clear/Delete confirmations stay exempt. Configure/date/duplicate still lack scopes.
+
+The five Hours checks formerly generated in `venue-operations-screen.unsaved.test.ts` are now in
+`hours-screen.unsaved.test.ts`: Keep/Discard with native Escape and actual input, clean/revert,
+exact submitted request with a failed refresh, refusal retains dirty input, and direct Clear
+cancellation without a write. The new body is `HoursApi.saveWeek`'s seven-day request, retaining
+all unchanged days and the edited period ID. The other venue assertions are unchanged. Added
+cases cover newer input, reconnect, departed replies/controls, period property order and guarded
+replacement. The first weekday run observed two expected failures; lifecycle and replacement
+runs observed additional assertion failures before their guards were implemented. Intermediate
+bad API usage and callback identity diagnostics are retained separately rather than called RED.
+
+The focused final family passed 173 cases across five suites. Four separately mutated installed
+candidate checks each failed their intended assertion while Clear's control passed; restoring
+that candidate passed 11 cases, and its four source/test files byte-matched the feature tree before
+removal. Eight rendered EN/ES/light/dark/390/1280 flows passed 16 scoped axe scans; their 16 captures
+were inspected in four contact sheets. Local receipts: Lane E `receipts/w69-reorientation-20261006-next`.
+These scope tests do not establish every Hours owner, page navigation, browser native reload or
+current-head CI. The temporary visual renderer supplies the shell's ES confirmation wording;
+it is a component-host inspection, not an end-to-end dashboard shell flow.
+
+Tasks 1/4 remain partial; this inventory adds owners rather than marking them protected. Task 5
+remaining direct writers/till/setup shells and Task 6 page/setup owners remain pending.
+
 
 ## 2026-10-06 dashboard logout and language checkpoint
 

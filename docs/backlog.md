@@ -1184,8 +1184,8 @@ Dashboard voluntary logout and a language change also request the shared warning
 API calls. Language changes exclude the retained profile editor and its descendants; picking
 the current language saves its preference without restoring unrelated drafts. Forced expiry
 and disconnection invalidate old answers and responses. These shell cases do not establish
-protection in every page owner. Hours (#1298) landed during this checkpoint and replaces the
-station-hours form; reconcile its new editors when rebasing onto that main advance.
+protection in every page owner. Hours (#1298) is included in the rebased candidate; its replacement editors are inventoried. Weekday-cell protection is implemented on this branch;
+Configure hours and special-date Add/Edit/Duplicate protection remains pending.
 The A279 rebase also required comparing the effective delete contents value after a fresh
 summary hides that choice. Its new browser case failed at the retained unload listener before
 the comparison/notification fix; the final catalogue pair passed 197 cases.
@@ -1449,12 +1449,14 @@ retain the draft, and pending writes block dismissal. Each opening owns its nati
 controls; disconnect aborts its question and unregisters its scope, and departed successful/refused
 replies leave a reconnected editor alone. Focused cases are in
 `packages/venue-service/src/dashboard/prep-stations-screen.unsaved.test.ts`.
-Station-hours modals now protect weekday, opening/closing times and interval insertion/removal
-through Cancel/native Escape. The comparison uses the exact emitted intervals and their order;
-clean/reverted rows close directly. Accepted writes commit before refresh, newer delivered input
-stays dirty, refusals retain the draft and pending writes block dismissal. Departed controls/replies
-leave a replacement editor alone, including its busy state. Focused cases are in
-`packages/venue-service/src/dashboard/station-hours-form.unsaved.test.ts`.
+Hours #1298 retired the station-hours form and its API. The W69 rebase retains that removal;
+its old station-hours protection and component tests no longer apply. The replacement Hours
+weekday editor now protects Cancel/native Escape and replacement openings, commits the exact
+submitted cell before refresh, retains newer input, and rejects departed replies after reconnect.
+Focused checks are in `packages/venue-service/src/dashboard/hours-screen.unsaved.test.ts`.
+Configure hours, special-date Add/Edit and Duplicate still need shared dirty scopes, close
+interception and accepted-write handling. Clear/Delete confirmations
+have no editable payload and remain exempt. Source: `packages/venue-service/src/dashboard/hours-screen.ts`.
 Disable station now protects a changed replacement-station selection through Cancel, native Escape
 and another station-action opening. Keep retains the selection; Discard closes without a station
 command. A successful fallback write commits before the separate disable command and refresh,

@@ -2,7 +2,16 @@ import { codeOf } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, UrlStateController } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  UrlStateController,
+  leaveCoordinatorFor,
+  type LeaveCoordinator,
+  type DraftScope,
+  type LeaveReason,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -268,6 +277,10 @@ export class HoursScreen extends LitElement {
   #sentCells: DateHoursCell[] = [];
   /** The subject a link asked for, focused once the hours are read. */
   #linked?: string;
+  #cellScope?: DraftScope<CellDraft>;
+  #cellBaseline?: CellDraft;
+  #leave?: LeaveCoordinator;
+  #editorBeforeClose?: (reason: LeaveReason) => Promise<boolean>;
 
   readonly #url = new UrlStateController(
     this,
@@ -294,6 +307,8 @@ export class HoursScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#registerCellScope();
+    this.requestUpdate();
     this.#detach = this.api.watchHours(
       this.#from,
       this.#to,
@@ -308,6 +323,11 @@ export class HoursScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#generation++;
+    this.#cellScope?.dispose();
+    this.#cellScope = undefined;
+    this.#leave = undefined;
+    if (this.editor?.kind === "cell") this.busy = false;
     super.disconnectedCallback();
     this.#detach?.();
   }
@@ -353,6 +373,16 @@ export class HoursScreen extends LitElement {
   // --- Editors -------------------------------------------------------------------------------
 
   #open(editor: Editor, returnTo: () => HTMLElement | null | undefined): void {
+    const generation = this.#generation;
+    const proceed = () => {
+      if (!this.isConnected || generation !== this.#generation || this.busy) return;
+      this.#acceptEditor(editor, returnTo);
+    };
+    if (!this.#cellScope) proceed();
+    else void this.#leave!.request({ scopes: [this.#cellScope.id], reason: "navigation", proceed });
+  }
+
+  #acceptEditor(editor: Editor, returnTo: () => HTMLElement | null | undefined): void {
     this.#generation++;
     this.#returnTo = returnTo;
     this.editor = editor;
@@ -360,9 +390,59 @@ export class HoursScreen extends LitElement {
     this.refused = {};
     this.bottomRefusal = "";
     this.busy = false;
+    this.#cellScope?.dispose();
+    this.#cellScope = undefined;
+    this.#cellBaseline = editor.kind === "cell" ? structuredClone(editor.draft) : undefined;
+    this.#registerCellScope();
+  }
+
+  #registerCellScope(): void {
+    const generation = this.#generation;
+    this.#editorBeforeClose = (reason) => this.#beforeClose(reason, generation);
+    const editor = this.editor;
+    if (!editor || this.#cellScope) return;
+    if (editor.kind === "cell") {
+      this.#leave = leaveCoordinatorFor(this);
+      let registering = true;
+      this.#cellScope = this.#leave?.register({
+        id: {},
+        parent: this,
+        current: () =>
+          registering
+            ? this.#cellBaseline!
+            : this.editor?.kind === "cell"
+              ? this.editor.draft
+              : editor.draft,
+        snapshot: (value) => structuredClone(value),
+        equal: (a, b) => {
+          const first = wire(a),
+            second = wire(b);
+          return (
+            first.mode === second.mode &&
+            first.periods.length === second.periods.length &&
+            first.periods.every((period, index) => {
+              const other = second.periods[index]!;
+              return (
+                period.id === other.id &&
+                period.opensAt === other.opensAt &&
+                period.closesAt === other.closesAt
+              );
+            })
+          );
+        },
+        restore: (draft) => {
+          if (this.editor?.kind === "cell") this.editor = { ...this.editor, draft };
+        },
+      });
+      registering = false;
+      this.#cellScope?.changed();
+    }
   }
 
   #close(): void {
+    this.#cellScope?.dispose();
+    this.#cellScope = undefined;
+    this.#cellBaseline = undefined;
     this.#generation++;
     this.editor = undefined;
     this.attempted = false;
@@ -371,6 +451,15 @@ export class HoursScreen extends LitElement {
     this.busy = false;
     const returnTo = this.#returnTo;
     void this.updateComplete.then(() => returnTo?.()?.focus());
+  }
+
+  async #beforeClose(reason: LeaveReason, generation: number): Promise<boolean> {
+    if (!this.isConnected || generation !== this.#generation || this.busy) return false;
+    if (!this.#cellScope) return true;
+    return (
+      (await this.#leave!.request({ scopes: [this.#cellScope.id], reason, proceed: () => {} })) ===
+      "proceeded"
+    );
   }
 
   #cellButton(key: string, weekday: number): HTMLElement | null {
@@ -585,17 +674,27 @@ export class HoursScreen extends LitElement {
     }
   }
 
-  /** The editor cannot be closed or replaced while `busy`, so the answer always belongs to it. */
   async #write(editor: Editor): Promise<void> {
+    const generation = this.#generation;
+    const current = () => this.isConnected && generation === this.#generation;
+    const scope = this.#cellScope;
+    const submitted = editor.kind === "cell" ? structuredClone(editor.draft) : undefined;
     this.busy = true;
     try {
       await this.#send(editor);
     } catch (error) {
+      if (!current()) return;
       this.busy = false;
       this.#refuse(editor, error);
       return;
     }
-    this.#close();
+    if (!current()) return;
+    if (scope && submitted) {
+      scope.commit(submitted);
+      this.#cellBaseline = submitted;
+    }
+    this.busy = false;
+    if (!scope?.isDirty()) this.#close();
     this.api.rereadWatches();
   }
 
@@ -710,6 +809,7 @@ export class HoursScreen extends LitElement {
     );
     if (Object.keys(refused).length !== Object.keys(this.refused).length) this.refused = refused;
     this.editor = editor;
+    this.#cellScope?.changed();
   }
 
   #cellChanged(event: CustomEvent<{ cell: CellDraft }>): void {
@@ -1042,6 +1142,7 @@ export class HoursScreen extends LitElement {
     const errors = { ...this.refused, ...own };
     const content = this.#content(editor, errors);
     const marked = Object.keys(errors).length > 0;
+    const generation = this.#generation;
     return keyed(
       this.#generation,
       html`<wt-modal
@@ -1055,10 +1156,15 @@ export class HoursScreen extends LitElement {
         }
         heading=${content.heading}
         .dismissible=${!this.busy}
-        @wt-close=${() => this.#close()}
+        .beforeClose=${this.#editorBeforeClose}
+        @wt-close=${() => {
+          if (this.isConnected && generation === this.#generation) this.#close();
+        }}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'))}
-        @hours-cell-change=${this.#cellChanged}
+        @hours-cell-change=${(event: CustomEvent<{ cell: CellDraft }>) => {
+          if (this.isConnected && generation === this.#generation) this.#cellChanged(event);
+        }}
       >
         <div class="form">${content.body}</div>
         <wt-form-actions
@@ -1073,10 +1179,10 @@ export class HoursScreen extends LitElement {
             data-test="cancel-editor"
             ?disabled=${this.busy}
             @click=${() => {
-              if (this.busy) return;
+              if (!this.isConnected || generation !== this.#generation || this.busy) return;
               if (editor.kind === "configure" && editor.confirming)
                 this.editor = { ...editor, confirming: false };
-              else this.#close();
+              else void this.renderRoot.querySelector("wt-modal")?.requestClose("cancel");
             }}
             >${content.cancel ?? t("hours.cancel")}</wt-button
           >
@@ -1084,7 +1190,9 @@ export class HoursScreen extends LitElement {
             data-test="save-editor"
             variant=${content.danger ? "danger" : "primary"}
             ?disabled=${this.busy || Object.keys(own).length > 0}
-            @click=${() => this.#submit()}
+            @click=${() => {
+              if (this.isConnected && generation === this.#generation) this.#submit();
+            }}
             >${content.save}</wt-button
           >
         </wt-form-actions>

@@ -36,7 +36,6 @@ const model: VenueServiceView = {
     },
   ],
   salePolicies: { departments: [], zones: [] },
-  hours: [{ departmentId: "d2", weekday: 1, opensAt: "09:00:00", closesAt: "18:00:00" }],
   zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
   menus: [
     { id: "m1", name: "Casa Delgado", active: true },
@@ -211,15 +210,6 @@ const cases = [
     edited: "",
     setup: [],
     want: ["z1", { departmentId: "d1", serviceMode: null }],
-  },
-  {
-    label: "Hours",
-    action: "new-hours",
-    field: "hours-opens",
-    initial: "",
-    edited: "10:00",
-    setup: [["hours-closes", "18:00"]],
-    want: ["d1", [{ weekday: 0, opensAt: "10:00", closesAt: "18:00" }]],
   },
   {
     label: "Menu assignment",
@@ -485,16 +475,6 @@ it("a departed refusal leaves the replacement editor clean and unmarked", async 
   ).toBe("");
   expect(replacement.shadowRoot!.querySelector("dialog")!.open).toBe(true);
   expect(unload()).toBe(false);
-});
-
-it("hours removal confirmation closes directly without a second warning or write", async () => {
-  const { screen, writes } = await mount();
-  const modal = await open(screen, "delete-hours-0");
-  expect(unload()).toBe(false);
-  modal.querySelector<HTMLElement>('[data-test="cancel-editor"]')!.click();
-  await expect.poll(() => modal.isConnected).toBe(false);
-  expect((await question()).open).toBe(false);
-  expect(writes).toEqual([]);
 });
 
 it("a reconnected venue form protects its retained draft against the original baseline", async () => {

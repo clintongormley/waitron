@@ -309,7 +309,7 @@ export class VenueOperationsScreen extends LitElement {
       this.#editorScope?.dispose();
       this.#editorScope = undefined;
       this.#editorIdentity = this.editor;
-      if (this.editor && this.editor.kind !== "delete" && this.editor.kind !== "disable") {
+      if (this.editor && this.editor.kind !== "disable") {
         const modal = this.renderRoot.querySelector("wt-modal")!;
         this.#leave ??= leaveCoordinatorFor(this);
         const baseline = (this.#editorBaseline ??= this.#editorValues(modal));
