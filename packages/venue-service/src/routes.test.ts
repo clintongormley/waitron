@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { setClaim } from "./routing-store.js";
 import { setStationToday } from "./station-times.js";
-import { seedStationWeek } from "./testing/interim-week.js";
+import { seedStationWeek } from "./testing/station-week.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 import { saveSpecialDate } from "./hours.js";
 import { Hono } from "hono";

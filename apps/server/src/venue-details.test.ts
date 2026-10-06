@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { seedStationWeek } from "@waitron/venue-service/testing/interim-week.js";
+import { seedStationWeek } from "@waitron/venue-service/testing/station-week.js";
 import { WorkforceBackend, employments } from "@waitron/workforce";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";

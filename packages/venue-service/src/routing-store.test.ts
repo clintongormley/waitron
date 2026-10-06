@@ -45,7 +45,7 @@ import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.j
 import { configureZone, createDepartment } from "./operations.js";
 import { routeExceptions } from "./schema/routing.js";
 import { setStationFallback, setStationToday } from "./station-times.js";
-import { seedStationWeek } from "./testing/interim-week.js";
+import { seedStationWeek } from "./testing/station-week.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 import { saveSpecialDate } from "./hours.js";
 

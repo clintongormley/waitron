@@ -3372,7 +3372,7 @@ it("has no station hours section or editor, and keeps Today's schedule actions",
   expect(el.shadowRoot!.querySelector("station-hours-form")).toBeNull();
 });
 
-it("Today returns a by-hand closure to the scheduled state after the day changes", async () => {
+it("Today redraws the scheduled label when the next background read no longer carries the by-hand closure", async () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   try {
     setLocale("en");

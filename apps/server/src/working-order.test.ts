@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { seedStationWeek } from "@waitron/venue-service/testing/interim-week.js";
+import { seedStationWeek } from "@waitron/venue-service/testing/station-week.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {

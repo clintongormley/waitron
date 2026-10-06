@@ -2461,7 +2461,7 @@ describe("venue operations screen", () => {
     expect(text).toContain("Terraza necesita una carta activa y publicada.");
   });
 });
-it("keeps the interim lists and creates departments in a cancellable modal", async () => {
+it("shows two tabs and a read-only departments table, and creates departments in a cancellable modal", async () => {
   const api = {
     load: vi.fn().mockResolvedValue(model),
     createDepartment: vi.fn(),

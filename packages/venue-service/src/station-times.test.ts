@@ -21,7 +21,7 @@ import { hoursWeekCells } from "./schema/hours.js";
 import { stationDayStates } from "./schema/station-times.js";
 import { setStationFallback, setStationToday, venueMoment } from "./station-times.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
-import { seedStationWeek } from "./testing/interim-week.js";
+import { seedStationWeek } from "./testing/station-week.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

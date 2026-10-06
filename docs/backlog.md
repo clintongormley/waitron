@@ -3771,7 +3771,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   VAT regime select;
   (3) refusals naming two fields or a row the refusal does not number stay at the bottom:
   `purchase.duplicate` (supplier tax id and invoice number), a purchase line's rate, base, tax or
-  type, `hours.N` on venue operations,
+  type,
   `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
   (4) on the backup screen: a refusal naming
   `destinationDir` or `schedule` still shows in the page banner rather than under the folder field
