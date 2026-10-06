@@ -6407,13 +6407,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Departments and zones; other screens still await their own one-department survey. Tab billing and
   the shared calendar remain open.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; steps 1–3 implemented, later steps open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  APPROVED; steps 1–3 and 7 implemented, later steps open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
-  Step 7 (venue details) is in progress on `feat/venue-details-editing`. Its shared server
+  Step 7 (venue details) is implemented. Its shared server
   reader/writer now has focused checks for normalization, field-specific stale drafts, no-op
   retries and province/clock refusals after a sale, order history or daily close. The new
   venue-details GET/PATCH routes use venue-view/configuration permissions and return field
@@ -6435,8 +6435,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   with live draft/error separation, changed-field confirmation, clock-change boundaries and
   each worker's retained backup deadline. The current server report route and the rendered
   roster's stored wall times have before/after receipts. EN/ES, light/dark and phone/desktop
-  states have accessibility scans and retained screenshots. Whole-branch review and
-  current-head CI remain before landing.
+  states have accessibility scans and retained screenshots.
   This build changes no schema.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
   its build landed as [PR #1269](https://github.com/clintongormley/waitron/pull/1269) on
@@ -6567,11 +6566,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   reset. It replaces claims/ordered exceptions without conversion, with five stored coordinate
   classes and populated-upgrade/configuration-transfer checks.
   [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) was approved by the owner on
-  2026-10-05. Its build is in progress: the shared server writer,
-  authenticated API, live consumer controls, and core dashboard editor are implemented on the
-  feature branch. The editor validates changed fields, retains drafts across passive updates,
-  requires warning acknowledgement, and offers read-only supervisor access. Clock previews,
-  the final acceptance audit, branch review and CI remain open; the feature is not landed.
+  2026-10-05. Its build is implemented: the shared server writer,
+  authenticated API, live consumer controls, and core dashboard editor. The editor validates changed fields, retains drafts across passive updates,
+  requires warning acknowledgement, and offers read-only supervisor access. Clock previews use one captured instant, the reporting boundary resolver and actual
+  scheduled backup deadlines; before/after report and rendered roster checks retain recorded facts.
   The approved policy allows current display-name/street/city
   corrections and same-province postcode edits, preserves recorded names and facts, keeps taxpayer
   identity read-only, and locks province/clock after sales. Clock edits also stop after order history
