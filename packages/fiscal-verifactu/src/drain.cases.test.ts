@@ -308,16 +308,19 @@ describe("drain — a run of refusals with one code stops its chain", () => {
   it("keeps another chain sending, even at a later position, while one chain is held", async () => {
     const aeat = fakeAeat();
     const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100]);
-    // Between the run's positions and the held record's: read across both chains, the three
-    // positions below this record are the run's.
-    const other = await seedSecondChain(suite.db, seeded, 100);
-    const held = await appendPendingAlta(suite.db, seeded, 200);
+    // On the run's node, so only the chain separates this record from the run below it.
+    const other = await seedPendingEnvios(suite.db, {
+      count: 1,
+      identity: { locationId: seeded.locationId, nodeId: seeded.nodeId, nif: seeded.nif },
+    });
+    expect(other.sifId).not.toBe(seeded.sifId);
+    const held = await appendPendingAlta(suite.db, seeded, 1_000_000);
     const wire = recording(aeat.client());
 
     await drain(deps(wire.client), SECOND);
 
-    expect(wire.sent).toEqual([[other.registroId]]);
-    expect((await envioOf(other.registroId)).estado).toBe("aceptado");
+    expect(wire.sent).toEqual([other.registroIds]);
+    expect((await envioOf(other.registroIds[0]!)).estado).toBe("aceptado");
     expect((await envioOf(held.registroId)).estado).toBe("detenido");
   });
 
@@ -408,6 +411,28 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       expect(rows.map((row) => row.codigo_error)).toEqual(["1100", null, "1100"]);
       await sendsNext(seeded, aeat);
     });
+
+    it("after three accepted records that carry one error code", async () => {
+      const aeat = fakeAeat();
+      const seeded = await fileOneEnvio(aeat, [null, null, null]);
+      // No accept the drain writes keeps a code; set one directly, so only the records' state
+      // separates them from a run of refusals.
+      await suite.db.execute(sql`
+        update envios set codigo_error = '1100' where registro_id in ${seeded.registroIds}
+      `);
+      expect(await estados(seeded.registroIds)).toEqual(["aceptado", "aceptado", "aceptado"]);
+      await sendsNext(seeded, aeat);
+    });
+
+    it("after two same-code refusals either side of an accepted record that carries that code", async () => {
+      const aeat = fakeAeat();
+      const seeded = await fileOneEnvio(aeat, [1100, null, 1100]);
+      await suite.db.execute(sql`
+        update envios set codigo_error = '1100' where registro_id = ${seeded.registroIds[1]!}
+      `);
+      expect(await estados(seeded.registroIds)).toEqual(["rechazado", "aceptado", "rechazado"]);
+      await sendsNext(seeded, aeat);
+    });
   });
 
   describe("a record already sent to AEAT is never held by the run", () => {
@@ -454,6 +479,66 @@ describe("drain — a run of refusals with one code stops its chain", () => {
 
       expect(wire.sent).toEqual([[unanswered]]);
       expect((await envioOf(unanswered)).estado).not.toBe("detenido");
+    });
+  });
+
+  describe("a record still awaiting its answer breaks the run for the records after it", () => {
+    /** One envío of four, the first three refused with 1100 and the fourth's answer unknown in
+     * the way `answerLost` makes it; then two records appended behind it. Every one is refused
+     * with 1100 whenever it reaches AEAT. */
+    async function runThenUnanswered(
+      answerLost: (real: VerifactuClient, id: string) => VerifactuClient,
+    ) {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 4 });
+      for (const key of seeded.facturaKeys) aeat.reject(key, 1100, "Rechazo 1100");
+      const fourth = seeded.registroIds[3]!;
+      const real = aeat.client();
+      await drain(deps(answerLost(real, fourth)), FIRST);
+      const appended = [];
+      for (const secuencia of [5, 6]) {
+        const record = await appendPendingAlta(suite.db, seeded, secuencia);
+        aeat.reject(record.facturaKey, 1100, "Rechazo 1100");
+        appended.push(record.registroId);
+      }
+      return { aeat, seeded, real, fourth, appended };
+    }
+
+    it("sends the records appended after an unreadable answer together with its retry, and holds the next record once all three are refused", async () => {
+      const { seeded, real, fourth, appended } = await runThenUnanswered((client, id) =>
+        rewritingLines(client, (linea) =>
+          linea.RefExterna === id ? { ...linea, EstadoRegistro: undefined } : linea,
+        ),
+      );
+      expect((await envioOf(fourth)).estado).toBe("pendiente");
+      const wire = recording(real);
+      const retry = new Date(FIRST.getTime() + backoffMs(1));
+
+      const result = await drain(deps(wire.client), retry);
+
+      expect(wire.sent).toEqual([[fourth, ...appended]]);
+      expect(result.recordsHalted).toBe(3);
+      expect(await estados([fourth, ...appended])).toEqual(["rechazado", "rechazado", "rechazado"]);
+
+      const seventh = await appendPendingAlta(suite.db, seeded, 7);
+      const afterRetry = await drain(deps(wire.client), new Date(retry.getTime() + 60_000));
+
+      expect(wire.sent).toHaveLength(1);
+      expect(await envioOf(seventh.registroId)).toMatchObject({
+        estado: "detenido",
+        incidencia: true,
+      });
+      expect(afterRetry.recordsHalted).toBe(1);
+    });
+
+    it("sends the records appended after a missing answer together with its recovered claim", async () => {
+      const { real, fourth, appended } = await runThenUnanswered(misnaming);
+      expect((await envioOf(fourth)).estado).toBe("enviando");
+      const wire = recording(real);
+
+      await drain(deps(wire.client), new Date(FIRST.getTime() + RECUPERACION_ENVIANDO_MS + 1));
+
+      expect(wire.sent).toEqual([[fourth, ...appended]]);
     });
   });
 });

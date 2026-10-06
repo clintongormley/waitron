@@ -205,6 +205,24 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
     ]);
   });
 
+  it("ends the counted run at an accepted record even when it carries the run's code", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await fileOnChain(aeat, seeded, 2, [1100, 1100, 1100], at(1));
+    // No accept the drain writes keeps a code; set one directly.
+    await suite.db.execute(sql`
+      update envios set codigo_error = '1100' where registro_id = ${seeded.registroIds[0]!}
+    `);
+    expect(await estadoOf(seeded.registroIds[0]!)).toBe("aceptado");
+    const held = await appendPendingAlta(suite.db, seeded, 5);
+    await runDrain(aeat, at(2));
+    expect(await estadoOf(held.registroId)).toBe("detenido");
+
+    expect((await refusalAlerts()).map((alert) => alert.params)).toEqual([
+      { codigo: "1100", count: 3 },
+    ]);
+  });
+
   it("raises nothing for a run at the limit while no record is held yet", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });

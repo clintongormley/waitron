@@ -1617,13 +1617,21 @@ reply can still open up to 1,000 cases first (`MAX_REGISTROS_POR_ENVIO`).
 **W41s-3b (built; PR number pending; owner review pending):** when the three records immediately
 before a record on its chain were all rejected with one error code (`SAME_CODE_REFUSAL_LIMIT` in
 `packages/fiscal-verifactu/src/drain.ts`), the drain holds that record and the chain's later ones
-when they are claimed, between envíos, and only records never sent before. The ongoing alert
+when they are claimed, between envíos, and only records never sent before. A record still awaiting
+AEAT's answer breaks a run: when the record right after a run was sent and its answer is unreadable
+or missing, the records added after it are sent with its retry, and a later record is held only
+once the refusals immediately before it make a run of three. The ongoing alert
 `fiscal.refusals_repeated` names the code and the length of the run. Nothing releases the hold yet.
 **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
 again).** Task 8 as planned resolves records that have a case of their own; a record the brake holds
 has none. While held, those records are not retried hourly. Open owner question: keep release to a
 person (as built), or add an automatic hourly probe that sends the first held record once an hour,
-an accept restarting the chain and a same-code refusal adding one case.
+an accept restarting the chain and a same-code refusal adding one case. Second point: whether the
+records added after a run's unanswered successor should be held instead of sent with its retry.
+Default as built: sent, because when the retried record's answer is anything but a refusal with
+the run's code, the run is broken and nothing would explain such a hold: the
+`fiscal.refusals_repeated` alert would not show, and when that answer is not a refusal at all
+`heldRecords` would name no case for the held records.
 **Follow-up W41s-3c (a defect W41s-3's review found that predates W41s-3):**
 `resolveLines` in `packages/fiscal-verifactu/src/drain.ts` matches a reply line to a claimed record
 by `RefExterna` alone, without checking the line's invoice identity or a repeated reference. A

@@ -47,8 +47,9 @@ export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
 export const DEFAULT_SKIP_RETRY_MS = 5 * 60 * 1000;
 const MAX_CONSULTA_PAGES = 10;
 
-/** How many refusals in a row with one code on a chain hold its next record
- * (`haltOpenChainClaims`). */
+/** How many records immediately before a never-sent record on its chain must all be refused
+ * with one code for `haltOpenChainClaims` to hold it. A record still awaiting its answer among
+ * them breaks the run. */
 export const SAME_CODE_REFUSAL_LIMIT = 3;
 
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
@@ -509,6 +510,11 @@ async function claimBatch(
  * `rechazado` with one and the same code. A held row becomes `detenido` with `incidencia`, so
  * every later claimed row of its chain is held with it.
  *
+ * A row still awaiting its answer (`pendiente` or `enviando`) breaks a run. So when the row right
+ * after a run was sent and its answer is unreadable or missing, the run rule does not hold the rows
+ * added after it: they are sent with its retry, and a later row is held only once the refusals
+ * immediately before it make a run of the limit.
+ *
  * A cancellation whose original, on the same chain, is `detenido` is held by the first rule: that
  * original is an earlier row of the chain. For a record of a conflict's own envío, see
  * `haltSuccessors`.
@@ -517,13 +523,14 @@ async function claimBatch(
  * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md). A cancellation of a
  * rejected original is held because nothing in this repository sets `SinRegistroPrevio`.
  *
- * The run rule spares a row already sent, or its outcome at AEAT would stay unknown: `claimBatch`
- * has incremented `intentos` in this transaction, so a first claim reads 1 here. `secuencia` is
- * unique per node (`registros_tenant_node_secuencia_uq`), not per chain, so "immediately before"
- * is the highest positions below this row's on its chain. A chain's rows are all on its node
- * (`appendToChain`, ./chain.ts), and naming the node lets `registros_node_secuencia_idx` serve
- * that walk: without it, `explain query plan` on the migrated schema showed a scan of every
- * record and a sort per claimed row.
+ * The run rule holds only a row claimed for the first time: `claimBatch` has incremented
+ * `intentos` in this transaction, so a first claim reads 1 here. A row with `intentos` above 1
+ * was claimed before, which includes an envío whose submit failed in transport; it may have
+ * reached AEAT, so it is sent again rather than held, or its outcome there would stay unknown.
+ * `secuencia` is unique per node (`registros_tenant_node_secuencia_uq`), not per chain, so
+ * "immediately before" is the highest positions below this row's on its chain. A chain's rows are
+ * all on its node (`appendToChain`, ./chain.ts), and naming the node lets
+ * `registros_node_secuencia_idx` serve that walk.
  *
  * No incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each held record
  * beside the case that holds it. A `halted` ack is written per held id, because this

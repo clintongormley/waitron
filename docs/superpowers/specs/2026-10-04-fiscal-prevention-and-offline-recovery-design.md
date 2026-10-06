@@ -143,7 +143,10 @@ conflict or after a held cancellation. **W41s-3b (built; owner review pending):*
 records immediately before a record on its chain (`SAME_CODE_REFUSAL_LIMIT` in `drain.ts`) were all
 rejected with one error code, the drain holds that record, and every later one of the chain, when
 it is claimed. The check runs between envíos, never inside one, and holds only a record never sent
-before. The chain stays stopped until a release action exists (a follow-up of Task 8), and its held
+before. A record still awaiting AEAT's answer breaks a run: when the record right after a run was
+sent and its answer is unreadable or missing, the records added after it are sent with its retry,
+and a later record is held only once the refusals immediately before it make a run of three. The
+chain stays stopped until a release action exists (a follow-up of Task 8), and its held
 records are not retried hourly meanwhile; the ongoing alert `fiscal.refusals_repeated` names the
 code and the run's length.
 

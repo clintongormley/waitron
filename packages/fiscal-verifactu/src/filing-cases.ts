@@ -205,7 +205,7 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
       r.id_emisor_factura || '|' || r.num_serie_factura || '|' || r.fecha_expedicion_factura
         as identity,
       c.id as case_id,
-      (
+      case when e.estado = 'detenido' and c.id is null then (
         select case when preceding_envio.estado = 'rechazado' then preceding_case.id end
         from registros_facturacion preceding
         left join envios preceding_envio on preceding_envio.registro_id = preceding.id
@@ -214,7 +214,7 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
           and preceding.secuencia < r.secuencia
         order by preceding.secuencia desc
         limit 1
-      ) as refused_before_case_id
+      ) end as refused_before_case_id
     from envios e
     join registros_facturacion r on r.id = e.registro_id
     left join filing_cases c on c.registro_id = e.registro_id
