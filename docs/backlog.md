@@ -2024,10 +2024,17 @@ Left open:
   `packages/catalogue/src/device-home.ts`.
 - On the Menus screen's Structure and Home page tabs, the screen reads the menu's structure and its
   Device Home Page separately, alongside the status read (Structure) or the preview read (Home page)
-  each tab already makes, so one edit re-reads the menu three times on either tab. Merging the reads needs either the structure's live query to also
-  listen to `products` (its table list is pinned in `apps/dashboard/src/api/live-queries.test.ts`)
-  or the tree to name shortcuts from the product list the screen already holds. **For the owner:**
-  which?
+  each tab already makes. **A290 is in progress** on `fix/menu-shared-edit-read`: the owner
+  authorised consolidating these reads on 2026-10-06. Its two new real-client Chromium tests in
+  `apps/dashboard/src/screens/menus-screen.test.ts` fail on the requested one-GET count while
+  checking that the edited values reach the screen. A 2026-10-06 demo probe on Casa Delgado,
+  selected by counting the active menus' structure nodes, recorded four menu GETs after a shortcut
+  removal on Structure and four after a Home columns edit: Home was read twice on each tab.
+  The last GET finished about 34 ms / 32 ms after the respective input event in that single run;
+  these are baseline observations, not a comparison or a latency bound. Implementation and the
+  after measurement remain open. Consolidation must retain shortcut-name refreshes from `products`
+  (the dependency is pinned in `apps/dashboard/src/api/live-queries.test.ts`) and the existing
+  old-response, error and publish-hash checks.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 DONE (W88a, #1228, 2026-10-05); left open:** A drag no longer sends a move once a refresh has removed

@@ -16,10 +16,10 @@ import {
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
+import { DashboardApi } from "../api/client.js";
 import type {
   CatalogueSummary,
   CategorySummary,
-  DashboardApi,
   MenuHome,
   SectionDetails,
   MemberRef,
@@ -8232,4 +8232,97 @@ it("replaces a later preview reset refusal with the next successful document", a
   );
   expect(panel.failed).toBe(false);
   expect(panel.preview!.document.menuId).toBe("menu-lunch");
+});
+
+describe("one menu read after an edit", () => {
+  it.each(["structure", "home"] as const)(
+    "shares one HTTP menu read after an edit on %s",
+    async (view) => {
+      const fixture = api();
+      let home = menuHome();
+      const reads: string[] = [];
+      const writes: Array<{ path: string; body: unknown }> = [];
+      const client = new DashboardApi("", async (path, init) => {
+        if (init.method !== "GET") {
+          writes.push({ path, body: init.body ? JSON.parse(String(init.body)) : undefined });
+          if (view === "structure")
+            home = {
+              ...home,
+              shortcuts: home.shortcuts.filter(({ memberId }) => memberId !== "t-burger"),
+            };
+          else home = { ...home, handheld: { ...home.handheld, columns: 5 } };
+          return new Response(null, { status: 204 });
+        }
+        reads.push(path);
+        const bodies: Record<string, () => unknown | Promise<unknown>> = {
+          "/management-api/catalogues": () => menus,
+          "/management-api/products": () => products,
+          "/management-api/categories": () => categories,
+          "/api/content-languages": () => ({ defaultLanguage: "es", languages: ["es", "en"] }),
+          "/management-api/catalogues/status": () => statuses(),
+          "/management-api/catalogues/menu-lunch/structure": () =>
+            fixture.getMenuStructure("menu-lunch"),
+          "/management-api/catalogues/menu-lunch/home": () => home,
+          "/management-api/catalogues/menu-lunch/status": () => statuses()["menu-lunch"],
+          "/management-api/catalogues/menu-lunch/preview": () => lunchPreview(),
+        };
+        const body = bodies[path];
+        if (!body) throw new Error(`Unexpected GET: ${path}`);
+        return Response.json(await body());
+      });
+      const el = await mount(
+        client as unknown as Api,
+        view === "structure" ? LUNCH_PATH : HOME_PATH,
+      );
+      await vi.waitFor(() => {
+        expect(structure(el)).not.toBeNull();
+        if (view === "structure") expect(rowOf(el, "home")).not.toBeNull();
+        else expect(q(el, 'wt-slider[name="home-columns"]')).not.toBeNull();
+      });
+      await structure(el).updateComplete;
+      reads.length = 0;
+      if (view === "structure") {
+        emit(structure(el), "wt-shortcut-remove", { memberId: "t-burger" });
+      } else {
+        const slider = q<HTMLElementTagNameMap["wt-slider"]>(el, 'wt-slider[name="home-columns"]')!;
+        await slider.updateComplete;
+        const input = slider.shadowRoot!.querySelector<HTMLInputElement>('input[type="range"]')!;
+        input.value = "5";
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      await vi.waitFor(() => expect(writes).toHaveLength(1));
+      // The stream notifies the screen of the accepted write's changed table.
+      client.liveData.invalidate([
+        { type: view === "structure" ? "section_members" : "menu_details" },
+      ]);
+      await vi.waitFor(() => {
+        if (view === "structure") {
+          expect(structure(el).home!.shortcuts.map(({ memberId }) => memberId)).toEqual([
+            "t-drinks",
+            "t-chips",
+          ]);
+          expect(structure(el).busy).toBe(false);
+        } else
+          expect(
+            q<HTMLElementTagNameMap["wt-slider"]>(el, 'wt-slider[name="home-columns"]')!.value,
+          ).toBe(5);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const menuReads = reads.filter((path) =>
+        path.startsWith("/management-api/catalogues/menu-lunch/"),
+      );
+      expect(writes[0]).toEqual(
+        view === "structure"
+          ? {
+              path: "/management-api/catalogues/menu-lunch/home/shortcuts/t-burger",
+              body: undefined,
+            }
+          : {
+              path: "/management-api/catalogues/menu-lunch/home-display",
+              body: { device: "handheld", columns: 5 },
+            },
+      );
+      expect(menuReads, JSON.stringify(menuReads)).toHaveLength(1);
+    },
+  );
 });
