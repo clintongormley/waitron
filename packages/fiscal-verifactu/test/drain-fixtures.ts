@@ -1,13 +1,16 @@
 import { sql } from "drizzle-orm";
-import { invoiceSeries, locations, nodes, sales, type Database } from "@waitron/db";
+import { invoiceSeries, locations, newId, nodes, sales, type Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
+import type { RegistroAlta } from "@waitron/verifactu";
+import type { FakeAeat } from "@waitron/verifactu/testing";
 import { envios } from "../src/schema/envios.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import { registroSif } from "../src/schema/sif.js";
 import { currentSif, registerSif } from "../src/registro-sif.js";
-import type { Entorno } from "../src/registro-row.js";
+import { decodeRegistroRow, fromRegistroRow } from "../src/registro-row.js";
+import type { Entorno, RegistroRow } from "../src/registro-row.js";
 import { TEST_SISTEMA, nifWithControlLetter } from "../src/testing/seed.js";
 import { seedTenantWithSif } from "./fixtures.js";
 import { steadyClock } from "./write-path-fixtures.js";
@@ -292,6 +295,63 @@ export async function appendPendingAlta(
   });
   await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
+}
+
+/** A pending cancellation of `originalId`, appended to the original's own chain at `secuencia`. */
+export async function appendCancellation(
+  db: Database,
+  seeded: SeededDrain,
+  originalId: string,
+  secuencia: number,
+): Promise<string> {
+  const records = await db.select().from(registrosFacturacion);
+  const original = records.find((row) => row.id === originalId)!;
+  const head = records
+    .filter((row) => row.sifId === original.sifId)
+    .sort((a, b) => b.secuencia - a.secuencia)[0]!;
+  const id = newId();
+  const huella = "C".repeat(63) + String(secuencia % 10);
+  await db.insert(registrosFacturacion).values({
+    ...original,
+    id,
+    secuencia,
+    tipoRegistro: "anulacion",
+    tipoFactura: null,
+    descripcionOperacion: null,
+    desglose: null,
+    cuotaTotal: null,
+    importeTotal: null,
+    primerRegistro: false,
+    anteriorIdEmisorFactura: head.idEmisorFactura,
+    anteriorNumSerieFactura: head.numSerieFactura,
+    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
+    anteriorHuella: head.huella,
+    huella,
+  });
+  await db.execute(sql`
+    update cadenas set secuencia = ${secuencia}, ultimo_registro_id = ${id}, ultima_huella = ${huella}
+    where node_id = ${seeded.nodeId}
+  `);
+  await db.insert(envios).values({ registroId: id, proximoIntentoEn: DUE_AT });
+  return id;
+}
+
+/** AEAT already holds another fingerprint under the record's identity: a Route B conflict. */
+export async function collideAtAeat(
+  db: Database,
+  aeat: FakeAeat,
+  seeded: SeededDrain,
+  registroId: string,
+): Promise<void> {
+  const raw = await db.execute<Record<string, unknown>>(sql`
+    select * from registros_facturacion where id = ${registroId}
+  `);
+  const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
+  await aeat
+    .client()
+    .submit({ ObligadoEmision: { NombreRazon: seeded.legalName, NIF: seeded.nif } }, [
+      { RegistroAlta: { ...ours, Huella: "D".repeat(64) } },
+    ]);
 }
 
 /**

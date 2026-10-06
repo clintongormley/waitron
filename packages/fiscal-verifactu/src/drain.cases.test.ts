@@ -1,16 +1,17 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { newId, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
-import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
+import type { RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
+  appendCancellation,
   appendPendingAlta,
+  collideAtAeat,
   seedIndependentChain,
   seedPendingEnvios,
   seedSecondChain,
-  type SeededDrain,
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import {
@@ -21,9 +22,6 @@ import {
   type DrainDeps,
 } from "./drain.js";
 import { heldRecords, listFilingCases, recordCaseEvent } from "./filing-cases.js";
-import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro-row.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -64,6 +62,30 @@ function recording(client: VerifactuClient): { client: VerifactuClient; sent: st
   };
 }
 
+/** Wraps a client so each line of AEAT's reply passes through `rewrite` before the drain reads it. */
+function rewritingLines(
+  client: VerifactuClient,
+  rewrite: (linea: RespuestaLinea) => RespuestaLinea,
+): VerifactuClient {
+  return {
+    submit: async (cabecera, registros) => {
+      const respuesta = await client.submit(cabecera, registros);
+      return { ...respuesta, RespuestaLinea: respuesta.RespuestaLinea.map(rewrite) };
+    },
+    consultar: (...args) => client.consultar(...args),
+  };
+}
+
+/** The reply's line for `registroId` names a record outside the envío. */
+const misnaming = (client: VerifactuClient, registroId: string) =>
+  rewritingLines(client, (linea) =>
+    linea.RefExterna === registroId ? { ...linea, RefExterna: "not-in-this-batch" } : linea,
+  );
+
+/** Every line of the reply arrives without its status. */
+const withoutStatus = (client: VerifactuClient) =>
+  rewritingLines(client, (linea) => ({ ...linea, EstadoRegistro: undefined }));
+
 interface EnvioState {
   estado: string;
   csv: string | null;
@@ -99,61 +121,6 @@ async function incidentCodes(): Promise<string[]> {
 }
 
 const cases = () => withTransaction(suite.db, (tx) => listFilingCases(tx));
-
-/** AEAT already holds another fingerprint under the record's identity: a Route B conflict. */
-async function collideAtAeat(
-  aeat: ReturnType<typeof createFakeAeat>,
-  seeded: SeededDrain,
-  registroId: string,
-): Promise<void> {
-  const raw = await suite.db.execute<Record<string, unknown>>(sql`
-    select * from registros_facturacion where id = ${registroId}
-  `);
-  const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
-  await aeat
-    .client()
-    .submit({ ObligadoEmision: { NombreRazon: seeded.legalName, NIF: seeded.nif } }, [
-      { RegistroAlta: { ...ours, Huella: "D".repeat(64) } },
-    ]);
-}
-
-/** A pending cancellation of `originalId`, appended to the original's own chain. */
-async function appendCancellation(
-  seeded: SeededDrain,
-  originalId: string,
-  secuencia: number,
-): Promise<string> {
-  const records = await suite.db.select().from(registrosFacturacion);
-  const original = records.find((row) => row.id === originalId)!;
-  const head = records
-    .filter((row) => row.sifId === original.sifId)
-    .sort((a, b) => b.secuencia - a.secuencia)[0]!;
-  const id = newId();
-  const huella = "C".repeat(63) + String(secuencia % 10);
-  await suite.db.insert(registrosFacturacion).values({
-    ...original,
-    id,
-    secuencia,
-    tipoRegistro: "anulacion",
-    tipoFactura: null,
-    descripcionOperacion: null,
-    desglose: null,
-    cuotaTotal: null,
-    importeTotal: null,
-    primerRegistro: false,
-    anteriorIdEmisorFactura: head.idEmisorFactura,
-    anteriorNumSerieFactura: head.numSerieFactura,
-    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
-    anteriorHuella: head.huella,
-    huella,
-  });
-  await suite.db.execute(sql`
-    update cadenas set secuencia = ${secuencia}, ultimo_registro_id = ${id}, ultima_huella = ${huella}
-    where node_id = ${seeded.nodeId}
-  `);
-  await suite.db.insert(envios).values({ registroId: id, proximoIntentoEn: SERVER_NOW });
-  return id;
-}
 
 describe("drain — a rejection is kept and does not hold its chain", () => {
   it("applies every line of a reply whose first line is a rejection, and opens a case for the rejected record", async () => {
@@ -216,7 +183,7 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     const [conflicting, sameReply, unsent] = seeded.registroIds;
-    await collideAtAeat(aeat, seeded, conflicting!);
+    await collideAtAeat(suite.db, aeat, seeded, conflicting!);
     const wire = recording(aeat.client());
 
     // A cap of 2 sends the first two records; the third stays unsent.
@@ -303,20 +270,9 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [conflicting, unanswered] = seeded.registroIds;
-    await collideAtAeat(aeat, seeded, conflicting!);
+    await collideAtAeat(suite.db, aeat, seeded, conflicting!);
     const real = aeat.client();
-    const secondLineMisnamed: VerifactuClient = {
-      submit: async (cabecera, registros) => {
-        const respuesta = await real.submit(cabecera, registros);
-        return {
-          ...respuesta,
-          RespuestaLinea: respuesta.RespuestaLinea.map((linea) =>
-            linea.RefExterna === unanswered ? { ...linea, RefExterna: "not-in-this-batch" } : linea,
-          ),
-        };
-      },
-      consultar: (...args) => real.consultar(...args),
-    };
+    const secondLineMisnamed = misnaming(real, unanswered!);
 
     await drain(deps(secondLineMisnamed), FIRST);
 
@@ -329,20 +285,9 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [conflicting, unanswered] = seeded.registroIds;
-    await collideAtAeat(aeat, seeded, conflicting!);
+    await collideAtAeat(suite.db, aeat, seeded, conflicting!);
     const real = aeat.client();
-    const secondLineMisnamed: VerifactuClient = {
-      submit: async (cabecera, registros) => {
-        const respuesta = await real.submit(cabecera, registros);
-        return {
-          ...respuesta,
-          RespuestaLinea: respuesta.RespuestaLinea.map((linea) =>
-            linea.RefExterna === unanswered ? { ...linea, RefExterna: "not-in-this-batch" } : linea,
-          ),
-        };
-      },
-      consultar: (...args) => real.consultar(...args),
-    };
+    const secondLineMisnamed = misnaming(real, unanswered!);
     await drain(deps(secondLineMisnamed), FIRST);
     const wire = recording(real);
 
@@ -367,20 +312,11 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [conflicting, unreadable] = seeded.registroIds;
-    await collideAtAeat(aeat, seeded, conflicting!);
+    await collideAtAeat(suite.db, aeat, seeded, conflicting!);
     const real = aeat.client();
-    const secondLineUnreadable: VerifactuClient = {
-      submit: async (cabecera, registros) => {
-        const respuesta = await real.submit(cabecera, registros);
-        return {
-          ...respuesta,
-          RespuestaLinea: respuesta.RespuestaLinea.map((linea) =>
-            linea.RefExterna === unreadable ? { ...linea, EstadoRegistro: undefined } : linea,
-          ),
-        };
-      },
-      consultar: (...args) => real.consultar(...args),
-    };
+    const secondLineUnreadable = rewritingLines(real, (linea) =>
+      linea.RefExterna === unreadable ? { ...linea, EstadoRegistro: undefined } : linea,
+    );
     await drain(deps(secondLineUnreadable), FIRST);
     expect((await envioOf(unreadable!)).estado).toBe("pendiente");
     const wire = recording(real);
@@ -405,7 +341,7 @@ describe("drain — a cancellation whose original was not accepted", () => {
     const [original] = seeded.registroIds;
     aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente");
     await drain(deps(aeat.client()), FIRST);
-    const cancellation = await appendCancellation(seeded, original!, 2);
+    const cancellation = await appendCancellation(suite.db, seeded, original!, 2);
     const later = await appendPendingAlta(suite.db, seeded, 3);
     const wire = recording(aeat.client());
 
@@ -426,9 +362,9 @@ describe("drain — a cancellation whose original was not accepted", () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [original] = seeded.registroIds;
-    await collideAtAeat(aeat, seeded, original!);
+    await collideAtAeat(suite.db, aeat, seeded, original!);
     await drain(deps(aeat.client()), FIRST);
-    const cancellation = await appendCancellation(seeded, original!, 2);
+    const cancellation = await appendCancellation(suite.db, seeded, original!, 2);
     const wire = recording(aeat.client());
 
     await drain(deps(wire.client), SECOND);
@@ -507,20 +443,7 @@ describe("drain — an unknown outcome blocks later claims on its chain", () => 
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [unknown] = seeded.registroIds;
     const real = aeat.client();
-    const withoutStatus: VerifactuClient = {
-      submit: async (cabecera, registros) => {
-        const respuesta = await real.submit(cabecera, registros);
-        return {
-          ...respuesta,
-          RespuestaLinea: respuesta.RespuestaLinea.map((l) => ({
-            ...l,
-            EstadoRegistro: undefined,
-          })),
-        };
-      },
-      consultar: (...args) => real.consultar(...args),
-    };
-    await drain(deps(withoutStatus), FIRST);
+    await drain(deps(withoutStatus(real)), FIRST);
     const retryAt = new Date(FIRST.getTime() + backoffMs(1));
     const successor = await appendPendingAlta(suite.db, seeded, 2);
     const other = await seedSecondChain(suite.db, seeded, 5);
@@ -546,22 +469,8 @@ describe("drain — an unknown outcome says whether a duplicate lookup failed", 
   it("names no lookup when the reply line itself is unreadable", async () => {
     const aeat = fakeAeat();
     await seedPendingEnvios(suite.db, { count: 1 });
-    const real = aeat.client();
-    const withoutStatus: VerifactuClient = {
-      submit: async (cabecera, registros) => {
-        const respuesta = await real.submit(cabecera, registros);
-        return {
-          ...respuesta,
-          RespuestaLinea: respuesta.RespuestaLinea.map((l) => ({
-            ...l,
-            EstadoRegistro: undefined,
-          })),
-        };
-      },
-      consultar: (...args) => real.consultar(...args),
-    };
 
-    await drain(deps(withoutStatus), FIRST);
+    await drain(deps(withoutStatus(aeat.client())), FIRST);
 
     const params = await unknownParams();
     expect(params).toHaveLength(1);
@@ -665,7 +574,7 @@ describe("drain — resolving a case releases nothing", () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [conflicting] = seeded.registroIds;
-    await collideAtAeat(aeat, seeded, conflicting!);
+    await collideAtAeat(suite.db, aeat, seeded, conflicting!);
     await drain(deps(aeat.client()), FIRST);
     const [opened] = await cases();
     expect(opened?.registroId).toBe(conflicting);

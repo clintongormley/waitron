@@ -14,10 +14,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
+  appendCancellation,
   appendPendingAlta,
   seedPendingEnvios,
   seedSecondChain,
-  type SeededDrain,
 } from "../test/drain-fixtures.js";
 import {
   heldRecords,
@@ -26,8 +26,6 @@ import {
   recordCaseEvent,
   type FilingCaseEvidence,
 } from "./filing-cases.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -68,44 +66,6 @@ async function openCaseOnFirstRecord() {
     }),
   );
   return { seeded, registroId, opened };
-}
-
-/** A cancellation of `originalId`, appended to the original's own chain at `secuencia`. */
-async function appendCancellation(
-  seeded: SeededDrain,
-  originalId: string,
-  secuencia: number,
-): Promise<string> {
-  const records = await suite.db.select().from(registrosFacturacion);
-  const original = records.find((row) => row.id === originalId)!;
-  const head = records
-    .filter((row) => row.sifId === original.sifId)
-    .sort((a, b) => b.secuencia - a.secuencia)[0]!;
-  const id = newId();
-  const huella = "C".repeat(63) + String(secuencia % 10);
-  await suite.db.insert(registrosFacturacion).values({
-    ...original,
-    id,
-    secuencia,
-    tipoRegistro: "anulacion",
-    tipoFactura: null,
-    descripcionOperacion: null,
-    desglose: null,
-    cuotaTotal: null,
-    importeTotal: null,
-    primerRegistro: false,
-    anteriorIdEmisorFactura: head.idEmisorFactura,
-    anteriorNumSerieFactura: head.numSerieFactura,
-    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
-    anteriorHuella: head.huella,
-    huella,
-  });
-  await suite.db.execute(sql`
-    update cadenas set secuencia = ${secuencia}, ultimo_registro_id = ${id}, ultima_huella = ${huella}
-    where node_id = ${seeded.nodeId}
-  `);
-  await suite.db.insert(envios).values({ registroId: id, proximoIntentoEn: OPENED_AT });
-  return id;
 }
 
 function appErrorCode(error: unknown): string | undefined {
@@ -588,7 +548,7 @@ describe("heldRecords", () => {
       });
       return opened;
     });
-    const cancellation = await appendCancellation(seeded, original, 3);
+    const cancellation = await appendCancellation(suite.db, seeded, original, 3);
     await setEstado(cancellation, "detenido");
     const behind = await appendPendingAlta(suite.db, seeded, 4);
     await setEstado(behind.registroId, "detenido");
