@@ -99,7 +99,8 @@ import {
  *   handed over): none is an ordering, payment or drawer write;
  * - `/api/demo-reader/cancel`: mounted only when the card provider is the simulator.
  *
- * A shared display (`kds`) may only prepare, whatever its stored list says (`profileAllows`).
+ * A shared display (`kds`) may only prepare, whatever its stored list says (`profileAllows`); on its
+ * own cookie, with nobody signed in, every till route answers `session.required`.
  */
 
 const suite = useVenueDb({
@@ -526,12 +527,34 @@ describe("a shared kitchen display", () => {
       tender: cash,
     });
     expect(collect.body.error?.code).toBe("device.cash_not_allowed");
+    const pay = await send(cookie, "POST", "/api/pay", {});
+    expect(pay.body.error).toEqual(forbidden("pay").error);
     const open = await send(cookie, "POST", "/api/drawer/open", {});
     expect(open.body.error).toEqual(forbidden("drawer_open").error);
     const advance = await send(cookie, "POST", `/api/orders/${id}/stations/${stationId}/advance`, {
       to: "ready",
     });
     expect(advance.status).toBe(200);
+  });
+
+  it("reaches no ordering, payment or drawer route on its own cookie, with nobody signed in", async () => {
+    const cookie = await display(CAPABILITY_FLAGS);
+    const order = await counterOrder(v, "Caña");
+    for (const [path, body] of [
+      ["/api/working-orders", { id: randomUUID(), lines: [] }],
+      ["/api/sales", { lines: [], tender: cash }],
+      ["/api/pay", {}],
+      [`/api/working-orders/${order}/collect`, { tender: cash }],
+      [`/api/working-orders/${order}/payments`, cash],
+      ["/api/drawer/open", {}],
+    ] as const) {
+      const answer = await send(cookie, "POST", path, body);
+      expect({ path, status: answer.status, code: answer.body.error?.code }).toEqual({
+        path,
+        status: 401,
+        code: "session.required",
+      });
+    }
   });
 
   it("refuses preparing from a display whose profile does not prepare, on both display routes", async () => {

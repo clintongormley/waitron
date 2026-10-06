@@ -26,7 +26,7 @@ import {
 import { createPairingMode, PAIRING_HOLD_MS, type PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
-import { enrolDeviceForTest } from "./testing/enrol.js";
+import { enrolDeviceForTest, listOnProfile } from "./testing/enrol.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
@@ -613,6 +613,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
         runsPass: false,
       }),
     );
+    await withTransaction(suite.db, (tx) => listOnProfile(tx, profileId, { watcherId }));
     const made = await knock(venue, { kind: "device", label: "Pass screen" });
     await claimFor(app, venue, made, holdId);
     const path = `/management-api/device-join-requests/${made.joinId}/accept`;
@@ -659,6 +660,9 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
+    await withTransaction(suite.db, (tx) =>
+      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
+    );
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
@@ -754,6 +758,9 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
+    await withTransaction(suite.db, (tx) =>
+      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
+    );
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
@@ -799,6 +806,9 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
+    await withTransaction(suite.db, (tx) =>
+      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
+    );
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     await claimFor(app, venue, made, holdId);
     const res = await send(

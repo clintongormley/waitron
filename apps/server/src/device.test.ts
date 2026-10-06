@@ -245,6 +245,31 @@ describe("device join-and-accept binds the device by its profile's form factor",
     expect(row.watcher_id).toBeNull();
   });
 
+  it("accepting a kds device refuses a station or watcher its profile does not list, and the request survives", async () => {
+    const { cfg, stationId } = await setupVenue();
+    const profileId = await seedProfile("kds", "Perfil KDS");
+    const watcherId = await watcher(cfg);
+    const window = createPairingMode();
+    window.open();
+    const made = await withTransaction(suite.db, (tx) =>
+      createJoinRequest(tx, cfg, { kind: "device", label: "Pantalla" }),
+    );
+    const accept = (choice: { stationId?: string; watcherId?: string }) =>
+      withTransaction(suite.db, (tx) =>
+        acceptDeviceJoinRequest(tx, cfg, made.joinId, { label: "Pantalla", profileId, ...choice }),
+      );
+
+    await expect(accept({ stationId })).rejects.toMatchObject({
+      code: "station.not_allowed",
+      params: { stationId },
+    });
+    await expect(accept({ watcherId })).rejects.toMatchObject({
+      code: "watcher.not_allowed",
+      params: { watcherId },
+    });
+    expect(await readJoinStatus(suite.db, cfg, made.joinId, made.token, window)).toBe("pending");
+  });
+
   it("a kds profile with NO station is device.station_required", async () => {
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("kds", "Perfil KDS");

@@ -14,6 +14,14 @@ import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { createStation } from "./kitchen.js";
+import type { TillConfig } from "./till-config.js";
+import { createWatcher } from "./watchers.js";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+} from "@waitron/shared";
 
 /**
  * The device-profile CRUD routes end to end, over HTTP, with the manager and staff sessions a real
@@ -48,8 +56,11 @@ function phoneCanvas(title: string): CanvasDef {
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
+/** The venue the station and watcher list routes are scoped to, as boot threads it. */
+let venueCfg: TillConfig;
+
 async function setupTenant(): Promise<void> {
-  await applyVenue(
+  const venue = await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -81,6 +92,15 @@ async function setupTenant(): Promise<void> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  venueCfg = {
+    nodeId: brandNodeId(venue.nodeId),
+    seriesId: brandSeriesId(venue.seriesIds[0]!),
+    locationId: brandLocationId(venue.locationId),
+    locale: LOCALE,
+    invoiceLocales: [LOCALE],
+    tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
+  };
 
   // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
   // generators, which a raw SQL insert never reaches.
@@ -107,6 +127,7 @@ function mountApp(): Hono {
     {
       db: suite.db,
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
+      venueCfg,
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -955,6 +976,165 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
+
+  describe("a kitchen display profile's station and watcher lists", () => {
+    type Lists = { profileId: string; stationIds: string[]; watcherIds: string[] };
+
+    async function kitchenChoices() {
+      return withTransaction(suite.db, async (tx) => ({
+        grill: (await createStation(tx, venueCfg, { name: uniqueName("Grill") })).id,
+        cold: (await createStation(tx, venueCfg, { name: uniqueName("Cold") })).id,
+        pass: (
+          await createWatcher(tx, venueCfg, {
+            name: uniqueName("Pass"),
+            everyStation: true,
+            stationIds: [],
+            everyZone: true,
+            zoneIds: [],
+            runsPass: false,
+          })
+        ).id,
+      }));
+    }
+
+    async function listsOf(app: Hono, profileId: string): Promise<Lists | undefined> {
+      const res = await app.request("/management-api/device-profile-kitchen-lists", {
+        headers: { cookie: managerCookie },
+      });
+      expect(res.status).toBe(200);
+      const found = ((await res.json()) as { lists: Lists[] }).lists.find(
+        (entry) => entry.profileId === profileId,
+      );
+      // Stations made here share a position and sort by their generated names.
+      return found && { ...found, stationIds: [...found.stationIds].sort() };
+    }
+
+    const kitchen = (name: string, extra: Record<string, unknown> = {}) => ({
+      name,
+      formFactor: "kds",
+      canvasId: null,
+      capabilities: ["act-as-kds", "prepare-orders"],
+      ...extra,
+    });
+
+    it("stores the lists with the profile, keeps them on a save that omits them, and lists them", async () => {
+      const app = mountApp();
+      const { grill, cold, pass } = await kitchenChoices();
+      const name = uniqueName("Kitchen");
+      const created = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(name, { stationIds: [grill, cold], watcherIds: [pass] })),
+      });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as ProfileRow;
+      const both = [grill, cold].sort();
+      expect(await listsOf(app, id)).toEqual({
+        profileId: id,
+        stationIds: both,
+        watcherIds: [pass],
+      });
+
+      const kept = await app.request(`/management-api/device-profiles/${id}`, {
+        method: "PUT",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(name)),
+      });
+      expect(kept.status).toBe(200);
+      expect(await listsOf(app, id)).toEqual({
+        profileId: id,
+        stationIds: both,
+        watcherIds: [pass],
+      });
+
+      const replaced = await app.request(`/management-api/device-profiles/${id}`, {
+        method: "PUT",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(name, { stationIds: [cold] })),
+      });
+      expect(replaced.status).toBe(200);
+      expect(await listsOf(app, id)).toEqual({
+        profileId: id,
+        stationIds: [cold],
+        watcherIds: [pass],
+      });
+    });
+
+    it("refuses removing a station an active device on the profile shows, naming the device, and keeps the whole save", async () => {
+      const app = mountApp();
+      const { grill, cold } = await kitchenChoices();
+      const name = uniqueName("Kitchen");
+      const created = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(name, { stationIds: [grill, cold] })),
+      });
+      const { id } = (await created.json()) as ProfileRow;
+      const deviceName = uniqueName("Grill screen");
+      const [device] = await suite.db
+        .insert(devices)
+        .values({
+          locationId: venueCfg.locationId,
+          label: deviceName,
+          tokenHash: "scrypt$00$00",
+          deviceProfileId: id,
+          stationId: grill,
+        })
+        .returning({ id: devices.id });
+
+      const res = await app.request(`/management-api/device-profiles/${id}`, {
+        method: "PUT",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(uniqueName("Renamed"), { stationIds: [cold] })),
+      });
+      expect({ status: res.status, body: await res.json() }).toEqual({
+        status: 409,
+        body: {
+          error: {
+            code: "device_profile.station_in_use",
+            params: { stationId: grill, deviceId: device!.id, deviceName },
+          },
+        },
+      });
+      const got = await app.request(`/management-api/device-profiles/${id}`, {
+        headers: { cookie: managerCookie },
+      });
+      expect(((await got.json()) as ProfileRow).name).toBe(name);
+      expect((await listsOf(app, id))?.stationIds).toHaveLength(2);
+    });
+
+    it("refuses a list that is not an array of distinct ids, naming the field", async () => {
+      const app = mountApp();
+      const twice = randomUUID();
+      for (const [field, value] of [
+        ["stationIds", "x"],
+        ["watcherIds", ["not-a-uuid"]],
+        ["stationIds", null],
+        ["watcherIds", [twice, twice]],
+      ] as const) {
+        const res = await app.request("/management-api/device-profiles", {
+          method: "POST",
+          headers: { ...JSON_HEADERS, cookie: managerCookie },
+          body: JSON.stringify(kitchen(uniqueName("Bad list"), { [field]: value })),
+        });
+        expect({ field, status: res.status, body: await res.json() }).toEqual({
+          field,
+          status: 400,
+          body: { error: { code: "management.request_invalid", params: { field } } },
+        });
+      }
+    });
+
+    it("refuses the lists to a staff session", async () => {
+      const app = mountApp();
+      const staffCookie = await login(app, STAFF_EMAIL);
+      const res = await app.request("/management-api/device-profile-kitchen-lists", {
+        headers: { cookie: staffCookie },
+      });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    });
   });
 
   it("refuses the device-profile routes unauthenticated with 401", async () => {

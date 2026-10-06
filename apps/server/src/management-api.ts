@@ -143,6 +143,7 @@ import {
 import { isUuid } from "./till-session.js";
 import { drawLogoRasters } from "./receipt-logo.js";
 import { readLocationAddress } from "./venue-address.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
 import type { AccountEmailSender } from "./account-email.js";
 import { exchangeGoogleCode, type GoogleOidcConfig } from "./google-oidc.js";
@@ -300,6 +301,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.name_taken": 409,
   "device_profile.in_use": 409,
   "device_profile.invalid": 400,
+  "device_profile.access_invalid": 400,
+  "device_profile.station_in_use": 409,
+  "device_profile.watcher_in_use": 409,
   "printer.not_found": 404,
   "catalogue.not_found": 404,
 };
@@ -476,6 +480,42 @@ function parsePrinterLists(body: {
     lists[field] = ids;
   }
   return lists;
+}
+
+/** A profile's station and watcher lists, by field; an absent one is left out. */
+function parseKitchenLists(body: { stationIds?: unknown; watcherIds?: unknown }): {
+  stationIds?: string[];
+  watcherIds?: string[];
+} {
+  const lists: { stationIds?: string[]; watcherIds?: string[] } = {};
+  for (const field of ["stationIds", "watcherIds"] as const) {
+    const value = body[field];
+    if (value === undefined) continue;
+    if (!Array.isArray(value)) throw new AppError("management.request_invalid", { field });
+    const ids = value.map((id) => requireBodyUuid(id, field));
+    if (new Set(ids).size !== ids.length)
+      throw new AppError("management.request_invalid", { field });
+    lists[field] = ids;
+  }
+  return lists;
+}
+
+/** Writes the lists `lists` names, keeping the stored one it omits. Call after the save authorized. */
+async function saveKitchenLists(
+  tx: Transaction,
+  deps: ManagementApiDeps,
+  profileId: string,
+  lists: { stationIds?: string[]; watcherIds?: string[] },
+): Promise<void> {
+  if (lists.stationIds === undefined && lists.watcherIds === undefined) return;
+  const cfg = requireVenueCfg(deps);
+  const stored = (await VENUE_SERVICE.readProfileKitchenLists(tx, cfg)).find(
+    (entry) => entry.profileId === profileId,
+  );
+  await VENUE_SERVICE.setProfileKitchenLists(tx, cfg, profileId, {
+    stationIds: lists.stationIds ?? stored?.stationIds ?? [],
+    watcherIds: lists.watcherIds ?? stored?.watcherIds ?? [],
+  });
 }
 
 /**
@@ -1256,6 +1296,20 @@ export function mountManagementApi(
     }),
   );
 
+  app.get("/management-api/device-profile-kitchen-lists", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const lists = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "layout.configure",
+        });
+        return VENUE_SERVICE.readProfileKitchenLists(tx, requireVenueCfg(deps));
+      });
+      return c.json({ lists });
+    }),
+  );
+
   app.get("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1283,6 +1337,8 @@ export function mountManagementApi(
         inactivityTimeoutSeconds?: unknown;
         receiptPrinterIds?: unknown;
         paymentSlipPrinterIds?: unknown;
+        stationIds?: unknown;
+        watcherIds?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1301,9 +1357,10 @@ export function mountManagementApi(
       const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const lists = parsePrinterLists(body);
+      const kitchenLists = parseKitchenLists(body);
       const result = await withTransaction(deps.db, async (tx) => {
         await requireListedPrinters(tx, sessionId, lists);
-        return createDeviceProfile(tx, {
+        const created = await createDeviceProfile(tx, {
           managementSessionId: sessionId,
           name,
           formFactor,
@@ -1315,13 +1372,15 @@ export function mountManagementApi(
             paymentSlipPrinterIds: lists.paymentSlipPrinterIds ?? [],
           },
         });
+        await saveKitchenLists(tx, deps, created.id, kitchenLists);
+        return created;
       });
       return c.json(result, 201);
     }),
   );
 
   // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null. An omitted
-  // printer list is the exception: it stays as it was.
+  // printer, station or watcher list is the exception: it stays as it was.
   app.put("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1334,6 +1393,8 @@ export function mountManagementApi(
         inactivityTimeoutSeconds?: unknown;
         receiptPrinterIds?: unknown;
         paymentSlipPrinterIds?: unknown;
+        stationIds?: unknown;
+        watcherIds?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1352,13 +1413,14 @@ export function mountManagementApi(
       const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const lists = parsePrinterLists(body);
+      const kitchenLists = parseKitchenLists(body);
       const result = await withTransaction(deps.db, async (tx) => {
         await requireListedPrinters(tx, sessionId, lists);
         const printerLists =
           Object.keys(lists).length === 0
             ? undefined
             : { ...(await readProfilePrinterLists(tx, id)), ...lists };
-        return updateDeviceProfile(tx, {
+        const updated = await updateDeviceProfile(tx, {
           managementSessionId: sessionId,
           id,
           name,
@@ -1368,6 +1430,8 @@ export function mountManagementApi(
           inactivityTimeoutSeconds,
           printerLists,
         });
+        await saveKitchenLists(tx, deps, id, kitchenLists);
+        return updated;
       });
       return c.json(result);
     }),

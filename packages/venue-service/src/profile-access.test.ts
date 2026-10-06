@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   deviceProfiles,
+  devices,
   floorZones,
   kitchenStations,
   locations,
@@ -25,8 +26,11 @@ import {
   resolveNewOrderZone,
 } from "./operations.js";
 import {
+  assertProfileBinding,
   assertProfileZone,
+  readProfileKitchenLists,
   readProfileServiceAccess,
+  setProfileKitchenLists,
   setProfileServiceAccess,
   type ProfileServiceAccessInput,
 } from "./profile-access.js";
@@ -630,6 +634,178 @@ describe("a profile's station and watcher lists", () => {
     await save(venue, display([grill], []));
     await save(venue, display([cold], []));
     await expect(read(venue)).resolves.toMatchObject({ stationIds: [cold] });
+  });
+
+  /** A Kitchen display profile listing the Grill and Cold stations and the Pass watcher. */
+  async function kitchen() {
+    const venue = await seedVenue();
+    await makeSharedDisplay(venue);
+    const grill = await seedStation(venue.cfg.locationId, "Grill", 0);
+    const cold = await seedStation(venue.cfg.locationId, "Cold", 1);
+    const pastry = await seedStation(venue.cfg.locationId, "Pastry", 2);
+    const pass = await seedWatcher(venue.cfg.locationId, "Pass", 0);
+    const bar = await seedWatcher(venue.cfg.locationId, "Bar pass", 1);
+    await setLists(venue, [grill, cold], [pass]);
+    return { venue, grill, cold, pastry, pass, bar };
+  }
+
+  const setLists = (venue: Venue, stationIds: string[], watcherIds: string[]) =>
+    scoped((tx) =>
+      setProfileKitchenLists(tx, venue.cfg, venue.profile, { stationIds, watcherIds }),
+    );
+
+  const binding = (venue: Venue, choice: { stationId?: string; watcherId?: string }) =>
+    outcome(
+      scoped((tx) =>
+        assertProfileBinding(tx, venue.profile, {
+          stationId: choice.stationId ?? null,
+          watcherId: choice.watcherId ?? null,
+        }),
+      ),
+    );
+
+  async function seedDevice(
+    venue: Venue,
+    label: string,
+    choice: { stationId?: string; watcherId?: string },
+  ): Promise<string> {
+    const [row] = await db
+      .insert(devices)
+      .values({
+        locationId: venue.cfg.locationId,
+        deviceProfileId: venue.profile,
+        label,
+        tokenHash: "hash",
+        stationId: choice.stationId ?? null,
+        watcherId: choice.watcherId ?? null,
+      })
+      .returning({ id: devices.id });
+    return row!.id;
+  }
+
+  it("lets a device show each station or watcher the profile lists, and refuses any other", async () => {
+    const { venue, grill, cold, pastry, pass, bar } = await kitchen();
+    await expect(binding(venue, { stationId: grill })).resolves.toEqual({ resolved: undefined });
+    await expect(binding(venue, { stationId: cold })).resolves.toEqual({ resolved: undefined });
+    await expect(binding(venue, { watcherId: pass })).resolves.toEqual({ resolved: undefined });
+    await expect(binding(venue, { stationId: pastry })).resolves.toEqual({
+      code: "station.not_allowed",
+      params: { stationId: pastry },
+    });
+    await expect(binding(venue, { watcherId: bar })).resolves.toEqual({
+      code: "watcher.not_allowed",
+      params: { watcherId: bar },
+    });
+  });
+
+  it("lets a profile with empty lists show no station or watcher at all", async () => {
+    const venue = await seedVenue();
+    await makeSharedDisplay(venue);
+    const grill = await seedStation(venue.cfg.locationId, "Grill", 0);
+    const pass = await seedWatcher(venue.cfg.locationId, "Pass", 0);
+    await expect(binding(venue, { stationId: grill })).resolves.toMatchObject({
+      code: "station.not_allowed",
+    });
+    await expect(binding(venue, { watcherId: pass })).resolves.toMatchObject({
+      code: "watcher.not_allowed",
+    });
+  });
+
+  it("still lets a device show a listed station after it is switched off", async () => {
+    const { venue, grill } = await kitchen();
+    await db.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, grill));
+    await expect(binding(venue, { stationId: grill })).resolves.toEqual({ resolved: undefined });
+  });
+
+  it("reads each profile's stored lists, switched-off entries included", async () => {
+    const { venue, grill, cold, pass } = await kitchen();
+    await db.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, grill));
+    const lists = await scoped((tx) => readProfileKitchenLists(tx, venue.cfg));
+    expect(lists.find((entry) => entry.profileId === venue.profile)).toEqual({
+      profileId: venue.profile,
+      stationIds: [grill, cold],
+      watcherIds: [pass],
+    });
+  });
+
+  it("refuses to remove the station an active device on the profile shows, naming the device", async () => {
+    const { venue, grill, cold, pass } = await kitchen();
+    const deviceId = await seedDevice(venue, "Grill screen", { stationId: grill });
+    const refusal = {
+      code: "device_profile.station_in_use",
+      params: { stationId: grill, deviceId, deviceName: "Grill screen" },
+    };
+    await expect(outcome(setLists(venue, [cold], [pass]))).resolves.toEqual(refusal);
+    await expect(outcome(save(venue, display([cold], [pass])))).resolves.toEqual(refusal);
+    await expect(read(venue)).resolves.toMatchObject({ stationIds: [grill, cold] });
+  });
+
+  it("refuses to remove the watcher an active device on the profile shows, naming the device", async () => {
+    const { venue, grill, pass } = await kitchen();
+    const deviceId = await seedDevice(venue, "Pass screen", { watcherId: pass });
+    await expect(outcome(setLists(venue, [grill], []))).resolves.toEqual({
+      code: "device_profile.watcher_in_use",
+      params: { watcherId: pass, deviceId, deviceName: "Pass screen" },
+    });
+    await expect(read(venue)).resolves.toMatchObject({ watcherIds: [pass] });
+  });
+
+  it("removes a station a disabled device shows, or one only another profile's device shows", async () => {
+    const { venue, grill, cold, pass } = await kitchen();
+    const disabled = await seedDevice(venue, "Old screen", { stationId: grill });
+    await db.update(devices).set({ active: false }).where(eq(devices.id, disabled));
+    const other = await seedVenue();
+    await makeSharedDisplay(other);
+    await scoped((tx) =>
+      setProfileKitchenLists(tx, venue.cfg, other.profile, { stationIds: [cold], watcherIds: [] }),
+    );
+    await db.insert(devices).values({
+      locationId: venue.cfg.locationId,
+      deviceProfileId: other.profile,
+      label: "Cold screen",
+      tokenHash: "hash",
+      stationId: cold,
+    });
+    await setLists(venue, [], [pass]);
+    await expect(read(venue)).resolves.toMatchObject({ stationIds: [], watcherIds: [pass] });
+  });
+
+  it("refuses the lists of a profile that is unknown or retired", async () => {
+    const venue = await seedVenue();
+    await db
+      .update(deviceProfiles)
+      .set({ retiredAt: new Date().toISOString() })
+      .where(eq(deviceProfiles.id, venue.profile));
+    const refusal = {
+      code: "device_profile.access_invalid",
+      params: { field: "profileId", reason: "not_found" },
+    };
+    await expect(outcome(setLists(venue, [], []))).resolves.toEqual(refusal);
+    await expect(
+      outcome(
+        scoped((tx) =>
+          setProfileKitchenLists(tx, venue.cfg, randomUUID(), { stationIds: [], watcherIds: [] }),
+        ),
+      ),
+    ).resolves.toEqual(refusal);
+  });
+
+  it("keeps a listed station switched off since, and still refuses adding one switched off", async () => {
+    const { venue, grill, cold, pastry, pass } = await kitchen();
+    await db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(inArray(kitchenStations.id, [grill, pastry]));
+    await setLists(venue, [grill, cold], [pass]);
+    const lists = await scoped((tx) => readProfileKitchenLists(tx, venue.cfg));
+    expect(lists.find((entry) => entry.profileId === venue.profile)?.stationIds).toEqual([
+      grill,
+      cold,
+    ]);
+    await expect(outcome(setLists(venue, [grill, cold, pastry], [pass]))).resolves.toEqual({
+      code: "device_profile.access_invalid",
+      params: { field: "stationIds", reason: "not_found" },
+    });
   });
 });
 

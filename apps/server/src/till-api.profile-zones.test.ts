@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   deviceProfiles,
+  kitchenStations,
   parties,
   tenants,
   workingOrders,
@@ -37,6 +38,9 @@ import type { Logger } from "./logger.js";
 import { placeGroups } from "./order-groups.js";
 import { createTable } from "./tables.js";
 import { mountTillApi } from "./till-api.js";
+import { mountDeviceApi } from "./device-api.js";
+import { createPairingMode } from "./pairing-mode.js";
+import type { StationQueueGroup } from "./working-order.js";
 import { parkOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -139,7 +143,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  *
  * Not zone-gated: the session, staff, till, locale and product reads; the kitchen's station,
  * notice, ticket-item, expo, watcher and `/api/orders/:id/stations/:sid/advance` routes, whose scope
- * is the device's station or watcher (Task 6); and the drawer, the authorizer and reason lists and
+ * is the device's station or watcher ("a kitchen display" below); and the drawer, the authorizer and reason lists and
  * `/api/statuses`, which name no zone.
  */
 
@@ -177,6 +181,8 @@ interface Fixtures {
   /** A Deli menu's item, also offered in the bar. */
   deliSpecial: string;
   deliItem: string;
+  /** The Deli tables zone's offer of the product the Deli round orders. */
+  deliTablesItem: string;
 }
 
 let v: PartyVenue;
@@ -266,6 +272,11 @@ beforeAll(async () => {
     },
     noopLog,
   );
+  mountDeviceApi(
+    app,
+    { db: suite.db, cfg: v.cfg, secureCookies: false, pairingMode: createPairingMode() },
+    noopLog,
+  );
   const zones = await inTx(v, async (tx) => {
     const restaurantId = await departmentOf(tx, v.tables.zoneId);
     const bar = await createServiceZone(tx, v.cfg, { name: "Bar", departmentId: restaurantId });
@@ -338,6 +349,7 @@ beforeAll(async () => {
     restTab: restSeated.tabId,
     deliSpecial: zones.deliSpecial,
     deliItem: zones.deliItem,
+    deliTablesItem: zones.deliTablesItem,
   };
   const [person] = await suite.db
     .insert(persons)
@@ -939,6 +951,68 @@ const ROUTES: readonly Row[] = [
     deliOrderZone,
   ],
 ];
+
+describe("a kitchen display", () => {
+  it("receives the Restaurant's and the Deli's work at its station, and cannot browse either department's orders", async () => {
+    const [station] = await suite.db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.isDefault, true));
+    const [kitchen] = await suite.db
+      .insert(deviceProfiles)
+      .values({
+        name: `Kitchen ${randomUUID()}`,
+        formFactor: "kds",
+        capabilities: ["act-as-kds", "prepare-orders"],
+      })
+      .returning({ id: deviceProfiles.id });
+    const device = await enrolDeviceForTest(suite.db, v.cfg, {
+      name: `Kitchen ${randomUUID()}`,
+      profileId: kitchen!.id,
+      stationId: station!.id,
+    });
+    const display = `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+    const fire = async (tableId: string, menuItemId: string) => {
+      const seated = await seat(v, tableId);
+      await inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, seated.partyId, {
+          groups: [{ lines: [{ menuItemId, quantity: "1" }], release: "fire" }],
+          operatorId: OPERATOR,
+        }),
+      );
+      return seated;
+    };
+    const deliTable = await inTx(v, (tx) =>
+      createTable(tx, v.cfg, { label: `D${randomUUID().slice(0, 4)}`, zoneId: f.deliTables }),
+    );
+    const deliRound = await fire(deliTable.id, f.deliTablesItem);
+    const restRound = await fire(await v.table(`R${randomUUID().slice(0, 4)}`), v.item("Agua"));
+
+    const queue = await send(display, "GET", "/api/device/station");
+    expect(queue.status).toBe(200);
+    const orders = (queue.body.station as { queue: StationQueueGroup[] }).queue.map(
+      (group) => group.orderId,
+    );
+    expect(orders).toEqual(expect.arrayContaining([deliRound.tabId, restRound.tabId]));
+    expect(orders).not.toContain(f.deliOrder);
+    expect(orders).not.toContain(f.restOrder);
+
+    for (const path of [
+      "/api/working-orders",
+      `/api/working-orders/${deliRound.tabId}`,
+      `/api/working-orders/${restRound.tabId}`,
+      `/api/parties/${deliRound.partyId}/current-orders`,
+      `/api/parties/${restRound.partyId}/bills`,
+    ]) {
+      const answer = await send(display, "GET", path);
+      expect({ path, status: answer.status, code: answer.body.error?.code }).toEqual({
+        path,
+        status: 401,
+        code: "session.required",
+      });
+    }
+  });
+});
 
 describe("a Restaurant profile on another department's zone", () => {
   it.each(ROUTES)("refuses %s", async (_name, method, path, body, zone) => {

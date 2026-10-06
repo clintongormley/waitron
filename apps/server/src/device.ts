@@ -18,6 +18,7 @@ import { payments } from "@waitron/payments";
 import { getDeviceProfile, kindOfFormFactor, printerChoices } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
 import { requireLiveStation } from "./kitchen.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { readWatcher } from "./watchers.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -324,8 +325,9 @@ export async function switchActiveProfile(
 }
 
 /**
- * Resolve which station or watcher a device with this profile binds. The ADMIN supplies the profile
- * and binding when accepting a join request, never the joining device on an unauthenticated route.
+ * Resolve which station or watcher a device with this profile binds: one the profile's list names.
+ * The ADMIN supplies the profile and binding when accepting a join request, never the joining device
+ * on an unauthenticated route.
  */
 export async function resolveDeviceBinding(
   tx: Transaction,
@@ -369,6 +371,7 @@ export async function resolveDeviceBinding(
         throw new AppError("watcher.not_found", { watcherId: input.watcherId });
       watcherId = input.watcherId;
     }
+    await VENUE_SERVICE.assertProfileBinding(tx, input.profileId, { stationId, watcherId });
   } else if (input.watcherId != null) {
     throw new AppError("management.request_invalid", { field: "watcherId" });
   }

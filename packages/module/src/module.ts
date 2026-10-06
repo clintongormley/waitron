@@ -434,6 +434,27 @@ export interface VenueServiceContribution {
     stationIds: string[];
     watcherIds: string[];
   }>;
+  /** Each live profile's stored station and watcher lists, switched-off entries included. */
+  readProfileKitchenLists(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+  ): Promise<{ profileId: string; stationIds: string[]; watcherIds: string[] }[]>;
+  /** Replaces a profile's station and watcher lists. Each must be switched on here unless already
+   *  listed; removing one an active device on the profile shows is refused
+   *  `device_profile.station_in_use` or `device_profile.watcher_in_use`, naming the device. */
+  setProfileKitchenLists(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    profileId: string,
+    lists: { stationIds: readonly string[]; watcherIds: readonly string[] },
+  ): Promise<void>;
+  /** Refused `station.not_allowed` or `watcher.not_allowed` unless the profile's list names the
+   *  device's station or watcher; an empty list permits none. */
+  assertProfileBinding(
+    tx: Transaction,
+    profileId: string,
+    binding: { stationId: string | null; watcherId: string | null },
+  ): Promise<void>;
   /** The department and zone half of {@link readProfileServiceAccess}. */
   readProfileZones(
     tx: Transaction,

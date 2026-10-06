@@ -44,6 +44,7 @@ import { setupVenue } from "./testing/venue-fixtures.js";
 import { createStation } from "./kitchen.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
 import type { TillConfig } from "./till-config.js";
+import { listOnProfile } from "./testing/enrol.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -713,6 +714,9 @@ describe("acceptDeviceJoinRequest", () => {
     // A `kds` profile bound to an EXISTING station, so resolveDeviceBinding writes nothing and the
     // one write both racers contend for is the `devices` INSERT that reuses the request's id.
     const profileId = await seedProfile("kds");
+    await withTransaction(suite.db, (tx) =>
+      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
+    );
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Racer" });
     });
@@ -881,6 +885,9 @@ describe("a returning disabled device", () => {
     const venue = await setupVenue(suite.db);
     const till = await seedProfile("till");
     const kds = await seedProfile("kds");
+    await withTransaction(suite.db, (tx) =>
+      listOnProfile(tx, kds, { stationId: venue.defaultStationId }),
+    );
     const deviceId = await disabledDevice(venue, till);
     const accepted = await comeBack(venue, deviceId, { label: "Pase", profileId: kds }).catch(
       (e: unknown) => e,
@@ -913,6 +920,7 @@ describe("a returning disabled device", () => {
     const station = await withTransaction(suite.db, (tx) =>
       createStation(tx, venue.cfg, { name: "Horno" }),
     );
+    await withTransaction(suite.db, (tx) => listOnProfile(tx, kds, { stationId: station.id }));
     const deviceId = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Horno" });
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
@@ -964,6 +972,7 @@ describe("a returning disabled device", () => {
         runsPass: false,
       }),
     );
+    await withTransaction(suite.db, (tx) => listOnProfile(tx, kds, { watcherId: watcher.id }));
     const deviceId = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pase" });
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {

@@ -9,6 +9,7 @@ import { createJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { createWatcher } from "./watchers.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
+import { listOnProfile } from "./testing/enrol.js";
 
 /**
  * The role-map fact `join-api.ts` is built on, pinned where it is consumed. Two things there break
@@ -61,6 +62,9 @@ it("join approval binds a kitchen screen to its watcher and rejects a second tar
       zoneIds: [],
       runsPass: false,
     }),
+  );
+  await withTransaction(suite.db, (tx) =>
+    listOnProfile(tx, profile!.id, { watcherId: watcher.id }),
   );
   const made = await withTransaction(suite.db, (tx) =>
     createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pass screen" }),

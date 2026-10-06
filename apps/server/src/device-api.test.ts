@@ -50,7 +50,8 @@ import { payments } from "@waitron/payments";
 import { deleteDeviceProfile, setProfilePrinterLists } from "@waitron/layouts";
 import "./errors.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
-import { enrolDeviceForTest } from "./testing/enrol.js";
+import type { WatcherBoard } from "./watcher-board.js";
+import { enrolDeviceForTest, listOnProfile } from "./testing/enrol.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 
 // Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
@@ -287,6 +288,7 @@ async function knockAndAccept(
   expect(res.status).toBe(200);
   const knock = (await res.json()) as { joinId: string };
   const accepted = await withTransaction(suite.db, async (tx) => {
+    await listOnProfile(tx, input.profileId, input);
     return acceptDeviceJoinRequest(tx, venue.cfg, knock.joinId, {
       label: input.name,
       profileId: input.profileId,
@@ -1604,6 +1606,112 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       error: { code: "watcher.not_found", params: { watcherId: other.id } },
     });
     expect(await storedBody(deviceId)).toMatchObject({ name: "Pass screen", watcherId });
+  });
+
+  describe("a kitchen screen's station or watcher, chosen from its profile's lists", () => {
+    async function kitchenProfile(venue: Venue) {
+      const [grill, cold, pastry] = await withTransaction(suite.db, async (tx) => [
+        await createStation(tx, venue.cfg, { name: "Grill" }),
+        await createStation(tx, venue.cfg, { name: "Cold" }),
+        await createStation(tx, venue.cfg, { name: "Pastry" }),
+      ]);
+      const profileId = await seedProfile("kds", ["prepare-orders"]);
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenLists(tx, venue.cfg, profileId, {
+          stationIds: [grill!.id, cold!.id],
+          watcherIds: [],
+        }),
+      );
+      return { profileId, grill: grill!.id, cold: cold!.id, pastry: pastry!.id };
+    }
+
+    it("gives two screens on one Kitchen profile different listed stations, and refuses a third", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { profileId, grill, cold, pastry } = await kitchenProfile(venue);
+      const first = await knockAndAccept(app, venue, {
+        name: "Screen 1",
+        profileId,
+        stationId: grill,
+      });
+      const second = await knockAndAccept(app, venue, {
+        name: "Screen 2",
+        profileId,
+        stationId: grill,
+      });
+
+      expect(
+        (await edit(app, venue.managerCookie, second.deviceId, { stationId: cold })).status,
+      ).toBe(204);
+      const refused = await edit(app, venue.managerCookie, first.deviceId, { stationId: pastry });
+      expect({ status: refused.status, body: await refused.json() }).toEqual({
+        status: 400,
+        body: { error: { code: "station.not_allowed", params: { stationId: pastry } } },
+      });
+      expect(await storedBody(first.deviceId)).toMatchObject({ stationId: grill });
+      expect(await storedBody(second.deviceId)).toMatchObject({ stationId: cold });
+    });
+
+    it("gives a screen a listed watcher, which then shows that watcher's stations only, and refuses one not listed", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { profileId, grill } = await kitchenProfile(venue);
+      const [pass, bar] = await withTransaction(suite.db, async (tx) => [
+        await createWatcher(tx, venue.cfg, {
+          name: "Pass",
+          everyStation: false,
+          stationIds: [venue.defaultStationId],
+          everyZone: true,
+          zoneIds: [],
+          runsPass: false,
+        }),
+        await createWatcher(tx, venue.cfg, {
+          name: "Bar pass",
+          everyStation: true,
+          stationIds: [],
+          everyZone: true,
+          zoneIds: [],
+          runsPass: false,
+        }),
+      ]);
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenLists(tx, venue.cfg, profileId, {
+          stationIds: [grill],
+          watcherIds: [pass!.id],
+        }),
+      );
+      const screen = await knockAndAccept(app, venue, {
+        name: "Screen",
+        profileId,
+        stationId: grill,
+      });
+
+      const unlisted = await edit(app, venue.managerCookie, screen.deviceId, {
+        stationId: null,
+        watcherId: bar!.id,
+      });
+      expect({ status: unlisted.status, body: await unlisted.json() }).toEqual({
+        status: 400,
+        body: { error: { code: "watcher.not_allowed", params: { watcherId: bar!.id } } },
+      });
+      expect(
+        (
+          await edit(app, venue.managerCookie, screen.deviceId, {
+            stationId: null,
+            watcherId: pass!.id,
+          })
+        ).status,
+      ).toBe(204);
+
+      const { items } = await fireOrder(venue);
+      await moveItemToStation(items[1]!, grill);
+      const board = await send(app, "GET", "/api/device/watcher", { cookie: screen.jar });
+      expect(board.status).toBe(200);
+      const shown = ((await board.json()) as WatcherBoard).orders.flatMap((order) =>
+        [...order.courses, ...order.groups].flatMap((part) => part.items.map((item) => item.id)),
+      );
+      expect(shown).toEqual([items[0]]);
+    });
   });
 
   it("sets the made-here stations, and the management GET lists them", async () => {

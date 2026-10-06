@@ -40,6 +40,12 @@ declare module "@waitron/shared" {
         | "department_required"
         | "shared_display";
     };
+    /** A device was given a station or watcher its profile's list does not name. */
+    "station.not_allowed": { stationId: string };
+    "watcher.not_allowed": { watcherId: string };
+    /** A profile's list lost a station or watcher an active device on the profile still shows. */
+    "device_profile.station_in_use": { stationId: string; deviceId: string; deviceName: string };
+    "device_profile.watcher_in_use": { watcherId: string; deviceId: string; deviceName: string };
     /** The profile has a department but none of its zones can be used now, so it cannot order. */
     "device_profile.no_service_zone": { profileId: string };
     // `route.dish_not_sent` is declared in apps/server's errors.ts, which raises it.

@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import { deviceProfiles, floorZones, kitchenStations, watchers } from "@waitron/db";
+import { deviceProfiles, devices, floorZones, kitchenStations, watchers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, type ErrorParams } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
@@ -189,34 +189,7 @@ export async function setProfileServiceAccess(
   }
 
   const scope = await checkedScope(tx, cfg, input);
-  const stationIds = [...new Set(input.stationIds)];
-  const watcherIds = [...new Set(input.watcherIds)];
-  if (stationIds.length > 0) {
-    const found = await tx
-      .select({ id: kitchenStations.id })
-      .from(kitchenStations)
-      .where(
-        and(
-          inArray(kitchenStations.id, stationIds),
-          eq(kitchenStations.locationId, cfg.locationId),
-          eq(kitchenStations.active, true),
-        ),
-      );
-    if (found.length !== stationIds.length) refuse("stationIds", "not_found");
-  }
-  if (watcherIds.length > 0) {
-    const found = await tx
-      .select({ id: watchers.id })
-      .from(watchers)
-      .where(
-        and(
-          inArray(watchers.id, watcherIds),
-          eq(watchers.locationId, cfg.locationId),
-          eq(watchers.active, true),
-        ),
-      );
-    if (found.length !== watcherIds.length) refuse("watcherIds", "not_found");
-  }
+  await checkLists(tx, cfg, profileId, input);
 
   // Deleting the scope row also deletes its `device_profile_zones` rows, through their key.
   await tx
@@ -235,6 +208,195 @@ export async function setProfileServiceAccess(
         .values(scope.zoneIds.map((zoneId) => ({ deviceProfileId: profileId, zoneId })));
     }
   }
+  await writeLists(tx, profileId, input);
+}
+
+/** The stations and watchers a device using the profile may show. */
+export interface ProfileKitchenLists {
+  stationIds: readonly string[];
+  watcherIds: readonly string[];
+}
+
+/** Each live profile's stored lists, switched-off stations and watchers included, by position. */
+export async function readProfileKitchenLists(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<{ profileId: string; stationIds: string[]; watcherIds: string[] }[]> {
+  const stations = await tx
+    .select({ profileId: deviceProfileStations.deviceProfileId, id: kitchenStations.id })
+    .from(deviceProfileStations)
+    .innerJoin(kitchenStations, eq(kitchenStations.id, deviceProfileStations.stationId))
+    .where(eq(kitchenStations.locationId, cfg.locationId))
+    .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
+  const listed = await tx
+    .select({ profileId: deviceProfileWatchers.deviceProfileId, id: watchers.id })
+    .from(deviceProfileWatchers)
+    .innerJoin(watchers, eq(watchers.id, deviceProfileWatchers.watcherId))
+    .where(eq(watchers.locationId, cfg.locationId))
+    .orderBy(asc(watchers.displayOrder), asc(watchers.name), asc(watchers.id));
+  const profiles = await tx
+    .select({ id: deviceProfiles.id })
+    .from(deviceProfiles)
+    .where(isNull(deviceProfiles.retiredAt))
+    .orderBy(asc(deviceProfiles.id));
+  return profiles.map(({ id }) => ({
+    profileId: id,
+    stationIds: stations.filter((row) => row.profileId === id).map((row) => row.id),
+    watcherIds: listed.filter((row) => row.profileId === id).map((row) => row.id),
+  }));
+}
+
+/** Replaces only the profile's station and watcher lists, checked as {@link setProfileServiceAccess} checks them. */
+export async function setProfileKitchenLists(
+  tx: Transaction,
+  cfg: VenueScope,
+  profileId: string,
+  input: ProfileKitchenLists,
+): Promise<void> {
+  const [profile] = await tx
+    .select({ id: deviceProfiles.id })
+    .from(deviceProfiles)
+    .where(and(eq(deviceProfiles.id, profileId), isNull(deviceProfiles.retiredAt)));
+  if (profile === undefined) refuse("profileId", "not_found");
+  await checkLists(tx, cfg, profileId, input);
+  await writeLists(tx, profileId, input);
+}
+
+/**
+ * Refuses `station.not_allowed` or `watcher.not_allowed` unless the profile's stored list names the
+ * device's station or watcher. An empty list names nothing, so it permits nothing. A listed one
+ * switched off since still passes: whether it is switched on is the caller's check.
+ */
+export async function assertProfileBinding(
+  tx: Transaction,
+  profileId: string,
+  binding: { stationId: string | null; watcherId: string | null },
+): Promise<void> {
+  if (binding.stationId !== null) {
+    const [listed] = await tx
+      .select({ id: deviceProfileStations.stationId })
+      .from(deviceProfileStations)
+      .where(
+        and(
+          eq(deviceProfileStations.deviceProfileId, profileId),
+          eq(deviceProfileStations.stationId, binding.stationId),
+        ),
+      );
+    if (listed === undefined)
+      throw new AppError("station.not_allowed", { stationId: binding.stationId });
+  }
+  if (binding.watcherId !== null) {
+    const [listed] = await tx
+      .select({ id: deviceProfileWatchers.watcherId })
+      .from(deviceProfileWatchers)
+      .where(
+        and(
+          eq(deviceProfileWatchers.deviceProfileId, profileId),
+          eq(deviceProfileWatchers.watcherId, binding.watcherId),
+        ),
+      );
+    if (listed === undefined)
+      throw new AppError("watcher.not_allowed", { watcherId: binding.watcherId });
+  }
+}
+
+/**
+ * Each id must be switched on at this location, unless the profile already lists it. Removing one an
+ * active device on this profile shows is refused, naming that device.
+ */
+async function checkLists(
+  tx: Transaction,
+  cfg: VenueScope,
+  profileId: string,
+  input: ProfileKitchenLists,
+): Promise<void> {
+  const stationIds = [...new Set(input.stationIds)];
+  const watcherIds = [...new Set(input.watcherIds)];
+  const storedStations = (
+    await tx
+      .select({ id: deviceProfileStations.stationId })
+      .from(deviceProfileStations)
+      .where(eq(deviceProfileStations.deviceProfileId, profileId))
+  ).map((row) => row.id);
+  const storedWatchers = (
+    await tx
+      .select({ id: deviceProfileWatchers.watcherId })
+      .from(deviceProfileWatchers)
+      .where(eq(deviceProfileWatchers.deviceProfileId, profileId))
+  ).map((row) => row.id);
+  if (stationIds.length > 0) {
+    const found = await tx
+      .select({ id: kitchenStations.id, active: kitchenStations.active })
+      .from(kitchenStations)
+      .where(
+        and(
+          inArray(kitchenStations.id, stationIds),
+          eq(kitchenStations.locationId, cfg.locationId),
+        ),
+      );
+    const usable = found.filter((row) => row.active || storedStations.includes(row.id));
+    if (usable.length !== stationIds.length) refuse("stationIds", "not_found");
+  }
+  if (watcherIds.length > 0) {
+    const found = await tx
+      .select({ id: watchers.id, active: watchers.active })
+      .from(watchers)
+      .where(and(inArray(watchers.id, watcherIds), eq(watchers.locationId, cfg.locationId)));
+    const usable = found.filter((row) => row.active || storedWatchers.includes(row.id));
+    if (usable.length !== watcherIds.length) refuse("watcherIds", "not_found");
+  }
+
+  const removedStations = storedStations.filter((id) => !stationIds.includes(id));
+  if (removedStations.length > 0) {
+    const [user] = await tx
+      .select({ id: devices.id, name: devices.label, stationId: devices.stationId })
+      .from(devices)
+      .where(
+        and(
+          eq(devices.deviceProfileId, profileId),
+          eq(devices.active, true),
+          inArray(devices.stationId, removedStations),
+        ),
+      )
+      .orderBy(asc(devices.label), asc(devices.id))
+      .limit(1);
+    if (user !== undefined)
+      throw new AppError("device_profile.station_in_use", {
+        stationId: user.stationId!,
+        deviceId: user.id,
+        deviceName: user.name,
+      });
+  }
+  const removedWatchers = storedWatchers.filter((id) => !watcherIds.includes(id));
+  if (removedWatchers.length > 0) {
+    const [user] = await tx
+      .select({ id: devices.id, name: devices.label, watcherId: devices.watcherId })
+      .from(devices)
+      .where(
+        and(
+          eq(devices.deviceProfileId, profileId),
+          eq(devices.active, true),
+          inArray(devices.watcherId, removedWatchers),
+        ),
+      )
+      .orderBy(asc(devices.label), asc(devices.id))
+      .limit(1);
+    if (user !== undefined)
+      throw new AppError("device_profile.watcher_in_use", {
+        watcherId: user.watcherId!,
+        deviceId: user.id,
+        deviceName: user.name,
+      });
+  }
+}
+
+async function writeLists(
+  tx: Transaction,
+  profileId: string,
+  input: ProfileKitchenLists,
+): Promise<void> {
+  const stationIds = [...new Set(input.stationIds)];
+  const watcherIds = [...new Set(input.watcherIds)];
   await tx
     .delete(deviceProfileStations)
     .where(eq(deviceProfileStations.deviceProfileId, profileId));
