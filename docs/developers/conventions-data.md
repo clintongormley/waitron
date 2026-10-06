@@ -696,6 +696,8 @@ each column's name was searched across `packages/` and `apps/` for a text compar
   detail editor (`apps/server/src/venue-details.ts`) separately validates a changed cutover as
   `HH:MM` or `HH:MM:00` and stores its whole-second spelling. Its real-database validation cases
   are in `apps/server/src/venue-details.test.ts`; an unrelated edit preserves the saved spelling.
+  This editor displays malformed saved cutovers in full so an eligible correction is a real change;
+  its preview reports the current clock as unavailable for that value.
 - **Writers that skip the helpers.** The configuration import
   (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`) copies the time values
   in a bundle's rows as written, without the normalising helpers; `station_hours` and

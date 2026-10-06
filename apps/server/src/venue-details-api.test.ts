@@ -400,3 +400,46 @@ it("can preview a valid replacement for an unreadable saved zone, including a na
     transitions: [],
   });
 });
+
+it("returns exactly the declared saved clock fields, without venue address fields", async () => {
+  const response = await app.request(
+    "/management-api/venue-details/clock-preview?timeZone=UTC&dayCutover=00%3A00",
+    { headers: { cookie: venue.managerCookie } },
+  );
+  expect(response.status).toBe(200);
+  const preview = await response.json();
+  expect(preview.current).toEqual({
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    civilDate: "2026-10-06",
+    timeOfDay: "04:00",
+    businessDay: "2026-10-05",
+    transitions: [
+      {
+        at: "2026-10-25T01:00:00.000Z",
+        civilDate: "2026-10-25",
+        boundaryAt: "2026-10-25T04:00:00.000Z",
+        boundaryTime: "05:00",
+      },
+      {
+        at: "2027-03-28T01:00:00.000Z",
+        civilDate: "2027-03-28",
+        boundaryAt: "2027-03-28T03:00:00.000Z",
+        boundaryTime: "05:00",
+      },
+    ],
+  });
+});
+it("does not preview a malformed saved cutover as a valid current clock", async () => {
+  await suite.db.execute(
+    sql`update locations set day_cutover = '06:00garbage' where id = ${venue.cfg.locationId}`,
+  );
+  const response = await app.request(
+    "/management-api/venue-details/clock-preview?timeZone=UTC&dayCutover=00%3A00",
+    { headers: { cookie: venue.managerCookie } },
+  );
+  expect(response.status).toBe(200);
+  const preview = await response.json();
+  expect(preview.current).toBeNull();
+  expect(preview.proposed.timeOfDay).toBe("02:00");
+});

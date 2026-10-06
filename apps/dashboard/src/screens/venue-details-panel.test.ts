@@ -511,3 +511,21 @@ it("previews the latest saved zone when only the cutover is changed, preserving 
   });
   expect(save(el).disabled).toBe(true);
 });
+
+it("explains an unavailable country beside the changed city and leaves retry available", async () => {
+  setLocale("en-GB");
+  const { api } = rig();
+  vi.mocked(api.patchVenueDetails).mockRejectedValue({
+    code: "venue.detail_invalid",
+    params: { field: "city", reason: "country_unavailable" },
+  });
+  const el = await editing(api);
+  change(el, "city", "New town");
+  await flush(el);
+  await click(el, "[data-test=acknowledge]");
+  await click(el, "[data-test=save]");
+  expect(field(el, "city").error).toBe(
+    "This geography cannot be changed here. A different fiscal or language context requires separate setup or a venue reset.",
+  );
+  expect(save(el).disabled).toBe(false);
+});

@@ -15,6 +15,7 @@ function civilDate(at: Date, timeZone: string): string {
   return ["year", "month", "day"].map((key) => parts.find((p) => p.type === key)!.value).join("-");
 }
 function view(at: Date, clock: Clock): VenueClockView | null {
+  if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(clock.dayCutover)) return null;
   const moment = venueMomentAt(at, clock);
   if (!moment) return null;
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -62,7 +63,8 @@ function view(at: Date, clock: Clock): VenueClockView | null {
     previousOffset = nextOffset;
   }
   return {
-    ...clock,
+    timeZone: clock.timeZone,
+    dayCutover: clock.dayCutover.slice(0, 5),
     civilDate: civilDate(at, clock.timeZone),
     timeOfDay: moment.timeOfDay,
     businessDay: moment.businessDay,
@@ -88,7 +90,7 @@ export function venueClockPreview(
   const candidate = { timeZone, dayCutover: proposed.dayCutover.slice(0, 5) };
   return {
     at: at.toISOString(),
-    current: view(at, { ...current, dayCutover: current.dayCutover.slice(0, 5) }),
+    current: view(at, current),
     proposed: view(at, candidate)!,
     backupDeadlines,
   };

@@ -132,15 +132,18 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
   const now = deps.now ?? (() => new Date());
   let running = false;
   async function tick(signal: AbortSignal) {
-    if (running || signal.aborted) return;
-    if (!deps.isPrimary()) {
+    if (running) return;
+    if (signal.aborted || !deps.isPrimary()) {
       deps.onScheduled?.(null);
       return;
     }
     running = true;
     try {
       const status = await deps.connection.status();
-      if (signal.aborted || !deps.isPrimary()) return;
+      if (signal.aborted || !deps.isPrimary()) {
+        deps.onScheduled?.(null);
+        return;
+      }
       await mkdir(dir, { recursive: true, mode: 0o700 });
       if (!(await lstat(dir)).isDirectory()) unavailable();
       await chmod(dir, 0o700);
@@ -267,6 +270,9 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
       await save();
       await deps.connection.publishCapture(p.id, p.metadata, signal);
       await complete();
+    } catch (error) {
+      deps.onScheduled?.(null);
+      throw error;
     } finally {
       running = false;
     }

@@ -6,7 +6,7 @@ const browserNow = (): Date => new Date();
 
 /**
  * `sentence` with how long ago `at` was (or, for a deadline, how soon it comes) in place of its
- * `{time}`, in the session's language; the exact time shows on hover or tap.
+ * `{time}`, in the session's language; the exact time shows on hover or tap in the browser’s time zone.
  */
 export function relativeTime(
   sentence: string,

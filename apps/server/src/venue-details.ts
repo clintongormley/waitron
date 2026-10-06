@@ -108,7 +108,7 @@ export async function readVenueDetails(
       city: location.city,
       province: location.province,
       timeZone: location.timeZone,
-      dayCutover: location.dayCutover.slice(0, 5),
+      dayCutover: equivalent("dayCutover", location.dayCutover, issuer.country)!,
     },
     issuer,
     hasSales: Boolean(history.sales),
@@ -123,7 +123,10 @@ export async function readVenueDetails(
           ? { decision: "refuse", reasons: ["geography_context"] }
           : { decision: "allow_with_warning", reasons: ["holiday_geography"] },
       postalCode:
-        pack === undefined
+        pack === undefined ||
+        (pack.administrativeAreas.length > 0 &&
+          (location.province === null ||
+            findAdministrativeArea(pack, location.province) === undefined))
           ? { decision: "refuse", reasons: ["geography_context"] }
           : { decision: "allow_with_warning", reasons: ["current_details_only"] },
       province: { decision: "refuse", reasons: [history.sales ? "sales" : "geography_context"] },
@@ -201,12 +204,12 @@ export async function writeVenueDetails(
           model.details.province === null
             ? undefined
             : findAdministrativeArea(pack, model.details.province);
-        if (
-          pack.administrativeAreas.length > 0 &&
-          (province === undefined ||
-            findAdministrativeAreaByPostalCode(pack, normalized!)?.code !== province.code)
-        )
-          invalid(field, "postcode");
+        if (pack.administrativeAreas.length > 0) {
+          if (province === undefined)
+            throw new AppError("venue.detail_locked", { field, reason: "geography_context" });
+          if (findAdministrativeAreaByPostalCode(pack, normalized!)?.code !== province.code)
+            invalid(field, "postcode");
+        }
         if (result?.valid) normalized = result.normalized;
       }
     }

@@ -488,3 +488,45 @@ it("exposes the persisted next capture deadline, including after worker restart 
   await restarted.tick(signal());
   expect(observed.at(-1)).toBeNull();
 });
+
+it("clears an observed deadline when status fails and recovers the persisted deadline later", async () => {
+  const f = await fixture();
+  let observed: number | null = null;
+  const worker = createCloudSnapshotWorker({
+    ...f.deps,
+    onScheduled: (at) => {
+      observed = at;
+    },
+  });
+  await worker.tick(signal());
+  const saved = JSON.parse(await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8")) as {
+    nextAt: number;
+  };
+  expect(observed).toBe(saved.nextAt);
+  const status = f.deps.connection.status;
+  f.deps.connection.status = async () => {
+    throw new Error("status unavailable");
+  };
+  await expect(worker.tick(signal())).rejects.toThrow("status unavailable");
+  expect(observed).toBeNull();
+  f.deps.connection.status = status;
+  await worker.tick(signal());
+  expect(observed).toBe(saved.nextAt);
+  expect(f.captures()).toBe(1);
+});
+it("clears the observed deadline when a tick is aborted before status", async () => {
+  const f = await fixture();
+  let observed: number | null = null;
+  const worker = createCloudSnapshotWorker({
+    ...f.deps,
+    onScheduled: (at) => {
+      observed = at;
+    },
+  });
+  await worker.tick(signal());
+  expect(observed).not.toBeNull();
+  const controller = new AbortController();
+  controller.abort();
+  await worker.tick(controller.signal);
+  expect(observed).toBeNull();
+});

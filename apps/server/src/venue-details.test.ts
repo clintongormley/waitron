@@ -1427,3 +1427,55 @@ it("accepts a named Etc zone containing a sign and passes it to the reporting cl
     "2026-10-06T07:00:00.000Z",
   );
 });
+
+describe("reviewed legacy geography and clock repairs", () => {
+  it.each([null, "Unknown legacy province"])(
+    "does not offer postcode edits without a resolved province: %s",
+    async (province) => {
+      await suite.db.execute(
+        sql`update locations set province = ${province} where id = ${venue.cfg.locationId}`,
+      );
+      const model = await read();
+      expect(model.policy.postalCode).toEqual({
+        decision: "refuse",
+        reasons: ["geography_context"],
+      });
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          writeVenueDetails(tx, venue.cfg, {
+            expected: model.details,
+            changes: { postalCode: "28001", name: "Must not save" },
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "venue.detail_locked",
+        params: { field: "postalCode", reason: "geography_context" },
+      });
+      expect((await read()).details.name).toBe("Sala principal");
+      const saved = await withTransaction(suite.db, (tx) =>
+        writeVenueDetails(tx, venue.cfg, {
+          expected: model.details,
+          changes: { name: "Allowed display correction" },
+        }),
+      );
+      expect(saved.model.details.name).toBe("Allowed display correction");
+    },
+  );
+  it("keeps a malformed saved cutover visible and accepts its eligible correction", async () => {
+    await suite.db.execute(
+      sql`update locations set day_cutover = '06:00garbage' where id = ${venue.cfg.locationId}`,
+    );
+    const model = await read();
+    expect(model.details.dayCutover).toBe("06:00garbage");
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: model.details,
+        changes: { dayCutover: "06:00" },
+      }),
+    );
+    expect(saved.changed).toBe(true);
+    expect(
+      suite.db.all(sql`select day_cutover from locations where id = ${venue.cfg.locationId}`),
+    ).toEqual([{ day_cutover: "06:00:00" }]);
+  });
+});

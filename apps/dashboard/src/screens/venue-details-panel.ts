@@ -49,6 +49,7 @@ const PROBLEMS: Record<string, StringKey> = {
   length: "venue_details.length",
   cutover: "venue_details.cutover",
   time_zone: "venue_details.time_zone",
+  country_unavailable: "venue_details.geography_context",
 };
 const REASONS: Record<string, StringKey> = {
   sales: "venue_details.sales",
