@@ -9,6 +9,10 @@ import { codeOf, tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
   focusFirstInvalid,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
   submitOnEnter,
   UrlStateController,
   type DataTableColumn,
@@ -55,6 +59,7 @@ type Editor =
       action: () => Promise<unknown>;
       impact?: DepartmentRemovalImpact;
     };
+type EditorValues = Record<string, string | boolean>;
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
 type PolicyRow =
   | { kind: "department"; department: Department }
@@ -201,6 +206,11 @@ export class VenueOperationsScreen extends LitElement {
   @state() private view: View = "departments";
   @state() private editor?: Editor;
   @state() private zoneId = "";
+  #editorScope?: DraftScope<EditorValues>;
+  #editorIdentity?: Editor;
+  #editorBaseline?: EditorValues;
+  #editorModel?: VenueServiceView;
+  #leave?: LeaveCoordinator;
   #opener?: HTMLElement;
   #openerAction?: { element: HTMLElement; key: string };
 
@@ -215,6 +225,7 @@ export class VenueOperationsScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.requestUpdate();
     void this.#load();
   }
   async #load(): Promise<void> {
@@ -249,14 +260,95 @@ export class VenueOperationsScreen extends LitElement {
     );
   }
   #open(editor: Editor): void {
+    this.#editorBaseline = undefined;
+    this.#editorModel = this.model;
     this.editor = editor;
     this.actionError = undefined;
     this.#restart();
   }
   #close(): void {
+    this.#editorBaseline = undefined;
+    this.#editorScope?.dispose();
+    this.#editorScope = undefined;
+    this.#editorIdentity = undefined;
+    this.#editorModel = undefined;
     this.editor = undefined;
     this.#restart();
     this.#returnFocus();
+  }
+  #editorValues(modal: HTMLElement): EditorValues {
+    return Object.fromEntries(
+      [...modal.querySelectorAll<HTMLInputElement>("[name]")].map((field) => [
+        field.name,
+        field.type === "checkbox" ? field.checked : field.value,
+      ]),
+    );
+  }
+  #sameEditorValues(a: EditorValues, b: EditorValues): boolean {
+    const normalized = (name: string, value: string | boolean) => {
+      if (typeof value !== "string") return value;
+      if (["department-name", "trading-name", "new-zone-name"].includes(name)) return value.trim();
+      if (
+        name === "assignment-order" &&
+        value.trim() !== "" &&
+        Number.isInteger(Number(value)) &&
+        Number(value) >= 0
+      )
+        return Number(value);
+      return value;
+    };
+    return (
+      Object.keys(a).length === Object.keys(b).length &&
+      Object.keys(a).every((name) =>
+        Object.is(normalized(name, a[name]!), normalized(name, b[name]!)),
+      )
+    );
+  }
+  protected override updated(): void {
+    if (this.#editorIdentity !== this.editor) {
+      this.#editorScope?.dispose();
+      this.#editorScope = undefined;
+      this.#editorIdentity = this.editor;
+      if (this.editor && this.editor.kind !== "delete" && this.editor.kind !== "disable") {
+        const modal = this.renderRoot.querySelector("wt-modal")!;
+        this.#leave ??= leaveCoordinatorFor(this);
+        const baseline = (this.#editorBaseline ??= this.#editorValues(modal));
+        let registering = true;
+        this.#editorScope = this.#leave?.register({
+          id: this.editor,
+          current: () => (registering ? baseline : this.#editorValues(modal)),
+          snapshot: (value) => ({ ...value }),
+          equal: (a, b) => this.#sameEditorValues(a, b),
+          restore: (value) => {
+            for (const field of modal.querySelectorAll<HTMLInputElement>("[name]")) {
+              const saved = value[field.name];
+              if (typeof saved === "boolean") field.checked = saved;
+              else if (saved !== undefined) field.value = saved;
+            }
+          },
+        });
+        registering = false;
+        this.#editorScope?.changed();
+      }
+    }
+  }
+  readonly #beforeEditorClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.busy || !this.isConnected) return false;
+    const editor = this.editor;
+    if (!this.#editorScope) return true;
+    const outcome = await this.#leave!.request({
+      scopes: [this.#editorScope.id],
+      reason,
+      proceed() {},
+    });
+    return this.isConnected && this.editor === editor && outcome === "proceeded";
+  };
+  override disconnectedCallback(): void {
+    this.#editorScope?.dispose();
+    this.#editorScope = undefined;
+    this.#editorIdentity = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
   }
   /** Once an empty table gains a row, focus returns to its persistent Add button. */
   #returnFocus(): void {
@@ -296,19 +388,35 @@ export class VenueOperationsScreen extends LitElement {
     if (this.busy) return;
     this.busy = true;
     const editor = this.editor;
+    const scope = this.#editorScope;
+    const submitted =
+      scope && this.renderRoot.querySelector("wt-modal")
+        ? this.#editorValues(this.renderRoot.querySelector("wt-modal")!)
+        : undefined;
     if (editor === undefined) this.actionError = undefined;
     let closed = false;
     try {
       await action();
-      if (this.editor === editor) {
-        this.editor = undefined;
-        this.#restart();
-        closed = editor !== undefined;
+      if (this.isConnected && this.editor === editor) {
+        if (submitted) {
+          this.#editorBaseline = { ...submitted };
+          scope?.commit(submitted);
+        }
+        if (!scope?.isDirty()) {
+          this.editor = undefined;
+          scope?.dispose();
+          this.#editorScope = undefined;
+          this.#editorIdentity = undefined;
+          this.#editorModel = undefined;
+          this.#editorBaseline = undefined;
+          this.#restart();
+          closed = editor !== undefined;
+        }
       }
       await this.#load();
     } catch (error) {
       if (editor === undefined) this.actionError = this.#refusal(codeOf(error ?? {}), error);
-      else this.#refused(error, fields);
+      else if (this.isConnected && this.editor === editor) this.#refused(error, fields);
     } finally {
       this.busy = false;
     }
@@ -1432,7 +1540,7 @@ export class VenueOperationsScreen extends LitElement {
     </section>`;
   }
   #editorContent(editor: Editor): EditorContent {
-    const model = this.model!;
+    const model = this.#editorModel ?? this.model!;
     switch (editor.kind) {
       case "new-zone":
         return {
@@ -1607,6 +1715,8 @@ export class VenueOperationsScreen extends LitElement {
     const marked = Object.keys(this.#errors()).length > 0;
     const invalid = Object.keys(this.fieldErrors).length > 0;
     const recheck = (event: Event) => {
+      if (!this.isConnected || this.editor !== editor) return;
+      this.#editorScope?.changed();
       const name = (event.target as HTMLInputElement).name;
       if (Object.hasOwn(this.refusedFields, name)) {
         const refused = { ...this.refusedFields };
@@ -1622,10 +1732,12 @@ export class VenueOperationsScreen extends LitElement {
         size=${confirming ? "compact" : "standard"}
         open
         heading=${content.heading}
+        .beforeClose=${this.#beforeEditorClose}
         @wt-close=${() => {
           if (this.editor === editor) this.#close();
         }}
         @keydown=${(event: KeyboardEvent) => {
+          if (!this.isConnected || this.editor !== editor) return;
           if (event.key === "Escape" && this.busy) {
             event.preventDefault();
             event.stopPropagation();
@@ -1633,7 +1745,7 @@ export class VenueOperationsScreen extends LitElement {
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'));
         }}
       >
-        <div class="form" @wt-change=${recheck}>${content.body}</div>
+        <div class="form" @wt-change=${recheck} @change=${recheck}>${content.body}</div>
         <wt-form-actions
           slot="footer"
           .error=${[...(this.editorError ? [this.editorError] : []), ...(marked ? [t("venue.fix_fields")] : [])].join(" ")}
@@ -1642,13 +1754,20 @@ export class VenueOperationsScreen extends LitElement {
             variant="secondary"
             data-test="cancel-editor"
             ?disabled=${this.busy}
-            @click=${() => this.#close()}
+            @click=${(event: Event) => {
+              if (this.editor === editor && this.isConnected)
+                void (event.currentTarget as HTMLElement)
+                  .closest("wt-modal")!
+                  .requestClose("cancel");
+            }}
             >${t("venue.cancel")}</wt-button
           ><wt-button
             data-test="save-editor"
             variant=${confirming ? "danger" : "primary"}
             ?disabled=${this.busy || invalid}
-            @click=${() => this.#submit(content)}
+            @click=${() => {
+              if (this.editor === editor && this.isConnected) this.#submit(content);
+            }}
             >${t(confirming ? "venue.confirm" : "venue.save")}</wt-button
           ></wt-form-actions
         >

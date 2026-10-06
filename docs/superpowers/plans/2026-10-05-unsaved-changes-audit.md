@@ -727,3 +727,37 @@ its name selection were skipped. Venue-service types, changed-file ESLint, Prett
 ```sh
 pnpm --filter @waitron/venue-service exec vitest run src/dashboard/watcher-form.unsaved.test.ts src/dashboard/watcher-form.test.ts src/dashboard/prep-stations-screen.test.ts -t 'watcher|Watcher'
 ```
+
+
+## 2026-10-06 department and zone modal checkpoint
+
+The branch now protects Department Add/Edit, zone Add/configuration, hours and menu-assignment
+editors through Cancel and native Escape. Each opening captures its rendered field values once;
+text uses its existing trimming and assignment order uses its existing valid-number conversion.
+Invalid values remain distinct. The native default checkbox belongs to the assignment scope.
+Successful writes commit submitted values before refreshing. Newer delivered input stays dirty,
+and background zone updates keep the opening's defaults. Replacement/disconnect abort a pending
+question; departed Save/Enter and refusals cannot affect the new form. Read-only removal
+confirmations remain exempt.
+
+The initial focused run failed 12 warning assertions and passed 12 clean/save controls. The next
+lifetime run failed the accepted-save/newer-edit case and the background-zone draft assertion.
+The two-suite venue selection passed 220 tests; a subsequent removal exemption case passed
+separately. A reconnection probe then failed its unload assertion: the retained draft had no
+registered scope. Retaining its accepted baseline and scheduling an update on reconnection
+made that probe pass. The final combined venue selection passed 222 tests. Four deletion controls
+in an installed independent checkout each failed
+its intended assertion, and restoring the source passed all 32 cases then present. The candidate
+was removed. A fifth deletion of the reconnect update failed its unload assertion; the final
+restored candidate passed 34 tests and was removed. Temporary visual cases passed in EN/ES, both themes and at 390/1280 widths, with
+16 axe scans and 16 inspected captures. Logs and images are in Lane E's local
+`receipts/w69-resume-20261006-forms` directory. Browser logs contain Lit's development-mode warning.
+
+The existing Cancel helper now polls for native modal removal. Its absence, focus and no-write
+assertions are retained; the initial full suite exposed four assertions running before native
+close completed. The first final family run passed 217 tests before the three additional lifetime
+controls were added. No existing expected value was changed.
+
+Station-action drafts and the remaining dashboard/till modal owners still need Task 4 work.
+Venue inline settings and shell/page/history routes remain Tasks 5–6; this checkpoint completes
+only the venue modal family, not either proposed W69 PR.

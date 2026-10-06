@@ -1299,6 +1299,15 @@ remain direct-close confirmations. Focused cases are in
 `apps/dashboard/src/screens/payment-attestation.unsaved.test.ts`. Other modal owners remain pending.
 Printer detail name/connection are page owners for the remaining page/navigation work. Other audited
 modal owners also remain to be wired. Keep automatic saves on their existing paths.
+Department Add/Edit, zone Add/configuration, department hours and menu-assignment dialogs now
+use the shared registry on the branch. Cancel and native Escape keep edited values until Discard;
+normalized text and equivalent valid assignment numbers revert cleanly. A successful write commits
+its submitted fields before refresh while newer delivered input remains unsaved. An open zone
+keeps its captured defaults through background updates, and departed controls/refusals cannot
+submit or mark a replacement editor. Removal confirmations stay exempt. Focused cases are in
+`packages/venue-service/src/dashboard/venue-operations-screen.unsaved.test.ts`; station-action,
+remaining modal and page/history work are still open.
+
 
 SumUp and Stripe connection forms now register exact key, affiliate/merchant and redirect-URL
 drafts on the branch. Scoped leave requests offer Keep/Discard, reverts remove unload protection,
@@ -1369,8 +1378,7 @@ ask before dropping edited choices; unchanged and reverted memberships close dir
 commits only its submitted selection before refresh, retaining newer input and other edited cells.
 Disconnect aborts pending questions, and departed selection and Save controls leave a replacement
 opening alone. The watcher unsaved suite checks these paths with the shared renderer.
-Department/zone forms, other station-action drafts and
-the remaining dashboard/till modal owners still need Task 4 work; page/history/native reload remain
+Other station-action drafts and the remaining dashboard/till modal owners still need Task 4 work; page/history/native reload remain
 Tasks 5–6. The existing station keyboard-reorder focus check failed in a filtered run and in the preceding checkpoint's installed measurement checkout.
 The 2026-10-06 follow-up reproduced it with Routing selected: the Today fixture inherited the
 preceding test's URL, leaving the Stations handle hidden. The fixture now opens Stations explicitly;

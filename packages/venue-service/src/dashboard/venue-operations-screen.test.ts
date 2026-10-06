@@ -123,6 +123,9 @@ async function action(el: VenueOperationsScreen, name: string) {
   if (menu) menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
   button.click();
   await settle(el);
+  if (name === "cancel-editor") {
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  }
 }
 
 function field(el: VenueOperationsScreen, name: string) {
