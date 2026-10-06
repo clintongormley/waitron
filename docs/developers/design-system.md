@@ -1500,7 +1500,9 @@ only accepted destinations from the pending choice; a refused destination still 
 closing. Inline member replacement registers only the pending replacement choice; its immediate
 Add/Remove/Reorder actions stay exempt. Layout create/duplicate/rename dialogs compare trimmed
 names and commit their submitted name before refresh. Include menu writes immediately on selection
-and stays exempt. The remaining form owners stay tracked in the W69
+and stays exempt. Add/Edit staff compare their normalized submitted details and role/status.
+Their writes commit before refresh; resending an invitation leaves an edited staff form unsaved.
+The remaining form owners stay tracked in the W69
 backlog entry. Page navigation is a separate part of that
 rollout. The coordinator's dirty-only unload registration
 requests the browser's own warning; the [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md)

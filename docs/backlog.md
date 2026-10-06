@@ -1217,8 +1217,15 @@ Focused cases are in `member-replacement.unsaved.test.ts` and `menu-layout.unsav
 registry. Cancel/Escape retains those values until Discard; refused writes retain their draft,
 and successful creation commits before list refresh. A delivered newer field event remains dirty
 against that submitted snapshot. The focused staff widget/screen suites include the standalone
-form's delayed close report. Edit staff, its credential subforms, other audited modal owners and
-page/navigation protection remain to be wired. Keep automatic saves on their existing paths.
+form's delayed close report. Edit staff now protects trimmed details, role and status through
+Cancel/native Escape and dirty-only unload handling. A save commits the submitted details before
+refresh; newer delivered input remains dirty. Resending an invitation does not commit or discard
+an edited staff form. Late successful/refused results for another person leave the current editor
+alone. Focused cases are in `person-edit.unsaved.test.ts` and `staff-edit.unsaved.test.ts` under
+`apps/dashboard/src/`. The staff reset/suspend confirmations contain no credential fields and
+remain command exemptions; credential inputs live on Profile. Profile credentials, other audited
+modal owners and page/navigation protection remain to be wired. Keep automatic saves on their
+existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

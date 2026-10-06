@@ -738,3 +738,25 @@ A completion belonging to a departed layout still releases its write's busy stat
 the stale form result. The two departed-layout cases reproduced a stuck busy flag when that
 release followed the identity check; each failed at the new view's disabled editor. Moving only
 that release before the check made both pass, and each installed-candidate deletion failed again.
+
+### Staff drafts commit independently of invitation commands
+
+On the W69 branch, Add/Edit staff register their normalized submitted details. Edit additionally
+compares role and status. A same-person summary refresh leaves the draft in place; replacement
+with another person disposes its scope and pending question. Cancel/native Escape use the shared
+leave request, and a pending write disables dismissal. A successful details write commits its
+submitted snapshot before refresh; newer input remains compared against that snapshot. An
+invitation resend does not save the details and leaves an edited form open.
+
+Focused receipt (2026-10-06): `pnpm --filter @waitron/dashboard exec vitest run
+src/widgets/person-edit.unsaved.test.ts src/screens/staff-edit.unsaved.test.ts` ran 20 cases in
+Chromium, including staff reset/suspend command exemptions. The full staff family ran 163 cases
+across 10 files. In an installed disposable candidate, deleting the Cancel route, Escape gate,
+change notifications, submitted commit, newer-input check, host busy binding, save identity check,
+refusal identity check or resend identity check made its selected assertion fail. Restoring the
+candidate ran the 20 cases successfully. Late successful/refused save or resend results for a
+different person do not mark or commit the currently edited person's form in these cases.
+
+The current Staff screen's reset/suspend dialogs contain no credential-entry fields. The audit's
+earlier staff credential-subform description is superseded; Profile owns its password/PIN/TOTP
+inputs. Its forms and the page/navigation rollout remain pending.
