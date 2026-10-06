@@ -2814,7 +2814,7 @@ describe("till-app", () => {
     expect(currentApi.pay).not.toHaveBeenCalled();
   });
 
-  it("asks for a full-invoice recipient before placing a loaded invoice-first bill over €3,000", async () => {
+  it("places a loaded bill over €3,000 without a recipient prompt despite retired timing metadata", async () => {
     const { el } = await mountApp({
       zonePolicy: { serviceMode: "invoice_first" },
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
@@ -2826,15 +2826,18 @@ describe("till-app", () => {
     emit(c, "place-order");
     await flush(el);
 
-    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull();
-    expect(currentApi.placeOrder).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(currentApi.placeOrder).toHaveBeenCalledWith("large-bill");
+    expect(tenderPay(el).stage).toBe("collect");
+    expect(ticket(el)).toBeNull();
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+    expect(currentApi.pay).not.toHaveBeenCalled();
   });
 
-  it("saves a chosen full-invoice recipient before placing an invoice-first bill", async () => {
+  it("saves a chosen full-invoice recipient before placing a ticket-then-pay bill", async () => {
     const placeOrder = vi.fn().mockResolvedValue(placedResult);
     const { el } = await mountApp({
-      zonePolicy: { serviceMode: "invoice_first" },
-      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      zonePolicy: { serviceMode: "ticket_then_pay" },
       placeOrder,
     });
     const c = await toCounter(el);

@@ -2963,7 +2963,6 @@ export class TillApp extends LitElement {
     clearInactiveChoices = false,
   ): Promise<void> {
     if (this.placing) return;
-    if (this.#basketFlow() === "invoice_first" && this.#askInvoiceRecipientForLargeBill()) return;
     this.placing = true;
     this.#counterSends++;
     const session = this.#operatorSession;
