@@ -1162,6 +1162,23 @@ describe("device-profiles-screen station and watcher lists", () => {
     });
   });
 
+  it("opened before the lists' first read arrives, still saves from the profile's stored lists", async () => {
+    const stored = [{ profileId: "p2", stationIds: ["s1", "s-off"], watcherIds: ["w1"] }];
+    const { api, el } = await editKitchen({
+      listProfileKitchenLists: vi
+        .fn()
+        .mockReturnValueOnce(new Promise(() => {}))
+        .mockResolvedValue(stored),
+    });
+    toggle(el, "profile-station-s2", true);
+    await el.updateComplete;
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
+      stationIds: ["s1", "s-off", "s2"],
+      watcherIds: ["w1"],
+    });
+  });
+
   it("sends no lists when they are unchanged", async () => {
     const { api, el } = await editKitchen();
     await save(el);

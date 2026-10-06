@@ -334,12 +334,15 @@ export class DeviceProfilesScreen extends LitElement {
     this.mode = "editor";
   }
 
-  /** Fetches the profile fresh via `getDeviceProfile(id)` rather than reusing the possibly-stale list
-   * row. */
+  /** Fetches the profile and its station and watcher lists fresh, rather than reusing rows a read
+   * may not have delivered yet. */
   async #openEditor(id: string): Promise<void> {
     this.#showError(null);
     try {
-      const profile = await this.api.getDeviceProfile(id);
+      const [profile, kitchenLists] = await Promise.all([
+        this.api.getDeviceProfile(id),
+        this.api.listProfileKitchenLists(),
+      ]);
       this.editingId = id;
       this.draftName = profile.name;
       this.draftCanvasId = profile.canvasId;
@@ -353,7 +356,7 @@ export class DeviceProfilesScreen extends LitElement {
         receiptPrinterIds: profile.receiptPrinterIds,
         paymentSlipPrinterIds: profile.paymentSlipPrinterIds,
       };
-      const stored = this.kitchenLists.find((entry) => entry.profileId === id);
+      const stored = kitchenLists.find((entry) => entry.profileId === id);
       this.#loadedKitchenLists = {
         stationIds: stored?.stationIds ?? [],
         watcherIds: stored?.watcherIds ?? [],

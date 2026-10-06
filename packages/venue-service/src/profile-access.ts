@@ -189,7 +189,7 @@ export async function setProfileServiceAccess(
   }
 
   const scope = await checkedScope(tx, cfg, input);
-  await checkLists(tx, cfg, profileId, input);
+  await checkLists(tx, cfg, profileId, input, await storedLists(tx, profileId));
 
   // Deleting the scope row also deletes its `device_profile_zones` rows, through their key.
   await tx
@@ -246,20 +246,45 @@ export async function readProfileKitchenLists(
   }));
 }
 
-/** Replaces only the profile's station and watcher lists, checked as {@link setProfileServiceAccess} checks them. */
+/**
+ * Replaces the profile's station and watcher lists, checked as {@link setProfileServiceAccess}
+ * checks them; a list `input` does not name stays as stored.
+ */
 export async function setProfileKitchenLists(
   tx: Transaction,
   cfg: VenueScope,
   profileId: string,
-  input: ProfileKitchenLists,
+  input: Partial<ProfileKitchenLists>,
 ): Promise<void> {
   const [profile] = await tx
     .select({ id: deviceProfiles.id })
     .from(deviceProfiles)
     .where(and(eq(deviceProfiles.id, profileId), isNull(deviceProfiles.retiredAt)));
   if (profile === undefined) refuse("profileId", "not_found");
-  await checkLists(tx, cfg, profileId, input);
-  await writeLists(tx, profileId, input);
+  const stored = await storedLists(tx, profileId);
+  const lists = {
+    stationIds: input.stationIds ?? stored.stationIds,
+    watcherIds: input.watcherIds ?? stored.watcherIds,
+  };
+  await checkLists(tx, cfg, profileId, lists, stored);
+  await writeLists(tx, profileId, lists);
+}
+
+/** The profile's list rows as stored, whatever the state of each station or watcher. */
+async function storedLists(tx: Transaction, profileId: string): Promise<ProfileKitchenLists> {
+  const stationIds = (
+    await tx
+      .select({ id: deviceProfileStations.stationId })
+      .from(deviceProfileStations)
+      .where(eq(deviceProfileStations.deviceProfileId, profileId))
+  ).map((row) => row.id);
+  const watcherIds = (
+    await tx
+      .select({ id: deviceProfileWatchers.watcherId })
+      .from(deviceProfileWatchers)
+      .where(eq(deviceProfileWatchers.deviceProfileId, profileId))
+  ).map((row) => row.id);
+  return { stationIds, watcherIds };
 }
 
 /**
@@ -309,21 +334,12 @@ async function checkLists(
   cfg: VenueScope,
   profileId: string,
   input: ProfileKitchenLists,
+  stored: ProfileKitchenLists,
 ): Promise<void> {
   const stationIds = [...new Set(input.stationIds)];
   const watcherIds = [...new Set(input.watcherIds)];
-  const storedStations = (
-    await tx
-      .select({ id: deviceProfileStations.stationId })
-      .from(deviceProfileStations)
-      .where(eq(deviceProfileStations.deviceProfileId, profileId))
-  ).map((row) => row.id);
-  const storedWatchers = (
-    await tx
-      .select({ id: deviceProfileWatchers.watcherId })
-      .from(deviceProfileWatchers)
-      .where(eq(deviceProfileWatchers.deviceProfileId, profileId))
-  ).map((row) => row.id);
+  const storedStations = stored.stationIds;
+  const storedWatchers = stored.watcherIds;
   if (stationIds.length > 0) {
     const found = await tx
       .select({ id: kitchenStations.id, active: kitchenStations.active })

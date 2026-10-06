@@ -230,10 +230,14 @@ export const QUERY_DEPENDENCIES = {
   getExtraList: ["extra_lists", "extra_list_items"],
   listDeviceProfiles: ["device_profiles", "device_profile_printers", "devices", "canvases"],
   getDeviceProfile: ["device_profiles", "device_profile_printers", "canvases"],
+  // `readProfileKitchenLists` (packages/venue-service/src/profile-access.ts) also filters and orders
+  // by the station and watcher rows.
   listProfileKitchenLists: [
     "device_profiles",
     "device_profile_stations",
     "device_profile_watchers",
+    "kitchen_stations",
+    "watchers",
   ],
   listDevices: [
     "devices",

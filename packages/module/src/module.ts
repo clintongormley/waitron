@@ -439,14 +439,14 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
   ): Promise<{ profileId: string; stationIds: string[]; watcherIds: string[] }[]>;
-  /** Replaces a profile's station and watcher lists. Each must be switched on here unless already
-   *  listed; removing one an active device on the profile shows is refused
-   *  `device_profile.station_in_use` or `device_profile.watcher_in_use`, naming the device. */
+  /** Replaces a profile's station and watcher lists; a list not named stays as stored. Each must be
+   *  switched on here unless already listed; removing one an active device on the profile shows is
+   *  refused `device_profile.station_in_use` or `device_profile.watcher_in_use`, naming the device. */
   setProfileKitchenLists(
     tx: Transaction,
     cfg: { locationId: LocationId },
     profileId: string,
-    lists: { stationIds: readonly string[]; watcherIds: readonly string[] },
+    lists: { stationIds?: readonly string[]; watcherIds?: readonly string[] },
   ): Promise<void>;
   /** Refused `station.not_allowed` or `watcher.not_allowed` unless the profile's list names the
    *  device's station or watcher; an empty list permits none. */

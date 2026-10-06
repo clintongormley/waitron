@@ -273,8 +273,8 @@ export async function endSessionsNotAdmitted(
 
 /**
  * Switch the device's active profile to `profileId` for the person signed in on `sessionId`: one
- * the device is approved for and the person may sign in on, with no payment of the device's in
- * progress. Printers follow {@link updateDeviceSettings}; the sessions of people the new profile
+ * the device is approved for and the person may sign in on, whose list names the station or watcher
+ * the device shows, with no payment of the device's in progress. Printers follow {@link updateDeviceSettings}; the sessions of people the new profile
  * does not admit end. Choosing the active profile changes nothing.
  */
 export async function switchActiveProfile(
@@ -313,6 +313,10 @@ export async function switchActiveProfile(
   if (!(await canUseDeviceProfile(tx, input.profileId, input.personId)))
     throw new AppError("device_profile.not_admitted", {});
   await assertNoPaymentInProgress(tx, device.id);
+  await VENUE_SERVICE.assertProfileBinding(tx, input.profileId, {
+    stationId: device.stationId,
+    watcherId: device.watcherId,
+  });
   const printers = await updateDeviceSettings(tx, device, {
     label: device.label,
     profileId: input.profileId,

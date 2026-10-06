@@ -770,6 +770,16 @@ describe("a profile's station and watcher lists", () => {
     await expect(read(venue)).resolves.toMatchObject({ stationIds: [], watcherIds: [pass] });
   });
 
+  it("keeps the stored list a save does not name", async () => {
+    const { venue, cold, pass } = await kitchen();
+    await scoped((tx) =>
+      setProfileKitchenLists(tx, venue.cfg, venue.profile, { stationIds: [cold] }),
+    );
+    await expect(read(venue)).resolves.toMatchObject({ stationIds: [cold], watcherIds: [pass] });
+    await scoped((tx) => setProfileKitchenLists(tx, venue.cfg, venue.profile, { watcherIds: [] }));
+    await expect(read(venue)).resolves.toMatchObject({ stationIds: [cold], watcherIds: [] });
+  });
+
   it("refuses the lists of a profile that is unknown or retired", async () => {
     const venue = await seedVenue();
     await db

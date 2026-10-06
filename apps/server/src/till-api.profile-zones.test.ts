@@ -7,6 +7,7 @@ import {
   deviceProfiles,
   kitchenStations,
   parties,
+  workingOrderLines,
   tenants,
   workingOrders,
   type Transaction,
@@ -39,6 +40,8 @@ import { placeGroups } from "./order-groups.js";
 import { createTable } from "./tables.js";
 import { mountTillApi } from "./till-api.js";
 import { mountDeviceApi } from "./device-api.js";
+import { createStation } from "./kitchen.js";
+import { moveDishesToStation } from "./station-move.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { StationQueueGroup } from "./working-order.js";
 import { parkOrder } from "./working-order.js";
@@ -985,8 +988,37 @@ describe("a kitchen display", () => {
     const deliTable = await inTx(v, (tx) =>
       createTable(tx, v.cfg, { label: `D${randomUUID().slice(0, 4)}`, zoneId: f.deliTables }),
     );
+    const restTable = () => v.table(`R${randomUUID().slice(0, 4)}`);
     const deliRound = await fire(deliTable.id, f.deliTablesItem);
-    const restRound = await fire(await v.table(`R${randomUUID().slice(0, 4)}`), v.item("Agua"));
+    const restRound = await fire(await restTable(), v.item("Agua"));
+    // One more order from each department, its dish then moved to another station.
+    const pastry = await inTx(v, (tx) =>
+      createStation(tx, v.cfg, { name: `Pastry ${randomUUID().slice(0, 4)}` }),
+    );
+    const elsewhere = [
+      await fire(
+        (
+          await inTx(v, (tx) =>
+            createTable(tx, v.cfg, { label: `D${randomUUID().slice(0, 4)}`, zoneId: f.deliTables }),
+          )
+        ).id,
+        f.deliTablesItem,
+      ),
+      await fire(await restTable(), v.item("Agua")),
+    ];
+    for (const round of elsewhere) {
+      const lines = await suite.db
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, round.tabId));
+      await inTx(v, (tx) =>
+        moveDishesToStation(tx, v.cfg, round.tabId, {
+          submissionId: randomUUID(),
+          lineIds: lines.map((line) => line.id),
+          stationId: pastry.id,
+        }),
+      );
+    }
 
     const queue = await send(display, "GET", "/api/device/station");
     expect(queue.status).toBe(200);
@@ -994,8 +1026,7 @@ describe("a kitchen display", () => {
       (group) => group.orderId,
     );
     expect(orders).toEqual(expect.arrayContaining([deliRound.tabId, restRound.tabId]));
-    expect(orders).not.toContain(f.deliOrder);
-    expect(orders).not.toContain(f.restOrder);
+    for (const round of elsewhere) expect(orders).not.toContain(round.tabId);
 
     for (const path of [
       "/api/working-orders",

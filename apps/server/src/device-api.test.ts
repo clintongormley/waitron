@@ -2863,6 +2863,34 @@ describe("a device's approved profiles and switching its active one", () => {
       expect((await switchTo(app, me.cookie, s.to)).status).toBe(200);
     });
 
+    it("refuses switching a screen moved onto a kitchen profile, with someone still signed in, to one that does not list its station", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const me = await signIn(t.deviceId);
+      const [listing, other] = [await seedProfile("kds"), await seedProfile("kds")];
+      await withTransaction(suite.db, (tx) =>
+        listOnProfile(tx, listing, { stationId: venue.defaultStationId }),
+      );
+      const moved = await manage(app, venue, t.deviceId, {
+        profileId: listing,
+        stationId: venue.defaultStationId,
+        approvedProfileIds: [other],
+      });
+      expect(moved.status).toBe(204);
+      // A kitchen profile with no role set admits every role, so the move left the session open.
+      expect(await openSessionsOn(t.deviceId)).toEqual([me.personId]);
+
+      const res = await switchTo(app, me.cookie, other);
+      expect({ status: res.status, body: await res.json() }).toEqual({
+        status: 400,
+        body: {
+          error: { code: "station.not_allowed", params: { stationId: venue.defaultStationId } },
+        },
+      });
+      expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(listing);
+    });
+
     it("a shared display with nobody signed in cannot switch", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);

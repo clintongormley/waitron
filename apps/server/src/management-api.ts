@@ -465,42 +465,36 @@ function parseInactivityTimeoutSeconds(value: unknown): number | null {
 }
 
 /** Absent stays absent; a present list must hold printer ids, each at most once. */
+/**
+ * The id lists `fields` names, each an array of distinct uuids; an absent one is left out, and any
+ * other value is refused `management.request_invalid` naming the field.
+ */
+function parseIdLists<F extends string>(
+  body: Partial<Record<F, unknown>>,
+  fields: readonly F[],
+): Partial<Record<F, string[]>> {
+  const lists: Partial<Record<F, string[]>> = {};
+  for (const field of fields) {
+    const value = body[field];
+    if (value === undefined) continue;
+    if (!Array.isArray(value)) throw new AppError("management.request_invalid", { field });
+    const ids = value.map((id) => requireBodyUuid(id, field));
+    if (new Set(ids).size !== ids.length)
+      throw new AppError("management.request_invalid", { field });
+    lists[field] = ids;
+  }
+  return lists;
+}
+
 function parsePrinterLists(body: {
   receiptPrinterIds?: unknown;
   paymentSlipPrinterIds?: unknown;
 }): Partial<ProfilePrinterLists> {
-  const lists: Partial<ProfilePrinterLists> = {};
-  for (const field of ["receiptPrinterIds", "paymentSlipPrinterIds"] as const) {
-    const value = body[field];
-    if (value === undefined) continue;
-    if (!Array.isArray(value)) throw new AppError("management.request_invalid", { field });
-    const ids = value.map((id) => requireBodyUuid(id, field));
-    if (new Set(ids).size !== ids.length)
-      throw new AppError("management.request_invalid", { field });
-    lists[field] = ids;
-  }
-  return lists;
+  return parseIdLists(body, ["receiptPrinterIds", "paymentSlipPrinterIds"]);
 }
 
-/** A profile's station and watcher lists, by field; an absent one is left out. */
-function parseKitchenLists(body: { stationIds?: unknown; watcherIds?: unknown }): {
-  stationIds?: string[];
-  watcherIds?: string[];
-} {
-  const lists: { stationIds?: string[]; watcherIds?: string[] } = {};
-  for (const field of ["stationIds", "watcherIds"] as const) {
-    const value = body[field];
-    if (value === undefined) continue;
-    if (!Array.isArray(value)) throw new AppError("management.request_invalid", { field });
-    const ids = value.map((id) => requireBodyUuid(id, field));
-    if (new Set(ids).size !== ids.length)
-      throw new AppError("management.request_invalid", { field });
-    lists[field] = ids;
-  }
-  return lists;
-}
-
-/** Writes the lists `lists` names, keeping the stored one it omits. Call after the save authorized. */
+/** Writes the lists `lists` names; the venue-service keeps the one it omits. Call after the save
+ * authorized. */
 async function saveKitchenLists(
   tx: Transaction,
   deps: ManagementApiDeps,
@@ -508,14 +502,7 @@ async function saveKitchenLists(
   lists: { stationIds?: string[]; watcherIds?: string[] },
 ): Promise<void> {
   if (lists.stationIds === undefined && lists.watcherIds === undefined) return;
-  const cfg = requireVenueCfg(deps);
-  const stored = (await VENUE_SERVICE.readProfileKitchenLists(tx, cfg)).find(
-    (entry) => entry.profileId === profileId,
-  );
-  await VENUE_SERVICE.setProfileKitchenLists(tx, cfg, profileId, {
-    stationIds: lists.stationIds ?? stored?.stationIds ?? [],
-    watcherIds: lists.watcherIds ?? stored?.watcherIds ?? [],
-  });
+  await VENUE_SERVICE.setProfileKitchenLists(tx, requireVenueCfg(deps), profileId, lists);
 }
 
 /**
@@ -1357,7 +1344,7 @@ export function mountManagementApi(
       const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const lists = parsePrinterLists(body);
-      const kitchenLists = parseKitchenLists(body);
+      const kitchenLists = parseIdLists(body, ["stationIds", "watcherIds"]);
       const result = await withTransaction(deps.db, async (tx) => {
         await requireListedPrinters(tx, sessionId, lists);
         const created = await createDeviceProfile(tx, {
@@ -1413,7 +1400,7 @@ export function mountManagementApi(
       const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const lists = parsePrinterLists(body);
-      const kitchenLists = parseKitchenLists(body);
+      const kitchenLists = parseIdLists(body, ["stationIds", "watcherIds"]);
       const result = await withTransaction(deps.db, async (tx) => {
         await requireListedPrinters(tx, sessionId, lists);
         const printerLists =
