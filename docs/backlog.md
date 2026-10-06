@@ -1625,16 +1625,33 @@ when they are claimed, between envíos, and only records never sent before. A re
 AEAT's answer breaks a run: when the record right after a run was sent and its answer is unreadable
 or missing, the records added after it are sent with its retry, and a later record is held only
 once the refusals immediately before it make a run of three. The ongoing alert
-`fiscal.refusals_repeated` names the code and the length of the run. Nothing releases the hold yet.
-**Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
-again).** Task 8 as planned resolves records that have a case of their own; a record the brake holds
-has none. While held, those records are not retried hourly. The owner chose (2026-10-06) to add
-an automatic hourly probe that sends the first held record once an hour, an accept restarting the
-chain and a same-code refusal adding one case: queued as W41s-3d. The owner also chose to keep the
+`fiscal.refusals_repeated` names the code and the length of the run. W41s-3d (below) sends the
+first held record once an hour.
+**Follow-up (W41s Task 8, held-record resolution): what still needs a person after W41s-3d.** Task 8
+as planned resolves records that have a case of their own; a record the brake holds has none. The
+owner chose (2026-10-06) an automatic hourly probe, built as W41s-3d: an accept or a refusal with
+another code restarts the chain by itself, and a refusal with the run's code adds one case an hour.
+Still needing a person: each refused record's case; a chain held by a conflict, or whose first held
+record is a cancellation of a refused invoice, which is never probed; and a chain whose probes keep
+being refused with the run's code. The owner also chose to keep the
 records added after a run's unanswered successor sent with its retry, as built. It was built so because when the retried record's answer is anything but a refusal with
 the run's code, the run is broken and nothing would explain such a hold: the
 `fiscal.refusals_repeated` alert would not show, and when that answer is not a refusal at all
 `heldRecords` would name no case for the held records.
+**W41s-3d (built 2026-10-06, pending owner review; PR to come):** while the brake holds a chain,
+the drain sends its first held record once an hour after the chain's last send (`claimProbes` and
+`BRAKE_PROBE_INTERVAL_MS` in `packages/fiscal-verifactu/src/drain.ts`); the record stays held while
+it is out. If AEAT accepts it, or refuses it with a different code, the chain's held records go back
+to waiting and are sent in order (`releaseSettledBrakeHolds`), up to the first held record that has
+a case of its own. A refusal with the run's code opens that record's case but records no
+`fiscal.registro_rechazado` incident; the chain stays held, the `fiscal.refusals_repeated` alert's
+count grows, and the next held record is sent an hour later. An unreadable answer keeps the record
+held for the next hourly try and raises `fiscal.estado_desconocido`; a failed send also keeps it
+held for the next hourly try. A chain held by a conflict, or whose first held record is a
+cancellation of a refused invoice, is never probed; a chain held by the brake AND by such a
+cancellation still shows `fiscal.refusals_repeated` but is not probed. For the owner: an unknown
+answer keeps the record held and retried hourly; a same-code refused probe records no incident; and
+the alert's `since` moves to each refused probe's case.
 **Follow-up W41s-3c (a defect W41s-3's review found that predates W41s-3):**
 `resolveLines` in `packages/fiscal-verifactu/src/drain.ts` matches a reply line to a claimed record
 by `RefExterna` alone, without checking the line's invoice identity or a repeated reference. A
