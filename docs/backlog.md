@@ -7139,6 +7139,14 @@ characters. Left open:
 
 ### B9. CI and test infra
 
+- **The `ci` step passes only when every needed job succeeded or was skipped, and prints each
+  result (A274, owner 2026-10-06) — DONE (#1283).**
+- **A job GitHub never acquired a runner for may still let `ci` pass (A274 follow-up) — OPEN.**
+  GitHub's documented results leave `success` or `skipped` for such a job, and the step passes
+  both; the next such run's `ci` log prints the value. A possible cure, untested: read the run's
+  job conclusions from the jobs API rather than `needs`. See
+  [ci-and-gates.md](developers/ci-and-gates.md), "The `ci` check passes only when every needed job
+  succeeded or was skipped".
 - **A Payments screen test failed once in a local dashboard coverage run (seen 2026-10-05 on W111's
   branch, `feat/receipt-top-block`) — OPEN, not investigated.**
   `apps/dashboard/src/screens/payments-screen.test.ts`, "isolates a status request failure to its
