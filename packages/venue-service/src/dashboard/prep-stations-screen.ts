@@ -117,7 +117,14 @@ export class PrepStationsScreen extends LitElement {
       wt-data-table::part(inherited) {
         --wt-color-text: var(--wt-color-text-muted);
       }
-      wt-data-table::part(disabled-station) {
+      wt-data-table::part(disabled-station),
+      wt-data-table::part(disabled-watcher-cell) {
+        color: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(disabled-watcher) {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--wt-space-2);
         color: var(--wt-color-text-muted);
       }
       h1 {
@@ -272,6 +279,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private watcherRemoval?: WatcherView;
   @state() private watcherRefusal?: { code: string; params?: { field?: string } };
   @state() private watcherRemoveError = "";
+  @state() private watcherEnableError = "";
   @state() private draft: StationInput = {
     name: "",
     displayOrder: 0,
@@ -1685,6 +1693,10 @@ export class PrepStationsScreen extends LitElement {
       watcher.printerIds
         .map((id) => view.printers.find((printer) => printer.id === id)?.name ?? id)
         .join(", ") || t("prep.none");
+    if (!watcher.active)
+      return html`<span part="disabled-watcher-cell" data-test=${`watcher-printers-${watcher.id}`}
+        >${names}</span
+      >`;
     const editor =
       this.watcherPrinterEditor?.watcherId === watcher.id ? this.watcherPrinterEditor : undefined;
     if (!editor)
@@ -1880,6 +1892,10 @@ export class PrepStationsScreen extends LitElement {
         : field === "zones"
           ? zones
           : t(watcher.runsPass ? "venue.yes" : "venue.no");
+    if (!watcher.active)
+      return html`<span part="disabled-watcher-cell" data-test=${`watcher-${field}-${watcher.id}`}
+        >${text}</span
+      >`;
     const editor =
       this.watcherCellEditor?.watcherId === watcher.id && this.watcherCellEditor.field === field
         ? this.watcherCellEditor
@@ -2307,14 +2323,22 @@ export class PrepStationsScreen extends LitElement {
   }
   #watchers() {
     const view = this.view!;
-    const ordered = [...view.watchers]
-      .filter((watcher) => watcher.active)
-      .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+    const inOrder = (watchers: readonly WatcherView[]) =>
+      [...watchers].sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+    const ordered = [...inOrder(view.watchers), ...inOrder(view.disabledWatchers)];
     const columns: DataTableColumn<WatcherView>[] = [
       {
         key: "name",
         label: t("prep.name"),
-        cell: (watcher) => html`<span data-test=${`watcher-${watcher.id}`}>${watcher.name}</span>`,
+        cell: (watcher) =>
+          watcher.active
+            ? html`<span data-test=${`watcher-${watcher.id}`}>${watcher.name}</span>`
+            : html`<span part="disabled-watcher" data-test=${`watcher-${watcher.id}`}
+                ><span data-test=${`watcher-name-${watcher.id}`}>${watcher.name}</span
+                ><span data-test=${`watcher-status-${watcher.id}`}
+                  >${t("watchers.status_disabled")}</span
+                ></span
+              >`,
       },
       {
         key: "follows",
@@ -2335,7 +2359,10 @@ export class PrepStationsScreen extends LitElement {
         key: "screens",
         label: t("watchers.screens"),
         cell: (watcher) =>
-          html`<span part="watcher-cell" data-test=${`watcher-screens-${watcher.id}`}>
+          html`<span
+            part=${watcher.active ? "watcher-cell" : "watcher-cell disabled-watcher-cell"}
+            data-test=${`watcher-screens-${watcher.id}`}
+          >
             ${
               view.devices
                 .filter((device) => device.watcherId === watcher.id)
@@ -2358,30 +2385,47 @@ export class PrepStationsScreen extends LitElement {
         label: t("prep.actions"),
         pinned: "end",
         cell: (watcher) =>
-          html`<wt-row-actions .label=${`${watcher.name}: ${t("prep.actions")}`}>
-            <wt-button
-              variant="secondary"
-              data-test=${`rename-watcher-${watcher.id}`}
-              @click=${() => {
-                this.watcherRename = {
-                  id: watcher.id,
-                  name: watcher.name,
-                  attempted: false,
-                  fieldError: "",
-                  error: "",
-                };
-              }}
-              >${t("venue.rename")}</wt-button
-            >
-            <wt-button
-              variant="danger"
-              data-test=${`remove-watcher-${watcher.id}`}
-              @click=${() => {
-                this.watcherRemoval = watcher;
-                this.watcherRemoveError = "";
-              }}
-              >${t("watchers.remove")}</wt-button
-            >
+          html`<wt-row-actions
+            data-test=${`watcher-actions-${watcher.id}`}
+            .label=${`${watcher.name}: ${t("prep.actions")}`}
+          >
+            ${
+              watcher.active
+                ? html`<wt-button
+                    variant="secondary"
+                    data-test=${`rename-watcher-${watcher.id}`}
+                    @click=${() => {
+                      this.watcherRename = {
+                        id: watcher.id,
+                        name: watcher.name,
+                        attempted: false,
+                        fieldError: "",
+                        error: "",
+                      };
+                    }}
+                    >${t("venue.rename")}</wt-button
+                  >`
+                : html`<wt-button
+                    variant="secondary"
+                    data-test=${`enable-watcher-${watcher.id}`}
+                    ?disabled=${this.busy}
+                    @click=${() => void this.#enableWatcher(watcher)}
+                    >${t("prep.enable")}</wt-button
+                  >`
+            }
+            ${
+              watcher.active || !watcher.inUse
+                ? html`<wt-button
+                    variant="danger"
+                    data-test=${`remove-watcher-${watcher.id}`}
+                    @click=${() => {
+                      this.watcherRemoval = watcher;
+                      this.watcherRemoveError = "";
+                    }}
+                    >${t(watcher.inUse ? "prep.disable" : "prep.delete")}</wt-button
+                  >`
+                : nothing
+            }
           </wt-row-actions>`,
       },
     ];
@@ -2394,7 +2438,35 @@ export class PrepStationsScreen extends LitElement {
         rowKey="id"
         .emptyLabel=${t("venue.combobox_no_results")}
       ></wt-data-table>
+      ${this.watcherEnableError ? html`<p class="error" role="alert" data-test="watcher-enable-error">${this.watcherEnableError}</p>` : nothing}
     </section>`;
+  }
+  /** Comes back with its name, follows and order; the printers it lost when disabled stay lost. */
+  async #enableWatcher(watcher: WatcherView) {
+    if (this.busy) return;
+    this.busy = true;
+    this.watcherEnableError = "";
+    try {
+      await this.api.enableWatcher(watcher.id);
+    } catch (error) {
+      const code = codeOf(error);
+      this.watcherEnableError =
+        code === "watcher.name_taken"
+          ? format("watchers.enable_name_taken", { name: watcher.name })
+          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error");
+      this.busy = false;
+      return;
+    }
+    await this.#load();
+    this.busy = false;
+    await this.updateComplete;
+    const table = this.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >('[data-test="watchers-table"]');
+    await table?.updateComplete;
+    table?.shadowRoot
+      ?.querySelector<HTMLElement>(`[data-test="watcher-actions-${watcher.id}"]`)
+      ?.focus();
   }
   async #saveWatcherName() {
     const draft = this.watcherRename;
@@ -2552,13 +2624,15 @@ export class PrepStationsScreen extends LitElement {
             size="compact"
             open
             data-test="remove-watcher-modal"
-            heading=${t("watchers.remove")}
+            heading=${this.watcherRemoval.inUse ? t("prep.disable") : t("watchers.delete_heading")}
             .dismissible=${!this.busy}
             @wt-close=${() => {
               this.watcherRemoval = undefined;
             }}
           >
-            <p>${format("watchers.remove_confirm", { name: this.watcherRemoval.name })}</p>
+            <p>
+              ${format(this.watcherRemoval.inUse ? "watchers.disable_confirm" : "watchers.delete_confirm", { name: this.watcherRemoval.name })}
+            </p>
             ${this.watcherRemoveError ? html`<p class="error" role="alert">${this.watcherRemoveError}</p>` : nothing}
             <wt-form-actions slot="footer"
               ><wt-button
@@ -2573,7 +2647,7 @@ export class PrepStationsScreen extends LitElement {
                 variant="danger"
                 ?disabled=${this.busy}
                 @click=${() => void this.#removeWatcher()}
-                >${t("watchers.remove")}</wt-button
+                >${t(this.watcherRemoval.inUse ? "prep.disable" : "prep.delete")}</wt-button
               ></wt-form-actions
             >
           </wt-modal>`

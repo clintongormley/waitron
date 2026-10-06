@@ -3,7 +3,9 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { Course, DashboardApi } from "../api/client.js";
@@ -112,6 +114,9 @@ export class CourseList extends LitElement {
   @state() private disabled: Course[] = [];
   @state() private edit: Edit | null = null;
   @state() private errorKey: string | null = null;
+  /** A Delete waiting for its confirmation; a refused one stays open with its refusal. */
+  @state() private deleting: { course: Course; errorKey: string | null; busy: boolean } | null =
+    null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
   readonly #writes = new ListWriteQueue();
@@ -351,12 +356,33 @@ export class CourseList extends LitElement {
 
   // ── Removal and Enable ─────────────────────────────────────────────────────────────────────────
 
-  /** The server deletes a course nothing names and disables one something does. */
+  /** The server deletes a course nothing names and disables one something does; a Delete asks first. */
   #remove(course: Course): void {
+    if (!course.inUse) {
+      this.deleting = { course, errorKey: null, busy: false };
+      return;
+    }
+    this.#change(() => this.api.removeCourse(course.id), this.#neighbour(course));
+  }
+
+  #confirmDelete(): void {
+    const target = this.deleting;
+    if (target === null || target.busy) return;
+    this.deleting = { ...target, errorKey: null, busy: true };
+    this.#change(() => this.api.removeCourse(target.course.id), this.#neighbour(target.course), {
+      refused: (error) => {
+        this.deleting = { ...target, errorKey: codeOf(error), busy: false };
+      },
+      sent: () => {
+        this.deleting = null;
+      },
+    });
+  }
+
+  #neighbour(course: Course): string | undefined {
     const rows = course.active ? this.courses : this.disabled;
     const at = rows.indexOf(course);
-    const neighbour = rows[at + 1] ?? rows[at - 1];
-    this.#change(() => this.api.removeCourse(course.id), neighbour?.id);
+    return (rows[at + 1] ?? rows[at - 1])?.id;
   }
 
   #enable(course: Course): void {
@@ -364,15 +390,21 @@ export class CourseList extends LitElement {
   }
 
   /** Sends one row's change, then puts focus on the row `focusId` names if it is still listed. */
-  #change(send: () => Promise<void>, focusId: string | undefined): void {
+  #change(
+    send: () => Promise<void>,
+    focusId: string | undefined,
+    report: { refused?: (error: unknown) => void; sent?: () => void } = {},
+  ): void {
     this.#showError(null);
     this.#writes.run(SCOPE, async () => {
       try {
         await send();
       } catch (error) {
-        this.#showError(codeOf(error));
+        if (report.refused) report.refused(error);
+        else this.#showError(codeOf(error));
         return;
       }
+      report.sent?.();
       await this.#load();
       if (this.courses.some((row) => row.id === focusId)) await this.#focusName(focusId!);
       else if (this.disabled.some((row) => row.id === focusId))
@@ -446,6 +478,42 @@ export class CourseList extends LitElement {
     </tr>`;
   }
 
+  #deleteDialog(): TemplateResult | typeof nothing {
+    const target = this.deleting;
+    if (target === null) return nothing;
+    return html`<wt-modal
+      open
+      size="compact"
+      data-test="delete-course-modal"
+      heading=${t("kitchen.delete_course")}
+      .dismissible=${!target.busy}
+      @wt-close=${() => {
+        this.deleting = null;
+      }}
+    >
+      <p>${t("kitchen.delete_course_confirm").replace("{name}", target.course.name)}</p>
+      <wt-form-actions
+        slot="footer"
+        .error=${target.errorKey === null ? "" : codeMessage(target.errorKey)}
+        ><wt-button
+          slot="cancel"
+          variant="secondary"
+          ?disabled=${target.busy}
+          @click=${() => {
+            this.deleting = null;
+          }}
+          >${t("action.cancel")}</wt-button
+        ><wt-button
+          data-test="confirm-delete-course"
+          variant="danger"
+          ?disabled=${target.busy}
+          @click=${() => this.#confirmDelete()}
+          >${t("action.delete")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-modal>`;
+  }
+
   #table(adding: Edit | null): TemplateResult {
     if (this.readOnly)
       return html`<ul>
@@ -512,7 +580,8 @@ export class CourseList extends LitElement {
               >${t("kitchen.add_course")}</wt-button
             >
           </div>`
-    }`;
+    }
+    ${this.#deleteDialog()}`;
   }
 }
 

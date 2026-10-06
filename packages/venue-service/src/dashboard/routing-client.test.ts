@@ -33,13 +33,50 @@ it("loads the routing and station context, including each station printer assign
     "/management-api/products": [],
     "/management-api/printers": [],
     "/management-api/devices": [],
-    "/management-api/watchers": [],
+    "/management-api/watchers?includeDisabled=true": [],
     "/management-api/stations/bar/printers": [{ stationId: "bar", printerId: "receipt" }],
   };
   const request = vi.fn(async (path: string) => responses[path]);
   const view = await new PrepStationsApi(request as DashboardRequest).load();
   expect(request.mock.calls.map((call) => call[0])).toEqual(Object.keys(responses));
   expect(view.stationPrinters).toEqual([{ stationId: "bar", printerId: "receipt" }]);
+});
+
+it("reads disabled watchers too, keeping them out of the watchers every other part of the page reads", async () => {
+  const watcher = {
+    displayOrder: 0,
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: false,
+    printerIds: [],
+    inUse: false,
+  };
+  const pass = { ...watcher, id: "pass", name: "Pass", active: true };
+  const old = { ...watcher, id: "old", name: "Old pass", active: false };
+  const request = vi.fn(async (path: string) =>
+    path === "/management-api/watchers?includeDisabled=true"
+      ? [old, pass]
+      : path === "/management-api/venue-service/routing"
+        ? {
+            claims: [],
+            exceptions: [],
+            unassigned: { folders: [], products: [] },
+            defaultStationId: null,
+            stations: [],
+          }
+        : [],
+  );
+  const view = await new PrepStationsApi(request as DashboardRequest).load();
+  expect(view.watchers).toEqual([pass]);
+  expect(view.disabledWatchers).toEqual([old]);
+});
+
+it("enables a disabled watcher through its reactivate route", async () => {
+  const request = vi.fn(async () => undefined);
+  await new PrepStationsApi(request as DashboardRequest).enableWatcher("old");
+  expect(request.mock.calls).toEqual([["/management-api/watchers/old/reactivate", "POST"]]);
 });
 
 it("creates, updates and removes watchers through management routes", async () => {

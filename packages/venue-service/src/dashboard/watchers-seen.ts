@@ -10,6 +10,8 @@ export interface WatcherView {
   zoneIds: readonly string[];
   runsPass: boolean;
   printerIds: readonly string[];
+  /** Something refers to it, so removing it disables it rather than deleting it. */
+  inUse: boolean;
 }
 
 /** Keep this rule aligned with watcherSees in apps/server/src/watchers.ts. */

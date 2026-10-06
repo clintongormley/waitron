@@ -92,6 +92,7 @@ it("keeps an edited watcher's saved display order", async () => {
     zoneIds: [],
     runsPass: true,
     printerIds: [],
+    inUse: false,
   };
   await form.updateComplete;
   change(form, '[name="name"]', { value: "Main pass" });
@@ -177,6 +178,7 @@ it("clears an old edit when opened for a new watcher", async () => {
     zoneIds: [],
     runsPass: true,
     printerIds: [],
+    inUse: false,
   };
   await form.updateComplete;
   form.watcher = undefined;

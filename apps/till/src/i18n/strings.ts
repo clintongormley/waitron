@@ -228,8 +228,10 @@ export const en = {
   "expo.marked_done": "{dish} marked done.",
   "expo.undo": "Undo",
   "expo.watcher_empty": "Nothing waiting here",
-  "expo.watcher_removed":
-    "This screen's watcher was removed. Ask a manager to set this screen up again.",
+  "expo.watcher_disabled":
+    "This screen's watcher was disabled. A manager can enable it again in Prep stations → Watchers, or set this screen up again.",
+  "expo.watcher_deleted":
+    "This screen's watcher was deleted. Ask a manager to set this screen up again.",
   "cancel.reason_prompt": "Reason for cancelling",
   // Integrated card terminal
   "card.collecting": "Tap or insert card…",
@@ -1180,7 +1182,9 @@ export const es: Record<StringKey, string> = {
   "expo.marked_done": "{dish} marcado como hecho.",
   "expo.undo": "Deshacer",
   "expo.watcher_empty": "Nada pendiente aquí",
-  "expo.watcher_removed":
+  "expo.watcher_disabled":
+    "Se ha deshabilitado el punto de seguimiento de esta pantalla. Un encargado puede volver a habilitarlo en Estaciones de preparación → Puntos de seguimiento, o volver a configurar esta pantalla.",
+  "expo.watcher_deleted":
     "Se ha eliminado el punto de seguimiento de esta pantalla. Pide a un encargado que vuelva a configurarla.",
   "cancel.reason_prompt": "Motivo de la cancelación",
   "card.collecting": "Acerca o inserta la tarjeta…",

@@ -6,6 +6,7 @@ import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
 import type { PrepStationsApi, PrepStationsView, StationHealthSnapshot } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
+import type { WatcherView } from "./watchers-seen.js";
 import "./prep-stations-screen.js";
 
 registerIcons({
@@ -75,6 +76,7 @@ const view: PrepStationsView = {
   stationPrinters: [],
   devices: [],
   watchers: [],
+  disabledWatchers: [],
 };
 function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
   const load = overrides.load ?? vi.fn().mockResolvedValue(view);
@@ -209,6 +211,7 @@ it("creates, edits and confirms removal of a watcher", async () => {
     zoneIds: [],
     runsPass: true,
     printerIds: [],
+    inUse: true,
   };
   const a = api({
     load: vi.fn().mockResolvedValue({ ...view, watchers: [pass] }),
@@ -3456,6 +3459,7 @@ it.each([
       zoneIds: [],
       runsPass: true,
       printerIds: [],
+      inUse: true,
     };
     const el = await mount(
       api({
@@ -4122,6 +4126,7 @@ const ticketView: PrepStationsView = {
       zoneIds: [],
       runsPass: true,
       printerIds: ["watcher"],
+      inUse: true,
     },
   ],
 };
@@ -5868,4 +5873,311 @@ it("Routing puts a refused unassigned folder claim beside that folder without wr
   expect(q(el, '[data-field-error="cocktails"]')).toBeNull();
   expect(a.setClaim).not.toHaveBeenCalled();
   expect(q(el, '[data-test="preview"]')).toBeNull();
+});
+
+const watcherRow = (id: string, name: string, extra: Partial<WatcherView> = {}): WatcherView => ({
+  id,
+  name,
+  active: true,
+  displayOrder: 0,
+  everyStation: true,
+  stationIds: [],
+  everyZone: true,
+  zoneIds: [],
+  runsPass: false,
+  printerIds: [],
+  inUse: false,
+  ...extra,
+});
+/** Pass is on a screen, Runner is on nothing; Old pass is disabled and on a screen, Spare on nothing. */
+function retainedWatchersView(): PrepStationsView {
+  const server = structuredClone(ticketView);
+  server.watchers = [
+    { ...server.watchers[0]!, inUse: true },
+    watcherRow("runner", "Runner", { displayOrder: 1 }),
+  ];
+  server.disabledWatchers = [
+    watcherRow("old", "Old pass", {
+      active: false,
+      inUse: true,
+      everyStation: false,
+      stationIds: ["bar"],
+    }),
+    watcherRow("spare", "Spare", { active: false, displayOrder: 2 }),
+  ];
+  server.printers.push({ id: "spare-printer", name: "Spare printer", active: true });
+  server.disabledWatchers[0]!.printerIds = ["spare-printer"];
+  return server;
+}
+const watcherMenu = (el: PrepStationsScreen, id: string) =>
+  [...q(el, `[data-test="watcher-actions-${id}"]`)!.querySelectorAll("wt-button")].map((button) =>
+    button.textContent!.trim(),
+  );
+const watcherRowIds = (el: PrepStationsScreen) =>
+  [...q(el, '[data-test="watchers-table"]')!.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
+    row.querySelector('[data-test^="watcher-"]')?.getAttribute("data-test"),
+  );
+
+it.each([
+  { locale: "en", remove: "Delete", disable: "Disable", enable: "Enable", status: "Disabled" },
+  {
+    locale: "es",
+    remove: "Eliminar",
+    disable: "Deshabilitar",
+    enable: "Habilitar",
+    status: "Deshabilitado",
+  },
+] as const)(
+  "Watchers offers Delete, Disable or Enable by what refers to each watcher ($locale)",
+  async ({ locale, remove, disable, enable, status }) => {
+    const { el } = await mountWatcherPrinters({
+      load: vi.fn().mockResolvedValue(retainedWatchersView()),
+    });
+    setLocale(locale);
+    el.requestUpdate();
+    await settle(el);
+    expect(watcherMenu(el, "runner")).toEqual([
+      locale === "en" ? "Rename" : "Cambiar nombre",
+      remove,
+    ]);
+    expect(watcherMenu(el, "pass").at(-1)).toBe(disable);
+    expect(watcherMenu(el, "old")).toEqual([enable]);
+    expect(watcherMenu(el, "spare")).toEqual([enable, remove]);
+    expect(q(el, '[data-test="watcher-status-old"]')!.textContent!.trim()).toBe(status);
+  },
+);
+
+it("Watchers lists disabled watchers after the active ones, muted, with a gap before their status", async () => {
+  const { el } = await mountWatcherPrinters({
+    load: vi.fn().mockResolvedValue(retainedWatchersView()),
+  });
+  expect(watcherRowIds(el)).toEqual([
+    "watcher-pass",
+    "watcher-runner",
+    "watcher-old",
+    "watcher-spare",
+  ]);
+  for (const id of ["pass", "runner"])
+    expect(q(el, `[data-test="watcher-status-${id}"]`)).toBeNull();
+  const name = q(el, '[data-test="watcher-name-old"]')!;
+  const status = q(el, '[data-test="watcher-status-old"]')!;
+  expect(name.textContent!.trim()).toBe("Old pass");
+  expect(status.textContent!.trim()).toBe("Disabled");
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-text-muted)";
+  el.shadowRoot!.appendChild(probe);
+  const muted = getComputedStyle(probe).color;
+  probe.remove();
+  expect(getComputedStyle(name).color).toBe(muted);
+  expect(getComputedStyle(q(el, '[data-test="watcher-follows-old"]')!).color).toBe(muted);
+  expect(getComputedStyle(q(el, '[data-test="watcher-pass"]')!).color).not.toBe(muted);
+  expect(status.getBoundingClientRect().left - name.getBoundingClientRect().right).toBeGreaterThan(
+    4,
+  );
+});
+
+it("Watchers gives a disabled watcher no Rename and no follows, zones, pass or printer editing", async () => {
+  const { el } = await mountWatcherPrinters({
+    load: vi.fn().mockResolvedValue(retainedWatchersView()),
+  });
+  for (const id of ["old", "spare"]) {
+    expect(q(el, `[data-test="rename-watcher-${id}"]`)).toBeNull();
+    for (const field of ["follows", "zones", "pass", "printers"])
+      expect(q(el, `[data-test="edit-watcher-${field}-${id}"]`)).toBeNull();
+  }
+  expect(q(el, '[data-test="watcher-follows-old"]')!.textContent!.trim()).toBe("Bar");
+  expect(q(el, '[data-test="watcher-zones-old"]')!.textContent!.trim()).toBe("every service zone");
+  expect(q(el, '[data-test="watcher-pass-old"]')!.textContent!.trim()).toBe("No");
+  expect(q(el, '[data-test="watcher-printers-old"]')!.textContent!.trim()).toBe("Spare printer");
+  expect(q(el, '[data-test="rename-watcher-pass"]')).not.toBeNull();
+  expect(q(el, '[data-test="edit-watcher-follows-pass"]')).not.toBeNull();
+});
+
+it.each([
+  {
+    locale: "en",
+    heading: "Delete watcher",
+    text: "Delete Runner? This cannot be undone.",
+    button: "Delete",
+  },
+  {
+    locale: "es",
+    heading: "Eliminar punto de seguimiento",
+    text: "¿Eliminar Runner? Esta acción no se puede deshacer.",
+    button: "Eliminar",
+  },
+] as const)(
+  "Watchers confirms Delete of a watcher nothing refers to, then removes it and reads again ($locale)",
+  async ({ locale, heading, text, button }) => {
+    const load = vi.fn().mockResolvedValue(retainedWatchersView());
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountWatcherPrinters({ load, removeWatcher: remove });
+    setLocale(locale);
+    el.requestUpdate();
+    await settle(el);
+    q(el, '[data-test="remove-watcher-runner"]')!.click();
+    await settle(el);
+    const modal = q(el, '[data-test="remove-watcher-modal"]')! as HTMLElement & { heading: string };
+    expect(modal.getAttribute("size")).toBe("compact");
+    expect(modal.heading).toBe(heading);
+    expect(modal.querySelector("p")!.textContent!.trim()).toBe(text);
+    const confirm = q(el, '[data-test="confirm-remove-watcher"]')!;
+    expect(confirm.getAttribute("variant")).toBe("danger");
+    expect(confirm.textContent!.trim()).toBe(button);
+    const reads = load.mock.calls.length;
+    confirm.click();
+    await settle(el);
+    expect(remove.mock.calls).toEqual([["runner"]]);
+    expect(load).toHaveBeenCalledTimes(reads + 1);
+    expect(q(el, '[data-test="remove-watcher-modal"]')).toBeNull();
+  },
+);
+
+it.each([
+  {
+    locale: "en",
+    heading: "Disable",
+    text: "Disable Pass? Its printers stop printing its copies.",
+    button: "Disable",
+  },
+  {
+    locale: "es",
+    heading: "Deshabilitar",
+    text: "¿Deshabilitar Pass? Sus impresoras dejarán de imprimir sus copias.",
+    button: "Deshabilitar",
+  },
+] as const)(
+  "Watchers confirms Disable of a watcher something refers to, then removes it and reads again ($locale)",
+  async ({ locale, heading, text, button }) => {
+    const load = vi.fn().mockResolvedValue(retainedWatchersView());
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountWatcherPrinters({ load, removeWatcher: remove });
+    setLocale(locale);
+    el.requestUpdate();
+    await settle(el);
+    q(el, '[data-test="remove-watcher-pass"]')!.click();
+    await settle(el);
+    const modal = q(el, '[data-test="remove-watcher-modal"]')! as HTMLElement & { heading: string };
+    expect(modal.getAttribute("size")).toBe("compact");
+    expect(modal.heading).toBe(heading);
+    expect(modal.querySelector("p")!.textContent!.trim()).toBe(text);
+    const confirm = q(el, '[data-test="confirm-remove-watcher"]')!;
+    expect(confirm.getAttribute("variant")).toBe("danger");
+    expect(confirm.textContent!.trim()).toBe(button);
+    const reads = load.mock.calls.length;
+    confirm.click();
+    await settle(el);
+    expect(remove.mock.calls).toEqual([["pass"]]);
+    expect(load).toHaveBeenCalledTimes(reads + 1);
+  },
+);
+
+it("Watchers confirms Delete of a disabled watcher nothing refers to", async () => {
+  const remove = vi.fn().mockResolvedValue(undefined);
+  const { el } = await mountWatcherPrinters({
+    load: vi.fn().mockResolvedValue(retainedWatchersView()),
+    removeWatcher: remove,
+  });
+  q(el, '[data-test="remove-watcher-spare"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-test="remove-watcher-modal"]')!.querySelector("p")!.textContent!.trim()).toBe(
+    "Delete Spare? This cannot be undone.",
+  );
+  q(el, '[data-test="confirm-remove-watcher"]')!.click();
+  await settle(el);
+  expect(remove.mock.calls).toEqual([["spare"]]);
+});
+
+it("Watchers enables a disabled watcher, reads again, and puts focus on its menu", async () => {
+  const before = retainedWatchersView();
+  const after = retainedWatchersView();
+  after.watchers.push({ ...after.disabledWatchers[0]!, active: true });
+  after.disabledWatchers.splice(0, 1);
+  const load = vi.fn().mockResolvedValueOnce(before).mockResolvedValue(after);
+  const enable = vi.fn().mockResolvedValue(undefined);
+  const remove = vi.fn();
+  const { el } = await mountWatcherPrinters({ load, enableWatcher: enable, removeWatcher: remove });
+  q(el, '[data-test="enable-watcher-old"]')!.click();
+  await settle(el);
+  expect(enable.mock.calls).toEqual([["old"]]);
+  expect(remove).not.toHaveBeenCalled();
+  expect(load).toHaveBeenCalledTimes(2);
+  expect(q(el, '[data-test="watcher-status-old"]')).toBeNull();
+  expect(q(el, '[data-test="rename-watcher-old"]')).not.toBeNull();
+  const table = q(el, '[data-test="watchers-table"]')!;
+  await vi.waitFor(() =>
+    expect(table.shadowRoot!.activeElement).toBe(q(el, '[data-test="watcher-actions-old"]')),
+  );
+});
+
+it.each([
+  {
+    locale: "en",
+    code: "watcher.name_taken",
+    message:
+      "Old pass cannot be enabled: an active watcher already has that name. Rename that watcher first, then enable this one.",
+  },
+  {
+    locale: "es",
+    code: "watcher.name_taken",
+    message:
+      "No se puede habilitar Old pass: un punto de seguimiento activo ya tiene ese nombre. Cambia primero el nombre de ese punto de seguimiento y luego habilita este.",
+  },
+  { locale: "en", code: "watcher.not_found", message: "This watcher could not be found." },
+  { locale: "en", code: "connection.failed", message: "The change could not be saved." },
+] as const)(
+  "Watchers explains a refused Enable ($locale, $code) and reads nothing again",
+  async ({ locale, code, message }) => {
+    const load = vi.fn().mockResolvedValue(retainedWatchersView());
+    const { el } = await mountWatcherPrinters({
+      load,
+      enableWatcher: vi.fn().mockRejectedValue({ code, params: { name: "Old pass" } }),
+    });
+    setLocale(locale);
+    el.requestUpdate();
+    await settle(el);
+    q(el, '[data-test="enable-watcher-old"]')!.click();
+    await settle(el);
+    const alert = q(el, '[data-test="watcher-enable-error"]')!;
+    expect(alert.getAttribute("role")).toBe("alert");
+    expect(alert.textContent!.trim()).toBe(message);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(q(el, '[data-test="watcher-status-old"]')).not.toBeNull();
+  },
+);
+
+it("keeps a disabled watcher out of the stations' watcher lists, the route tester and the printer pickers", async () => {
+  const { el, table } = await mountTickets({
+    load: vi.fn().mockResolvedValue(retainedWatchersView()),
+    explain: vi.fn().mockResolvedValue({
+      route: { kind: "station", stationId: "bar" },
+      decidedBy: { kind: "default" },
+      fallbacks: [],
+      noReplacement: false,
+      stations: [],
+    }),
+  });
+  const follows = ticketQ(table, '[data-test="watchers-bar"]')!.textContent!;
+  expect(follows).toContain("Pass, Runner");
+  expect(follows).not.toContain("Old pass");
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  const choice = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+  expect(choice.options.find((row) => row.value === "spare-printer")).toEqual({
+    value: "spare-printer",
+    label: "Spare printer",
+    disabled: false,
+    description: undefined,
+  });
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Watched by: Pass, Runner");
+  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Old pass");
+  history.replaceState(null, "", "/manage/prep-stations/view/watchers");
+  const watcherPicker = await openWatcherPrinters(el);
+  expect(watcherPicker.options.find((row) => row.value === "spare-printer")?.description).toBe(
+    undefined,
+  );
 });

@@ -1923,6 +1923,16 @@ describe("catalogue-screen", () => {
       );
       return el;
     }
+    /** Deletes a course nothing refers to from the window: its Delete, then the confirmation. */
+    async function deleteInWindow(el: CatalogueScreen, id: string): Promise<void> {
+      inList(el, `[data-test="remove-${id}"]`).click();
+      await vi.waitFor(() =>
+        expect(
+          courseList(el)!.shadowRoot!.querySelector('[data-test="confirm-delete-course"]'),
+        ).not.toBeNull(),
+      );
+      inList(el, '[data-test="confirm-delete-course"]').click();
+    }
     /** Opens the list's new row and types a name into it, leaving focus in the field. */
     async function typeNewCourse(el: CatalogueScreen, name: string): Promise<void> {
       await userEvent.click(inList(el, '[data-test="add-course"]'));
@@ -2044,7 +2054,7 @@ describe("catalogue-screen", () => {
       const el = await openCourses(api, "k1");
       await typeNewCourse(el, "Postres");
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
-      inList(el, '[data-test="remove-k2"]').click();
+      await deleteInWindow(el, "k2");
       await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
       await new Promise((resolve) => setTimeout(resolve, 300));
       await flush(el);
@@ -2147,7 +2157,7 @@ describe("catalogue-screen", () => {
     it("clears the product's course when the window removed it", async () => {
       const api = courseApi();
       const el = await openCourses(api, "k2");
-      inList(el, '[data-test="remove-k2"]').click();
+      await deleteInWindow(el, "k2");
       await vi.waitFor(() => expect(inList(el, '[data-test="name-k2"]')).toBeNull());
       await done(el);
       expect(editor(el).currentValue.courseId).toBeNull();
@@ -2158,7 +2168,7 @@ describe("catalogue-screen", () => {
     it("keeps the product's course when the window neither added a course nor removed it", async () => {
       const api = courseApi();
       const el = await openCourses(api, "k2");
-      inList(el, '[data-test="remove-k1"]').click();
+      await deleteInWindow(el, "k1");
       await vi.waitFor(() => expect(inList(el, '[data-test="name-k1"]')).toBeNull());
       await done(el);
       expect(editor(el).currentValue.courseId).toBe("k2");
@@ -2171,7 +2181,7 @@ describe("catalogue-screen", () => {
       const api = courseApi();
       const el = await openCourses(api, "k1");
       await addCourse(el, "Postres");
-      inList(el, '[data-test="remove-k-new"]').click();
+      await deleteInWindow(el, "k-new");
       await vi.waitFor(() => expect(inList(el, '[data-test="name-k-new"]')).toBeNull());
       await done(el);
       expect(editor(el).currentValue.courseId).toBe("k1");

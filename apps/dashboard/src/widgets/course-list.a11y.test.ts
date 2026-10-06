@@ -33,7 +33,10 @@ function stubApi(state: State): DashboardApi {
           ),
     createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
     updateCourse: vi.fn().mockResolvedValue(undefined),
-    removeCourse: vi.fn().mockResolvedValue(undefined),
+    removeCourse:
+      state === "Delete dialog, refused"
+        ? vi.fn().mockRejectedValue({ code: "connection.failed" })
+        : vi.fn().mockResolvedValue(undefined),
     enableCourse: vi.fn().mockResolvedValue(undefined),
     moveCourse: vi.fn().mockResolvedValue(COURSES),
   } as unknown as DashboardApi;
@@ -48,6 +51,8 @@ const states = [
   "menu open at phone width",
   "with a disabled course",
   "disabled course's menu open at phone width",
+  "Delete dialog at phone width",
+  "Delete dialog, refused",
 ] as const;
 type State = (typeof states)[number];
 
@@ -92,6 +97,23 @@ describe.each(["light", "dark"] as const)("course list (%s)", (theme) => {
       (q('tr[data-course="d1"] wt-row-actions') as unknown as WtRowActions).show();
       await settle(el);
       expect(q('[data-test="enable-d1"]')).not.toBeNull();
+    }
+    if (state.startsWith("Delete dialog")) {
+      q('[data-test="remove-c1"]').click();
+      await settle(el);
+      expect(q('[data-test="delete-course-modal"]')).not.toBeNull();
+    }
+    if (state === "Delete dialog, refused") {
+      q('[data-test="confirm-delete-course"]').click();
+      await vi.waitFor(() =>
+        expect(
+          (
+            q('[data-test="delete-course-modal"] wt-form-actions') as HTMLElement & {
+              error: string;
+            }
+          ).error,
+        ).not.toBe(""),
+      );
     }
     await expectNoA11yViolations(host);
   });

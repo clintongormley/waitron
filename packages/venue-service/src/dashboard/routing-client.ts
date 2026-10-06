@@ -75,7 +75,9 @@ export interface PrepStationsView {
     kind: string;
     active: boolean;
   }[];
+  /** The active watchers. Only the Watchers tab lists `disabledWatchers` as well. */
   watchers: WatcherView[];
+  disabledWatchers: WatcherView[];
 }
 interface ListedProduct {
   id: string;
@@ -137,6 +139,7 @@ export class PrepStationsApi {
         stationPrinters: [],
         devices: [],
         watchers: [],
+        disabledWatchers: [],
       };
     }
     const [routing, stations, categories, zones, products, printers, devices, watchers] =
@@ -148,7 +151,7 @@ export class PrepStationsApi {
         this.#read<ListedProduct[]>("/management-api/products"),
         this.#read<PrepStationsView["printers"]>("/management-api/printers"),
         this.#read<PrepStationsView["devices"]>("/management-api/devices"),
-        this.#read<WatcherView[]>("/management-api/watchers"),
+        this.#read<WatcherView[]>("/management-api/watchers?includeDisabled=true"),
       ]);
     const stationPrinters = (
       await Promise.all(
@@ -178,7 +181,8 @@ export class PrepStationsApi {
       printers,
       stationPrinters,
       devices,
-      watchers,
+      watchers: watchers.filter((watcher) => watcher.active),
+      disabledWatchers: watchers.filter((watcher) => !watcher.active),
     };
   }
   preview(change: RoutingChange): Promise<RoutingMove[]> {
@@ -214,8 +218,12 @@ export class PrepStationsApi {
   setWatcherPrinters(id: string, printerIds: readonly string[]): Promise<void> {
     return this.request(`/management-api/watchers/${id}/printers`, "PUT", { printerIds });
   }
+  /** The server deletes a watcher nothing refers to and disables one something does. */
   removeWatcher(id: string): Promise<void> {
     return this.request(`/management-api/watchers/${id}`, "DELETE");
+  }
+  enableWatcher(id: string): Promise<void> {
+    return this.request(`/management-api/watchers/${id}/reactivate`, "POST");
   }
   updateStation(
     id: string,

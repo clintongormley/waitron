@@ -247,7 +247,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations when the selected watcher was removed", async () => {
+  it("has no violations when the selected watcher was disabled", async () => {
     const api = {
       ...stubApi(),
       listWatchers: vi.fn().mockResolvedValue([{ id: "pass", name: "Pass", runsPass: true }]),
@@ -260,7 +260,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="pass"]')!.click();
     await flush(el);
-    expect(el.shadowRoot!.textContent).toContain("watcher was removed");
+    expect(el.shadowRoot!.textContent).toContain("watcher was disabled");
     await expectNoA11yViolations(host);
   });
   it("has no violations on a populated pass board (all three levers, both age extremes)", async () => {
