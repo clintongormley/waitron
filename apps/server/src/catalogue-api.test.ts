@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, categories, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -6231,4 +6231,45 @@ it("marks shared snapshots with the catalogue write revision they include", asyn
   expect(refused.headers.get("x-waitron-menu-revision")).toBeNull();
   const unchanged = await send(app, "GET", `${path}/read?part=home`);
   expect((await unchanged.json()).revision).toEqual(committed);
+});
+
+it("keeps a shared snapshot's revision with its data when a write commits before the response", async () => {
+  const app = mountApp();
+  const id = await createCatalogueVia(app, "Snapshot response race");
+  const path = `/management-api/catalogues/${id}`;
+  const before = await (await send(app, "GET", `${path}/read?part=home`)).json();
+  const lock = suite.db.withWriteLock.bind(suite.db);
+  let intervene = true;
+  let savedRevision: unknown;
+  const boundary = vi.spyOn(suite.db, "withWriteLock").mockImplementation(async (work) => {
+    const result = await lock(work);
+    if (intervene) {
+      intervene = false;
+      const write = await send(app, "PATCH", `${path}/home-display`, {
+        body: { device: "handheld", columns: 5 },
+      });
+      expect(write.status).toBe(204);
+      savedRevision = JSON.parse(write.headers.get("x-waitron-menu-revision") ?? "null");
+    }
+    return result;
+  });
+  try {
+    const response = await send(app, "GET", `${path}/read?part=home`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      revision: before.revision,
+      home: { status: 200, body: { handheld: { columns: 3 } } },
+    });
+    expect(savedRevision).toEqual({
+      epoch: before.revision.epoch,
+      sequence: before.revision.sequence + 1,
+    });
+    const after = await send(app, "GET", `${path}/read?part=home`);
+    expect(await after.json()).toMatchObject({
+      revision: savedRevision,
+      home: { status: 200, body: { handheld: { columns: 5 } } },
+    });
+  } finally {
+    boundary.mockRestore();
+  }
 });

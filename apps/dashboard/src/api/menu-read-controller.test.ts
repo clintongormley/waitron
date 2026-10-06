@@ -433,3 +433,91 @@ it.each([
     );
   },
 );
+
+it("forces a manual refresh even when its snapshot includes the latest successful write", async () => {
+  vi.useFakeTimers();
+  let columns = 3;
+  const values: MenuReadResult[] = [];
+  const reads: string[] = [];
+  const api = new DashboardApi("", async (path, init) => {
+    const revision = { epoch: "server", sequence: 1 };
+    if (init.method !== "GET")
+      return new Response(null, {
+        status: 204,
+        headers: { "x-waitron-menu-revision": JSON.stringify(revision) },
+      });
+    reads.push(path);
+    return Response.json({
+      revision,
+      home: { status: 200, body: { handheld: { columns } } },
+    });
+  });
+  const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+  const controller = new MenuReadController(
+    host,
+    () => api,
+    () => {},
+  );
+  controllers.push(controller);
+  const initial = controller.watch("lunch", ["home"], (value) => values.push(value));
+  await vi.advanceTimersByTimeAsync(0);
+  await initial;
+  await api.setHomeDisplay("lunch", "handheld", { columns: 3 });
+  await controller.refresh(true);
+  expect(reads).toHaveLength(1);
+  columns = 5;
+  const forced = controller.refresh(false);
+  await vi.advanceTimersByTimeAsync(100);
+  await forced;
+  expect(reads).toHaveLength(2);
+  expect(values.at(-1)).toMatchObject({ home: { body: { handheld: { columns: 5 } } } });
+});
+
+it("reads the newer save back when an older save response arrives last", async () => {
+  vi.useFakeTimers();
+  let sequence = 5;
+  const answers: Array<(response: Response) => void> = [];
+  const reads: string[] = [];
+  const values: MenuReadResult[] = [];
+  const api = new DashboardApi("", async (path, init) => {
+    if (init.method !== "GET") return new Promise<Response>((resolve) => answers.push(resolve));
+    reads.push(path);
+    return Response.json({
+      revision: { epoch: "server", sequence },
+      home: { status: 200, body: { handheld: { columns: sequence === 5 ? 3 : 5 } } },
+    });
+  });
+  const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+  const controller = new MenuReadController(
+    host,
+    () => api,
+    () => {},
+  );
+  controllers.push(controller);
+  const initial = controller.watch("lunch", ["home"], (value) => values.push(value));
+  await vi.advanceTimersByTimeAsync(0);
+  await initial;
+  const older = api.setHomeDisplay("lunch", "handheld", { columns: 3 });
+  const newer = api.setHomeDisplay("lunch", "handheld", { columns: 5 });
+  expect(answers).toHaveLength(2);
+  answers[1]!(
+    new Response(null, {
+      status: 204,
+      headers: { "x-waitron-menu-revision": JSON.stringify({ epoch: "server", sequence: 6 }) },
+    }),
+  );
+  await newer;
+  answers[0]!(
+    new Response(null, {
+      status: 204,
+      headers: { "x-waitron-menu-revision": JSON.stringify({ epoch: "server", sequence: 5 }) },
+    }),
+  );
+  await older;
+  sequence = 6;
+  const refreshed = controller.refresh(true);
+  await vi.advanceTimersByTimeAsync(100);
+  await refreshed;
+  expect(reads).toHaveLength(2);
+  expect(values.at(-1)).toMatchObject({ home: { body: { handheld: { columns: 5 } } } });
+});

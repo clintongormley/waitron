@@ -427,10 +427,6 @@ function refuseRetiredFields(body: Record<string, unknown>): void {
       throw new AppError("management.request_invalid", { field: retired });
 }
 
-/**
- * `mountCatalogueApi`'s `gated`: one transaction, with the caller's session checked first.
- * `personId` is the manager the session belongs to.
- */
 type GatedWork = <T>(
   c: Context,
   sessionId: string,
@@ -696,8 +692,6 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
 }
 
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
-  // Every `/management-api` route's DB work goes through here, so the gate is applied in exactly
-  // one place.
   const epoch = crypto.randomUUID();
   let sequence = 0;
   const gated: GatedWork = (c, sessionId, fn) =>

@@ -2022,7 +2022,7 @@ Left open:
   of CSS. A change to the till's tiles has to be repeated by hand, and no test sees the two drift
   apart. Proposed follow-up: move the shared logic and CSS beside `arrangeHome` in
   `packages/catalogue/src/device-home.ts`.
-- **A290 implemented on `fix/menu-shared-edit-read`; review and landing pending.** Structure
+- **A290 — DONE (2026-10-06).** Structure
   and Home page share a menu read subscription after their initial independent loads. The shared
   endpoint returns each selected part's result or refusal separately, retaining usable Structure
   and Home content when Preview refuses an old publication. Catalogue responses carry a per-mount
