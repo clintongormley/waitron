@@ -1,6 +1,6 @@
 import type { HomeDisplay } from "./menu-document-types.js";
 
-/** Every section and layout belongs to one menu. */
+/** Every section belongs to one menu. */
 export type SectionRole = "section" | "menu_root" | "home_layout";
 
 export type MemberRef =
@@ -32,7 +32,7 @@ export interface SectionInput {
   color?: string | null;
 }
 
-/** One shortcut of a Device Home Page, as the Home page tab lists it. */
+/** One shortcut of a Device Home Page. */
 export interface HomeTile {
   memberId: string;
   position: number;

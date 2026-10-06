@@ -41,7 +41,7 @@ export type FrozenOffer = Omit<
     image: string | null;
     description: Record<string, string> | null;
     /** The product's effective colour (color-inheritance.ts), frozen when the version is built;
-     * null draws the neutral tile. Absent from a version published before it existed. */
+     * null draws the neutral tile. */
     color?: string | null;
     variants: FrozenOfferVariant[];
     placements: string[][];
@@ -132,7 +132,7 @@ export interface LiveOffer extends Omit<MenuOffer, "ordering" | "combined">, Pub
   available: boolean;
   image: string | null;
   /** The product's effective colour (color-inheritance.ts), frozen when the version is built;
-   * null draws the neutral tile. Absent from a version published before it existed. */
+   * null draws the neutral tile. */
   color?: string | null;
   description: Record<string, string> | null;
   offeredModifiers: LiveOfferedModifier[];

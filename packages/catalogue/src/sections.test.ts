@@ -95,7 +95,7 @@ async function fixture(): Promise<Fixture> {
   });
 }
 
-/** The root or default home layout `createCatalogue` gave the menu. */
+/** The root or home section `createCatalogue` gave the menu. */
 async function menuOwned(role: "menu_root" | "home_layout", menuId: string): Promise<string> {
   const { rows } = await fx.db.execute<{ id: string }>(sql`
     select ${sql.raw(role === "menu_root" ? "root_section_id" : "default_home_layout_id")} as id
@@ -274,7 +274,7 @@ describe("section details", () => {
       });
   });
 
-  it("refuses to update or delete a menu root or home layout", async () => {
+  it("refuses to update or delete a menu root or home section", async () => {
     const f = await fixture();
     for (const role of ["menu_root", "home_layout"] as const) {
       const owned = await menuOwned(role, f.lunchMenu);
@@ -526,7 +526,7 @@ describe("cycles", () => {
 });
 
 describe("roles", () => {
-  it("refuses an owned section or home layout as an inclusion", async () => {
+  it("refuses an owned section or home section as an inclusion", async () => {
     const f = await fixture();
     const target = await create("Target");
     const own = await owned("Own");
@@ -549,7 +549,7 @@ describe("roles", () => {
     ]);
   });
 
-  it("refuses every generic member write into a home layout", async () => {
+  it("refuses every generic member write into a home section", async () => {
     const f = await fixture();
     const layout = await menuOwned("home_layout", f.lunchMenu);
     const drinks = await create("Drinks");

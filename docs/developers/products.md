@@ -304,9 +304,8 @@ colour this changes (one with no colour of its own and no coloured category near
 menu's Preview tab names the change "colour" for that product. The version on sale keeps the old colour until you
 publish (the "a category's colour" cases in `packages/catalogue/src/menu-publication.test.ts`). A
 product's own colour goes into the next version's offer in the same way
-(`packages/catalogue/src/menu-document.test.ts`), though no test reads a menu's status after one. A version published before colours
-existed carries no product colours: it is still sold from, its products draw the plain tile, and its menu reads as
-changed until it is published again.
+(`packages/catalogue/src/menu-document.test.ts`), though no test reads a menu's status after one. A live version in an
+earlier document format is not sold from: [product-categories.md](product-categories.md).
 
 A menu section has a colour of its own, set in the section form. It paints the section's own tile
 and nothing else: the products inside the section keep their own colours.

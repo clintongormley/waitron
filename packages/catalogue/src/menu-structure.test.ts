@@ -152,7 +152,7 @@ const offerNames = async (menuId: string) =>
   (await app((tx) => listMenuOffers(tx, [menuId]))).map((offer) => offer.name);
 
 describe("creating a menu", () => {
-  it("makes a root and a home layout the menu owns, and records both in menu_details", async () => {
+  it("makes a root and a home section the menu owns, and records both in menu_details", async () => {
     await seedTenant(fx.db);
     const menu = await app((tx) => createCatalogue(tx, { name: "Lunch menu" }));
     const owned = await app((tx) =>

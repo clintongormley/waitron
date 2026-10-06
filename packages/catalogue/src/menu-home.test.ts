@@ -436,7 +436,7 @@ describe("home tiles", () => {
     ]);
   });
 
-  it("refuses unreachable menu roots and home layouts as tiles", async () => {
+  it("refuses unreachable menu roots and home sections as tiles", async () => {
     const f = await menusFixture(fx.db);
     const leftover = await leftoverLayout(f.lunch);
     const dinnerHome = await homeOf(f.dinner);

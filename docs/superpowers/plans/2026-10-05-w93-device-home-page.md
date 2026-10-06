@@ -1725,7 +1725,7 @@ equally strict check of the new behaviour where the behaviour still exists.
 | `scripts/catalogue-engine-neutral.test.ts:34` **[owner, Task 2's answer]** | scans `packages/catalogue/src/home-layouts.ts` | scans `packages/catalogue/src/menu-home.ts`; the three checks unchanged | D2 |
 | `…menu-inclusion.test.ts:80-82` | `listHomeLayouts`/`addShortcut(layout)` | `readMenuHome`/`addShortcut(menu)`; the refusal unchanged | D2 |
 | `apps/server/src/catalogue-api.test.ts:4527` (`:4532-4541`) | `menuDetails.defaultHomeLayoutId`; warning with `layoutName` | `homeSectionId`; `{ kind: "shortcut_missing", name }` | D1, D5 |
-| `…catalogue-api.test.ts:5405`, `:5507` | tile routes by layout id | shortcut routes by menu; the same refusals, generic-route `wrong_role` kept | D2 |
+| `…catalogue-api.test.ts:5405`, `:5507` | tile routes by layout id | shortcut routes by menu; the same refusals, generic-route `wrong_role` kept. `:5507` also takes the add half of the deleted list/create case (`:5442`): the added shortcut's shape, Drinks added at position 0 after Soup, and the listing that follows. Its move changed from `{ to: 1 }` expecting `[[drinks, 0], [soup, 1]]` to `{ to: 0 }` expecting `[[soup, 0], [drinks, 1]]` | D2 |
 | `…catalogue-api.test.ts:5442` | list, create, duplicate, rename, delete, default layout | deleted; "no longer serves the named layout routes" and "reads a menu's Device Home Page" | D2 |
 | `…catalogue-api.test.ts:5555`, `:5587`, `:5637` | 404, shape and gate checks over the layout routes | the same checks over the Device Home Page routes; the `name` and `layoutId` cases go with their routes | D2 |
 | `apps/server/src/configuration-transfer.test.ts:1684` (`:1702-1738`) | `listHomeLayouts`; `homeLayouts[0].tiles`; `layoutName: "Home"` | `readMenuHome`; `home.shortcuts`; no `layoutName`; positions and names unchanged | D2, D5 |
@@ -1761,6 +1761,12 @@ changed): `packages/catalogue/src/migrations.test.ts:490,500` (the property rena
 `api/client-routes.test.ts:917` (each drops a warning's `layoutName`). The PR states the count per
 file.
 
+### Task 4
+
+| file:line | Before | After | Why |
+| --- | --- | --- | --- |
+| `packages/ui/src/tap-target-and-focus.test.ts:41`, `:49` | the case title and the exact-set `toEqual` list of field elements name `wt-button`, `wt-combobox`, `wt-input`, `wt-number-stepper`, `wt-price-input`, `wt-switch` and `wt-textarea` | both gain `wt-slider`; every existing entry unchanged | the new primitive is held to the same tap-target and focus rule |
+
 ### Task 5
 
 | file:line | Before | After | Why |
@@ -1782,10 +1788,11 @@ defaulting to the `columns: 3` it always passed).
 
 ### Task 6
 
-No assertion changed or deleted, and no existing fixture grew: every check in
-`menu-structure-table.test.ts`, `menu-structure-table.a11y.test.ts`, `client-routes.test.ts` and
-`live-queries.test.ts` is new (a `describe` block, an a11y case, one route case, and one row added to
-the `it.each` table of dependencies). The structure table's `home` property defaults to null, so the
+No assertion deleted, and no existing fixture grew. One check changed: in `live-queries.test.ts`'s
+`it.each` table of dependencies, the `listHomeLayouts` row was renamed in place to `getMenuHome`,
+with the same arguments and tables. Every other check in `menu-structure-table.test.ts`,
+`menu-structure-table.a11y.test.ts` and `client-routes.test.ts` that this task touched is new (a
+`describe` block, an a11y case and one route case). The structure table's `home` property defaults to null, so the
 existing cases, which pass none, draw no Device Home Page row and read as before. A missing
 shortcut's kind reads `members.missing` ("No longer available" | "Ya no está disponible"), the label
 `memberKindLabel` gives a `missing` reference, not a separate "Missing" word.
@@ -1808,9 +1815,10 @@ shortcut's kind reads `members.missing` ("No longer available" | "Ya no está di
 | `…menus-screen.a11y.test.ts:430`, `:440` | the layout form and the layout delete window | deleted | D2 |
 | `apps/dashboard/src/widgets/home-layout-editor.test.ts`, `home-layout-editor.a11y.test.ts` | the layout editor | files deleted with it; the preview's checks are in `device-home-preview.test.ts` and its a11y file (Task 7), the tile list's in `menu-structure-table.test.ts` (Task 6) | D2, D10 |
 | `apps/dashboard/src/api/client-routes.test.ts:837-894`, `:1037-1052` | the layout and tile client methods' routes | deleted; Task 6's "reads a menu's Device Home Page and writes its shortcuts and display settings" | D2, D9 |
-| `apps/dashboard/src/api/live-queries.test.ts:110-116` | `listHomeLayouts`' dependencies | deleted; Task 6's `getMenuHome` row | D2 |
+| `apps/dashboard/src/api/live-queries.test.ts:110-116` | `listHomeLayouts`' dependencies | renamed in place to `getMenuHome` (Task 6's row), the same arguments and tables | D2 |
+| `…menus-screen.test.ts:5652` **[implementer]** | adds, removes and moves tiles: the `addHomeTile` call check, the read count reaching 2 after the add and 3 after the remove, and `writeCalls` `["addHomeTile", "removeHomeTile", "moveHomeTile"]` | removes (through the shortcut row's Remove) and moves only: the add's call check goes, the read count reaches 2 after the remove and stays 2 after the move, and `writeCalls` is `["removeHomeShortcut", "moveHomeShortcut"]`. Adding goes through the picker, pinned by the new case "adds the chosen target at once and closes, reading the home again" | D9 |
 | `…menus-screen.test.ts:5684` **[implementer]** | the tile list is disabled during an add until the layouts are read again | the tree is disabled during a remove until the home is read again (an add now goes through the picker, whose cases hold its own `busy`); a move still leaves it usable | D9 |
-| `…menus-screen.test.ts:5703` **[implementer]** | a refused tile add is explained in `home-error` | a refused shortcut remove is explained in `member-error`; a refused add is the picker's (combobox `error` and `form.fix_fields` for a refusal about the chosen target, the code's message alone at the bottom otherwise); the refused move's re-read unchanged | D9 |
+| `…menus-screen.test.ts:5703` **[implementer]** | a refused tile add is explained in `home-error` | a refused shortcut remove is explained in `member-error`; a refused add is the picker's (combobox `error` and `form.fix_fields` for a refusal about the chosen target, the code's message alone at the bottom otherwise). The refused move's code changed from `menu_section.not_found` to `menu.shortcut_unreachable`, and the refused remove takes `menu_section.not_found`, so the case's two refusals show different messages; the check that a refused move reads the home again is unchanged | D9 |
 | `…menus-screen.test.ts:5477` **[implementer]** | the layouts are read only on the Home page tab | the menu's home is read on the Structure and Home page tabs; the case opens from Price overrides, checks the home and the preview are not read there, and that the Home page tab takes the menu's state from the preview (no `getMenuStatus` read on a refresh) | D9, D10 |
 | `…menus-screen.test.ts` "shows the root's members…" and "fits a phone: … every row's ⋮ is on screen (390 px)" | over the default fake, the name list `["Burger", "Drinks", "Favourites"]` (then with Drinks' members), and the ⋮ list starting `"root"` | still over the default fake, after the Device Home Page row is drawn: the name list gains the closed row's name `"Página de inicio del dispositivo"` first, and the ⋮ list gains `"home"` first; every other name and key unchanged (owner decision 2026-10-05 ~00:05: the spec adds the row, so the check moves to the new behaviour, not around it). The new case "fits a phone with the Device Home Page row and Drinks › Beer open…" also names every row with the home row open | D9 |
 | `…menus-screen.test.ts` `topLevelKeys`, `childKeys` **[implementer]** | every level-2 row and every row under `root` | leave out `home` and `home/*`, so they still read the menu's own rows; no assertion changed | D9 |

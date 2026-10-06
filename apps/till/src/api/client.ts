@@ -249,11 +249,9 @@ export interface TillProduct {
   menuVersionId?: string;
   /** False when it cannot be sold now; absent on a retrieved held line. */
   available?: boolean;
-  /** Who may order it on its own, as its menu version published it; absent on a retrieved held line
-   * and from a version published before the setting existed. */
+  /** Who may order it on its own, as its menu version published it; absent on a retrieved held line. */
   ordering?: ProductOrdering;
-  /** The offer's effective colour; absent on a retrieved held line and from a version published
-   * before it existed. */
+  /** The offer's effective colour; absent on a retrieved held line. */
   color?: string | null;
   /** The offer's photo; absent on a retrieved held line. */
   image?: string | null;

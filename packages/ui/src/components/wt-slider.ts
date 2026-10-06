@@ -98,7 +98,7 @@ export class WtSlider extends LitElement {
         @input=${this.#onInput}
         @change=${this.#onChange}
       />
-      ${this.error ? html`<p class="error" id=${errorId} role="alert">${this.error}</p>` : nothing}`;
+      ${this.error ? html`<p class="error" id=${errorId} role="alert" data-error>${this.error}</p>` : nothing}`;
   }
 }
 
