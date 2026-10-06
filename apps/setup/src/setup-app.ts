@@ -303,6 +303,14 @@ const CONFIGURATION_NAME_MESSAGES: Record<string, StringKey> = {
 /** The sentence for a refusal of a configuration export the operator chose to load. */
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
+  if (
+    code === "setup.request_invalid" &&
+    typeof params?.field === "string" &&
+    params.field.startsWith("module:") &&
+    params.field.length > "module:".length
+  ) {
+    return say("shell.configuration.incompatible_version");
+  }
   const key = typeof code === "string" ? CONFIGURATION_NAME_MESSAGES[code] : undefined;
   const name = params?.name;
   return key !== undefined && typeof name === "string" && name !== ""

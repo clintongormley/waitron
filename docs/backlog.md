@@ -6568,9 +6568,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   The sibling audit found no such translation in department create/rename. Outside this zone
   item, `apps/server/src/tables.ts` still translates every unique refusal in `createTable`,
   `updateTable`, `createStatus` and `updateStatus` to a label collision; a separate
-  follow-up should identify each label key and force another-key clash. Old configuration-bundle
-  import was not
-  verified in this review and remains outside the pre-live compatibility policy.
+  follow-up should identify each label key and force another-key clash.
+  A261-2e runs an encrypted export captured from `c47122f55^` through the current setup import
+  route. It is refused with `setup.request_invalid` (`module:core`) before any database rows or
+  staging files change. Setup now tells you in English and Spanish to export again from a box
+  running the current version. A committed fixture retains the original export bytes; this adds
+  no compatibility converter or migration.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
   profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**
