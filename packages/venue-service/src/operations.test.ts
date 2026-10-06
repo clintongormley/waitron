@@ -942,7 +942,9 @@ describe("service zone name refusals", () => {
     const existing = await scoped((tx) =>
       createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
     );
-    const generateId = vi.spyOn(floorZones.id, "defaultFn").mockReturnValue(existing.id);
+    const generateId = vi
+      .spyOn(floorZones.id as unknown as { defaultFn: () => string }, "defaultFn")
+      .mockReturnValue(existing.id);
     try {
       await expect(
         scoped((tx) => createServiceZone(tx, cfg, { name: "Garden", departmentId: department.id })),

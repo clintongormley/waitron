@@ -314,7 +314,9 @@ describe("zone CRUD", () => {
   it("createZone keeps a primary-key clash as an internal database error", async () => {
     const cfg = await setupVenue();
     const existing = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
-    const generateId = vi.spyOn(floorZones.id, "defaultFn").mockReturnValue(existing.id);
+    const generateId = vi
+      .spyOn(floorZones.id as unknown as { defaultFn: () => string }, "defaultFn")
+      .mockReturnValue(existing.id);
     try {
       await expect(
         asApp(cfg, (tx) => createZone(tx, cfg, { name: "Garden" })),
