@@ -59,6 +59,7 @@ const view: PrepStationsView = {
   stationPrinters: [],
   devices: [],
   watchers: [],
+  disabledWatchers: [],
 };
 const snapshot: StationHealthSnapshot = {
   capturedAt: "2026-10-05T12:00:00Z",

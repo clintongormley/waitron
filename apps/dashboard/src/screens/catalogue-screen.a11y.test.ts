@@ -57,7 +57,7 @@ const products: Product[] = [
 
 const stations = [{ id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true }];
 
-const courses = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true }];
+const courses = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true, inUse: false }];
 
 const drinks = {
   memberId: "m-drinks",
@@ -118,6 +118,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listProducts: vi.fn().mockResolvedValue(products),
     listStations: vi.fn().mockResolvedValue(stations),
     listCourses: vi.fn().mockResolvedValue(courses),
+    listCoursesWithDisabled: vi.fn().mockResolvedValue(courses),
     listUnits: vi
       .fn()
       .mockResolvedValue([

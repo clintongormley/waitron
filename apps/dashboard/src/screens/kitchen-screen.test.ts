@@ -22,11 +22,13 @@ const STATIONS: Station[] = [
   },
 ];
 
-const COURSES: Course[] = [{ id: "c1", name: "Entrantes", displayOrder: 0, active: true }];
+const COURSES: Course[] = [
+  { id: "c1", name: "Entrantes", displayOrder: 0, active: true, inUse: false },
+];
 
 const TWO_COURSES: Course[] = [
-  { id: "c1", name: "Entrantes", displayOrder: 0, active: true },
-  { id: "c2", name: "Postres", displayOrder: 1, active: true },
+  { id: "c1", name: "Entrantes", displayOrder: 0, active: true, inUse: false },
+  { id: "c2", name: "Postres", displayOrder: 1, active: true, inUse: false },
 ];
 
 function stubApi(
@@ -43,10 +45,10 @@ function stubApi(
     setDefaultStation: vi.fn().mockResolvedValue(undefined),
     setBumpMode: vi.fn().mockResolvedValue(undefined),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
-    listCourses: vi.fn().mockResolvedValue(courses.map((c) => ({ ...c }))),
+    listCoursesWithDisabled: vi.fn().mockResolvedValue(courses.map((c) => ({ ...c }))),
     createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
     updateCourse: vi.fn().mockResolvedValue(undefined),
-    deactivateCourse: vi.fn().mockResolvedValue(undefined),
+    removeCourse: vi.fn().mockResolvedValue(undefined),
     getKitchenTimingDefaults: vi.fn().mockResolvedValue({
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
@@ -130,7 +132,7 @@ describe("kitchen-screen", () => {
     await vi.waitFor(() =>
       expect(list.shadowRoot!.querySelectorAll("tbody tr[data-course]")).toHaveLength(2),
     );
-    expect(api.listCourses).toHaveBeenCalledTimes(1);
+    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(1);
   });
 
   it("seeds the fire-control toggle from the PERSISTED setting (getFireControl) and reflects it", async () => {

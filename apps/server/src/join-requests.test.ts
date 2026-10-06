@@ -951,7 +951,7 @@ describe("a returning disabled device", () => {
     expect(row).toEqual({ active: false, stationId: station.id });
   });
 
-  it("refuses to enable a kitchen screen on the watcher it held once that watcher is removed", async () => {
+  it("refuses to enable a kitchen screen on the watcher it held once that watcher is disabled", async () => {
     const venue = await setupVenue(suite.db);
     const kds = await seedProfile("kds");
     const watcher = await withTransaction(suite.db, (tx) =>

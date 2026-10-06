@@ -69,6 +69,7 @@ const view: PrepStationsView = {
   stationPrinters: [],
   devices: [],
   watchers: [],
+  disabledWatchers: [],
 };
 function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
   return {

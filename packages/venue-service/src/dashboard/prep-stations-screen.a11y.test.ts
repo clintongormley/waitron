@@ -27,6 +27,16 @@ const empty = {
   stationPrinters: [],
   devices: [],
   watchers: [],
+  disabledWatchers: [],
+};
+const watcher = {
+  displayOrder: 0,
+  everyStation: true,
+  stationIds: [],
+  everyZone: true,
+  zoneIds: [],
+  runsPass: true,
+  printerIds: [],
 };
 describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (theme) => {
   it.each([
@@ -42,12 +52,17 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     "watcher",
     "watcher-rename",
     "watcher-remove",
+    "watcher-delete",
+    "watcher-disabled",
+    "watcher-disabled-menu",
+    "watcher-enable-refused",
   ] as const)("checks %s state", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
     const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
     el.api = {
       updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
+      enableWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
       readStationHealth: vi.fn().mockResolvedValue({
         capturedAt: "2026-10-05T12:00:00Z",
         stations: [],
@@ -113,18 +128,14 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
               ],
               watchers: state.startsWith("watcher")
                 ? [
-                    {
-                      id: "pass",
-                      name: "Pass",
-                      active: true,
-                      displayOrder: 0,
-                      everyStation: true,
-                      stationIds: [],
-                      everyZone: true,
-                      zoneIds: [],
-                      runsPass: true,
-                      printerIds: [],
-                    },
+                    { ...watcher, id: "pass", name: "Pass", active: true, inUse: true },
+                    { ...watcher, id: "runner", name: "Runner", active: true, inUse: false },
+                  ]
+                : [],
+              disabledWatchers: state.startsWith("watcher")
+                ? [
+                    { ...watcher, id: "old", name: "Old pass", active: false, inUse: true },
+                    { ...watcher, id: "spare", name: "Spare", active: false, inUse: false },
                   ]
                 : [],
             },
@@ -190,11 +201,45 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
       );
       await el.updateComplete;
     }
-    if (state === "watcher-remove") {
-      el.shadowRoot!.querySelector('[data-test="watchers-table"]')!
-        .shadowRoot!.querySelector<HTMLElement>('[data-test="remove-watcher-pass"]')!
+    const watcherTable = () =>
+      el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        '[data-test="watchers-table"]',
+      )!;
+    if (state === "watcher-remove" || state === "watcher-delete") {
+      watcherTable()
+        .shadowRoot!.querySelector<HTMLElement>(
+          `[data-test="remove-watcher-${state === "watcher-remove" ? "pass" : "runner"}"]`,
+        )!
         .click();
       await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector('[data-test="remove-watcher-modal"]')!.textContent,
+      ).toContain(state === "watcher-remove" ? "Disable Pass?" : "This cannot be undone.");
+    }
+    if (state.startsWith("watcher-disabled") || state === "watcher-enable-refused") {
+      await watcherTable().updateComplete;
+      expect(
+        watcherTable().shadowRoot!.querySelector('[data-test="watcher-status-old"]')!.textContent,
+      ).toContain("Disabled");
+    }
+    if (state === "watcher-disabled-menu") {
+      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+        new CustomEvent("wt-tab-change", { detail: { value: "watchers" } }),
+      );
+      await el.updateComplete;
+      const menu = watcherTable().shadowRoot!.querySelector('[data-test="watcher-actions-spare"]')!;
+      await page.elementLocator(menu.shadowRoot!.querySelector("button")!).click();
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    }
+    if (state === "watcher-enable-refused") {
+      watcherTable()
+        .shadowRoot!.querySelector<HTMLElement>('[data-test="enable-watcher-old"]')!
+        .click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+          "Rename that watcher first",
+        ),
+      );
     }
     expect(el.shadowRoot!.querySelector("h1")).not.toBeNull();
     await expectNoA11yViolations(host);

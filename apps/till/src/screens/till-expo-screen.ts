@@ -447,7 +447,8 @@ export class TillExpoScreen extends LitElement {
   @state() private watchers: WatcherSummary[] = [];
   @state() private selected: string | null = null;
   @state() private choosing = false;
-  @state() private watcherRemoved = false;
+  /** Why the chosen watcher shows nothing: switched off, or gone from the server. */
+  @state() private watcherGone: "disabled" | "deleted" | null = null;
   @state() private deviceWatcherName = "";
   @state() private watcherRunsPass = false;
   @state() private doneErrorCode?: string;
@@ -488,7 +489,7 @@ export class TillExpoScreen extends LitElement {
         this.selected = board.watcher.id;
         this.deviceWatcherName = board.watcher.name;
         this.orders = board.orders;
-        this.watcherRemoved = !board.watcher.active;
+        this.watcherGone = board.watcher.active ? null : "disabled";
         this.watcherRunsPass = board.watcher.runsPass;
       } else void this.#reload();
     } else if (this.embedded) void this.#reload();
@@ -541,7 +542,7 @@ export class TillExpoScreen extends LitElement {
     }
     this.selected = id;
     this.choosing = false;
-    this.watcherRemoved = false;
+    this.watcherGone = null;
     if (!restored && !this.embedded && this.#url.read("till-view") === "expo")
       this.#url.write({ "till-watcher": id });
     void this.#reload();
@@ -576,7 +577,7 @@ export class TillExpoScreen extends LitElement {
       if (Array.isArray(result)) this.orders = result;
       else {
         this.orders = result.orders;
-        this.watcherRemoved = !result.watcher.active;
+        this.watcherGone = result.watcher.active ? null : "disabled";
         if (this.deviceMode) this.deviceWatcherName = result.watcher.name;
         this.watcherRunsPass = result.watcher.runsPass;
       }
@@ -586,7 +587,7 @@ export class TillExpoScreen extends LitElement {
       this.#tableChangedNext = null;
     } catch (error) {
       if (request > this.#appliedRequest && this.#isCurrent(boardId, epoch)) {
-        if ((error as { code?: string }).code === "watcher.not_found") this.watcherRemoved = true;
+        if ((error as { code?: string }).code === "watcher.not_found") this.watcherGone = "deleted";
         this.stale = true;
       }
     }
@@ -702,7 +703,7 @@ export class TillExpoScreen extends LitElement {
   override render() {
     return html`
       <section class="screen" aria-label=${t("expo.title")}>
-        ${this.deviceMode && !this.watcherRemoved ? html`<h1 class="title">${this.deviceWatcherName}</h1>` : nothing}
+        ${this.deviceMode && this.watcherGone === null ? html`<h1 class="title">${this.deviceWatcherName}</h1>` : nothing}
         ${
           this.embedded || this.deviceMode
             ? nothing
@@ -744,24 +745,24 @@ export class TillExpoScreen extends LitElement {
               </div>`
             : nothing
         }
-        ${this.choosing || this.watcherRemoved ? nothing : this.#overdueBadge()}
-        ${this.choosing || this.watcherRemoved ? nothing : html`<p class="stale" role="status" ?data-stale=${this.stale}>${this.stale ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>` : nothing}</p>`}
-        ${this.doneNotice && !this.choosing && !this.watcherRemoved ? html`<p class="done-notice" role="status">${t("expo.marked_done").replace("{dish}", this.doneNotice.dish)} <wt-button data-undo variant="secondary" @click=${() => void this.#undo()}>${t("expo.undo")}</wt-button></p>` : nothing}
-        ${this.doneErrorCode && !this.watcherRemoved ? html`<p class="error" role="alert">${codeMessage(this.doneErrorCode)}</p>` : nothing}
+        ${this.choosing || this.watcherGone !== null ? nothing : this.#overdueBadge()}
+        ${this.choosing || this.watcherGone !== null ? nothing : html`<p class="stale" role="status" ?data-stale=${this.stale}>${this.stale ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>` : nothing}</p>`}
+        ${this.doneNotice && !this.choosing && this.watcherGone === null ? html`<p class="done-notice" role="status">${t("expo.marked_done").replace("{dish}", this.doneNotice.dish)} <wt-button data-undo variant="secondary" @click=${() => void this.#undo()}>${t("expo.undo")}</wt-button></p>` : nothing}
+        ${this.doneErrorCode && this.watcherGone === null ? html`<p class="error" role="alert">${codeMessage(this.doneErrorCode)}</p>` : nothing}
         ${
-          this.reprintErrorCode && !this.watcherRemoved
+          this.reprintErrorCode && this.watcherGone === null
             ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
             : nothing
         }
         ${
-          this.tableChanged === null || this.watcherRemoved
+          this.tableChanged === null || this.watcherGone !== null
             ? nothing
             : html`<p class="table-changed" role="status" data-table-changed>
                 ${t("station.table_changed_named").replace("{table}", () => this.tableChanged!)}
                 ${t("station.table_changed")}
               </p>`
         }
-        ${this.choosing ? nothing : this.watcherRemoved ? html`<p role="alert">${t("expo.watcher_removed")}</p>` : this.orders.length === 0 ? this.#empty() : this.#board()}
+        ${this.choosing ? nothing : this.watcherGone ? html`<p role="alert">${t(this.watcherGone === "deleted" ? "expo.watcher_deleted" : "expo.watcher_disabled")}</p>` : this.orders.length === 0 ? this.#empty() : this.#board()}
       </section>
     `;
   }

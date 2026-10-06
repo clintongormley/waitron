@@ -295,14 +295,53 @@ describe("till-expo-screen", () => {
     expect(api.getExpoQueue).not.toHaveBeenCalled();
   });
 
-  it("shows only the removed notice for an unattended watcher that was disabled", async () => {
-    const el = await mount({
-      api: stubApi(),
-      deviceMode: true,
-      initialDeviceWatcher: deviceBoard(false),
-    });
-    expect(el.shadowRoot!.textContent).toContain("watcher was removed");
-    expect(el.shadowRoot!.querySelector("[data-order], [data-done], [data-all-done]")).toBeNull();
+  it.each([
+    [
+      "en-GB",
+      "This screen's watcher was disabled. A manager can enable it again in Prep stations → Watchers, or set this screen up again.",
+    ],
+    [
+      "es-ES",
+      "Se ha deshabilitado el punto de seguimiento de esta pantalla. Un encargado puede volver a habilitarlo en Estaciones de preparación → Puntos de seguimiento, o volver a configurar esta pantalla.",
+    ],
+  ])(
+    "shows only the disabled notice for an unattended watcher that was disabled (%s)",
+    async (locale, notice) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        const el = await mount({
+          api: stubApi(),
+          deviceMode: true,
+          initialDeviceWatcher: deviceBoard(false),
+        });
+        expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(notice);
+        expect(
+          el.shadowRoot!.querySelector("[data-order], [data-done], [data-all-done]"),
+        ).toBeNull();
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  it("says a chosen watcher the server no longer has was deleted, not disabled", async () => {
+    const previousLocale = currentLocale();
+    setLocale("en-GB");
+    try {
+      const api = stubApi([threeCourseOrder], {
+        listWatchers: vi.fn().mockResolvedValue([{ id: "pass", name: "Pass", runsPass: false }]),
+        getWatcherQueue: vi.fn().mockRejectedValue({ code: "watcher.not_found" }),
+      });
+      const el = await mount({ api });
+      el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="pass"]')!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+        "This screen's watcher was deleted. Ask a manager to set this screen up again.",
+      );
+    } finally {
+      setLocale(previousLocale);
+    }
   });
 
   it("sends All done through the bound device route", async () => {

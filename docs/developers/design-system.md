@@ -1354,7 +1354,8 @@ Where the two differ, and why:
 - The price table moves focus to the field a refusal names, even when the person has moved on to
   another row, opening a size's product first if it is folded shut (`#focusField`). The course list
   marks the field and moves focus nowhere (`#commit`).
-- The course list shows any other refusal as an alert under the list. The price table says each
+- The course list shows a Delete refused while its confirmation dialog is open in that dialog, and any other refusal as an alert
+  under the list. The price table says each
   refusal, including one already shown under its field, in a status line that stays in view at the
   bottom of the tab while the rows scroll, because a save made far down the list must still be seen.
   It says a success there only for the last save made, once the prices have been read again after
@@ -1916,8 +1917,8 @@ above for the close-event race a shared, reused modal needs to guard against. On
 owner 2026-09-30): Content languages' Set as default and Remove save straight away, without a modal
 (removing a language keeps its translations); its Add language still opens one. A language the
 venue's region requires has no Remove and shows "Required". A second exception (A212): the course
-list, on Venue settings' Kitchen tab and in the product editor's Courses window, adds, renames and removes
-courses in place without a modal, saving each change as it is made; the Courses window has one Done
+list, on Venue settings' Kitchen tab and in the product editor's Courses window, adds, renames and disables
+courses in place without a modal, saving each change as it is made, and asks in a dialog before a Delete; the Courses window has one Done
 button. A third exception (W89, owner 2026-10-04): a menu's Price overrides tab sets each product's
 and each size's price in its own row, saving each change as it is made (Forms → "A value saved from
 its own table row").
@@ -2404,7 +2405,7 @@ removing a product from a menu removes that offer.
 
 Something switched off but kept — a product, a variant, an options or extras list, a zone, a
 department, a station, a table, a table status, an adjustment reason, a user, a printer, a print
-agent, a device, a card reader — is switched off with **Disable** (options and extras lists and
+agent, a device, a card reader, and a watcher or a kitchen course that something refers to — is switched off with **Disable** (options and extras lists and
 table statuses are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Some have no Enable on any screen yet; the backlog entry "One word
 for switched off, kept for the record" in `docs/backlog.md` lists them. Its status reads **Active**
@@ -2414,12 +2415,12 @@ which may delete that row (Remove from this list, Remove image, a passkey). "Res
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
 screen uses: **Activo** or **Deshabilitado** for a producto, departamento, estado, motivo, usuario,
-lector, agente or dispositivo; **Activa** or **Deshabilitada** for a variante, lista, zona,
+lector, agente, dispositivo, punto de seguimiento or curso; **Activa** or **Deshabilitada** for a variante, lista, zona,
 estación, mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
 
-Where a screen has both, the action follows what the code does: the products list's bulk action
+Where a screen has both, the action follows what the code does: a watcher's or a kitchen course's row offers Delete when nothing refers to it and Disable when something does; Disable only switches it off, and a confirmed Delete switches it off instead when something refers to it by then; the products list's bulk action
 reads Disable while only products are selected (and is not offered when every selected product is
 disabled already) and Delete once a category is in the selection,
 because the category itself is deleted. Products selected directly are disabled; the products

@@ -767,7 +767,7 @@ export class DevicesScreen extends LitElement {
     if (device.watcherId !== null) {
       const name = this.watchers.find((watcher) => watcher.id === device.watcherId)?.name;
       return name === undefined
-        ? t("devices.watcher_removed")
+        ? t("devices.watcher_disabled")
         : `${t("devices.watcher_prefix")}${name}`;
     }
     return this.#stationName(device.stationId);
@@ -1391,7 +1391,7 @@ export class DevicesScreen extends LitElement {
       else
         watcherOptions.push({
           value: held.value,
-          label: `${held.name} (${t("devices.watcher_removed_mark")})`,
+          label: `${held.name} (${t("devices.watcher_disabled_mark")})`,
           group: t("devices.watchers_group"),
         });
     }

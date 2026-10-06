@@ -580,8 +580,8 @@ export class CatalogueScreen extends LitElement {
     if (kind === "options") this.optionLists = await this.api.background.listOptionLists();
   }
 
-  /** The window saves each change as it is made; closing waits for the last of them, then brings the
-   * product's course in line. The editor is not reseeded, so the product's unsaved edits survive. */
+  /** Closing waits for the course list to settle, then brings the product's course in line. The
+   * editor is not reseeded, so the product's unsaved edits survive. */
   async #closeCourses(): Promise<void> {
     const generation = this.#editorGeneration;
     if (this.#child.kind !== "courses" || this.#closingCourses === generation) return;
@@ -590,7 +590,7 @@ export class CatalogueScreen extends LitElement {
     await list.settled();
     if (this.#closingCourses === generation) this.#closingCourses = null;
     if (generation !== this.#editorGeneration) return;
-    // A refused name stays on screen to be fixed, unless Escape has already shut the window.
+    // Unsaved work stays on screen, unless Escape has already shut the window.
     if (list.unsaved && this.#coursesWindow().open) return;
     const added = this.#addedCourse;
     this.#addedCourse = null;

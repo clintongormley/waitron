@@ -606,7 +606,7 @@ declare module "@waitron/shared" {
     "station.name_taken": { name: string };
     /** The effective late thresholds would be unordered for this station. */
     "station.thresholds_invalid": { field: string; stationId?: string; name: string };
-    /** No watcher with this id in this venue. */
+    /** No watcher with this id in this venue; where only an active watcher will do, also a disabled one. */
     "watcher.not_found": { watcherId: string };
     /** A switched-on watcher already has this name in this venue. */
     "watcher.name_taken": { name: string };
@@ -666,8 +666,8 @@ declare module "@waitron/shared" {
     /** A kitchen-course name already exists in this venue. `name` is the operator's own text. */
     "course.name_taken": { name: string };
     /**
-     * No kitchen course with this id in this venue, or one that is DEACTIVATED — folded into one
-     * code as `station.not_found` folds its own.
+     * No kitchen course with this id in this venue; where only an active course will do
+     * (`requireLiveCourse`, `moveCourse`), also a disabled one.
      */
     "course.not_found": { courseId: string };
     /**

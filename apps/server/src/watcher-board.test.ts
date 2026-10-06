@@ -503,6 +503,20 @@ describe("watcher board", () => {
         tx.select().from(watcherItemMarks).where(eq(watcherItemMarks.watcherId, watcherId)),
       ),
     ).toEqual([]);
+    // A device still naming the watcher keeps it, disabled, rather than deleted.
+    await inTx(v, async (tx) => {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: `Watcher ${randomUUID()}`, formFactor: "kds" })
+        .returning({ id: deviceProfiles.id });
+      await tx.insert(devices).values({
+        locationId: v.cfg.locationId,
+        watcherId,
+        deviceProfileId: profile!.id,
+        label: "Pass screen",
+        tokenHash: randomUUID(),
+      });
+    });
     await inTx(v, (tx) => removeWatcher(tx, v.cfg, watcherId));
     expect(await read()).toEqual({
       watcher: { id: watcherId, name: "Pass", runsPass: true, active: false },

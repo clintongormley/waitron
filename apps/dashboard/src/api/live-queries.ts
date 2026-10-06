@@ -241,6 +241,8 @@ export const QUERY_DEPENDENCIES = {
   listStations: ["kitchen_stations"],
   listWatchers: ["watchers", "watcher_stations", "watcher_zones", "watcher_printers"],
   listCourses: ["kitchen_courses"],
+  // Not the order tables `inUse` also reads: a stale Delete is answered by disabling instead.
+  listCoursesWithDisabled: ["kitchen_courses", "products"],
   listTables: ["dining_tables", "floor_zones", "working_orders", "table_service_statuses"],
   listZones: ["floor_zones"],
   getFireControl: ["locations"],

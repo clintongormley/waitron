@@ -6,13 +6,17 @@ import {
   fireControlMode,
   isUniqueViolation,
   kitchenCourses,
+  orderDraftLines,
   products,
   kitchenStations,
   kitchenStationTiming,
+  ticketItems,
+  workingOrderLines,
 } from "@waitron/db";
 import type { StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { productWithId, type ProductScope } from "@waitron/catalogue";
+import { idsInUse, type Reference } from "./in-use.js";
 import type { TillConfig } from "./till-config.js";
 import { assertStationTiming, getKitchenTimingDefaults } from "./kitchen-timing.js";
 import type { StationTimingPatch } from "./kitchen-timing.js";
@@ -362,8 +366,13 @@ export async function createCourse(
   }
 }
 
-/** The venue's ACTIVE courses in firing order: lowest `display_order` first, then `name`. */
-export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Course[]> {
+/** The venue's courses in firing order: lowest `display_order` first, then `name`. Active ones
+ *  only, unless `includeDisabled`. */
+export async function listCourses(
+  tx: Transaction,
+  cfg: TillConfig,
+  includeDisabled = false,
+): Promise<Course[]> {
   return tx
     .select({
       id: kitchenCourses.id,
@@ -372,7 +381,12 @@ export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Cou
       active: kitchenCourses.active,
     })
     .from(kitchenCourses)
-    .where(and(eq(kitchenCourses.locationId, cfg.locationId), eq(kitchenCourses.active, true)))
+    .where(
+      and(
+        eq(kitchenCourses.locationId, cfg.locationId),
+        includeDisabled ? undefined : eq(kitchenCourses.active, true),
+      ),
+    )
     .orderBy(kitchenCourses.displayOrder, kitchenCourses.name);
 }
 
@@ -407,12 +421,12 @@ export async function moveCourse(
 }
 
 /**
- * Edit any subset of a course's `name`/`displayOrder`/`active`. An absent id throws
- * `course.not_found`; a name collision throws `course.name_taken`.
+ * Edit any subset of a course's `name`/`displayOrder`/`active`. An absent or another venue's id
+ * throws `course.not_found`; a name collision throws `course.name_taken`.
  */
 export async function updateCourse(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   id: string,
   patch: { name?: string; displayOrder?: number; active?: boolean },
 ): Promise<void> {
@@ -426,7 +440,7 @@ export async function updateCourse(
     updated = await tx
       .update(kitchenCourses)
       .set(set)
-      .where(eq(kitchenCourses.id, id))
+      .where(and(eq(kitchenCourses.id, id), eq(kitchenCourses.locationId, cfg.locationId)))
       .returning({ id: kitchenCourses.id });
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -440,20 +454,35 @@ export async function updateCourse(
   }
 }
 
-/** Deactivate a course — never a hard delete, since a `ticket_items.course_id` snapshot may
- *  reference it. */
-export async function deactivateCourse(
+/** What keeps a course from being deleted. `in-use-references.test.ts` checks it against declared foreign keys only. */
+export const COURSE_REFERENCES: readonly Reference[] = [
+  { table: products, column: products.courseId },
+  { table: orderDraftLines, column: orderDraftLines.courseId },
+  { table: workingOrderLines, column: workingOrderLines.courseId },
+  { table: ticketItems, column: ticketItems.courseId },
+];
+
+export function coursesInUse(tx: Transaction, ids: readonly string[]): Promise<Set<string>> {
+  return idsInUse(tx, COURSE_REFERENCES, ids);
+}
+
+/** Delete a course nothing refers to and disable one something still names; with `disable`, only
+ *  ever disable it. */
+export async function removeCourse(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   id: string,
+  disable = false,
 ): Promise<void> {
-  const updated = await tx
-    .update(kitchenCourses)
-    .set({ active: false })
-    .where(eq(kitchenCourses.id, id))
-    .returning({ id: kitchenCourses.id });
-  if (updated.length === 0) {
-    throw new AppError("course.not_found", { courseId: id });
+  const [found] = await tx
+    .select({ active: kitchenCourses.active })
+    .from(kitchenCourses)
+    .where(and(eq(kitchenCourses.id, id), eq(kitchenCourses.locationId, cfg.locationId)));
+  if (!found) throw new AppError("course.not_found", { courseId: id });
+  if (!disable && (await coursesInUse(tx, [id])).size === 0) {
+    await tx.delete(kitchenCourses).where(eq(kitchenCourses.id, id));
+  } else if (found.active) {
+    await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id));
   }
 }
 

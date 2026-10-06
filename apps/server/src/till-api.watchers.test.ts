@@ -340,7 +340,7 @@ describe("watcher routes", () => {
     ).toEqual([]);
   });
 
-  it("refuses malformed Done and returns a removed watcher's empty board to its device", async () => {
+  it("refuses malformed Done and returns a disabled watcher's empty board to its device", async () => {
     const f = await fixture();
     for (const body of [
       { ticketItemIds: [], done: true },

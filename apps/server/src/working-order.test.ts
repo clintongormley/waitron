@@ -78,9 +78,10 @@ import { ticketLinesFrom } from "./receipt-lines.js";
 import {
   createCourse,
   createStation,
-  deactivateCourse,
   deactivateStation,
+  removeCourse,
   setProductCourse,
+  updateCourse,
 } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
@@ -4646,7 +4647,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBeNull(); // Principales held
 
-      await deactivateCourse(tx, cfg, pri.id);
+      await removeCourse(tx, cfg, pri.id);
       await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).not.toBeNull(); // released
     });
@@ -4767,7 +4768,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const retired = await createCourse(tx, cfg, { name: "Postres", displayOrder: 1 });
-      await deactivateCourse(tx, cfg, retired.id);
+      await updateCourse(tx, cfg, retired.id, { active: false });
       const starter = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
@@ -6677,7 +6678,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
       const dead = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
-      await deactivateCourse(tx, cfg, dead.id);
+      await updateCourse(tx, cfg, dead.id, { active: false });
       await expect(
         addRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: dead.id }]),
       ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: dead.id } });

@@ -12,6 +12,7 @@ const pass: WatcherView = {
   zoneIds: [],
   runsPass: true,
   printerIds: [],
+  inUse: false,
 };
 const runner: WatcherView = {
   id: "runner",
@@ -24,6 +25,7 @@ const runner: WatcherView = {
   zoneIds: ["terrace"],
   runsPass: false,
   printerIds: [],
+  inUse: false,
 };
 
 it.each([

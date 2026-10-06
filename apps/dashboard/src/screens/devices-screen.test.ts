@@ -336,23 +336,32 @@ describe("devices-screen", () => {
     expect(deepText(el, "[data-test=device-station-pass]")).toBe("Punto de seguimiento: Pass");
   });
 
-  it("identifies a kitchen screen whose watcher has been removed", async () => {
-    const removed = {
+  it("identifies a kitchen screen whose watcher has been disabled", async () => {
+    const disabled = {
       ...devices[0]!,
-      id: "removed",
+      id: "disabled",
       stationId: null,
       watcherId: "w1",
       binding: { name: "Pass", active: false },
     };
     const api = stubApi({
-      listDevices: vi.fn().mockResolvedValue([removed]),
+      listDevices: vi.fn().mockResolvedValue([disabled]),
       listWatchers: vi.fn().mockResolvedValue([]),
     });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
-    expect(deepText(el, "[data-test=device-station-removed]")).toBe(
-      "Punto de seguimiento eliminado",
+    expect(deepText(el, "[data-test=device-station-disabled]")).toBe(
+      "Punto de seguimiento deshabilitado",
     );
+    const before = currentLocale();
+    try {
+      setLocale("en-GB");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(deepText(el, "[data-test=device-station-disabled]")).toBe("Watcher disabled");
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("leaves a null profile empty, says a kitchen screen with no station has none, and a null last-seen Never", async () => {
@@ -1134,7 +1143,7 @@ describe("the Edit dialog", () => {
     stationId: "s-off",
     binding: { name: "Old", active: false },
   };
-  /** A kitchen screen on a watcher since removed, as the server lists it. */
+  /** A kitchen screen on a watcher since disabled, as the server lists it. */
   const onOffWatcher: DeviceRow = {
     ...kitchen,
     stationId: null,
@@ -1176,7 +1185,7 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-binding").options.map((o) => o.value)).not.toContain("station:s-off");
   });
 
-  it("a kitchen screen whose watcher was removed keeps it in Shows, marked; one whose watcher is gone opens with Shows empty", async () => {
+  it("a kitchen screen whose watcher was disabled keeps it in Shows, marked; one whose watcher is gone opens with Shows empty", async () => {
     const deleted = { ...kitchen, id: "k2", stationId: null, watcherId: "w-gone", binding: null };
     const api = editApi({
       listDevices: vi.fn().mockResolvedValue([onOffWatcher, deleted]),
@@ -1188,7 +1197,11 @@ describe("the Edit dialog", () => {
       { value: "station:s1", label: "Cocina", group: t("devices.stations_group") },
       { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
       { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
-      { value: "watcher:w-off", label: "Old pass (Eliminado)", group: t("devices.watchers_group") },
+      {
+        value: "watcher:w-off",
+        label: "Old pass (Deshabilitado)",
+        group: t("devices.watchers_group"),
+      },
     ]);
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
@@ -1370,12 +1383,12 @@ describe("the Edit dialog", () => {
     );
   });
 
-  it("marks a held station as disabled and a held watcher as removed, in English and Spanish", async () => {
+  it("marks a held station as disabled and a held watcher as disabled, in English and Spanish", async () => {
     const before = currentLocale();
     try {
       for (const [locale, station, watcher] of [
-        ["en", "Old (Disabled)", "Old pass (Removed)"],
-        ["es-ES", "Old (Deshabilitada)", "Old pass (Eliminado)"],
+        ["en", "Old (Disabled)", "Old pass (Disabled)"],
+        ["es-ES", "Old (Deshabilitada)", "Old pass (Deshabilitado)"],
       ] as const) {
         setLocale(locale);
         const api = editApi({

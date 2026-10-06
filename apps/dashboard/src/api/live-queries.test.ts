@@ -186,6 +186,11 @@ it("refreshes the bucket copy's settings every ten seconds, and depends on `back
   expect(query.refreshMs).toBe(10_000);
 });
 
+it("reads the course list again when a course or a product changes, never on an order's lines", () => {
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), "listCoursesWithDisabled", []);
+  expect(query.dependencies).toEqual([{ type: "kitchen_courses" }, { type: "products" }]);
+});
+
 it("subscribes no read to the product label tables, which products no longer carry", () => {
   const named = Object.values(QUERY_DEPENDENCIES).flat();
   expect(named).not.toContain("labels");

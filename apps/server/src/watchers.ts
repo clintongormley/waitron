@@ -2,6 +2,7 @@ import "./errors.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
+  devices,
   floorZones,
   isUniqueViolation,
   printers,
@@ -9,9 +10,11 @@ import {
   watchers,
   watcherPrinters,
   watcherStations,
+  watcherItemMarks,
   watcherZones,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { idsInUse, type Reference } from "./in-use.js";
 import { requireLiveStation } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -157,19 +160,66 @@ export async function updateWatcher(
   await setFollows(tx, watcherId, checked.stationIds, checked.zoneIds);
 }
 
+/** What keeps a watcher from being deleted. `in-use-references.test.ts` checks it against declared foreign keys only. */
+export const WATCHER_REFERENCES: readonly Reference[] = [
+  { table: devices, column: devices.watcherId },
+  { table: watcherItemMarks, column: watcherItemMarks.watcherId },
+];
+
+/** A watcher's own settings, deleted with it. */
+export const WATCHER_SETTINGS: readonly Reference[] = [
+  { table: watcherStations, column: watcherStations.watcherId },
+  { table: watcherZones, column: watcherZones.watcherId },
+  { table: watcherPrinters, column: watcherPrinters.watcherId },
+];
+
+export function watchersInUse(tx: Transaction, ids: readonly string[]): Promise<Set<string>> {
+  return idsInUse(tx, WATCHER_REFERENCES, ids);
+}
+
+/** Delete a watcher nothing refers to and disable one something still names; with `disable`, only
+ *  ever disable it. Disabling drops its printers. */
 export async function removeWatcher(
   tx: Transaction,
   cfg: TillConfig,
   watcherId: string,
+  disable = false,
 ): Promise<void> {
   const [found] = await tx
     .select({ active: watchers.active })
     .from(watchers)
     .where(and(eq(watchers.id, watcherId), eq(watchers.locationId, cfg.locationId)));
   if (!found) throw new AppError("watcher.not_found", { watcherId });
+  if (!disable && (await watchersInUse(tx, [watcherId])).size === 0) {
+    for (const { table, column } of WATCHER_SETTINGS) {
+      await tx.delete(table).where(eq(column, watcherId));
+    }
+    await tx.delete(watchers).where(eq(watchers.id, watcherId));
+    return;
+  }
   if (!found.active) return;
   await tx.update(watchers).set({ active: false }).where(eq(watchers.id, watcherId));
   await tx.delete(watcherPrinters).where(eq(watcherPrinters.watcherId, watcherId));
+}
+
+/** Enables a disabled watcher with its name, follows and order; the printers it lost stay lost. */
+export async function reactivateWatcher(
+  tx: Transaction,
+  cfg: TillConfig,
+  watcherId: string,
+): Promise<void> {
+  const [found] = await tx
+    .select({ name: watchers.name, active: watchers.active })
+    .from(watchers)
+    .where(and(eq(watchers.id, watcherId), eq(watchers.locationId, cfg.locationId)));
+  if (!found) throw new AppError("watcher.not_found", { watcherId });
+  if (found.active) return;
+  try {
+    await tx.update(watchers).set({ active: true }).where(eq(watchers.id, watcherId));
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new AppError("watcher.name_taken", { name: found.name });
+    throw error;
+  }
 }
 
 async function assemble(
@@ -201,11 +251,20 @@ async function assemble(
   }));
 }
 
-export async function listWatchers(tx: Transaction, cfg: TillConfig): Promise<Watcher[]> {
+export async function listWatchers(
+  tx: Transaction,
+  cfg: TillConfig,
+  includeDisabled = false,
+): Promise<Watcher[]> {
   const rows = await tx
     .select()
     .from(watchers)
-    .where(and(eq(watchers.locationId, cfg.locationId), eq(watchers.active, true)))
+    .where(
+      and(
+        eq(watchers.locationId, cfg.locationId),
+        includeDisabled ? undefined : eq(watchers.active, true),
+      ),
+    )
     .orderBy(asc(watchers.displayOrder), asc(watchers.name));
   return assemble(tx, rows);
 }
