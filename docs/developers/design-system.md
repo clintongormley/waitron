@@ -1523,6 +1523,14 @@ rollout. The coordinator's dirty-only unload registration
 requests the browser's own warning; the [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md)
 records its activation and platform limits.
 
+On the W69 branch, the dashboard installs the shared accepted-history adapter. Its leave
+callback receives the destination URL so Account settings can retain the underlying page's
+drafts. Sidebar and product-link requests defer screen changes until acceptance. Plain same-app
+anchors use the dispatched click's composed path; modified clicks, new-tab targets and downloads
+keep browser handling. The profile shell tests cover Keep/Discard through sidebar, links and
+indexed Back/Forward. Other application shells, direct history writers and individual page/tab
+owners remain part of the rollout.
+
 #### A value saved from its own table row
 
 A few lists edit a value in its own row, saving each change as it is made, with no `wt-modal`

@@ -377,3 +377,40 @@ it.each(["indexed", "unindexed"] as const)(
     expect(f.value).toBe("saved");
   },
 );
+
+it("a retained draft does not block a route whose affected scope is clean", async () => {
+  const f = fixture();
+  guard.dispose();
+  guard = new NavigationGuard(window, {
+    isDirty: () => coordinator.isDirty(),
+    request: (proceed, signal, destination) =>
+      coordinator.request({
+        scopes: destination?.endsWith("/retained") ? [] : "all",
+        reason: "navigation",
+        proceed,
+        signal,
+      }),
+  });
+  f.edit();
+  void guard.write("/guarded/retained");
+  await expect.poll(() => location.pathname).toBe("/guarded/retained");
+  expect(f.value).toBe("edited");
+  expect(f.answers).toHaveLength(0);
+});
+
+it("an accepted-route observer can normalize the URL without adding another history entry", async () => {
+  const f = fixture();
+  stop!();
+  stop = observeNavigation(window, () => {
+    if (new URL(guard.href).pathname === "/guarded/legacy")
+      void guard.write("/guarded/current", true);
+  });
+  const length = history.length;
+  f.edit();
+  const result = guard.write("/guarded/legacy");
+  await expect.poll(() => f.answers.length).toBe(1);
+  f.answers[0]!("discard");
+  expect(await result).toBe("proceeded");
+  expect(location.pathname).toBe("/guarded/current");
+  expect(history.length).toBe(length + 1);
+});

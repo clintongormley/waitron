@@ -2,7 +2,11 @@ import type { LeaveOutcome } from "@waitron/ui-core/unsaved-changes";
 
 export interface NavigationLeave {
   isDirty(): boolean;
-  request(proceed: () => void | Promise<void>, signal: AbortSignal): Promise<LeaveOutcome>;
+  request(
+    proceed: () => void | Promise<void>,
+    signal: AbortSignal,
+    destination: string,
+  ): Promise<LeaveOutcome>;
 }
 
 interface Position {
@@ -86,6 +90,9 @@ export class NavigationGuard {
 
   private publish(entry: Entry): void {
     this.accepted = entry;
+    const attempt = this.pending;
+    this.pending = undefined;
+    if (attempt) this.release(attempt);
     this.target.dispatchEvent(new Event(acceptedEvent));
   }
 
@@ -129,10 +136,14 @@ export class NavigationGuard {
     try {
       if (!this.same(this.read(), this.accepted)) await this.restored(attempt);
       if (this.disposed || this.pending !== attempt) return "stale";
-      return await this.leave.request(async () => {
-        if (!this.same(this.read(), this.accepted)) await this.restored(attempt);
-        if (!this.disposed && this.pending === attempt) await proceed();
-      }, attempt.controller.signal);
+      return await this.leave.request(
+        async () => {
+          if (!this.same(this.read(), this.accepted)) await this.restored(attempt);
+          if (!this.disposed && this.pending === attempt) await proceed();
+        },
+        attempt.controller.signal,
+        attempt.destination.href,
+      );
     } finally {
       if (this.pending === attempt) this.pending = undefined;
     }
@@ -155,7 +166,6 @@ export class NavigationGuard {
     // Clean writes stay synchronous for existing route handlers; only dirty leaves wait.
     if (!this.leave.isDirty()) {
       this.writeAccepted(attempt.destination, replace);
-      this.pending = undefined;
       return Promise.resolve("proceeded");
     }
     return this.decide(attempt, () => this.writeAccepted(attempt.destination, replace));

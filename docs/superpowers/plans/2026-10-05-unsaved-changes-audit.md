@@ -1824,3 +1824,54 @@ native reload, shell interception and remaining page/setup owners still need Tas
 
 Tasks 1/4 remain partial pending the final owner classification and advancing-main audit. Tasks
 2/3 remain complete. Neither proposed W69 PR is ready for finish-branch.
+
+
+## Dashboard route checkpoint — 2026-10-06
+
+The dashboard now installs the accepted-history adapter. Sidebar requests and product deep
+links write their complete destination before the shell changes its screen. Ordinary same-app
+anchors are intercepted through their dispatched click's composed path, including links from a
+child shadow root. Modified clicks, new tabs, downloads and other origins/app paths stay with
+the browser. Account settings keeps the underlying page mounted; closing it selects only the
+profile scope. Forced expiry resets pending traversal before replacing the login URL.
+
+`dashboard-app.unsaved-changes.test.ts` exercises an edited profile's actual telephone input
+through sidebar, indexed Back/Forward, same-app links and product deep links. It also checks
+reverts, old answers after expiry and retained main-page input (the latter is a test-only
+registered owner, not evidence for each page). `navigation-guard.test.ts` checks destination-based
+retained scopes and accepted-route URL normalization. Three existing dashboard shell fixtures
+now disconnect their previous application before mounting the next application in the same
+document; every existing permission/navigation assertion remains unchanged.
+
+Receipts: `~/waitron-campaign-e/receipts/w69-shell-routes-20261006`. The initial sidebar selector
+and retained-route probe failed before their intended assertions; the corrected runs supply
+the RED receipts. The initial family exposed the retained-page close and current-page group
+regressions; their original assertions pass after scoping and accepted-route handling fixes.
+Seven separate installed-candidate deletions failed at the intended assertions beside passing
+controls. The restored candidate passed its shell and adapter/controller suites and its two
+production files byte-matched the feature checkout. Scoped adapter/controller coverage and
+shell/browser checks are recorded in that receipt directory; package-wide CI remains pending.
+
+The rendered Back/Keep/Discard probe covers EN/ES, both themes and 390/1280 widths, with axe on
+the confirmation and retained profile editor and screenshots of both states. Native reload,
+actual pointer navigation through a modal backdrop and individual page owners are not covered
+by that probe. Its initial background Orders read used an incomplete API fixture; the final
+probe supplies those reads and is retained separately.
+
+Tasks 1/4 remain partial, 2/3 complete, and 5/6 incomplete. The remaining Task 5 work includes
+till/setup shells, direct receipt/login writers and screen/tab/context mutations before URL
+writes, plus activated native reload. Task 6 still supplies every page/setup owner. Hours landed
+as #1298, main `bbc14bc0f`, during this checkpoint; rebase and audit its cell/date/calendar
+editors before treating the old station-hours classification as current. No partial PR is ready.
+
+
+The later encoded Profile-link case first failed on a shadow-root fixture's absent parentElement;
+that is not RED evidence. After moving the anchor into the actual shadow root, the intended URL
+assertion failed. Destination scoping now decodes the primary segment, with a malformed-segment
+control retaining its existing fallback. An eighth installed-candidate deletion of that decoding
+failed the encoded-link assertion; the malformed-route control passed. The final restored shell
+suite passed 37 cases. The earlier shell family passed 368 cases before these two added cases;
+scoped adapter/controller checks passed 41, and unedited fiscal checks passed 20. Final visual
+fixture checks passed 43 (35 route cases plus eight visual flows), with 16 scoped axe scans and
+16 inspected final captures before the encoded-link extension. These dated counts are receipts
+for the named stages, not a full-branch completion claim.

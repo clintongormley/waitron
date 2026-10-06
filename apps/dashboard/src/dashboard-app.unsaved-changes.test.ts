@@ -30,6 +30,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     api: {
       getMe: async () => ({
         personId: "p1",
+        email: "ada@example.com",
         role: "staff",
         locale: "en-GB",
         venueLocale: "en-GB",
@@ -55,6 +56,8 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listMyShifts: async () => [],
       listMySwaps: async () => [],
       listMyAbsences: async () => [],
+      listOrderStaff: async () => ({ staff: [] }),
+      listOrderPages: async () => ({ rows: [], next: null, from: null, to: null }),
       listAlerts: async () => ({ visible: false, alerts: [] }),
       passkeySignals: async () => ({
         rpId: "localhost",
@@ -409,4 +412,294 @@ it("changing language retains the profile draft when no departing page is dirty"
   expect(telephone(m)).toBe("123456");
   expect(m.screen.isConnected).toBe(true);
   expect(unload()).toBe(true);
+});
+
+function selectOrders(m: Mounted) {
+  m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-orders]")!.click();
+}
+
+it("sidebar navigation keeps the profile and URL until Discard accepts one destination", async () => {
+  const m = await mount();
+  change(m, "123456");
+  await m.screen.updateComplete;
+  const length = history.length;
+  selectOrders(m);
+  await expect.poll(() => m.question.open).toBe(true);
+  expect(location.pathname).toBe("/manage/profile");
+  expect(telephone(m)).toBe("123456");
+  expect(m.screen.isConnected).toBe(true);
+  await choose(m, "keep");
+  expect(location.pathname).toBe("/manage/profile");
+  expect(history.length).toBe(length);
+  expect(telephone(m)).toBe("123456");
+  selectOrders(m);
+  await expect.poll(() => m.question.open).toBe(true);
+  await choose(m, "discard");
+  await expect.poll(() => location.pathname).toBe("/manage/orders");
+  await expect.poll(() => m.screen.isConnected).toBe(false);
+  expect(unload()).toBe(false);
+});
+
+it("reverted profile input lets sidebar navigation close the profile directly", async () => {
+  const m = await mount();
+  change(m, "123456");
+  change(m, "");
+  selectOrders(m);
+  await expect.poll(() => location.pathname).toBe("/manage/orders");
+  await expect.poll(() => m.screen.isConnected).toBe(false);
+  expect(m.question.open).toBe(false);
+  expect(unload()).toBe(false);
+});
+
+it("forced expiry invalidates a pending sidebar destination before an old Discard answer", async () => {
+  const m = await mount();
+  change(m, "123456");
+  selectOrders(m);
+  await expect.poll(() => m.question.open).toBe(true);
+  await m.question.updateComplete;
+  const oldDiscard = m.question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+  window.dispatchEvent(
+    new CustomEvent("waitron-session-invalid", {
+      detail: { code: "management_session.expired" },
+    }),
+  );
+  await expect.poll(() => location.pathname).toBe("/manage/");
+  oldDiscard.click();
+  await m.app.updateComplete;
+  expect(location.pathname).toBe("/manage/");
+  expect(m.app.shadowRoot!.querySelector("dashboard-login-screen")).not.toBeNull();
+  expect(unload()).toBe(false);
+});
+
+async function reopenedProfile(m: Mounted): Promise<Mounted> {
+  await expect
+    .poll(() =>
+      m.app
+        .shadowRoot!.querySelector("dashboard-profile-screen")
+        ?.shadowRoot?.querySelector("wt-tabs"),
+    )
+    .not.toBeNull();
+  const screen = m.app.shadowRoot!.querySelector("dashboard-profile-screen")!;
+  m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-profile-details]")!.click();
+  await screen.updateComplete;
+  const inner = screen.shadowRoot!.querySelector("wt-modal")!;
+  await inner.updateComplete;
+  return { ...m, screen, inner };
+}
+
+for (const direction of ["back", "forward"] as const) {
+  it(`dashboard ${direction} restores the edited profile for Keep and closes it only for Discard`, async () => {
+    let m = await mount();
+    selectOrders(m);
+    await expect.poll(() => m.screen.isConnected).toBe(false);
+    if (direction === "back") {
+      m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=profile]")!.click();
+    } else {
+      history.back();
+    }
+    await expect.poll(() => location.pathname).toBe("/manage/profile");
+    m = await reopenedProfile(m);
+    change(m, "123456");
+    await m.screen.updateComplete;
+    history[direction]();
+    await expect.poll(() => m.question.open).toBe(true);
+    expect(location.pathname).toBe("/manage/profile");
+    expect(telephone(m)).toBe("123456");
+    await choose(m, "keep");
+    expect(location.pathname).toBe("/manage/profile");
+    expect(m.screen.isConnected).toBe(true);
+    history[direction]();
+    await expect.poll(() => m.question.open).toBe(true);
+    await choose(m, "discard");
+    await expect.poll(() => location.pathname).toBe("/manage/orders");
+    await expect.poll(() => m.screen.isConnected).toBe(false);
+    expect(unload()).toBe(false);
+  });
+}
+
+it("opening and closing Account settings retains the edited main page without a warning", async () => {
+  const m = await mount();
+  const departing = pageDraft(m);
+  m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+  await expect.poll(() => location.pathname).toBe("/manage/my-schedule");
+  expect(m.question.open).toBe(false);
+  m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=profile]")!.click();
+  await expect.poll(() => location.pathname).toBe("/manage/profile");
+  expect(m.question.open).toBe(false);
+  expect(departing.input.isConnected).toBe(true);
+  expect(departing.input.value).toBe("page edited");
+  expect(unload()).toBe(true);
+});
+
+it.each([
+  ["/manage/orders?keep=1#orders", "/manage/orders"],
+  ["/manage?keep=1#orders", "/manage/my-schedule"],
+])(
+  "an ordinary same-app anchor %s from a child shadow root asks before its default navigation",
+  async (href, destination) => {
+    const m = await mount();
+    change(m, "123456");
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.textContent = "Orders";
+    m.screen.shadowRoot!.append(anchor);
+    let reachedBrowser = false;
+    const blockDefault = (event: MouseEvent) => {
+      reachedBrowser = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener("click", blockDefault, { once: true });
+    anchor.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+    );
+    document.removeEventListener("click", blockDefault);
+    expect(reachedBrowser).toBe(false);
+    await expect.poll(() => m.question.open).toBe(true);
+    expect(location.pathname).toBe("/manage/profile");
+    await choose(m, "keep");
+    expect(telephone(m)).toBe("123456");
+    document.addEventListener("click", blockDefault, { once: true });
+    anchor.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+    );
+    document.removeEventListener("click", blockDefault);
+    await expect.poll(() => m.question.open).toBe(true);
+    await choose(m, "discard");
+    await expect.poll(() => location.pathname).toBe(destination);
+    expect(location.search).toBe("?keep=1");
+    expect(location.hash).toBe("#orders");
+    expect(unload()).toBe(false);
+  },
+);
+
+it("a guarded product deep link accepts the product and screen in one history stop", async () => {
+  const m = await mount({
+    getMe: async () => ({
+      personId: "p1",
+      email: "ada@example.com",
+      role: "manager",
+      locale: "en-GB",
+      venueLocale: "en-GB",
+      sessionDefault: "en-GB",
+      venueName: "Venue",
+      permissions: ["product.manage"],
+      modules: [],
+    }),
+  });
+  change(m, "123456");
+  const length = history.length;
+  const request = () =>
+    m.app.shadowRoot!.querySelector(".body")!.firstElementChild!.dispatchEvent(
+      new CustomEvent("wt-edit-product", {
+        detail: { productId: "product-1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  request();
+  await expect.poll(() => m.question.open).toBe(true);
+  expect(location.pathname).toBe("/manage/profile");
+  await choose(m, "keep");
+  expect(telephone(m)).toBe("123456");
+  request();
+  await expect.poll(() => m.question.open).toBe(true);
+  await choose(m, "discard");
+  await expect.poll(() => location.pathname).toBe("/manage/catalogue/product/product-1");
+  expect(history.length).toBe(length + 1);
+  expect(m.app.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+  expect(unload()).toBe(false);
+});
+
+it.each([
+  "ctrl",
+  "meta",
+  "shift",
+  "alt",
+  "middle",
+  "download",
+  "new-tab",
+  "external",
+  "other-app",
+] as const)(
+  "%s links keep browser handling without discarding edited profile input",
+  async (kind) => {
+    const m = await mount();
+    change(m, "123456");
+    const anchor = document.createElement("a");
+    anchor.href =
+      kind === "external"
+        ? "https://example.invalid/manage/orders"
+        : kind === "other-app"
+          ? "/setup/"
+          : "/manage/orders";
+    if (kind === "download") anchor.download = "orders";
+    if (kind === "new-tab") anchor.target = "_blank";
+    m.screen.shadowRoot!.append(anchor);
+    let reachedBrowser = false;
+    const blockDefault = (event: MouseEvent) => {
+      reachedBrowser = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener("click", blockDefault, { once: true });
+    anchor.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        ctrlKey: kind === "ctrl",
+        metaKey: kind === "meta",
+        shiftKey: kind === "shift",
+        altKey: kind === "alt",
+        button: kind === "middle" ? 1 : 0,
+      }),
+    );
+    document.removeEventListener("click", blockDefault);
+    await m.app.updateComplete;
+    expect(reachedBrowser).toBe(true);
+    expect(m.question.open).toBe(false);
+    expect(location.pathname).toBe("/manage/profile");
+    expect(telephone(m)).toBe("123456");
+    expect(unload()).toBe(true);
+  },
+);
+
+it("an encoded Account settings link retains the edited underlying page", async () => {
+  const m = await mount();
+  const departing = pageDraft(m);
+  m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+  await expect.poll(() => location.pathname).toBe("/manage/my-schedule");
+  const anchor = document.createElement("a");
+  anchor.href = "/manage/%70rofile";
+  (departing.input.getRootNode() as ShadowRoot).append(anchor);
+  const blockDefault = (event: MouseEvent) => event.preventDefault();
+  document.addEventListener("click", blockDefault, { once: true });
+  anchor.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+  );
+  document.removeEventListener("click", blockDefault);
+  await expect.poll(() => location.pathname).toBe("/manage/%70rofile");
+  expect(m.question.open).toBe(false);
+  expect(departing.input.isConnected).toBe(true);
+  expect(departing.input.value).toBe("page edited");
+  expect(unload()).toBe(true);
+});
+
+it("a malformed route segment still asks before discarding the profile and falls back safely", async () => {
+  const m = await mount();
+  change(m, "123456");
+  const anchor = document.createElement("a");
+  anchor.href = "/manage/%ZZ";
+  m.screen.shadowRoot!.append(anchor);
+  const blockDefault = (event: MouseEvent) => event.preventDefault();
+  document.addEventListener("click", blockDefault, { once: true });
+  anchor.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+  );
+  document.removeEventListener("click", blockDefault);
+  await expect.poll(() => m.question.open).toBe(true);
+  expect(location.pathname).toBe("/manage/profile");
+  await choose(m, "discard");
+  await expect.poll(() => location.pathname).toBe("/manage/my-schedule");
+  expect(m.screen.isConnected).toBe(false);
+  expect(unload()).toBe(false);
 });

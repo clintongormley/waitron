@@ -1,5 +1,5 @@
-import { LeaveController, type LeaveReason } from "@waitron/ui";
-import { dashboardPath } from "./navigation.js";
+import { LeaveController, navigationGuardFor, type LeaveReason } from "@waitron/ui";
+import { dashboardPath, leftToBrowser } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
@@ -829,6 +829,7 @@ export class DashboardApp extends LitElement {
     this.#breakpoint = window.matchMedia(DRAWER_BREAKPOINT);
     this.narrow = this.#breakpoint.matches;
     this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
+    this.addEventListener("click", this.#onAppLink, true);
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.addEventListener("waitron-session-active", this.#onSessionActive);
     window.addEventListener("storage", this.#onSessionStorage);
@@ -840,6 +841,7 @@ export class DashboardApp extends LitElement {
     this.liveUpdates?.stop();
     this.#breakpoint?.removeEventListener("change", this.#onBreakpointChange);
     this.#breakpoint = undefined;
+    this.removeEventListener("click", this.#onAppLink, true);
     window.removeEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.removeEventListener("waitron-session-active", this.#onSessionActive);
     window.removeEventListener("storage", this.#onSessionStorage);
@@ -1114,6 +1116,7 @@ export class DashboardApp extends LitElement {
 
   #returnToLogin(code: string | null): void {
     this.leave.forceReset();
+    navigationGuardFor(window)?.reset();
     this.#languageQueries.release("getContentLanguages");
     this.#clearAlerts();
     this.contentLanguagesReady = false;
@@ -1501,13 +1504,40 @@ export class DashboardApp extends LitElement {
     </header>`;
   }
 
+  readonly #onAppLink = (event: MouseEvent): void => {
+    if (event.defaultPrevented || leftToBrowser(event)) return;
+    const anchor = event
+      .composedPath()
+      .find(
+        (node): node is HTMLAnchorElement =>
+          node instanceof HTMLAnchorElement && node.hasAttribute("href"),
+      );
+    if (
+      !anchor ||
+      anchor.hasAttribute("download") ||
+      (anchor.target !== "" && anchor.target !== "_self")
+    )
+      return;
+    const url = new URL(anchor.href);
+    if (
+      url.origin !== location.origin ||
+      (url.pathname !== "/manage" && !url.pathname.startsWith("/manage/"))
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    void navigationGuardFor(window)?.write(url);
+  };
+
   #selectScreen(screen: ScreenId): void {
-    diag.record("info", "nav", { screen });
-    this.screen = this.#permittedScreen(screen);
-    // Picking the page already shown changes no `screen`, so `willUpdate` would leave its group shut.
-    this.#openGroupOf(this.screen);
-    this.#writeScreenUrl(this.screen);
-    this.drawerOpen = false;
+    const destination = this.#permittedScreen(screen);
+    void Promise.resolve(this.#writeScreenUrl(destination)).then((outcome) => {
+      if (outcome === "proceeded" && this.isConnected && this.screen === destination) {
+        this.#openGroupOf(destination);
+        this.drawerOpen = false;
+        this.navSearch = "";
+      }
+    });
   }
 
   /** A screen (the units in-use modal) asks to open a product's editor; navigate to the catalogue
@@ -1516,11 +1546,7 @@ export class DashboardApp extends LitElement {
     event.stopPropagation();
     const screen = this.#permittedScreen("catalogue");
     if (screen !== "catalogue") return;
-    // An ordinary screen change (so the previous screen's `view` segment is cleared), then the
-    // product on top of it — `write` merges into what the URL already holds. The second write
-    // REPLACES, so the jump is a single Back-button stop rather than two.
-    this.#selectScreen(screen);
-    this.#url.write({ product: event.detail.productId }, true);
+    void this.#url.write({ dashboard: screen, view: null, product: event.detail.productId });
   }
 
   #mayOpen(item: AccessRule): boolean {
@@ -1582,10 +1608,32 @@ export class DashboardApp extends LitElement {
     return "overview";
   }
 
-  readonly #url = new UrlStateController(this, () => this.#onHistory(), dashboardPath);
+  readonly #url = new UrlStateController(this, () => this.#onHistory(), {
+    ...dashboardPath,
+    leave: {
+      isDirty: () => this.leave.coordinator.isDirty(),
+      request: (proceed, signal, destination) => {
+        const segment = new URL(destination).pathname.split("/")[2];
+        let requested: string | undefined;
+        try {
+          requested = segment === undefined ? undefined : decodeURIComponent(segment);
+        } catch {
+          requested = undefined;
+        }
+        const profile = this.renderRoot.querySelector<ProfileScreen>("dashboard-profile-screen");
+        const scopes =
+          requested === "profile"
+            ? []
+            : this.profileOpen && requested === this.screen && profile
+              ? [profile]
+              : "all";
+        return this.leave.coordinator.request({ scopes, reason: "navigation", proceed, signal });
+      },
+    },
+  });
 
-  #writeScreenUrl(screen: ScreenId, replace = false): void {
-    this.#url.write(
+  #writeScreenUrl(screen: ScreenId, replace = false) {
+    return this.#url.write(
       { dashboard: screen, ...(this.#url.read("dashboard") === screen ? {} : { view: null }) },
       replace,
     );
@@ -1616,15 +1664,12 @@ export class DashboardApp extends LitElement {
 
   /** A pushed navigation, so the browser's Back button closes the modal. */
   #openProfile(): void {
-    this.profileOpen = true;
     this.#url.write({ dashboard: "profile" }, false);
-    this.drawerOpen = false;
   }
 
   /** Replaces the current entry, so "profile" does not stay behind as its own Back-button stop. A
    * Back-button close goes through `#onHistory` instead. */
   #closeProfile(): void {
-    this.profileOpen = false;
     this.#writeScreenUrl(this.screen, true);
   }
 
@@ -1632,6 +1677,7 @@ export class DashboardApp extends LitElement {
     if (this.screen === "login" || this.sessionRole === undefined) return;
     this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#writeCurrentUrl(true);
+    this.#openGroupOf(this.screen);
     this.drawerOpen = false;
     diag.record("info", "nav", { screen: this.screen });
   };
@@ -1690,7 +1736,6 @@ export class DashboardApp extends LitElement {
   }
 
   #openFromNav(screen: ScreenId): void {
-    this.navSearch = "";
     this.#selectScreen(screen);
   }
 

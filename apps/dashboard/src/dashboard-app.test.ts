@@ -2479,6 +2479,7 @@ describe("dashboard-app", () => {
     await flush(sup);
     expect(navItem(sup, "devices")).toBeTruthy();
     expect(navItem(sup, "diagnostics")).toBeNull();
+    sup.remove();
 
     const { el: mgr } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
@@ -2501,6 +2502,7 @@ describe("dashboard-app", () => {
     const panel = adm.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
     const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
     expect(order.indexOf("nav-servers")).toBe(order.indexOf("nav-backup") + 1);
+    adm.remove();
 
     // A manager holds no `mirror.create`, so the item that would only answer "not permitted" is not
     // offered; an admin whose permissions somehow lack it is not offered it either.
@@ -2510,6 +2512,7 @@ describe("dashboard-app", () => {
     await flush(mgr);
     expect(navItem(mgr, "backup")).toBeTruthy();
     expect(navItem(mgr, "servers")).toBeNull();
+    mgr.remove();
     const { el: bare } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({ ...meResponse, role: "admin", permissions: [] }),
