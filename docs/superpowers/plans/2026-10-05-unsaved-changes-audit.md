@@ -394,3 +394,19 @@ behavior and accessibility suites. English/Spanish, light/dark, phone/desktop ed
 renderings ran with axe. Synthetic unload checks cover listener cancellation, not a native reload
 prompt. Reader naming was wired at the preceding checkpoint; the earlier device checkpoints' pending
 reader references are superseded. SumUp/Stripe forms and the other modal/page owners remain pending.
+
+## 2026-10-06 connection-form checkpoint
+
+SumUp and Stripe connection forms register their own exact submitted inputs with the nearest
+application registry. SumUp includes the optional affiliate fields and ambiguous merchant choice;
+Stripe includes both keys and redirect URLs. A scoped request retains the visible draft on Keep,
+restores it on Discard, and skips unchanged values. A submitted request is exempt while waiting;
+a refusal restores draft protection, and an accepted response commits only its submitted values.
+If newer input arrived, the form remains editable instead of calling the host's closing callback.
+Disconnect clears typed values and unregisters the scope; old controls and replies cannot affect
+a reconnected opening. SumUp's restored merchant selection also updates the combobox value.
+
+The new sibling `*-connect-form.unsaved.test.ts` suites exercise these boundaries and the containing
+owner's scope request. They do not establish interception of the Payments page's actual navigation
+or browser reload. Those adapters remain Tasks 5–6. SumUp/Stripe reader forms and other modal owners
+remain pending. Existing provider connect and pairing assertions are unchanged.
