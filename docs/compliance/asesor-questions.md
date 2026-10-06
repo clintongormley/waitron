@@ -2528,7 +2528,8 @@ specification has not been checked for it.
 
 > Cuando remitimos un envío con varios registros de facturación (hasta 1.000), la respuesta de la
 > AEAT contiene una línea (`RespuestaLinea`) por registro. En nuestras pruebas en el entorno de
-> preproducción, las líneas llegaron siempre en el mismo orden en que enviamos los registros.
+> preproducción, cada registro enviado apareció en exactamente una línea de la respuesta; no
+> registramos el orden en que llegaron las líneas.
 >
 > **(a)** ¿Garantiza la AEAT que las líneas de la respuesta siguen el orden de los registros del
 > envío, de modo que la línea N corresponde siempre al registro N? ¿Consta en alguna
@@ -2544,14 +2545,17 @@ specification has not been checked for it.
 when it also names that record (our reference and the invoice's issuer, number and date). Any
 other record's outcome is unknown: it is sent again, an alert is raised, and the alert shows the
 line it was compared with. When the reply's line count differs from the records sent, every record
-of that envío is unknown and the whole reply is kept once. A reordered reply can therefore only
-cause extra retries, never an invoice wrongly taken as accepted.
+of that envío is unknown and the whole reply is kept once. A reordered reply can therefore never
+make an invoice wrongly taken as accepted; if AEAT always reordered, though, a multi-record envío
+would never be confirmed and its records would be sent again and again, holding their chain.
 
-**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-06).** All six
-replies with more than one line listed the records in the order sent, including both
-1,000-record envíos, and each record had exactly one line (runs 37283677375, 37283909983 and
-37283910284). These are test-system observations, not a guarantee; (a) and (b) remain for the
-asesor.
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; corrected 2026-10-07).** In
+all six replies with more than one line, including both 1,000-record envíos, each record sent was
+named by exactly one line (runs 37283677375, 37283909983 and 37283910284). The ORDER of the lines
+was not recorded: the probe (`scripts/live-aeat.mjs` in the `@waitron/verifactu` repository) looks
+each sent record up in the reply by invoice number and saves the results in the order sent,
+whatever order AEAT used. An earlier version of this paragraph said the replies listed the records
+in the order sent; nothing we hold shows that. (a) and (b) remain for the asesor.
 
 Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json).
 
