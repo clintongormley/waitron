@@ -714,6 +714,20 @@ declare module "@waitron/shared" {
     /** A cash payment from a device whose profile does not take cash (`assertTakesCash`). */
     "device.cash_not_allowed": Record<string, never>;
     /**
+     * A device's active profile cannot change while a card payment it started is still unresolved
+     * (`payments.state` `attempting` or `initiated`): the payment finishes or is cancelled first.
+     */
+    "device.payment_in_progress": Record<string, never>;
+    /**
+     * A switch named a profile the device is not approved for: never approved, withdrawn since the
+     * till last read the list, retired, of another form factor, or unknown.
+     */
+    "device_profile.not_approved": Record<string, never>;
+    /** The person signed in on the device may not sign in on the profile they tried to switch to. */
+    "device_profile.not_admitted": Record<string, never>;
+    /** A manager approved, for a device, a profile of another form factor than its active one. */
+    "device_profile.incompatible": { field: "approvedProfileIds" };
+    /**
      * The device-management surface named a device id that matches nothing, or, on
      * `PATCH /management-api/devices/:id` alone, a disabled device (`active = false`). Unlike
      * `device.unauthorized`, this surface is for an authenticated manager, so the id is echoed.

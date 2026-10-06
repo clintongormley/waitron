@@ -1,7 +1,7 @@
 /** The device join, enrolment and management surface end to end. */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceMadeHereStations,
@@ -23,6 +23,7 @@ import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { mountDeviceApi } from "./device-api.js";
+import { listApprovedProfiles, switchActiveProfile } from "./device.js";
 import {
   ENROL_RATE_MAX,
   ENROL_RATE_WINDOW_MS,
@@ -38,7 +39,14 @@ import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { decimal } from "@waitron/shared";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import {
+  deviceProfileAdmissionRoles,
+  hashPin,
+  loginWithPin,
+  persons,
+  sessions,
+} from "@waitron/identity";
+import { payments } from "@waitron/payments";
 import { deleteDeviceProfile, setProfilePrinterLists } from "@waitron/layouts";
 import "./errors.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
@@ -2242,5 +2250,561 @@ describe("deleted routes are gone (404)", () => {
     const venue = await setupVenue(suite.db);
     const res = await send(mountApp(venue.cfg), method as "POST", path, { body: {} });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("a device's approved profiles and switching its active one", () => {
+  type Device = { deviceId: string; jar: string; profileId: string };
+
+  async function approved(deviceId: string): Promise<string[]> {
+    return withTransaction(suite.db, (tx) => listApprovedProfiles(tx, deviceId));
+  }
+
+  /** The manager's edit, as the dashboard sends it: every stored field plus `changes`. */
+  async function manage(
+    app: Hono,
+    venue: Venue,
+    deviceId: string,
+    changes: Record<string, unknown>,
+  ): Promise<Response> {
+    const [row] = await suite.db
+      .select({
+        name: devices.label,
+        profileId: devices.deviceProfileId,
+        stationId: devices.stationId,
+        watcherId: devices.watcherId,
+        receiptPrinterId: devices.receiptPrinterId,
+        paymentSlipPrinterId: devices.paymentSlipPrinterId,
+      })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    return send(app, "PATCH", `/management-api/devices/${deviceId}`, {
+      cookie: venue.managerCookie,
+      body: { ...row!, ...changes },
+    });
+  }
+
+  async function approve(app: Hono, venue: Venue, deviceId: string, ids: string[]) {
+    const res = await manage(app, venue, deviceId, { approvedProfileIds: ids });
+    expect(res.status).toBe(204);
+  }
+
+  /** A signed-in person of `role` on the device, as the cookie the till sends. */
+  async function signIn(
+    deviceId: string,
+    role: "staff" | "manager" = "staff",
+  ): Promise<{ cookie: string; personId: string }> {
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: `Person ${randomUUID()}`, pinHash: hashPin("4321"), role })
+      .returning({ id: persons.id });
+    const session = await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
+    );
+    return { cookie: `${SESSION_COOKIE}=${session.token}`, personId: person!.id };
+  }
+
+  function switchTo(app: Hono, cookie: string | null, profileId: unknown): Promise<Response> {
+    return send(app, "POST", "/api/device/active-profile", { cookie, body: { profileId } });
+  }
+
+  /** Admits only `role` to `profileId`. */
+  async function admitOnly(profileId: string, role: "staff" | "manager"): Promise<void> {
+    await suite.db.insert(deviceProfileAdmissionRoles).values({ deviceProfileId: profileId, role });
+  }
+
+  /** An `attempting` card payment started on `deviceId`. */
+  async function paymentInProgress(venue: Venue, deviceId: string, state = "attempting" as const) {
+    const orderId = randomUUID();
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    await parkOrder({ db: suite.db }, venue.cfg, {
+      id: orderId,
+      zoneId: offers.zoneId,
+      lines: offers.toOfferLines([{ productId: venue.cafeId, quantity: "1" }]),
+      label: "Mesa 1",
+    });
+    const [row] = await suite.db
+      .insert(payments)
+      .values({
+        workingOrderId: orderId,
+        source: "device",
+        deviceId,
+        provider: "stripe",
+        paymentRef: randomUUID(),
+        amount: 150,
+        state,
+      })
+      .returning({ id: payments.id });
+    return row!.id;
+  }
+
+  async function openSessionsOn(deviceId: string): Promise<string[]> {
+    const rows = await suite.db
+      .select({ personId: sessions.personId })
+      .from(sessions)
+      .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)));
+    return rows.map((row) => row.personId).sort();
+  }
+
+  async function captureCode(run: () => Promise<unknown>): Promise<string | undefined> {
+    try {
+      await run();
+      return undefined;
+    } catch (error) {
+      return (error as { code?: string }).code;
+    }
+  }
+
+  async function till(app: Hono, venue: Venue, name = "Caja"): Promise<Device> {
+    const { deviceId, jar, profileId } = await enrolTill(app, venue, name);
+    return { deviceId, jar, profileId };
+  }
+
+  describe("approval", () => {
+    it("a freshly enrolled device lists exactly its active profile as approved", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      expect(await approved(t.deviceId)).toEqual([t.profileId]);
+      const listed = await send(app, "GET", "/management-api/devices", {
+        cookie: venue.managerCookie,
+      });
+      const rows = (await listed.json()) as { id: string; approvedProfileIds: string[] }[];
+      expect(rows.find((r) => r.id === t.deviceId)?.approvedProfileIds).toEqual([t.profileId]);
+    });
+
+    it("approving two alternatives keeps the active profile approved", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const [a, b] = [await seedProfile("till"), await seedProfile("till")];
+      await approve(app, venue, t.deviceId, [a, b]);
+      expect(new Set(await approved(t.deviceId))).toEqual(new Set([t.profileId, a, b]));
+      expect((await approved(t.deviceId))[0]).toBe(t.profileId);
+      expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(t.profileId);
+    });
+
+    it("an edit without approvedProfileIds leaves the approved set alone", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const a = await seedProfile("till");
+      await approve(app, venue, t.deviceId, [a]);
+      expect((await manage(app, venue, t.deviceId, { name: "Renamed" })).status).toBe(204);
+      expect(await approved(t.deviceId)).toEqual([t.profileId, a]);
+    });
+
+    it("an empty list withdraws every alternative, never the active profile", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const a = await seedProfile("till");
+      await approve(app, venue, t.deviceId, [a]);
+      await approve(app, venue, t.deviceId, []);
+      expect(await approved(t.deviceId)).toEqual([t.profileId]);
+    });
+
+    it("refuses an unknown profile as device_profile.not_found, changing nothing", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const a = await seedProfile("till");
+      const res = await manage(app, venue, t.deviceId, {
+        name: "Renamed",
+        approvedProfileIds: [a, randomUUID()],
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ error: { code: "device_profile.not_found" } });
+      expect(await approved(t.deviceId)).toEqual([t.profileId]);
+      const [row] = await suite.db
+        .select({ label: devices.label })
+        .from(devices)
+        .where(eq(devices.id, t.deviceId));
+      expect(row!.label).toBe("Caja");
+    });
+
+    it("refuses a profile of another form factor as device_profile.incompatible, changing nothing", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      for (const formFactor of ["kds", "phone-portrait"] as const) {
+        const other = await seedProfile(formFactor);
+        const res = await manage(app, venue, t.deviceId, { approvedProfileIds: [other] });
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "device_profile.incompatible", params: { field: "approvedProfileIds" } },
+        });
+      }
+      expect(await approved(t.deviceId)).toEqual([t.profileId]);
+    });
+
+    it("refuses a malformed list as management.request_invalid", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      for (const bad of [null, "x", ["not-a-uuid"], {}]) {
+        const res = await manage(app, venue, t.deviceId, { approvedProfileIds: bad });
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "approvedProfileIds" } },
+        });
+      }
+    });
+
+    it("activating a profile not yet approved approves it, and the one it replaces stays approved", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const next = await seedProfile("till");
+      expect((await manage(app, venue, t.deviceId, { profileId: next })).status).toBe(204);
+      expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(next);
+      expect(await approved(t.deviceId)).toEqual([next, t.profileId]);
+    });
+
+    it("activating with approvedProfileIds approves exactly the new active profile and that list", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const [next, a] = [await seedProfile("till"), await seedProfile("till")];
+      const res = await manage(app, venue, t.deviceId, {
+        profileId: next,
+        approvedProfileIds: [a],
+      });
+      expect(res.status).toBe(204);
+      expect(await approved(t.deviceId)).toEqual([next, a]);
+    });
+
+    it("refuses to change the active profile during a payment on the device, changing nothing", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const next = await seedProfile("till");
+      await paymentInProgress(venue, t.deviceId);
+      const res = await manage(app, venue, t.deviceId, {
+        name: "Renamed",
+        profileId: next,
+        approvedProfileIds: [],
+      });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "device.payment_in_progress" } });
+      expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(t.profileId);
+      expect(await approved(t.deviceId)).toEqual([t.profileId]);
+    });
+
+    it("still renames a device and approves alternatives during a payment on it", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const a = await seedProfile("till");
+      await paymentInProgress(venue, t.deviceId);
+      const res = await manage(app, venue, t.deviceId, {
+        name: "Renamed",
+        approvedProfileIds: [a],
+      });
+      expect(res.status).toBe(204);
+      expect(await approved(t.deviceId)).toEqual([t.profileId, a]);
+    });
+
+    it("activating a profile ends the sessions of people it does not admit", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const next = await seedProfile("till");
+      await admitOnly(next, "manager");
+      await signIn(t.deviceId, "staff");
+      const manager = await signIn(t.deviceId, "manager");
+      expect((await manage(app, venue, t.deviceId, { profileId: next })).status).toBe(204);
+      expect(await openSessionsOn(t.deviceId)).toEqual([manager.personId]);
+    });
+
+    it("lists neither a retired alternative nor one whose form factor no longer matches", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const [kept, retired, changed] = [
+        await seedProfile("till"),
+        await seedProfile("till"),
+        await seedProfile("till"),
+      ];
+      await approve(app, venue, t.deviceId, [kept, retired, changed]);
+      await suite.db
+        .update(deviceProfiles)
+        .set({ retiredAt: new Date().toISOString() })
+        .where(eq(deviceProfiles.id, retired));
+      await suite.db
+        .update(deviceProfiles)
+        .set({ formFactor: "phone-portrait" })
+        .where(eq(deviceProfiles.id, changed));
+      expect(await approved(t.deviceId)).toEqual([t.profileId, kept]);
+    });
+
+    it("forgets a device's approvals when the profile is deleted", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const a = await seedProfile("till");
+      await approve(app, venue, t.deviceId, [a]);
+      await suite.db.delete(deviceProfiles).where(eq(deviceProfiles.id, a));
+      expect(await approved(t.deviceId)).toEqual([t.profileId]);
+    });
+  });
+
+  describe("GET /api/device/profiles", () => {
+    it("names the device's approved profiles and which is active", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const a = await seedProfile("till");
+      await approve(app, venue, t.deviceId, [a]);
+      const names = await suite.db
+        .select({ id: deviceProfiles.id, name: deviceProfiles.name })
+        .from(deviceProfiles);
+      const nameOf = (id: string) => names.find((row) => row.id === id)!.name;
+      const res = await send(app, "GET", "/api/device/profiles", { cookie: t.jar });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        activeProfileId: t.profileId,
+        profiles: [
+          { id: t.profileId, name: nameOf(t.profileId) },
+          { id: a, name: nameOf(a) },
+        ],
+      });
+    });
+
+    it("401s a request with no device", async () => {
+      const venue = await setupVenue(suite.db);
+      const res = await send(mountApp(venue.cfg), "GET", "/api/device/profiles", { cookie: null });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    });
+  });
+
+  describe("POST /api/device/active-profile", () => {
+    /** A till on profile `from`, with `to` approved; `from` lists [Bar, Counter] for receipts and
+     * [Bar] for slips, and the device holds Counter and Bar. */
+    async function switchable(app: Hono, venue: Venue) {
+      const [bar, counter, kitchen] = await seedNamedPrinters(venue.cfg, [
+        "Bar",
+        "Counter",
+        "Kitchen",
+      ]);
+      const from = await seedProfile("till");
+      const to = await seedProfile("till");
+      await withTransaction(suite.db, async (tx) => {
+        await setProfilePrinterLists(tx, from, {
+          receiptPrinterIds: [bar!, counter!],
+          paymentSlipPrinterIds: [bar!],
+        });
+        // Counter stays on the new profile's receipt list; Bar is not on its slip list.
+        await setProfilePrinterLists(tx, to, {
+          receiptPrinterIds: [kitchen!, counter!],
+          paymentSlipPrinterIds: [kitchen!],
+        });
+      });
+      const { deviceId, jar } = await knockAndAccept(app, venue, { name: "Caja", profileId: from });
+      await suite.db
+        .update(devices)
+        .set({ receiptPrinterId: counter!, paymentSlipPrinterId: bar! })
+        .where(eq(devices.id, deviceId));
+      await approve(app, venue, deviceId, [to]);
+      return { deviceId, jar, from, to, bar: bar!, counter: counter!, kitchen: kitchen! };
+    }
+
+    it("switches to an approved profile, keeping a printer the new profile lists and moving the other to its first", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const s = await switchable(app, venue);
+      const me = await signIn(s.deviceId);
+      const res = await switchTo(app, me.cookie, s.to);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        activeProfileId: s.to,
+        receiptPrinterId: s.counter,
+        paymentSlipPrinterId: s.kitchen,
+      });
+      expect(await deviceBindings(s.deviceId)).toEqual({
+        deviceProfileId: s.to,
+        receiptPrinterId: s.counter,
+        paymentSlipPrinterId: s.kitchen,
+      });
+      // The profile it left stays approved, so the device can switch back.
+      expect(new Set(await approved(s.deviceId))).toEqual(new Set([s.from, s.to]));
+      expect((await switchTo(app, me.cookie, s.from)).status).toBe(200);
+      expect((await deviceBindings(s.deviceId)).deviceProfileId).toBe(s.from);
+    });
+
+    it("selecting the active profile again changes nothing", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const s = await switchable(app, venue);
+      // A printer the profile does not list stays held: nothing is re-chosen.
+      await suite.db
+        .update(devices)
+        .set({ receiptPrinterId: s.kitchen })
+        .where(eq(devices.id, s.deviceId));
+      const me = await signIn(s.deviceId);
+      const other = await signIn(s.deviceId);
+      await admitOnly(s.from, "manager");
+      const res = await switchTo(app, me.cookie, s.from);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        activeProfileId: s.from,
+        receiptPrinterId: s.kitchen,
+        paymentSlipPrinterId: s.bar,
+      });
+      expect(await deviceBindings(s.deviceId)).toEqual({
+        deviceProfileId: s.from,
+        receiptPrinterId: s.kitchen,
+        paymentSlipPrinterId: s.bar,
+      });
+      expect(await openSessionsOn(s.deviceId)).toEqual([me.personId, other.personId].sort());
+    });
+
+    it("ends the sessions of people the new profile does not admit, and keeps the others", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const s = await switchable(app, venue);
+      const me = await signIn(s.deviceId, "manager");
+      const otherManager = await signIn(s.deviceId, "manager");
+      const staff = await signIn(s.deviceId, "staff");
+      await admitOnly(s.to, "manager");
+      expect((await switchTo(app, me.cookie, s.to)).status).toBe(200);
+      expect(await openSessionsOn(s.deviceId)).toEqual([me.personId, otherManager.personId].sort());
+      // The ended session can no longer act on the device.
+      const after = await send(app, "PUT", "/api/device/printers", {
+        cookie: staff.cookie,
+        body: { receiptPrinterId: null },
+      });
+      expect(after.status).toBe(401);
+      expect(await after.json()).toMatchObject({ error: { code: "session.required" } });
+    });
+
+    it("refuses a profile the device is not approved for, profile and printers untouched", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const s = await switchable(app, venue);
+      const me = await signIn(s.deviceId);
+      const before = await deviceBindings(s.deviceId);
+      for (const target of [await seedProfile("till"), randomUUID()]) {
+        const res = await switchTo(app, me.cookie, target);
+        expect(res.status).toBe(403);
+        expect(await res.json()).toMatchObject({ error: { code: "device_profile.not_approved" } });
+      }
+      expect(await deviceBindings(s.deviceId)).toEqual(before);
+    });
+
+    it("refuses an approval withdrawn while an old client still offers it", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const s = await switchable(app, venue);
+      const me = await signIn(s.deviceId);
+      const offered = await send(app, "GET", "/api/device/profiles", { cookie: s.jar });
+      expect(((await offered.json()) as { profiles: { id: string }[] }).profiles).toContainEqual(
+        expect.objectContaining({ id: s.to }),
+      );
+      await approve(app, venue, s.deviceId, []);
+      const res = await switchTo(app, me.cookie, s.to);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: { code: "device_profile.not_approved" } });
+      expect((await deviceBindings(s.deviceId)).deviceProfileId).toBe(s.from);
+    });
+
+    it("refuses a person the new profile does not admit, profile, printers and sessions untouched", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const s = await switchable(app, venue);
+      const me = await signIn(s.deviceId, "staff");
+      await admitOnly(s.to, "manager");
+      const before = await deviceBindings(s.deviceId);
+      const res = await switchTo(app, me.cookie, s.to);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: { code: "device_profile.not_admitted" } });
+      expect(await deviceBindings(s.deviceId)).toEqual(before);
+      expect(await openSessionsOn(s.deviceId)).toEqual([me.personId]);
+    });
+
+    it.each(["attempting", "initiated"] as const)(
+      "refuses during a payment %s on the device, profile and printers untouched",
+      async (state) => {
+        const venue = await setupVenue(suite.db);
+        const app = mountApp(venue.cfg);
+        const s = await switchable(app, venue);
+        const me = await signIn(s.deviceId);
+        await paymentInProgress(venue, s.deviceId, state as "attempting");
+        const before = await deviceBindings(s.deviceId);
+        const res = await switchTo(app, me.cookie, s.to);
+        expect(res.status).toBe(409);
+        expect(await res.json()).toMatchObject({ error: { code: "device.payment_in_progress" } });
+        expect(await deviceBindings(s.deviceId)).toEqual(before);
+      },
+    );
+
+    it("switches once the device's payment has finished, and a payment on another device does not stop it", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const s = await switchable(app, venue);
+      const other = await till(app, venue, "Otra caja");
+      const me = await signIn(s.deviceId);
+      const done = await paymentInProgress(venue, s.deviceId);
+      await suite.db.update(payments).set({ state: "captured" }).where(eq(payments.id, done));
+      await paymentInProgress(venue, other.deviceId);
+      expect((await switchTo(app, me.cookie, s.to)).status).toBe(200);
+    });
+
+    it("a shared display with nobody signed in cannot switch", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const kds = await enrolKds(app, venue, venue.defaultStationId);
+      const res = await switchTo(app, kds.jar, kds.profileId);
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+      expect((await deviceBindings(kds.deviceId)).deviceProfileId).toBe(kds.profileId);
+    });
+
+    it("refuses a session that ended, or a device revoked, after the request was authenticated", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const s = await switchable(app, venue);
+      const me = await signIn(s.deviceId);
+      const [session] = await suite.db
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(eq(sessions.personId, me.personId));
+      const input = {
+        deviceId: s.deviceId,
+        sessionId: session!.id,
+        personId: me.personId,
+        profileId: s.to,
+      };
+      await suite.db
+        .update(sessions)
+        .set({ endedAt: new Date().toISOString() })
+        .where(eq(sessions.id, session!.id));
+      const ended = await captureCode(() =>
+        withTransaction(suite.db, (tx) => switchActiveProfile(tx, input)),
+      );
+      expect(ended).toBe("session.required");
+      await suite.db.update(sessions).set({ endedAt: null }).where(eq(sessions.id, session!.id));
+      await suite.db.update(devices).set({ active: false }).where(eq(devices.id, s.deviceId));
+      const revoked = await captureCode(() =>
+        withTransaction(suite.db, (tx) => switchActiveProfile(tx, input)),
+      );
+      expect(revoked).toBe("device.unauthorized");
+      expect((await deviceBindings(s.deviceId)).deviceProfileId).toBe(s.from);
+    });
+
+    it("refuses a body without a profile id as management.request_invalid", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const s = await switchable(app, venue);
+      const me = await signIn(s.deviceId);
+      for (const bad of [undefined, null, "not-a-uuid"]) {
+        const res = await switchTo(app, me.cookie, bad);
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "profileId" } },
+        });
+      }
+    });
   });
 });

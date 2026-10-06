@@ -1,10 +1,21 @@
 // Side-effect only: keeps the `device.*` codes (errors.ts) reachable from the file that throws them.
 import "./errors.js";
 import { AppError } from "@waitron/shared";
-import { eq } from "drizzle-orm";
-import { constraintTarget, devices, isUniqueViolation, sameTarget } from "@waitron/db";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
+import {
+  constraintTarget,
+  deviceApprovedProfiles,
+  deviceProfiles,
+  devices,
+  isUniqueViolation,
+  nowIso,
+  sameTarget,
+} from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
-import { firstUsablePrinters, getDeviceProfile, kindOfFormFactor } from "@waitron/layouts";
+import { canUseDeviceProfile, sessions } from "@waitron/identity";
+import { payments } from "@waitron/payments";
+import { getDeviceProfile, kindOfFormFactor, printerChoices } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
 import { requireLiveStation } from "./kitchen.js";
 import { readWatcher } from "./watchers.js";
@@ -57,8 +68,9 @@ interface DevicePrinters {
 
 /**
  * Write a device's name, profile and binding, plus any `also` columns, refusals mapped by
- * {@link mapDeviceNameTaken}. The printers it holds stay while the profile does; a new profile takes
- * its first usable printers at the device's own location. Returns the printers the row now holds.
+ * {@link mapDeviceNameTaken}. The printers it holds stay while the profile does; under a new profile
+ * each stays if that profile offers it at the device's own location, and otherwise becomes the
+ * first one it offers there. Returns the printers the row now holds.
  */
 export async function updateDeviceSettings(
   tx: Transaction,
@@ -77,7 +89,7 @@ export async function updateDeviceSettings(
           receiptPrinterId: device.receiptPrinterId,
           paymentSlipPrinterId: device.paymentSlipPrinterId,
         }
-      : await firstUsablePrinters(tx, settings.profileId, device.locationId);
+      : await keptOrFirstPrinters(tx, device, settings.profileId);
   try {
     await tx
       .update(devices)
@@ -94,6 +106,221 @@ export async function updateDeviceSettings(
     throw mapDeviceNameTaken(error);
   }
   return printers;
+}
+
+async function keptOrFirstPrinters(
+  tx: Transaction,
+  device: DevicePrinters & { locationId: string },
+  profileId: string,
+): Promise<DevicePrinters> {
+  const choices = await printerChoices(tx, profileId, device.locationId);
+  const pick = (current: string | null, offered: { id: string }[]) =>
+    offered.some((choice) => choice.id === current) ? current : (offered[0]?.id ?? null);
+  return {
+    receiptPrinterId: pick(device.receiptPrinterId, choices.receipt),
+    paymentSlipPrinterId: pick(device.paymentSlipPrinterId, choices.paymentSlip),
+  };
+}
+
+/**
+ * Each device's approved alternatives, by name, for `deviceId` alone or every device: live profiles
+ * of its active profile's form factor, the active one left out. A row whose profile was retired or
+ * changed form factor since is kept but not offered.
+ */
+export async function readApprovedAlternatives(
+  tx: Transaction,
+  deviceId?: string,
+): Promise<Map<string, { id: string; name: string }[]>> {
+  const active = alias(deviceProfiles, "active_profile");
+  const rows = await tx
+    .select({
+      deviceId: deviceApprovedProfiles.deviceId,
+      id: deviceProfiles.id,
+      name: deviceProfiles.name,
+    })
+    .from(deviceApprovedProfiles)
+    .innerJoin(devices, eq(devices.id, deviceApprovedProfiles.deviceId))
+    .innerJoin(active, eq(active.id, devices.deviceProfileId))
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceApprovedProfiles.deviceProfileId))
+    .where(
+      and(
+        deviceId === undefined ? undefined : eq(deviceApprovedProfiles.deviceId, deviceId),
+        ne(deviceProfiles.id, devices.deviceProfileId),
+        isNull(deviceProfiles.retiredAt),
+        eq(deviceProfiles.formFactor, active.formFactor),
+      ),
+    )
+    .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
+  const byDevice = new Map<string, { id: string; name: string }[]>();
+  for (const { deviceId, ...profile } of rows) {
+    const list = byDevice.get(deviceId) ?? [];
+    list.push(profile);
+    byDevice.set(deviceId, list);
+  }
+  return byDevice;
+}
+
+/** The device's active profile and its approved alternatives, by name; empty for an unknown device. */
+export async function readApprovedProfiles(
+  tx: Transaction,
+  deviceId: string,
+): Promise<{ id: string; name: string }[]> {
+  const [current] = await tx
+    .select({ id: deviceProfiles.id, name: deviceProfiles.name })
+    .from(devices)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+    .where(eq(devices.id, deviceId));
+  if (current === undefined) return [];
+  return [current, ...((await readApprovedAlternatives(tx, deviceId)).get(deviceId) ?? [])];
+}
+
+/** The ids {@link readApprovedProfiles} lists, the active profile first. */
+export async function listApprovedProfiles(tx: Transaction, deviceId: string): Promise<string[]> {
+  return (await readApprovedProfiles(tx, deviceId)).map((profile) => profile.id);
+}
+
+/**
+ * Make `ids` the device's approved alternatives, replacing those stored. Its active profile stays
+ * approved whether or not `ids` names it. Each must be a live profile of the active profile's form
+ * factor.
+ */
+export async function approveDeviceProfiles(
+  tx: Transaction,
+  deviceId: string,
+  ids: readonly string[],
+): Promise<void> {
+  const [device] = await tx
+    .select({ profileId: devices.deviceProfileId, formFactor: deviceProfiles.formFactor })
+    .from(devices)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+    .where(eq(devices.id, deviceId));
+  if (device === undefined) throw new AppError("device.not_found", { deviceId });
+  const alternatives = [...new Set(ids)].filter((id) => id !== device.profileId);
+  for (const id of alternatives) {
+    const profile = await getDeviceProfile(tx, id);
+    if (profile === undefined) throw new AppError("device_profile.not_found", {});
+    if (profile.formFactor !== device.formFactor)
+      throw new AppError("device_profile.incompatible", { field: "approvedProfileIds" });
+  }
+  await tx.delete(deviceApprovedProfiles).where(eq(deviceApprovedProfiles.deviceId, deviceId));
+  if (alternatives.length > 0)
+    await tx
+      .insert(deviceApprovedProfiles)
+      .values(alternatives.map((deviceProfileId) => ({ deviceId, deviceProfileId })));
+}
+
+/**
+ * After a device's active profile moved from `from` to `to`: `from` stays approved as an
+ * alternative, and `to`, approved by being active, needs no row.
+ */
+export async function keepApprovedAfterSwitch(
+  tx: Transaction,
+  deviceId: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  if (from === to) return;
+  await tx
+    .insert(deviceApprovedProfiles)
+    .values({ deviceId, deviceProfileId: from })
+    .onConflictDoNothing({
+      target: [deviceApprovedProfiles.deviceId, deviceApprovedProfiles.deviceProfileId],
+    });
+  await tx
+    .delete(deviceApprovedProfiles)
+    .where(
+      and(
+        eq(deviceApprovedProfiles.deviceId, deviceId),
+        eq(deviceApprovedProfiles.deviceProfileId, to),
+      ),
+    );
+}
+
+/**
+ * Refuses `device.payment_in_progress` while a payment the device started still waits on its
+ * provider: `attempting` until the provider answers, `initiated` until a hosted payment is paid or
+ * expires. A capture not yet filed is not counted: the provider has already answered the device.
+ */
+export async function assertNoPaymentInProgress(tx: Transaction, deviceId: string): Promise<void> {
+  const [found] = await tx
+    .select({ id: payments.id })
+    .from(payments)
+    .where(
+      and(eq(payments.deviceId, deviceId), inArray(payments.state, ["attempting", "initiated"])),
+    )
+    .limit(1);
+  if (found !== undefined) throw new AppError("device.payment_in_progress", {});
+}
+
+/** Ends each open session on the device whose person `profileId` does not admit. */
+export async function endSessionsNotAdmitted(
+  tx: Transaction,
+  deviceId: string,
+  profileId: string,
+): Promise<void> {
+  const open = await tx
+    .select({ id: sessions.id, personId: sessions.personId })
+    .from(sessions)
+    .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)));
+  const ended: string[] = [];
+  for (const session of open) {
+    if (!(await canUseDeviceProfile(tx, profileId, session.personId))) ended.push(session.id);
+  }
+  if (ended.length > 0)
+    await tx.update(sessions).set({ endedAt: nowIso() }).where(inArray(sessions.id, ended));
+}
+
+/**
+ * Switch the device's active profile to `profileId` for the person signed in on `sessionId`: one
+ * the device is approved for and the person may sign in on, with no payment of the device's in
+ * progress. Printers follow {@link updateDeviceSettings}; the sessions of people the new profile
+ * does not admit end. Choosing the active profile changes nothing.
+ */
+export async function switchActiveProfile(
+  tx: Transaction,
+  input: { deviceId: string; sessionId: string; personId: string; profileId: string },
+): Promise<{ activeProfileId: string } & DevicePrinters> {
+  const [device] = await tx
+    .select({
+      id: devices.id,
+      active: devices.active,
+      label: devices.label,
+      locationId: devices.locationId,
+      deviceProfileId: devices.deviceProfileId,
+      stationId: devices.stationId,
+      watcherId: devices.watcherId,
+      receiptPrinterId: devices.receiptPrinterId,
+      paymentSlipPrinterId: devices.paymentSlipPrinterId,
+    })
+    .from(devices)
+    .where(eq(devices.id, input.deviceId));
+  if (device === undefined || !device.active) throw new AppError("device.unauthorized", {});
+  const [session] = await tx
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(and(eq(sessions.id, input.sessionId), isNull(sessions.endedAt)));
+  if (session === undefined) throw new AppError("session.required", {});
+  if (input.profileId === device.deviceProfileId) {
+    return {
+      activeProfileId: device.deviceProfileId,
+      receiptPrinterId: device.receiptPrinterId,
+      paymentSlipPrinterId: device.paymentSlipPrinterId,
+    };
+  }
+  if (!(await listApprovedProfiles(tx, device.id)).includes(input.profileId))
+    throw new AppError("device_profile.not_approved", {});
+  if (!(await canUseDeviceProfile(tx, input.profileId, input.personId)))
+    throw new AppError("device_profile.not_admitted", {});
+  await assertNoPaymentInProgress(tx, device.id);
+  const printers = await updateDeviceSettings(tx, device, {
+    label: device.label,
+    profileId: input.profileId,
+    stationId: device.stationId,
+    watcherId: device.watcherId,
+  });
+  await keepApprovedAfterSwitch(tx, device.id, device.deviceProfileId, input.profileId);
+  await endSessionsNotAdmitted(tx, device.id, input.profileId);
+  return { activeProfileId: input.profileId, ...printers };
 }
 
 /**

@@ -795,6 +795,12 @@ describe("what can refuse a write to device_profiles", () => {
       order by child, column`);
     expect(rows).toEqual([
       {
+        child: "device_approved_profiles",
+        column: "device_profile_id",
+        parent: "device_profiles",
+        on_delete: "CASCADE",
+      },
+      {
         child: "device_profile_admission_persons",
         column: "device_profile_id",
         parent: "device_profiles",

@@ -31,7 +31,18 @@ import {
   setDeviceCookie,
   sightingDue,
 } from "./device-session.js";
-import { requireDeviceName, resolveDeviceBinding, updateDeviceSettings } from "./device.js";
+import {
+  approveDeviceProfiles,
+  assertNoPaymentInProgress,
+  endSessionsNotAdmitted,
+  keepApprovedAfterSwitch,
+  readApprovedAlternatives,
+  readApprovedProfiles,
+  requireDeviceName,
+  resolveDeviceBinding,
+  switchActiveProfile,
+  updateDeviceSettings,
+} from "./device.js";
 import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
@@ -96,6 +107,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,
   "session.required": 401,
   "device.forbidden_station": 403,
+  "device_profile.not_approved": 403,
+  "device_profile.not_admitted": 403,
+  "device_profile.incompatible": 400,
+  "device.payment_in_progress": 409,
   // The knock's own refusals. `pairing_closed` is a 403 rather than a 401: the door is shut, not
   // the caller unknown, and the device's next step is a person, not a credential.
   "device.pairing_closed": 403,
@@ -288,6 +303,31 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     }),
   );
 
+  // ── The profiles this device may switch between (DEVICE-GUARDED) ─────────────────────────────
+  app.get("/api/device/profiles", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const profiles = await withTransaction(deps.db, (tx) =>
+        readApprovedProfiles(tx, device.deviceId),
+      );
+      return c.json({ activeProfileId: profiles[0]?.id ?? device.deviceProfileId, profiles });
+    }),
+  );
+
+  // ── Switch the session's device to another approved profile (SESSION-GUARDED) ──────────────────
+  // A signed-in person is required, so a shared display with nobody signed in cannot switch.
+  app.post("/api/device/active-profile", (c) =>
+    run(c, log, async () => {
+      const { personId, sessionId, device } = await requireSession({ db: deps.db }, c);
+      const body = await readJsonBody<{ profileId?: unknown }>(c);
+      const profileId = requireBodyUuid(body.profileId, "profileId");
+      const switched = await withTransaction(deps.db, (tx) =>
+        switchActiveProfile(tx, { deviceId: device.deviceId, sessionId, personId, profileId }),
+      );
+      return c.json(switched, 200);
+    }),
+  );
+
   // ── Report the device's battery (DEVICE-GUARDED) ─────────────────────────────────────────────
   app.put("/api/device/battery", (c) =>
     run(c, log, async () => {
@@ -433,7 +473,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       // The inner join always matches: `device_profile_id` is NOT NULL with a RESTRICT FK.
-      const { rows, madeHere } = await gated(sessionId, async (tx) => ({
+      const { rows, madeHere, alternatives } = await gated(sessionId, async (tx) => ({
         rows: await tx
           .select({
             id: devices.id,
@@ -462,6 +502,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           .leftJoin(watchers, eq(watchers.id, devices.watcherId))
           .orderBy(desc(devices.enrolledAt)),
         madeHere: await listMadeHereStations(tx),
+        alternatives: await readApprovedAlternatives(tx),
       }));
       return c.json(
         rows.map(
@@ -484,6 +525,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             profileRetired: profileRetiredAt !== null,
             kind: kindOfFormFactor(formFactor),
             madeHereStationIds: madeHere.get(row.id) ?? [],
+            approvedProfileIds: [
+              row.deviceProfileId,
+              ...(alternatives.get(row.id) ?? []).map((profile) => profile.id),
+            ],
           }),
         ),
       );
@@ -526,6 +571,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         receiptPrinterId?: unknown;
         paymentSlipPrinterId?: unknown;
         madeHereStationIds?: unknown;
+        approvedProfileIds?: unknown;
       }>(c);
       await gated(sessionId, async (tx) => {
         if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
@@ -559,6 +605,16 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         if (madeHere !== undefined && (!Array.isArray(madeHere) || !madeHere.every(isUuid))) {
           throw new AppError("management.request_invalid", { field: "madeHereStationIds" });
         }
+        // Absent leaves the stored approvals alone; the active profile is approved either way.
+        const approvedIds = body.approvedProfileIds;
+        if (
+          approvedIds !== undefined &&
+          (!Array.isArray(approvedIds) || !approvedIds.every(isUuid))
+        ) {
+          throw new AppError("management.request_invalid", { field: "approvedProfileIds" });
+        }
+        const switching = profileId !== device.deviceProfileId;
+        if (switching) await assertNoPaymentInProgress(tx, id);
         const binding = await resolveDeviceBinding(tx, deps.cfg, {
           profileId,
           stationId,
@@ -589,6 +645,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         if (madeHere !== undefined) {
           await setMadeHereStations(tx, deps.cfg, id, madeHere as string[]);
         }
+        await keepApprovedAfterSwitch(tx, id, device.deviceProfileId, profileId);
+        if (approvedIds !== undefined) await approveDeviceProfiles(tx, id, approvedIds as string[]);
+        if (switching) await endSessionsNotAdmitted(tx, id, profileId);
       });
       return c.body(null, 204);
     }),

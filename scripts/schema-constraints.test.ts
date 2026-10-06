@@ -68,6 +68,8 @@ const EXPECTED_FOREIGN_KEYS = [
   ["holiday_geographies", ["location_id"], "locations"],
   ["local_holidays", ["geography_id"], "holiday_geographies"],
   ["departments", ["location_id"], "locations"],
+  ["device_approved_profiles", ["device_id"], "devices"],
+  ["device_approved_profiles", ["device_profile_id"], "device_profiles"],
   ["device_card_readers", ["device_id"], "devices"],
   ["device_card_readers", ["reader_id"], "card_readers"],
   ["device_made_here_stations", ["device_id"], "devices"],
