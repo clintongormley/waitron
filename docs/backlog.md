@@ -1548,7 +1548,8 @@ W41s-10c landed as [#1264](https://github.com/clintongormley/waitron/pull/1264).
 landed with public F1 disabled. **Next action:** continue the approved dependent W41s tasks in campaign order,
 keeping each task's fiscal and adviser gates.
 **Update, 2026-10-06 (W41s-3, built; not landed):** Task 3 is built on branch
-`feat/w41s-filing-cases` and awaits the owner's review. Every line of AEAT's reply is kept. A
+`feat/w41s-filing-cases`; the owner approved its nine changed filing checks and it awaits
+landing approval. Every line of AEAT's reply is kept. A
 rejection no longer holds the later records of its chain (D2, on
 [§7.1's receipts](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1));
 only rejection code 1161 was tested, and it was triggered artificially. A conflict with AEAT's
@@ -1561,7 +1562,10 @@ record that needs a person's decision gets a filing case, kept in tables whose r
 changed or deleted; resolving a case releases nothing yet (Tasks 8–9 do that). A new ongoing
 alert, `fiscal.filing_cases_open`, counts the cases with no resolution. **Still open:** no probe
 has yet shown what AEAT does with a record sent after a 3000 conflict or after a held
-cancellation.
+cancellation; the owner chose (2026-10-06) to keep holding there, and the live probe of those two
+cases is queued as W41s-1b. A refusal that would refuse every later record (one about the
+taxpayer's identity, say) now opens one case per record; the follow-up W41s-3b adds a brake that
+stops a chain after several refusals in a row with the same code.
 Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A231p
 and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
