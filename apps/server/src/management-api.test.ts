@@ -1274,7 +1274,6 @@ describe("/management-api/tables", () => {
         error: { code: "table.zone_inactive", params: { tableId, zoneId } },
       });
 
-      // The zone route enables a zone of a disabled department; the till still leaves the zone out.
       expect(
         (
           await req(

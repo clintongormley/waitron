@@ -447,7 +447,7 @@ describe("floor-screen — enabling a disabled table", () => {
     expect(q(el, "[data-test=table-enable-t7]")).not.toBeNull();
   });
 
-  it("shows the server's refusal to enable a table in a disabled zone or department in words, in both languages", async () => {
+  it("shows the server's refusal to enable a table in a disabled zone or department in words; both languages have wording", async () => {
     const generic = {
       es: codeMessage("test.unmapped", "es"),
       en: codeMessage("test.unmapped", "en"),
@@ -467,6 +467,7 @@ describe("floor-screen — enabling a disabled table", () => {
       codeMessage("table.zone_inactive", "es-ES"),
     );
     expect(q(el, "[data-test=table-enable-t2]")).not.toBeNull();
+    expect(api.listTables).toHaveBeenCalledTimes(1);
   });
 
   it("leaves a disabled table off the plan's canvas and tray", async () => {

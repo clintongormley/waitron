@@ -6207,7 +6207,11 @@ bump it when a fixed version is published, and run the certificate suites in tho
   active table into a disabled zone and leaves it active (run on W110e's branch: 204), though the
   floor screen offers only active zones; creating a department with a name another department has
   answers 500 `server.internal`, because there is no `department.name_taken` code (run on W110d's branch: a
-  second `POST /management-api/venue-service/departments` with the same name); and an active
+  second `POST /management-api/venue-service/departments` with the same name); a table can still
+  be enabled, or created, in an active zone that has no department, and staff then cannot open a
+  bill on it, because `resolveZoneContext` (`packages/venue-service/src/operations.ts`)
+  inner-joins `zone_service_policies` and `openTab` answers `service_zone.not_found` (read, not
+  run); and an active
   zone with no department has its "Unconfigured" word drawn the same way the disabled word was,
   with no space before it (read in `venue-operations-screen.ts`, not seen). (e) a test gap,
   reported by W110's review and not re-checked: `#fallbackReason`
