@@ -547,8 +547,9 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    hangs over it: the existing zero-rate class is shown as **No tax (0%)**, and asesor Q20 asks
    whether any intended case legally needs N1 or N2 instead — to be answered before the first live
    filing (the #345 entry below).
-3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319,
-   #327 and #380 reworked these, so read them against the rules before changing anything.
+3. **Printing** — `printers-screen.ts` with its agent tabs, Prep stations Tickets/Watchers,
+   and department/zone Receipt cells. A261 step 8 retired Printing rules; review the surviving
+   screens against the rules before changing them.
 4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
    `packages/payments-sumup`. #333 changed only their row menus.
 5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
@@ -2434,9 +2435,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   since W93) and
   `product-editor.ts` also contain both a `<table>` and a row menu (found by grep, not read). None
   has a phone-width case and none was measured.
-- Read-back gaps: the print-mode and
-  `drawer_open_policy` toggles are set-only (the latter gates cash access); the Impresoras editor
-  leaves agent and transport re-binding read-only though the API accepts it.
+- Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
+  though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
 
 ### A4. Till, displays and devices
 
@@ -2869,10 +2869,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       slip opens no drawer; B30 covers only the machine Waitron does not talk to.
     - From B29's review, not fixed there: a cash sale with automatic receipts reads the device's
       receipt printer twice in one transaction (`enqueueSaleReceipt` and `enqueueSaleDrawer` each
-      call `resolveReceiptPrinter`) — resolve it once; every change on the dashboard's Printing
-      rules screen reloads all its data through `#mutate` → `#load()`
-      (`apps/dashboard/src/screens/printing-rules-screen.ts`), even `#setPrintMode` and
-      `#setDrawerPolicy`, which update their own state in place.
+      call `resolveReceiptPrinter`) — resolve it once. The other B29 reload finding concerned
+      Printing rules, which A261 step 8 retired.
   - **Task 17 (#991, a table that leaves without paying).** Asesor Q28 was decided by the owner
     without the asesor (2026-10-01): the full simplified invoice is issued when the table leaves.
     Open:
@@ -5686,7 +5684,7 @@ reading unless marked run:
   all would pass; the server always sends one.
 - Guards no test can reach, left uncovered rather than deleted: the canvas editor's "no draft" and
   "no selected card" guards, several `?? []` and `?? null` fallbacks in the printers, payments,
-  kitchen, backup, devices, printing-rules, profile, extra-list and option-list files, and a
+  kitchen, backup, devices, profile, extra-list and option-list files, and a
   handful in `dashboard-app.ts` and `login-screen.ts`. **Next action:** delete them with a
   receipt each, or leave them as defensive code by decision.
 
