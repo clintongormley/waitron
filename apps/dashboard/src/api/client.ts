@@ -102,7 +102,6 @@ import type {
   OptionListRow,
 } from "@waitron/catalogue/src/modifier-list-types.js";
 import type {
-  HomeLayout,
   HomeTile,
   MenuHome,
   SectionDetails,
@@ -111,15 +110,7 @@ import type {
   SectionMember,
   TileRef,
 } from "@waitron/catalogue/src/section-types.js";
-export type {
-  HomeLayout,
-  HomeTile,
-  MenuHome,
-  SectionDetails,
-  MemberRef,
-  SectionInput,
-  SectionMember,
-};
+export type { HomeTile, MenuHome, SectionDetails, MemberRef, SectionInput, SectionMember };
 import type {
   LanguageTranslationGaps,
   TranslationGap,
@@ -1907,64 +1898,6 @@ export class DashboardApi {
 
   getMenuPreview(id: string): Promise<MenuPreview> {
     return this.#request<MenuPreview>(`/management-api/catalogues/${id}/preview`, "GET");
-  }
-
-  /** The menu's working layouts, the default first, each with its tiles in order. */
-  listHomeLayouts(menuId: string): Promise<HomeLayout[]> {
-    return this.#request<HomeLayout[]>(`/management-api/catalogues/${menuId}/home-layouts`, "GET");
-  }
-
-  createHomeLayout(menuId: string, name: string): Promise<{ id: string }> {
-    return this.#request(`/management-api/catalogues/${menuId}/home-layouts`, "POST", { name });
-  }
-
-  setDefaultHomeLayout(menuId: string, layoutId: string): Promise<void> {
-    return this.#request<void>(`/management-api/catalogues/${menuId}/default-home-layout`, "PUT", {
-      layoutId,
-    });
-  }
-
-  /** A new layout of the same menu holding the same tiles in the same order. */
-  duplicateHomeLayout(layoutId: string, name: string): Promise<{ id: string }> {
-    return this.#request(`/management-api/home-layouts/${layoutId}/duplicate`, "POST", { name });
-  }
-
-  renameHomeLayout(layoutId: string, name: string): Promise<void> {
-    return this.#request<void>(`/management-api/home-layouts/${layoutId}`, "PATCH", { name });
-  }
-
-  /** The menu's default is refused `menu.default_layout_required`. */
-  deleteHomeLayout(layoutId: string): Promise<void> {
-    return this.#request<void>(`/management-api/home-layouts/${layoutId}`, "DELETE");
-  }
-
-  /** A target the menu's structure does not reach is refused `menu.shortcut_unreachable`. */
-  addHomeTile(layoutId: string, ref: MemberRef): Promise<SectionMember> {
-    return this.#request(`/management-api/home-layouts/${layoutId}/tiles`, "POST", { ref });
-  }
-
-  replaceHomeTile(layoutId: string, memberId: string, ref: MemberRef): Promise<SectionMember> {
-    return this.#request(
-      `/management-api/home-layouts/${layoutId}/tiles/${memberId}/replace`,
-      "POST",
-      { ref },
-    );
-  }
-
-  removeHomeTile(layoutId: string, memberId: string): Promise<void> {
-    return this.#request<void>(
-      `/management-api/home-layouts/${layoutId}/tiles/${memberId}`,
-      "DELETE",
-    );
-  }
-
-  /** Answers the whole layout in its new order. */
-  moveHomeTile(layoutId: string, memberId: string, to: number): Promise<SectionMember[]> {
-    return this.#request(
-      `/management-api/home-layouts/${layoutId}/tiles/${memberId}/position`,
-      "PUT",
-      { to },
-    );
   }
 
   /** The menu's working Device Home Page: every shortcut in order, the ones its structure no longer

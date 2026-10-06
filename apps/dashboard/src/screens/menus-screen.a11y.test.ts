@@ -13,6 +13,7 @@ import { MenusScreen } from "./menus-screen.js";
 import type { MenuStructureTree } from "../widgets/menu-structure-tree.js";
 import type {
   DashboardApi,
+  MenuHome,
   SectionDetails,
   MenuPreview,
   MenuStructureNode,
@@ -168,37 +169,37 @@ function api(state: State): DashboardApi {
         { "p-lager": "Lager" },
       ),
     } satisfies MenuPreview),
-    listHomeLayouts: vi.fn().mockResolvedValue([
-      {
-        id: "l-home",
-        name: "Home",
-        isDefault: true,
-        tiles: [
-          {
-            memberId: "t-lager",
-            position: 0,
-            ref: { kind: "product", productId: "p-lager" },
-            name: "Lager",
-            reachable: true,
-          },
-          {
-            memberId: "t-drinks",
-            position: 1,
-            ref: { kind: "section", sectionId: "s-drinks" },
-            name: "Drinks",
-            reachable: true,
-          },
-          {
-            memberId: "t-soup",
-            position: 2,
-            ref: { kind: "product", productId: "p-soup" },
-            name: "Soup",
-            reachable: false,
-          },
-        ],
-      },
-      { id: "l-counter", name: "Counter", isDefault: false, tiles: [] },
-    ]),
+    getMenuHome: vi.fn().mockResolvedValue({
+      homeSectionId: "home-lunch",
+      shortcuts: [
+        {
+          memberId: "t-lager",
+          position: 0,
+          ref: { kind: "product", productId: "p-lager" },
+          name: "Lager",
+          missingName: null,
+          reachable: true,
+        },
+        {
+          memberId: "t-drinks",
+          position: 1,
+          ref: { kind: "section", sectionId: "s-drinks" },
+          name: "Drinks",
+          missingName: null,
+          reachable: true,
+        },
+        {
+          memberId: "t-soup",
+          position: 2,
+          ref: { kind: "product", productId: "p-soup" },
+          name: "Soup",
+          missingName: "Soup",
+          reachable: false,
+        },
+      ],
+      handheld: { columns: 3, tiles: "colours", order: "home_first" },
+      till: { columns: 6, tiles: "colours", order: "home_first" },
+    } satisfies MenuHome),
     getMenuPrices: vi.fn().mockResolvedValue([
       {
         menuItemId: "mi-lager",
@@ -409,42 +410,44 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     onTestFinished(() => page.viewport(frame.width, frame.height));
     const mounted = await mount("populated", theme, "/manage/menus/menu/menu-lunch/view/home");
     await vi.waitFor(() => {
-      if (!mounted.el.shadowRoot!.querySelector("dashboard-home-layout-editor"))
-        throw new Error("layouts");
+      const root = mounted.el.shadowRoot!;
+      if (!root.querySelector('wt-slider[name="home-columns"]')) throw new Error("home");
+      if (!root.querySelector("dashboard-device-home-preview")) throw new Error("preview");
     });
     return mounted;
   }
 
   it.each([390, 1280])(
-    "accessible Home page tab with a tile off the menu and both previews, %ipx wide",
+    "accessible Home page tab with its controls and preview, %ipx wide",
     async (width) => {
       const { el, host } = await mountHome(width);
-      const editor = q(el, "dashboard-home-layout-editor");
-      expect(
-        editor.shadowRoot!.querySelector('[data-test="preview-till"] [data-tile="t-soup"]'),
-      ).not.toBeNull();
+      const preview = q(el, "dashboard-device-home-preview") as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      };
+      await preview.updateComplete;
+      expect(preview.shadowRoot!.querySelector(".frame")).not.toBeNull();
+      expect(q(el, '[data-test="columns-note"]').textContent!.trim()).toBe(
+        t("home.columns_note_handheld"),
+      );
       await expectNoA11yViolations(host);
     },
   );
 
-  it("accessible new layout form refusing a blank name", async () => {
-    const { el, host } = await mountHome(1280);
-    const editor = q(el, "dashboard-home-layout-editor");
-    editor.shadowRoot!.querySelector<HTMLElement>('[data-test="add-layout"]')!.click();
-    await el.updateComplete;
-    q(el, 'wt-modal[data-test="layout-form"] [data-test="layout-save"]').click();
-    await el.updateComplete;
+  it("accessible Structure tab with the Device Home Page row open and the shortcut picker", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    await vi.waitFor(() =>
+      treeRows(el).querySelector<HTMLElement>('tr[data-row-key="home"] .row-activate')!.click(),
+    );
+    await vi.waitFor(() => {
+      if (!treeRows(el).querySelector('tr[data-row-key="home/t-soup"]')) throw new Error("open");
+    });
     await expectNoA11yViolations(host);
-  });
-
-  it("accessible layout delete window", async () => {
-    const { el, host } = await mountHome(1280);
-    const editor = q(el, "dashboard-home-layout-editor");
-    editor.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-l-counter"]')!.click();
-    await el.updateComplete;
-    expect(
-      (q(el, 'wt-modal[data-test="layout-delete"]') as HTMLElement & { open: boolean }).open,
-    ).toBe(true);
+    await rowAction(el, "home", "add-product-shortcut");
+    await vi.waitFor(() =>
+      expect(
+        (q(el, 'wt-modal[data-test="add-shortcut"]') as HTMLElement & { open: boolean }).open,
+      ).toBe(true),
+    );
     await expectNoA11yViolations(host);
   });
 

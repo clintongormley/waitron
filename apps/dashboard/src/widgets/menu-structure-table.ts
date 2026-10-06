@@ -557,6 +557,15 @@ export class MenuStructureTable extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
 
+  /** Opens or closes the row `key` once the rows last given are drawn, without reporting it as a
+   * person's change. */
+  async setExpanded(key: string, expanded: boolean): Promise<void> {
+    await this.updateComplete;
+    const table = this.#table();
+    await table?.updateComplete;
+    table?.setExpanded(key, expanded);
+  }
+
   /** Focuses the row's ⋮, or the nearest ancestor's when the row is not drawn. */
   focusRowMenu(key: string): void {
     const root = this.#table()?.shadowRoot;

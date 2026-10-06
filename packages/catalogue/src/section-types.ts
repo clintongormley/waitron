@@ -51,11 +51,3 @@ export interface MenuHome {
   handheld: HomeDisplay;
   till: HomeDisplay;
 }
-
-/** A menu's working home layout with its tiles in order. */
-export interface HomeLayout {
-  id: string;
-  name: string;
-  isDefault: boolean;
-  tiles: HomeTile[];
-}

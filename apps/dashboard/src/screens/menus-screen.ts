@@ -8,7 +8,6 @@ import {
   focusFirstInvalid,
   setContentLanguages,
   currentContentLanguages,
-  submitOnEnter,
   UrlStateController,
   type DataTableColumn,
 } from "@waitron/ui";
@@ -20,24 +19,26 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { memberName } from "../widgets/member-list-editor.js";
 import "../widgets/menu-structure-table.js";
 import type { StructureAddAction } from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
-import "../widgets/home-layout-editor.js";
+import "../widgets/device-home-preview.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
 import "../widgets/product-color-form.js";
-import { textField } from "../widgets/form-fields.js";
 import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
 import type {
   CatalogueSummary,
   CategorySummary,
   DashboardApi,
-  HomeLayout,
+  HomeDevice,
+  HomeDisplay,
+  MenuHome,
   SectionDetails,
   SectionInput,
   MemberRef,
@@ -51,6 +52,12 @@ import type {
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
+import {
+  HOME_COLUMN_RANGE,
+  HOME_DEVICES,
+  HOME_ORDERS,
+  HOME_TILE_MODES,
+} from "@waitron/catalogue/src/device-home.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -121,18 +128,21 @@ function namesThePrice(error: unknown, save: PriceSave): boolean {
   );
 }
 
-/** A form's one message at its bottom: every message not under a field `shown` names, then the
- * generic sentence when one is. */
-function bottomMessage(errors: Record<string, string>, shown: ReadonlySet<string>): string {
-  const marked = Object.entries(errors).some(([key, message]) => message && shown.has(key));
-  const others = Object.entries(errors)
-    .filter(([key, message]) => message && !shown.has(key))
-    .map(([, message]) => message);
-  return [...others, ...(marked ? [t("form.fix_fields")] : [])].join(" ");
-}
-
 const without = (errors: Record<string, string>, keys: readonly string[]) =>
   Object.fromEntries(Object.entries(errors).filter(([key]) => !keys.includes(key)));
+
+/** Refusals about the target a shortcut picker chose, which belong under the picker. */
+const SHORTCUT_TARGET_REFUSALS = new Set([
+  "menu.shortcut_unreachable",
+  "menu_section.member_duplicate",
+  "menu_section.not_found",
+  "menu_section.wrong_role",
+]);
+
+const HOME_DISPLAY_FIELDS: readonly string[] = ["columns", "tiles", "order"];
+
+/** The structure tree's key for its Device Home Page row. */
+const HOME_ROW = "home";
 
 /** Every product and section the structure holds, at any depth. */
 function reachable(nodes: MenuStructureNode[]): { products: string[]; sections: Set<string> } {
@@ -331,6 +341,42 @@ export class MenusScreen extends LitElement {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-3);
       }
+      .home fieldset {
+        display: grid;
+        gap: var(--wt-space-1);
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      .home legend {
+        padding: 0;
+        margin-bottom: var(--wt-space-1);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .choices {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--wt-space-4);
+      }
+      .choices label {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-height: var(--wt-tap-min);
+      }
+      .choices input[type="radio"] {
+        margin: 0;
+        accent-color: var(--wt-color-primary);
+      }
+      .choices input[type="radio"]:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .home h2 {
+        margin: var(--wt-space-3) 0 0;
+        font-size: var(--wt-font-size-lg);
+      }
       wt-data-table::part(name) {
         overflow-wrap: anywhere;
         text-align: start;
@@ -489,8 +535,6 @@ export class MenusScreen extends LitElement {
   @state() private menuForm: { id: string | null; name: string } | null = null;
   /** Each name form's last refusal, less its name once the operator changes it. */
   @state() private menuFormErrors: Record<string, string> = {};
-  /** The name forms, by `data-test`, whose Save has been pressed since they opened. */
-  @state() private attempted: ReadonlySet<string> = new Set();
 
   /** The list the new-section form adds to, while it is open. */
   @state() private creatingSection: ListTarget | null = null;
@@ -512,23 +556,23 @@ export class MenusScreen extends LitElement {
   @state() private addingProducts: ListTarget | null = null;
   @state() private addProductsError: string | null = null;
 
-  /** Null until the open menu's home page layouts are read, which happens only on their tab. */
-  @state() private homeLayouts: HomeLayout[] | null = null;
+  /** Null until the open menu's Device Home Page is read, which happens only on the Structure and
+   * Home page tabs. */
+  @state() private menuHome: MenuHome | null = null;
   @state() private homeLoadError = false;
-  /** Why a change on the Home page tab was refused. */
+  /** Why a display setting was refused, when the refusal names no control on screen. */
   @state() private homeError: string | null = null;
-  /** The layout being edited; empty for the menu's default. */
-  @state() private homeLayoutId = "";
-  /** The layout form while it is open: a new layout, a copy of `layoutId`, or its new name. */
-  @state() private layoutForm: {
-    kind: "create" | "duplicate" | "rename";
-    layoutId: string | null;
-    name: string;
-  } | null = null;
-  @state() private layoutFormName = "";
-  @state() private layoutFormErrors: Record<string, string> = {};
-  @state() private deletingLayout: { id: string; name: string } | null = null;
-  @state() private deleteLayoutError: string | null = null;
+  @state() private homeDevice: HomeDevice = "handheld";
+  /** A display setting's save is out. */
+  @state() private homeSaving = false;
+  @state() private homeFieldErrors: Partial<Record<keyof HomeDisplay, string>> = {};
+  /** The shortcut picker while it is open. */
+  @state() private addingShortcut: "product" | "section" | null = null;
+  @state() private shortcutChoice = "";
+  /** A refusal about the chosen target, shown under the picker. */
+  @state() private shortcutError = "";
+  /** Any other refusal of an add, shown at the picker's end. */
+  @state() private shortcutFormError = "";
 
   readonly #queries = new DashboardQueries(
     this,
@@ -869,12 +913,12 @@ export class MenusScreen extends LitElement {
   }
 
   /** Follows every menu's state while the list is shown, and the open menu's alone while its
-   * editor is — except on the Preview tab, where the preview's own answer carries it and a second
-   * query would only repeat the read. `again` reads it afresh even when it is already followed,
-   * keeping the open menu's state on screen until that read replaces it. */
+   * editor is — except on the Preview and Home page tabs, where the preview's own answer carries it
+   * and a second query would only repeat the read. `again` reads it afresh even when it is already
+   * followed, keeping the open menu's state on screen until that read replaces it. */
   #followStatus(again = false): void {
     const menuId = this.menuId;
-    const ownQuery = menuId !== null && this.view !== "preview";
+    const ownQuery = menuId !== null && this.view !== "preview" && this.view !== "home";
     if (!again && this.#statusFor === menuId && this.#statusOwnQuery === ownQuery) return;
     const sameMenu = this.#statusFor === menuId;
     this.#statusFor = menuId;
@@ -931,13 +975,13 @@ export class MenusScreen extends LitElement {
     this.previewError = false;
   }
 
-  /** The query slot holds one watch, so watching another menu's layouts stops the earlier one. */
+  /** The query slot holds one watch, so watching another menu's home stops the earlier one. */
   async #watchHome(menuId: string): Promise<void> {
     this.#homeFor = menuId;
     this.homeLoadError = false;
     try {
-      await this.#homeQueries.watch("listHomeLayouts", [menuId], (value) => {
-        this.homeLayouts = value;
+      await this.#homeQueries.watch("getMenuHome", [menuId], (value) => {
+        this.menuHome = value;
         this.homeLoadError = false;
       });
     } catch {
@@ -947,10 +991,11 @@ export class MenusScreen extends LitElement {
 
   #releaseHome(): void {
     this.#homeFor = null;
-    this.#homeQueries.release("listHomeLayouts");
-    this.homeLayouts = null;
+    this.#homeQueries.release("getMenuHome");
+    this.menuHome = null;
     this.homeLoadError = false;
     this.homeError = null;
+    this.homeFieldErrors = {};
   }
 
   /** Also forgets the rows, so the tab shows loading rather than old rows until the next read. */
@@ -962,14 +1007,15 @@ export class MenusScreen extends LitElement {
   }
 
   /** The prices are watched only while the Price overrides tab is shown: the structure edits made
-   * on the other tab write tables the prices read depends on. The preview likewise. */
+   * on the other tab write tables the prices read depends on. The preview and the menu's home
+   * likewise, each on the tabs that draw it. */
   #showView(view: Tab): void {
     this.view = view;
     this.#followStatus();
-    if (view !== "preview") this.#releasePreview();
+    if (view !== "preview" && view !== "home") this.#releasePreview();
     else if (this.menuId !== null && this.#previewFor !== this.menuId)
       void this.#watchPreview(this.menuId);
-    if (view !== "home") this.#releaseHome();
+    if (view !== "home" && view !== "structure") this.#releaseHome();
     else if (this.menuId !== null && this.#homeFor !== this.menuId)
       void this.#watchHome(this.menuId);
     if (view !== "prices") {
@@ -1016,11 +1062,10 @@ export class MenusScreen extends LitElement {
     this.#releasePrices();
     this.#releasePreview();
     this.#releaseHome();
-    this.homeLayoutId = "";
-    this.layoutForm = null;
-    this.deletingLayout = null;
+    this.homeDevice = "handheld";
+    this.addingShortcut = null;
     // An open menu's state waits for `#showView`, which each caller opening a menu runs next and
-    // which knows whether the Preview tab carries it, so no query starts only to be released.
+    // which knows whether the preview carries it, so no query starts only to be released.
     if (menuId === null) {
       this.#followStatus();
       this.#structureQueries.release("getMenuStructure");
@@ -1091,33 +1136,11 @@ export class MenusScreen extends LitElement {
     this.menuForm = { id: menu?.id ?? null, name: menu?.name ?? "" };
   }
 
-  #restart(form: string): void {
-    this.attempted = new Set([...this.attempted].filter((open) => open !== form));
-  }
-
-  #attempt(form: string): void {
-    this.attempted = new Set([...this.attempted, form]);
-  }
-
   /** Moves focus to the first invalid field of the modal `form`, once it has rendered. */
   async #focusInvalid(form: string): Promise<void> {
     await this.updateComplete;
     const modal = this.shadowRoot!.querySelector(`wt-modal[data-test="${form}"]`);
     if (modal) await focusFirstInvalid(modal);
-  }
-
-  /** A name form's messages: its refusal, and once Save has been pressed, `required` while the
-   * name is blank — which alone holds Save. */
-  #nameFormErrors(
-    form: string,
-    refused: Record<string, string>,
-    field: string,
-    value: string,
-    required: string,
-  ): { errors: Record<string, string>; placed: { blocked: boolean; bottom: string } } {
-    const blank = this.attempted.has(form) && value.trim() === "";
-    const errors = { ...refused, ...(blank ? { [field]: required } : {}) };
-    return { errors, placed: { blocked: blank, bottom: bottomMessage(errors, new Set([field])) } };
   }
 
   async #saveMenu(input: SectionInput): Promise<void> {
@@ -1396,68 +1419,103 @@ export class MenusScreen extends LitElement {
     });
   }
 
-  // ── Home page ────────────────────────────────────────────────────────────────────────────────
+  // ── The Device Home Page ─────────────────────────────────────────────────────────────────────
 
-  /** Reads the layouts again after a write, when their tab still shows the same menu. */
+  /** Reads the home again after a write, when a tab drawing it still shows the same menu. */
   async #rereadHome(menuId: string): Promise<void> {
-    if (this.menuId === menuId && this.view === "home") await this.#watchHome(menuId);
+    if (this.menuId === menuId && (this.view === "home" || this.view === "structure"))
+      await this.#watchHome(menuId);
   }
 
-  /** Adds, removes and a new default hold `busy` until the layouts are read again. A tile write's
-   * scope is its layout, as a move's is, so a move knows when another write to it waits behind. */
-  #homeWrite(
-    scope: string,
-    write: () => Promise<unknown>,
-    replacement?: (error?: unknown) => void,
-  ): void {
+  /** Adds and removes hold `busy` until the home is read again. Their scope is the menu's home, as
+   * a move's is, so a move knows when another write to the shortcuts waits behind it. A refusal
+   * that lands after the person has left the menu is dropped. Answers whether the write was saved,
+   * once the home has been read again. */
+  #shortcutWrite(
+    write: (menuId: string) => Promise<unknown>,
+    refused: (error: unknown) => void,
+    saved?: () => void,
+  ): Promise<boolean> {
     const menuId = this.menuId!;
-    this.homeError = null;
+    this.memberError = null;
     this.busy = true;
-    this.#writes.run(scope, async () => {
-      try {
-        await write();
-      } catch (error) {
-        const shownLayout =
-          this.homeLayouts?.find((layout) => layout.id === this.homeLayoutId)?.id ??
-          this.homeLayouts?.[0]?.id;
-        if (this.menuId === menuId && (!replacement || shownLayout === scope)) {
-          if (replacement) replacement(error);
-          else this.homeError = codeMessage(codeOf(error));
+    return new Promise((done) =>
+      this.#writes.run(`home:${menuId}`, async () => {
+        try {
+          await write(menuId);
+        } catch (error) {
+          if (this.menuId === menuId) refused(error);
+          this.busy = false;
+          done(false);
+          return;
         }
-        if (!replacement || this.menuId === menuId) this.busy = false;
-        return;
-      }
-      replacement?.();
-      await this.#rereadHome(menuId);
-      if (!replacement || this.menuId === menuId) this.busy = false;
-    });
+        saved?.();
+        await this.#rereadHome(menuId);
+        this.busy = false;
+        done(true);
+      }),
+    );
   }
 
-  /** The layout's tile ids in the order shown. */
-  #tileOrder(layoutId: string): string[] {
-    const layout = this.homeLayouts?.find(({ id }) => id === layoutId);
-    return (layout?.tiles ?? []).map(({ memberId }) => memberId);
+  #openShortcutPicker(kind: "product" | "section"): void {
+    this.addingShortcut = kind;
+    this.shortcutChoice = "";
+    this.shortcutError = "";
+    this.shortcutFormError = "";
+    this.#returnFocusTo([HOME_ROW]);
   }
 
-  /** Not `busy`, as for a move in the Structure tab: the keyboard user's focus stays on the row. The
-   * last queued write's answer is shown only while the order on screen is the one the move was sent
-   * over, or the answer itself; any other order may be a newer change, so the layouts are read
-   * again. */
-  #moveTile(layoutId: string, memberId: string, to: number): void {
+  /** Adds the chosen target at once. An empty home's row opens once the add is read back, because
+   * a branch the tree sees for the first time starts closed. */
+  async #addShortcut(id: string): Promise<void> {
+    const kind = this.addingShortcut;
+    if (kind === null || id === "" || this.busy) return;
+    const menuId = this.menuId;
+    const ref: MemberRef = kind === "product" ? { kind, productId: id } : { kind, sectionId: id };
+    const wasEmpty = this.menuHome?.shortcuts.length === 0;
+    this.shortcutError = "";
+    this.shortcutFormError = "";
+    const saved = await this.#shortcutWrite(
+      (menu) => this.api.addHomeShortcut(menu, ref),
+      (error) => {
+        const message = codeMessage(codeOf(error));
+        if (SHORTCUT_TARGET_REFUSALS.has(codeOf(error))) {
+          this.shortcutError = message;
+          void this.#focusInvalid("add-shortcut");
+        } else this.shortcutFormError = message;
+      },
+      () => {
+        this.addingShortcut = null;
+      },
+    );
+    if (!saved || !wasEmpty || this.menuId !== menuId || !this.menuHome?.shortcuts.length) return;
+    await this.updateComplete;
+    await this.renderRoot
+      .querySelector("dashboard-menu-structure-table")
+      ?.setExpanded(HOME_ROW, true);
+  }
+
+  #shortcutOrder(): string[] {
+    return (this.menuHome?.shortcuts ?? []).map(({ memberId }) => memberId);
+  }
+
+  /** Not `busy`, as for a member's move: the keyboard user's focus stays on the row. The last queued
+   * write's answer is shown only while the order on screen is the one the move was sent over, or
+   * the answer itself; any other order may be a newer change, so the home is read again. */
+  #moveShortcut(memberId: string, to: number): void {
     const menuId = this.menuId!;
-    this.homeError = null;
+    this.memberError = null;
     let sentOver: string[] = [];
     this.#writes.move(
-      layoutId,
+      `home:${menuId}`,
       () => {
-        sentOver = this.#tileOrder(layoutId);
-        return this.api.moveHomeTile(layoutId, memberId, to);
+        sentOver = this.#shortcutOrder();
+        return this.api.moveHomeShortcut(menuId, memberId, to);
       },
       async (ordered, last) => {
-        if (!last || this.menuId !== menuId || this.homeLayouts === null) return;
-        const layout = this.homeLayouts.find(({ id }) => id === layoutId);
-        const tiles = new Map(layout?.tiles.map((tile) => [tile.memberId, tile]));
-        const shown = this.#tileOrder(layoutId).join(" ");
+        if (!last || this.menuId !== menuId || this.menuHome === null) return;
+        const tiles = new Map(this.menuHome.shortcuts.map((tile) => [tile.memberId, tile]));
+        const shown = this.#shortcutOrder().join(" ");
         const answer = ordered.map(({ id }) => id);
         if (
           ordered.length !== tiles.size ||
@@ -1467,89 +1525,55 @@ export class MenusScreen extends LitElement {
           await this.#rereadHome(menuId);
           return;
         }
-        this.homeLayouts = this.homeLayouts.map((each) =>
-          each.id === layoutId
-            ? {
-                ...each,
-                tiles: ordered.map(({ id }, position) => ({ ...tiles.get(id)!, position })),
-              }
-            : each,
-        );
+        this.menuHome = {
+          ...this.menuHome,
+          shortcuts: ordered.map(({ id }, position) => ({ ...tiles.get(id)!, position })),
+        };
       },
       async (error) => {
         if (this.menuId !== menuId) return;
-        this.homeError = codeMessage(codeOf(error));
+        this.memberError = codeMessage(codeOf(error));
         await this.#rereadHome(menuId);
       },
     );
   }
 
-  #openLayoutForm(kind: "create" | "duplicate" | "rename", layoutId: string | null): void {
-    const name = this.homeLayouts?.find(({ id }) => id === layoutId)?.name ?? "";
-    this.layoutForm = { kind, layoutId, name };
-    this.layoutFormName =
-      kind === "duplicate"
-        ? t("sections.copy_name").replace("{name}", name)
-        : kind === "rename"
-          ? name
-          : "";
-    this.layoutFormErrors = {};
-    this.#restart("layout-form");
-  }
-
-  /** A new layout or a copy is the one edited next. */
-  async #saveLayout(): Promise<void> {
-    const form = this.layoutForm;
-    if (form === null || this.busy) return;
-    this.#attempt("layout-form");
-    this.layoutFormErrors = {};
-    const name = this.layoutFormName.trim();
-    if (name === "") {
-      void this.#focusInvalid("layout-form");
-      return;
-    }
-    const menuId = this.menuId!;
-    this.busy = true;
-    let made: string | null = null;
+  /** Saves one display setting of the device shown. A refusal naming a control of that device goes
+   * under it; any other is said above the controls. */
+  async #saveDisplay(patch: Partial<HomeDisplay>): Promise<void> {
+    const menuId = this.menuId;
+    if (menuId === null || this.homeSaving) return;
+    const device = this.homeDevice;
+    const fields = Object.keys(patch) as (keyof HomeDisplay)[];
+    this.homeSaving = true;
+    this.homeError = null;
+    this.homeFieldErrors = Object.fromEntries(
+      Object.entries(this.homeFieldErrors).filter(
+        ([key]) => !fields.includes(key as keyof HomeDisplay),
+      ),
+    );
     try {
-      if (form.kind === "create") made = (await this.api.createHomeLayout(menuId, name)).id;
-      else if (form.kind === "duplicate")
-        made = (await this.api.duplicateHomeLayout(form.layoutId!, name)).id;
-      else await this.api.renameHomeLayout(form.layoutId!, name);
+      await this.api.setHomeDisplay(menuId, device, patch);
     } catch (error) {
-      this.layoutFormErrors = refusal(error);
-      this.busy = false;
-      void this.#focusInvalid("layout-form");
+      this.homeSaving = false;
+      if (this.menuId !== menuId) return;
+      const code = codeOf(error);
+      const params = (error as { params?: { device?: unknown; field?: unknown } } | undefined)
+        ?.params;
+      const field = params?.field;
+      if (
+        code === "menu.home_display_invalid" &&
+        params?.device === this.homeDevice &&
+        typeof field === "string" &&
+        HOME_DISPLAY_FIELDS.includes(field)
+      )
+        this.homeFieldErrors = { ...this.homeFieldErrors, [field]: codeMessage(code) };
+      else this.homeError = codeMessage(code);
       return;
     }
-    this.busy = false;
-    this.layoutForm = null;
-    if (made !== null && this.menuId === menuId) this.homeLayoutId = made;
-    await this.#rereadHome(menuId);
-  }
-
-  #openDeleteLayout(layoutId: string): void {
-    const layout = this.homeLayouts?.find(({ id }) => id === layoutId);
-    if (layout === undefined) return;
-    this.deletingLayout = { id: layout.id, name: layout.name };
-    this.deleteLayoutError = null;
-  }
-
-  async #deleteLayout(): Promise<void> {
-    const target = this.deletingLayout;
-    if (target === null || this.busy) return;
-    const menuId = this.menuId!;
-    this.busy = true;
-    this.deleteLayoutError = null;
-    try {
-      await this.api.deleteHomeLayout(target.id);
-    } catch (error) {
-      this.deleteLayoutError = codeMessage(codeOf(error));
-      this.busy = false;
-      return;
-    }
-    this.busy = false;
-    this.deletingLayout = null;
+    this.homeSaving = false;
+    if (this.menuId === menuId && this.menuHome !== null)
+      this.menuHome = { ...this.menuHome, [device]: { ...this.menuHome[device], ...patch } };
     await this.#rereadHome(menuId);
   }
 
@@ -1751,30 +1775,6 @@ export class MenusScreen extends LitElement {
     if (this.busy && event.key === "Escape") event.preventDefault();
   };
 
-  #nameInput(options: {
-    name: string;
-    label: string;
-    value: string;
-    errors: Record<string, string>;
-    save: string;
-    change: (value: string) => void;
-  }) {
-    const context = {
-      busy: this.busy,
-      locales: [],
-      error: (key: string) => options.errors[key] ?? "",
-    };
-    return html`<div
-      @keydown=${(event: KeyboardEvent) =>
-        submitOnEnter(
-          event,
-          this.shadowRoot!.querySelector<HTMLElement>(`[data-test="${options.save}"]`),
-        )}
-    >
-      ${textField(context, options.name, options.label, options.value, options.change, true)}
-    </div>`;
-  }
-
   #formModal(
     options: {
       test: string;
@@ -1812,8 +1812,8 @@ export class MenusScreen extends LitElement {
       }}
     >
       ${options.open ? options.body : nothing}
-      ${options.test.startsWith("layout-") ? nothing : html`<p class="field-error" role="alert" data-test="form-error">${message || nothing}</p>`}
-      <wt-form-actions slot="footer" .error=${options.test.startsWith("layout-") ? message : ""}
+      <p class="field-error" role="alert" data-test="form-error">${message || nothing}</p>
+      <wt-form-actions slot="footer"
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -1992,7 +1992,18 @@ export class MenusScreen extends LitElement {
           ? nothing
           : html`<p role="status" data-test="structure-loading">${t("menus.structure_loading")}</p>`
       }`;
-    return html`${error}
+    const homeError = this.homeLoadError
+      ? html`<p class="error" role="alert" data-test="home-row-error">${t("home.error")}</p>
+          <div>
+            <wt-button
+              data-test="home-row-retry"
+              variant="secondary"
+              @click=${() => void this.#watchHome(this.menuId!)}
+              >${t("menus.retry")}</wt-button
+            >
+          </div>`
+      : nothing;
+    return html`${error}${homeError}
       ${(structure.includedBy ?? []).length ? html`<p data-test="included-by">${t("menus.included_in")}: ${structure.includedBy.map((menu, index) => html`${index ? ", " : ""}<a href=${`/manage/menus/menu/${menu.id}/view/structure`}>${menu.name}${this.statuses?.[menu.id]?.clashes ? ` (${this.statuses[menu.id]!.clashes} ${t(this.statuses[menu.id]!.clashes === 1 ? "menus.clash" : "menus.clashes")})` : ""}</a>`)}</p>` : nothing}
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
@@ -2000,7 +2011,27 @@ export class MenusScreen extends LitElement {
         .categories=${this.categories}
         .current=${this.path}
         .busy=${this.busy}
+        .home=${this.menuHome}
         menuName=${this.#menuName()}
+        @wt-shortcut-add=${(event: CustomEvent<{ kind: "product" | "section" }>) => {
+          event.stopPropagation();
+          this.#openShortcutPicker(event.detail.kind);
+        }}
+        @wt-shortcut-remove=${(event: CustomEvent<{ memberId: string }>) => {
+          event.stopPropagation();
+          const { memberId } = event.detail;
+          this.#returnFocusTo([HOME_ROW], true);
+          void this.#shortcutWrite(
+            (menuId) => this.api.removeHomeShortcut(menuId, memberId),
+            (error) => {
+              this.memberError = codeMessage(codeOf(error));
+            },
+          );
+        }}
+        @wt-shortcut-move=${(event: CustomEvent<{ memberId: string; to: number }>) => {
+          event.stopPropagation();
+          this.#moveShortcut(event.detail.memberId, event.detail.to);
+        }}
         @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
           event.stopPropagation();
           this.#edit(event.detail.path);
@@ -2113,162 +2144,186 @@ export class MenusScreen extends LitElement {
             >
           </div>`
       : nothing;
-    if (this.homeLayouts === null)
+    const home = this.menuHome;
+    if (home === null)
       return html`${error}${loadError}${
         this.homeLoadError
           ? nothing
           : html`<p role="status" data-test="home-loading">${t("home.loading")}</p>`
       }`;
-    const layoutId = (event: CustomEvent<{ layoutId: string }>): string => {
-      event.stopPropagation();
-      return event.detail.layoutId;
-    };
+    const device = this.homeDevice;
+    const display = home[device];
+    const range = HOME_COLUMN_RANGE[device];
     return html`${error}${loadError}
-      <dashboard-home-layout-editor
-        .layouts=${this.homeLayouts}
-        selected=${this.homeLayoutId}
-        .products=${this.#tileProducts}
-        .sections=${this.#tileSections}
-        .busy=${this.busy}
-        menuName=${this.#menuName()}
-        @wt-layout-select=${(event: CustomEvent<{ layoutId: string }>) => {
-          this.homeLayoutId = layoutId(event);
-          this.homeError = null;
-        }}
-        @wt-layout-add=${(event: Event) => {
+      <fieldset>
+        <legend>${t("home.device")}</legend>
+        <div class="choices">
+          ${HOME_DEVICES.map(
+            (each) =>
+              html`<label
+                ><input
+                  type="radio"
+                  name="home-device"
+                  value=${each}
+                  .checked=${each === device}
+                  @change=${() => {
+                    this.homeDevice = each;
+                    this.homeFieldErrors = {};
+                  }}
+                />${t(each === "handheld" ? "home.device_handheld" : "home.device_till")}</label
+              >`,
+          )}
+        </div>
+      </fieldset>
+      <wt-slider
+        name="home-columns"
+        label=${t("home.columns")}
+        .min=${range.min}
+        .max=${range.max}
+        .value=${display.columns}
+        .disabled=${this.homeSaving}
+        error=${this.homeFieldErrors.columns ?? ""}
+        @wt-change=${(event: CustomEvent<{ value: number }>) => {
           event.stopPropagation();
-          this.#openLayoutForm("create", null);
+          void this.#saveDisplay({ columns: event.detail.value });
         }}
-        @wt-layout-rename=${(event: CustomEvent<{ layoutId: string }>) =>
-          this.#openLayoutForm("rename", layoutId(event))}
-        @wt-layout-duplicate=${(event: CustomEvent<{ layoutId: string }>) =>
-          this.#openLayoutForm("duplicate", layoutId(event))}
-        @wt-layout-delete=${(event: CustomEvent<{ layoutId: string }>) =>
-          this.#openDeleteLayout(layoutId(event))}
-        @wt-layout-default=${(event: CustomEvent<{ layoutId: string }>) => {
-          const id = layoutId(event);
-          const menuId = this.menuId!;
-          // The editor stays on the layout it shows, which would otherwise be whichever layout
-          // is the default, and so first, after the read.
-          this.homeLayoutId =
-            this.homeLayouts?.find(({ id: shown }) => shown === this.homeLayoutId)?.id ??
-            this.homeLayouts?.[0]?.id ??
-            "";
-          this.#homeWrite(`home:${menuId}`, () => this.api.setDefaultHomeLayout(menuId, id));
-        }}
-        @wt-tile-add=${(event: CustomEvent<{ layoutId: string; ref: MemberRef }>) => {
-          event.stopPropagation();
-          const { layoutId: id, ref } = event.detail;
-          this.#homeWrite(id, () => this.api.addHomeTile(id, ref));
-        }}
-        @wt-tile-replace=${(
-          event: CustomEvent<{ layoutId: string; memberId: string; ref: MemberRef }>,
-        ) => {
-          event.stopPropagation();
-          const { layoutId: id, memberId, ref } = event.detail;
-          const complete = (
-            event.currentTarget as HTMLElementTagNameMap["dashboard-home-layout-editor"]
-          ).replacementCompletion(memberId);
-          this.#homeWrite(
-            id,
-            () => this.api.replaceHomeTile(id, memberId, ref),
-            (error) => {
-              const code = codeOf(error);
-              const params = (
-                error as { params?: { ref?: MemberRef; sectionId?: string } } | undefined
-              )?.params;
-              const field =
-                (code === "menu.shortcut_unreachable" &&
-                  params?.ref?.kind === ref.kind &&
-                  (ref.kind === "product"
-                    ? params.ref.kind === "product" && params.ref.productId === ref.productId
-                    : params.ref.kind === "section" && params.ref.sectionId === ref.sectionId)) ||
-                (ref.kind === "section" &&
-                  (code === "menu_section.not_found" || code === "menu_section.wrong_role") &&
-                  params?.sectionId === ref.sectionId);
-              complete(error === undefined ? "" : codeMessage(code), field);
-            },
-          );
-        }}
-        @wt-tile-remove=${(event: CustomEvent<{ layoutId: string; memberId: string }>) => {
-          event.stopPropagation();
-          const { layoutId: id, memberId } = event.detail;
-          this.#homeWrite(id, () => this.api.removeHomeTile(id, memberId));
-        }}
-        @wt-tile-move=${(
-          event: CustomEvent<{ layoutId: string; memberId: string; to: number }>,
-        ) => {
-          event.stopPropagation();
-          this.#moveTile(event.detail.layoutId, event.detail.memberId, event.detail.to);
-        }}
-      ></dashboard-home-layout-editor>`;
+      ></wt-slider>
+      <p class="help" data-test="columns-note">
+        ${t(device === "handheld" ? "home.columns_note_handheld" : "home.columns_note_till")}
+      </p>
+      ${this.#homeChoice(
+        "tiles",
+        t("home.tiles"),
+        HOME_TILE_MODES.map((mode) => ({
+          value: mode,
+          label: t(mode === "colours" ? "home.tiles_colours" : "home.tiles_thumbnails"),
+        })),
+        display.tiles,
+        (value) => void this.#saveDisplay({ tiles: value as HomeDisplay["tiles"] }),
+      )}
+      ${this.#homeChoice(
+        "order",
+        t("home.order"),
+        HOME_ORDERS.map((order) => ({
+          value: order,
+          label: t(order === "home_first" ? "home.order_home_first" : "home.order_menu_first"),
+        })),
+        display.order,
+        (value) => void this.#saveDisplay({ order: value as HomeDisplay["order"] }),
+      )}
+      <section aria-labelledby="home-preview-heading">
+        <h2 id="home-preview-heading">${t("home.preview_heading")}</h2>
+        ${this.#renderHomePreview(device)}
+      </section>`;
   }
 
-  #renderLayoutForm() {
-    const form = this.layoutForm;
-    const { errors, placed } = this.#nameFormErrors(
-      "layout-form",
-      this.layoutFormErrors,
-      "name",
-      this.layoutFormName,
-      t("home.name_required"),
+  /** One display setting as a group of radios, its refusal beneath it. */
+  #homeChoice(
+    field: "tiles" | "order",
+    legend: string,
+    options: { value: string; label: string }[],
+    value: string,
+    change: (value: string) => void,
+  ) {
+    const error = this.homeFieldErrors[field];
+    const errorId = `home-${field}-error`;
+    return html`<fieldset aria-describedby=${ifDefined(error ? errorId : undefined)}>
+      <legend>${legend}</legend>
+      <div class="choices">
+        ${options.map(
+          (option) =>
+            html`<label
+              ><input
+                type="radio"
+                name=${`home-${field}`}
+                value=${option.value}
+                .checked=${option.value === value}
+                .disabled=${this.homeSaving}
+                aria-invalid=${ifDefined(error ? "true" : undefined)}
+                @change=${() => change(option.value)}
+              />${option.label}</label
+            >`,
+        )}
+      </div>
+      ${
+        error
+          ? html`<p class="field-error" role="alert" id=${errorId} data-test=${errorId}>
+              ${error}
+            </p>`
+          : nothing
+      }
+    </fieldset>`;
+  }
+
+  #renderHomePreview(device: HomeDevice) {
+    if (this.preview !== null)
+      return html`<dashboard-device-home-preview
+        .document=${this.preview.document}
+        device=${device}
+      ></dashboard-device-home-preview>`;
+    if (!this.previewError)
+      return html`<p role="status" data-test="home-preview-loading">
+        ${t("home.preview_loading")}
+      </p>`;
+    return html`<p class="error" role="alert" data-test="home-preview-error">
+        ${t("home.preview_error")}
+      </p>
+      <div>
+        <wt-button
+          data-test="home-preview-retry"
+          variant="secondary"
+          @click=${() => void this.#watchPreview(this.menuId!)}
+          >${t("menus.retry")}</wt-button
+        >
+      </div>`;
+  }
+
+  #renderShortcutPicker() {
+    const kind = this.addingShortcut;
+    const held = new Set(
+      (this.menuHome?.shortcuts ?? []).map(({ ref }) =>
+        ref.kind === "product" ? ref.productId : ref.kind === "section" ? ref.sectionId : null,
+      ),
     );
-    const heading =
-      form === null
-        ? ""
-        : form.kind === "create"
-          ? t("home.create_heading")
-          : t(form.kind === "duplicate" ? "home.duplicate_heading" : "home.rename_heading").replace(
-              "{name}",
-              form.name,
-            );
+    const options =
+      kind === "section"
+        ? this.#tileSections
+            .filter(({ id }) => !held.has(id))
+            .map(({ id, internalName }) => ({ value: id, label: internalName }))
+        : this.#tileProducts
+            .filter(({ id }) => !held.has(id))
+            .map(({ id, name }) => ({ value: id, label: name }));
     return this.#formModal({
-      test: "layout-form",
-      open: form !== null,
-      heading,
-      body: html`<div class="fields">
-        ${this.#nameInput({
-          name: "name",
-          label: t("home.name"),
-          value: this.layoutFormName,
-          errors,
-          save: "layout-save",
-          change: (value) => {
-            this.layoutFormName = value;
-            this.layoutFormErrors = without(this.layoutFormErrors, ["name"]);
-          },
-        })}
-        ${
-          form?.kind === "duplicate"
-            ? html`<p class="help">${t("home.duplicate_note")}</p>`
-            : nothing
-        }
-      </div>`,
-      save: "layout-save",
-      saveLabel: form?.kind === "duplicate" ? t("home.duplicate_save") : t("action.save"),
-      errors: placed,
-      close: () => {
-        this.layoutForm = null;
+      test: "add-shortcut",
+      open: kind !== null,
+      heading: t(kind === "section" ? "home.add_section" : "home.add_product"),
+      body: html`<wt-combobox
+        name=${kind === "section" ? "shortcut-section" : "shortcut-product"}
+        required
+        label=${t(kind === "section" ? "home.tile_section" : "home.tile_product")}
+        search="auto"
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        placeholder=${t(kind === "section" ? "home.choose_section" : "home.choose_product")}
+        .options=${options}
+        .value=${this.shortcutChoice}
+        .disabled=${this.busy}
+        error=${this.shortcutError}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          this.shortcutChoice = event.detail.value;
+          void this.#addShortcut(this.shortcutChoice);
+        }}
+      ></wt-combobox>`,
+      errors: {
+        blocked: false,
+        bottom: [this.shortcutFormError, this.shortcutError ? t("form.fix_fields") : ""]
+          .filter(Boolean)
+          .join(" "),
       },
-      submit: () => void this.#saveLayout(),
-    });
-  }
-
-  #renderDeleteLayout() {
-    const target = this.deletingLayout;
-    return this.#formModal({
-      test: "layout-delete",
-      open: target !== null,
-      heading: t("home.delete_heading").replace("{name}", target?.name ?? ""),
-      body: html`<p>${t("home.delete_note")}</p>`,
-      save: "layout-delete-confirm",
-      saveLabel: t("action.delete"),
-      saveVariant: "danger",
-      errors: { blocked: false, bottom: this.deleteLayoutError ?? "" },
       close: () => {
-        this.deletingLayout = null;
+        this.addingShortcut = null;
       },
-      submit: () => void this.#deleteLayout(),
+      closed: () => this.#windowClosed(),
     });
   }
 
@@ -2549,7 +2604,7 @@ export class MenusScreen extends LitElement {
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
       ${this.#renderNewSection()} ${this.#renderProductColor()} ${this.#renderAddProducts()}
-      ${this.#renderLayoutForm()} ${this.#renderDeleteLayout()}`;
+      ${this.#renderShortcutPicker()}`;
   }
 
   override render() {
