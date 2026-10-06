@@ -399,7 +399,7 @@ checks `menus-screen.test.ts:5194`, `:5264`, `:5275`, `:5395`, `:5457`.
 
 ## T6: inspect the rendered menu and finish the documentation
 
-- [ ] Add failing layout assertions to widget/screen suites for every combination of
+- [x] Add failing layout assertions to widget/screen suites for every combination of
       interface EN/ES, light/dark, widths **390 and 1280** with default and alternative
       customer language plus Internal mode. Set actual iframe with `page.viewport(width, 844)`;
       assert `window.innerWidth === width`. At 1280 assert preview and changes are side by
@@ -408,34 +408,34 @@ checks `menus-screen.test.ts:5194`, `:5264`, `:5275`, `:5395`, `:5457`.
       Assert publication strip/action and return-to-change control remain reachable without
       moving the preview out of its pane. Expected red is incorrect rectangles/overflow,
       not an expected screenshot file missing.
-- [ ] Extend `menu-preview.a11y.test.ts` and `customer-menu.a11y.test.ts` over that matrix
+- [x] Extend `menu-preview.a11y.test.ts` and `customer-menu.a11y.test.ts` over that matrix
       for hierarchy closed/expanded, product detail, before/removal, Home/title target,
       selected change, missing text, clashes, warning confirmation, loading/failure and
       current/unpublished states. Keep all current a11y state cases. Assert named native
       controls and keyboard return separately from axe. Test token-painted focus/highlight
       with host overrides and reduced-motion scrolling. Do not weaken axe rules to pass.
-- [ ] Before browser runs, inspect `memory_pressure` and current testing processes; take
+- [x] Before browser runs, inspect `memory_pressure` and current testing processes; take
       turns with other sessions rather than overlap a whole-workspace coverage run. Run
       `pnpm --filter @waitron/dashboard exec vitest run src/widgets/customer-menu.test.ts src/widgets/customer-menu.a11y.test.ts src/widgets/menu-preview.test.ts src/widgets/menu-preview.a11y.test.ts`
       and selected screen layout cases. Check actual Tests counts and each exit status.
-- [ ] Save captures under a workspace-local ignored directory allowed by Vite, with paths
+- [x] Save captures under a workspace-local ignored directory allowed by Vite, with paths
       calculated relative to each test, not an untracked `src/look` directory. Register app
       icons in the harness. LOOK at all eight EN/ES-theme-width combinations for hierarchy,
       product detail and removal/move, with customer languages and Internal represented.
       Inspect missing translation/image states and Home target too. Retain paths and measured
       widths in implementation receipts. A passing axe run or screenshot capture is not a look.
-- [ ] Use `wa-wt demo waitron-feat-menu-preview-redesign` to open the real screen after
+- [x] Use `wa-wt demo waitron-feat-menu-preview-redesign` to open the real screen after
       focused checks; use the registered instance's URLs. Inspect a populated published menu,
       unpublished edits, a removal and concurrent stale publication through real API. Do not
       start bare `pnpm dev`. If no stack slot is available, retain browser-harness/API evidence
       and state the real-stack check as an outstanding limitation, not completed verification.
-- [ ] Update design-system with Preview panes, detail inspection, fallback labelling,
+- [x] Update design-system with Preview panes, detail inspection, fallback labelling,
       before/after navigation and mobile return control. Update the current W95 backlog
       outcome (add a W95 completion entry if there is still none) and W89's clash-wording
       and W88's phone-overflow follow-ups only where verification closes
       them. Update A299's note to say Preview no longer draws the staff tree; do not mark
       deletion done. No campaign edits by this writer. Parent writes test-change FYI.
-- [ ] Run `git diff --check`, local dashboard build
+- [x] Run `git diff --check`, local dashboard build
       `pnpm --filter @waitron/dashboard build`, and focused types if investigating a boundary
       problem; normal scoped typechecks also run in the push hook. Formatting of docs needs
       explicit `pnpm exec prettier --ignore-path /dev/null --check docs/developers/design-system.md docs/backlog.md` because
@@ -471,3 +471,11 @@ No runtime checks were run by the documentation writer. Existing content limits 
 in the spec and exercised rather than filled from drafts. No unresolved owner decision is
 needed within this scope. Parent must remap pointers on any new base and report any concrete
 gap the implementation experiments reveal before claiming completion.
+
+Implementation acceptance audit (2026-10-06): T1–T5 and T6 local checks completed.
+Dense screen checks cover EN/ES × light/dark × 390/1280 with all three content views,
+detail, removed empty section and Home. Separate navigation cases cover all sixteen kinds,
+product moves and section cross-links; modifier limits and expanded hierarchy have their
+own behavioral/accessibility cases. This is combined evidence, not a claim that every
+interaction was screenshot-inspected in every state. Real-stack receipts include eight
+removal views and the exact stale-hash 409. Review/push/current-head CI remain to finish.

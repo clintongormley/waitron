@@ -2064,11 +2064,11 @@ shown. An event from the table for "these branches changed" would be cleaner; it
 other items in the tree's row menus are greyed out while a change is out; the link to the included
 menu's own editor is a link, which has no greyed-out state, so it stays live.
 
-**Inspect the proposed menu and follow every change — PLANNED (W95, 2026-10-06).**
+**Inspect the proposed menu and follow every change — IMPLEMENTED (W95, 2026-10-06; review and CI pending).**
 The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
 [implementation plan](superpowers/plans/2026-10-06-w95-menu-preview.md) define a customer-language
 hierarchy, product inspection and linked before/after changes, with explicit translation
-fallbacks. Implementation is in progress: the preview envelope now carries the frozen live
+fallbacks. The preview envelope carries the frozen live
 document, the occurrence index preserves repeated nested paths, and section/list changes carry
 ID paths independent of their displayed names. Changes now carry before/after addresses
 for their actual fields, including repeated dishes and nested variants, extras and option labels;
@@ -2093,7 +2093,7 @@ live snapshot and reject the previous hash without adding version or publication
 suite separately checks that a refused publication adds no image-reference row.
 Dense screen checks cover both interface languages, both themes and actual widths 390 and 1280;
 real-stack checks inspected eight removal views and received the exact stale-hash refusal. Final
-acceptance audit, documentation checks, whole-branch review and CI remain pending.
+acceptance audit checks all sixteen change kinds and the exact before/after destinations. Whole-branch review and current-head CI remain pending.
 
 **A menu's Preview tab is wider than a phone for a one-word menu name — FIXED IN W95
 (2026-10-06; branch validation, not yet landed).** Dense full-screen checks in
@@ -4389,7 +4389,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     has any sale, working order or daily close. Hours keeps wall times and date keys as stored and
     reads again on a `locations` change; allowing a change after trading would need its own
     decision on what stored hours mean.
-  Left open by its reviews:
+    Left open by its reviews:
   - `scripts/dashboard-browser-purity.test.ts` reads only bookings' and adjustments' dashboard
     folders, so nothing checks that venue-service's dashboard code stays free of server imports.
   - `packages/fiscal-verifactu/src/privileges.expected.ts` still lists `department_hours`; the
@@ -4415,39 +4415,39 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     `prep-stations-overview.a11y.test.ts` in `packages/venue-service/src/dashboard/`) write `look/*.png`
     into that folder on every run, and git shows it as untracked — the same shape as the
     kitchen-screen case recorded under W110b.
-  [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is approved with
-  the owner's 2026-10-05 13:25 amendments; national/regional data, owner-entered city holidays and
-  holiday-aware special-date naming are not implemented. Its Hours dependency (step 5) is built,
-  with the `HolidayReader` seam it supplies.
-  Local holidays follow the venue address city directly, with no confirmation or reselection.
-  Geography changes retain but hide old entries with `These local holidays were for <old city>`;
-  matching the address again restores them automatically. Two additive venue-service tables hold
-  geography/area identity and local entries, without a settings/selection pointer. The country
-  holiday capability supplies the allowance (Spain 2 from the plan's BOE receipt; no capability
-  permits no local entries, including import), and the UI reads it from the response. Approved
-  incomplete-year notices, full label/naming rules, permissions and all other behavior remain.
-  The consolidated 2027 BOE list was not located by the plan's dated search; recheck it before the
-  build rather than extrapolating dates or treating a regional publication as nationwide coverage.
-  [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) was approved on
-  2026-10-05; the grid and row-first cell storage are not implemented. Its Prep stations dependency
-  is landed; follow the lane queue for the build. Approved decisions cover the No category group,
-  nested collapsed counts, configured
-  versus fallback cell presentation,
-  read-only default-cell permissions, retained disabled targets, zone cleanup and pre-live routing
-  reset. It replaces claims/ordered exceptions without conversion, with five stored coordinate
-  classes and populated-upgrade/configuration-transfer checks.
-  [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) — DONE (#1281).
-  Changes needing another fiscal/geographic context or
-  history removal use a separately approved setup/reset instead. Later
-  Hours/holidays/menu builds retain their own compatibility tests.
-  [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
-  is implemented in [PR #1288](https://github.com/clintongormley/waitron/pull/1288).
-  It removes the redundant page and legacy location receipt/drawer settings, makes manual drawer
-  authorization unconditional, and preserves device/profile/printer gates, automatic drawer jobs
-  and receipt/replay safeguards. The owner approved the reset release and the exact core/0109
-  upgrade-test reset entry on 2026-10-06. Old bookmarks use the surviving Tickets destination;
-  older configuration exports are refused before staging. Steps 4–6 remain with their owning lanes.
-  [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
+    [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is approved with
+    the owner's 2026-10-05 13:25 amendments; national/regional data, owner-entered city holidays and
+    holiday-aware special-date naming are not implemented. Its Hours dependency (step 5) is built,
+    with the `HolidayReader` seam it supplies.
+    Local holidays follow the venue address city directly, with no confirmation or reselection.
+    Geography changes retain but hide old entries with `These local holidays were for <old city>`;
+    matching the address again restores them automatically. Two additive venue-service tables hold
+    geography/area identity and local entries, without a settings/selection pointer. The country
+    holiday capability supplies the allowance (Spain 2 from the plan's BOE receipt; no capability
+    permits no local entries, including import), and the UI reads it from the response. Approved
+    incomplete-year notices, full label/naming rules, permissions and all other behavior remain.
+    The consolidated 2027 BOE list was not located by the plan's dated search; recheck it before the
+    build rather than extrapolating dates or treating a regional publication as nationwide coverage.
+    [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) was approved on
+    2026-10-05; the grid and row-first cell storage are not implemented. Its Prep stations dependency
+    is landed; follow the lane queue for the build. Approved decisions cover the No category group,
+    nested collapsed counts, configured
+    versus fallback cell presentation,
+    read-only default-cell permissions, retained disabled targets, zone cleanup and pre-live routing
+    reset. It replaces claims/ordered exceptions without conversion, with five stored coordinate
+    classes and populated-upgrade/configuration-transfer checks.
+    [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) — DONE (#1281).
+    Changes needing another fiscal/geographic context or
+    history removal use a separately approved setup/reset instead. Later
+    Hours/holidays/menu builds retain their own compatibility tests.
+    [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
+    is implemented in [PR #1288](https://github.com/clintongormley/waitron/pull/1288).
+    It removes the redundant page and legacy location receipt/drawer settings, makes manual drawer
+    authorization unconditional, and preserves device/profile/printer gates, automatic drawer jobs
+    and receipt/replay safeguards. The owner approved the reset release and the exact core/0109
+    upgrade-test reset entry on 2026-10-06. Old bookmarks use the surviving Tickets destination;
+    older configuration exports are refused before staging. Steps 4–6 remain with their owning lanes.
+    [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
   profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
