@@ -482,7 +482,7 @@ derivation (one 401, seven 429), because `passwordThrottle.begin` refuses a seco
 flight. **Next action:** give the till sign-in the same turn-taking (`inTurn`,
 `apps/server/src/attempt-turns.ts`) or an in-flight refusal.
 
-**A section a diet filter empties keeps its place on the till (A297, owner 2026-10-06) — DONE.**
+**A section a diet filter empties keeps its place on the till (A297, #1317, owner 2026-10-06) — DONE.**
 **Decided (owner, 2026-10-06):** such a section stays, faded and not openable, in the structure, as
 a shortcut and inside an open section; if it is the section that is open, the till still says "Not
 found" and shows home. A section left with nothing because every product in it was Inactive when
