@@ -45,7 +45,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
-import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
+import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
   addTabRound,
@@ -150,7 +150,7 @@ interface SeededVenue {
  * `allocateOrderNumber` counts per node, so the order number is that test's own — always 1 on the
  * first park — and the suite is order-independent (CLAUDE.md §4).
  */
-async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
+async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue> {
   await seedTenant(db);
   const eachUnitId = randomUUID();
   const kgUnitId = randomUUID();
@@ -271,7 +271,6 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     simplifiedInvoiceLimit: null,
     // Defaults to prepay (park/list/retrieve/update/abandon don't dispatch on the mode); the KDS fire
     // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.
-    orderFlow,
   });
   return {
     cfg,
@@ -2533,7 +2532,7 @@ const stubClock = {
   now: () => ({ instant: new Date(), offsetMinutes: 0 }),
 } as unknown as TrustedClock;
 
-/** A fiscal-backend stub — never touched on the non-`invoice_first` placing paths these tests exercise. */
+/** A fiscal-backend stub — never touched on the non-`ticket_then_pay` placing paths these tests exercise. */
 const stubBackend = {} as unknown as FiscalBackend;
 
 /** A basket line for a product at quantity 1 — the shape createOpenOrder/fireLines consume. */
@@ -3632,7 +3631,7 @@ describe("opening hours", () => {
 });
 
 describe("an order whose card payment is in flight (plan D22)", () => {
-  async function payingHeldOrder(orderFlow?: TillConfig["orderFlow"]) {
+  async function payingHeldOrder(orderFlow?: OrderFlow) {
     const venue = await setupVenue(orderFlow);
     // Placing fires the line, which needs a station to reach.
     await withTransaction(db, (tx) =>

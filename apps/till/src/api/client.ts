@@ -378,7 +378,7 @@ export interface ZoneOfferCatalogue {
   context: {
     zoneId: string;
     departmentId: string;
-    serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+    serviceMode: "table_tab" | "prepay" | "ticket_then_pay";
     receiptPrintMode?: "auto" | "on_request" | "never";
   };
   defaultMenuId: string | null;
@@ -392,7 +392,7 @@ export interface ServiceZoneSummary {
   name: string;
   departmentId: string;
   departmentName: string;
-  serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+  serviceMode: "table_tab" | "prepay" | "ticket_then_pay";
 }
 
 export type { MenuState, MenuUnavailable };
@@ -1126,7 +1126,7 @@ export interface HeldOrder {
   })[];
 }
 
-export type OrderFlow = "prepay" | "invoice_first" | "ticket_then_pay";
+export type OrderFlow = "prepay" | "ticket_then_pay";
 
 /** The kitchen state a ticket item advances through: `queued → preparing → ready`. */
 export type TicketState = "queued" | "preparing" | "ready";

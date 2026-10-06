@@ -1,5 +1,11 @@
 # Tables, parties and bills: the till's table actions — design
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 **Status:** draft for review, revision 4 (2026-09-28). Section 4 holds the owner's decisions, made in
 design sessions on 2026-09-28; everything else is this document's proposal and is open to review.
 Section 13 lists the points the reviewers should look at hardest. Revision 2 folds in the first

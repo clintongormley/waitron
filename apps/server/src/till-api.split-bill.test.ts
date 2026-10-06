@@ -125,7 +125,6 @@ function makeCfg(locationId: string, nodeId: string): OriginConfig {
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 }
 

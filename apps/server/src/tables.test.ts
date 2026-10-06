@@ -96,7 +96,6 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfi
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 }
 
@@ -691,7 +690,6 @@ async function setupTabVenue(): Promise<{
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
   const { cafeId, aguaId, tableId, offers } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });

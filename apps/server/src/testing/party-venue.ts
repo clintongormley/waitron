@@ -135,7 +135,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   });
   const { tables, counter, productIds } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });

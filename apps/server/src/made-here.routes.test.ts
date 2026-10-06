@@ -1202,7 +1202,7 @@ describe("made-here route wiring", () => {
     expect(answer.json.code).toBe("submission.id_reused");
   });
 
-  it.each(["ticket_then_pay", "invoice_first"] as const)(
+  it.each(["ticket_then_pay", "ticket_then_pay"] as const)(
     "/api/sales makes a no-party %s counter order here when payment sends it",
     async (serviceMode) => {
       const { zoneId, menuItemId } = await inTx(venue, async (tx) => {

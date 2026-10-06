@@ -168,7 +168,6 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   });
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });

@@ -77,7 +77,6 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
   const manager = await withTransaction(db, async (tx) => {
     // Through the table definition for the same reason as the venue rows above.

@@ -174,7 +174,7 @@ useVenueDb({
       );
     });
     const offers = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
     );
     invoiceFirstZone = offers.zoneId;
     productIdOf = (name) => productIds.get(name)!;
@@ -546,7 +546,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
       });
 
       await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
       );
       const newId = await placed([
         {
@@ -578,7 +578,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
           sql`update extra_list_items set portion = 50 where list_id = ${portionListId}`,
         );
         await tx.execute(sql`update units set precision = 3 where seed_key = 'credit-test-kg'`);
-        await offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" });
+        await offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" });
       });
     }
   });

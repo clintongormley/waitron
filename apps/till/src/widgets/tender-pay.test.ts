@@ -622,7 +622,7 @@ describe("till-tender-pay", () => {
       store.addProduct(cafe, "2");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
-        mode: "invoice_first",
+        mode: "ticket_then_pay",
         stage,
         takesCash: false,
       });
@@ -650,7 +650,7 @@ describe("till-tender-pay", () => {
     collectStore.addProduct(cafe, "2");
     const collect = await mountWidget<TillTenderPay>("till-tender-pay", {
       store: collectStore,
-      mode: "invoice_first",
+      mode: "ticket_then_pay",
       stage: "collect",
     });
     expect(query(collect.el, ".pay-card")).not.toBeNull(); // Modes I/T collect view
@@ -670,7 +670,7 @@ describe("till-tender-pay", () => {
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
-      mode: "invoice_first",
+      mode: "ticket_then_pay",
       stage: "order",
     });
     expect(query(el, ".place")).not.toBeNull();
@@ -692,7 +692,7 @@ describe("till-tender-pay", () => {
     expect(query(el, ".hold")).not.toBeNull();
   });
 
-  describe.each(["ticket_then_pay", "invoice_first"] as const)(
+  describe.each(["ticket_then_pay", "ticket_then_pay"] as const)(
     "a %s zone at the order stage, which sends to the kitchen without payment",
     (mode) => {
       async function mountOrderStage() {
@@ -752,7 +752,7 @@ describe("till-tender-pay", () => {
     const store = new WorkingOrderStore();
     const { el: empty } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
-      mode: "invoice_first",
+      mode: "ticket_then_pay",
     });
     expect(query(empty, ".place")!.hasAttribute("disabled")).toBe(true);
 
@@ -760,7 +760,7 @@ describe("till-tender-pay", () => {
     busyStore.addProduct(cafe, "2");
     const { el: busy } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store: busyStore,
-      mode: "invoice_first",
+      mode: "ticket_then_pay",
       busy: true,
     });
     expect(query(busy, ".place")!.hasAttribute("disabled")).toBe(true);
@@ -771,7 +771,7 @@ describe("till-tender-pay", () => {
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
-      mode: "invoice_first",
+      mode: "ticket_then_pay",
     });
     let captured: CustomEvent | undefined;
     el.addEventListener("place-order", (e) => (captured = e as CustomEvent));
@@ -787,7 +787,7 @@ describe("till-tender-pay", () => {
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
-      mode: "invoice_first",
+      mode: "ticket_then_pay",
       stage: "collect",
     });
     expect(query(el, ".pay")).not.toBeNull();
@@ -819,9 +819,9 @@ describe("till-tender-pay", () => {
     const zones = [
       { mode: "prepay", stage: "order" },
       { mode: "ticket_then_pay", stage: "order" },
-      { mode: "invoice_first", stage: "order" },
+      { mode: "ticket_then_pay", stage: "order" },
       { mode: "ticket_then_pay", stage: "collect" },
-      { mode: "invoice_first", stage: "collect" },
+      { mode: "ticket_then_pay", stage: "collect" },
     ] as const;
 
     async function mountAt(mode: OrderFlow, stage: "order" | "collect", width?: string) {
@@ -884,7 +884,7 @@ describe("till-tender-pay", () => {
     store.addProduct(cafe, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
-      mode: "invoice_first",
+      mode: "ticket_then_pay",
       stage: "collect",
     });
     const confirmSpy = vi.fn();
@@ -930,7 +930,7 @@ describe("till-tender-pay", () => {
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
-      mode: "invoice_first",
+      mode: "ticket_then_pay",
       stage: "collect",
     });
     click(el, ".pay");
@@ -1344,7 +1344,7 @@ describe("till-tender-pay", () => {
       store.addProduct(cafe, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
-        mode: "invoice_first",
+        mode: "ticket_then_pay",
         stage: "collect",
         cardProvider: "stripe_terminal",
       });

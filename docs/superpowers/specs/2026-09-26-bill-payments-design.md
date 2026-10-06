@@ -1,5 +1,11 @@
 # Several payments against one bill — the payment and billing design
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 **Status:** written 2026-09-26 by the lane B runner as plan Task 0. **Amended the same day with the
 owner's answers to §11** (§11 records each), which added two things: the cash-up counts money on the
 day it moves (§9a), and a card refund is a durable attempt that survives an interrupted call (§6b).

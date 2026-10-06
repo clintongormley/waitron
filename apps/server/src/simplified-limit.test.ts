@@ -64,7 +64,7 @@ useVenueDb({
         .returning({ id: floorZones.id });
       invoiceFirst = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
-        serviceMode: "invoice_first",
+        serviceMode: "ticket_then_pay",
         productIds,
       });
     });

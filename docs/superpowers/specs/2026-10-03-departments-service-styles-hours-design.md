@@ -1,5 +1,11 @@
 # Departments, service styles and opening hours
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 > **Update, 2026-10-05 (A261 step 2):** The "What exists today" section below records the code
 > as it stood on 2026-10-03. The [Departments and zones plan](../plans/2026-10-04-departments-and-zones.md)
 > replaces live venue-wide pay timing and receipt printing with department defaults and optional

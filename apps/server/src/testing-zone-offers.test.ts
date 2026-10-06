@@ -75,7 +75,6 @@ async function seedVenue(db: Database): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "ticket_then_pay",
   };
   return withTransaction(db, async (tx) => {
     const carta = await createCatalogue(tx, { name: "Carta" });

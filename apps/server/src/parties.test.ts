@@ -1257,7 +1257,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
   it("is owed on the surviving party and blocks Finish until the till collects it under the invoice filed at placing", async () => {
     const venue = await provisionBillVenue(suite.db);
     const invoiceFirst = await inTx(suite, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
     );
     const s = await seatedWith(venue);
     const billId = await placedCounterBillMovedTo(venue, invoiceFirst.zoneId, s, true);

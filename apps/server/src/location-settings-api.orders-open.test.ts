@@ -424,7 +424,7 @@ describe("a receipt-language change while orders are open", () => {
   it("accepts a change while an already-issued order is placed, and collecting it keeps the language it was filed in", async () => {
     reset();
     const placing = await withTransaction(venue.db, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
     );
     const id = randomUUID();
     const filed = () => ({

@@ -108,7 +108,6 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       invoiceLocales: [LOCALE],
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
-      orderFlow: "prepay",
     };
     const { cocinaId, printerId, orderId, lineId } = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });

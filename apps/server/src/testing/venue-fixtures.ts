@@ -52,7 +52,6 @@ function tillConfigFromVenue(venue: VenueResult): OriginConfig {
     simplifiedInvoiceLimit: null,
     // ticket_then_pay so `placeOrder` FIRES the lines to the kitchen (open → placed) without filing a
     // fiscal doc — the lightest fire path that puts real ticket items on the station queue.
-    orderFlow: "ticket_then_pay",
   };
 }
 

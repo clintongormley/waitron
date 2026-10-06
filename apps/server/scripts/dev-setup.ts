@@ -277,7 +277,6 @@ async function seedDemoDevices(
     invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 
   const { profiles, stations, activeWatchers } = await withTransaction(db, async (tx) => {

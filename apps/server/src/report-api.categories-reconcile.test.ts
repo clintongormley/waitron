@@ -120,7 +120,6 @@ describe("the category report reconciles with the till's sales", () => {
       invoiceLocales: [LOCALE],
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
-      orderFlow: "prepay",
     });
 
     // Drinks > Softs; Water sits in Drinks itself; Bread and Olives have no category. Two rates, and

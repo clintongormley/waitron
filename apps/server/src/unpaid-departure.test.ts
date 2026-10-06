@@ -76,7 +76,7 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     invoiceFirstZone = (
       await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
       )
     ).zoneId;
     prepayZone = await inTx(venue, async (tx) => {

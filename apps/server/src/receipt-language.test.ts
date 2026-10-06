@@ -120,7 +120,6 @@ async function venueWith(
       WAITRON_TILL_LOCATION_ID: venue.locationId,
       ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),
-    orderFlow: "prepay",
     simplifiedInvoiceLimit: null,
   });
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {

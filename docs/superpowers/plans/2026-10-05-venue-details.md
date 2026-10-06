@@ -1,5 +1,11 @@
 # Venue details implementation plan (A261 step 7)
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 > **For agentic workers:** use `superpowers:executing-plans` for routine inline execution. Start each behavior change with a failing test, observe its intended failure, implement the smallest change, and rerun it. Use `git commit -s` at independently working task boundaries. The driver owns review, commits and landing.
 
 **Goal:** Let you correct the venue's display details on Venue settings, with server-enforced limits that preserve issued documents and historical reporting days.

@@ -304,7 +304,6 @@ function makeCfg(locationId: string, nodeId: string): TillConfig {
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 }
 
@@ -1176,11 +1175,7 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
 describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)", () => {
   it("omits the retired venue mode from public boot info", async () => {
     const app = new Hono();
-    mountTillApi(
-      app,
-      { ...deps(suite.db), cfg: { ...cfg, orderFlow: "invoice_first" } },
-      collect([]),
-    );
+    mountTillApi(app, { ...deps(suite.db), cfg: { ...cfg } }, collect([]));
 
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);
@@ -1749,7 +1744,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       const token = await openSession(suite.db);
       const headers = { cookie: `${SESSION_COOKIE}=${token}` };
       await suite.db.execute(sql`
-        update zone_service_policies set service_mode = 'invoice_first'
+        update zone_service_policies set service_mode = 'ticket_then_pay'
         where zone_id = ${counterZoneId}`);
       await suite.db.execute(sql`
         update department_sale_policies set paid_when = ${paidWhen}

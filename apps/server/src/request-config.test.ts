@@ -12,7 +12,6 @@ describe("requestCfg", () => {
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       tipsEnabled: true,
-      orderFlow: "prepay",
       simplifiedInvoiceLimit: decimal("400"),
     };
     const device = deviceId("0f0e0d0c-0b0a-4908-8706-050403020100");

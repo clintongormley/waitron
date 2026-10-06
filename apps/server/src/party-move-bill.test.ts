@@ -70,7 +70,7 @@ let counterCaña: string;
 async function zoneNamed(
   tx: Transaction,
   name: string,
-  serviceMode: "invoice_first" | "table_tab",
+  serviceMode: "ticket_then_pay" | "table_tab",
 ): Promise<string> {
   const [zone] = await tx
     .insert(floorZones)
@@ -85,7 +85,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
-    invoiceFirstZone = await inTx(v, (tx) => zoneNamed(tx, "Barra factura", "invoice_first"));
+    invoiceFirstZone = await inTx(v, (tx) => zoneNamed(tx, "Barra factura", "ticket_then_pay"));
     terrazaZone = await inTx(v, (tx) => zoneNamed(tx, "Terraza", "table_tab"));
     counterCaña = await pricedInZone(v, v.counter.zoneId, "Caña", "3.50");
     // Agua is handed over at the bar, so it is never sent to the kitchen.

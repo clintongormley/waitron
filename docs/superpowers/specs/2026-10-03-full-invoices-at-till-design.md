@@ -1,5 +1,11 @@
 # Full invoices at the till (A231)
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 **Status:** proposal for owner approval, 2026-10-03. Build and landing require a separate owner decision. This design covers an F1 issued for the bill being charged. An F3 issued after an F2 is a later build.
 
 **Status update, 2026-10-04:** The owner approved the build described by this design and its [implementation plan](../plans/2026-10-03-full-invoices-at-till.md). Landing still requires the owner's review. F1 issuance remains disabled while the original-delivery work and the asesor's remedy procedure are outstanding.

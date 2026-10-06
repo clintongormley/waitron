@@ -1,5 +1,11 @@
 # The dashboard's Orders screen — design
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 > **Update, 2026-10-05 (A261 step 2):** The earlier description below of automatic receipt
 > printing records the location-wide setting at the time of this design. The
 > [Departments and zones plan](../plans/2026-10-04-departments-and-zones.md) moves that choice to a

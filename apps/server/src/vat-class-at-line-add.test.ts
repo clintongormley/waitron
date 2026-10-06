@@ -146,7 +146,6 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   });
 
   const products = await withTransaction(suite.db, async (tx) => {

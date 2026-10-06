@@ -114,7 +114,7 @@ names, and records the same product in its own `product_id` and a variant's pare
 one in force on the day the invoice is issued.** Each published menu version records the VAT class
 of each dish, variant and extras item, and no rate (`buildMenuDocument`,
 `packages/catalogue/src/menu-document.ts`), and a till is served that class rather than the
-product's current one. A line added to a held order, a tab or an invoice-first order stores that
+product's current one. A line added to a held order or a tab stores that
 class (`working_order_lines.vat_class`) with its gross price; a walk-up sale is priced at payment,
 from the version live then (`priceOrderLines`, `apps/server/src/working-order.ts`). A variant with
 no class of its own was frozen at its parent's class, and an extras line takes the class frozen for

@@ -1615,7 +1615,6 @@ it("leaves out a print agent's node, so the importing venue does not show it as 
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
-    orderFlow: "prepay",
     simplifiedInvoiceLimit: null,
   });
   const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {

@@ -111,7 +111,6 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
   const st = await asApp(admin, (tx) =>
     createStation(tx, cfg, { name: "Cocina", isDefault: true }),

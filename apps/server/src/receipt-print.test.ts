@@ -140,7 +140,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -149,7 +149,6 @@ function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConf
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow,
   };
 }
 
@@ -199,7 +198,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, orderFlow));
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -214,7 +213,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     return {
       available: (await listAvailableProducts(tx, cfg.locationId)).products,
-      offers: await offerProducts(tx, cfg),
+      offers: await offerProducts(tx, cfg, { serviceMode: orderFlow, paidWhen: orderFlow }),
     };
   });
   const each = available.find((p) => p.pricingUnit === "each")!;
@@ -1242,7 +1241,7 @@ describe("every device whose profile allows the drawer opens its receipt printer
     otherCapabilities: string[] = [...CAPABILITY_FLAGS],
   ) {
     const base = await setupVenue(orderFlow);
-    const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow });
+    const cfg = await deviceRequestCfg(suite.db, { ...base.cfg });
     const other = await addTill(cfg, "Caja 2", otherCapabilities);
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });

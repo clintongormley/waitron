@@ -88,7 +88,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     store.addProduct(cafe, "2");
     const { host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
-      { store, mode: "invoice_first", stage: "order" },
+      { store, mode: "ticket_then_pay", stage: "order" },
       theme,
     );
     await expectNoA11yViolations(host);

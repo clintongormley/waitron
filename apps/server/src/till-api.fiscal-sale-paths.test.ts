@@ -1,3 +1,4 @@
+import { offerProducts } from "./testing/zone-offers.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -128,7 +129,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 }
 
@@ -1575,7 +1575,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
 describe("place → station queue → per-line advance → collect (KDS-1 ticket model, over HTTP)", () => {
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
+    const modeCfg: TillConfig = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 
     const app = new Hono();
@@ -2244,12 +2244,12 @@ describe("handheld sales and device capability gates", () => {
     return order!.status;
   }
 
-  it("a handheld places a Mode-I order for an operator holding only the payment permission, filing one deferred invoice under itself, as a till does", async () => {
+  it("handheld and till placement files nothing; collection files each invoice under the collecting device with only payment permission", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     await suite.db.execute(sql`
-      update departments set default_service_mode = 'invoice_first'
-      where location_id = ${cfg.locationId}`);
-    const modeCfg: TillConfig = { ...cfg, orderFlow: "invoice_first" };
+      update department_sale_policies set paid_when = 'ticket_then_pay'
+      where department_id in (select id from departments where location_id = ${cfg.locationId})`);
+    const modeCfg: TillConfig = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -2272,15 +2272,34 @@ describe("handheld sales and device capability gates", () => {
         },
       });
       expect(placed.status).toBe(200);
-      expect(await placed.json()).toMatchObject({
-        id,
-        status: "placed",
-        invoiceNumber: expect.stringMatching(/^A\/\d+$/),
-      });
+      expect(await placed.json()).toEqual({ id, status: "placed" });
       expect(await statusOf(id)).toBe("placed");
       expect(await amendmentsOf(id)).toEqual([
         { kind: "order_placed", actorId: operatorId, reason: null },
       ]);
+    }
+
+    expect(await withTransaction(suite.db, (tx) => tx.select().from(registrosFacturacion))).toEqual(
+      [],
+    );
+    expect(await withTransaction(suite.db, (tx) => tx.select().from(sales))).toEqual([]);
+    for (const [id, deviceCookie] of [
+      [byHandheld, handheldCookie],
+      [byTill, tillDeviceCookie],
+    ] as const) {
+      const collected = await app.request(`/api/working-orders/${id}/collect`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${await loginOperator(app, cfg, operatorId, deviceCookie)}; ${deviceCookie}`,
+        },
+        body: JSON.stringify({ tender: { method: "cash", amount: "5.00" } }),
+      });
+      expect(collected.status).toBe(200);
+      expect(await collected.json()).toMatchObject({
+        invoiceNumber: expect.stringMatching(/^A\/\d+$/),
+      });
+      expect(await statusOf(id)).toBe("settled");
     }
 
     const registros = await withTransaction(suite.db, (tx) =>
@@ -2296,7 +2315,7 @@ describe("handheld sales and device capability gates", () => {
 
   it("a handheld collects a placed Mode-T order in cash for an operator holding only the payment permission, settling it and filing one record under itself, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
+    const modeCfg: TillConfig = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -2391,7 +2410,7 @@ describe("handheld sales and device capability gates", () => {
 
     it("refuses a cash collect from a device whose profile lacks take-cash, leaving the order placed", async () => {
       const { cfg, available, operatorId } = await setupVenue();
-      const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
+      const modeCfg: TillConfig = { ...cfg };
       const each = available.find((p) => p.pricingUnit === "each")!;
       const app = new Hono();
       mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -2840,7 +2859,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     await suite.db.execute(sql`
       update departments set default_service_mode = 'ticket_then_pay'
       where location_id = ${cfg.locationId}`);
-    const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
+    const modeCfg: TillConfig = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -2892,7 +2911,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     await suite.db.execute(sql`
       update departments set default_service_mode = 'ticket_then_pay'
       where location_id = ${cfg.locationId}`);
-    const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
+    const modeCfg: TillConfig = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -3004,7 +3023,10 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   async function venueWithTill(orderFlow: OrderFlow = "prepay") {
     const venue = await setupVenue();
-    const cfg: TillConfig = { ...venue.cfg, orderFlow };
+    const cfg: TillConfig = { ...venue.cfg };
+    await withTransaction(suite.db, (tx) =>
+      offerProducts(tx, cfg, { serviceMode: orderFlow, paidWhen: orderFlow }),
+    );
     const { available, operatorId } = venue;
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -3160,7 +3182,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     expect(printed.documents).toHaveLength(1);
   });
 
-  it.each(["ticket_then_pay", "invoice_first"] as const)(
+  it.each(["ticket_then_pay", "ticket_then_pay"] as const)(
     "collecting a placed %s order by hand-keyed card opens the device's drawer once for the slip, and a replay opens nothing more",
     async (orderFlow) => {
       const { cfg, each, app, cookie, on, operatorId } = await venueWithTill(orderFlow);
@@ -3220,8 +3242,8 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
   it.each([
     ["ticket_then_pay", "cash"],
     ["ticket_then_pay", "card"],
-    ["invoice_first", "cash"],
-    ["invoice_first", "card"],
+    ["ticket_then_pay", "cash"],
+    ["ticket_then_pay", "card"],
   ] as const)(
     "a handheld whose profile does not allow the drawer collecting a placed %s order by %s opens none, although its receipt printer and another printer here have one",
     async (orderFlow, method) => {

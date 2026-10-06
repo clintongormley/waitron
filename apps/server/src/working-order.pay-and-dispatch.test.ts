@@ -160,7 +160,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 }
 
@@ -170,7 +169,7 @@ type OfferedProduct = AvailableProduct & { menuItemId: string };
 interface SeededVenue {
   cfg: DeviceRequestConfig;
   available: AvailableProduct[];
-  /** The venue's counter-default zone, whose mode matches `cfg.orderFlow`. */
+  /** The venue's counter-default zone. */
   zoneId: string;
   /** "Café" — each, 1.50 gross, general(21%). */
   cafe: OfferedProduct;
@@ -246,8 +245,11 @@ async function setupVenue(): Promise<SeededVenue> {
 async function offerAtCounter(
   cfg: DeviceRequestConfig,
   available: AvailableProduct[],
+  mode: OrderFlow = "prepay",
 ): Promise<SeededVenue> {
-  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
+  const offers = await withTransaction(suite.db, (tx) =>
+    offerProducts(tx, cfg, { serviceMode: mode, paidWhen: mode }),
+  );
   const offered = (name: string): OfferedProduct => {
     const product = available.find((p) => p.name === name)!;
     return { ...product, menuItemId: offers.offerFor(product.id) };
@@ -263,11 +265,10 @@ async function offerAtCounter(
 
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue();
-  return offerAtCounter({ ...venue.cfg, orderFlow: mode }, venue.available);
+  return offerAtCounter({ ...venue.cfg }, venue.available, mode);
 }
 
-/** The OUTSTANDING (issued-but-unsettled) sales — the surface an invoice-first order shows on
- *  between placing and collect. */
+/** The issued-but-unsettled sales. */
 async function outstanding(): Promise<{ saleId: string; amountDue: string }[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await listOutstandingSales(tx);
@@ -1254,9 +1255,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
 
-    await withTransaction(suite.db, (tx) =>
-      fireDishesAtPayment(tx, { ...cfg, orderFlow: "invoice_first" }, id),
-    );
+    await withTransaction(suite.db, (tx) => fireDishesAtPayment(tx, { ...cfg }, id));
 
     expect(await ticketStateOf(id)).toBe("queued");
   });
@@ -1270,7 +1269,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await suite.db.execute(sql`update order_service_contexts
-      set service_mode = 'invoice_first' where working_order_id = ${id}`);
+      set service_mode = 'ticket_then_pay' where working_order_id = ${id}`);
 
     const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
@@ -1292,12 +1291,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
 
-    const placed = await placeOrder(
-      { db: suite.db, backend, clock },
-      { ...cfg, orderFlow: "invoice_first" },
-      id,
-      OPERATOR,
-    );
+    const placed = await placeOrder({ db: suite.db, backend, clock }, { ...cfg }, id, OPERATOR);
 
     expect(placed).toEqual({ id, status: "placed" });
     expect(await saleCount(id)).toBe(0);
@@ -1632,7 +1626,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("a quick-sale placement files nothing; payment files exactly one settled invoice", async () => {
-    const { cfg, cafe, agua, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, agua, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1686,7 +1680,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("snapshots the department trading name when the quick sale is paid", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     await suite.db.execute(
       sql`update departments set trading_name = 'Deli Before Payment' where location_id = ${cfg.locationId}`,
     );
@@ -1718,7 +1712,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("the paid result carries the backend's words beside its QR", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1736,7 +1730,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: a covered cash over-tender at collect settles at the total and hands back change", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1759,7 +1753,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: a card tender at collect records exactly one captured payment linked to the sale; cash records none", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
 
     // CARD collect: the invoice issued deferred at placing, then a manual-card ("datáfono") tender at
     // collect. The card charges the EXACT invoice total on the separate terminal — no change.
@@ -1779,7 +1773,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await orderState(cardId)).toEqual({ status: "settled", settledAtSet: true });
 
     // The card tender AND a captured manual `payments` row linked to the settled sale; without the row
-    // the invoice-first card collect would be invisible to reconciliation.
+    // the issued-bill card collect would be invisible to reconciliation.
     expect(await tendersFor(cardId)).toEqual([{ method: "card", amount: "1.50" }]);
     expect(await paymentCount(cardId)).toBe(1);
     expect(await paymentsFor(cardId)).toEqual([
@@ -1790,7 +1784,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await saleCount(cardId)).toBe(1);
     expect(await registroCount(cardId)).toBe(1);
 
-    // CASH collect of a SEPARATE invoice-first order → NO payments row (cash is a tender only), the
+    // CASH collect of a SEPARATE issued bill → NO payments row (cash is a tender only), the
     // other branch of the card side-write. Same-state divergence (CLAUDE.md §1): card writes 1, cash 0.
     const cashId = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -1808,7 +1802,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("a double-tap placement opens one amendment log and files nothing before payment", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1832,7 +1826,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: a concurrent double collect settles the invoice ONCE and both see the same ticket", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1978,7 +1972,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -2431,8 +2425,8 @@ describe("paying a counter order never sent, in a zone that sends before payment
     expect(await linesSent(id)).toEqual([true]);
   });
 
-  it("invoice_first: a cash walk-up files a settled sale and sends its dish in the payment", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+  it("ticket_then_pay: a cash walk-up files a settled sale and sends its dish in the payment", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const printerId = await kitchenPrinter(cfg);
     const id = randomUUID();
 
@@ -2500,7 +2494,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
     expect(await saleCount(id)).toBe(1);
   });
 
-  it.each(["ticket_then_pay", "invoice_first"] as const)(
+  it.each(["ticket_then_pay", "ticket_then_pay"] as const)(
     "%s: a parked order paid sends its first course and holds its later course, and the same pay sent again changes nothing",
     async (mode) => {
       const { cfg, cafe, agua, zoneId } = await modeVenue(mode);

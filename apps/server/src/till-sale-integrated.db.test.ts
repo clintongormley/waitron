@@ -133,7 +133,7 @@ function nextNif(): string {
   return nifWithControlLetter(70_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -142,7 +142,6 @@ function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConf
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow,
   };
 }
 
@@ -190,7 +189,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, orderFlow));
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -205,7 +204,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     return {
       available: (await listAvailableProducts(tx, cfg.locationId)).products,
-      offers: await offerProducts(tx, cfg),
+      offers: await offerProducts(tx, cfg, { serviceMode: orderFlow, paidWhen: orderFlow }),
     };
   });
   const cafe = available.find((p) => p.name === "Café")!;
@@ -217,7 +216,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
 
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue(mode);
-  return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
+  return { ...venue, cfg: { ...venue.cfg } };
 }
 
 /** The split-flow deps with a real `StripeTerminalProvider` over `FakeStripe`. A tips-on test
@@ -1642,7 +1641,6 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
 
   it("tips on: charges amountDue+tip, settles the invoice at the total, records the tip on the tender", async () => {
     const { cfg: baseCfg, cafe } = await modeVenue("ticket_then_pay");
-    // `placedIssuedBill` dispatches only on `orderFlow`, so the tips override does not affect it.
     const cfg = { ...baseCfg, tipsEnabled: true };
     const app = suite.db;
     const { id } = await placedIssuedBill(cfg, cafe);

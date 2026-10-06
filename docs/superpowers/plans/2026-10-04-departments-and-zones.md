@@ -1,5 +1,11 @@
 # Departments and zones: implementation plan (A261 step 2)
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 > **2026-10-04 approved amendment:** The owner approved this plan with the decisions below. The
 > [devices, menus and service zones design](../specs/2026-10-04-devices-menus-and-service-zones-design.md)
 > puts starting zones on profiles and menu membership on departments. Step 2 keeps today's

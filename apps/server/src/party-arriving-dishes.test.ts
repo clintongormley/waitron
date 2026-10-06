@@ -75,7 +75,10 @@ useVenueDb({
         .values({ locationId: v.cfg.locationId, name: "Barra factura" })
         .returning({ id: floorZones.id });
       return (
-        await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, serviceMode: "invoice_first" })
+        await offerProducts(tx, v.cfg, {
+          zone: { zoneId: zone!.id },
+          serviceMode: "ticket_then_pay",
+        })
       ).zoneId;
     });
     [entrantes, principales, postres] = await inTx(v, async (tx) => [

@@ -3046,7 +3046,7 @@ async function clampServed(tx: Transaction, lineIds: readonly string[]): Promise
 
 /**
  * Lines pass between two orders only when both have the same service mode, or neither has a service
- * context. A table bill sends nothing when it is paid, so a pay-first or invoice-first bill's unsent
+ * context. A table bill sends nothing when it is paid, so a quick-sale bill's unsent
  * dishes moved into it would never reach the kitchen.
  */
 export async function assertServiceModesMatch(

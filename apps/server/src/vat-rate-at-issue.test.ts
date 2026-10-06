@@ -1,3 +1,4 @@
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -162,7 +163,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow,
   });
 
   const products = await withTransaction(suite.db, async (tx) => {
@@ -204,7 +204,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     };
   });
   const { counter, tables } = await withTransaction(suite.db, async (tx) => ({
-    counter: await offerProducts(tx, cfg),
+    counter: await offerProducts(tx, cfg, { serviceMode: orderFlow, paidWhen: orderFlow }),
     tables: await offerProducts(tx, cfg, { zone: "tables" }),
   }));
   return { cfg, products, counter, tables };
@@ -411,12 +411,13 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     expect(out.outcome === "captured" && out.ticket.vatBreakdown).toEqual(CANA_AT_4);
   });
 
-  it("invoice-first files at placing: placed on the eve and collected on New Year's Day keeps the old rate; parked on the eve and placed on New Year's Day takes the new one", async () => {
-    const v = await setupVenue("invoice_first");
+  it("an invoice issued on the eve keeps its rate at collection; one issued on New Year's Day takes the new rate", async () => {
+    const v = await setupVenue("ticket_then_pay");
     at(EVE);
     const before = await park(v, one(v, v.products.cana));
     const after = await park(v, one(v, v.products.cana));
     await placeOrder(deps(), v.cfg, before, OPERATOR);
+    await issueOrderInvoice(deps(), v.cfg, before, OPERATOR);
 
     at(NEW_YEAR);
     await collectOrder(deps(), v.cfg, {
@@ -425,6 +426,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
       tender: { method: "cash", amount: "2.50" },
     });
     await placeOrder(deps(), v.cfg, after, OPERATOR);
+    await issueOrderInvoice(deps(), v.cfg, after, OPERATOR);
 
     expect(await filed(before)).toMatchObject({ issuedAt: EVE, vatBreakdown: CANA_AT_10 });
     expect(await filed(after)).toMatchObject({ issuedAt: NEW_YEAR, vatBreakdown: CANA_AT_4 });

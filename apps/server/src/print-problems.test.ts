@@ -120,7 +120,6 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   } satisfies TillConfig);
   return inTx(async (tx) => {
     const { id: barra } = await createStation(tx, cfg, { name: "Barra" });

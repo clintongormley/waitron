@@ -61,7 +61,6 @@ function tillConfigFor(venue: Venue): OriginConfig {
     invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 }
 

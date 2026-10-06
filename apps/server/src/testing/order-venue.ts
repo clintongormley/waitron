@@ -47,7 +47,7 @@ export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
     .where(eq(devices.id, venue.deviceId));
   const invoiceFirstZone = (
     await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
     )
   ).zoneId;
   const made = await inTx(venue, async (tx) => {
