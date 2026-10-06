@@ -6562,6 +6562,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   in A261-2c alongside the column, with a venue reset accepted. That implementation has not
   landed; the item is parked pending the populated-upgrade test's reset decision.
   The Numbered collection choice applies to `prepay` and `ticket_then_pay` quick sales.
+  A261-2f explains the quick-sale-only scope in English and Spanish on the department and
+  zone Order number cells and editors. Filled choices use the shared help button; table-tab
+  orders are not numbered. Browser checks open both controls in both themes at phone and desktop widths.
   A261-2d identifies the `floor_zones` name key in `createServiceZone` and the
   server's `createZone`/`updateZone`; primary-key clashes remain database errors. Focused
   real-database tests force all three clashes and retain duplicate-name and rollback checks.

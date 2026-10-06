@@ -280,6 +280,8 @@ const en = {
   "venue.paid": "Paid",
   "venue.pay_on_collection": "Pay on collection",
   "venue.collection_number": "Order number",
+  "venue.collection_number_help_label": "About order numbers",
+  "venue.collection_number_help": "Quick sales only: orders on a table tab are not numbered.",
   "venue.none": "None",
   "venue.numbered": "Numbered",
   "venue.receipt": "Receipt",
@@ -660,6 +662,9 @@ const es: Record<keyof typeof en, string> = {
   "venue.paid": "Pago",
   "venue.pay_on_collection": "Pagar al recoger",
   "venue.collection_number": "Número de pedido",
+  "venue.collection_number_help_label": "Acerca de los números de pedido",
+  "venue.collection_number_help":
+    "Solo ventas rápidas: los pedidos de una cuenta de mesa no se numeran.",
   "venue.none": "Ninguno",
   "venue.numbered": "Numerado",
   "venue.receipt": "Recibo",

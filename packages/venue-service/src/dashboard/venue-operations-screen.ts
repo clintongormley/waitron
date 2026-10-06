@@ -25,6 +25,7 @@ import type {
 } from "./client.js";
 import { t } from "./strings.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 
 const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
   Object.entries(values).reduce(
@@ -95,6 +96,10 @@ export class VenueOperationsScreen extends LitElement {
         cursor: pointer;
         padding: 0;
         text-decoration: underline;
+      }
+      wt-data-table::part(collection-cell) {
+        display: inline-flex;
+        align-items: center;
       }
       wt-data-table::part(trading-name-cell) {
         display: inline-flex;
@@ -949,16 +954,24 @@ export class VenueOperationsScreen extends LitElement {
                   ?.collectionNumber;
           const effectiveLabel =
             collectionNumber === "numbered" ? t("venue.numbered") : t("venue.none");
+          const help = (slot?: string) =>
+            html`<wt-help-tooltip
+              slot=${ifDefined(slot)}
+              aria-label=${t("venue.collection_number_help_label")}
+              >${t("venue.collection_number_help")}</wt-help-tooltip
+            >`;
           if (this.collectionEditor !== key)
-            return html`<button
-              type="button"
-              part=${row.kind === "zone" && stored == null ? "edit-collection inherited-value" : "edit-collection"}
-              data-test="edit-collection"
-              aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.collection_number")}, ${effectiveLabel}`}
-              @click=${() => (this.collectionEditor = key)}
-            >
-              ${effectiveLabel}
-            </button>`;
+            return html`<span part="collection-cell"
+              ><button
+                type="button"
+                part=${row.kind === "zone" && stored == null ? "edit-collection inherited-value" : "edit-collection"}
+                data-test="edit-collection"
+                aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.collection_number")}, ${effectiveLabel}`}
+                @click=${() => (this.collectionEditor = key)}
+              >
+                ${effectiveLabel}</button
+              >${help()}</span
+            >`;
           return html`<wt-combobox
             name="collectionNumber"
             label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.collection_number")}`}
@@ -1003,7 +1016,8 @@ export class VenueOperationsScreen extends LitElement {
                 this.collectionEditor = undefined;
               });
             }}
-          ></wt-combobox>`;
+            >${help("help")}</wt-combobox
+          >`;
         },
       },
       {
