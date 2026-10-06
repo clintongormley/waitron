@@ -108,6 +108,7 @@ jobs:
   # machinery, is `scope=global`, which is no filter at all. Expanding a changed package to its DEPENDENTS is still pnpm's job, via the
   # `--filter "...<pkg>"` arguments built below.
   changes:
+    timeout-minutes: 1
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.classify.outputs.code }}
@@ -131,7 +132,7 @@ jobs:
       light_b: ${{ steps.gates.outputs.light_b }}
       shared: ${{ steps.gates.outputs.shared }}
     steps:
-      - run: exit 1 # THROWAWAY (A274 proof): a needed job fails
+      - run: sleep 150 # THROWAWAY (A274 proof): a needed job is cancelled by its timeout
       # fetch-depth: 0 is load-bearing. The default is 1, which leaves no merge base to diff
       # against and no history for pnpm's own change detection — both would then silently report
       # "nothing changed" and skip the entire suite.
