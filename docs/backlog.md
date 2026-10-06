@@ -1173,6 +1173,13 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Service-status Add and explicit-save rows now register independently on the branch. A successful
+write commits only its submitted draft before refresh; later input and other rows stay protected.
+Live reads preserve edited rows and adopt clean rows. Disable commits only the saved active state,
+retaining other row edits. Disconnect releases the scopes and older replies cannot change a
+reconnected editor. Focused browser, deletion-control and visual receipts are recorded in the W69
+audit; actual service-status sidebar/tab/history paths and native reload remain unverified.
+
 Receipt appearance, language and operation description now have independent scopes on the branch.
 Each accepted write commits its captured body before a sibling write settles; refusals and newer
 input remain protected. Appearance compares its existing normalized body; operation description
@@ -1320,6 +1327,13 @@ releases protection before dispatching the existing split/transfer command. The 
 covers reverts, raw invalid input, enclosing leave, live reads, reconnect, departed controls,
 replacement bills and busy transitions. Remaining audit classification and page/setup/history/
 navigation/native reload work keep W69 incomplete.
+
+**Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
+The native status colour fields show an ellipsis instead of the full label in the inspected
+EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell receipts are
+`~/waitron-campaign-e/receipts/w69-status-rows-20261006/look/`; runtime reproduction on main is
+unverified. W69 changes no field sizing. Next action: reproduce in Venue settings → Tables and
+adjust the colour-field width using the shared field contract without changing status colour data.
 
 **Sidebar contrast (found during W69, 2026-10-06) — OPEN.** At desktop width in the light theme,
 axe reports the selected My schedule navigation button at 4.32:1 against the required 4.5:1.

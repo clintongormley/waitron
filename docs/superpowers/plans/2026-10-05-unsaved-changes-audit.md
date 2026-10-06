@@ -436,7 +436,7 @@ Every named owner has the `.ts` extension. In the Test column, a named sibling h
 | DS `canvas-editor-screen`; DS `canvas-editor/canvas-grid-preview`, `canvas-editor/card-preview`, `canvas-editor/card-contracts`                                                                                                                                                                                                                                                                        | **P** canvas name and copied CanvasDef including nested card/property drafts, ordered tabs/cards; seed selected canvas clone. Create/duplicate name dialogs also P. Visual preview tabs retain common draft; page/selection leave protects it. Delete/read-only preview **E**.                                                                                                                                | Name modal, nested settings cancel, editor Back, canvas selection/page                                     | DS `canvas-editor-screen`                                                                                                              |
 | DS `devices-screen`                                                                                                                                                                                                                                                                                                                                                                                    | **P** edit device and Add pairing settings after device is identified: seed name/profile/binding/printer/reader defaults and compare actual patch. Invitation QR/waiting and completed pairing **E**; number proof remains existing immediate verification. Preserve pairing generations/cleanup.                                                                                                             | Add/Edit modal, nested choice, page                                                                        | DS `devices-screen`                                                                                                                    |
 | DS `floor-screen`                                                                                                                                                                                                                                                                                                                                                                                      | **P** new table and each explicit-save label/capacity row, seeded new defaults/fetched row. Commit per row. **E** placement/drag writes and viewing plano.                                                                                                                                                                                                                                                    | Inline Cancel, selected zone/table/tab/page                                                                | DS `floor-screen`                                                                                                                      |
-| DS `service-status-screen`                                                                                                                                                                                                                                                                                                                                                                             | **P** new status and each explicit-save status row; seed label/color/default or fetched row, compare trimmed label/color/order/active body. Commit only written row. Immediate row reorder **E**.                                                                                                                                                                                                             | Inline Cancel, tab/page                                                                                    | DS `service-status-screen`                                                                                                             |
+| DS `service-status-screen`                                                                                                                                                                                                                                                                                                                                                                             | **P** new status and each explicit-save status row; seed label/color/default or fetched row; create compares trimmed label/color, explicit row save compares its raw label/color/order/active body. Commit only written row. Immediate row reorder **E**.                                                                                                                                                                                                             | Inline Cancel, tab/page                                                                                    | DS `service-status-screen`                                                                                                             |
 | DS `printers-screen`                                                                                                                                                                                                                                                                                                                                                                                   | **P** Add/manual network host/port/name, discovered-device naming, agent rename, detail name/connection and calibration settings. Seed existing printer or discovery/manual defaults; compare existing submission bodies, normalized host/port and saved calibration fields, ordered where applicable. Replace local armed-discard logic with shared question. Calibration test results are not saved fields. | Dialog Cancel/Escape, editor change, calibration exit/page; internal steps retaining draft do not reset it | DS `printers-screen`                                                                                                                   |
 | DS `printers-screen` discovery/calibration actions                                                                                                                                                                                                                                                                                                                                                     | **E** discovery waiting, test print/open drawer, ruler result/connection probe output, successful registration; preserve Bluetooth pairing proof/busy behavior. Typed pairing proof before action is **P**, ephemeral only. No new prompt while a hardware command runs.                                                                                                                                      | Existing action, busy and cleanup routes                                                                   | DS `printers-screen`                                                                                                                   |
 | DS `printing-rules-screen`                                                                                                                                                                                                                                                                                                                                                                             | **E**, station/watch/drawer policy changes already save through handlers. No staged form transaction introduced.                                                                                                                                                                                                                                                                                              | Existing tab/page routes                                                                                   | DS `printing-rules-screen`                                                                                                             |
@@ -2561,3 +2561,63 @@ restart, hover colours and activated native reload remain unverified.
 This completes the Cloud acknowledgement/exempt-owner stage only. Remaining page/till/tab/context
 routes, final advancing-owner classification and activated native reload remain open. Tasks 2/3
 stay complete and Tasks 1/4/5/6 partial; W69 is not ready for finish-branch or landing.
+
+## Service-status page owners checkpoint — 2026-10-06
+
+The Add form and each explicit-save row register separate scopes under the service-status screen.
+Create keeps its existing trimmed label, selected colour and list-length display order body;
+row update keeps its raw label, colour, order and active body. List length is derived data rather
+than staged input. The owner suite asserts both bodies with literal expected values.
+Successful writes commit their captured snapshot before refreshing; a failed refresh cannot make
+that submitted draft dirty again. Only an unchanged submitted Add label is cleared; newer label
+or colour input remains compared with the accepted values. A refused write retains its draft.
+
+A live snapshot holds each edited row intact, including when that row disappears from the read;
+clean rows adopt incoming values or leave the list. Unchanged rows do not commit again and cannot
+abort a pending warning. An accepted immediate Disable updates the current and saved active value
+without committing other row fields. Disconnect releases every scope, clears local input and
+loads fresh baselines on reconnect; old create/update/Disable success or refusal cannot write into
+that replacement editor. Read-only rows and clean/reverted drafts remain exempt.
+
+Evidence in this checkpoint:
+
+- Initial `pnpm --filter @waitron/dashboard exec vitest run
+  src/screens/service-status-screen.unsaved.test.ts`: **16 failed / 3 passed**. Missing warning and
+  newer Add input erased by a completed request were observed before implementation.
+- Initial two-file family: **42 passed / 1 failed**, at a clean row's incoming live value incorrectly
+  becoming dirty. Capturing dirty identities before applying rows corrected that baseline path.
+- Additional Disable tests: **22 passed / 2 failed**, at unadopted active=false and an old refusal
+  shown in the replacement editor. Minimal owner changes made the tests pass.
+- Final `pnpm --filter @waitron/dashboard exec vitest run
+  src/screens/service-status-screen.unsaved.test.ts src/screens/service-status-screen.test.ts
+  src/screens/service-status-screen.a11y.test.ts src/screens/venue-settings-screen.test.ts
+  src/dashboard-app.test.ts`: **395 passed**. No original assertion changed.
+- In an independent frozen-installed candidate, ten mutations each failed their selected
+  assertion while the two clean/read-only controls passed: row/Add notification, row/Add
+  successful snapshot commit, dirty-row live retention, row disconnect disposal, old Add success
+  gate, Disable's partial baseline commit, disposal before removing clean rows and the fetched-list
+  count used for Add display order. Restoring the candidate ran the new and original
+  status suites: **53 passed**; production file bytes matched the feature copy.
+- Eight native row/Add input Keep/Discard flows used the actual LeaveController and confirmation,
+  EN/ES, both asserted theme roots and measured widths 390/1280. **16 axe scans passed** with the
+  pointer parked; **16 captures inspected** in four sheets. The first visual harness omitted its
+  requested theme; the corrected run asserts `host.dataset.theme` and supplies the mount theme.
+  The first contact-sheet attempt selected an empty root folder; final assembly asserts all 16
+  files from the package's actual screenshot folder. Those early artifacts establish neither theme
+  nor visual coverage.
+
+Two final edge tests failed before their corrections: removing several clean rows produced a
+read-error banner while disposal still read missing values; retaining a removed dirty row made
+Add send displayOrder=1 for a fetched empty list (expected 0). Disposal now runs while those clean
+values exist, and Add derives its position from the fetched count independently of retained drafts.
+Each focused red run failed one case while the two clean/read-only controls passed. The final
+five-file family above includes both regressions. Dashboard typecheck, focused ESLint, source
+Prettier and `git diff --check` passed; unedited fiscal write-path/inmutabilidad suites ran **20 cases**.
+The original fiscal files have no branch diff against `ac861b774d9d368d8435b0b06f1467ef89f9386e`.
+
+The visual fixture uses a minimal shell and synthetic API. Actual service-status API writes,
+sidebar/container tabs/history, hover colours and activated native reload remain unverified.
+At phone width the colour-field labels show an ellipsis; recorded separately in the backlog.
+W69 remains incomplete: remaining page owners, till shell, tab/context paths, activated native
+reload and an advancing-main owner inventory are still required. Receipts:
+`~/waitron-campaign-e/receipts/w69-status-rows-20261006`.
