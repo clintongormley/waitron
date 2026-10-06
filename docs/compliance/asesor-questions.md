@@ -9,6 +9,10 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
+On **2026-10-06**: **Q42 added**, beside Q27–Q29, on a bill paid later by bank transfer — invoice
+now and collect later, or a proforma first and the invoice on payment — asked for full and
+simplified invoices alike. The standalone English and Spanish Word copies do not carry it yet.
+
 On **2026-10-04** (W41s prevention and offline recovery): **Q5(f) and Q33–Q40 revised; Q41
 added** for issued invoices missing from a restored backup. The current formulations below
 replace the 2026-10-03 proposals where they differ. They cover a paper allocation register in
@@ -935,6 +939,132 @@ with `Descuento -1,00 €` beneath the first.
 > partir de ellas); el ticket muestra ambas líneas a 3,33 € la unidad, con «Descuento -1,00 €»
 > debajo de la primera. ¿Es correcto que un mismo producto figure así en dos líneas con precios
 > distintos?
+
+---
+
+### Q42. A bill paid later by bank transfer — invoice now, or a proforma and the invoice on payment? (added 2026-10-06)
+
+**Why it matters.** The owner, 2026-10-06: *"We may still need to have the ability to issue an
+invoice before it is paid. For instance, with a big invoice of 5,000 euros, it's unlikely that the
+person will pay in the moment. We give them the invoice or we send them the invoice and then they
+pay afterwards by, for instance, a bank transfer."* And: *"in Italy, I've seen companies send a
+draft invoice, wait for payment, and then issue the final invoice. That may be the way forward, but
+we need confirmation."* Nothing is designed or built for this until the asesor answers and the
+owner decides.
+
+It applies to both kinds of invoice:
+
+- **The full invoice (F1)**, with the customer's NIF and address. A bill above €3,000 VAT included
+  must be one: a simplified invoice is allowed up to that amount for restaurant services (RD
+  1619/2012 art. 4.2.e, quoted in [verifactu-findings.md §15.3](verifactu-findings.md#153-the-deli-qualifies-for-facturas-simplificadas-twice-over);
+  the [full-invoices design](../superpowers/specs/2026-10-03-full-invoices-at-till-design.md)
+  requires an F1 from €3,000.01). On `main` the software issues no F1 yet: every sale files as a
+  simplified invoice (`counterparty: null` in `packages/core/src/record-sale.ts`), and the F1 build
+  (A231) is an open pull request.
+- **The simplified invoice (F2)** the till prints as the receipt — for example a regular customer,
+  or a group, who settles a bill below the ceiling by transfer later. An F2 names no customer, so
+  there is nobody on the invoice to chase.
+
+The two shapes we could build:
+
+- **(a) Invoice now, paid later.** Issue the invoice at once, unpaid; the bill closes owing the
+  amount; the transfer is recorded against that invoice when it arrives. Much of this exists for
+  F2: an order can file its invoice with no payment (`issueUnpaidInvoice`,
+  `apps/server/src/working-order.ts`), the amount each invoice still owes is read in
+  `apps/server/src/sale-due.ts`, and a table that leaves without paying already gets an F2 for the
+  full amount, collected later (Q28, on the owner's 2026-10-01 decision); the dashboard's Orders
+  screen filters unpaid orders and shows what each still owes (`apps/server/src/orders-list.ts`).
+  Missing: recording a payment by transfer (collecting an issued invoice accepts only cash or card —
+  `sale.unsupported_tender`, `apps/server/src/till-sale.ts`) and collecting part of what an issued
+  invoice owes.
+- **(b) A proforma first, the invoice on payment** (the owner's Italian example). Send a proforma
+  with no fiscal value; issue the invoice only when the transfer arrives, perhaps days or weeks
+  after the meal.
+
+What the texts say, quoted from the BOE consolidated texts fetched 2026-10-06 (RD 1619/2012 at
+<https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696>, last updated there 31/03/2026; Ley 37/1992
+at <https://www.boe.es/buscar/act.php?id=BOE-A-1992-28740>, last updated there 02/10/2026). They
+are why shape (b) is the one we cannot settle ourselves:
+
+- RD 1619/2012, art. 11.1: «Las facturas deberán ser expedidas en el momento de realizarse la
+  operación. No obstante, cuando el destinatario de la operación sea un empresario o profesional que
+  actúe como tal, las facturas deberán expedirse antes del día 16 del mes siguiente a aquél en que se
+  haya producido el devengo del Impuesto correspondiente a la citada operación.»
+- Ley 37/1992, art. 75.Uno.2.º: the tax falls due «En las prestaciones de servicios, cuando se
+  presten, ejecuten o efectúen las operaciones gravadas». Art. 75.Dos: «en las operaciones sujetas a
+  gravamen que originen pagos anticipados anteriores a la realización del hecho imponible el
+  impuesto se devengará en el momento del cobro total o parcial del precio por los importes
+  efectivamente percibidos».
+- RD 1619/2012, art. 2.1, last paragraph: «También deberá expedirse factura y copia de esta por los
+  pagos recibidos con anterioridad a la realización de las entregas de bienes o prestaciones de
+  servicios por las que deba asimismo cumplirse esta obligación conforme al párrafo anterior […]».
+- RD 1619/2012, art. 6.1.i) (full invoice) and art. 7.1.c) (simplified invoice): the invoice carries
+  «La fecha en que se hayan efectuado las operaciones que se documentan o en la que, en su caso, se
+  haya recibido el pago anticipado, siempre que se trate de una fecha distinta a la de expedición de
+  la factura».
+
+On our reading, art. 11.1 ties issue to the operation, not to payment, which is what makes shape
+(b) doubtful for a consumer; for a business customer the day-16 deadline gives up to about six
+weeks, counted from when the tax fell due, not from payment. That reading is ours, and it is what
+we are asking the asesor to confirm or correct. AEAT's own words on proformas — lawful, and kept
+unaltered once issued, under art. 29.2.j LGT — are quoted in
+[verifactu-findings.md §8](verifactu-findings.md#8-pre-facturas-are-lawful-and-preserved-once-issued-added-2026-07-31);
+whether a restaurant pre-bill counts as one is Q14, still open.
+
+Ask it with **Q27** (money taken before the invoice exists; its part (c) is printing the invoice
+before anyone pays), **Q28** (a table that leaves without paying: the same "invoice issued, paid
+later" shape for an F2), **Q21** (pre-bill or invoice when the bill is asked for) and **Q14** (is a
+*precuenta* a *prefactura*). Part (c) meets the full-invoices design's open decision 5: how an
+issued F1 is cancelled or corrected, which the first F1 build will not do automatically.
+
+> **(a)** *Factura ahora, cobro después.* Prestado el servicio (por ejemplo, una comida de grupo de
+> 5.000 €), ¿podemos expedir la factura en ese momento, entregarla o enviarla sin haber cobrado, y
+> registrar el cobro cuando llegue la transferencia?
+>
+> - **(a1) Factura completa (F1)**, con NIF y domicilio del cliente: ¿qué debe conservar o mostrar
+>   el sistema sobre el importe pendiente de cobro (por ejemplo, una relación de facturas
+>   pendientes, o la referencia de la transferencia al cobrarla)?
+> - **(a2) Factura simplificada (F2)**, por debajo de 3.000 € (por ejemplo, un cliente habitual o un
+>   grupo que paga días después): ¿es igualmente admisible, aunque la factura no identifique al
+>   cliente? ¿Debemos conservar en otro sitio quién debe el importe?
+> - **(a3)** Nuestro cierre diario de caja es un documento interno, no una declaración. ¿Cómo debe
+>   tratar una factura expedida y no cobrada: como venta del día de expedición con el importe
+>   pendiente aparte, y el cobro por transferencia en el día en que se recibe? ¿Hay algún
+>   inconveniente?
+>
+> **(b)** *Proforma primero, factura al cobro.* ¿Podemos enviar al cliente una proforma o
+> prefactura sin validez fiscal y expedir la factura sólo cuando se recibe la transferencia, días o
+> semanas después de prestado el servicio? Lo preguntamos a la vista del artículo 11.1 del RD
+> 1619/2012 («en el momento de realizarse la operación») y del artículo 75.Uno.2.º de la Ley
+> 37/1992 (devengo «cuando se presten, ejecuten o efectúen las operaciones gravadas»).
+>
+> - **(b1) Factura completa (F1)**, a un empresario o profesional: ¿basta con expedirla antes del
+>   día 16 del mes siguiente al devengo, aunque el cobro llegue después? Y si el destinatario de la
+>   F1 es un particular, ¿cabe esperar al cobro?
+> - **(b2) Factura simplificada (F2)**, a un consumidor final: ¿cabe esperar al cobro, o debe
+>   expedirse en el momento de la comida?
+> - **(b3)** Si cabe esperar, ¿la factura debe indicar la fecha de la operación distinta de la de
+>   expedición (artículos 6.1.i y 7.1.c del RD 1619/2012)? ¿Y la proforma enviada debe conservarse
+>   de forma inalterable, con sus cambios anotados como registros posteriores (artículo 29.2.j de la
+>   LGT, según la interpretación de la AEAT para albaranes, proformas y prefacturas)?
+> - **(b4)** De las dos formas, (a) y (b), ¿cuál es lícita y cuál nos recomienda?
+>
+> **(c)** *Impago.* Si el cliente no paga nunca:
+>
+> - **(c1)** con la forma (a), la factura ya está expedida y registrada. ¿El único cauce para
+>   recuperar el IVA es la modificación de la base imponible por créditos incobrables (artículo
+>   80.Cuatro de la Ley 37/1992)? ¿Es igual para una F1 que para una F2? Para una F1, ¿qué
+>   procedimiento recomienda para anularla o rectificarla si la operación no llega a cobrarse, o se
+>   anula por acuerdo con el cliente?
+> - **(c2)** con la forma (b), no se ha expedido ninguna factura. Si el servicio ya se prestó, ¿debe
+>   expedirse igualmente la factura, aunque no se cobre?
+>
+> **(d)** *Señal o anticipo.* Si el cliente paga una señal antes del evento (por ejemplo, el 30 % al
+> reservar), entendemos que el IVA de esa parte se devenga al cobrarla (artículo 75.Dos de la Ley
+> 37/1992) y que debe expedirse factura por ella (artículo 2.1 del RD 1619/2012). ¿Es así, también
+> cuando el cliente es un particular y la factura sería simplificada? ¿Cómo debe reflejar la factura
+> final la señal ya facturada? ¿Cambia la señal la respuesta a (a) o (b) para el resto del
+> importe?
 
 ---
 
