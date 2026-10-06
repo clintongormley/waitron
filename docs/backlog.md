@@ -1221,9 +1221,8 @@ choices and serving counts now use the shared warning on Back/native Escape. Kee
 choice; Discard resets only local entry, leaving the party draft intact. Confirm releases protection
 before dispatching the existing request. Focused browser cases cover child reports, reconnect,
 detached controls and delayed clean closes against replacement openings. Station choices and
-line removals already retained by the party draft remain exempt from a second warning. Remaining
-inline split/transfer selections and page/history/navigation work
-keep W69 incomplete. Line-edit station choices now ask through Cancel/native Escape on the branch.
+line removals already retained by the party draft remain exempt from a second warning.
+Page/history/navigation work keeps W69 incomplete. Line-edit station choices now ask through Cancel/native Escape on the branch.
 Keep retains the chosen station; Discard closes without retrying. Confirm accepts the existing exact
 retry directly and invalidates an older question. Focused browser cases cover clean/reverted entry,
 ancestor leave, replacement controls, child close reports, disconnect and immediate operator lock.
@@ -1231,6 +1230,12 @@ The outer Account settings dialog now consults its child’s guard before footer
 Escape. Keep preserves the child and profile URL; Discard closes only that profile. A child save
 in flight refuses outer close, and forced expiry clears credential proof without asking. Focused
 real-shell cases cover reverts, save/refused refresh, stale answers and unrelated retained drafts.
+Split quantities, transfer target/items and the staged table choice now ask before Back abandons
+them on the branch. Keep retains the choice; Discard restores only local inputs. Explicit Confirm
+releases protection before dispatching the existing split/transfer command. The browser suite
+covers reverts, raw invalid input, enclosing leave, live reads, reconnect, departed controls,
+replacement bills and busy transitions. Remaining audit classification and page/setup/history/
+navigation/native reload work keep W69 incomplete.
 
 **Sidebar contrast (found during W69, 2026-10-06) — OPEN.** At desktop width in the light theme,
 axe reports the selected My schedule navigation button at 4.32:1 against the required 4.5:1.

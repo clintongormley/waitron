@@ -202,6 +202,13 @@ type Destination = "fire-now" | "add-to-held" | "add-as-new";
 type TableVerb = "move" | "join" | "move-bill";
 type ActionVerb = TableVerb | "merge" | "transfer" | "split";
 
+interface ActionDraft {
+  tableId: string | null;
+  toBillId: string | null;
+  lines: Set<number>;
+  quantities: Map<number, string>;
+}
+
 /** Move this bill's choice: to a table, with who the picker showed seated there, or to the counter. */
 export interface MoveBillDetail {
   to: { tableId: string; seated: SeatedRead } | { counter: true };
@@ -1256,6 +1263,80 @@ export class TillTableOrderScreen extends LitElement {
   @state() private splitQuantities = new Map<number, string>();
   @state() private splitAttempted = false;
 
+  readonly #actionId = {};
+  #actionScope?: DraftScope<ActionDraft>;
+  #actionBaseline?: ActionDraft;
+  #actionLeave?: LeaveCoordinator;
+  #actionOpening = 0;
+
+  #actionControlCurrent(event: Event): boolean {
+    const control = event.currentTarget as HTMLElement;
+    return (
+      this.isConnected &&
+      !this.busy &&
+      control.isConnected &&
+      control.getRootNode() === this.renderRoot
+    );
+  }
+
+  #actionPayload(): ActionDraft {
+    return {
+      tableId: this.splitTableId,
+      toBillId: this.transferToBillId,
+      lines: new Set(this.transferLineNos),
+      quantities: new Map(this.splitQuantities),
+    };
+  }
+
+  #watchActions(): void {
+    if (
+      this.actionVerb !== "split" &&
+      this.actionVerb !== "transfer" &&
+      this.actionStep !== "split-table" &&
+      this.actionStep !== "split-table-bill"
+    ) {
+      this.#retireActions();
+      return;
+    }
+    if (this.#actionScope) return;
+    this.#actionLeave = leaveCoordinatorFor(this);
+    if (!this.#actionLeave) return;
+    this.#actionBaseline ??= this.#actionPayload();
+    this.#actionScope = this.#actionLeave.register<ActionDraft>({
+      id: this.#actionId,
+      parent: this,
+      current: () => this.#actionPayload(),
+      snapshot: (value) => ({
+        ...value,
+        lines: new Set(value.lines),
+        quantities: new Map(value.quantities),
+      }),
+      equal: (a, b) =>
+        a.tableId === b.tableId &&
+        a.toBillId === b.toBillId &&
+        a.lines.size === b.lines.size &&
+        [...a.lines].every((line) => b.lines.has(line)) &&
+        a.quantities.size === b.quantities.size &&
+        [...a.quantities].every(([line, quantity]) => b.quantities.get(line) === quantity),
+      restore: (value) => {
+        this.splitTableId = value.tableId;
+        this.transferToBillId = value.toBillId;
+        this.transferLineNos = new Set(value.lines);
+        this.splitQuantities = new Map(value.quantities);
+        this.splitAttempted = false;
+      },
+    });
+    this.#actionScope.commit(this.#actionBaseline);
+  }
+
+  #retireActions(): void {
+    this.#actionOpening++;
+    this.#actionScope?.dispose();
+    this.#actionScope = undefined;
+    this.#actionBaseline = undefined;
+    this.#actionLeave = undefined;
+  }
+
   /** The party's draft for the signed-in person, owned by the app; null until the app has read it and
    * the party's groups. Unset, the screen keeps a draft of its own. */
   @property({ attribute: false }) draftStore?: WorkingOrderStore | null;
@@ -1364,6 +1445,10 @@ export class TillTableOrderScreen extends LitElement {
     this.#previewScope?.dispose();
     this.#previewScope = undefined;
     this.#previewLeave = undefined;
+    this.#actionOpening++;
+    this.#actionScope?.dispose();
+    this.#actionScope = undefined;
+    this.#actionLeave = undefined;
     this.#watchedDraft?.stop();
     this.#watchedDraft = undefined;
     this.#resizing?.disconnect();
@@ -1497,6 +1582,8 @@ export class TillTableOrderScreen extends LitElement {
     }
     this.#watchServe();
     this.#watchPreview();
+    this.#watchActions();
+    if (changed.has("busy") && this.busy) this.#actionScope?.changed();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
@@ -4162,6 +4249,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #closeActions(): void {
+    this.#retireActions();
     this.actionStep = "closed";
     this.actionVerb = null;
     this.splitTableId = null;
@@ -4183,6 +4271,7 @@ export class TillTableOrderScreen extends LitElement {
       this.splitAttempted = false;
     }
     this.actionStep = verb === "split" ? "split-lines" : "pick";
+    this.#watchActions();
   }
 
   /** A table another party holds asks about the bills first; any other goes at once. */
@@ -4319,6 +4408,7 @@ export class TillTableOrderScreen extends LitElement {
                   pick: () => {
                     this.splitTableId = id;
                     this.actionStep = "split-table-bill";
+                    this.#actionScope?.changed();
                   },
                 },
               ];
@@ -4340,7 +4430,9 @@ export class TillTableOrderScreen extends LitElement {
               class="target"
               data-target=${target.id}
               variant="secondary"
-              @click=${target.pick}
+              @click=${(event: Event) => {
+                if (this.#actionControlCurrent(event)) target.pick();
+              }}
             >
               ${target.name}
             </wt-button>`,
@@ -4351,6 +4443,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #splitTable(tableId: string, billId: string | null): void {
+    this.#retireActions();
     this.#dispatch("split-table", { tableId, billId });
     this.#closeActions();
   }
@@ -4362,40 +4455,49 @@ export class TillTableOrderScreen extends LitElement {
     } else {
       this.transferToBillId = bill.workingOrderId;
       this.actionStep = "transfer-lines";
+      this.#actionScope?.changed();
     }
   }
 
-  #toggleTransferLine(line: TabLine): void {
+  #toggleTransferLine(line: TabLine, event: Event): void {
+    if (!this.#actionControlCurrent(event)) return;
     const next = new Set(this.transferLineNos);
     if (next.has(line.lineNo)) next.delete(line.lineNo);
     else next.add(line.lineNo);
     this.transferLineNos = next;
+    this.#actionScope?.changed();
   }
 
   /** Moves whole lines only, so every entry is `{ lineNo }` with no `quantity`. */
-  #confirmTransfer(): void {
+  #confirmTransfer(event: Event): void {
+    if (!this.#actionControlCurrent(event)) return;
     if (this.transferToBillId === null || this.transferLineNos.size === 0) return;
     const transfers: TabTransfer[] = this.lines
       .filter((line) => this.transferLineNos.has(line.lineNo))
       .map((line) => ({ lineNo: line.lineNo }));
+    this.#retireActions();
     this.#dispatch("transfer-lines", { toBillId: this.transferToBillId, transfers });
     this.#closeActions();
   }
 
-  #toggleSplitLine(line: TabLine): void {
+  #toggleSplitLine(line: TabLine, event: Event): void {
+    if (!this.#actionControlCurrent(event)) return;
     const next = new Map(this.splitQuantities);
     if (next.has(line.lineNo)) next.delete(line.lineNo);
     else next.set(line.lineNo, this.#displayQty(line.quantity));
     this.splitQuantities = next;
+    this.#actionScope?.changed();
   }
 
   #setSplitQuantity(lineNo: number, quantity: string): void {
     const next = new Map(this.splitQuantities);
     next.set(lineNo, quantity);
     this.splitQuantities = next;
+    this.#actionScope?.changed();
   }
 
-  #stepSplitQuantity(line: TabLine, delta: -1 | 1): void {
+  #stepSplitQuantity(line: TabLine, delta: -1 | 1, event: Event): void {
+    if (!this.#actionControlCurrent(event)) return;
     const current = decimal(
       this.splitQuantities.get(line.lineNo) ?? this.#displayQty(line.quantity),
     );
@@ -4449,7 +4551,8 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Full quantities omit `quantity`; partial plain dishes carry their exact selected decimal. Modifier
    * children are absent from the picker and move with their whole parent on the server. */
-  async #confirmSplit(): Promise<void> {
+  async #confirmSplit(event: Event): Promise<void> {
+    if (!this.#actionControlCurrent(event)) return;
     if (this.splitQuantities.size === 0) return;
     this.splitAttempted = true;
     if (this.#splitErrors().length > 0) {
@@ -4467,11 +4570,38 @@ export class TillTableOrderScreen extends LitElement {
           : { lineNo: line.lineNo, quantity };
       });
     if (transfers.length === 0) return;
+    this.#retireActions();
     this.#dispatch("split-lines", { transfers });
     this.#closeActions();
   }
 
-  #actionBack(): void {
+  #actionBack(event: Event): void {
+    if (!this.#actionControlCurrent(event)) return;
+    if (!this.#actionScope) {
+      this.#actionBackNow();
+      return;
+    }
+    const opening = this.#actionOpening;
+    const step = this.actionStep;
+    void this.#actionLeave!.request({
+      scopes: [this.#actionId],
+      reason: "cancel",
+      proceed: () => {
+        if (
+          !this.isConnected ||
+          this.busy ||
+          opening !== this.#actionOpening ||
+          step !== this.actionStep
+        )
+          return;
+        this.#actionBackNow();
+        this.#actionScope?.changed();
+        this.#watchActions();
+      },
+    });
+  }
+
+  #actionBackNow(): void {
     switch (this.actionStep) {
       case "menu":
         this.#closeActions();
@@ -4528,7 +4658,14 @@ export class TillTableOrderScreen extends LitElement {
 
   #actionMenu(): TemplateResult {
     const action = (name: string, key: StringKey, choose: () => void) =>
-      html`<wt-button class="action" data-action=${name} variant="secondary" @click=${choose}>
+      html`<wt-button
+        class="action"
+        data-action=${name}
+        variant="secondary"
+        @click=${(event: Event) => {
+          if (this.#actionControlCurrent(event)) choose();
+        }}
+      >
         ${t(key)}
       </wt-button>`;
     const verb = (name: Exclude<ActionVerb, "split">, key: StringKey) =>
@@ -4542,6 +4679,7 @@ export class TillTableOrderScreen extends LitElement {
           party !== null && party.tableIds.length > 1
             ? action("split-table", "table.action_split_table", () => {
                 this.actionStep = "split-table";
+                this.#watchActions();
               })
             : nothing
         }
@@ -4552,7 +4690,9 @@ export class TillTableOrderScreen extends LitElement {
           class="action"
           data-action="split"
           variant="secondary"
-          @click=${() => this.#chooseVerb("split")}
+          @click=${(event: Event) => {
+            if (this.#actionControlCurrent(event)) this.#chooseVerb("split");
+          }}
         >
           ${t("table.action_split")}
         </wt-button>
@@ -4595,7 +4735,9 @@ export class TillTableOrderScreen extends LitElement {
                     class="target"
                     data-target=${target.id}
                     variant="secondary"
-                    @click=${target.pick}
+                    @click=${(event: Event) => {
+                      if (this.#actionControlCurrent(event)) target.pick();
+                    }}
                   >
                     ${target.name}
                   </wt-button>`,
@@ -4689,7 +4831,7 @@ export class TillTableOrderScreen extends LitElement {
         data-transfer-confirm
         variant="primary"
         ?disabled=${!canConfirm}
-        @click=${() => this.#confirmTransfer()}
+        @click=${(event: Event) => this.#confirmTransfer(event)}
       >
         ${t("table.transfer_confirm")}
       </wt-button>
@@ -4705,7 +4847,7 @@ export class TillTableOrderScreen extends LitElement {
       class="option transfer-line"
       data-transfer-line=${line.lineNo}
       aria-pressed=${selected}
-      @click=${() => this.#toggleTransferLine(line)}
+      @click=${(event: Event) => this.#toggleTransferLine(line, event)}
     >
       <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
       <span class="qty">${this.#displayQty(line.quantity)}</span>
@@ -4730,7 +4872,7 @@ export class TillTableOrderScreen extends LitElement {
           data-split-confirm
           variant="primary"
           ?disabled=${this.splitQuantities.size === 0 || errors.length > 0}
-          @click=${() => void this.#confirmSplit()}
+          @click=${(event: Event) => void this.#confirmSplit(event)}
         >
           ${t("table.split_confirm")}
         </wt-button>
@@ -4749,7 +4891,7 @@ export class TillTableOrderScreen extends LitElement {
         class="option transfer-line"
         data-split-line=${line.lineNo}
         aria-pressed=${selected}
-        @click=${() => this.#toggleSplitLine(line)}
+        @click=${(event: Event) => this.#toggleSplitLine(line, event)}
       >
         <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
         <span class="qty">${this.#displayQty(line.quantity)}</span>
@@ -4768,6 +4910,7 @@ export class TillTableOrderScreen extends LitElement {
                 .error=${error}
                 @wt-change=${(event: Event) => {
                   event.stopPropagation();
+                  if (!this.#actionControlCurrent(event)) return;
                   this.#setSplitQuantity(
                     line.lineNo,
                     (event as CustomEvent<{ value: string }>).detail.value,
@@ -4789,7 +4932,7 @@ export class TillTableOrderScreen extends LitElement {
         data-split-dec=${line.lineNo}
         aria-label=${`${t("basket.decrease")} ${name}`}
         ?disabled=${compareDecimal(current, decimal("1")) <= 0}
-        @click=${() => this.#stepSplitQuantity(line, -1)}
+        @click=${(event: Event) => this.#stepSplitQuantity(line, -1, event)}
       >
         <span aria-hidden="true">−</span>
       </wt-button>
@@ -4800,7 +4943,7 @@ export class TillTableOrderScreen extends LitElement {
         data-split-inc=${line.lineNo}
         aria-label=${`${t("basket.increase")} ${name}`}
         ?disabled=${compareDecimal(current, decimal(line.quantity)) >= 0}
-        @click=${() => this.#stepSplitQuantity(line, 1)}
+        @click=${(event: Event) => this.#stepSplitQuantity(line, 1, event)}
       >
         <span aria-hidden="true">+</span>
       </wt-button>
@@ -4813,7 +4956,7 @@ export class TillTableOrderScreen extends LitElement {
       class="action-back"
       data-action-back
       variant="secondary"
-      @click=${() => this.#actionBack()}
+      @click=${(event: Event) => this.#actionBack(event)}
     >
       ${this.actionStep === "menu" ? t("action.cancel") : t("action.back")}
     </wt-button>`;

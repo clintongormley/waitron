@@ -1693,3 +1693,51 @@ The temporary visual source/captures and restored candidate were removed from pr
 
 Tasks 1/4 remain partial. Inline split/transfer choices and Tasks 5/6 page/setup/history/navigation
 and native reload remain. Neither proposed W69 PR is ready for finish-branch at this checkpoint.
+
+
+## 2026-10-06 inline table action checkpoint
+
+Back now consults the same registry before abandoning split quantities, a transfer destination
+and selected items, or the table selected for Split a table. The scope starts with the action's
+empty defaults. Keep retains the exact raw quantity, selected items and target; Discard restores
+those local inputs before continuing Back. Explicit Confirm retires this scope before dispatching
+the existing command. Immediate Merge bill targets remain exempt. No command-body conversion or
+server write is added by Discard.
+
+The scope is a child of the table screen, so an enclosing leave includes it. Set membership and
+quantity-map keys compare by value. Same-order reads retain its initial defaults. Disconnect
+removes the scope and invalidates the question; reconnect reinstates its original baseline.
+Old controls cannot alter a replacement flow. A busy transition invalidates a pending question
+without restoring its staged inputs. The existing order-identity replacement closes actions and
+invalidates the question; interception before a voluntary bill switch remains Tasks 5/6 work.
+
+`apps/till/src/screens/till-table-order-screen.actions-unsaved.test.ts` uses the actual
+LeaveController and table screen. The initial fixture omitted table signals and failed before
+reaching the feature; that run is not a red receipt. With complete table fixtures, ten intended
+assertions failed and the immediate-merge control passed. The first implementation passed all
+11. Two departed-control cases then failed their assertions; liveness checks made them pass.
+A temporary raw-quantity fixture allowed its parent rerender to overwrite its precision; the
+fixture now supplies the same rows through the parent. The busy-transition case subsequently
+failed because the old question stayed open, then passed after explicit invalidation. A final
+departed-menu case failed when an old Name/Transfer/Split button reset a replacement split;
+the same control-liveness check now covers those menu actions.
+
+The retained receipt directory is `~/waitron-campaign-e/receipts/w69-inline-actions-20261006`.
+Its logs name the exact tests and commands. The seven-suite family passed 711 cases before
+the final departed-menu extension; the final table-screen family passed 273 cases, including
+all 19 new action-owner cases. Eight independent deletions each failed the intended
+assertion beside an unchanged passing control: Back, retirement before each of the three commands,
+synchronous dirty notification, reconnect baseline, ancestor restoration and departed-control
+liveness. The final busy invalidation and parent relationship receive separate deletion controls.
+The unedited fiscal write-path and immutability suites passed 20 cases. No existing behavioral
+assertion changed in this checkpoint.
+
+The temporary visual probe runs Split bill, Transfer items and Split a table in EN/ES, light/dark
+and 390/1280 widths. It passed 24 flows and 48 axe scans. Its first captures left the action below
+the viewport; the final probe scrolls to the action and clicks the actual Back control. The final
+48 question/retained-choice captures were inspected in six contact sheets. The probe source and
+captures are retained outside product source. These are in-app Back and synthetic unload checks;
+native reload, shell interception and remaining page/setup owners still need Tasks 5/6.
+
+Tasks 1/4 remain partial pending the final owner classification and advancing-main audit. Tasks
+2/3 remain complete. Neither proposed W69 PR is ready for finish-branch.
