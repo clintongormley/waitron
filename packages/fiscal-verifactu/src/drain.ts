@@ -100,9 +100,6 @@ export interface DrainDeps {
  * holds it. */
 type DueRow = RegistroRow & { intentos: number; probe?: { runCode: string } };
 
-/** Anything `execute` reads on: a transaction, or the database outside one. */
-type Reader = Pick<Transaction, "execute">;
-
 /**
  * Is there anything to send, read before the drain opens its own transaction? Lone stale claims
  * count, so `drainDue` can recover them even with no pending row, and so does a brake hold
@@ -714,7 +711,11 @@ function dueProbes(now: Date, environment: Entorno): SQL {
 }
 
 /** When the next probe falls due after `now`, or null when none does. */
-async function nextProbeAt(reader: Reader, now: Date, environment: Entorno): Promise<Date | null> {
+async function nextProbeAt(
+  reader: Database | Transaction,
+  now: Date,
+  environment: Entorno,
+): Promise<Date | null> {
   const cutoff = new Date(now.getTime() - BRAKE_PROBE_INTERVAL_MS).toISOString();
   const { rows } = await reader.execute<{ last_sent: string | null }>(sql`
     select min(heads.last_sent) as last_sent from (${brakeHeldHeads(environment)}) heads
