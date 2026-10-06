@@ -1614,7 +1614,7 @@ cancellation; the owner chose (2026-10-06) to keep holding there, and the live p
 cases is queued as W41s-1b. A refusal that would refuse every later record (one about the
 taxpayer's identity, say) opens one case per record until the brake below stops the chain; one
 reply can still open up to 1,000 cases first (`MAX_REGISTROS_POR_ENVIO`).
-**W41s-3b (built, #1303; owner review pending):** when the three records immediately
+**W41s-3b (landed, #1303, 2026-10-06):** when the three records immediately
 before a record on its chain were all rejected with one error code (`SAME_CODE_REFUSAL_LIMIT` in
 `packages/fiscal-verifactu/src/drain.ts`), the drain holds that record and the chain's later ones
 when they are claimed, between envíos, and only records never sent before. A record still awaiting
@@ -1624,11 +1624,10 @@ once the refusals immediately before it make a run of three. The ongoing alert
 `fiscal.refusals_repeated` names the code and the length of the run. Nothing releases the hold yet.
 **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
 again).** Task 8 as planned resolves records that have a case of their own; a record the brake holds
-has none. While held, those records are not retried hourly. Open owner question: keep release to a
-person (as built), or add an automatic hourly probe that sends the first held record once an hour,
-an accept restarting the chain and a same-code refusal adding one case. Second point: whether the
-records added after a run's unanswered successor should be held instead of sent with its retry.
-Default as built: sent, because when the retried record's answer is anything but a refusal with
+has none. While held, those records are not retried hourly. The owner chose (2026-10-06) to add
+an automatic hourly probe that sends the first held record once an hour, an accept restarting the
+chain and a same-code refusal adding one case: queued as W41s-3d. The owner also chose to keep the
+records added after a run's unanswered successor sent with its retry, as built. It was built so because when the retried record's answer is anything but a refusal with
 the run's code, the run is broken and nothing would explain such a hold: the
 `fiscal.refusals_repeated` alert would not show, and when that answer is not a refusal at all
 `heldRecords` would name no case for the held records.
