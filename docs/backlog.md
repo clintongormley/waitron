@@ -1548,9 +1548,9 @@ now carry the test-system receipts and their limits. The legal questions remain 
 W41s-10c landed as [#1264](https://github.com/clintongormley/waitron/pull/1264). A231 #1256 has
 landed with public F1 disabled. **Next action:** continue the approved dependent W41s tasks in campaign order,
 keeping each task's fiscal and adviser gates.
-**Update, 2026-10-06 (W41s-3, built; not landed):** Task 3 is built on branch
-`feat/w41s-filing-cases`; the owner approved its nine changed filing checks and it awaits
-landing approval. Every line of AEAT's reply is kept. A
+**Update, 2026-10-06 (W41s-3, landed):** Task 3 landed as
+[#1289](https://github.com/clintongormley/waitron/pull/1289), with the owner's approval of its
+nine changed filing checks and of the landing. Every line of AEAT's reply is kept. A
 rejection no longer holds the later records of its chain (D2, on
 [§7.1's receipts](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1));
 only rejection code 1161 was tested, and it was triggered artificially. A conflict with AEAT's
