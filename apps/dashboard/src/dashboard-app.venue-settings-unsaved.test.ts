@@ -16,6 +16,7 @@ async function mount(
   path = "/manage/venue-settings/view/tables",
   locale = "en-GB",
   theme: "light" | "dark" = "light",
+  apiOverrides: Partial<DashboardApi> = {},
 ) {
   history.replaceState(null, "", path);
   let logouts = 0;
@@ -93,6 +94,7 @@ async function mount(
         putLocale: async (code: string) => {
           locales.push(code);
         },
+        ...apiOverrides,
       } as unknown as DashboardApi,
     },
     theme,
@@ -107,6 +109,101 @@ async function mount(
     .toBeTruthy();
   return { app, host, logouts: () => logouts, locales };
 }
+
+async function editTiming(app: DashboardApp) {
+  const kitchen = settings(app).shadowRoot!.querySelector("dashboard-kitchen-screen")!;
+  await expect
+    .poll(() => kitchen.shadowRoot?.querySelector("[data-test=edit-timing]"))
+    .toBeTruthy();
+  kitchen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-timing]")!.click();
+  await kitchen.updateComplete;
+  const input = kitchen.shadowRoot!.querySelector<WtInput>("[name=warmAfterMinutes]")!;
+  await input.updateComplete;
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), "6");
+  return { kitchen, input };
+}
+
+it("the actual Kitchen tab keeps late flags through Keep and restores them only after Discard", async () => {
+  const { app } = await mount("/manage/venue-settings/view/kitchen");
+  const { input } = await editTiming(app);
+  await select(app, "tables");
+  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
+  expect(selected(app)).toBe("kitchen");
+  expect(input.checkVisibility()).toBe(true);
+  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  await choose(app, "keep");
+  expect(input.value).toBe("6");
+  await select(app, "tables");
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  expect(input.value).toBe("5");
+  expect(input.checkVisibility()).toBe(false);
+});
+
+it("real history Back waits for a Kitchen timing decision and Forward restores its accepted baseline", async () => {
+  const { app } = await mount();
+  await select(app, "kitchen");
+  const { input } = await editTiming(app);
+  history.back();
+  await choose(app, "keep");
+  expect(selected(app)).toBe("kitchen");
+  expect(input.value).toBe("6");
+  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  history.back();
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  history.forward();
+  await expect.poll(() => selected(app)).toBe("kitchen");
+  expect(input.value).toBe("5");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+});
+
+it("Kitchen timing protects sidebar, voluntary logout and language replacement before their actions", async () => {
+  const { app, logouts, locales } = await mount("/manage/venue-settings/view/kitchen");
+  const { input } = await editTiming(app);
+  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
+  await choose(app, "keep");
+  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  expect(input.value).toBe("6");
+  app.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
+  await choose(app, "keep");
+  expect(logouts()).toBe(0);
+  app.shadowRoot!.querySelector("wt-language-chooser")!.dispatchEvent(
+    new CustomEvent("wt-locale-selected", {
+      detail: { code: "es-ES" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await choose(app, "keep");
+  expect(locales).toEqual([]);
+  expect(input.value).toBe("6");
+  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  expect(input.isConnected).toBe(false);
+});
+
+it("forced expiry clears a Kitchen timing draft and makes its unanswered Discard inert", async () => {
+  const { app, logouts } = await mount("/manage/venue-settings/view/kitchen");
+  const { kitchen, input } = await editTiming(app);
+  await select(app, "tables");
+  const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await expect.poll(() => warning.open).toBe(true);
+  await warning.updateComplete;
+  const discard = warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+  window.dispatchEvent(
+    new CustomEvent("waitron-session-invalid", { detail: { code: "management_session.expired" } }),
+  );
+  await expect.poll(() => kitchen.isConnected).toBe(false);
+  discard.click();
+  expect(logouts()).toBe(0);
+  expect(input.isConnected).toBe(false);
+  expect(location.pathname).toBe("/manage/");
+  const unload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(false);
+});
 
 function settings(app: DashboardApp) {
   return app.shadowRoot!.querySelector("dashboard-venue-settings-screen")!;

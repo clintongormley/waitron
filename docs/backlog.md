@@ -1173,27 +1173,40 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Kitchen late flags now use the shared warning on the branch. Cancel and native Escape keep your
+edited minutes until you choose Discard; normalized reverts and accepted writes are clean.
+A refused save keeps the draft. Input delivered during Save stays protected against the submitted
+snapshot; older controls and replies cannot alter a reconnected opening in the focused cases.
+Real dashboard cases exercise the Kitchen tab, Back/Forward, sidebar, voluntary sign-out,
+language replacement and forced expiry. Native EN/ES, light/dark, phone/desktop captures and
+scoped accessibility scans are recorded in the dated audit.
+
+The service setting switches/dropdowns, bump mode and fire control remain immediate writes.
+Their pending and refused writes do not acquire discard protection or clear a different draft's
+question in the new tests. Backup/export, login credentials, till schedule/enrolment and the till
+shell/order-state acceptance audit still need work. W69 is not ready for finishing or landing.
+
 W97 (#1311) is integrated on the branch. Device Edit now protects its approved-profile choices,
 including a revert and edits made while a write is pending. Accepted device values stay clean if
 the separate reader write fails, while an unsaved reader selection remains protected. Requests
 still omit unchanged approvals. Existing checks are unchanged; the dated audit records the rebase,
 fixture additions, failing-first cases, deletion controls and inspected native confirmation flows.
-The expanded Device profiles editor remains next, now that W97 has landed.
+The expanded Device profiles editor is protected on the branch; its dated audit records the checks.
 
 The new catalogue colour entry now identifies its product and commits an accepted colour before
 refreshing on the branch. Replacement and reconnect release the old opening; departed write
 results leave the replacement draft and its busy gate alone. Native Cancel/Escape retain a refused
 draft through Keep and close only after Discard. The dated audit records route tests, independent
-guard deletions and EN/ES, both-theme, phone/desktop captures. Configuration exemptions,
-device-profile integration and the remaining navigation/advancing-owner audit keep W69 incomplete.
+guard deletions and EN/ES, both-theme, phone/desktop captures. The remaining page/navigation and advancing-owner
+audit keep W69 incomplete.
 
 Local holiday Add/Edit now uses the shared protection on the branch. Cancel and native Escape
 retain the entry until you choose Discard; trimmed reverts and accepted saves stay clean. Hours
 keeps the Dates tab and its local entry visible while navigation is being decided. Refusals retain
 the values, and live reads do not replace the opening baseline. Remove confirmations and immediate
 holiday-area writes remain exempt. The dated audit records browser tests, deletion controls and
-EN/ES, light/dark, phone/desktop captures. Device-profile integration and the remaining navigation
-and advancing-owner audit still keep W69 incomplete.
+EN/ES, light/dark, phone/desktop captures. The remaining page/navigation and advancing-owner
+audit keep W69 incomplete.
 
 Venue details and its containing Venue settings tabs now use the shared protection on the branch.
 Cancel keeps your edited venue values until you choose Discard; normalized reverts stay clean.
@@ -1204,8 +1217,7 @@ sidebar leave and voluntary sign-out. Detached controls cannot change or submit 
 The dated audit records the commands and their limits. A subsequent activated Chromium reload
 probe covers a service-status draft in the real dashboard shell, including cancelling and accepting
 the native warning and clean/revert/save/discard/disconnect exemptions. A listener-deletion control
-fails its dirty-reload assertion. Other native leave paths remain unverified. Device-profile
-reconciliation and the remaining page/context routes still keep W69 incomplete.
+fails its dirty-reload assertion. Other native leave paths remain unverified. The remaining page/context routes still keep W69 incomplete.
 
 Prep-station printer cells now use the shared warning on the branch. Cancel, native Escape,
 replacing the station and leaving Tickets ask before discarding your selection. Keep retains it;
@@ -1214,8 +1226,7 @@ writes commit before refresh, and later edits stay dirty against the submitted s
 Disconnected editors release their scope; older writes cannot replace a new editor. Native Escape
 also cancels its browser default action in printer and Settings cells, so opening the warning does
 not hand that same keypress to its dialog. The dated audit records focused tests, deletion controls
-and inspected EN/ES, light/dark, phone/desktop captures. Remaining configuration owners,
-device-profile reconciliation and the full shell/history/native-reload audit keep W69 incomplete.
+and inspected EN/ES, light/dark, phone/desktop captures. Remaining page owners and the full shell/history audit keep W69 incomplete.
 
 Prep-station Settings cells now use the shared warning on the branch: Cancel, Escape, replacement
 by another cell and the screen's tab change ask before discarding an edited choice or timing value.
@@ -1231,7 +1242,7 @@ before their URL change or list refresh; later edits remain protected. Deferred-
 reconnected drafts, stale errors and a newer save's busy state. The dated audit records focused
 browser tests, deletion controls and inspected EN/ES, light/dark, phone/desktop warning captures.
 Full dashboard route/history integration, same-canvas tab navigation and activated native reload
-remain unverified. Contributed settings and the advancing device-profile audit keep W69 incomplete.
+remain unverified. Remaining page owners and the advancing-owner audit keep W69 incomplete.
 
 The bill discount limit now has its own protection on the branch. Keep retains your typed limit;
 Discard restores its starting value without writing settings. Saving a reason leaves an edited

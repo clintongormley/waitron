@@ -3239,3 +3239,58 @@ Receipts retained by Lane E under `receipts/w69-profiles-20261007`:
 This completes the Device profiles owner stage. Configuration exemptions, remaining actual
 DashboardApp/till/context/sidebar/tab/breadcrumb/history routes and the advancing-owner audit
 remain open. Tasks 1/4/5/6 remain partial; W69 is not ready for finish-branch or landing.
+
+## 2026-10-07: Kitchen late flags and immediate configuration settings
+
+Kitchen's explicit-save late flags form now registers its three submitted minute values beneath
+its screen. Cancel and native Escape request the shared warning; Keep retains the input and
+Discard closes without a write. Valid numeric spellings compare by their submitted number;
+invalid/empty input remains distinct. Accepted writes commit their captured snapshot before
+refreshing. Later input remains protected, and a refused write leaves the edited form mounted.
+An opening identity gates input, Cancel, Save and returned write results. Disconnect releases
+that opening and its pending question. Live reads do not replace its draft baseline.
+
+The first focused browser run reported nine failing cases and one passing accepted-save control.
+A subsequent departed-controls case failed with the new opening's field changed from 5 to 6.
+Those failures preceded their implementation fixes. The Kitchen behavior/timing/accessibility
+family and the actual dashboard container suite passed; the final added cases also passed.
+The real shell cases exercise tabs, Back/Forward, sidebar, voluntary logout, language replacement
+and forced expiry with actual native input. API replies remain synthetic; live server persistence
+and a native reload of this particular form were not measured.
+
+The five service-setting controls remain immediate writes: edit sent lines, ticket grouping,
+held-work printing, release reminder and clearing workflow. Their new registry-connected cases
+assert that pending, accepted and refused writes stay exempt and that accepting one cannot clear
+an independent draft's question. Bump mode and fire control have corresponding Kitchen cases.
+These are characterization tests of existing immediate behavior, not a new production change.
+The first characterization attempts clicked under the switch's thumb and assumed optimistic
+values while the service panel still showed its stored model. The corrected cases use native
+keyboard/option activation and check the displayed value after the outcome.
+
+Independent installed-copy deletions of registration, input notification, submitted commit,
+write-start invalidation, native Escape cancellation, disconnect disposal and old-control gates
+each failed their intended case beside a passing accepted-save control. Adding accidental dirty
+registration to immediate service writes failed all five controls in both outcomes beside a
+passing read-only control. Restored suites passed. Logs and exact commands are retained in Lane E
+`receipts/w69-exemptions-20261007/`; they include the additional old-refusal/write-gate probes.
+
+Eight real-dashboard flows cover EN/ES, both token themes and measured 390/1280 viewport widths.
+Their sixteen scoped axe scans passed, and sixteen warning/kept captures were inspected in four
+contact sheets. This does not establish full-shell accessibility: sidebar contrast remains a
+separate backlog item. The dark token captures do not emulate the browser's dark colour-scheme
+media preference, so their logo appearance is not evidence about the production dark logo.
+
+Dashboard and venue-service types, scoped lint, source formatting and the focused root guards
+passed. The first typechecks exposed an unavailable direct ui-core import and obsolete empty
+`devices`/`deviceZones` fixture fields; the final code imports ui's existing public types and removes
+only those retired fixture fields. W97 #1311 (`7873b97e2`) removed them from the client view.
+No existing behavioral assertion changed. Fiscal routines, schema and domain requests were not
+edited in this checkpoint.
+
+The source audit found remaining staged page work in `backup-screen.ts`, `login-screen.ts`,
+`till-schedule-screen.ts` and `till-enrol-screen.ts`. Their lack of registry integration is source
+inspection, not a new runtime failure receipt. Till's UrlStateController still has no leave adapter;
+its existing automatic/retained order lifecycles need the design's acceptance checks. Start with
+Backup/export's actual request fields, then reconcile these owners and the complete advancing
+modal/page inventory. Tasks 2/3 stay complete; Tasks 1/4/5/6 remain partial. W69 is not ready for
+finish-branch or landing.

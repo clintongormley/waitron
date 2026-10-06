@@ -1,7 +1,15 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
 import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -13,6 +21,7 @@ import type { BumpMode, DashboardApi, FireControl, KitchenTimingDefaults } from 
 
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
 type TimingField = (typeof TIMING_FIELDS)[number];
+type TimingSnapshot = Record<TimingField, string | number>;
 const TIMING_LABELS = {
   warmAfterMinutes: "kitchen.station_warm",
   overdueAfterMinutes: "kitchen.station_overdue",
@@ -81,6 +90,9 @@ export class KitchenScreen extends LitElement {
   @state() private timingSaving = false;
   @state() private timingRefusals: Partial<Record<TimingField, string>> = {};
   @state() private timingSaveError = "";
+  #timingScope?: DraftScope<TimingSnapshot>;
+  #timingIdentity?: object;
+  #leave?: LeaveCoordinator;
 
   @state() private bumpMode: BumpMode = "line";
   @state() private fireControl: FireControl = "waiter";
@@ -101,6 +113,52 @@ export class KitchenScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+  }
+
+  override disconnectedCallback(): void {
+    this.#closeTiming();
+    this.timingSaving = false;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #timingValue(): TimingSnapshot {
+    const value = (field: TimingField): string | number => {
+      const raw = this.timingDraft![field];
+      const number = Number(raw);
+      return raw.trim() !== "" && Number.isInteger(number) && number >= 1 && number <= 2_147_483_647
+        ? number
+        : raw;
+    };
+    return {
+      warmAfterMinutes: value("warmAfterMinutes"),
+      overdueAfterMinutes: value("overdueAfterMinutes"),
+      forgottenAfterMinutes: value("forgottenAfterMinutes"),
+    };
+  }
+
+  #sameTiming(a: TimingSnapshot, b: TimingSnapshot): boolean {
+    return TIMING_FIELDS.every((field) => a[field] === b[field]);
+  }
+
+  #timingCurrent(identity: object | undefined): boolean {
+    return this.isConnected && identity === this.#timingIdentity;
+  }
+
+  #closeTiming(): void {
+    this.#timingScope?.dispose();
+    this.#timingScope = undefined;
+    this.#timingIdentity = undefined;
+    this.timingDraft = undefined;
+  }
+
+  #cancelTiming(reason: LeaveReason, identity: object | undefined): void {
+    if (!this.#timingCurrent(identity) || this.timingSaving) return;
+    const proceed = () => {
+      if (this.#timingCurrent(identity) && !this.timingSaving) this.#closeTiming();
+    };
+    if (!this.#timingScope) proceed();
+    else void this.#leave!.request({ scopes: [this.#timingScope.id], reason, proceed });
   }
 
   async #load(): Promise<void> {
@@ -131,7 +189,7 @@ export class KitchenScreen extends LitElement {
   }
 
   #openTiming(): void {
-    if (!this.timing || this.readOnly) return;
+    if (!this.timing || this.readOnly || this.timingDraft) return;
     this.timingDraft = {
       warmAfterMinutes: String(this.timing.warmAfterMinutes),
       overdueAfterMinutes: String(this.timing.overdueAfterMinutes),
@@ -140,6 +198,25 @@ export class KitchenScreen extends LitElement {
     this.timingAttempted = false;
     this.timingRefusals = {};
     this.timingSaveError = "";
+    const id = (this.#timingIdentity = {});
+    this.#leave ??= leaveCoordinatorFor(this);
+    this.#timingScope = this.#leave?.register({
+      id,
+      parent: this,
+      current: () => this.#timingValue(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => this.#sameTiming(a, b),
+      restore: (value) => {
+        this.timingDraft = {
+          warmAfterMinutes: String(value.warmAfterMinutes),
+          overdueAfterMinutes: String(value.overdueAfterMinutes),
+          forgottenAfterMinutes: String(value.forgottenAfterMinutes),
+        };
+        this.timingAttempted = false;
+        this.timingRefusals = {};
+        this.timingSaveError = "";
+      },
+    });
   }
 
   #timingErrors(): Partial<Record<TimingField, string>> {
@@ -166,9 +243,9 @@ export class KitchenScreen extends LitElement {
     return errors;
   }
 
-  async #saveTiming(): Promise<void> {
+  async #saveTiming(identity: object | undefined): Promise<void> {
     const draft = this.timingDraft;
-    if (!draft || this.timingSaving || this.readOnly) return;
+    if (!this.#timingCurrent(identity) || !draft || this.timingSaving || this.readOnly) return;
     this.timingAttempted = true;
     this.timingRefusals = {};
     this.timingSaveError = "";
@@ -180,13 +257,19 @@ export class KitchenScreen extends LitElement {
       return;
     }
     this.timingSaving = true;
+    const scope = this.#timingScope;
+    const submitted = {
+      warmAfterMinutes: Number(draft.warmAfterMinutes),
+      overdueAfterMinutes: Number(draft.overdueAfterMinutes),
+      forgottenAfterMinutes: Number(draft.forgottenAfterMinutes),
+    };
+    scope?.changed();
     try {
-      await this.api.setKitchenTimingDefaults({
-        warmAfterMinutes: Number(draft.warmAfterMinutes),
-        overdueAfterMinutes: Number(draft.overdueAfterMinutes),
-        forgottenAfterMinutes: Number(draft.forgottenAfterMinutes),
-      });
+      await this.api.setKitchenTimingDefaults(submitted);
+      if (!this.#timingCurrent(identity)) return;
+      scope?.commit(submitted);
     } catch (error) {
+      if (!this.#timingCurrent(identity)) return;
       const code = codeOf(error);
       const params = (error as { params?: { field?: unknown; name?: unknown } } | null)?.params;
       const field = TIMING_FIELDS.find((field) => field === params?.field);
@@ -199,19 +282,20 @@ export class KitchenScreen extends LitElement {
       if (field) this.timingRefusals = { [field]: message };
       else this.timingSaveError = message;
       await this.updateComplete;
-      if (field)
+      if (field && this.#timingCurrent(identity))
         await focusFirstInvalid(
           this.renderRoot.querySelector<HTMLElement>('[data-test="timing-form"]')!,
         );
       return;
     } finally {
-      this.timingSaving = false;
+      if (this.#timingCurrent(identity)) this.timingSaving = false;
     }
-    this.timingDraft = undefined;
+    if (this.#sameTiming(this.#timingValue(), submitted)) this.#closeTiming();
     await this.#loadTiming();
   }
 
   #timingPanel(): TemplateResult {
+    const identity = this.#timingIdentity;
     const errors = {
       ...this.timingRefusals,
       ...(this.timingAttempted ? this.#timingErrors() : {}),
@@ -228,9 +312,11 @@ export class KitchenScreen extends LitElement {
               class="timing-form"
               data-test="timing-form"
               @keydown=${(event: KeyboardEvent) => {
+                if (!this.#timingCurrent(identity)) return;
                 if (event.key === "Escape" && !this.timingSaving) {
+                  event.preventDefault();
                   event.stopPropagation();
-                  this.timingDraft = undefined;
+                  this.#cancelTiming("escape", identity);
                 } else
                   submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-timing"]'));
               }}
@@ -247,7 +333,9 @@ export class KitchenScreen extends LitElement {
                     ?disabled=${this.timingSaving}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       event.stopPropagation();
+                      if (!this.#timingCurrent(identity)) return;
                       this.timingDraft = { ...this.timingDraft!, [field]: event.detail.value };
+                      this.#timingScope?.changed();
                       const refusals = { ...this.timingRefusals };
                       delete refusals[field];
                       this.timingRefusals = refusals;
@@ -260,15 +348,13 @@ export class KitchenScreen extends LitElement {
                   variant="secondary"
                   data-test="cancel-timing"
                   ?disabled=${this.timingSaving}
-                  @click=${() => {
-                    this.timingDraft = undefined;
-                  }}
+                  @click=${() => this.#cancelTiming("cancel", identity)}
                   >${t("action.cancel")}</wt-button
                 >
                 <wt-button
                   data-test="save-timing"
                   ?disabled=${this.timingSaving || localInvalid}
-                  @click=${() => void this.#saveTiming()}
+                  @click=${() => void this.#saveTiming(identity)}
                   >${t("action.save")}</wt-button
                 >
               </wt-form-actions>

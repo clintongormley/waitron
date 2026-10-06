@@ -45,8 +45,6 @@ const model: VenueServiceView = {
     { id: "z1", name: "Dining room" },
     { id: "z2", name: "Deli counter" },
   ],
-  devices: [],
-  deviceZones: [],
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
