@@ -389,7 +389,7 @@ describe("provisionVenue", () => {
 });
 
 describe("clearProvisionFixture", () => {
-  it("clears a venue's local holidays, entries before their geographies and both before the venue", async () => {
+  it("clears a venue's local holidays and their geographies before the venue", async () => {
     const db = ownerDb();
     const request = venueRequest(nextNif());
     request.location.city = "Vielha e Mijaran";

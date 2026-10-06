@@ -303,6 +303,19 @@ describe("reading a venue's holidays", () => {
     expect(model.venue).toEqual({ country: "ZZ", provinceCode: "10", city: "  VILLA real " });
   });
 
+  it("stores the city trimmed, at whatever length the address holds it", async () => {
+    const long = "V".repeat(5000);
+    for (const [city, kept] of [
+      ["  Villa Real ", "Villa Real"],
+      [long, long],
+    ]) {
+      const cfg = await venue({ city });
+      const saved = await run((tx) => store.saveLocalHoliday(tx, cfg, null, local("2026-03-19")));
+      const { geographies } = await stored();
+      expect(geographies.find(({ id }) => id === saved.geographyId)?.city).toBe(kept);
+    }
+  });
+
   it("keeps accents and punctuation apart when comparing cities", async () => {
     const cfg = await venue({ city: "Ávila" });
     const saved = await run((tx) => store.saveLocalHoliday(tx, cfg, null, local("2026-03-19")));

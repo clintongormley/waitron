@@ -711,6 +711,11 @@ describe("validateHolidayConfiguration", () => {
     ],
     ["a blank city", (t) => (t.holiday_geographies![0]!.city = "  "), "holiday_geographies.city"],
     [
+      "a city with the spaces around it the writer trims",
+      (t) => (t.holiday_geographies![0]!.city = "  Villa  Real "),
+      "holiday_geographies.city",
+    ],
+    [
       "a city key that is not the city's normalized form",
       (t) => (t.holiday_geographies![0]!.city_key = "Villa  Real"),
       "holiday_geographies.city_key",
@@ -783,6 +788,13 @@ describe("validateHolidayConfiguration", () => {
     const tables = holidayTables();
     edit(tables);
     expect(() => validateHolidayConfiguration(tables, packs(2))).toThrowError(refusal(field));
+  });
+
+  it("accepts a city of any length, as setup stores one and the writer copies it", () => {
+    const tables = holidayTables();
+    tables.holiday_geographies![0]!.city = "V".repeat(5000);
+    tables.holiday_geographies![0]!.city_key = "v".repeat(5000);
+    expect(() => validateHolidayConfiguration(tables, packs(2))).not.toThrow();
   });
 
   it("accepts the same date for two geographies", () => {

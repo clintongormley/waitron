@@ -251,16 +251,6 @@ export function validateHoursConfiguration(
   }
 }
 
-/**
- * Refuses (`setup.request_invalid`, `field` naming the table or `<table>.<column>`) holiday rows the
- * writers could not have stored, judged by the RECEIVING build's country packs: each geography's
- * country is a pack's code, its province one of that pack's codes, its city key the city's
- * normalized form and its area one the pack sources for that province; no two geographies share a
- * place, since the import moves every one to the one receiving venue. Each entry names a geography
- * in the bundle, a real date no other entry of that geography holds and a name the writer keeps as
- * it is; and no geography holds more entries in a civil year than its pack allows, which is none
- * for a pack without a holiday calendar. Retained geographies are held to the same rules.
- */
 export function validateHolidayConfiguration(
   tables: Tables,
   findPack: PackLookup = getCountryPack,
@@ -275,7 +265,8 @@ export function validateHolidayConfiguration(
     const province = row.province_code;
     if (!pack.administrativeAreas.some(({ code }) => code === province))
       refuse("holiday_geographies.province_code");
-    if (typeof row.city !== "string" || row.city.trim() === "") refuse("holiday_geographies.city");
+    if (typeof row.city !== "string" || row.city.trim() === "" || row.city !== row.city.trim())
+      refuse("holiday_geographies.city");
     if (row.city_key !== holidayCityKey(row.city)) refuse("holiday_geographies.city_key");
     const place = JSON.stringify([row.country, province, row.city_key]);
     if (places.has(place)) refuse("holiday_geographies.city_key");

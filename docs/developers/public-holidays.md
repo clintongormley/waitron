@@ -85,9 +85,13 @@ It carries no shipped holiday, no source hash and no data version: the receiving
 own. On import every row gets a new id and belongs to the receiving venue, and which geography is
 current follows the receiving venue's own address.
 
-`validateHolidayConfiguration`, beside the file's Hours check, refuses rows the writers could not
-have stored, judged by the receiving build's packs. A refusal is `setup.request_invalid` naming the
-table or column, and the venue is not created. The cases are in that file's tests and in "public
+`validateHolidayConfiguration`, beside the file's Hours check, judges the holiday rows by the
+receiving build's packs. It refuses a country or province code the pack does not have, a blank city
+or one with spaces around it (the writer trims the city), a city key that is not the city's
+normalized form, two geographies for one place, an area the pack does not offer for that province,
+an entry whose geography is not in the bundle, an impossible or repeated date, a name the writer
+would trim or refuse, and more entries in a civil year than the pack allows. A refusal is
+`setup.request_invalid` naming the table or column, and the venue is not created. The cases are in that file's tests and in "public
 holidays in a configuration transfer" in `apps/server/src/configuration-transfer.test.ts`. A bundle
 from before the holiday tables existed is refused by the module schema version check.
 
@@ -98,7 +102,8 @@ The 2026 data was checked against the archived annex by a test, not by reading:
 - "pins every shipped source to the SHA-256 of the archived page it was read from"
   (`packages/country-es/src/holidays.test.ts`) hashes each archived page and compares it with
   `sources.ts`. On 2026-10-06, `shasum -a 256 packages/country-es/src/data/sources/BOE-A-2025-21667.xml`
-  printed `f85e22b21de215dafdc2491eab6a535b0c92e744c8d2ae79d3d4c0532c9770e0`.
+  printed `f85e22b21de215dafdc2491eab6a535b0c92e744c8d2ae79d3d4c0532c9770e0`. The archived XML gives
+  the resolution's publication date as `<fecha_publicacion>20251028</fecha_publicacion>`.
 - "ships exactly the annex's rows, region by region, with its notes applied" turns the archived
   annex into one line per marked cell and note, turns `es-2026.ts` into the same lines, and expects
   no line missing and none extra. Its sibling case changes a region, a date and the Arán rule in a
@@ -135,7 +140,10 @@ These steps assume Spain; another country follows the same shape with its own of
 3. **Capture.** Fetch the resolution's XML with `curl` from
    `https://www.boe.es/diario_boe/xml.php?id=<id>` into `packages/country-es/src/data/sources/`,
    run `shasum -a 256` on it, and record the hash in `sources.ts` and in the sources `README.md`
-   table with the fetch date. A moved address is not a new fact. A changed hash for a page already
+   table with the fetch date and the resolution's publication date. For each territorial note or
+   unusual cell the data depends on, write down where it sits in the annex (the row and column, or
+   the note's number), as the README does for 2026's notes 1 and 2. A moved address is not a new
+   fact. A changed hash for a page already
    shipped means the page changed: compare its rows again before shipping anything.
 4. **Transcribe and compare.** Write `es-YYYY.ts` by hand from the annex and notes, with data
    version `ES-YYYY.1`; a correction to a shipped year raises the revision (`ES-YYYY.2`). Keep every
@@ -160,6 +168,7 @@ These steps assume Spain; another country follows the same shape with its own of
    coverage only for the years and regions you compared. A release changes no stored row: "reads a
    data revision's facts, version and allowance, leaving every stored row as it was"
    (`packages/venue-service/src/holidays.test.ts`) reads a venue through a revised pack and finds its
-   local holidays, geographies and special dates unchanged. That test covers the venue-service
-   tables only; sales and working-time records are not read by the holiday code at all. A release
+   `local_holidays`, `holiday_geographies` and `special_dates` rows unchanged. It does not compare a
+   special date's hours cells, sales or working-time records; the holiday code does not read sales
+   or working-time tables at all (its imports, read, not run). A release
    closes no venue, creates no special date and recalculates no wage.
