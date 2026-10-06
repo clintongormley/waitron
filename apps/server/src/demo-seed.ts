@@ -1,4 +1,5 @@
 import type { Database } from "@waitron/db";
+import { getCountryPack } from "@waitron/country-packs";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 import { seedDemoRestaurant } from "../scripts/demo-seed/seed.js";
 import type { SeedLocale } from "../scripts/demo-seed/menu.js";
@@ -17,6 +18,10 @@ export async function seedInstalledDemo(
   result: VenueResult,
   venue: VenueRequest,
 ): Promise<void> {
+  const identity = getCountryPack(venue.country)?.demo;
+  if (identity === undefined) {
+    throw new Error(`seedInstalledDemo: the ${venue.country} country pack has no demo identity`);
+  }
   await seedDemoRestaurant(db, {
     venue: {
       nodeId: result.nodeId,
@@ -25,5 +30,6 @@ export async function seedInstalledDemo(
     },
     locale: demoSeedLocale(venue),
     salesDays: INSTALLED_DEMO_SALES_DAYS,
+    departmentTradingNames: identity.departmentTradingNames,
   });
 }

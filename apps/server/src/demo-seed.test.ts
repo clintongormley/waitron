@@ -7,9 +7,16 @@ vi.mock("../scripts/demo-seed/seed.js", () => ({ seedDemoRestaurant }));
 
 import { INSTALLED_DEMO_SALES_DAYS, demoSeedLocale, seedInstalledDemo } from "./demo-seed.js";
 
-function venueWithLocales(invoiceLocales: string[]): VenueRequest {
-  return { location: { invoiceLocales } } as unknown as VenueRequest;
+function venueWithLocales(invoiceLocales: string[], country = "ES"): VenueRequest {
+  return { country, location: { invoiceLocales } } as unknown as VenueRequest;
 }
+
+const RESULT = {
+  locationId: "location-1",
+  nodeId: "node-1",
+  seriesIds: ["series-standard", "series-rectificative"],
+  seeded: [],
+} satisfies VenueResult;
 
 describe("demoSeedLocale", () => {
   it.each([
@@ -47,6 +54,33 @@ describe("seedInstalledDemo", () => {
       },
       locale: "es",
       salesDays: 30,
+      departmentTradingNames: { restaurant: "Bar Casa Delgado", deli: "Deli Delgado" },
     });
+  });
+
+  it("names the departments after the venue's country, not the seed language", async () => {
+    seedDemoRestaurant.mockReset();
+    seedDemoRestaurant.mockResolvedValue(undefined);
+
+    await seedInstalledDemo({} as Database, RESULT, venueWithLocales(["en-GB"]));
+    await seedInstalledDemo({} as Database, RESULT, venueWithLocales(["es-ES"]));
+
+    const [english, spanish] = seedDemoRestaurant.mock.calls.map(([, input]) => input);
+    expect(english.locale).toBe("en");
+    expect(spanish.locale).toBe("es");
+    expect(english.departmentTradingNames).toEqual({
+      restaurant: "Bar Casa Delgado",
+      deli: "Deli Delgado",
+    });
+    expect(spanish.departmentTradingNames).toEqual(english.departmentTradingNames);
+  });
+
+  it("refuses, seeding nothing, a venue whose country has no demo identity", async () => {
+    seedDemoRestaurant.mockReset();
+
+    await expect(
+      seedInstalledDemo({} as Database, RESULT, venueWithLocales(["en-GB"], "GB")),
+    ).rejects.toThrow(/GB/);
+    expect(seedDemoRestaurant).not.toHaveBeenCalled();
   });
 });

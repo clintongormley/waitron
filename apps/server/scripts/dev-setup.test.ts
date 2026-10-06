@@ -215,6 +215,33 @@ describe("devSetup against a real venue directory", () => {
     expect(first.env.WAITRON_TILL_LOCALE).toBe("en-GB");
   });
 
+  it("builds the venue as the Spain pack's demo business, and its seeded sales are filed under that tax ID", async () => {
+    const read = await readVenue(async (db) => {
+      const { rows: tenant } = await db.execute<{ legal_name: string; tax_id: string }>(
+        sql`select legal_name, tax_id from tenants`,
+      );
+      const { rows: location } = await db.execute<{ name: string }>(
+        sql`select name from locations`,
+      );
+      const { rows: departments } = await db.execute<{ trading_name: string }>(
+        sql`select trading_name from departments order by trading_name`,
+      );
+      const { rows: sales } = await db.execute<{ n: number }>(sql`select count(*) as n from sales`);
+      const { rows: records } = await db.execute<{ issuer: string; n: number }>(
+        sql`select id_emisor_factura as issuer, count(*) as n from registros_facturacion group by id_emisor_factura`,
+      );
+      return { tenant, location, departments, sales: sales[0]!.n, records };
+    });
+    expect(read.tenant).toEqual([{ legal_name: "Waitron Demo S.L.", tax_id: "B00000000" }]);
+    expect(read.location).toEqual([{ name: "Casa Delgado" }]);
+    expect(read.departments.map((d) => d.trading_name)).toEqual([
+      "Bar Casa Delgado",
+      "Deli Delgado",
+    ]);
+    expect(read.sales).toBeGreaterThan(0);
+    expect(read.records).toEqual([{ issuer: "B00000000", n: read.sales }]);
+  });
+
   it("migrates into the venue file the server opens, not somewhere else", async () => {
     const store = await openVenueDatabase(first.env.WAITRON_VENUE_DIR);
     try {

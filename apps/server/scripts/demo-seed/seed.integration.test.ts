@@ -24,6 +24,7 @@ import {
 import type { OriginConfig } from "../../src/till-config.js";
 import { getHeldOrder, parkOrder } from "../../src/working-order.js";
 import { readImageBytes } from "@waitron/media";
+import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
@@ -69,7 +70,12 @@ describe("demo seed end-to-end", () => {
     const venue = await provisionVenue();
     const start = Date.now();
 
-    await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 3 });
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 3,
+      departmentTradingNames: getCountryPack("ES")!.demo!.departmentTradingNames,
+    });
 
     const paired = await suite.db.execute<{ n: number }>(sql`select count(*) as n from devices`);
     expect(paired.rows[0]!.n).toBe(0);

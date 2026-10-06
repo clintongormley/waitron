@@ -23,6 +23,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import { getCountryPack } from "@waitron/country-packs";
 import { parseModuleConfig } from "@waitron/module";
 import {
   locationId as brandLocationId,
@@ -202,6 +203,9 @@ export async function inspectVenues(
   }
 }
 
+/** The wizard's Demo identity for Spain, so a dev venue is the same business a Demo box is. */
+const DEMO_IDENTITY = getCountryPack("ES")!.demo!;
+
 async function provisionVenue(
   db: Database,
   seedLocale: SeedLocale,
@@ -211,10 +215,10 @@ async function provisionVenue(
     planVenue(
       {
         country: "ES",
-        taxId: "50000000R",
-        legalName: "Waitron Dev SL",
+        taxId: DEMO_IDENTITY.taxId,
+        legalName: DEMO_IDENTITY.legalName,
         location: {
-          name: "Sala principal",
+          name: DEMO_IDENTITY.locationName,
           fiscalTerritory: DEV_VENUE_TERRITORY,
           invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
           operationDescription: "Venta en establecimiento",
@@ -248,7 +252,12 @@ async function provisionVenue(
     locationId: venue.locationId,
   };
 
-  await seedDemoRestaurant(db, { venue: ids, locale: seedLocale, salesDays });
+  await seedDemoRestaurant(db, {
+    venue: ids,
+    locale: seedLocale,
+    salesDays,
+    departmentTradingNames: DEMO_IDENTITY.departmentTradingNames,
+  });
 
   // The displays bind the station and watcher created by the seed.
   await seedDemoDevices(db, ids, seedLocale);

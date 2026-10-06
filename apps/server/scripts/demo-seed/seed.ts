@@ -3,6 +3,7 @@
 
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import type { CountryDemoIdentity } from "@waitron/country";
 import { createPrinter } from "@waitron/printing";
 import {
   buildMenuDocument,
@@ -32,13 +33,14 @@ export interface SeedDemoVenue {
 export interface SeedDemoInput {
   venue: SeedDemoVenue;
   locale: SeedLocale;
+  departmentTradingNames: CountryDemoIdentity["departmentTradingNames"];
   /** `0` seeds no sales; everything else still seeds. */
   salesDays: number;
 }
 
 export async function seedDemoRestaurant(
   db: Database,
-  { venue, locale, salesDays }: SeedDemoInput,
+  { venue, locale, salesDays, departmentTradingNames }: SeedDemoInput,
 ): Promise<void> {
   const { locationId } = venue;
   demoSeedEnvironment(process.env);
@@ -60,7 +62,7 @@ export async function seedDemoRestaurant(
     );
     await routeToDemoPrinter(tx, locationId, demoPrinter.id);
     await seedOptionLists(tx, { productsByImage, locale });
-    await seedFloor(tx, { locationId, locale, menuIds });
+    await seedFloor(tx, { locationId, locale, departmentTradingNames, menuIds });
     await seedWatchers(tx, { locationId, locale, stationIds });
     await seedStaff(tx);
     await seedAdjustmentReasons(tx, { locale });
