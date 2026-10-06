@@ -1618,7 +1618,7 @@ jobs:
   # reintroducing it one layer up.
   #
   # Because the job therefore always runs, its own `if` cannot be what decides pass or fail. The
-  # step below is: it reads `needs.*.result` and exits non-zero itself.
+  # step below decides.
   ci:
     if: always()
     needs:
@@ -1649,19 +1649,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # An ALLOWLIST: `success` and `skipped` pass, and every other result fails, including one
-      # nobody anticipated. `skipped` must pass because scoping works by skipping: a skipped job
-      # means "this change could not affect that check", not "that check did not run". The step has
-      # no `if:`, so it always runs and prints what each needed job reported.
+      # nobody anticipated. `skipped` must pass because scoping works by skipping a check this
+      # change could not affect; a job skipped because something it needs failed is caught by that
+      # failure. The step has no `if:`, so it always runs and prints what each needed job reported.
       #
-      # A list of bad values is not enough: a job GitHub cancelled because no runner picked it up
-      # has passed `contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')`.
-      # If GitHub reports such a job as `skipped`, this allowlist passes it too. GitHub alone
-      # evaluates `toJSON(needs)`; scripts/ci-workflow.test.mjs runs the script on sample results.
+      # A job GitHub cancelled because no runner picked it up reached `ci` as neither `failure` nor
+      # `cancelled`. Of GitHub's documented results that leaves `success` or `skipped`, which this
+      # step passes too; for such a job it fails only an undocumented or missing value. See
+      # docs/developers/ci-and-gates.md, "The `ci` check passes only when every needed job
+      # succeeded or was skipped".
       - name: Fail unless every needed job succeeded or was skipped
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: |
-          jq -nr '
+          jq --unbuffered -nr '
             $ENV.NEEDS | fromjson
             | if type != "object" or length == 0 then error("no needed job results to read") else . end
             | to_entries

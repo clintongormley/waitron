@@ -507,15 +507,31 @@ function ciVerdictStep() {
   return { keys, step, script: script.join("\n") };
 }
 
-/** Runs the step's script as GitHub's default Linux shell does (`bash -e`), with `NEEDS` set. */
+const VERDICT_SPAWN_TIMEOUT_MS = 10_000;
+
+// jq's exit status for an `error(...)` or a failed `fromjson`. A jq compile error exits 3 and a
+// missing jq 127, so neither can satisfy it; any error jq hits while running still exits 5, which
+// is why every case also checks the message.
+const JQ_REFUSED = 5;
+
+/**
+ * Runs the step's script as GitHub's default Linux shell does (`bash -e`), with `NEEDS` set, and
+ * returns its stdout and stderr as ONE stream in the order written (`2>&1` inside the child), which
+ * two separately captured streams joined afterwards cannot show. Throws on a killed child.
+ */
 function runVerdict(needs) {
-  const env = { PATH: process.env.PATH };
+  const env = { PATH: process.env.PATH, VERDICT_SCRIPT: ciVerdictStep().script };
   if (needs !== undefined) env.NEEDS = typeof needs === "string" ? needs : JSON.stringify(needs);
-  const result = spawnSync("bash", ["-e", "-c", ciVerdictStep().script], {
+  const result = spawnSync("bash", ["-c", 'bash -e -c "$VERDICT_SCRIPT" 2>&1'], {
     encoding: "utf8",
     env,
-    timeout: 10_000,
+    timeout: VERDICT_SPAWN_TIMEOUT_MS,
   });
+  if (result.error !== undefined || result.status === null) {
+    throw new Error(
+      `the verdict script failed to run (killed after ${VERDICT_SPAWN_TIMEOUT_MS}ms?): ${result.error?.message ?? result.signal}`,
+    );
+  }
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
@@ -525,33 +541,64 @@ describe("the `ci` aggregate's verdict", () => {
 
   it("always runs, reading every needed job's result from the environment", () => {
     const { keys, step } = ciVerdictStep();
-    expect(keys.filter((line) => /^ {8}if:/.test(line))).toEqual([]);
+    expect(keys.filter((line) => /^ {6}(?:- | {2})if:/.test(line))).toEqual([]);
     expect(step).toContain("          NEEDS: ${{ toJSON(needs) }}");
   });
 
-  it("passes when every needed job succeeded or was skipped", () => {
-    expect(runVerdict(results("success", "success")).status).toBe(0);
-    expect(runVerdict(results("success", "skipped", "skipped")).status).toBe(0);
+  it("passes when every needed job succeeded or was skipped, printing each one", () => {
+    expect(runVerdict(results("success", "success"))).toEqual({
+      status: 0,
+      output: "job-0: success\njob-1: success\n",
+    });
+    expect(runVerdict(results("success", "skipped", "skipped"))).toEqual({
+      status: 0,
+      output: "job-0: success\njob-1: skipped\njob-2: skipped\n",
+    });
   });
 
-  it("fails, naming the job, when one failed or was cancelled", () => {
+  it("fails when one failed or was cancelled, printing every job before naming it", () => {
     for (const bad of ["failure", "cancelled"]) {
       const { status, output } = runVerdict(results("success", bad, "skipped"));
-      expect(status, bad).not.toBe(0);
-      expect(output, bad).toContain(`job-1: ${bad}`);
+      expect(status, bad).toBe(JQ_REFUSED);
+      const printed = output.split("\n");
+      const errorAt = printed.findIndex((line) => line.includes("not succeeded or skipped: job-1"));
+      expect(errorAt, output).toBeGreaterThan(-1);
+      expect(printed.slice(0, errorAt), output).toEqual([
+        "job-0: success",
+        `job-1: ${bad}`,
+        "job-2: skipped",
+      ]);
     }
   });
 
   it("fails on a result nobody anticipated, or none at all", () => {
     for (const odd of ["neutral", "", null, "Success"]) {
-      expect(runVerdict(results("success", odd)).status, String(odd)).not.toBe(0);
+      const { status, output } = runVerdict(results("success", odd));
+      expect(status, String(odd)).toBe(JQ_REFUSED);
+      expect(output, String(odd)).toContain("not succeeded or skipped: job-1");
     }
-    expect(runVerdict({ a: { result: "success" }, b: { outputs: {} } }).status).not.toBe(0);
+    const missing = runVerdict({ a: { result: "success" }, b: { outputs: {} } });
+    expect(missing.status).toBe(JQ_REFUSED);
+    expect(missing.output).toContain("not succeeded or skipped: b");
   });
 
   it("fails when it was handed no results to read", () => {
-    for (const needs of [undefined, "", "{}", "not json", "[]"]) {
-      expect(runVerdict(needs).status, String(needs)).not.toBe(0);
+    for (const needs of ["{}", "[]"]) {
+      const { status, output } = runVerdict(needs);
+      expect(status, needs).toBe(JQ_REFUSED);
+      expect(output, needs).toContain("no needed job results to read");
+    }
+  });
+
+  it("fails when NEEDS is unset or not JSON", () => {
+    for (const [needs, message] of [
+      [undefined, "only strings can be parsed"],
+      ["", "(while parsing '')"],
+      ["not json", "(while parsing 'not json')"],
+    ]) {
+      const { status, output } = runVerdict(needs);
+      expect(status, String(needs)).toBe(JQ_REFUSED);
+      expect(output, String(needs)).toContain(message);
     }
   });
 });
