@@ -1,3 +1,10 @@
+import { sameValue } from "./product-editor-model.js";
+import {
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
 import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -146,6 +153,7 @@ export class OptionListForm extends LitElement {
   ];
 
   @property({ type: Boolean }) open = false;
+  @property({ attribute: false }) draftParent?: object;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) languages: ContentLanguages = {
     defaultLanguage: "en",
@@ -170,6 +178,37 @@ export class OptionListForm extends LitElement {
   @state() private serverErrors: Record<string, string> = {};
   #rowPointerStart: EventTarget | null = null;
 
+  #scope?: DraftScope<OptionListInput>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #registerDraft(): void {
+    if (!this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<OptionListInput>({
+        id: this,
+        parent: this.draftParent,
+        current: () => this.#comparisonValue(),
+        snapshot: (value) => structuredClone(value),
+        equal: sameValue,
+        restore: (value) => this.#restoreDraft(value),
+      });
+    }
+  }
+
   readonly #reorder = new ReorderController(
     this,
     {
@@ -190,6 +229,8 @@ export class OptionListForm extends LitElement {
       (changes.has("value") &&
         this.value?.id !== (changes.get("value") as OptionList | null | undefined)?.id)
     ) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
       this.#reseed();
     }
     if (changes.has("open") && !this.open) this.editingLabel = null;
@@ -198,6 +239,7 @@ export class OptionListForm extends LitElement {
       this.serverErrors = this.#mapFieldErrors();
       this.dismissed = new Set();
     }
+    this.#registerDraft();
   }
 
   protected override updated(changes: PropertyValues<this>): void {
@@ -328,6 +370,7 @@ export class OptionListForm extends LitElement {
 
   #edit(change: () => void, ...keys: string[]): void {
     change();
+    this.#scope?.changed();
     this.dismissed = new Set([...this.dismissed, ...keys]);
   }
 
@@ -339,6 +382,7 @@ export class OptionListForm extends LitElement {
   #saveLabel(event: CustomEvent<{ value: DraftLabel }>): void {
     event.stopPropagation();
     const saved = event.detail.value;
+    this.shadowRoot!.querySelector("dashboard-option-label-form")!.closeSaved(saved);
     const known = this.labels.some((label) => label.id === saved.id);
     this.#editLabels(() => {
       this.labels = known
@@ -420,32 +464,59 @@ export class OptionListForm extends LitElement {
       void this.#focusFirstInvalid();
       return;
     }
-    this.#emit(event, "wt-submit", {
-      value: {
-        name: this.name.trim(),
-        customerName: translations(this.customerName),
-        kitchenName: this.kitchenName.trim() || null,
-        active: this.active,
-        defaultLabelId: this.defaultLabelId,
-        labels: this.labels.map((label) => ({
-          id: label.id,
-          name: label.name.trim(),
-          customerName: translations(label.customerName),
-          kitchenName: label.kitchenName.trim() || null,
-          available: label.available,
-        })),
-      },
-    });
+    this.#emit(event, "wt-submit", { value: this.#comparisonValue() });
+  }
+
+  #comparisonValue(): OptionListInput {
+    return {
+      name: this.name.trim(),
+      customerName: translations(this.customerName),
+      kitchenName: this.kitchenName.trim() || null,
+      active: this.active,
+      defaultLabelId: this.defaultLabelId,
+      labels: this.labels.map((label) => ({
+        id: label.id,
+        name: label.name.trim(),
+        customerName: translations(label.customerName),
+        kitchenName: label.kitchenName.trim() || null,
+        available: label.available,
+      })),
+    };
+  }
+
+  #restoreDraft(value: OptionListInput): void {
+    this.name = value.name;
+    this.customerName = { ...value.customerName };
+    this.kitchenName = value.kitchenName ?? "";
+    this.active = value.active;
+    this.defaultLabelId = value.defaultLabelId;
+    this.labels = value.labels.map((label) => ({
+      ...label,
+      id: label.id!,
+      customerName: { ...label.customerName },
+      kitchenName: label.kitchenName ?? "",
+    }));
+  }
+
+  commitSaved(submitted: OptionListInput): void {
+    this.#scope?.commit(submitted);
+  }
+  closeSaved(submitted: OptionListInput): void {
+    this.commitSaved(submitted);
+    this.open = false;
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
   }
 
   #cancel(event: Event): void {
-    // The dialog also reports a close it was told to make, a task later; by then the screen has
-    // closed this form and a second cancel would be about nothing.
-    if (this.busy || !this.open) {
-      event.stopPropagation();
-      return;
-    }
-    this.#emit(event, "wt-cancel", {});
+    event.stopPropagation();
+    if (this.busy || !this.open) return;
+    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.#reportCancel();
+  }
+
+  #reportCancel(): void {
+    if (this.busy || !this.open) return;
+    this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
 
   #fields(errors: Record<string, string>): FieldContext {
@@ -634,6 +705,7 @@ export class OptionListForm extends LitElement {
     const editing = this.editingLabel;
     return html`<dashboard-option-label-form
       .open=${editing !== null}
+      .draftParent=${this}
       .busy=${this.busy}
       .languages=${this.languages}
       .value=${editing === "new" ? null : editing}
@@ -661,11 +733,15 @@ export class OptionListForm extends LitElement {
     return html`<wt-modal
         size="standard"
         .open=${this.open}
+        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
         heading=${t(this.value ? "options.edit" : "options.create")}
         @keydown=${(event: KeyboardEvent) => {
           if (this.busy && event.key === "Escape") event.preventDefault();
         }}
-        @wt-close=${(event: Event) => this.#cancel(event)}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.#reportCancel();
+        }}
       >
         <div
           ?inert=${this.busy}

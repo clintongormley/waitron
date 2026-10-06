@@ -310,6 +310,14 @@ export class ModifiersScreen extends LitElement {
     }
     // The write succeeded, so the editor closes BEFORE the refresh: a failed refresh is a load
     // failure, not a failed save, and a retained create form invites a duplicate submission.
+    if (kind === "extras")
+      this.shadowRoot!.querySelector("dashboard-extra-list-form")!.closeSaved(
+        event.detail.value as ExtraListInput,
+      );
+    else
+      this.shadowRoot!.querySelector("dashboard-option-list-form")!.closeSaved(
+        event.detail.value as OptionListInput,
+      );
     const opener = editing.value ? null : this.#addOpener;
     this.#closeEditor();
     this.busy = false;

@@ -698,3 +698,10 @@ inheritance; an answer for an earlier opening cannot commit a replacement Produc
 cases: `catalogue-forms.unsaved.test.ts`, `unit-owners.unsaved.test.ts` and
 `menu-colour.unsaved.test.ts` under `apps/dashboard/src/`. Category colour selection submits
 immediately and remains exempt.
+
+On the W69 implementation branch, extras/options list forms register their normalized submitted
+values and ordered rows. Their Product-related forms name the Product as their parent; the option
+label names its list. List writes commit before a refresh or attaching a new list to the Product.
+A label save commits that child before updating the list draft. Focused cases are in
+`apps/dashboard/src/widgets/modifier-forms.unsaved.test.ts` and
+`apps/dashboard/src/screens/modifier-owners.unsaved.test.ts`; other audited owners remain pending.

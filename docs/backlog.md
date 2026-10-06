@@ -1190,8 +1190,12 @@ leave the Product unsaved. The Catalogue screen commits the submitted Product be
 a rejected write retains its draft. Unit Add/Edit, Related Unit creation and explicit Product
 colour overrides also use the shared warning. Units commit before refresh; creating a Related
 Unit commits only the child, leaving the Product draft unsaved. Category colour selection stays
-on its immediate-save path. Other audited modal owners and page/navigation protection remain
-to be wired. Keep automatic saves on their existing paths.
+on its immediate-save path. Extras and options list editors, including the Product's related
+list forms and the nested option-label editor, now use the same registry on the branch. Successful
+list writes commit before refresh or attaching a newly created list to the Product; saving a label
+commits only that child. Ordered rows, invalid pick limits, inherited prices and equivalent valid
+price spellings have focused browser checks. Other audited modal owners and page/navigation
+protection remain to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

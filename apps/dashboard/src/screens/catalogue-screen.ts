@@ -665,20 +665,26 @@ export class CatalogueScreen extends LitElement {
   #submitExtraList(event: CustomEvent<{ value: ExtraListInput }>): void {
     event.stopPropagation();
     const editing = this.editingList?.kind === "extras" ? this.editingList.value : null;
-    void this.#submitChild(async () =>
-      editing
-        ? await this.api.updateExtraList(editing.id, event.detail.value)
-        : await this.api.createExtraList(event.detail.value),
+    const form = this.shadowRoot!.querySelector("dashboard-extra-list-form")!;
+    void this.#submitChild(
+      async () =>
+        editing
+          ? await this.api.updateExtraList(editing.id, event.detail.value)
+          : await this.api.createExtraList(event.detail.value),
+      () => form.closeSaved(event.detail.value),
     );
   }
 
   #submitOptionList(event: CustomEvent<{ value: OptionListInput }>): void {
     event.stopPropagation();
     const editing = this.editingList?.kind === "options" ? this.editingList.value : null;
-    void this.#submitChild(async () =>
-      editing
-        ? await this.api.updateOptionList(editing.id, event.detail.value)
-        : await this.api.createOptionList(event.detail.value),
+    const form = this.shadowRoot!.querySelector("dashboard-option-list-form")!;
+    void this.#submitChild(
+      async () =>
+        editing
+          ? await this.api.updateOptionList(editing.id, event.detail.value)
+          : await this.api.createOptionList(event.detail.value),
+      () => form.closeSaved(event.detail.value),
     );
   }
 
@@ -914,6 +920,7 @@ export class CatalogueScreen extends LitElement {
         // rather than offering a field in a guessed language.
         this.contentLanguages
           ? html`<dashboard-extra-list-form
+                .draftParent=${this.#editor() ?? undefined}
                 .open=${this.#child.kind === "extras"}
                 .busy=${this.#child.busy}
                 .languages=${this.contentLanguages}
@@ -924,6 +931,7 @@ export class CatalogueScreen extends LitElement {
                 @wt-cancel=${() => this.#cancelChild("extras")}
               ></dashboard-extra-list-form>
               <dashboard-option-list-form
+                .draftParent=${this.#editor() ?? undefined}
                 .open=${this.#child.kind === "options"}
                 .busy=${this.#child.busy}
                 .languages=${this.contentLanguages}
