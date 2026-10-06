@@ -241,6 +241,9 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
  * key naming no step the walk takes, fails the guard.
  */
 const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly string[] }> = {
+  "venue-service/0020_retire_invoice_first": {
+    refused: ["DROP TABLE `departments`", "FOREIGN KEY constraint failed"],
+  },
   "core/0104_retire_location_order_flow": {
     refused: ["DROP TABLE `locations`", "FOREIGN KEY constraint failed"],
   },

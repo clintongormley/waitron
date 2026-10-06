@@ -6704,7 +6704,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   the unused timing field. Issued-bill move and VAT fixtures explicitly issue unpaid invoices,
   preserving their financial assertions. The three stored service-mode checks also refuse the
   retired value through a generated venue-service rebuild. The populated-upgrade guard refuses
-  that rebuild at departments; its exact reset entry awaits the queue-required approval.
+  that rebuild at departments; the owner approved its exact reset entry on 2026-10-06.
   The owner approved the moved-table placement/collection replacement and future checks of
   that same retirement pattern on 2026-10-06. The moved-table route test now requires no filing
   at placement and one invoice at collection, retaining the total and single-send assertions.

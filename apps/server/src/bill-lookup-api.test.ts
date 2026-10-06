@@ -10,7 +10,7 @@ import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 import {
   collect,
   credit,
-  placedInvoiceFirst,
+  placedIssuedBill,
   provisionOrderVenue,
   voidInvoice,
   type OrderVenue,
@@ -162,7 +162,7 @@ describe("till bill lookup", () => {
   });
 
   it("finds a placed counter debt but leaves out an open or paid bill", async () => {
-    const placed = await placedInvoiceFirst(venue, "Botella tinto");
+    const placed = await placedIssuedBill(venue, "Botella tinto");
     const [invoice] = venue.db.all<{ number: number; code: string }>(
       sql`select s.invoice_number as number, i.code from sales s join invoice_series i on i.id = s.series_id where s.working_order_id = ${placed}`,
     );
