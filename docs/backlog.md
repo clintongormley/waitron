@@ -7222,10 +7222,12 @@ characters. Left open:
 
 - **The `ci` step passes only when every needed job succeeded or was skipped, and prints each
   result (A274, owner 2026-10-06) — DONE (#1283).**
-- **A job GitHub never acquired a runner for may still let `ci` pass (A274 follow-up) — OPEN.**
-  GitHub's documented results leave `success` or `skipped` for such a job, and the step passes
-  both; the next such run's `ci` log prints the value. A possible cure, untested: read the run's
-  job conclusions from the jobs API rather than `needs`. See
+- **A job GitHub never acquired a runner for may still let `ci` pass (A274 follow-up) — DONE
+  (A276).** `ci` now also reads each needed job's conclusion from GitHub's jobs API, which recorded
+  the 2026-10-05 never-acquired job as `cancelled` (the `gh api` read of run 37368759185 is in the
+  section linked below). Shown on GitHub for a failed, a timed-out and a
+  hand-cancelled never-run job; GitHub's own "not acquired" cancellation could not be produced on
+  demand, so that exact case is not demonstrated. See
   [ci-and-gates.md](developers/ci-and-gates.md), "The `ci` check passes only when every needed job
   succeeded or was skipped".
 - **A Payments screen test failed once in a local dashboard coverage run (seen 2026-10-05 on W111's

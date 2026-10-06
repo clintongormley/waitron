@@ -1617,8 +1617,8 @@ jobs:
   # same deadlock the five-required-ids arrangement had, and `always()` is what stops the fix for it
   # reintroducing it one layer up.
   #
-  # Because the job therefore always runs, its own `if` cannot be what decides pass or fail. The
-  # step below decides.
+  # Because the job therefore always runs, its own `if` cannot be what decides pass or fail. The two
+  # steps below decide, and either one failing fails the job.
   ci:
     if: always()
     needs:
@@ -1647,6 +1647,10 @@ jobs:
       - test-light-b
       - mutation-shared
     runs-on: ubuntu-latest
+    # Naming a permission drops the workflow's defaults. This job checks nothing out, so it holds
+    # `actions: read` alone: the permission GitHub lists for the jobs API the second step reads.
+    permissions:
+      actions: read
     steps:
       # An ALLOWLIST: `success` and `skipped` pass, and every other result fails, including one
       # nobody anticipated. `skipped` must pass because scoping works by skipping a check this
@@ -1654,10 +1658,9 @@ jobs:
       # failure. The step has no `if:`, so it always runs and prints what each needed job reported.
       #
       # A job GitHub cancelled because no runner picked it up reached `ci` as neither `failure` nor
-      # `cancelled`. Of GitHub's documented results that leaves `success` or `skipped`, which this
-      # step passes too; for such a job it fails only an undocumented or missing value. See
-      # docs/developers/ci-and-gates.md, "The `ci` check passes only when every needed job
-      # succeeded or was skipped".
+      # `cancelled`, so this step can pass it. The next step reads each needed job's conclusion
+      # from GitHub's jobs API instead of from `needs`. See docs/developers/ci-and-gates.md, "The
+      # `ci` check passes only when every needed job succeeded or was skipped".
       - name: Fail unless every needed job succeeded or was skipped
         env:
           NEEDS: ${{ toJSON(needs) }}
@@ -1670,6 +1673,72 @@ jobs:
               (map(select(.value.result != "success" and .value.result != "skipped") | .key)
                | if length > 0 then error("not succeeded or skipped: \(join(", "))") else empty end)
           '
+
+      # While no needed job sets a `name:`, its API entries are named by its id: `lint`, a matrix's
+      # `test-heavy (1)`, a reusable workflow's `image / smoke` (or `image` when skipped). A completed
+      # conclusion other than `success` or `skipped` fails at once; anything not yet settled (the
+      # call failing, a number of jobs read that differs from the API's `total_count`, a needed job
+      # absent or still running) is retried a bounded number of times, then fails.
+      - name: Fail unless GitHub's jobs API reports every needed job succeeded or skipped
+        if: always()
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          tries="${JOBS_API_TRIES:-6}"
+          delay="${JOBS_API_DELAY:-10}"
+
+          if ! jq -en '$ENV.NEEDS | fromjson | type == "object" and length > 0' >/dev/null; then
+            echo "::error::no needed job results to read"
+            exit 1
+          fi
+
+          judge='
+            ($ENV.NEEDS | fromjson | keys_unsorted) as $ids
+            | (map(.jobs[])) as $jobs
+            | [$ids[] as $id
+               | {id: $id,
+                  jobs: [$jobs[] | select(.name == $id or (.name | startswith("\($id) (") or startswith("\($id) / ")))]}]
+            | {lines: [.[] | if (.jobs | length) == 0 then "\(.id): not in the jobs API"
+                             else (.jobs[] | "\(.name): \(if .status == "completed" then .conclusion else .status end)") end],
+               bad: [.[].jobs[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped") | .name],
+               missing: [.[] | select((.jobs | length) == 0) | .id],
+               pending: [.[].jobs[] | select(.status != "completed") | .name],
+               read: ($jobs | length),
+               total: $pages[0].total_count}
+            | . + if (.bad | length) > 0 then {verdict: "fail", reason: "not succeeded or skipped: \(.bad | join(", "))"}
+                  elif .read != .total then {verdict: "retry", reason: "read \(.read) of \(.total) jobs"}
+                  elif (.missing | length) > 0 then {verdict: "retry", reason: "no job in the jobs API for: \(.missing | join(", "))"}
+                  elif (.pending | length) > 0 then {verdict: "retry", reason: "not completed: \(.pending | join(", "))"}
+                  else {verdict: "pass", reason: ""} end
+          '
+
+          for ((try = 1; try <= tries; try++)); do
+            if ((try > 1)); then sleep "$delay"; fi
+            verdict=retry
+            report=""
+            if ! pages=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100"); then
+              reason="the jobs API call failed"
+            elif ! report=$(jq -sc '. as $pages | '"$judge" <<<"$pages"); then
+              reason="the jobs API answer could not be read"
+            else
+              verdict=$(jq -r .verdict <<<"$report")
+              reason=$(jq -r .reason <<<"$report")
+              if [[ $verdict != retry ]]; then break; fi
+            fi
+            echo "Try $try of $tries: $reason"
+          done
+
+          if [[ -n $report ]]; then jq -r '.lines[]' <<<"$report"; fi
+          if [[ $verdict != pass ]]; then
+            echo "::error::$reason"
+            exit 1
+          fi
 
   # Publishes the image to GHCR — a POST-GATE LEAF, downstream of the WHOLE suite rather than of the
   # image smoke alone. `needs: [changes, ci]` waits on the `ci` aggregate, so a push to `main` (or a
