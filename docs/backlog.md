@@ -6423,7 +6423,7 @@ bump it when a fixed version is published, and run the certificate suites in tho
   owner questions from W110c, in its PR: whether a bulk Enable is wanted, and whether an
   all-disabled selection's Disable should be greyed out like the toolbar's other buttons rather than
   hidden. W110c's review read #1269 as having added a test for (e); not re-checked, so (e) below may
-  be stale. (b) is done by W110b (#1278). Two of its loose ends are closed by A285:
+  be stale. (b) is done by W110b (#1278). Two of its loose ends are closed by A285 (#1308):
   `GET /management-api/watchers` now needs only `venue.view`, like the stations and courses lists
   (writes still need `venue.configure`), and `products`, `order_draft_lines`, `working_order_lines`
   and `ticket_items` each have an index on `course_id` (core migration
