@@ -930,8 +930,10 @@ unused `units` property is gone (it closes W75's leftover).
 - **Products maker-link contrast on a focused row, found during A303:** a whole-widget axe scan
   after clicking a product media trigger reports the made-at link at 3.87:1 in light theme and
   3.57:1 in dark theme against the focused row background. Reproduced in
-  `product-list.a11y.test.ts` with a native trigger click; the retained diagnostic is Lane D's
-  `receipts/a303/colour-focus-a11y-green.log`. Origin before this branch is unverified. Open-menu
+  `product-list.a11y.test.ts` with a native trigger click. In a frozen-installed throwaway checkout
+  of `0f2fe28f1`, clicking the original Actions trigger produced the same failures in both themes;
+  the two unfocused controls passed. Lane D's `receipts/a303/focus-baseline2.log` retains that
+  experiment, and `colour-focus-a11y-green.log` retains the media-trigger diagnostic. Open-menu
   scans through the component's `show()` method pass in both themes. Fix the row/link contrast
   separately; no axe rule is excluded here.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
