@@ -478,13 +478,12 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     expect(wire.sent).toEqual([[healthy.registroId], held]);
   });
 
-  it("does not release a record held under an earlier rule behind a lone refusal", async () => {
+  it("does not release a held record behind a lone refusal with no run before it", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     aeat.reject(seeded.facturaKeys[2]!, RUN_CODE, "Rechazo");
     await drain(deps(aeat.client()), T0);
     const older = await appendPendingAlta(suite.db, seeded, 4);
-    // Stands in for a record held by a rule that held every record behind a refusal.
     await suite.db.execute(sql`
       update envios set estado = 'detenido', incidencia = true, intentos = 1,
         enviado_en = ${T.toISOString()}
