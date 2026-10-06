@@ -427,3 +427,25 @@ The unchanged Stripe reader suite and `stripe-add-reader.unsaved.test.ts` ran in
 with its connection and panel suites. The visual/accessibility matrix exercised native Escape in
 English/Spanish, light/dark and phone/desktop. SumUp reader pairing and the remaining modal owners
 remain pending. Page/history/native-reload integration remains Tasks 5–6.
+
+
+## 2026-10-06 SumUp reader checkpoint
+
+When you edit a reader name or pairing code, Cancel and native Escape ask before discarding those
+exact inputs. Keep retains them; Discard closes without pairing. Clean/reverted inputs close
+directly. Once you submit Pair, the existing pairing cancellation and cleanup run without another
+question. A refused POST restores input protection. Failed/expired results are exempt; Try again
+keeps the submitted name and clears the old code as the next form's defaults.
+
+Each opening owns its controls and each attempt owns its client, notification, timer and in-flight
+status read. Disconnect clears the input and unregisters its scope. Departed replies cannot finish
+or fail a replacement opening, and a pending old status read cannot block or release its new poll.
+A late accepted POST still notifies the captured callback or cleans up its processing row through
+its captured request, preserving the existing detached/pending-close behavior.
+
+`sumup-add-reader.test.ts` is unchanged. Its new sibling `sumup-add-reader.unsaved.test.ts` ran with
+the full SumUp dashboard family in Chromium. The visual/axe matrix covers EN/ES, light/dark and
+390/1280 widths through native Escape. Deleting close interception, opening identity and poll-reply
+identity in an installed disposable candidate failed their cases; clean controls still passed.
+Synthetic unload events establish listener cancellation only. Other modal owners remain pending,
+and actual page/history/native-reload integration remains Tasks 5–6.

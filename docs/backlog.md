@@ -1312,8 +1312,14 @@ name/reference inputs through Cancel and native Escape, with clean/reverted and 
 exemptions. Accepted registration commits before notification and retains newer input; departed
 replies, controls, native close reports and a reconnecting callback leave a replacement opening
 alone. Its unchanged reader suite and new `stripe-add-reader.unsaved.test.ts` exercise these paths.
-SumUp reader pairing and the remaining modal owners are still pending; actual provider/page
-navigation and native reload remain Tasks 5–6.
+SumUp reader name/code inputs now also use Cancel/native Escape protection. A submitted pairing
+and its result stay exempt, preserving the existing cancellation, status polling and orphan cleanup.
+A refused POST returns to protected input; Try again keeps the name, clears the expired code and
+protects subsequent edits. Reconnects clear local input, and departed controls, POST/status replies
+and host notifications leave a replacement opening alone. The existing SumUp reader assertions
+are unchanged; `sumup-add-reader.unsaved.test.ts` adds close, request-body and lifetime cases.
+Other modal owners remain pending; actual provider/page navigation and native reload remain
+Tasks 5–6.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
