@@ -4,6 +4,7 @@ import { LiveConnection, LiveData, setLocale, type DashboardRequest } from "@wai
 import { applyTokens } from "@waitron/ui";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { WtFormActions } from "@waitron/ui";
+import type { LocalHolidayModel } from "../holiday-types.js";
 import type {
   CalendarDay,
   HourPeriod,
@@ -126,23 +127,54 @@ function model(): HoursModel {
 /** A value to answer with, a promise of one, or `{ reject }` to refuse with. */
 type Answer = unknown;
 
-/** A request stub: reads answer the current model (or a queued failure); writes answer their queue. */
+function localModel(): LocalHolidayModel {
+  const geography = {
+    id: "g-sevilla",
+    country: "ES",
+    provinceCode: "41",
+    city: "Sevilla",
+    areaKey: null,
+    matchesVenue: true,
+  };
+  return {
+    venue: { country: "ES", provinceCode: "41", city: "Sevilla" },
+    localEntryLimit: 2,
+    areaOptions: [],
+    areaRequired: false,
+    geographies: [geography],
+    entries: [{ id: "e1", geographyId: geography.id, date: "2026-10-15", name: "Feria" }],
+  };
+}
+
+/**
+ * A request stub: Hours reads answer the current model (or a queued failure), local holiday reads
+ * the current local model (or their own queue); writes answer their queue.
+ */
 function server(liveData?: LiveData) {
   const state = {
     model: model(),
+    local: localModel(),
     reads: [] as Answer[],
+    localReads: [] as Answer[],
     writes: [] as Answer[],
   };
-  const request = vi.fn<(path: string, method: string, body?: unknown) => Promise<unknown>>(
-    async (_path, method) => {
-      const queue = method === "GET" ? state.reads : state.writes;
-      const next = queue.length > 0 ? queue.shift() : method === "GET" ? state.model : undefined;
-      const value = await next;
-      if (typeof value === "object" && value !== null && "reject" in value)
-        throw (value as { reject: unknown }).reject;
-      return structuredClone(value);
-    },
-  );
+  const request = vi.fn<
+    (
+      path: string,
+      method: string,
+      body?: unknown,
+      options?: { passive?: boolean },
+    ) => Promise<unknown>
+  >(async (path, method) => {
+    const local = method === "GET" && path.endsWith("/local-holidays");
+    const queue = local ? state.localReads : method === "GET" ? state.reads : state.writes;
+    const answer = local ? state.local : method === "GET" ? state.model : undefined;
+    const next = queue.length > 0 ? queue.shift() : answer;
+    const value = await next;
+    if (typeof value === "object" && value !== null && "reject" in value)
+      throw (value as { reject: unknown }).reject;
+    return structuredClone(value);
+  });
   const api = new HoursApi(request as unknown as DashboardRequest, liveData);
   const calls = (method: string) =>
     request.mock.calls.filter((call) => call[1] === method).map((call) => [call[0], call[2]]);
@@ -1876,7 +1908,7 @@ describe("Hours: the calendar", () => {
     await panelAction(el, "make_special");
     expect(modal(el)!.getAttribute("heading")).toBe("Add a special date");
     expect(field(el, "date")!.value).toBe("2026-10-15");
-    expect(field(el, "name")!.value).toBe("");
+    expect(field(el, "name")!.value).toBe("2026-10-15");
     await setField(el, "name", "Our party");
     await choose(el, "colour", "green");
     await click(el, saveButton(el));
@@ -2199,3 +2231,166 @@ describe("Hours: the calendar", () => {
     probe.remove();
   });
 });
+
+describe("Hours: public holidays", () => {
+  const calendar = (el: HoursScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "hours-calendar",
+    )!;
+  const day = (el: HoursScreen, date: string) =>
+    calendar(el).shadowRoot!.querySelector<HTMLButtonElement>(`td[data-date="${date}"] button`)!;
+  const monthCoverage = (el: HoursScreen) =>
+    [...calendar(el).shadowRoot!.querySelectorAll('[data-test="month-coverage"] li')].map(text);
+  async function makeSpecial(el: HoursScreen, date: string) {
+    await click(el, day(el, date));
+    await click(el, calendar(el).shadowRoot!.querySelector('[data-test="calendar-make_special"]'));
+  }
+  /** The model as the server reads it once 15 October holds `names`, and 2026's coverage. */
+  function withHolidays(
+    names: string[],
+    nationalRegional: "complete" | "area_required" = "complete",
+  ): HoursModel {
+    const next = model();
+    next.days.push({
+      date: "2026-10-15",
+      specialDate: null,
+      holidays: names.map((name, index) => ({
+        id: `local:${index}`,
+        date: "2026-10-15",
+        name,
+        scope: "local",
+        sourceId: "owner:g-sevilla",
+      })),
+      tone: "standard",
+    });
+    next.holidaySources = [
+      { id: "owner:g-sevilla", kind: "owner", title: "Sevilla", url: null, sha256: null },
+    ];
+    next.holidayCoverage = [
+      {
+        year: 2026,
+        country: "ES",
+        provinceCode: "25",
+        regionCode: "09",
+        nationalRegional,
+        local: "owner_entered",
+        dataVersion: "ES-2026.1",
+        sourceIds: [],
+      },
+    ];
+    return next;
+  }
+
+  it("puts Local holidays at the foot of the Special dates tab, read-only for a viewer", async () => {
+    const { api } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    const section = el.shadowRoot!.querySelector<HTMLElement & { readOnly: boolean }>(
+      "local-holidays-editor",
+    )!;
+    expect(section).not.toBeNull();
+    const table = listTable(el);
+    expect(table.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section.readOnly).toBe(false);
+    await selectTab(el, "week");
+    expect(el.shadowRoot!.querySelector("local-holidays-editor")).toBeNull();
+
+    const viewer = await mount(server().api, true);
+    await selectTab(viewer, "dates");
+    expect(
+      viewer.shadowRoot!.querySelector<HTMLElement & { readOnly: boolean }>(
+        "local-holidays-editor",
+      )!.readOnly,
+    ).toBe(true);
+  });
+
+  it("names a date made special after its holidays, and follows another client's rename until the name is edited", async () => {
+    const liveData = new LiveData();
+    const { api, state } = server(liveData);
+    state.model = withHolidays(["Feria", "Fiesta común"]);
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    expect(text(day(el, "2026-10-15"))).toBe("15 Feria · Fiesta común · standard hours");
+    await makeSpecial(el, "2026-10-15");
+    expect(field(el, "name")!.value).toBe("Feria · Fiesta común");
+
+    state.model = withHolidays(["Feria de otoño"]);
+    liveData.invalidate([{ type: "local_holidays" }]);
+    await vi.waitFor(() =>
+      expect(text(day(el, "2026-10-15"))).toBe("15 Feria de otoño · standard hours"),
+    );
+    await settle(el);
+    expect(field(el, "name")!.value).toBe("Feria de otoño");
+
+    await setField(el, "name", "Our own name");
+    state.model = withHolidays(["Feria de invierno"]);
+    liveData.invalidate([{ type: "local_holidays" }]);
+    await vi.waitFor(() =>
+      expect(text(day(el, "2026-10-15"))).toBe("15 Feria de invierno · standard hours"),
+    );
+    await settle(el);
+    expect(field(el, "name")!.value).toBe("Our own name");
+    expect(modal(el)).not.toBeNull();
+  });
+
+  it("opening Make this a special date creates nothing until saved", async () => {
+    const { api, calls } = server();
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await makeSpecial(el, "2026-10-15");
+    await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
+    expect(request_writes(calls)).toEqual([]);
+  });
+
+  it("follows another client's area choice into the calendar's coverage", async () => {
+    const liveData = new LiveData();
+    const { api, state } = server(liveData);
+    state.model = withHolidays([], "area_required");
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    expect(monthCoverage(el)).toEqual([
+      "2026: only official holidays for the whole province are shown until the holiday area is chosen under Special dates.",
+    ]);
+    state.model = withHolidays([]);
+    liveData.invalidate([{ type: "holiday_geographies" }]);
+    await vi.waitFor(() => expect(monthCoverage(el)).toEqual([]));
+  });
+
+  it("follows another client's address change into the local section, reading passively and posting nothing", async () => {
+    const liveData = new LiveData();
+    const { api, state, request } = server(liveData);
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    const section = () => el.shadowRoot!.querySelector("local-holidays-editor")!;
+    await vi.waitFor(() =>
+      expect(text(section().shadowRoot!.querySelector('[data-test="local-allowance"]'))).toBe(
+        "2026: 1 of 2 local holidays entered.",
+      ),
+    );
+    state.local = {
+      ...localModel(),
+      venue: { country: "ES", provinceCode: "41", city: "Utrera" },
+      geographies: [{ ...localModel().geographies[0]!, matchesVenue: false }],
+      entries: [],
+    };
+    liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() =>
+      expect(text(section().shadowRoot!.querySelector('[data-test="retained"]'))).toBe(
+        "These local holidays were for Sevilla. Remove",
+      ),
+    );
+    expect(request.mock.calls.every(([, method]) => method === "GET")).toBe(true);
+    expect(request.mock.calls.every((call) => call[3]?.passive === true)).toBe(true);
+
+    const reads = request.mock.calls.length;
+    el.remove();
+    liveData.invalidate([{ type: "local_holidays" }, { type: "locations" }]);
+    liveData.refresh();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(request.mock.calls.length).toBe(reads);
+  });
+});
+
+function request_writes(calls: (method: string) => unknown[][]) {
+  return [...calls("POST"), ...calls("PUT"), ...calls("DELETE")];
+}

@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
+import type { HolidayCoverage, HolidaySource } from "../holiday-types.js";
 import type {
   CalendarDay,
+  HolidayFact,
   HoursModel,
   HoursModelSubject,
   LocalDate,
@@ -146,14 +148,18 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
   };
 }
 
-function server(options: { fail?: boolean; hold?: Promise<unknown> } = {}) {
+function server(
+  options: { fail?: boolean; hold?: Promise<unknown>; edit?: (model: HoursModel) => void } = {},
+) {
   const request = vi.fn<(path: string, method: string) => Promise<unknown>>(async (path) => {
     // Whether this read fails is decided when it is sent, however late it settles.
     const fail = options.fail;
     if (options.hold !== undefined) await options.hold;
     if (fail) throw { code: "connection.failed" };
     const query = new URL(path, location.origin).searchParams;
-    return rangeModel(query.get("from")!, query.get("to")!);
+    const model = rangeModel(query.get("from")!, query.get("to")!);
+    options.edit?.(model);
+    return model;
   });
   const api = new HoursApi(request as unknown as DashboardRequest);
   const reads = () => request.mock.calls.map(([path]) => path.split("?")[1]);
@@ -620,7 +626,7 @@ describe("Hours calendar: a date's panel", () => {
     await open(el, "2026-10-14");
     expect(text(panel(el).querySelector("h2"))).toBe("Wed, 14 Oct 2026");
     expect(text(panel(el).querySelector('[data-test="holidays"]'))).toBe(
-      "Public holiday: Invented feast",
+      "Local holiday: Invented feast",
     );
     expect(rows(el)).toEqual([
       ["Restaurant", "Standard hours: 12:00–16:00"],
@@ -739,5 +745,248 @@ describe("Hours calendar: a date's panel", () => {
     }
     expect(text(dayButton(el, "2026-10-13"))).toBe("13 Staff day off · Closed");
     expect(text(dayButton(el, "2026-10-12"))).toBe("12 Fiesta Nacional");
+  });
+});
+
+describe("Hours calendar: public holidays", () => {
+  const fact = (
+    id: string,
+    date: LocalDate,
+    name: string,
+    scope: HolidayFact["scope"],
+    sourceId: string,
+  ): HolidayFact => ({ id, date, name, scope, sourceId });
+  const BOE: HolidaySource = {
+    id: "es-boe-2025-21667",
+    kind: "official",
+    title: "BOE-A-2025-21667",
+    url: "https://www.boe.es/buscar/doc.php?id=BOE-A-2025-21667",
+    sha256: "abc",
+  };
+  const OWNER: HolidaySource = {
+    id: "owner:g1",
+    kind: "owner",
+    title: "Sevilla",
+    url: null,
+    sha256: null,
+  };
+  const coverage = (
+    year: number,
+    nationalRegional: HolidayCoverage["nationalRegional"],
+    local: HolidayCoverage["local"],
+  ): HolidayCoverage => ({
+    year,
+    country: "ES",
+    provinceCode: "41",
+    regionCode: "01",
+    nationalRegional,
+    local,
+    dataVersion: nationalRegional === "complete" ? "ES-2026.1" : null,
+    sourceIds: [],
+  });
+  /** 15 October holds three facts, two of them sharing a name; 16 October holds the special date. */
+  function holidays(model: HoursModel) {
+    const on15 = model.days.find((day) => day.date === "2026-10-15");
+    on15?.holidays.push(
+      fact("shipped:national", "2026-10-15", "Fiesta común", "national", BOE.id),
+      fact("shipped:regional", "2026-10-15", "Día de la región", "regional", BOE.id),
+      fact("local:e1", "2026-10-15", "Día de la región", "local", OWNER.id),
+    );
+    model.holidaySources = [BOE, OWNER];
+    model.holidayCoverage = [coverage(2026, "complete", "owner_entered")];
+  }
+
+  it("joins a day's distinct labels once, on standard hours and the standard colour, and adds no colour of its own", async () => {
+    const { api } = server({ edit: holidays });
+    const el = await mount(api);
+    expect(text(dayButton(el, "2026-10-15"))).toBe(
+      "15 Fiesta común · Día de la región · standard hours",
+    );
+    expect(day(el, "2026-10-15").dataset.tone).toBe("standard");
+    expect(getComputedStyle(day(el, "2026-10-15")).backgroundColor).toBe(
+      token(el, "--wt-color-day-standard"),
+    );
+    expect(dayButton(el, "2026-10-15").querySelector("[data-colour]")).toBeNull();
+    expect(dayButton(el, "2026-10-15").getAttribute("aria-label")).toBe(
+      "Thursday, 15 October 2026, Fiesta común · Día de la región · standard hours",
+    );
+  });
+
+  it("lists every applicable label with its scope and source in the panel, without saying Closed", async () => {
+    const { api } = server({ edit: holidays });
+    const el = await mount(api);
+    await open(el, "2026-10-15");
+    const items = [...panel(el).querySelectorAll('[data-test="holidays"] li')].map(text);
+    expect(items).toEqual([
+      "National holiday: Fiesta común Source: BOE-A-2025-21667",
+      "Regional holiday: Día de la región Source: BOE-A-2025-21667",
+      "Local holiday: Día de la región Entered by you for Sevilla",
+    ]);
+    const link = panel(el).querySelector<HTMLAnchorElement>('[data-test="holidays"] a')!;
+    expect(link.href).toBe(BOE.url);
+    expect(text(panel(el))).not.toMatch(/closed/i);
+    expect([...panel(el).querySelectorAll('[data-test="coverage"] li')].map(text)).toEqual([
+      "2026: official national and regional holidays are included.",
+      "2026: local holidays are the ones you entered.",
+    ]);
+    const heard: CalendarAction[] = [];
+    el.addEventListener("hours-calendar-action", (event) =>
+      heard.push((event as CustomEvent<CalendarAction>).detail),
+    );
+    await press(el, "calendar-make_special");
+    expect(heard[0]!.holidays!.map(({ id }) => id)).toEqual([
+      "shipped:national",
+      "shipped:regional",
+      "local:e1",
+    ]);
+  });
+
+  it("shows a holiday's facts beside a special date's own name and hours, and Delete removes only the special date", async () => {
+    const { api } = server({
+      edit: (model) => {
+        model.days
+          .find((day) => day.date === "2026-10-12")!
+          .holidays.push(
+            fact("shipped:pilar", "2026-10-12", "Fiesta Nacional de España", "national", BOE.id),
+          );
+        model.holidaySources = [BOE];
+      },
+    });
+    const el = await mount(api);
+    expect(text(dayButton(el, "2026-10-12"))).toBe("12 Fiesta Nacional Fiesta Nacional de España");
+    expect(day(el, "2026-10-12").dataset.tone).toBe("red");
+    await open(el, "2026-10-12");
+    expect(text(panel(el).querySelector("h2"))).toBe("Mon, 12 Oct 2026 · Fiesta Nacional");
+    expect(text(panel(el).querySelector('[data-test="holidays"]'))).toBe(
+      "National holiday: Fiesta Nacional de España Source: BOE-A-2025-21667",
+    );
+    const heard: CalendarAction[] = [];
+    el.addEventListener("hours-calendar-action", (event) =>
+      heard.push((event as CustomEvent<CalendarAction>).detail),
+    );
+    await press(el, "calendar-delete");
+    expect(heard.map(({ kind, special }) => [kind, special?.id])).toEqual([["delete", "fiesta"]]);
+  });
+
+  it.each([
+    [
+      "complete",
+      "none_entered",
+      [],
+      [
+        "2026: official national and regional holidays are included.",
+        "2026: no local holidays entered.",
+      ],
+    ],
+    [
+      "missing_year",
+      "none_entered",
+      ["2026: official holidays are not available yet, so none are shown."],
+      [
+        "2026: official holidays are not available yet, so none are shown.",
+        "2026: no local holidays entered.",
+      ],
+    ],
+    [
+      "unknown_region",
+      "address_unresolved",
+      ["2026: the venue's province is not recognised, so official holidays are not shown."],
+      [
+        "2026: the venue's province is not recognised, so official holidays are not shown.",
+        "2026: local holidays need the venue's city and a recognised province in its address.",
+      ],
+    ],
+    [
+      "area_required",
+      "owner_entered",
+      [
+        "2026: only official holidays for the whole province are shown until the holiday area is chosen under Special dates.",
+      ],
+      [
+        "2026: only official holidays for the whole province are shown until the holiday area is chosen under Special dates.",
+        "2026: local holidays are the ones you entered.",
+      ],
+    ],
+    [
+      "unsupported_country",
+      "unsupported_country",
+      ["2026: official holidays are not available for this country."],
+      [
+        "2026: official holidays are not available for this country.",
+        "2026: local holidays cannot be entered for a venue in this country.",
+      ],
+    ],
+  ] as const)(
+    "says coverage %s / %s on the month and on ordinary and special days alike, editing still offered",
+    async (national, local, month, shown) => {
+      const { api } = server({
+        edit: (model) => {
+          model.holidayCoverage = [coverage(2026, national, local)];
+        },
+      });
+      const el = await mount(api);
+      expect(
+        [...el.shadowRoot!.querySelectorAll('[data-test="month-coverage"] li')].map(text),
+      ).toEqual(month);
+      for (const date of ["2026-10-15", "2026-10-12"]) {
+        await open(el, date);
+        expect([...panel(el).querySelectorAll('[data-test="coverage"] li')].map(text)).toEqual(
+          shown,
+        );
+        expect(panel(el).querySelectorAll("wt-button").length).toBeGreaterThan(0);
+      }
+    },
+  );
+
+  it("treats a year with no coverage as unknown, never as complete", async () => {
+    const { api } = server();
+    const el = await mount(api);
+    expect(
+      [...el.shadowRoot!.querySelectorAll('[data-test="month-coverage"] li')].map(text),
+    ).toEqual(["2026: which official holidays apply could not be read."]);
+  });
+
+  it("says each year's coverage across December and January", async () => {
+    const { api } = server({
+      edit: (model) => {
+        model.holidayCoverage = [
+          coverage(2026, "complete", "none_entered"),
+          coverage(2027, "missing_year", "none_entered"),
+        ];
+      },
+    });
+    const el = await mount(api, { today: "2026-12-20" });
+    expect(
+      [...el.shadowRoot!.querySelectorAll('[data-test="month-coverage"] li')].map(text),
+    ).toEqual(["2027: official holidays are not available yet, so none are shown."]);
+    await open(el, "2027-01-01");
+    expect([...panel(el).querySelectorAll('[data-test="coverage"] li')].map(text)[0]).toBe(
+      "2027: official holidays are not available yet, so none are shown.",
+    );
+    await open(el, "2026-12-31");
+    expect([...panel(el).querySelectorAll('[data-test="coverage"] li')].map(text)[0]).toBe(
+      "2026: official national and regional holidays are included.",
+    );
+    await press(el, "previous-month");
+    expect(el.shadowRoot!.querySelector('[data-test="month-coverage"]')).toBeNull();
+  });
+
+  it("speaks Spanish about holidays and coverage, keeping official names as published", async () => {
+    setLocale("es");
+    const { api } = server({ edit: holidays });
+    const el = await mount(api);
+    expect(text(dayButton(el, "2026-10-15"))).toBe(
+      "15 Fiesta común · Día de la región · horario habitual",
+    );
+    await open(el, "2026-10-15");
+    expect([...panel(el).querySelectorAll('[data-test="holidays"] li')].map(text)).toEqual([
+      "Festivo nacional: Fiesta común Fuente: BOE-A-2025-21667",
+      "Festivo autonómico: Día de la región Fuente: BOE-A-2025-21667",
+      "Festivo local: Día de la región Introducido por ti para Sevilla",
+    ]);
+    expect([...panel(el).querySelectorAll('[data-test="coverage"] li')].map(text)).toEqual([
+      "2026: se incluyen los festivos oficiales nacionales y autonómicos.",
+      "2026: los festivos locales son los que introdujiste.",
+    ]);
   });
 });

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { chooseOption, cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
+import type { LocalHolidayModel } from "../holiday-types.js";
 import type { HoursModel, WeekCell, WeekDay } from "../hours-types.js";
 import { HoursApi } from "./hours-client.js";
 import type { HoursScreen } from "./hours-screen.js";
@@ -78,6 +79,25 @@ function model(clockReadable = true): HoursModel {
   };
 }
 
+function localModel(): LocalHolidayModel {
+  const geography = {
+    id: "g",
+    country: "ES",
+    provinceCode: "41",
+    city: "Sevilla",
+    areaKey: null,
+    matchesVenue: true,
+  };
+  return {
+    venue: { country: "ES", provinceCode: "41", city: "Sevilla" },
+    localEntryLimit: 2,
+    areaOptions: [],
+    areaRequired: false,
+    geographies: [geography, { ...geography, id: "old", city: "Utrera", matchesVenue: false }],
+    entries: [{ id: "e1", geographyId: "g", date: "2026-05-30", name: "San Fernando" }],
+  };
+}
+
 async function mount(
   theme: "light" | "dark",
   options: {
@@ -90,11 +110,11 @@ async function mount(
 ): Promise<HoursScreen> {
   history.replaceState(null, "", "/manage/hours");
   await mountThemed("<div></div>", theme);
-  const request = async (_path: string, method: string) => {
+  const request = async (path: string, method: string) => {
     if (method === "GET") {
       if (options.pendingRead) return new Promise(() => {});
       if (options.failRead) throw { code: "connection.failed" };
-      return model(options.clockReadable);
+      return path.endsWith("/local-holidays") ? localModel() : model(options.clockReadable);
     }
     if (options.refuse !== undefined) throw options.refuse;
     return undefined;
@@ -175,8 +195,14 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
   },
   "a read-only week whose clock cannot be read": (theme) =>
     mount(theme, { readOnly: true, clockReadable: false }),
-  "the special dates list": async (theme) => {
+  "the special dates list with local holidays at its foot": async (theme) => {
     const el = await mount(theme);
+    await showTab(el, "dates");
+    expect(deep(el, '[data-test="local-entries"]')).not.toBeNull();
+    return el;
+  },
+  "the special dates list and local holidays, read-only": async (theme) => {
+    const el = await mount(theme, { readOnly: true });
     await showTab(el, "dates");
     return el;
   },
