@@ -571,6 +571,33 @@ describe("station status by calendar date", () => {
     });
   });
 
+  it("keeps the default station open on a date that still holds the Closed cell it was given before it became the default", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveWeek(
+        tx,
+        f.cfg,
+        f.downstairs,
+        configuredWeek({ 2: { mode: "all_day", periods: [] } }),
+      );
+      await saveDate(tx, f.cfg, "2026-10-06", [[f.downstairs, closedDate]]);
+      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual(outOfHours);
+      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-13T10:00:00Z")).toEqual(inHours);
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, f.kitchen));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, f.downstairs));
+      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
+        open: true,
+        why: "default",
+      });
+    });
+  });
+
   it("applies no hours at all while the venue's clock cannot be read", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);

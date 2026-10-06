@@ -722,6 +722,69 @@ describe("special dates", () => {
       ),
     ).rejects.toMatchObject({ code: "station.always_open", params: { stationId: f.kitchen.id } });
   });
+
+  it("keeps the cell of a station that has since become the default when an edit leaves it out, and still refuses one that names it", async () => {
+    const f = await fixture();
+    const evening = period("18:00", "22:00");
+    const date = await saveDate(
+      f,
+      null,
+      specialInput({
+        cells: [
+          { subject: f.bar, cell: { mode: "periods", periods: [evening] } },
+          { subject: f.deli, cell: { mode: "closed", periods: [] } },
+        ],
+      }),
+    );
+    await makeDefault(f, f.bar);
+    const barRows = async () => {
+      const rows = await dateRows(date.id);
+      return {
+        cell: rows.cells.find((cell) => cell.stationId === f.bar.id),
+        periods: rows.periods,
+      };
+    };
+    const before = await barRows();
+    expect(before.cell).toMatchObject({ stationId: f.bar.id, mode: "periods" });
+    expect(before.periods.map((row) => row.id)).toEqual([evening.id]);
+
+    await saveDate(
+      f,
+      date.id,
+      specialInput({
+        name: "Renamed",
+        cells: [{ subject: f.deli, cell: { mode: "closed", periods: [] } }],
+      }),
+    );
+    expect(await barRows()).toEqual(before);
+    expect((await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, date.id))).name).toBe(
+      "Renamed",
+    );
+
+    await expect(
+      saveDate(
+        f,
+        date.id,
+        specialInput({ cells: [{ subject: f.bar, cell: { mode: "closed", periods: [] } }] }),
+      ),
+    ).rejects.toMatchObject({ code: "station.always_open", params: { stationId: f.bar.id } });
+    expect(await barRows()).toEqual(before);
+    expect(await resolve(f, f.bar, "2026-10-09")).toEqual({
+      subject: f.bar,
+      openingDate: "2026-10-09",
+      specialDateId: date.id,
+      source: "default_station",
+      cell: { mode: "always_open", periods: [] },
+    });
+
+    await withTransaction(db, (tx) =>
+      tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, f.bar.id)),
+    );
+    expect(await resolve(f, f.bar, "2026-10-09")).toMatchObject({
+      source: "special",
+      cell: { mode: "periods", periods: [evening] },
+    });
+  });
 });
 
 describe("hours either side of a special date", () => {
@@ -1489,19 +1552,6 @@ describe("duplicating a special date", () => {
       { code: "hours.invalid", params: { field: "dates" } },
     ],
     [
-      "a copied cell for a station that has since become the default",
-      async (f) => {
-        const source = await saveDate(
-          f,
-          null,
-          specialInput({ cells: [{ subject: f.bar, cell: { mode: "closed", periods: [] } }] }),
-        );
-        await makeDefault(f, f.bar);
-        return { sourceId: source.id, dates: ["2026-10-20", "2026-10-21"] };
-      },
-      { code: "station.always_open", params: { stationId: "bar" } },
-    ],
-    [
       "a copied period that opens at a minute the clock skips on a target",
       async (f) => ({
         sourceId: (
@@ -1585,6 +1635,44 @@ describe("duplicating a special date", () => {
       ),
     });
     expect(await storedDates(f)).toEqual(before);
+  });
+
+  it("copies the cell of a station that has since become the default as it is, and that station stays Always open on each copy", async () => {
+    const f = await fixture();
+    const evening = period("18:00", "22:00");
+    const source = await saveDate(
+      f,
+      null,
+      specialInput({
+        cells: [
+          { subject: f.bar, cell: { mode: "periods", periods: [evening] } },
+          { subject: f.deli, cell: { mode: "closed", periods: [] } },
+        ],
+      }),
+    );
+    await makeDefault(f, f.bar);
+    const copies = await duplicate(f, source.id, ["2026-10-20", "2026-10-21"]);
+    expect(copies.map((copy) => copy.date)).toEqual(["2026-10-20", "2026-10-21"]);
+    for (const copy of copies) {
+      const read = await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, copy.id));
+      const bar = read.cells.find(({ subject }) => subject.id === f.bar.id);
+      expect(bar).toEqual({
+        subject: f.bar,
+        cell: {
+          mode: "periods",
+          periods: [{ id: expect.any(String), opensAt: "18:00", closesAt: "22:00" }],
+        },
+      });
+      expect(bar!.cell.periods[0]!.id).not.toBe(evening.id);
+      expect(read.cells.find(({ subject }) => subject.id === f.deli.id)?.cell).toEqual(closed);
+      expect(await resolve(f, f.bar, copy.date)).toEqual({
+        subject: f.bar,
+        openingDate: copy.date,
+        specialDateId: copy.id,
+        source: "default_station",
+        cell: { mode: "always_open", periods: [] },
+      });
+    }
   });
 
   it("copies a period onto a clock-change day while the venue's clock cannot be read", async () => {

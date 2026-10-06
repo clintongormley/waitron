@@ -101,6 +101,7 @@ function model(): HoursModel {
       { subject: { kind: "station", id: "bar" }, days: barWeek },
     ],
     days: [day("2026-10-07", null), day("2026-10-12", FIESTA), day("2026-10-13", STAFF)],
+    specialDates: [FIESTA, STAFF],
     specialCells: [
       {
         specialDateId: "fiesta",
@@ -394,7 +395,9 @@ describe("Hours: the standard week", () => {
     const order = request.mock.calls.map((call) => call[1]);
     expect(order.lastIndexOf("GET")).toBeGreaterThan(order.indexOf("PUT"));
     expect(calls("GET").length).toBe(readsBefore + 1);
-    expect(el.shadowRoot!.activeElement).toBe(cellButton(el, restaurant, 2));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.activeElement).toBe(cellButton(el, restaurant, 2)),
+    );
   });
 
   it("swapping two periods' times keeps each id with its row and writes no other cell", async () => {
@@ -448,12 +451,12 @@ describe("Hours: the standard week", () => {
     await setField(el, "wednesday.periods.0.opensAt", "16:00");
     await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
     expect(modal(el)).toBeNull();
-    expect(el.shadowRoot!.activeElement).toBe(cellButton(el, bar, 3));
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(cellButton(el, bar, 3)));
     await click(el, cellButton(el, bar, 3));
     expect(field(el, "wednesday.periods.0.opensAt")!.value).toBe("17:00");
     await userEvent.keyboard("{Escape}");
-    await settle(el);
-    expect(modal(el)).toBeNull();
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(cellButton(el, bar, 3)));
     expect(calls("PUT")).toEqual([]);
   });
 
@@ -563,6 +566,18 @@ describe("Hours: the standard week", () => {
       "The default station is always open, so its hours cannot change.",
     ],
     [{ code: "connection.failed" }, "The change could not be saved."],
+    [
+      { code: "hours.invalid", params: { field: "days.1.cell.periods.0.id" } },
+      "One of these periods could not be saved as sent. Close this editor and open it again to start from the saved hours.",
+    ],
+    [
+      { code: "hours.invalid", params: { field: "days.0.cell.mode" } },
+      "Some days of this week now have no hours, and a week has hours on every day or on none. Close this editor and open it again.",
+    ],
+    [
+      { code: "hours.invalid", params: { field: "subject" } },
+      "A department or prep station these hours are for no longer exists. Close this editor and open it again.",
+    ],
   ])(
     "says a refusal that names no field in the editor at its bottom: %j",
     async (refusal, message) => {
@@ -1107,6 +1122,81 @@ describe("Hours: special dates", () => {
     expect(editors.some((editor) => editor.disabled)).toBe(false);
   });
 
+  it("saves a whole-venue closure past a half-filled locked cell, sending the stored cells as they were", async () => {
+    const { api, calls } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+    await choose(el, "station.bar.mode", "periods");
+    await setField(el, "station.bar.periods.0.opensAt", "18:00");
+    field(el, "closeWholeVenue")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+    );
+    await settle(el);
+    await click(el, saveButton(el));
+    expect(calls("PUT")).toEqual([
+      [
+        "/management-api/venue-service/special-dates/fiesta",
+        {
+          date: "2026-10-12",
+          name: "Fiesta Nacional",
+          colour: "red",
+          closeWholeVenue: true,
+          cells: model().specialCells[0]!.cells,
+        },
+      ],
+    ]);
+    expect(modal(el)).toBeNull();
+  });
+
+  it("lists, edits and deletes a date saved beyond the calendar's year", async () => {
+    const { api, state, calls } = server();
+    const far = {
+      id: "far",
+      date: "2028-12-25",
+      name: "Christmas 2028",
+      colour: "green" as const,
+      closeWholeVenue: false,
+    };
+    state.model.specialDates.push(far);
+    state.model.specialCells.push({
+      specialDateId: "far",
+      cells: [{ subject: { kind: "station", id: "bar" }, cell: { mode: "closed", periods: [] } }],
+    });
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await listTable(el).updateComplete;
+    expect(listRows(el).map((row) => row.slice(0, 2))).toEqual([
+      ["Mon, 12 Oct 2026", "Fiesta Nacional Red"],
+      ["Tue, 13 Oct 2026", "Staff day off Grey"],
+      ["Mon, 25 Dec 2028", "Christmas 2028 Green"],
+    ]);
+    await menuAction(el, rowOf(el, "Christmas 2028"), "edit-date");
+    expect(field(el, "date")!.value).toBe("2028-12-25");
+    expect(field(el, "station.bar.mode")!.value).toBe("closed");
+    await setField(el, "name", "Christmas Day 2028");
+    await click(el, saveButton(el));
+    expect(calls("PUT")).toEqual([
+      [
+        "/management-api/venue-service/special-dates/far",
+        {
+          date: "2028-12-25",
+          name: "Christmas Day 2028",
+          colour: "green",
+          closeWholeVenue: false,
+          cells: [
+            { subject: { kind: "station", id: "bar" }, cell: { mode: "closed", periods: [] } },
+          ],
+        },
+      ],
+    ]);
+    await menuAction(el, rowOf(el, "Christmas 2028"), "delete-date");
+    await click(el, saveButton(el));
+    expect(calls("DELETE")).toEqual([
+      ["/management-api/venue-service/special-dates/far", undefined],
+    ]);
+  });
+
   it.each([
     [
       { code: "special_date.date_taken", params: { date: "2026-10-13" } },
@@ -1179,6 +1269,14 @@ describe("Hours: special dates", () => {
       { code: "hours.invalid", params: { field: "closeWholeVenue" } },
       "Check the highlighted hours: periods must not overlap, including past midnight.",
     ],
+    [
+      { code: "hours.invalid", params: { field: "cells.0.cell.periods.0.id" } },
+      "One of these periods could not be saved as sent. Close this editor and open it again to start from the saved hours.",
+    ],
+    [
+      { code: "hours.invalid", params: { field: "cells.1.subject" } },
+      "A department or prep station these hours are for no longer exists. Close this editor and open it again.",
+    ],
   ])("says a refusal that names no shown field at the bottom: %j", async (refusal, message) => {
     const { api, state } = server();
     const el = await mount(api);
@@ -1187,6 +1285,11 @@ describe("Hours: special dates", () => {
     state.writes.push({ reject: refusal });
     await click(el, saveButton(el));
     expect(await bottomMessage(el)).toBe(message);
+    expect(
+      findAll<Field>(el, "wt-modal [name]")
+        .filter((input) => input.error)
+        .map((input) => input.getAttribute("name")),
+    ).toEqual([]);
     expect(saveButton(el).disabled).toBe(false);
   });
 
@@ -1326,6 +1429,7 @@ describe("Hours: special dates", () => {
   it("says there are no special dates yet", async () => {
     const { api, state } = server();
     state.model.days = state.model.days.map((day) => ({ ...day, specialDate: null }));
+    state.model.specialDates = [];
     state.model.specialCells = [];
     const el = await mount(api);
     await selectTab(el, "dates");

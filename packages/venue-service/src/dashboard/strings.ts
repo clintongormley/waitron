@@ -456,6 +456,12 @@ const en = {
   "hours.delete_clash":
     "Deleting this date would leave the standard hours overlapping the hours on {date}.",
   "hours.field_refused": "Check this value.",
+  "hours.period_unsaved":
+    "One of these periods could not be saved as sent. Close this editor and open it again to start from the saved hours.",
+  "hours.subject_gone":
+    "A department or prep station these hours are for no longer exists. Close this editor and open it again.",
+  "hours.week_mixed":
+    "Some days of this week now have no hours, and a week has hours on every day or on none. Close this editor and open it again.",
   "hours.date": "Date",
   "hours.name": "Name",
   "hours.colour": "Colour",
@@ -960,6 +966,12 @@ const es: Record<keyof typeof en, string> = {
   "hours.delete_clash":
     "Borrar esta fecha haría que el horario habitual se solapara con el del {date}.",
   "hours.field_refused": "Revisa este valor.",
+  "hours.period_unsaved":
+    "Uno de estos periodos no se pudo guardar tal como se envió. Cierra este editor y vuelve a abrirlo para partir del horario guardado.",
+  "hours.subject_gone":
+    "Ya no existe un departamento o una estación de preparación de este horario. Cierra este editor y vuelve a abrirlo.",
+  "hours.week_mixed":
+    "Algunos días de esta semana ya no tienen horario, y una semana tiene horario todos los días o ninguno. Cierra este editor y vuelve a abrirlo.",
   "hours.date": "Fecha",
   "hours.name": "Nombre",
   "hours.colour": "Color",

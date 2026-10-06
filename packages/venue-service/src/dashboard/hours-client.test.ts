@@ -12,6 +12,7 @@ const model = (civilDate: string): HoursModel => ({
   subjects: [],
   week: [],
   days: [],
+  specialDates: [],
   specialCells: [],
 });
 

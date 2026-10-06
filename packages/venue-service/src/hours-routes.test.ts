@@ -291,6 +291,15 @@ describe("reading Hours", () => {
         },
         { date: "2030-10-16", specialDate: null, holidays: [], tone: "standard" },
       ],
+      specialDates: [
+        {
+          id: party.id,
+          date: "2030-10-15",
+          name: "Staff party",
+          colour: "purple",
+          closeWholeVenue: false,
+        },
+      ],
       specialCells: [
         {
           specialDateId: party.id,
@@ -411,6 +420,47 @@ describe("reading Hours", () => {
     expect(short.days).toBe(3);
     expect(long.days).toBe(92);
     expect(long.count).toBe(short.count);
+  });
+
+  it("lists every special date from the venue's yesterday onward however far ahead, apart from the calendar's range", async () => {
+    const fx = await fixture();
+    /** Sunday 6 October 2030, 12:00 in Madrid. */
+    const at = new Date("2030-10-06T10:00:00Z");
+    const closedDeli = [{ subject: fx.deli, cell: { mode: "closed", periods: [] } as DateCell }];
+    const saved: Record<string, SpecialDate> = {};
+    for (const date of ["2030-10-04", "2030-10-05", "2030-10-14", "2032-12-25"])
+      saved[date] = await withTransaction(db, (tx) =>
+        saveSpecialDate(tx, fx.cfg, null, input({ date, name: date, cells: closedDeli }), at),
+      );
+    const read = () =>
+      withTransaction(db, (tx) => readHoursModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
+
+    const model = await read();
+    expect(model.civilDate).toBe("2030-10-06");
+    expect(model.specialDates).toEqual([
+      saved["2030-10-05"],
+      saved["2030-10-14"],
+      saved["2032-12-25"],
+    ]);
+    expect(model.days.map((day) => day.specialDate?.id ?? null)).toEqual([
+      null,
+      saved["2030-10-14"]!.id,
+      null,
+    ]);
+    for (const date of ["2030-10-05", "2030-10-14", "2032-12-25"])
+      expect(
+        model.specialCells.find((entry) => entry.specialDateId === saved[date]!.id)?.cells,
+      ).toEqual(closedDeli);
+    expect(
+      model.specialCells.some((entry) => entry.specialDateId === saved["2030-10-04"]!.id),
+    ).toBe(false);
+
+    // With no venue date to go by, the list starts where the range does.
+    await db
+      .update(locations)
+      .set({ timeZone: "Mars/Base" })
+      .where(eq(locations.id, fx.cfg.locationId));
+    expect((await read()).specialDates).toEqual([saved["2030-10-14"], saved["2032-12-25"]]);
   });
 });
 

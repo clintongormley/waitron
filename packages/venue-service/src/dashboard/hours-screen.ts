@@ -81,6 +81,8 @@ type Editor =
       id: string | null;
       heading: Key;
       draft: DateDraft;
+      /** The date's stored cells, the default station's apart, as the editor opened. */
+      stored: DateHoursCell[];
       /** Cells of subjects the editor does not show, sent back as they were. */
       hidden: DateHoursCell[];
     }
@@ -452,6 +454,7 @@ export class HoursScreen extends LitElement {
       };
     });
     const defaults = new Set(this.model!.subjects.filter(isDefaultStation).map(keyOf));
+    const kept = stored.filter((entry) => !defaults.has(keyOf(entry.subject)));
     this.#open(
       {
         kind: "date",
@@ -464,9 +467,8 @@ export class HoursScreen extends LitElement {
           closeWholeVenue: special?.closeWholeVenue ?? closeWholeVenue,
           cells,
         },
-        hidden: stored.filter(
-          (entry) => !shownKeys.has(keyOf(entry.subject)) && !defaults.has(keyOf(entry.subject)),
-        ),
+        stored: kept,
+        hidden: kept.filter((entry) => !shownKeys.has(keyOf(entry.subject))),
       },
       returnTo,
     );
@@ -501,10 +503,9 @@ export class HoursScreen extends LitElement {
         ) as Record<string, string>;
       case "date": {
         const { draft } = editor;
-        const errors: Record<string, string> = Object.assign(
-          {},
-          ...draft.cells.map(({ prefix, cell }) => cellChecks(prefix, cell)),
-        );
+        const errors: Record<string, string> = draft.closeWholeVenue
+          ? {}
+          : Object.assign({}, ...draft.cells.map(({ prefix, cell }) => cellChecks(prefix, cell)));
         if (draft.date === "") errors.date = t("hours.date_required");
         if (draft.name.trim() === "") errors.name = t("hours.name_required");
         if (draft.colour === "") errors.colour = t("hours.colour_required");
@@ -566,7 +567,10 @@ export class HoursScreen extends LitElement {
             subject: { kind: subject.kind, id: subject.id },
             cell: wire(cell),
           }));
-        this.#sentCells = [...shown, ...editor.hidden] as DateHoursCell[];
+        // Locked by the closure, the cells are sent as they were stored, never as edited.
+        this.#sentCells = (
+          draft.closeWholeVenue ? editor.stored : [...shown, ...editor.hidden]
+        ) as DateHoursCell[];
         return this.api.saveDate(editor.id, {
           date: draft.date,
           name: draft.name.trim(),
@@ -625,8 +629,7 @@ export class HoursScreen extends LitElement {
       if (code !== "hours.invalid" || match === null) return undefined;
       const weekday = Number(match[1]);
       if (editor.kind === "cell" && weekday !== editor.weekday) return undefined;
-      const rest = match[2] ?? "mode";
-      return `${DAY_KEYS[weekday]}.${rest.startsWith("periods.") ? rest : "mode"}`;
+      return this.#cellField(DAY_KEYS[weekday]!, match[2]);
     }
     if (editor.kind === "date") {
       if (code === "special_date.date_taken") return "date";
@@ -638,8 +641,7 @@ export class HoursScreen extends LitElement {
         sent ? keyOf(subject) === keyOf(sent.subject) : subject.id === subjectId,
       );
       if (entry === undefined) return undefined;
-      const rest = match?.[2] ?? "mode";
-      return `${entry.prefix}.${rest.startsWith("periods.") ? rest : "mode"}`;
+      return this.#cellField(entry.prefix, match?.[2]);
     }
     if (editor.kind === "duplicate") {
       if (code === "special_date.date_taken") {
@@ -649,6 +651,12 @@ export class HoursScreen extends LitElement {
       return code === "hours.invalid" && /^dates\.\d+$/.test(field) ? field : undefined;
     }
     return undefined;
+  }
+
+  /** The drawn field a refusal of one cell names: a period's time, or else its Hours choice. */
+  #cellField(prefix: string, rest: string | undefined): string | undefined {
+    if (rest?.startsWith("periods.") !== true) return `${prefix}.mode`;
+    return /^periods\.\d+\.(opensAt|closesAt)$/.test(rest) ? `${prefix}.${rest}` : undefined;
   }
 
   /**
@@ -670,13 +678,22 @@ export class HoursScreen extends LitElement {
   }
 
   /** The bottom message for a refusal that names no field the editor shows. */
-  #sentence(editor: Editor, code: string, { date }: { date?: string }): string {
+  #sentence(
+    editor: Editor,
+    code: string,
+    { field = "", date }: { field?: string; date?: string },
+  ): string {
     if (code === "special_date.not_found") return t("hours.date_not_found");
     if (code === "station.always_open") return t("hours.always_open");
     if (code === "special_date.date_taken")
       return format("hours.date_taken", { date: formatDate(date!) });
     if (code !== "hours.invalid") return t("hours.save_error");
-    if (date === undefined) return t("hours.invalid");
+    if (date === undefined) {
+      if (/\.periods\.\d+\.id$/.test(field)) return t("hours.period_unsaved");
+      if (/^(cells\.\d+\.)?subject$/.test(field)) return t("hours.subject_gone");
+      if (/^days\.\d\.cell\.mode$/.test(field)) return t("hours.week_mixed");
+      return t("hours.invalid");
+    }
     return format(editor.kind === "delete" ? "hours.delete_clash" : "hours.invalid_clash", {
       date: formatDate(date),
     });
@@ -1155,11 +1172,10 @@ export class HoursScreen extends LitElement {
   // --- Special dates -------------------------------------------------------------------------
 
   #rows(): ListRow[] {
-    return this.model!.days.flatMap(({ specialDate }) =>
-      specialDate === null
-        ? []
-        : [{ special: specialDate, cells: this.#storedCells(specialDate.id) }],
-    );
+    return this.model!.specialDates.map((special) => ({
+      special,
+      cells: this.#storedCells(special.id),
+    }));
   }
 
   #dateCell(row: ListRow, subject: Subject) {

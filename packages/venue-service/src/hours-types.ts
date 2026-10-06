@@ -102,7 +102,15 @@ export interface HoursModel {
   week: { subject: HoursSubject; days: WeekDay[] }[];
   /** Every date of the range, in order. */
   days: CalendarDay[];
-  /** The stored cells of each special date in the range; a subject with no cell inherits. */
+  /**
+   * Every special date from the venue's yesterday onward, however far ahead, in date order; from
+   * the range's first date while the venue's clock cannot be read.
+   */
+  specialDates: SpecialDate[];
+  /**
+   * The stored cells of each special date in the range or in `specialDates`; a subject with no
+   * cell inherits.
+   */
   specialCells: { specialDateId: string; cells: DateHoursCell[] }[];
 }
 

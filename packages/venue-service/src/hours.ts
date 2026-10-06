@@ -113,6 +113,16 @@ async function requireSubjects(
   return defaults;
 }
 
+async function defaultStationIds(tx: Transaction, cfg: VenueScope): Promise<Set<string>> {
+  const rows = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(
+      and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.isDefault, true)),
+    );
+  return new Set(rows.map((row) => row.id));
+}
+
 /** Periods by cell id, in their saved order, wire times. */
 async function periodsByCell(
   tx: Transaction,
@@ -703,7 +713,14 @@ export async function saveSpecialDate(
       entry.cell as { mode: StoredMode; periods: HourPeriod[] },
     );
   }
-  const dropped = existingCells.filter((cell) => !kept.has(cell.id)).map((cell) => cell.id);
+  // A default station's cell is dormant rather than dropped: no request can carry it, and it
+  // applies again if the station stops being the default.
+  const dormant = existingCells.length === 0 ? new Set<string>() : await defaultStationIds(tx, cfg);
+  const dropped = existingCells
+    .filter(
+      (cell) => !kept.has(cell.id) && !(cell.stationId !== null && dormant.has(cell.stationId)),
+    )
+    .map((cell) => cell.id);
   if (dropped.length > 0)
     await tx.delete(specialDateHours).where(inArray(specialDateHours.id, dropped));
   return { id: specialDateId, ...values };
@@ -749,13 +766,15 @@ export async function duplicateSpecialDate(
   if (occupied !== undefined) throw new AppError("special_date.date_taken", { date: occupied });
 
   const cells = await readDateCells(tx, sourceId);
+  // A copied cell is checked only for its subject, so a default station's dormant cell is copied
+  // as it is.
   await requireSubjects(
     tx,
     cfg,
     cells.map((entry, index) => ({
       subject: entry.subject,
       field: `cells.${index}.subject`,
-      writing: true,
+      writing: false,
     })),
   );
   const zone = await readableZone(tx, cfg);
@@ -939,10 +958,16 @@ function rangeDates(from: unknown, to: unknown): LocalDate[] {
 }
 
 /**
- * The venue's subjects, their standard weeks and the special dates in `dates` with their cells,
- * in a fixed number of reads however many dates, subjects and special dates there are.
+ * The venue's subjects, their standard weeks and the special dates in `dates`, and any from
+ * `listFrom` onward, with their cells, in a fixed number of reads however many dates, subjects and
+ * special dates there are.
  */
-async function readRange(tx: Transaction, cfg: VenueScope, dates: readonly LocalDate[]) {
+async function readRange(
+  tx: Transaction,
+  cfg: VenueScope,
+  dates: readonly LocalDate[],
+  listFrom?: LocalDate,
+) {
   const departmentRows = await tx
     .select({
       id: departments.id,
@@ -1012,8 +1037,10 @@ async function readRange(tx: Transaction, cfg: VenueScope, dates: readonly Local
     .where(
       and(
         eq(specialDates.locationId, cfg.locationId),
-        gte(specialDates.date, dates[0]!),
-        lte(specialDates.date, dates[dates.length - 1]!),
+        or(
+          and(gte(specialDates.date, dates[0]!), lte(specialDates.date, dates[dates.length - 1]!)),
+          listFrom === undefined ? undefined : gte(specialDates.date, listFrom),
+        ),
       ),
     )
     .orderBy(asc(specialDates.date));
@@ -1094,8 +1121,9 @@ export async function readHoursModel(
 ): Promise<HoursModel> {
   const dates = rangeDates(from, to);
   const clock = await readLocationClock(tx, cfg.locationId);
-  const range = await readRange(tx, cfg, dates);
   const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
+  const listFrom = civilDate === null ? from : addDays(civilDate, -1);
+  const range = await readRange(tx, cfg, dates, listFrom);
   return {
     timeZone: clock.timeZone,
     dayCutover: clock.dayCutover,
@@ -1110,6 +1138,7 @@ export async function readHoursModel(
       })),
     })),
     days: calendarDays(dates, range),
+    specialDates: range.specials.filter((special) => special.date >= listFrom),
     specialCells: range.specials.map((special) => ({
       specialDateId: special.id,
       cells: range.cellsByDate.get(special.id)!,

@@ -76,6 +76,7 @@ describe("hours-cell-editor", () => {
       ["periods", "Opening periods"],
     ]);
     expect(el.shadowRoot!.querySelector("legend")!.textContent).toBe("Monday");
+    expect((mode as unknown as { required: boolean }).required).toBe(true);
   });
 
   it("offers a blank choice that keeps the standard hours, shown in grey, on a special date", async () => {
@@ -99,6 +100,8 @@ describe("hours-cell-editor", () => {
     ]);
     expect(mode.value).toBe("");
     expect(mode.placeholder).toBe("Standard hours (12:00–16:00)");
+    expect((mode as unknown as { required: boolean }).required).toBe(false);
+    expect(mode.hasAttribute("required")).toBe(false);
     await chooseOption(mode, "closed");
     expect(changes.at(-1)).toEqual({ mode: "closed", periods: [] });
     await chooseOption(mode, "");

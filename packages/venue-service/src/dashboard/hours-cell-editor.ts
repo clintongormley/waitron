@@ -198,7 +198,7 @@ export class HoursCellEditor extends LitElement {
         name=${`${this.fieldPrefix}.mode`}
         label=${t("hours.mode")}
         search="never"
-        required
+        ?required=${!this.modes.includes("inherit")}
         .options=${options}
         .value=${this.cell.mode === "inherit" ? "" : this.cell.mode}
         placeholder=${this.modes.includes("inherit") ? inherit : ""}
