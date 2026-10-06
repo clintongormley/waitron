@@ -246,6 +246,7 @@ describe("product-list", () => {
     const cell = cellUnder(root, "ale", "Made at");
     expect(cell.textContent!.trim()).toBe("");
     expect(cell.querySelector("a")).toBeNull();
+    expect(cellUnder(root, "lager", "Made at").textContent).toContain("Bar");
   });
   it("says nowhere, with the tester link, for a product the made-at read routes to no station", async () => {
     setLocale("en");

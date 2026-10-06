@@ -2301,17 +2301,14 @@ deep-tree case in `apps/server/src/category-sales-page.test.ts`, at 58mm and 203
 chose to leave it as it is rather than shorten deep paths on paper (2026-10-05).
 
 **Products: a category's Made at shows where its dishes are made — DONE (W86, #1203; its asterisk
-W86a, #1223, W86b, #1231, W86c, #1234); left open:**
-(1) DONE (A277): a product row with no entry in the made-at read (an inactive one, for example)
-now shows an empty cell instead of "Nowhere", as category rows do; a product the read routes to no
-station still reads "Nowhere"; (2) a category's link is the same
-`maker-link` as a product's, so the contrast concern and the missing `activatesRow: false` recorded
-under W87 apply to category rows too (there a click beside the link opens or closes the category;
-judged from the code, not run); (3) a person who may not read routing sees "Kitchen routing
-unavailable" on every category, because a refused read counts as a failed one;
-(5) the "some items made elsewhere" note does not look at whether the categories involved hold any
-products, so it can claim items that do not exist yet; the owner chose to keep these words
-(2026-10-05).
+W86a, #1223, W86b, #1231, W86c, #1234; a product's blank Made at when the read has no entry, A277);
+left open:** (2) a category's link is the same `maker-link` as a product's, so the contrast concern
+and the missing `activatesRow: false` recorded under W87 apply to category rows too (there a click
+beside the link opens or closes the category; judged from the code, not run); (3) a person who may
+not read routing sees "Kitchen routing unavailable" on every category, because a refused read
+counts as a failed one; (5) the "some items made elsewhere" note does not look at whether the
+categories involved hold any products, so it can claim items that do not exist yet; the owner chose
+to keep these words (2026-10-05).
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
