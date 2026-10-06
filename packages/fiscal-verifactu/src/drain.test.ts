@@ -577,7 +577,7 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
 });
 
 /**
- * Per-record resolution: a rejection raises a structured incident and holds nothing behind it,
+ * Per-record resolution: a lone rejection raises a structured incident and holds nothing behind it,
  * AceptadoConErrores is still an accept with a warning, and a record landing on a chain held for a
  * conflict is stopped without reaching AEAT.
  */
