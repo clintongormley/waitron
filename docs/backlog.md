@@ -4259,15 +4259,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   history removal use a separately approved setup/reset instead. Later
   Hours/holidays/menu builds retain their own compatibility tests.
   [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
-  was approved by the owner on 2026-10-05; its build remains open.
-  It removes the redundant
-  page and legacy location receipt/drawer settings, makes manual drawer authorization unconditional,
-  and preserves device/profile/printer gates, automatic drawer jobs and receipt/replay safeguards.
-  The owner approved the plan on 2026-10-05 at 15:55; its step 3 dependency is now landed,
-  alongside A238 and step 2. Follow the lane queue for the build. Recommendations cover
-  old bookmarks, incompatible export refusal and explicit reset approval if the populated locations
-  upgrade cannot preserve cross-set rows and triggers. Existing guards remain unchanged; useful
-  screen checks move to surviving surfaces before retirement, with any deletion lacking an equally strict replacement requiring approval.
+  is implemented in [PR #1288](https://github.com/clintongormley/waitron/pull/1288).
+  It removes the redundant page and legacy location receipt/drawer settings, makes manual drawer
+  authorization unconditional, and preserves device/profile/printer gates, automatic drawer jobs
+  and receipt/replay safeguards. The owner approved the reset release and the exact core/0109
+  upgrade-test reset entry on 2026-10-06. Old bookmarks use the surviving Tickets destination;
+  older configuration exports are refused before staging. Steps 4–6 remain with their owning lanes.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
   profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**
