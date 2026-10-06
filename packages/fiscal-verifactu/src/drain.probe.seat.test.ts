@@ -186,4 +186,31 @@ describe("drain — the hourly probe's answers from a hand-built client seat (no
     ]);
     expect(await refusalAlerts(PROBE_AT)).toEqual([{ codigo: String(RUN_CODE), count: 3 }]);
   });
+
+  it("a reply with no line for the probe keeps it held, records no incident, and probes again an hour later", async () => {
+    const { first, second } = await brakeHold();
+    const lineless = seat({ EstadoRegistro: "Correcto" });
+    const client: VerifactuClient = {
+      submit: async (cabecera, registros) => ({
+        ...(await lineless.client.submit(cabecera, registros)),
+        RespuestaLinea: [],
+      }),
+      consultar: lineless.client.consultar,
+    };
+
+    await drain(deps(client), PROBE_AT);
+
+    expect(lineless.sent).toEqual([[first]]);
+    expect(await estadoOf(first)).toEqual({ estado: "detenido", csv: null });
+    expect((await estadoOf(second)).estado).toBe("detenido");
+    expect(await incidentCodes()).toEqual(RUN_REFUSALS);
+
+    const later = seat({ EstadoRegistro: "Correcto" });
+    await drain(deps(later.client), new Date(PROBE_AT.getTime() + 59 * 60_000));
+    expect(later.sent).toEqual([]);
+
+    await drain(deps(later.client), new Date(PROBE_AT.getTime() + 60 * 60_000));
+    expect(later.sent).toEqual([[first]]);
+    expect(await estadoOf(first)).toEqual({ estado: "aceptado", csv: SEAT_CSV });
+  });
 });
