@@ -1508,6 +1508,18 @@ describe("till-app", () => {
     );
   });
 
+  it("says in its own words that the device's profile has no zone left to order in", async () => {
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockRejectedValue({ code: "device_profile.no_service_zone" }),
+    });
+
+    const c = await toCounter(el);
+    expect(c.products).toEqual([]);
+    const alert = el.shadowRoot!.querySelector('[role="alert"]')?.textContent;
+    expect(alert).toContain(codeMessage("device_profile.no_service_zone"));
+    expect(alert).not.toContain(t("service_zone.load_error"));
+  });
+
   it("changes and manually refreshes the counter's service zone", async () => {
     const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
     defaultCatalogue.zones = [

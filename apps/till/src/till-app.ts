@@ -1895,7 +1895,7 @@ export class TillApp extends LitElement {
     // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
     this.#floorLoaded = false;
-    let offerLoadFailed = false;
+    let offerLoadFailed: CounterError | false = false;
     // The same person signing in again, with nobody else in between, comes back to the zone they
     // left and the menu they chose there.
     const returning = this.#browsing?.personId === personId ? this.#browsing : undefined;
@@ -1926,9 +1926,11 @@ export class TillApp extends LitElement {
       this.receiptPrintMode = context.receiptPrintMode ?? "auto";
       if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
       if (returning?.zoneId === context.zoneId) keptMenu = returning.menuId;
-    } catch {
+    } catch (error) {
       if (replaced()) return;
-      offerLoadFailed = true;
+      const code = (error as { code?: unknown } | null)?.code;
+      offerLoadFailed =
+        code === "device_profile.no_service_zone" ? { code } : "service_zone.load_error";
       this.#loadCounterOffers({ offers: [], menus: [] }, false);
       this.counterServiceZones = [];
       this.counterServiceZoneId = "";
@@ -1946,7 +1948,7 @@ export class TillApp extends LitElement {
     this.operatorPersonId = personId;
     this.#resumeOrderDraft();
     this.permissions = permissions;
-    this.errorKey = offerLoadFailed ? "service_zone.load_error" : undefined;
+    this.errorKey = offerLoadFailed === false ? undefined : offerLoadFailed;
     this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
