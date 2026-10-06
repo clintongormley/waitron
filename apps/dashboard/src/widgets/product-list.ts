@@ -153,6 +153,7 @@ export class ProductList extends LitElement {
       wt-data-table[narrow]::part(thumb-placeholder) {
         display: none;
       }
+      /* Keep wrapped names on their first-line baseline beside the media slot. */
       wt-data-table::part(product-cell) {
         display: block;
       }

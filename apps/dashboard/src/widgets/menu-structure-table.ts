@@ -129,10 +129,10 @@ export class MenuStructureTable extends LitElement {
         align-items: center;
         margin-inline-end: var(--wt-space-3);
       }
-      /* The table's arrow, the grip while reordering, and the swatch slot come before the menu's name. */
       wt-data-table::part(tree-heading) {
         margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
       }
+      /* Keep wrapped names on their first-line baseline beside the media slot. */
       wt-data-table::part(product-cell) {
         display: block;
       }

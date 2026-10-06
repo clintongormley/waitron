@@ -1851,6 +1851,9 @@ describe("A303 tree media slots", () => {
         if (width <= 440) {
           expect(slot.getBoundingClientRect().width).toBe(0);
           expect(photo.getBoundingClientRect().width).toBe(0);
+          const media = table.shadowRoot!.querySelectorAll('[part~="product-media"]');
+          expect(media.length).toBeGreaterThan(0);
+          for (const button of media) expect(button.getBoundingClientRect().width).toBe(0);
           for (const swatch of table.shadowRoot!.querySelectorAll(
             '[part~="swatch-button"], [part~="swatch-box"]',
           )) {
@@ -1906,6 +1909,9 @@ describe("Structure product media", () => {
       "/manage/catalogue/product/p-burger?field=image",
     );
     await userEvent.click(media!.shadowRoot!.querySelector("button")!);
+    const photoLink = media!.querySelector<HTMLAnchorElement>("a")!;
+    photoLink.focus();
+    expect(table(el).shadowRoot!.activeElement).toBe(photoLink);
     await userEvent.keyboard("{Escape}");
     expect(media!.shadowRoot!.activeElement).toBe(media!.shadowRoot!.querySelector("button"));
   });

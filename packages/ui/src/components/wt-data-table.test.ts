@@ -7015,3 +7015,48 @@ for (const tree of [false, true])
       }
     });
   }
+
+for (const tree of [false, true]) {
+  test.each(["baseline", "center"] as const)(
+    `paints %s row controls with tree ${tree}`,
+    async (align) => {
+      const el = await table({
+        rowControls: (row) => html`<button>Move ${row.name}</button>`,
+        rowControlsAlign: align,
+        rowParent: tree ? () => null : undefined,
+      });
+      const native = el.shadowRoot!.querySelector("table")!;
+      expect(native.hasAttribute("data-center-controls")).toBe(align === "center");
+      for (const cell of native.querySelectorAll("tbody tr td:first-child")) {
+        expect(getComputedStyle(cell).verticalAlign).toBe(
+          align === "center" ? "middle" : "baseline",
+        );
+        expect(getComputedStyle(cell.querySelector(".row-controls")!).display).toBe(
+          align === "center" ? "flex" : "contents",
+        );
+      }
+    },
+  );
+  test(`locks filtered widths including the row-control column with tree ${tree}`, async () => {
+    await page.viewport(1280, 844);
+    const el = await tableS({
+      columns: withStatus,
+      rowControls: (row) => html`<button>Move ${row.name}</button>`,
+      rowParent: tree ? () => null : undefined,
+    });
+    const root = el.shadowRoot!;
+    const widths = [...root.querySelectorAll("thead th")].map(
+      (cell) => cell.getBoundingClientRect().width,
+    );
+    expect(widths).toHaveLength(3);
+    await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+    await el.updateComplete;
+    const native = root.querySelector("table")!;
+    expect(native.hasAttribute("data-locked-columns")).toBe(true);
+    const cols = [...native.querySelectorAll<HTMLTableColElement>("colgroup col")];
+    expect(cols).toHaveLength(3);
+    for (let i = 0; i < cols.length; i++)
+      expect(parseFloat(cols[i]!.style.width)).toBeCloseTo(widths[i]!, 1);
+    expect(rowKeysS(el)).toEqual(["1"]);
+  });
+}
