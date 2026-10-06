@@ -437,6 +437,8 @@ const en = {
   "hours.overlap_previous_day": "These hours overlap {day}'s hours past midnight.",
   "hours.overlap_next_day": "These hours run past midnight into {day}'s hours.",
   "hours.time_skipped": "The clock skips this time on this date.",
+  "hours.time_repeats":
+    "{subject}: the clock goes back, so {time} happens twice. These hours apply both times.",
   "hours.duplicate_skipped": "The clock skips a time these hours use on this date.",
   "hours.date_moved_clash":
     "Moving this date away from {date} would leave its standard hours overlapping a neighbouring date.",
@@ -950,6 +952,8 @@ const es: Record<keyof typeof en, string> = {
   "hours.overlap_previous_day": "Este horario se solapa con el del {day} pasada la medianoche.",
   "hours.overlap_next_day": "Este horario pasa de la medianoche y se solapa con el del {day}.",
   "hours.time_skipped": "El reloj se salta esta hora en esta fecha.",
+  "hours.time_repeats":
+    "{subject}: el reloj se atrasa, así que la hora {time} se da dos veces. Este horario se aplica las dos veces.",
   "hours.duplicate_skipped": "En esta fecha el reloj se salta una hora que usa este horario.",
   "hours.date_moved_clash":
     "Mover esta fecha desde el {date} haría que su horario habitual se solapara con una fecha vecina.",

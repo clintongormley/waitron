@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { clockChangesBetween, localTimeOccurrences, venueLocalMoment } from "./hours-clock.js";
+import { clockChangesBetween, venueLocalMoment } from "./hours-clock.js";
+import { localTimeOccurrences } from "./hours-occurrences.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
 const madrid = { timeZone: "Europe/Madrid", dayCutover: "06:00" };

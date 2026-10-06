@@ -25,7 +25,8 @@ import {
   type WeekCell,
   type WeekDay,
 } from "../hours-types.js";
-import { addDays, weekdayOf } from "../hours-rules.js";
+import { repeatedTimes } from "../hours-occurrences.js";
+import { addDays, isLocalDate, weekdayOf } from "../hours-rules.js";
 import type { HoursApi } from "./hours-client.js";
 import {
   cellChecks,
@@ -880,15 +881,16 @@ export class HoursScreen extends LitElement {
           ? html`<p class="note" data-test="whole-venue-note">${t("hours.whole_venue_note")}</p>`
           : nothing
       }
-      ${draft.cells.map(({ subject, prefix, cell }) =>
-        cellEditor(
-          subject.name,
-          prefix,
-          DATE_MODES,
-          cell,
-          weekday === null ? "" : this.#standardText(subject, weekday),
-          draft.closeWholeVenue,
-        ),
+      ${draft.cells.map(
+        ({ subject, prefix, cell }) =>
+          html`${cellEditor(
+            subject.name,
+            prefix,
+            DATE_MODES,
+            cell,
+            weekday === null ? "" : this.#standardText(subject, weekday),
+            draft.closeWholeVenue,
+          )}${this.#repeatNotes(draft, subject, cell)}`,
       )}
       ${defaults.map(
         (subject) =>
@@ -896,6 +898,24 @@ export class HoursScreen extends LitElement {
             ${format("hours.default_station", { name: subject.name })}
           </p>`,
       )}`;
+  }
+
+  /** A period time the clock shows twice is explained, not refused: both occurrences follow it. */
+  #repeatNotes(draft: DateDraft, subject: Subject, cell: CellDraft) {
+    const model = this.model!;
+    if (
+      draft.closeWholeVenue ||
+      cell.mode !== "periods" ||
+      !model.clockReadable ||
+      !isLocalDate(draft.date)
+    )
+      return nothing;
+    return repeatedTimes(draft.date, cell.periods, model.timeZone).map(
+      (time) =>
+        html`<p class="note" data-test="repeat-note">
+          ${format("hours.time_repeats", { subject: subject.name, time })}
+        </p>`,
+    );
   }
 
   #duplicateForm(editor: Extract<Editor, { kind: "duplicate" }>, errors: Record<string, string>) {

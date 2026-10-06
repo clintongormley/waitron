@@ -1270,6 +1270,78 @@ describe("Hours: special dates", () => {
     ]);
   });
 
+  it("explains before saving that a time the clock shows twice follows these hours both times, and still saves", async () => {
+    const { api, calls } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
+    const notes = () =>
+      [...el.shadowRoot!.querySelectorAll('[data-test="repeat-note"]')].map((note) => text(note));
+    const bar0230 =
+      "Bar: the clock goes back, so 02:30 happens twice. These hours apply both times.";
+    await setField(el, "name", "Clocks back");
+    await choose(el, "colour", "red");
+    await choose(el, "station.bar.mode", "periods");
+    await setField(el, "station.bar.periods.0.opensAt", "02:30");
+    await setField(el, "station.bar.periods.0.closesAt", "04:00");
+    expect(notes()).toEqual([]);
+    await setField(el, "date", "2026-10-25");
+    expect(notes()).toEqual([bar0230]);
+    await setField(el, "station.bar.periods.0.closesAt", "");
+    expect(notes()).toEqual([]);
+    await setField(el, "station.bar.periods.0.closesAt", "04:00");
+    expect(notes()).toEqual([bar0230]);
+
+    await setField(el, "date", "2026-10-18");
+    expect(notes()).toEqual([]);
+
+    await setField(el, "date", "2026-10-24");
+    await setField(el, "station.bar.periods.0.opensAt", "22:00");
+    expect(notes()).toEqual([]);
+    await setField(el, "station.bar.periods.0.closesAt", "02:30");
+    expect(notes()).toEqual([bar0230]);
+
+    await switchClosure(el, true);
+    expect(notes()).toEqual([]);
+    await switchClosure(el, false);
+    expect(notes()).toEqual([bar0230]);
+
+    await click(el, saveButton(el));
+    expect(calls("POST")).toEqual([
+      [
+        "/management-api/venue-service/special-dates",
+        expect.objectContaining({
+          date: "2026-10-24",
+          cells: [
+            {
+              subject: { kind: "station", id: "bar" },
+              cell: {
+                mode: "periods",
+                periods: [{ id: expect.any(String), opensAt: "22:00", closesAt: "02:30" }],
+              },
+            },
+          ],
+        }),
+      ],
+    ]);
+    expect(modal(el)).toBeNull();
+  });
+
+  it("explains a time the clock shows twice in Spanish", async () => {
+    setLocale("es");
+    const { api } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
+    await setField(el, "date", "2026-10-25");
+    await choose(el, "station.bar.mode", "periods");
+    await setField(el, "station.bar.periods.0.opensAt", "01:00");
+    await setField(el, "station.bar.periods.0.closesAt", "02:15");
+    expect(text(el.shadowRoot!.querySelector('[data-test="repeat-note"]'))).toBe(
+      "Bar: el reloj se atrasa, así que la hora 02:15 se da dos veces. Este horario se aplica las dos veces.",
+    );
+  });
+
   it("lists, edits and deletes a date saved beyond the calendar's year", async () => {
     const { api, state, calls } = server();
     const far = {

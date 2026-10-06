@@ -26,10 +26,10 @@ import { readLocationClock } from "@waitron/reporting";
 import {
   clockChangesBetween,
   isReadableClock,
-  localTimeOccurrences,
   venueLocalMoment,
   type VenueLocalMoment,
 } from "./hours-clock.js";
+import { localTimeOccurrences } from "./hours-occurrences.js";
 import { readStationSchedules } from "./hours.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
