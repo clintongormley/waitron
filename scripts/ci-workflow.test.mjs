@@ -1,7 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   LIGHT_A_PACKAGES,
   LIGHT_B_PACKAGES,
@@ -484,27 +493,50 @@ describe("ci.yml's job graph", () => {
   });
 });
 
+const NEEDS_STEP = "Fail unless every needed job succeeded or was skipped";
+const JOBS_API_STEP = "Fail unless GitHub's jobs API reports every needed job succeeded or skipped";
+
 /**
- * The `ci` job's one step: its own keys (indent 8) and its `run: |` script, dedented. Weaker than
- * GitHub: the `env:` value is read as text, so what `${{ toJSON(needs) }}` evaluates to is GitHub's.
+ * One of the `ci` job's steps, found by its `name:`: its own keys (indent 8), every line of it, and
+ * its `run: |` script, dedented. Weaker than GitHub: the `env:` values are read as text, so what
+ * `${{ toJSON(needs) }}` and the other expressions evaluate to is GitHub's.
  */
-function ciVerdictStep() {
+function ciStepNamed(name) {
   const body = job("ci").body;
   const stepsAt = body.findIndex((line) => /^ {4}steps:\s*$/.test(line));
   if (stepsAt === -1) throw new Error("the `ci` job has no `steps:`");
-  const steps = body.slice(stepsAt + 1).filter((line) => /^ {6}- /.test(line));
-  if (steps.length !== 1) throw new Error(`the \`ci\` job has ${steps.length} steps, not one`);
+  const starts = [];
+  for (let at = stepsAt + 1; at < body.length; at++) if (/^ {6}- /.test(body[at])) starts.push(at);
+  const steps = starts.map((at, index) => body.slice(at, starts[index + 1] ?? body.length));
+  const named = steps.filter((lines) =>
+    lines.some(
+      (line, at) =>
+        (at === 0 || /^ {8}\S/.test(line)) && line.trim().replace(/^- /, "") === `name: ${name}`,
+    ),
+  );
+  if (named.length !== 1)
+    throw new Error(`the \`ci\` job has ${named.length} steps named "${name}", not one`);
 
-  const step = body.slice(body.indexOf(steps[0]));
+  const step = named[0];
   const keys = step.filter((line, at) => at === 0 || /^ {8}\S/.test(line));
   const runAt = step.findIndex((line) => /^ {8}run: \|\s*$/.test(line));
-  if (runAt === -1) throw new Error("the `ci` job's step has no `run: |` block");
+  if (runAt === -1) throw new Error(`the \`ci\` job's step "${name}" has no \`run: |\` block`);
   const script = [];
   for (const line of step.slice(runAt + 1)) {
     if (line.trim() !== "" && !line.startsWith(" ".repeat(10))) break;
     script.push(line.slice(10));
   }
   return { keys, step, script: script.join("\n") };
+}
+
+/** The `ci` job's first step, which reads `needs`. */
+function ciVerdictStep() {
+  return ciStepNamed(NEEDS_STEP);
+}
+
+/** The `ci` job's second step, which reads GitHub's jobs API. */
+function ciJobsApiStep() {
+  return ciStepNamed(JOBS_API_STEP);
 }
 
 const VERDICT_SPAWN_TIMEOUT_MS = 10_000;
@@ -599,6 +631,232 @@ describe("the `ci` aggregate's verdict", () => {
       const { status, output } = runVerdict(needs);
       expect(status, String(needs)).toBe(JQ_REFUSED);
       expect(output, String(needs)).toContain(message);
+    }
+  });
+});
+
+// A stand-in for `gh`, first on PATH. Call n writes its arguments to args.n, prints out.n (or the
+// latest out file before it) and exits with status.n (default 0).
+const GH_STUB = `#!/usr/bin/env bash
+n=$(( $(cat "$STUB_DIR/count" 2>/dev/null || echo 0) + 1 ))
+echo "$n" > "$STUB_DIR/count"
+printf '%s\n' "$@" > "$STUB_DIR/args.$n"
+for ((i = n; i >= 1; i--)); do
+  if [ -f "$STUB_DIR/out.$i" ]; then cat "$STUB_DIR/out.$i"; break; fi
+done
+exit "$(cat "$STUB_DIR/status.$n" 2>/dev/null || echo 0)"
+`;
+
+describe("the `ci` aggregate's jobs API cross-check", () => {
+  let stubDir;
+  beforeEach(() => {
+    stubDir = mkdtempSync(join(tmpdir(), "ci-jobs-api-"));
+    writeFileSync(join(stubDir, "gh"), GH_STUB);
+    chmodSync(join(stubDir, "gh"), 0o755);
+  });
+  afterEach(() => {
+    rmSync(stubDir, { recursive: true, force: true });
+  });
+
+  const apiJob = (name, conclusion, status = "completed") => ({
+    name,
+    status,
+    conclusion: status === "completed" ? conclusion : null,
+    runner_id: 1,
+  });
+  const page = (jobsOnPage, total = jobsOnPage.length) =>
+    JSON.stringify({ total_count: total, jobs: jobsOnPage });
+  const needsFor = (...ids) =>
+    Object.fromEntries(ids.map((id) => [id, { result: "success", outputs: {} }]));
+
+  /** Call n of the stub answers `answers[n-1]`: a string to print, or `{ out, status }`. */
+  function runCrossCheck(needs, answers) {
+    for (const name of readdirSync(stubDir)) if (name !== "gh") rmSync(join(stubDir, name));
+    answers.forEach((answer, at) => {
+      const { out, status } = typeof answer === "string" ? { out: answer, status: 0 } : answer;
+      if (out !== undefined) writeFileSync(join(stubDir, `out.${at + 1}`), out);
+      writeFileSync(join(stubDir, `status.${at + 1}`), String(status ?? 0));
+    });
+    const env = {
+      PATH: `${stubDir}:${process.env.PATH}`,
+      STUB_DIR: stubDir,
+      GH_TOKEN: "token",
+      REPO: "o/r",
+      RUN_ID: "123",
+      RUN_ATTEMPT: "2",
+      JOBS_API_TRIES: "3",
+      JOBS_API_DELAY: "0",
+      VERDICT_SCRIPT: ciJobsApiStep().script,
+    };
+    if (needs !== undefined) env.NEEDS = typeof needs === "string" ? needs : JSON.stringify(needs);
+    const result = spawnSync("bash", ["-c", 'bash -e -c "$VERDICT_SCRIPT" 2>&1'], {
+      encoding: "utf8",
+      env,
+      timeout: VERDICT_SPAWN_TIMEOUT_MS,
+    });
+    if (result.error !== undefined || result.status === null) {
+      throw new Error(
+        `the cross-check script failed to run (killed after ${VERDICT_SPAWN_TIMEOUT_MS}ms?): ${result.error?.message ?? result.signal}`,
+      );
+    }
+    const calls = existsSync(join(stubDir, "count"))
+      ? Number(readFileSync(join(stubDir, "count"), "utf8"))
+      : 0;
+    return { status: result.status, output: `${result.stdout}${result.stderr}`, calls };
+  }
+  const argsOfCall = (n) =>
+    readFileSync(join(stubDir, `args.${n}`), "utf8")
+      .split("\n")
+      .filter(Boolean);
+
+  it("is wired to always run, read this run's jobs with a token allowed to, and keep its default tries", () => {
+    const { keys, step } = ciJobsApiStep();
+    expect(keys).toContain("        if: always()");
+    for (const line of [
+      "          GH_TOKEN: ${{ github.token }}",
+      "          REPO: ${{ github.repository }}",
+      "          RUN_ID: ${{ github.run_id }}",
+      "          RUN_ATTEMPT: ${{ github.run_attempt }}",
+      "          NEEDS: ${{ toJSON(needs) }}",
+    ]) {
+      expect(step).toContain(line);
+    }
+    expect(lines.filter((line) => /^\s*JOBS_API_\w+\s*:/.test(line))).toEqual([]);
+
+    const body = job("ci").body;
+    const permissionsAt = body.findIndex((line) => /^ {4}permissions:\s*$/.test(line));
+    expect(permissionsAt).toBeGreaterThan(-1);
+    const granted = [];
+    for (const line of body.slice(permissionsAt + 1)) {
+      if (line.trim() === "" || line.trim().startsWith("#")) continue;
+      if (!/^ {6}\S/.test(line)) break;
+      granted.push(line.trim());
+    }
+    expect(granted).toEqual(["actions: read"]);
+  });
+
+  it("reads this run attempt's jobs, every page of them", () => {
+    const { status, calls } = runCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")])]);
+    expect(status).toBe(0);
+    expect(calls).toBe(1);
+    const args = argsOfCall(1);
+    expect(args).toContain("api");
+    expect(args).toContain("--paginate");
+    expect(args).toContain("repos/o/r/actions/runs/123/attempts/2/jobs?per_page=100");
+  });
+
+  it("passes when every needed job succeeded or was skipped, printing each one", () => {
+    const { status, output } = runCrossCheck(
+      needsFor("lint", "test-heavy", "image", "bundle-smoke"),
+      [
+        page([
+          apiJob("lint", "success"),
+          apiJob("test-heavy (1)", "success"),
+          apiJob("test-heavy (2)", "success"),
+          apiJob("image / smoke", "success"),
+          apiJob("bundle-smoke", "skipped"),
+          apiJob("ci", null, "in_progress"),
+        ]),
+      ],
+    );
+    expect(status, output).toBe(0);
+    expect(output.split("\n").filter(Boolean)).toEqual([
+      "lint: success",
+      "test-heavy (1): success",
+      "test-heavy (2): success",
+      "image / smoke: success",
+      "bundle-smoke: skipped",
+    ]);
+
+    const skippedCaller = runCrossCheck(needsFor("image"), [page([apiJob("image", "skipped")])]);
+    expect(skippedCaller.status, skippedCaller.output).toBe(0);
+    expect(skippedCaller.output).toBe("image: skipped\n");
+  });
+
+  it("fails at once on a job GitHub never gave a runner, though `needs` says it succeeded", () => {
+    const never = { name: "test-ui", status: "completed", conclusion: "cancelled", runner_id: 0 };
+    const { status, output, calls } = runCrossCheck(needsFor("lint", "test-ui"), [
+      page([apiJob("lint", "success"), never]),
+    ]);
+    expect(status).not.toBe(0);
+    expect(calls).toBe(1);
+    const printed = output.split("\n");
+    const errorAt = printed.findIndex((line) => line.includes("not succeeded or skipped: test-ui"));
+    expect(errorAt, output).toBeGreaterThan(-1);
+    expect(printed.slice(0, errorAt), output).toEqual(["lint: success", "test-ui: cancelled"]);
+  });
+
+  it("fails on any other completed conclusion, a missing one included", () => {
+    for (const bad of ["failure", null, "neutral", "timed_out"]) {
+      const { status, output, calls } = runCrossCheck(needsFor("lint"), [
+        page([apiJob("lint", bad)]),
+      ]);
+      expect(status, String(bad)).not.toBe(0);
+      expect(calls, String(bad)).toBe(1);
+      expect(output, String(bad)).toContain("not succeeded or skipped: lint");
+    }
+  });
+
+  it("does not take a job whose name only starts with the needed id as that job", () => {
+    const { status, output, calls } = runCrossCheck(needsFor("test-server"), [
+      page([apiJob("test-server-stream", "success")]),
+    ]);
+    expect(status).not.toBe(0);
+    expect(calls).toBe(3);
+    expect(output).toContain("test-server: not in the jobs API");
+    expect(output).toContain("no job in the jobs API for: test-server");
+  });
+
+  it("combines every page, and retries until it has read as many jobs as the API counts", () => {
+    const twoPages =
+      page([apiJob("lint", "success")], 2) + "\n" + page([apiJob("typecheck", "success")], 2);
+    const whole = runCrossCheck(needsFor("lint", "typecheck"), [twoPages]);
+    expect(whole.status, whole.output).toBe(0);
+    expect(whole.output).toBe("lint: success\ntypecheck: success\n");
+
+    const short = runCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")], 2)]);
+    expect(short.status).not.toBe(0);
+    expect(short.calls).toBe(3);
+    expect(short.output).toContain("read 1 of 2 jobs");
+  });
+
+  it("fails when the API call fails on every try", () => {
+    const failing = runCrossCheck(needsFor("lint"), [{ status: 1 }, { status: 1 }, { status: 1 }]);
+    expect(failing.status).not.toBe(0);
+    expect(failing.calls).toBe(3);
+    expect(failing.output).toContain("the jobs API call failed");
+  });
+
+  it("passes when the API call fails once and then succeeds", () => {
+    const { status, output, calls } = runCrossCheck(needsFor("lint"), [
+      { out: "", status: 1 },
+      page([apiJob("lint", "success")]),
+    ]);
+    expect(status, output).toBe(0);
+    expect(calls).toBe(2);
+    expect(output).toContain("lint: success");
+  });
+
+  it("waits for a needed job that has not completed, and fails if it never does", () => {
+    const later = runCrossCheck(needsFor("lint"), [
+      page([apiJob("lint", null, "in_progress")]),
+      page([apiJob("lint", "success")]),
+    ]);
+    expect(later.status, later.output).toBe(0);
+    expect(later.calls).toBe(2);
+
+    const never = runCrossCheck(needsFor("lint"), [page([apiJob("lint", null, "in_progress")])]);
+    expect(never.status).not.toBe(0);
+    expect(never.calls).toBe(3);
+    expect(never.output).toContain("lint: in_progress");
+    expect(never.output).toContain("not completed: lint");
+  });
+
+  it("fails without calling the API when it was handed no needed jobs", () => {
+    for (const needs of [undefined, "", "not json", "{}", "[]"]) {
+      const { status, calls } = runCrossCheck(needs, [page([apiJob("lint", "success")])]);
+      expect(status, String(needs)).not.toBe(0);
+      expect(calls, String(needs)).toBe(0);
     }
   });
 });
