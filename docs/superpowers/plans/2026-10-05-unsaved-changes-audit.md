@@ -3018,3 +3018,36 @@ editors. These cases establish that shell/container route integration, not serve
 browser-native reload prompting. Other page/context routes, device-profile reconciliation after
 W97, final advancing-owner classification and activated native reload remain incomplete. Tasks
 2/3 stay complete; Tasks 1/4/5/6 stay partial. No PR, push, finish-branch or landing at this checkpoint.
+
+## 2026-10-07: activated native reload in the dashboard shell
+
+If you cancel Chromium's reload warning while editing a service-status label, the current
+document and your typed label remain. Accepting that warning loads a new document. A clean
+form, a reverted label, an accepted save, a discarded draft and a disconnected application
+each reload without a warning. This measurement used the real DashboardApp, Venue settings
+container and service-status owner with synthetic API replies in headless Chromium
+153.0.8010.12, English and the light theme at 1280 × 720. It changes no production code.
+
+The reproducible probe and logs are in Lane E's local
+`receipts/w69-native-reload-20261007/`. Run `node probe.mjs` there after creating and installing
+the candidate named by `candidate-path.txt`. The probe starts its own loopback Vite server and
+closes that server and Chromium on exit. Its final run reports seven passing checks. The
+assertions inspect the native dialog type, a per-document identity and the native input's value;
+they do not infer a warning from a dispatched beforeunload event.
+
+Removing the coordinator's beforeunload listener registration in the installed disposable
+checkout leaves the clean-reload control passing and fails `dirty native reload must ask`
+with no dialog observed. Restoring the source byte for byte passes all seven checks again.
+The unchanged coordinator suite reports 45 passes; the unchanged dashboard container and
+service-status unsaved suites report 44 passes. The retained-draft capture was inspected.
+
+Early fixture attempts contained a TypeScript annotation in a plain browser script and assumed
+Playwright would always report a cancelled reload the same way. Their failed logs are retained.
+The final probe accepts a cancellation or navigation timeout only after observing and dismissing
+a native beforeunload dialog, then asserts that both the document and draft survived.
+
+This establishes one activated Chromium reload path and its listed exemptions. It does not
+establish native prompting for other form owners, tab close, external navigation, other browsers
+or mobile process termination. The remaining configuration/device-profile owners, page and till
+route matrices and advancing-source inventory still keep Tasks 1/4/5/6 partial. W69 remains
+incomplete and is not ready for finish-branch or landing.

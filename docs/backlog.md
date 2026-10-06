@@ -1179,8 +1179,11 @@ Accepted saves close the editor before a refresh, so a failed read does not make
 A tab click keeps the current panel visible while the warning is open and after Keep. Real
 DashboardApp cases cover Tables and Venue details tabs, keyboard tab changes, Tables Back/Forward,
 sidebar leave and voluntary sign-out. Detached controls cannot change or submit a later opening.
-The dated audit records the commands and their limits. Device-profile reconciliation, the remaining
-page/context routes and activated native reload still keep W69 incomplete.
+The dated audit records the commands and their limits. A subsequent activated Chromium reload
+probe covers a service-status draft in the real dashboard shell, including cancelling and accepting
+the native warning and clean/revert/save/discard/disconnect exemptions. A listener-deletion control
+fails its dirty-reload assertion. Other native leave paths remain unverified. Device-profile
+reconciliation and the remaining page/context routes still keep W69 incomplete.
 
 Prep-station printer cells now use the shared warning on the branch. Cancel, native Escape,
 replacing the station and leaving Tickets ask before discarding your selection. Keep retains it;
