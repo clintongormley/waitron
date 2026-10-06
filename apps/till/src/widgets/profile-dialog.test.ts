@@ -99,6 +99,11 @@ describe("till-profile-dialog", () => {
     expect(await bottom(el)).toBe(t("profile.order_open"));
   });
 
+  it("an unsaved order change is said at the bottom", async () => {
+    const el = await mountDialog({ draftUnsaved: true });
+    expect(await bottom(el)).toBe(t("profile.draft_unsaved"));
+  });
+
   it("shows the switch as busy while it is out", async () => {
     const el = await mountDialog({ busy: true });
     expect(button(el, "profile-switch").loading).toBe(true);

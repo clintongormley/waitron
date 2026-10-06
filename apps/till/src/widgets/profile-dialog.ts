@@ -38,6 +38,8 @@ export class TillProfileDialog extends LitElement {
   @property({ attribute: false }) error: { code: string } | null = null;
   /** An order is in progress on this device, so the switch waits until it is held or cleared. */
   @property({ type: Boolean }) orderOpen = false;
+  /** The open order's last change could not be saved, so the switch waits until it is. */
+  @property({ type: Boolean }) draftUnsaved = false;
   @property({ type: Boolean }) busy = false;
 
   @state() private chosen = "";
@@ -63,6 +65,7 @@ export class TillProfileDialog extends LitElement {
 
   #bottomMessage(): string {
     if (this.orderOpen) return t("profile.order_open");
+    if (this.draftUnsaved) return t("profile.draft_unsaved");
     if (this.error === null) return "";
     if (ABOUT_CHOICE.has(this.error.code)) return this.refusalShown ? t("form.fix_fields") : "";
     return codeMessage(this.error.code);

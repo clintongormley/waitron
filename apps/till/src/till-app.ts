@@ -1531,6 +1531,8 @@ export class TillApp extends LitElement {
   @state() private profileBusy = false;
   /** A switch was asked for while an order is in progress on this device. */
   @state() private profileOrderOpen = false;
+  /** A switch was asked for while the open order's draft held a change the server has not got. */
+  @state() private profileDraftUnsaved = false;
   /** Printer switches are sent one at a time, each once the one before has answered or been cut
    * off, so each answer is newer than the one before. A switch with no answer within
    * `TABLE_REQUEST_LIMIT_MS` is cut off, so it cannot hold back the picks after it; a cut-off
@@ -3795,11 +3797,16 @@ export class TillApp extends LitElement {
     if (session !== this.#operatorSession) return;
     this.profileError = null;
     this.profileOrderOpen = false;
+    this.profileDraftUnsaved = false;
     this.profileBusy = false;
     this.profileOpen = true;
   }
 
-  /** The counter basket is this browser's alone, so the server cannot see it to refuse the switch. */
+  /**
+   * The counter basket and an order with no party are this browser's alone, and a table draft's
+   * last change may not have reached the server, so the server cannot refuse the switch for them:
+   * re-entering after it starts a new draft and drops the old one unsaved.
+   */
   async #onProfileSwitch(event: CustomEvent<{ profileId: string }>): Promise<void> {
     if (this.profileBusy) return;
     const { profileId } = event.detail;
@@ -3807,13 +3814,24 @@ export class TillApp extends LitElement {
       this.profileOpen = false;
       return;
     }
-    if (this.#store.lines.length > 0) {
+    this.profileDraftUnsaved = false;
+    if (this.#store.lines.length > 0 || this.#partylessDraft.lines.length > 0) {
       this.profileOrderOpen = true;
       return;
     }
     const session = this.#operatorSession;
     this.profileOrderOpen = false;
     this.profileBusy = true;
+    const sync = this.#draftSync;
+    if (sync !== undefined) {
+      const saved = await sync.flush();
+      if (session !== this.#operatorSession) return;
+      if (saved !== "saved") {
+        this.profileBusy = false;
+        this.profileDraftUnsaved = true;
+        return;
+      }
+    }
     try {
       await this.api.switchDeviceProfile(profileId);
     } catch (error) {
@@ -7996,6 +8014,7 @@ export class TillApp extends LitElement {
                 .activeProfileId=${this.activeProfileId}
                 .error=${this.profileError}
                 .orderOpen=${this.profileOrderOpen}
+                .draftUnsaved=${this.profileDraftUnsaved}
                 .busy=${this.profileBusy}
                 @profile-switch=${(event: CustomEvent<{ profileId: string }>) =>
                   void this.#onProfileSwitch(event)}

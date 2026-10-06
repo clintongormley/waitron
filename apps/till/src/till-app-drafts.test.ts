@@ -18,6 +18,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import { resized } from "./screens/till-table-order-screen.test-helpers.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
+import type { TillProfileDialog } from "./widgets/profile-dialog.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
   DraftLineInput,
@@ -906,6 +907,94 @@ describe("till-app: signing out with a draft", () => {
     expect(server.drafts.map((each) => [each.ownerId, each.lines.length])).toEqual([["p1", 1]]);
     // Sam's session is live now: ending Ana's would end his.
     expect(api.logout).not.toHaveBeenCalled();
+  });
+});
+
+describe("till-app: switching the device's profile with a table order open", () => {
+  const profiles = {
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "till-dev",
+      name: "Till 1",
+      formFactor: "till",
+      stationId: null,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      printerChoices: { receipt: [], paymentSlip: [] },
+      profileId: "pr-counter",
+      approvedProfiles: [
+        { id: "pr-counter", name: "Counter till" },
+        { id: "pr-bar", name: "Bar till" },
+      ],
+    }),
+  };
+  const profileDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillProfileDialog>("till-profile-dialog");
+
+  async function askToSwitch(el: TillApp): Promise<void> {
+    shell(el).shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!.click();
+    await flush(el);
+    emit(profileDialog(el)!, "profile-switch", { profileId: "pr-bar" });
+    await flush(el, 6);
+  }
+
+  function switchStub() {
+    return vi.fn().mockResolvedValue({
+      activeProfileId: "pr-bar",
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+    });
+  }
+
+  it("sends no switch, and keeps the line, when the draft's last change cannot be saved", async () => {
+    const switchDeviceProfile = switchStub();
+    const { el } = await mountApp({
+      ...profiles,
+      switchDeviceProfile,
+      saveDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+
+    await askToSwitch(el);
+
+    expect(switchDeviceProfile).not.toHaveBeenCalled();
+    expect(profileDialog(el)!.draftUnsaved).toBe(true);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+  });
+
+  it("saves a change still waiting to be saved before the switch is sent", async () => {
+    const switchDeviceProfile = switchStub();
+    const { el } = await mountApp({ ...profiles, switchDeviceProfile });
+    await openMesa(el);
+    press(el, "Beer");
+
+    await askToSwitch(el);
+
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(switchDeviceProfile).toHaveBeenCalledOnce();
+    expect(api.saveDraft.mock.invocationCallOrder[0]!).toBeLessThan(
+      switchDeviceProfile.mock.invocationCallOrder[0]!,
+    );
+    expect(savedLines()).toHaveLength(1);
+  });
+
+  it("refuses to switch while an order with no party holds lines, which are never saved", async () => {
+    const switchDeviceProfile = switchStub();
+    const unseated = table("t9", "9", null);
+    const { el } = await mountApp({
+      ...profiles,
+      switchDeviceProfile,
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, unseated]),
+    });
+    await openMesa(el, "t9");
+    await tap(el, "Beer");
+    expect(rows(el)).toEqual(["Beer ×1"]);
+
+    await askToSwitch(el);
+
+    expect(switchDeviceProfile).not.toHaveBeenCalled();
+    expect(profileDialog(el)!.orderOpen).toBe(true);
+    expect(rows(el)).toEqual(["Beer ×1"]);
   });
 });
 
