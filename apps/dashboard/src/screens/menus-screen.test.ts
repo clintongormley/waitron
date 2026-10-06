@@ -1874,12 +1874,13 @@ it("says the menus could not be loaded, and tries again", async () => {
 // The Structure tab
 
 it("shows the root's members, and expanding Drinks shows its members inline", async () => {
-  // The Device Home Page row has its own cases; here it is never read, so only the menu's rows show.
-  const el = await mountLunch(api({ getMenuHome: vi.fn(() => new Promise(() => undefined)) }));
+  const el = await mountLunch();
+  await vi.waitFor(() => expect(rowOf(el, "home")).not.toBeNull());
+  const home = "Página de inicio del dispositivo";
   const names = () => allInStructure(el, '[data-test="name"]').map((name) => text(name));
-  expect(names()).toEqual(["Burger", "Drinks", "Favourites"]);
+  expect(names()).toEqual([home, "Burger", "Drinks", "Favourites"]);
   await toggleRow(el, "m-drinks");
-  expect(names()).toEqual(["Burger", "Drinks", "Lager", "Beer", "Lemonade", "Favourites"]);
+  expect(names()).toEqual([home, "Burger", "Drinks", "Lager", "Beer", "Lemonade", "Favourites"]);
   // Staff names only.
   const shown = text(inStructure(el, "tbody"));
   for (const wrong of ["Bebidas", "Something to drink", "for guests", "COCINA"])
@@ -3722,14 +3723,15 @@ describe("the Structure tree", () => {
     const height = window.innerHeight;
     await page.viewport(390, 844);
     onTestFinished(() => page.viewport(width, height));
-    // The Device Home Page row's ⋮ has a case of its own below.
-    const el = await mountLunch(api({ getMenuHome: vi.fn(() => new Promise(() => undefined)) }));
+    const el = await mountLunch();
+    await vi.waitFor(() => expect(rowOf(el, "home")).not.toBeNull());
     await toggleRow(el, "m-drinks");
     await toggleRow(el, "m-drinks/m-beer");
     expect(window.innerWidth).toBe(390);
     expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     const menus = allInStructure(el, "wt-row-actions");
     expect(menus.map((menu) => menu.closest("tr")!.dataset.rowKey)).toEqual([
+      "home",
       "root",
       "m-burger",
       "m-drinks",
