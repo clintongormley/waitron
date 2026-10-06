@@ -97,10 +97,12 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
         nextDueAt: result.nextDueAt?.toISOString() ?? null,
       });
       // DECISION: `recordsHalted`/`incidentsRaised` do NOT feed `parked` or any other field that
-      // flips `/health`; `parked` is always `0` for this duty. A halted record is already written to
-      // the `incidents` table (`raiseIncident`, packages/fiscal-verifactu/src/drain.ts), where the
-      // dashboard's alerts show it to anyone holding `fiscal.view`; and a record AEAT rejects can be
-      // one invoice's data problem, not a sign that this process is stuck.
+      // flips `/health`; `parked` is always `0` for this duty. A record AEAT rejects, or one that
+      // conflicts with AEAT's copy, already gets an incident and a filing case (`raiseIncident`,
+      // `openCase`, packages/fiscal-verifactu/src/drain.ts); a record held behind it gets neither and
+      // counts in the `fiscal.submission_stopped` alert. The dashboard's alerts show both to anyone
+      // holding `fiscal.view`; and a record AEAT rejects can be one invoice's data problem, not a
+      // sign that this process is stuck.
       return { nextDueAt: result.nextDueAt, skipped: result.skipped.length, parked: 0 };
     }),
   );

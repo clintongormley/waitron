@@ -114,8 +114,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La AEAT ha aceptado un registro de facturación, pero ha indicado un problema: {mensaje} (código {codigo}).",
   },
   "fiscal.estado_desconocido": {
-    en: "The tax agency (AEAT) answered for an invoice record without a status Waitron recognises, so it is not known whether AEAT kept it. Waitron will send it again. AEAT's message: {mensaje} (code {codigo}).",
-    es: "La AEAT ha respondido sobre un registro de facturación sin un estado que Waitron reconozca, así que no se sabe si la AEAT lo ha guardado. Waitron lo volverá a enviar. Mensaje de la AEAT: {mensaje} (código {codigo}).",
+    en: "The tax agency (AEAT) answered for an invoice record without a status Waitron recognises, or said it already holds a record for this invoice and Waitron could not confirm it is this one, so it is not known whether AEAT kept it. Waitron will send it again. AEAT's message: {mensaje} (code {codigo}).",
+    es: "La AEAT ha respondido sobre un registro de facturación sin un estado que Waitron reconozca, o ha dicho que ya tiene un registro para esta factura y Waitron no ha podido confirmar que sea este, así que no se sabe si la AEAT lo ha guardado. Waitron lo volverá a enviar. Mensaje de la AEAT: {mensaje} (código {codigo}).",
   },
   "fiscal.duplicado_anulado": {
     en: "The tax agency (AEAT) already holds this invoice record as cancelled. Sending on this chain is on hold. Contact support.",

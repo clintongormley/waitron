@@ -17,8 +17,9 @@ the pass was not wholesale abandoned and no Stripe settlement-audit period has b
 permanently parked — it is **not** a claim that every individual fiscal record has actually been
 accepted by AEAT. A database whose records reach AEAT but are individually rejected reads `200` with
 `lastOkAt` refreshing every pass; that is visible only via `recordsHalted`/`incidentsRaised` in the
-`drain.complete` log line, the `incidents` table, and the dashboard's alerts bell and Alerts screen
-(as `fiscal.` alerts, to anyone holding `fiscal.view`), deliberately, not through this endpoint — see
+`drain.complete` log line, the `incidents` and `filing_cases` tables, and the dashboard's alerts
+bell and Alerts screen (as `fiscal.` alerts, among them `fiscal.filing_cases_open`, to anyone
+holding `fiscal.view`), deliberately, not through this endpoint — see
 ["What `/health` means"](#what-health-means) below for the exact boundary, and why, before treating
 a `503` as noise or its absence as "nothing is wrong."
 
@@ -423,9 +424,11 @@ things — three visible in the body above without needing the logs, one that ne
   `WAITRON_SKIP_RETRY_MS` interval, folded as a minimum against an earlier gate — see the env-var
   table above) or a `failed` one (which retries on its own backoff and does NOT flip this field —
   see `src/pass.ts`'s own comment on why). `fiscal.drain` has no equivalent terminal outcome at
-  all — a rejected or held fiscal record is a different, already-persisted signal (the `incidents` table, the
-  dashboard's alerts bell and Alerts screen, and `recordsHalted`/`incidentsRaised` in `drain.complete`),
-  deliberately not fed into `/health`; see
+  all — a rejected or held fiscal record is a different, already-persisted signal, deliberately not
+  fed into `/health`: the record that caused a hold, or that AEAT rejected, gets a row in the
+  `incidents` table and a filing case in `filing_cases` (open ones raise the `fiscal.filing_cases_open`
+  alert); a record held behind it gets neither, and shows in the `fiscal.submission_stopped` alert
+  and in `recordsHalted` in `drain.complete`; see
   the opening section above. Find a park via the error-level `reconcile.run_parked` log line, which
   carries the duty, period and `errorCode`.
 

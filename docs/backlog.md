@@ -1566,6 +1566,15 @@ cancellation; the owner chose (2026-10-06) to keep holding there, and the live p
 cases is queued as W41s-1b. A refusal that would refuse every later record (one about the
 taxpayer's identity, say) now opens one case per record; the follow-up W41s-3b adds a brake that
 stops a chain after several refusals in a row with the same code.
+**Follow-up W41s-3c (a defect W41s-3's review found that predates W41s-3):**
+`resolveLines` in `packages/fiscal-verifactu/src/drain.ts` matches a reply line to a claimed record
+by `RefExterna` alone, without checking the line's invoice identity or a repeated reference. A
+review probe gave invoice B's accepted line invoice A's reference, and the drain marked A
+`aceptado` though AEAT had rejected it; the same probe failed the same way on base `429f18b0b`.
+This is defensive handling of a malformed reply, and its fix is its own fiscal item.
+**For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
+paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
+yet, so the screen should add an open-only filter or paging when it calls them.
 Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A231p
 and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs

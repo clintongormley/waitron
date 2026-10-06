@@ -497,15 +497,13 @@ async function claimBatch(
  * whose original (same chain, same invoice identity) is `rechazado`. A held row becomes
  * `detenido` with `incidencia`, so every later claimed row of its chain is held with it.
  *
- * A conflict never holds a record of its own envío when the reply is applied; one whose outcome
- * is still unknown is held here at its next claim like any later record of the chain, and is not
- * sent again. The same rule holds a cancellation whose original, on the same chain, is
- * `detenido`: that original is an earlier row of the chain.
+ * A cancellation whose original, on the same chain, is `detenido` is held by the first rule: that
+ * original is an earlier row of the chain. For a record of a conflict's own envío, see
+ * `haltSuccessors`.
  *
- * A `rechazado` row holds nothing behind it: in the design's §7.1 runs (code 1161 only) AEAT
- * answered each successor of a rejected record on its own and accepted it. A cancellation of a
- * rejected original is held because nothing in this repository sets `SinRegistroPrevio`, and §7.1
- * never sent an ordinary cancellation of a rejected original.
+ * A `rechazado` row holds nothing behind it (design §7.1,
+ * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md). A cancellation of a
+ * rejected original is held because nothing in this repository sets `SinRegistroPrevio`.
  *
  * No incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each held record
  * beside the case that holds it. A `halted` ack is written per held id, because this
@@ -658,9 +656,9 @@ async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
 }
 
 /**
- * Applies every line with its own outcome, whatever an earlier line of the same reply did: in the
- * design's §7.1 runs AEAT answered each record of an envío individually, and this reply is never
- * returned again.
+ * Applies every line with its own outcome, whatever an earlier line of the same reply did (design
+ * §7.1, docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md). This reply is
+ * never returned again.
  */
 async function persistResponse(
   tx: Transaction,
@@ -678,8 +676,7 @@ async function persistResponse(
 }
 
 /** Routes one resolved line to its estado transition + side effects. `sentIds` is the envío's
- * batch, which a conflict does not hold when the reply is applied (see `haltOpenChainClaims` for
- * one whose outcome stays unknown). */
+ * batch (see `haltSuccessors`). */
 async function applyOutcome(
   tx: Transaction,
   { row, linea, efectivo, lookup, duplicateAcceptedWithErrors }: ResolvedLine,
@@ -973,10 +970,9 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
  * `resolveLines` makes Route B's consulta before this transaction opens; a failed one leaves this
  * record unknown, as missing evidence does.
  *
- * A conflict opens a case and holds this chain's records not yet sent: AEAT holds another record
- * under this identity, and no probe has sent a successor after one (design §7.1 tested only a
- * rejected predecessor AEAT holds nothing for). A record of this envío is not held here, but one
- * whose outcome stays unknown is held at its next claim (`haltOpenChainClaims`).
+ * A conflict opens a case and holds this chain's records not yet sent (`haltSuccessors`); why a
+ * conflict holds and a rejection does not: design §7.1,
+ * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md.
  */
 async function handleDuplicate(
   tx: Transaction,

@@ -184,8 +184,9 @@ export async function openFilingCasesSummary(
  * held cancellation whose original alta (same `sif_id`, same invoice identity) is `rechazado` or
  * `detenido` names its original's case. Any other held record names the case of the nearest
  * earlier `detenido` record on its chain (`sif_id`): that record's own case, or, when it has none,
- * the case it names in turn. A `rechazado` record holds nothing, so its case is never named for a
- * record after it.
+ * the case it names in turn. A `rechazado` record holds nothing, so its case is named for no later
+ * record except a held cancellation of it. Mirrors the hold rule in `./drain.ts`'s
+ * `haltOpenChainClaims`: the two change together.
  */
 export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
   const { rows } = await tx.execute<{

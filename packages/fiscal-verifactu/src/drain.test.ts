@@ -1629,8 +1629,9 @@ describe("drain — the deployment-environment guard", () => {
 
   /**
    * A refused row's successors on the SAME chain must not submit either: they would reach AEAT
-   * pointing at a huella AEAT never received. `haltOpenChainClaims` only sees an OPEN
-   * `rechazado`/`detenido` envío, not a `pendiente` refusal.
+   * pointing at a huella AEAT never received. `haltOpenChainClaims` holds a claimed row only behind
+   * an earlier `detenido` row of its chain, or when it is a cancellation whose original is
+   * `rechazado`; a `pendiente` refusal is neither.
    */
   it("halts a chain behind a refused predecessor: no successor submits, and none of them are touched", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });

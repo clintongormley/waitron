@@ -122,11 +122,9 @@ declare module "@waitron/shared" {
 
     /**
      * `./drain.ts`'s `handleDuplicate` (error 3000): AEAT's own copy of this identity is `Anulada`,
-     * and the record is a sale, or a cancellation whose fingerprint differs from the one AEAT
-     * holds or for which AEAT returns no record. Holds the record and its chain's later records not
-     * yet sent, and opens a filing case. A record of the same envío is not held when the reply is
-     * applied; one whose outcome is still unknown is held at its next claim like any later record
-     * of the chain. No `codigo`/`mensaje` params: they would only ever repeat 3000.
+     * and the record is a sale, or a cancellation the lookup did not match to the record AEAT
+     * holds. The record is held and a filing case opened. No `codigo`/`mensaje` params: they would
+     * only ever repeat 3000.
      */
     "fiscal.duplicado_anulado": { registroId: string };
 
