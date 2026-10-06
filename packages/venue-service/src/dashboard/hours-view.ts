@@ -2,6 +2,7 @@
 import { currentLocale } from "@waitron/dashboard-kit";
 import type {
   DateHoursCell,
+  HourPeriod,
   HoursModel,
   HoursModelSubject,
   HoursSubject,
@@ -10,8 +11,21 @@ import type {
   WeekCell,
 } from "../hours-types.js";
 import { weekdayOf } from "../hours-rules.js";
-import { cellText } from "./hours-cell-editor.js";
 import { t } from "./strings.js";
+
+export function format(key: Parameters<typeof t>[0], values: Record<string, string>): string {
+  return Object.entries(values).reduce(
+    (text, [name, value]) => text.replaceAll(`{${name}}`, value),
+    t(key),
+  );
+}
+
+/** How a Closed, all-day or periods cell reads. */
+export function cellText(cell: { mode: string; periods: readonly HourPeriod[] }): string {
+  if (cell.mode === "closed") return t("hours.closed");
+  if (cell.mode === "all_day") return t("hours.all_day");
+  return cell.periods.map((period) => `${period.opensAt}–${period.closesAt}`).join(", ");
+}
 
 export const keyOf = (subject: HoursSubject) => `${subject.kind}:${subject.id}`;
 export const isDefaultStation = (subject: HoursModelSubject) =>

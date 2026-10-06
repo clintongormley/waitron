@@ -5,12 +5,12 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { HourPeriod } from "../hours-types.js";
 import {
   cellChecks,
-  cellText,
   type CellDraft,
   type HoursCellEditor,
   weekChecks,
 } from "./hours-cell-editor.js";
 import "./hours-cell-editor.js";
+import { cellText } from "./hours-view.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));

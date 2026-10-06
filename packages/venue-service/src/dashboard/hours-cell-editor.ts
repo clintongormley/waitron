@@ -7,6 +7,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { HourPeriod } from "../hours-types.js";
 import { cellIntervals, tailOverlaps } from "../hours-rules.js";
+import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
 /** What one cell editor edits. `inherit` is offered only on a special date. */
@@ -15,20 +16,6 @@ export type CellMode = "inherit" | "closed" | "all_day" | "periods";
 export interface CellDraft {
   mode: CellMode;
   periods: HourPeriod[];
-}
-
-export function format(key: Parameters<typeof t>[0], values: Record<string, string>): string {
-  return Object.entries(values).reduce(
-    (text, [name, value]) => text.replaceAll(`{${name}}`, value),
-    t(key),
-  );
-}
-
-/** How a Closed, all-day or periods cell reads. */
-export function cellText(cell: { mode: string; periods: readonly HourPeriod[] }): string {
-  if (cell.mode === "closed") return t("hours.closed");
-  if (cell.mode === "all_day") return t("hours.all_day");
-  return cell.periods.map((period) => `${period.opensAt}–${period.closesAt}`).join(", ");
 }
 
 /** The cell's own faults, keyed by field name under `prefix`; a cell not in periods has none. */

@@ -11,9 +11,15 @@ import type {
   SpecialDate,
 } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
-import { format } from "./hours-cell-editor.js";
 import type { HoursApi } from "./hours-client.js";
-import { browserToday, dateValue, formatDate, formatLongDate, storedCells } from "./hours-view.js";
+import {
+  browserToday,
+  dateValue,
+  format,
+  formatDate,
+  formatLongDate,
+  storedCells,
+} from "./hours-view.js";
 import { t } from "./strings.js";
 
 /** A month, `YYYY-MM`. */
@@ -279,6 +285,7 @@ export class HoursCalendar extends LitElement {
   @state() private focusDate: LocalDate | null = null;
 
   #detach?: () => void;
+  #days = new Map<LocalDate, CalendarDay>();
   /** A date to focus once the month that holds it has drawn. */
   #focusAfterRender?: LocalDate;
 
@@ -323,8 +330,17 @@ export class HoursCalendar extends LitElement {
   }
 
   #apply(model: HoursModel): void {
+    const focused = this.shadowRoot?.activeElement ?? null;
     this.model = model;
+    this.#days = new Map(model.days.map((day) => [day.date, day]));
     this.readError = "";
+    // A panel action the new read takes away, such as Delete once the date is ordinary, would
+    // otherwise drop focus to the page.
+    const date = this.selected;
+    if (focused === null || date === null) return;
+    void this.updateComplete.then(() => {
+      if (!focused.isConnected) this.#dayButton(date)?.focus();
+    });
   }
 
   #show(month: Month, focus?: LocalDate): void {
@@ -333,6 +349,8 @@ export class HoursCalendar extends LitElement {
     if (month === this.month) return;
     this.month = month;
     this.model = undefined;
+    this.#days = new Map();
+    if (this.selected !== null && !monthGrid(month).includes(this.selected)) this.selected = null;
     this.#watch();
   }
 
@@ -349,7 +367,7 @@ export class HoursCalendar extends LitElement {
 
   #dayOf(date: LocalDate): CalendarDay {
     return (
-      this.model?.days.find((day) => day.date === date) ?? {
+      this.#days.get(date) ?? {
         date,
         specialDate: null,
         holidays: [],
@@ -387,7 +405,7 @@ export class HoursCalendar extends LitElement {
       ...(special === undefined
         ? {}
         : { special, cells: structuredClone(storedCells(this.model!, special.id)) }),
-      returnTo: () => trigger,
+      returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
     };
     this.dispatchEvent(
       new CustomEvent<CalendarAction>("hours-calendar-action", {

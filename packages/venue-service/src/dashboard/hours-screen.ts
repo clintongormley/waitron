@@ -29,7 +29,6 @@ import { addDays, weekdayOf } from "../hours-rules.js";
 import type { HoursApi } from "./hours-client.js";
 import {
   cellChecks,
-  format,
   weekChecks,
   type CellDraft,
   type CellMode,
@@ -41,6 +40,7 @@ import "./hours-calendar.js";
 import { datesListStyles, renderDatesList } from "./hours-dates-list.js";
 import {
   browserToday,
+  format,
   formatDate,
   isDefaultStation,
   keyOf,
@@ -303,6 +303,9 @@ export class HoursScreen extends LitElement {
   }
 
   async #reload(): Promise<void> {
+    // With live updates, the change feed's announcement of the write re-reads every Hours watch
+    // (hours.live.test.ts), so reading here too would read each save twice.
+    if (this.api.liveData !== undefined) return;
     void this.renderRoot.querySelector("hours-calendar")?.reload();
     try {
       this.#apply(await this.api.load(this.#from, this.#to));

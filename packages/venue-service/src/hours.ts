@@ -1086,7 +1086,11 @@ function calendarDays(
 ): CalendarDay[] {
   const specialOn = new Map(range.specials.map((special) => [special.date, special]));
   const factsOn = new Map<LocalDate, HolidayFact[]>();
-  for (const fact of holidays) factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
+  for (const fact of holidays) {
+    const facts = factsOn.get(fact.date);
+    if (facts === undefined) factsOn.set(fact.date, [fact]);
+    else facts.push(fact);
+  }
   const active = range.subjects.filter((s) => s.kind === "department" && s.active);
   return dates.map((date) => {
     const special = specialOn.get(date) ?? null;
@@ -1107,9 +1111,8 @@ function calendarDays(
 }
 
 /**
- * Public holiday facts for a range of dates. It reads on the caller's transaction and makes no
- * network call while it is open; the facts are separate from special dates, so no special-date
- * write changes them.
+ * Public holiday facts for a range of dates. A reader must read on the caller's transaction, must
+ * make no network call while it is open, and must not derive its facts from special dates.
  */
 export type HolidayReader = (
   tx: Transaction,

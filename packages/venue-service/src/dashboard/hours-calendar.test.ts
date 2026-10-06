@@ -483,6 +483,31 @@ describe("Hours calendar: the month", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it("ignores a month's read that settles after the calendar has moved to another month", async () => {
+    let release!: () => void;
+    const held = () => new Promise((resolve) => (release = () => resolve(undefined)));
+    const options: { fail?: boolean; hold?: Promise<unknown> } = { hold: held() };
+    const { api } = server(options);
+    const el = await mount(api);
+    options.hold = undefined;
+    await press(el, "next-month");
+    expect(text(dayButton(el, "2026-11-20"))).toBe("20 Late autumn");
+    release();
+    await settle(el);
+    // October's answer, which has no 20 November, has not replaced November's.
+    expect(text(dayButton(el, "2026-11-20"))).toBe("20 Late autumn");
+
+    options.hold = held();
+    options.fail = true;
+    await press(el, "next-month");
+    options.hold = undefined;
+    options.fail = false;
+    await press(el, "previous-month");
+    release();
+    await settle(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("speaks Spanish", async () => {
     setLocale("es");
     const { api } = server();
@@ -613,6 +638,31 @@ describe("Hours calendar: a date's panel", () => {
     expect(heard.map(({ kind, date, special }) => [kind, date, special])).toEqual([
       ["make_special", "2026-10-14", undefined],
     ]);
+  });
+
+  it("closes the panel when the month it moves to does not show the open date", async () => {
+    const { api } = server();
+    const el = await mount(api);
+    await open(el, "2026-10-12");
+    expect(text(panel(el).querySelector("h2"))).toBe("Mon, 12 Oct 2026 · Fiesta Nacional");
+    await press(el, "next-month");
+    expect(heading(el)).toBe("November 2026");
+    expect(text(panel(el))).toBe("Choose a date to see its hours.");
+    expect(panel(el).querySelector("wt-button")).toBeNull();
+    await press(el, "previous-month");
+    expect(text(panel(el))).toBe("Choose a date to see its hours.");
+    expect(dayButton(el, "2026-10-12").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("keeps the open date across a month change when the new month still shows it", async () => {
+    const { api } = server();
+    const el = await mount(api);
+    await open(el, "2026-11-01");
+    await press(el, "next-month");
+    expect(heading(el)).toBe("November 2026");
+    expect(text(panel(el).querySelector("h2"))).toBe("Sun, 1 Nov 2026");
+    expect(rows(el)[0]).toEqual(["Restaurant", "Standard hours: 12:00–16:00"]);
+    expect(dayButton(el, "2026-11-01").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("offers nothing to change to a read-only viewer", async () => {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { LiveConnection, LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { WtFormActions } from "@waitron/ui";
@@ -1725,6 +1725,142 @@ describe("Hours: the calendar", () => {
     expect(calls("DELETE")).toEqual([
       ["/management-api/venue-service/special-dates/fiesta", undefined],
     ]);
+  });
+
+  it("shows a date added in the list on a calendar the address brought back beneath the editor", async () => {
+    history.replaceState(null, "", "/manage/hours/view/calendar");
+    const { api, state } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
+    await setField(el, "date", "2026-10-21");
+    await setField(el, "name", "Market day");
+    await choose(el, "colour", "blue");
+    // The browser's Back button while the editor is open.
+    history.replaceState(null, "", "/manage/hours/view/calendar");
+    dispatchEvent(new PopStateEvent("popstate"));
+    await settle(el);
+    expect(text(day(el, "2026-10-21"))).toBe("21");
+    expect(modal(el)).not.toBeNull();
+    const market = {
+      id: "market",
+      date: "2026-10-21",
+      name: "Market day",
+      colour: "blue" as const,
+      closeWholeVenue: false,
+    };
+    state.writes.push(market);
+    state.model.specialDates.push(market);
+    state.model.days.push({ date: market.date, specialDate: market, holidays: [], tone: "blue" });
+    state.model.specialCells.push({ specialDateId: "market", cells: [] });
+    await click(el, saveButton(el));
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    await settle(el);
+    expect(text(day(el, "2026-10-21"))).toBe("21 Market day");
+  });
+
+  it("returns focus to the date in the grid once a date deleted from the calendar is gone", async () => {
+    const { api, state } = server();
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await openDay(el, "2026-10-12");
+    await panelAction(el, "delete");
+    const gone = model();
+    gone.specialDates = [STAFF];
+    gone.days = gone.days.filter((entry) => entry.date !== "2026-10-12");
+    gone.specialCells = [];
+    state.model = gone;
+    await click(el, saveButton(el));
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    await settle(el);
+    expect(text(day(el, "2026-10-12"))).toBe("12");
+    expect(calendar(el)!.shadowRoot!.activeElement).toBe(day(el, "2026-10-12"));
+  });
+
+  it("returns focus to the date in the grid when live updates remove the date before the delete answers", async () => {
+    const liveData = new LiveData();
+    const { api, state } = server(liveData);
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await openDay(el, "2026-10-12");
+    await panelAction(el, "delete");
+    const late = deferred();
+    state.writes.push(late.promise);
+    await click(el, saveButton(el));
+    const gone = model();
+    gone.specialDates = [STAFF];
+    gone.days = gone.days.filter((entry) => entry.date !== "2026-10-12");
+    gone.specialCells = [];
+    state.model = gone;
+    liveData.invalidate([{ type: "special_dates" }]);
+    await vi.waitFor(() => expect(text(day(el, "2026-10-12"))).toBe("12"));
+    expect(modal(el)).not.toBeNull();
+    late.resolve(undefined);
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    await settle(el);
+    expect(calendar(el)!.shadowRoot!.activeElement).toBe(day(el, "2026-10-12"));
+  });
+
+  it("reads a save once for each open view when live updates announce it", async () => {
+    const liveData = new LiveData();
+    const stream = Object.assign(new EventTarget(), { readyState: 1, close: () => {} });
+    const connection = new LiveConnection(liveData, { open: () => stream });
+    connection.start();
+    try {
+      const { api, state, calls } = server(liveData);
+      const el = await mount(api);
+      await selectTab(el, "calendar");
+      await openDay(el, "2026-10-12");
+      await panelAction(el, "edit");
+      await setField(el, "name", "Fiesta renamed");
+      state.model = renamed("Fiesta renamed");
+      const before = calls("GET").length;
+      await click(el, saveButton(el));
+      await vi.waitFor(() => expect(modal(el)).toBeNull());
+      // What the server's change feed sends once the save has committed.
+      stream.dispatchEvent(
+        new MessageEvent("change", {
+          data: JSON.stringify([{ type: "special_dates" }, { type: "special_date_hours" }]),
+        }),
+      );
+      await vi.waitFor(() => expect(text(day(el, "2026-10-12"))).toBe("12 Fiesta renamed"));
+      await settle(el);
+      const reads = calls("GET")
+        .slice(before)
+        .map(([path]) => path);
+      expect(reads).toHaveLength(2);
+      expect(reads).toContain("/management-api/venue-service/hours?from=2026-09-28&to=2026-11-01");
+      expect(new Set(reads).size).toBe(2);
+    } finally {
+      connection.stop();
+    }
+  });
+
+  it("says a failed live read after a save as a read failure, with the editor closed", async () => {
+    const liveData = new LiveData();
+    const { api, state } = server(liveData);
+    const el = await mount(api);
+    await click(el, cellButton(el, bar, 2));
+    await click(el, saveButton(el));
+    expect(modal(el)).toBeNull();
+    state.reads.push({ reject: { code: "connection.failed" } });
+    liveData.invalidate([{ type: "hours_week_cells" }]);
+    await vi.waitFor(() =>
+      expect(text(el.shadowRoot!.querySelector('[data-test="page-alert"]'))).toBe(
+        "Hours could not be loaded.",
+      ),
+    );
+    expect(modal(el)).toBeNull();
+  });
+
+  it("keeps its view while the address moves to another screen", async () => {
+    history.replaceState(null, "", "/manage/hours/view/calendar");
+    const { api } = server();
+    const el = await mount(api);
+    history.pushState(null, "", "/manage/printers");
+    dispatchEvent(new PopStateEvent("popstate"));
+    await settle(el);
+    expect(calendar(el)).not.toBeNull();
   });
 
   it("offers a read-only viewer the calendar with nothing to change", async () => {

@@ -5,8 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { DateHoursCell, HoursModel, HoursModelSubject, SpecialDate } from "../hours-types.js";
-import { format } from "./hours-cell-editor.js";
-import { dateValue, formatDate, keyOf, storedCells } from "./hours-view.js";
+import { dateValue, format, formatDate, keyOf, storedCells } from "./hours-view.js";
 import { t } from "./strings.js";
 
 type Key = Parameters<typeof t>[0];
