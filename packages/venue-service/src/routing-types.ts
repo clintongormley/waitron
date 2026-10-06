@@ -17,6 +17,12 @@ export interface StationTimes {
   hours: WeeklyInterval[];
   /** The standard week has hours set; when absent, any `hours` at all mean it has. */
   weekSet?: boolean;
+  /**
+   * A special date from today on (on any date while the clock cannot be read) closes this station
+   * for some or all of its day: a Closed cell, a cell with periods, or a whole-venue closure. When
+   * absent, none does.
+   */
+  specialDateRestricts?: boolean;
   fallbackStationId: string | null;
   today: "open" | "closed" | null;
   closedSendsTo: string | null;

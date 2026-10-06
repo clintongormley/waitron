@@ -494,6 +494,43 @@ describe("station status by calendar date", () => {
     });
   });
 
+  it("says which stations a special date from today onwards closes for some or all of its day", async () => {
+    await db.transaction(async (tx) => {
+      const tuesdayNoon = new Date("2026-10-06T10:00:00Z");
+      const restricts = async (cfg: VenueScope, id: string) =>
+        (await routingModel(tx, cfg, tuesdayNoon)).stationTimes.find((row) => row.stationId === id)
+          ?.specialDateRestricts;
+      const f = await fixture(tx);
+      expect(await restricts(f.cfg, f.upstairs)).toBe(false);
+      // Christmas Eve is past the seven days the status reads.
+      await saveDate(tx, f.cfg, "2026-12-24", [
+        [f.upstairs, { mode: "periods", periods: [hourPeriod("12:00", "16:00")] }],
+      ]);
+      await saveDate(tx, f.cfg, "2026-10-05", [[f.downstairs, closedDate]]);
+      await saveDate(tx, f.cfg, "2026-10-20", [[f.downstairs, { mode: "all_day", periods: [] }]]);
+      expect(await restricts(f.cfg, f.upstairs)).toBe(true);
+      expect(await restricts(f.cfg, f.downstairs)).toBe(false);
+      await saveDate(tx, f.cfg, "2026-10-06", [[f.downstairs, closedDate]]);
+      expect(await restricts(f.cfg, f.downstairs)).toBe(true);
+
+      const g = await fixture(tx);
+      await saveDate(tx, g.cfg, "2027-01-06", [], true);
+      expect(await restricts(g.cfg, g.upstairs)).toBe(true);
+      expect(await restricts(g.cfg, g.downstairs)).toBe(true);
+      expect(await restricts(f.cfg, f.retired)).toBe(false);
+
+      // With no readable clock there is no today, so a past date counts too.
+      const h = await fixture(tx);
+      await saveDate(tx, h.cfg, "2026-10-02", [[h.upstairs, closedDate]]);
+      expect(await restricts(h.cfg, h.upstairs)).toBe(false);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, h.cfg.locationId));
+      expect(await restricts(h.cfg, h.upstairs)).toBe(true);
+    });
+  });
+
   it("tells a station with no hours set from one Closed every day", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);

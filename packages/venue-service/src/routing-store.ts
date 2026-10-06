@@ -30,7 +30,7 @@ import {
   type VenueLocalMoment,
 } from "./hours-clock.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
-import { readStationSchedules } from "./hours.js";
+import { readStationSchedules, stationsRestrictedFrom } from "./hours.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { stationDayStates, stationFallbacks } from "./schema/station-times.js";
@@ -827,6 +827,7 @@ export async function routingModel(
   const cutover = clock.dayCutover.slice(0, 5);
   const nextChange = nextChangeFinder(rules, at, clock, moment);
   const neverMatches = unreachableExceptions(rules);
+  const restricted = await stationsRestrictedFrom(tx, cfg, moment?.civilDate ?? null);
   const productFolders = await tx
     .select({
       id: products.id,
@@ -887,6 +888,7 @@ export async function routingModel(
       nextTransition: nextChange(id),
       hours: [...(rules.timing.get(id)?.hours ?? [])],
       weekSet: rules.timing.get(id)?.weekSet ?? false,
+      specialDateRestricts: restricted.wholeVenue || restricted.stationIds.has(id),
       fallbackStationId: rules.timing.get(id)?.fallbackId ?? null,
       today: rules.timing.get(id)?.today ?? null,
       closedSendsTo: closedSendsTo(rules, id, moment),

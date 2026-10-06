@@ -1291,3 +1291,40 @@ export async function readStationSchedules(
       for (const schedule of schedules.values()) schedule.dates.set(special.date, []);
   return schedules;
 }
+
+/**
+ * The stations a special date on or after `from` (on any date when null) closes for some or all of
+ * its day: a Closed cell, a cell with periods, or, for every station, a whole-venue closure. One
+ * read, however many stations and dates there are.
+ */
+export async function stationsRestrictedFrom(
+  tx: Transaction,
+  cfg: VenueScope,
+  from: LocalDate | null,
+): Promise<{ wholeVenue: boolean; stationIds: Set<string> }> {
+  const rows = await tx
+    .select({
+      closeWholeVenue: specialDates.closeWholeVenue,
+      stationId: specialDateHours.stationId,
+    })
+    .from(specialDates)
+    .leftJoin(
+      specialDateHours,
+      and(
+        eq(specialDateHours.specialDateId, specialDates.id),
+        isNotNull(specialDateHours.stationId),
+        inArray(specialDateHours.mode, ["closed", "periods"]),
+      ),
+    )
+    .where(
+      and(
+        eq(specialDates.locationId, cfg.locationId),
+        from === null ? undefined : gte(specialDates.date, from),
+        or(eq(specialDates.closeWholeVenue, true), isNotNull(specialDateHours.id)),
+      ),
+    );
+  return {
+    wholeVenue: rows.some((row) => row.closeWholeVenue),
+    stationIds: new Set(rows.flatMap((row) => (row.stationId === null ? [] : [row.stationId]))),
+  };
+}

@@ -102,12 +102,19 @@ export function folderMadeAt(
   for (const { id } of categories)
     for (const zone of zones) compare(id, outcomeOf(chooseMaker(rules, asFolder(id), zone, null)));
 
+  const restrictedByDate = new Set(
+    routing.stationTimes
+      .filter(({ specialDateRestricts }) => specialDateRestricts === true)
+      .map(({ stationId }) => stationId),
+  );
   const timed = (stationId: string) => {
     if (stationId === routing.defaultStationId) return false;
     const timing = rules.timing.get(stationId);
     return (
       timing !== undefined &&
-      ((timing.weekSet ?? timing.hours.length > 0) || timing.today === "closed")
+      ((timing.weekSet ?? timing.hours.length > 0) ||
+        timing.today === "closed" ||
+        restrictedByDate.has(stationId))
     );
   };
 
