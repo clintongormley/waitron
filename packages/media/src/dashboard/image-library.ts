@@ -162,10 +162,12 @@ export class ImageLibrary extends LitElement {
         /* The photo's width at the height cap. Invalid while --photo-ratio is absent (before the
            photo loads, after it fails), so each reader below takes its fallback. */
         --photo-cap: calc(60dvh * var(--photo-ratio));
+        container-type: inline-size;
       }
       .viewer img {
         flex: 3 1 calc(var(--wt-tap-min) * 7);
         min-width: 0;
+        margin-inline: auto;
         height: auto;
         max-height: 60dvh;
         max-width: var(--photo-cap, none);
@@ -184,6 +186,16 @@ export class ImageLibrary extends LitElement {
               max(0px, var(--wt-tap-min) * 7 - var(--photo-cap, var(--wt-tap-min) * 7))
           );
         min-width: 0;
+      }
+      /* 12 × --wt-tap-min + --wt-space-4, where the photo stops sitting beside the list; a container
+         query cannot read a custom property. The wrap-point tests pin the two together. */
+      @container (width < 544px) {
+        .viewer > * {
+          --photo-cap: calc(40dvh * var(--photo-ratio));
+        }
+        .viewer img {
+          max-height: 40dvh;
+        }
       }
       .uses h3 {
         margin: 0 0 var(--wt-space-2);

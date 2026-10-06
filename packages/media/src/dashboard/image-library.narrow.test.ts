@@ -500,3 +500,84 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 }
+
+const tall = { width: 200, height: 1600 };
+
+for (const theme of ["light", "dark"] as const) {
+  for (const [shape, size] of [
+    ["very tall portrait", tall],
+    ["portrait", { width: 600, height: 800 }],
+  ] as const) {
+    it(`draws a ${shape} photo at most 40% of the window high, at its own proportions and centred, above its list of uses at 390px (${theme})`, async () => {
+      await page.viewport(390, 800);
+      const { library, photo, list } = await openPreview(theme, uses, size);
+      expect(photo.bottom).toBeLessThanOrEqual(list.top);
+      expect(photo.height).toBeLessThanOrEqual(window.innerHeight * 0.4 + 0.5);
+      expect(photo.width / photo.height).toBeCloseTo(size.width / size.height, 2);
+      const viewer = measured(library.shadowRoot!.querySelector(".viewer")!);
+      expect(
+        Math.abs(photo.left + photo.width / 2 - (viewer.left + viewer.width / 2)),
+      ).toBeLessThan(1);
+    });
+  }
+
+  it(`draws a landscape photo across the whole row above its list of uses at 390px (${theme})`, async () => {
+    await page.viewport(390, 800);
+    const size = { width: 900, height: 400 };
+    const { library, photo, list } = await openPreview(theme, uses, size);
+    expect(photo.bottom).toBeLessThanOrEqual(list.top);
+    const viewer = measured(library.shadowRoot!.querySelector(".viewer")!);
+    expect(Math.abs(photo.width - viewer.width)).toBeLessThan(1);
+    expect(photo.width / photo.height).toBeCloseTo(size.width / size.height, 2);
+  });
+
+  for (const [width, height] of [
+    [360, 560],
+    [390, 800],
+  ] as const) {
+    it(`on a phone the photo takes at most 40% of the window's height, so the list's heading and its first use show below a very tall photo without scrolling, at ${width}×${height} (${theme})`, async () => {
+      await page.viewport(width, height);
+      const { library, body, photo } = await openPreview(theme, uses, tall);
+      const modal = library.shadowRoot!.querySelector("wt-modal")!;
+      const visible = body.getBoundingClientRect();
+      expect(body.scrollTop).toBe(0);
+      expect(photo.height).toBeLessThanOrEqual(height * 0.4 + 0.5);
+      for (const element of [
+        modal.querySelector("#uses-heading")!,
+        modal.querySelector(".uses li a")!,
+      ]) {
+        const box = measured(element);
+        expect(box.top, element.tagName).toBeGreaterThanOrEqual(visible.top);
+        expect(box.bottom, element.tagName).toBeLessThanOrEqual(visible.bottom);
+        expect(box.left, element.tagName).toBeGreaterThanOrEqual(visible.left);
+        expect(box.right, element.tagName).toBeLessThanOrEqual(visible.right);
+      }
+    });
+  }
+
+  it(`lowers a very tall photo's height cap from 60% to 40% of the window exactly where it moves from beside its list of uses to above it, at two window heights (${theme})`, async () => {
+    await page.viewport(1280, 800);
+    const { library } = await openPreview(theme, uses, tall);
+    const viewer = library.shadowRoot!.querySelector<HTMLElement>(".viewer")!;
+    const image = viewer.querySelector("img")!;
+    const usesList = viewer.querySelector(".uses")!;
+    const tapMin = token(library, "--wt-tap-min");
+    const gap = token(library, "--wt-space-4");
+    const threshold = tapMin * 12 + gap;
+    for (const height of [800, 500]) {
+      await page.viewport(1280, height);
+      viewer.style.width = `${threshold}px`;
+      await frame();
+      let photo = measured(image);
+      expect(photo.right, `${height}px high: beside`).toBeLessThanOrEqual(measured(usesList).left);
+      expect(Math.abs(photo.height - height * 0.6), `${height}px high: 60% cap`).toBeLessThan(1);
+
+      viewer.style.width = `${threshold - 1}px`;
+      await frame();
+      photo = measured(image);
+      expect(photo.bottom, `${height}px high: stacked`).toBeLessThanOrEqual(measured(usesList).top);
+      expect(photo.height, `${height}px high: 40% cap`).toBeLessThanOrEqual(height * 0.4 + 0.5);
+      expect(photo.width / photo.height).toBeCloseTo(tall.width / tall.height, 2);
+    }
+  });
+}
