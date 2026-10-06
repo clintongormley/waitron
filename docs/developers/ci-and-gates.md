@@ -428,6 +428,25 @@ the browser shards (`test-ui`, `test-till`, `test-dashboard`, `test-setup`) and
 `--shard` splits by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a
 package's test-file count.
 
+### The `ci` check passes only when every needed job succeeded or was skipped
+
+The `ci` job's one step reads `toJSON(needs)` and fails unless every needed job's result is
+`success` or `skipped`; any other value fails, including one nobody listed. Until A274 the step
+fired only on `failure` or `cancelled`, and that let a cancellation through: in run 37368759185
+attempt 1 (2026-10-05, PR head `4123486d0`), `test-dashboard` was cancelled with "The job was not
+acquired by Runner of type hosted even after multiple attempts" and `ci` finished green with its
+step skipped; run 37371194302 attempt 1 did the same with twelve such jobs. Every superseded run's
+cancellations that evening did fire the old step, and one of their logs printed
+`"result": "cancelled"`. What GitHub handed `ci` for a never-acquired job was never printed, so it
+is not known; if it is `skipped`, the allowlist passes it as well. The step now prints every
+result, so the next such run records it.
+
+`scripts/ci-workflow.test.mjs` runs the step's script on sample results; GitHub alone evaluates
+`toJSON(needs)`. On GitHub, through a throwaway pull request based on the fix branch (#1282):
+run 37424069355, every test job skipped → `ci` passed; 37424588800, `changes` failed → `ci`
+failed; 37425317943, `changes` cancelled by its own `timeout-minutes` → `ci` failed; 37425907838,
+the run cancelled by hand while `changes` ran → `ci` failed.
+
 ### A shard can exit 1 with every one of its tests passing — RETIRED from CLAUDE.md
 
 Taken out of `CLAUDE.md` §2 on 2026-09-25: on Vitest 4.1.11 this call has no timeout, measured
