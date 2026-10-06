@@ -35,7 +35,8 @@ declare module "@waitron/shared" {
         | "outside_allowed"
         | "empty"
         | "required"
-        | "department_required";
+        | "department_required"
+        | "shared_display";
     };
     // `route.dish_not_sent` is declared in apps/server's errors.ts, which raises it.
     "order.service_context_missing": { workingOrderId: string };

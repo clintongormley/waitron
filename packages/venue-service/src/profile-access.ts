@@ -15,8 +15,9 @@ import "./errors.js";
 
 /**
  * A profile's service scope, resolved against the venue's current rows. `departmentId` null means no
- * department restriction (and, for a shared display, no ordering): `allowedZoneIds` and
- * `startingZoneId` are then null too. With a department, `allowedZoneIds` lists the zones the
+ * department restriction, and `allowedZoneIds` and `startingZoneId` are then null too. A shared
+ * display (`kds`) always reads that way: a save refuses it a department or zones, and the read
+ * ignores any stored before the profile became one. With a department, `allowedZoneIds` lists the zones the
  * profile may order in now, by position, and `startingZoneId` is its stored starting zone while
  * that is still allowed, otherwise the first allowed zone; an empty list and a null starting zone
  * mean the profile cannot order.
@@ -40,6 +41,9 @@ export interface ProfileServiceAccessInput {
 
 type Refusal = ErrorParams["device_profile.access_invalid"];
 
+/** The form factor `@waitron/layouts` treats as a shared kitchen display. */
+const SHARED_DISPLAY = "kds";
+
 function refuse(field: Refusal["field"], reason: Refusal["reason"]): never {
   throw new AppError("device_profile.access_invalid", { field, reason });
 }
@@ -51,6 +55,7 @@ export async function readProfileServiceAccess(
 ): Promise<ProfileServiceAccess> {
   const [profile] = await tx
     .select({
+      formFactor: deviceProfiles.formFactor,
       departmentId: deviceProfileServiceAccess.departmentId,
       everyZone: deviceProfileServiceAccess.everyZone,
       startingZoneId: deviceProfileServiceAccess.startingZoneId,
@@ -96,7 +101,11 @@ export async function readProfileServiceAccess(
       .orderBy(asc(watchers.displayOrder), asc(watchers.name), asc(watchers.id))
   ).map((row) => row.id);
 
-  if (profile.departmentId === null || profile.startingZoneId === null) {
+  if (
+    profile.formFactor === SHARED_DISPLAY ||
+    profile.departmentId === null ||
+    profile.startingZoneId === null
+  ) {
     return {
       departmentId: null,
       allowedZoneIds: null,
@@ -151,10 +160,15 @@ export async function setProfileServiceAccess(
   input: ProfileServiceAccessInput,
 ): Promise<void> {
   const [profile] = await tx
-    .select({ id: deviceProfiles.id })
+    .select({ formFactor: deviceProfiles.formFactor })
     .from(deviceProfiles)
     .where(and(eq(deviceProfiles.id, profileId), isNull(deviceProfiles.retiredAt)));
   if (profile === undefined) refuse("profileId", "not_found");
+  if (profile.formFactor === SHARED_DISPLAY) {
+    if (input.departmentId !== null) refuse("departmentId", "shared_display");
+    if (input.allowedZoneIds !== null) refuse("allowedZoneIds", "shared_display");
+    if (input.startingZoneId !== null) refuse("startingZoneId", "shared_display");
+  }
 
   const scope = await checkedScope(tx, cfg, input);
   const stationIds = [...new Set(input.stationIds)];

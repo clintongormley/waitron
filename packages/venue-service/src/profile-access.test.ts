@@ -140,6 +140,14 @@ const save = (venue: Venue, input: ProfileServiceAccessInput) =>
 const read = (venue: Venue) =>
   scoped((tx) => readProfileServiceAccess(tx, venue.cfg, venue.profile));
 
+/** No device holds the seeded profile, so `device_profile_form_factor_locked` lets it change. */
+async function makeSharedDisplay(venue: Venue): Promise<void> {
+  await db
+    .update(deviceProfiles)
+    .set({ formFactor: "kds" })
+    .where(eq(deviceProfiles.id, venue.profile));
+}
+
 describe("a profile's service access", () => {
   it("has no department restriction while nothing is stored for the profile", async () => {
     const venue = await seedVenue();
@@ -454,6 +462,48 @@ describe("a profile's service access", () => {
       allowedZoneIds: [],
       startingZoneId: null,
     });
+    // `configureZone` does not check that the department is active, so an active zone can sit
+    // under a disabled one; it still is not offered.
+    await scoped((tx) =>
+      configureZone(tx, venue.cfg, { zoneId: venue.counter, departmentId: venue.restaurant }),
+    );
+    await expect(read(venue)).resolves.toMatchObject({ allowedZoneIds: [], startingZoneId: null });
+  });
+
+  it("refuses a department, zones or a starting zone on a shared display", async () => {
+    const venue = await seedVenue();
+    await makeSharedDisplay(venue);
+    for (const [input, field] of [
+      [restaurantScope(venue), "departmentId"],
+      [
+        {
+          ...restaurantScope(venue),
+          departmentId: null,
+          startingZoneId: null,
+          allowedZoneIds: [venue.dining],
+        },
+        "allowedZoneIds",
+      ],
+      [{ ...restaurantScope(venue), departmentId: null }, "startingZoneId"],
+    ] as const) {
+      await expect(outcome(save(venue, input))).resolves.toEqual({
+        code: "device_profile.access_invalid",
+        params: { field, reason: "shared_display" },
+      });
+    }
+  });
+
+  it("reads a shared display as having no department, whatever was stored before it became one", async () => {
+    const venue = await seedVenue();
+    await save(venue, restaurantScope(venue));
+    await makeSharedDisplay(venue);
+    await expect(read(venue)).resolves.toEqual({
+      departmentId: null,
+      allowedZoneIds: null,
+      startingZoneId: null,
+      stationIds: [],
+      watcherIds: [],
+    });
   });
 
   it("is deleted with its profile", async () => {
@@ -513,6 +563,7 @@ describe("a profile's station and watcher lists", () => {
 
   it("stores the lists for a shared display with no department, in display order", async () => {
     const venue = await seedVenue();
+    await makeSharedDisplay(venue);
     const grill = await seedStation(venue.cfg.locationId, "Grill", 2);
     const cold = await seedStation(venue.cfg.locationId, "Cold", 1);
     const pass = await seedWatcher(venue.cfg.locationId, "Pass", 1);

@@ -90,6 +90,7 @@ import {
   departments,
   readHolidays,
   readLocalHolidayModel,
+  readProfileServiceAccess,
   readSpecialDate,
   readWeekHours,
   replaceWeekHours,
@@ -97,6 +98,7 @@ import {
   saveHolidayArea,
   saveLocalHoliday,
   saveSpecialDate,
+  setProfileServiceAccess,
   setStationToday,
   stationStates,
   type WeekCell,
@@ -2488,14 +2490,19 @@ it("transfers a profile's department, zones and station list, leaving a retired 
       ).map((station) => [station.id, station.name]),
     );
     return {
-      department: access.departmentId === null ? null : "set",
+      department: (
+        await tx
+          .select({ name: departments.name })
+          .from(departments)
+          .where(eq(departments.id, access.departmentId ?? ""))
+      )[0]?.name,
       allowed: (access.allowedZoneIds ?? []).map((id) => zones.get(id)),
       starting: zones.get(access.startingZoneId ?? ""),
       stations: access.stationIds.map((id) => stations.get(id)),
     };
   });
   expect(imported).toEqual({
-    department: "set",
+    department: "Restaurant",
     allowed: ["Terrace"],
     starting: "Terrace",
     stations: ["Grill"],
