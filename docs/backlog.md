@@ -4280,7 +4280,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   numeric columns carry a retirement note. Review notes retained for future cleanup: the overview
   API object still exposes write methods (server routes remain the permission boundary), and
   station reordering repeats an active filter after an active-only read.
-  [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) — DONE. One Hours page
+  [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) — DONE
+  ([PR #1298](https://github.com/clintongormley/waitron/pull/1298)). One Hours page
   (`/manage/hours`) holds each department's and station's standard week, the special dates and a
   month calendar; routing reads the same schedules. The old station and department hours editors
   and their two tables are gone (venue-service `0022_retire_legacy_hours`); a pre-live venue is
@@ -4318,6 +4319,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     special-date name mid-word (a design choice for the owner); the test where the live feed
     delivers nothing does not check that its two reads cover different ranges; and no test sends
     the default station with a blank inherited cell.
+  - When live updates are off and every Hours read both fails and takes longer than the 60-second
+    refresh, no error is shown: the dashboard's request code sets no timeout on a read. Found in
+    #1298's review; I believe it predates the branch (not checked with `git blame`).
+  - The prep-stations screenshot tests (`prep-stations-screen.test.ts`,
+    `prep-stations-overview.a11y.test.ts` in `packages/venue-service/src/dashboard/`) write `look/*.png`
+    into that folder on every run, and git shows it as untracked — the same shape as the
+    kitchen-screen case recorded under W110b.
   [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is approved with
   the owner's 2026-10-05 13:25 amendments; national/regional data, owner-entered city holidays and
   holiday-aware special-date naming are not implemented. Its Hours dependency (step 5) is built,
