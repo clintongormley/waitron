@@ -95,6 +95,16 @@ export class HoursApi {
     };
   }
 
+  /**
+   * After a write, has every Hours watch read again through the shared live data, so the write
+   * shows even when the change feed delivers nothing. False when there is no live data to ask.
+   */
+  rereadWatches(): boolean {
+    if (this.liveData === undefined) return false;
+    this.liveData.invalidate(QUERY_DEPENDENCIES.hours.map((type) => ({ type })));
+    return true;
+  }
+
   saveWeek(subject: HoursSubject, days: readonly WeekDay[]): Promise<void> {
     return this.request(`${BASE}/hours/week`, "PUT", { subject, days });
   }

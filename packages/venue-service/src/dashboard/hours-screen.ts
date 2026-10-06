@@ -303,9 +303,7 @@ export class HoursScreen extends LitElement {
   }
 
   async #reload(): Promise<void> {
-    // With live updates, the change feed's announcement of the write re-reads every Hours watch
-    // (hours.live.test.ts), so reading here too would read each save twice.
-    if (this.api.liveData !== undefined) return;
+    if (this.api.rereadWatches()) return;
     void this.renderRoot.querySelector("hours-calendar")?.reload();
     try {
       this.#apply(await this.api.load(this.#from, this.#to));

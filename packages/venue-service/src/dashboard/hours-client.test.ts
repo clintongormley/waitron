@@ -229,3 +229,36 @@ describe("HoursApi.watchHours", () => {
     expect(failed).not.toHaveBeenCalled();
   });
 });
+
+describe("HoursApi.rereadWatches", () => {
+  it("has every Hours watch read once more through live data, and says when there is none", async () => {
+    const liveData = new LiveData();
+    const request = vi.fn(async (path: string) =>
+      model(path.includes("2030-11") ? "2030-11-06" : "2030-10-06"),
+    );
+    const api = new HoursApi(request as DashboardRequest, liveData);
+    const october = vi.fn();
+    const november = vi.fn();
+    const detachOctober = api.watchHours("2030-10-01", "2030-10-31", october, vi.fn(), vi.fn());
+    const detachNovember = api.watchHours("2030-11-01", "2030-11-30", november, vi.fn(), vi.fn());
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(api.rereadWatches()).toBe(true);
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(4));
+    await vi.waitFor(() =>
+      expect([october.mock.calls.length, november.mock.calls.length]).toEqual([2, 2]),
+    );
+    expect(
+      request.mock.calls
+        .slice(2)
+        .map(([path]) => path)
+        .sort(),
+    ).toEqual([HOURS_PATH, "/management-api/venue-service/hours?from=2030-11-01&to=2030-11-30"]);
+    detachOctober();
+    detachNovember();
+
+    const alone = vi.fn(async () => model("2030-10-06"));
+    expect(new HoursApi(alone as DashboardRequest).rereadWatches()).toBe(false);
+    await settled();
+    expect(alone).not.toHaveBeenCalled();
+  });
+});

@@ -1575,7 +1575,7 @@ describe("Hours: the calendar", () => {
     expect(calendar(el)!.readOnly).toBe(false);
   });
 
-  it("edits a date from the calendar, and the calendar and the list show it at once under the same id", async () => {
+  it("edits a date from the calendar, and without live updates the calendar and the list read it at once under the same id", async () => {
     const { api, state, calls } = server();
     const el = await mount(api);
     await selectTab(el, "calendar");
@@ -1727,55 +1727,67 @@ describe("Hours: the calendar", () => {
     ]);
   });
 
-  it("shows a date added in the list on a calendar the address brought back beneath the editor", async () => {
-    history.replaceState(null, "", "/manage/hours/view/calendar");
-    const { api, state } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
-    await setField(el, "date", "2026-10-21");
-    await setField(el, "name", "Market day");
-    await choose(el, "colour", "blue");
-    // The browser's Back button while the editor is open.
-    history.replaceState(null, "", "/manage/hours/view/calendar");
-    dispatchEvent(new PopStateEvent("popstate"));
-    await settle(el);
-    expect(text(day(el, "2026-10-21"))).toBe("21");
-    expect(modal(el)).not.toBeNull();
-    const market = {
-      id: "market",
-      date: "2026-10-21",
-      name: "Market day",
-      colour: "blue" as const,
-      closeWholeVenue: false,
-    };
-    state.writes.push(market);
-    state.model.specialDates.push(market);
-    state.model.days.push({ date: market.date, specialDate: market, holidays: [], tone: "blue" });
-    state.model.specialCells.push({ specialDateId: "market", cells: [] });
-    await click(el, saveButton(el));
-    await vi.waitFor(() => expect(modal(el)).toBeNull());
-    await settle(el);
-    expect(text(day(el, "2026-10-21"))).toBe("21 Market day");
-  });
+  it.each([
+    ["without live updates", () => undefined],
+    ["with live updates that deliver nothing", () => new LiveData()],
+  ])(
+    "shows a date added in the list on a calendar the address brought back beneath the editor, %s",
+    async (_, liveData) => {
+      history.replaceState(null, "", "/manage/hours/view/calendar");
+      const { api, state } = server(liveData());
+      const el = await mount(api);
+      await selectTab(el, "dates");
+      await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
+      await setField(el, "date", "2026-10-21");
+      await setField(el, "name", "Market day");
+      await choose(el, "colour", "blue");
+      // The browser's Back button while the editor is open.
+      history.replaceState(null, "", "/manage/hours/view/calendar");
+      dispatchEvent(new PopStateEvent("popstate"));
+      await settle(el);
+      expect(text(day(el, "2026-10-21"))).toBe("21");
+      expect(modal(el)).not.toBeNull();
+      const market = {
+        id: "market",
+        date: "2026-10-21",
+        name: "Market day",
+        colour: "blue" as const,
+        closeWholeVenue: false,
+      };
+      state.writes.push(market);
+      state.model.specialDates.push(market);
+      state.model.days.push({ date: market.date, specialDate: market, holidays: [], tone: "blue" });
+      state.model.specialCells.push({ specialDateId: "market", cells: [] });
+      await click(el, saveButton(el));
+      await vi.waitFor(() => expect(modal(el)).toBeNull());
+      await settle(el);
+      expect(text(day(el, "2026-10-21"))).toBe("21 Market day");
+    },
+  );
 
-  it("returns focus to the date in the grid once a date deleted from the calendar is gone", async () => {
-    const { api, state } = server();
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await openDay(el, "2026-10-12");
-    await panelAction(el, "delete");
-    const gone = model();
-    gone.specialDates = [STAFF];
-    gone.days = gone.days.filter((entry) => entry.date !== "2026-10-12");
-    gone.specialCells = [];
-    state.model = gone;
-    await click(el, saveButton(el));
-    await vi.waitFor(() => expect(modal(el)).toBeNull());
-    await settle(el);
-    expect(text(day(el, "2026-10-12"))).toBe("12");
-    expect(calendar(el)!.shadowRoot!.activeElement).toBe(day(el, "2026-10-12"));
-  });
+  it.each([
+    ["without live updates", () => undefined],
+    ["with live updates that deliver nothing", () => new LiveData()],
+  ])(
+    "returns focus to the date in the grid once a date deleted from the calendar is gone, %s",
+    async (_, liveData) => {
+      const { api, state } = server(liveData());
+      const el = await mount(api);
+      await selectTab(el, "calendar");
+      await openDay(el, "2026-10-12");
+      await panelAction(el, "delete");
+      const gone = model();
+      gone.specialDates = [STAFF];
+      gone.days = gone.days.filter((entry) => entry.date !== "2026-10-12");
+      gone.specialCells = [];
+      state.model = gone;
+      await click(el, saveButton(el));
+      await vi.waitFor(() => expect(modal(el)).toBeNull());
+      await settle(el);
+      expect(text(day(el, "2026-10-12"))).toBe("12");
+      expect(calendar(el)!.shadowRoot!.activeElement).toBe(day(el, "2026-10-12"));
+    },
+  );
 
   it("returns focus to the date in the grid when live updates remove the date before the delete answers", async () => {
     const liveData = new LiveData();
@@ -1801,7 +1813,40 @@ describe("Hours: the calendar", () => {
     expect(calendar(el)!.shadowRoot!.activeElement).toBe(day(el, "2026-10-12"));
   });
 
-  it("reads a save once for each open view when live updates announce it", async () => {
+  it("shows a save on the page and the calendar when the live stream is open but delivers nothing", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const liveData = new LiveData();
+    const stream = Object.assign(new EventTarget(), { readyState: 1, close: () => {} });
+    const connection = new LiveConnection(liveData, { open: () => stream });
+    connection.start();
+    try {
+      const { api, state, calls } = server(liveData);
+      const el = await mount(api);
+      await selectTab(el, "calendar");
+      await openDay(el, "2026-10-12");
+      await panelAction(el, "edit");
+      await setField(el, "name", "Fiesta renamed");
+      state.model = renamed("Fiesta renamed");
+      const before = calls("GET").length;
+      await click(el, saveButton(el));
+      await vi.waitFor(() => expect(modal(el)).toBeNull());
+      await vi.waitFor(() => expect(text(day(el, "2026-10-12"))).toBe("12 Fiesta renamed"));
+      await settle(el);
+      const reads = calls("GET")
+        .slice(before)
+        .map(([path]) => path);
+      expect(reads).toHaveLength(2);
+      expect(reads).toContain("/management-api/venue-service/hours?from=2026-09-28&to=2026-11-01");
+      await selectTab(el, "dates");
+      await listTable(el).updateComplete;
+      expect(listRows(el)[0]!.slice(0, 2)).toEqual(["Mon, 12 Oct 2026", "Fiesta renamed Red"]);
+    } finally {
+      connection.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads a save at most twice for each open view when live updates also announce it", async () => {
     const liveData = new LiveData();
     const stream = Object.assign(new EventTarget(), { readyState: 1, close: () => {} });
     const connection = new LiveConnection(liveData, { open: () => stream });
@@ -1828,8 +1873,11 @@ describe("Hours: the calendar", () => {
       const reads = calls("GET")
         .slice(before)
         .map(([path]) => path);
-      expect(reads).toHaveLength(2);
-      expect(reads).toContain("/management-api/venue-service/hours?from=2026-09-28&to=2026-11-01");
+      // One read each after the save, and one more each for the change event, which the shared
+      // cache cannot tell apart from a later write by someone else.
+      expect(reads).toHaveLength(4);
+      const month = "/management-api/venue-service/hours?from=2026-09-28&to=2026-11-01";
+      expect(reads.filter((path) => path === month)).toHaveLength(2);
       expect(new Set(reads).size).toBe(2);
     } finally {
       connection.stop();
