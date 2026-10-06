@@ -247,8 +247,6 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_admission_roles",
     "device_profile_admission_persons",
   ],
-  // `listDepartments` and `listServiceZones` (packages/venue-service/src/operations.ts).
-  getProfileScopeChoices: ["departments", "floor_zones", "zone_service_policies"],
   // `readProfileKitchenLists` (packages/venue-service/src/profile-access.ts) also filters and orders
   // by the station and watcher rows.
   listProfileKitchenLists: [

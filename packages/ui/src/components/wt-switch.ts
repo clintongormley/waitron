@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query } from "lit/decorators.js";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
 @customElement("wt-switch")
@@ -103,6 +103,10 @@ export class WtSwitch extends LitElement {
       label {
         cursor: inherit;
       }
+
+      .visually-hidden {
+        ${visuallyHiddenStyles}
+      }
     `,
   ];
 
@@ -114,6 +118,8 @@ export class WtSwitch extends LitElement {
    * switch whose column or row heading already says what it is. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   @property() name = "";
+  /** Read to assistive technology as the switch's description; the screen draws any visible text. */
+  @property() description = "";
 
   private readonly inputId = uniqueId("wt-switch");
 
@@ -146,6 +152,7 @@ export class WtSwitch extends LitElement {
             .checked=${this.checked}
             ?disabled=${this.disabled}
             aria-label=${this.accessibleName || this.label || nothing}
+            aria-describedby=${this.description ? `${this.inputId}-description` : nothing}
             @change=${this.onChange}
           />
           <span class="track"></span>
@@ -153,6 +160,13 @@ export class WtSwitch extends LitElement {
         </span>
         ${this.label && !this.hideLabel ? html`<label part="label" for=${this.inputId}>${this.label}</label>` : nothing}
       </span>
+      ${
+        this.description
+          ? html`<span class="visually-hidden" id="${this.inputId}-description"
+              >${this.description}</span
+            >`
+          : nothing
+      }
     `;
   }
 }

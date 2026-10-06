@@ -6,6 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
@@ -115,6 +116,30 @@ function sameExceptions(a: readonly PersonException[], b: readonly PersonExcepti
       b.some((other) => other.personId === entry.personId && other.admitted === entry.admitted),
     )
   );
+}
+
+/** The department's switched-on zones, by position. */
+function activeZones(choices: ProfileScopeChoices, departmentId: string | null) {
+  return choices.zones.filter((zone) => zone.departmentId === departmentId && zone.active);
+}
+
+/**
+ * A stored subset and starting zone less the zones switched off since, as the till reads them: the
+ * start moves to the first zone left, or is empty when none is.
+ */
+function liveZones(
+  scope: ProfileServiceScope,
+  choices: ProfileScopeChoices,
+): { allowedZoneIds: string[] | null; startingZoneId: string } {
+  const zones = activeZones(choices, scope.departmentId).map((zone) => zone.id);
+  const allowed =
+    scope.allowedZoneIds === null ? null : zones.filter((id) => scope.allowedZoneIds!.includes(id));
+  const usable = allowed ?? zones;
+  const start = scope.startingZoneId;
+  return {
+    allowedZoneIds: allowed,
+    startingZoneId: start !== null && usable.includes(start) ? start : (usable[0] ?? ""),
+  };
 }
 
 const EVERY_ROLE: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
@@ -392,9 +417,6 @@ export class DeviceProfilesScreen extends LitElement {
         this.#queries.watch("listProfileKitchenLists", [], (value) => {
           this.kitchenLists = value;
         }),
-        this.#queries.watch("getProfileScopeChoices", [], (value) => {
-          this.scopeChoices = value;
-        }),
         this.#queries.watch("listStaff", [], (value) => {
           this.staff = value;
         }),
@@ -532,9 +554,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** The department's switched-on zones, by position. */
   #departmentZones(departmentId: string): ProfileScopeChoices["zones"] {
-    return this.scopeChoices.zones.filter(
-      (zone) => zone.departmentId === departmentId && zone.active,
-    );
+    return activeZones(this.scopeChoices, departmentId);
   }
 
   #allowedZones(): ProfileScopeChoices["zones"] {
@@ -649,18 +669,37 @@ export class DeviceProfilesScreen extends LitElement {
     this.#loaded = null;
     this.attempted = false;
     this.fieldRefusal = null;
+    this.#opened += 1;
+  }
+
+  /** Bumped by every open and close of the editor, so a read that lands after the editor moved
+   * on changes nothing. */
+  #opened = 0;
+
+  /** Read when the editor opens rather than kept live: the editor is the only reader. */
+  async #readScopeChoices(): Promise<ProfileScopeChoices> {
+    this.scopeChoices = await this.api.getProfileScopeChoices();
+    return this.scopeChoices;
   }
 
   /** A venue with one department starts the profile there, at its first zone. */
   #openCreate(): void {
     this.#clearDraft();
     this.#showError(null);
-    const departments = this.scopeChoices.departments.filter((department) => department.active);
-    if (departments.length === 1) {
-      this.draftDepartmentId = departments[0]!.id;
-      this.#settleStartingZone();
-    }
     this.mode = "editor";
+    const opened = this.#opened;
+    this.#readScopeChoices().then(
+      (choices) => {
+        if (opened !== this.#opened || this.draftDepartmentId !== "") return;
+        const departments = choices.departments.filter((department) => department.active);
+        if (departments.length !== 1) return;
+        this.draftDepartmentId = departments[0]!.id;
+        this.#settleStartingZone();
+      },
+      (error: unknown) => {
+        if (opened === this.#opened) this.#showReadError(error);
+      },
+    );
   }
 
   /** Fetches the profile and its station and watcher lists fresh, rather than reusing rows a read
@@ -668,9 +707,10 @@ export class DeviceProfilesScreen extends LitElement {
   async #openEditor(id: string): Promise<void> {
     this.#showError(null);
     try {
-      const [profile, kitchenLists] = await Promise.all([
+      const [profile, kitchenLists, choices] = await Promise.all([
         this.api.getDeviceProfile(id),
         this.api.listProfileKitchenLists(),
+        this.#readScopeChoices(),
       ]);
       this.#clearDraft();
       this.editingId = id;
@@ -693,14 +733,13 @@ export class DeviceProfilesScreen extends LitElement {
         watcherIds: stored?.watcherIds ?? [],
       };
       this.draftKitchenLists = this.#loadedKitchenLists;
-      // A zone switched off since it was chosen no longer counts, as on the till.
       this.draftDepartmentId = profile.departmentId ?? "";
-      this.draftEveryZone = profile.allowedZoneIds === null;
-      this.draftZoneIds = this.#departmentZones(this.draftDepartmentId)
-        .map((zone) => zone.id)
-        .filter((zoneId) => profile.allowedZoneIds?.includes(zoneId));
-      this.draftStartingZoneId = profile.startingZoneId ?? "";
-      if (this.draftDepartmentId !== "") this.#settleStartingZone();
+      if (profile.departmentId !== null) {
+        const zones = liveZones(profile, choices);
+        this.draftEveryZone = zones.allowedZoneIds === null;
+        this.draftZoneIds = zones.allowedZoneIds ?? [];
+        this.draftStartingZoneId = zones.startingZoneId;
+      }
       this.draftRoles = EVERY_ROLE.filter((role) => profile.admittedRoles.includes(role));
       this.draftExceptions = [...profile.personExceptions];
       this.draftStartingScreen = profile.startingScreen;
@@ -926,32 +965,40 @@ export class DeviceProfilesScreen extends LitElement {
 
   // ── Duplicate ────────────────────────────────────────────────────────────────────────────────────
 
-  /** A copy keeps where the profile serves and who signs in on it. A kitchen display's copy lists
-   * the switched-on stations and watchers the original lists. */
+  /**
+   * A copy keeps where the profile serves and who signs in on it, less the zones switched off since.
+   * With its department off, or none of its zones left, the copy carries no department, so the
+   * refusal says one is needed. A kitchen display's copy lists the switched-on stations and watchers
+   * the original lists.
+   */
   #duplicate(profile: DeviceProfile): void {
     const name = `${profile.name}${t("device_profiles.copy_suffix")}`;
-    const extras: ProfileSaveExtras = {};
-    if (profile.formFactor === "kds") {
-      const stored = this.kitchenLists.find((entry) => entry.profileId === profile.id);
-      const on = (all: { id: string; active: boolean }[], ids: readonly string[]) =>
-        all.filter((entry) => entry.active && ids.includes(entry.id)).map((entry) => entry.id);
-      const lists = {
-        stationIds: on(this.stations, stored?.stationIds ?? []),
-        watcherIds: on(this.watchers, stored?.watcherIds ?? []),
-      };
-      if (lists.stationIds.length + lists.watcherIds.length > 0) Object.assign(extras, lists);
-    } else {
-      extras.departmentId = profile.departmentId;
-      extras.allowedZoneIds = profile.allowedZoneIds;
-      extras.startingZoneId = profile.startingZoneId;
-      if (profile.admittedRoles.length < EVERY_ROLE.length)
-        extras.admittedRoles = profile.admittedRoles;
-      if (profile.personExceptions.length > 0) extras.personExceptions = profile.personExceptions;
-      if (profile.startingScreen !== null) extras.startingScreen = profile.startingScreen;
-    }
-    const extrasArg = Object.keys(extras).length === 0 ? [] : ([extras] as const);
-    void this.#mutate(() =>
-      this.api.createDeviceProfile(
+    void this.#mutate(async () => {
+      const extras: ProfileSaveExtras = {};
+      if (profile.formFactor === "kds") {
+        const stored = this.kitchenLists.find((entry) => entry.profileId === profile.id);
+        const on = (all: { id: string; active: boolean }[], ids: readonly string[]) =>
+          all.filter((entry) => entry.active && ids.includes(entry.id)).map((entry) => entry.id);
+        const lists = {
+          stationIds: on(this.stations, stored?.stationIds ?? []),
+          watcherIds: on(this.watchers, stored?.watcherIds ?? []),
+        };
+        if (lists.stationIds.length + lists.watcherIds.length > 0) Object.assign(extras, lists);
+      } else {
+        const choices = await this.api.getProfileScopeChoices();
+        const departmentOn = choices.departments.some(
+          (department) => department.id === profile.departmentId && department.active,
+        );
+        const zones = liveZones(profile, choices);
+        if (departmentOn && zones.startingZoneId !== "")
+          Object.assign(extras, { departmentId: profile.departmentId, ...zones });
+        if (profile.admittedRoles.length < EVERY_ROLE.length)
+          extras.admittedRoles = profile.admittedRoles;
+        if (profile.personExceptions.length > 0) extras.personExceptions = profile.personExceptions;
+        if (profile.startingScreen !== null) extras.startingScreen = profile.startingScreen;
+      }
+      const extrasArg = Object.keys(extras).length === 0 ? [] : ([extras] as const);
+      await this.api.createDeviceProfile(
         name,
         profile.canvasId,
         profile.capabilities,
@@ -962,8 +1009,8 @@ export class DeviceProfilesScreen extends LitElement {
           paymentSlipPrinterIds: profile.paymentSlipPrinterIds,
         },
         ...extrasArg,
-      ),
-    );
+      );
+    });
   }
 
   // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
@@ -1262,6 +1309,10 @@ export class DeviceProfilesScreen extends LitElement {
       (entry) => entry.id === this.draftDepartmentId,
     );
     const zones = this.#departmentZones(this.draftDepartmentId);
+    const everyZoneHint = t("device_profiles.every_zone_hint").replace(
+      "{department}",
+      department?.name ?? "",
+    );
     return html`
       <h2 class="section-title">${t("device_profiles.where_heading")}</h2>
       <wt-combobox
@@ -1271,7 +1322,6 @@ export class DeviceProfilesScreen extends LitElement {
         required
         label=${t("device_profiles.department")}
         search="auto"
-        placeholder=${t("device_profiles.department_hint")}
         searchPlaceholder=${t("categories.combobox_search")}
         noResultsLabel=${t("categories.combobox_no_results")}
         .options=${this.#departmentOptions()}
@@ -1279,7 +1329,11 @@ export class DeviceProfilesScreen extends LitElement {
         .error=${errors.department ?? ""}
         .invalid=${Boolean(errors.department)}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDepartment(e)}
-      ></wt-combobox>
+      >
+        <wt-help-tooltip slot="help" aria-label=${t("device_profiles.department_help_label")}
+          >${t("device_profiles.department_hint")}</wt-help-tooltip
+        >
+      </wt-combobox>
       ${
         this.draftDepartmentId === ""
           ? nothing
@@ -1288,16 +1342,14 @@ export class DeviceProfilesScreen extends LitElement {
                   data-test="profile-every-zone"
                   name="everyZone"
                   label=${t("device_profiles.every_zone")}
+                  description=${this.draftEveryZone ? everyZoneHint : ""}
                   .checked=${this.draftEveryZone}
                   @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onEveryZone(e)}
                 ></wt-switch>
                 ${
                   this.draftEveryZone
-                    ? html`<p class="hint" data-test="profile-zones-hint">
-                          ${t("device_profiles.every_zone_hint").replace(
-                            "{department}",
-                            department?.name ?? "",
-                          )}
+                    ? html`<p class="hint" data-test="profile-zones-hint" aria-hidden="true">
+                          ${everyZoneHint}
                         </p>
                         ${this.#groupError("profile-zones", errors.zones)}`
                     : nothing
@@ -1331,7 +1383,6 @@ export class DeviceProfilesScreen extends LitElement {
         required
         label=${t("device_profiles.starting_zone")}
         search="auto"
-        placeholder=${t("device_profiles.starting_zone_hint")}
         searchPlaceholder=${t("categories.combobox_search")}
         noResultsLabel=${t("categories.combobox_no_results")}
         .options=${this.#allowedZones().map((zone) => ({ value: zone.id, label: zone.name }))}
@@ -1339,7 +1390,11 @@ export class DeviceProfilesScreen extends LitElement {
         .error=${errors.startingZone ?? ""}
         .invalid=${Boolean(errors.startingZone)}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onStartingZone(e)}
-      ></wt-combobox>
+      >
+        <wt-help-tooltip slot="help" aria-label=${t("device_profiles.starting_zone_help_label")}
+          >${t("device_profiles.starting_zone_hint")}</wt-help-tooltip
+        >
+      </wt-combobox>
     `;
   }
 
@@ -1408,7 +1463,7 @@ export class DeviceProfilesScreen extends LitElement {
                     name="personExceptions"
                     label=${person.displayName}
                     search="never"
-                    placeholder=${t("device_profiles.person_follows_role")}
+                    show-empty-option
                     .options=${(["", "allow", "deny"] as const).map((rule) => ({
                       value: rule,
                       label: this.#ruleLabel(rule),
@@ -1465,7 +1520,7 @@ export class DeviceProfilesScreen extends LitElement {
               name="startingScreen"
               label=${t("device_profiles.starting_screen")}
               search="never"
-              placeholder=${t("device_profiles.starting_screen_first_tab")}
+              show-empty-option
               .options=${[
                 { value: "", label: t("device_profiles.starting_screen_first_tab") },
                 ...NAVIGATION_SCREENS.filter((screen) =>

@@ -1702,6 +1702,123 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(vi.mocked(api.listDeviceProfiles).mock.calls.length).toBe(listReads + 1);
   });
 
+  it("duplicates only the zones still switched on, moving the start onto one of them", async () => {
+    const offZone: DeviceProfile = {
+      ...profiles[0]!,
+      allowedZoneIds: ["z1", "z4"],
+      startingZoneId: "z4",
+    };
+    const api = stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([offZone]) });
+    const el = await mount(api);
+    q(el, "duplicate-p1")!.click();
+    await flush(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+      departmentId: "d1",
+      allowedZoneIds: ["z1"],
+      startingZoneId: "z1",
+    });
+  });
+
+  it.each([
+    [
+      "its department is switched off",
+      { ...scopeChoices, departments: [{ id: "d1", name: "Restaurante", active: false }] },
+      ["z1"],
+    ],
+    ["none of its zones is still on", scopeChoices, ["z4"]],
+  ] as const)(
+    "duplicates no scope when %s, so the refusal says a department is needed",
+    async (_case, choices, zones) => {
+      const api = stubApi({
+        listDeviceProfiles: vi
+          .fn()
+          .mockResolvedValue([
+            { ...profiles[0]!, allowedZoneIds: [...zones], startingZoneId: zones[0] },
+          ]),
+        getProfileScopeChoices: vi.fn().mockResolvedValue(choices),
+      });
+      const el = await mount(api);
+      q(el, "duplicate-p1")!.click();
+      await flush(el);
+      expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toBeUndefined();
+    },
+  );
+
+  it("reads the departments and zones when the editor opens, not while the list is showing", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const el = await mount(api);
+    expect(api.getProfileScopeChoices).not.toHaveBeenCalled();
+    q(el, "edit-p1")!.click();
+    await flush(el);
+    expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(1);
+    liveData.invalidate([
+      { type: "departments", id: "d1" },
+      { type: "floor_zones", id: "z1" },
+    ]);
+    await flush(el);
+    expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens an edit with its stored zones even when the departments arrive after the click", async () => {
+    let arrive!: (choices: ProfileScopeChoices) => void;
+    const api = stubApi({
+      getDeviceProfile: vi
+        .fn()
+        .mockResolvedValue({ ...profiles[0]!, allowedZoneIds: ["z2"], startingZoneId: "z2" }),
+      getProfileScopeChoices: vi.fn(
+        () => new Promise<ProfileScopeChoices>((resolve) => (arrive = resolve)),
+      ),
+    });
+    const el = await mount(api);
+    q(el, "edit-p1")!.click();
+    await flush(el);
+    arrive(scopeChoices);
+    await flush(el);
+    expect(q(el, "profile-every-zone")!.checked).toBe(false);
+    expect(q(el, "profile-zone-z2")!.checked).toBe(true);
+    expect(q(el, "profile-zone-z1")!.checked).toBe(false);
+    expect(q(el, "profile-starting-zone")!.value).toBe("z2");
+  });
+
+  it("starts a new profile in the only department even when the departments arrive after the click", async () => {
+    let arrive!: (choices: ProfileScopeChoices) => void;
+    const api = stubApi({
+      getProfileScopeChoices: vi.fn(
+        () => new Promise<ProfileScopeChoices>((resolve) => (arrive = resolve)),
+      ),
+    });
+    const el = await mount(api);
+    q(el, "create")!.click();
+    await flush(el);
+    arrive(scopeChoices);
+    await flush(el);
+    expect(q(el, "profile-department")!.value).toBe("d1");
+    expect(q(el, "profile-starting-zone")!.value).toBe("z1");
+  });
+
+  it("explains department and starting zone with a help button, and shows the meaning of each empty choice as chosen", async () => {
+    const { el } = await openEdit(profiles[0]!);
+    for (const field of ["profile-department", "profile-starting-zone"]) {
+      const help = q(el, field)!.querySelector('wt-help-tooltip[slot="help"]');
+      expect(help?.getAttribute("aria-label")).toBeTruthy();
+      expect(help?.textContent?.trim()).toBeTruthy();
+      expect((q(el, field) as unknown as Combobox).placeholder).toBe("");
+    }
+    for (const field of ["profile-starting-screen", "profile-person-pe-ana"]) {
+      const box = q(el, field) as unknown as Combobox & { showEmptyOption: boolean };
+      expect(box.showEmptyOption).toBe(true);
+      expect(box.placeholder).toBe("");
+    }
+  });
+
+  it("describes the every-zone switch by its hint", async () => {
+    const { el } = await openEdit(profiles[0]!);
+    expect((q(el, "profile-every-zone") as unknown as { description: string }).description).toBe(
+      t("device_profiles.every_zone_hint").replace("{department}", "Restaurante"),
+    );
+  });
+
   it("copies where a profile serves, who signs in and its starting screen when it is duplicated", async () => {
     const narrowed: DeviceProfile = {
       ...profiles[0]!,

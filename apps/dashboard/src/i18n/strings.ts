@@ -1824,6 +1824,8 @@ export const en = {
   "device_profiles.screen.show-expo": "Pass",
   "device_profiles.screen.show-schedule": "My schedule",
   "device_profiles.department_disabled_mark": "Disabled",
+  "device_profiles.department_help_label": "Help with the department",
+  "device_profiles.starting_zone_help_label": "Help with the starting zone",
   "device_profiles.kitchen_lists_hint":
     "Each kitchen screen on this profile shows one of these. Choose which on Devices.",
   "device_profiles.err_department_required": "Choose the department this profile orders for",
@@ -4194,6 +4196,8 @@ export const es: Record<StringKey, string> = {
   "device_profiles.screen.show-expo": "Pase",
   "device_profiles.screen.show-schedule": "Mi horario",
   "device_profiles.department_disabled_mark": "Deshabilitado",
+  "device_profiles.department_help_label": "Ayuda sobre el departamento",
+  "device_profiles.starting_zone_help_label": "Ayuda sobre la zona inicial",
   "device_profiles.kitchen_lists_hint":
     "Cada pantalla de cocina con este perfil muestra una de estas. Elige cuál en Dispositivos.",
   "device_profiles.err_department_required": "Elige el departamento para el que pide este perfil",
