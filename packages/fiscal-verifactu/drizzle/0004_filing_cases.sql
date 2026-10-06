@@ -22,7 +22,7 @@ CREATE TABLE `filing_cases` (
 	`evidence` text NOT NULL,
 	`opened_at` text NOT NULL,
 	FOREIGN KEY (`registro_id`) REFERENCES `registros_facturacion`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "filing_cases_cause_ck" CHECK("filing_cases"."cause" in ('fiscal.registro_rechazado', 'fiscal.huella_divergente', 'fiscal.duplicado_anulado'))
+	CONSTRAINT "filing_cases_cause_ck" CHECK("filing_cases"."cause" <> '')
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `filing_cases_registro_uq` ON `filing_cases` (`registro_id`);

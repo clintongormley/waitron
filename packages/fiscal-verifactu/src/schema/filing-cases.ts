@@ -3,13 +3,12 @@ import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, id, json, label, newId, table, ts } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
-/** The incident code that opened a case. */
-export const filingCaseCause = enumType([
-  "fiscal.registro_rechazado",
-  "fiscal.huella_divergente",
-  "fiscal.duplicado_anulado",
-]);
-export type FilingCaseCause = (typeof filingCaseCause.enumValues)[number];
+/**
+ * The incident code that opened a case. Closed here, not in the table: a fixed list in a CHECK
+ * would make each new cause a table rebuild, which fails once events point at the cases.
+ */
+export type FilingCaseCause =
+  "fiscal.registro_rechazado" | "fiscal.huella_divergente" | "fiscal.duplicado_anulado";
 
 /** What AEAT said about the record when the case opened. `csv` is the envío's. */
 export interface FilingCaseEvidence {
@@ -32,13 +31,13 @@ export const filingCases = table(
     registroId: id("registro_id")
       .notNull()
       .references(() => registrosFacturacion.id),
-    cause: filingCaseCause("cause").notNull(),
+    cause: label("cause").$type<FilingCaseCause>().notNull(),
     evidence: json<FilingCaseEvidence>("evidence").notNull(),
     openedAt: ts("opened_at").notNull(),
   },
   (t) => [
     uniqueIndex("filing_cases_registro_uq").on(t.registroId),
-    check("filing_cases_cause_ck", enumCheck(t.cause)),
+    check("filing_cases_cause_ck", sql`${t.cause} <> ''`),
   ],
 );
 

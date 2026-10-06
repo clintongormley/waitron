@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bbc452fb-2b28-4b9b-8428-5b5cefdc34d2",
+  "id": "812bb7f6-8ea1-452e-93c0-cd86d9de1cd5",
   "prevId": "85ec4644-46c6-44b4-91f7-eaaeda41769e",
   "tables": {
     "acks": {
@@ -530,7 +530,7 @@
       "checkConstraints": {
         "filing_cases_cause_ck": {
           "name": "filing_cases_cause_ck",
-          "value": "\"filing_cases\".\"cause\" in ('fiscal.registro_rechazado', 'fiscal.huella_divergente', 'fiscal.duplicado_anulado')"
+          "value": "\"filing_cases\".\"cause\" <> ''"
         }
       }
     },

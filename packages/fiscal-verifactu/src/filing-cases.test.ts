@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   UNIQUE_VIOLATION,
   captureError,
+  checkFailed,
   newId,
   refusalOn,
   triggerRaised,
@@ -568,6 +569,27 @@ describe("heldRecords", () => {
       { registroId: cancellation, caseId: originalCase.id },
       { registroId: behind.registroId, caseId: originalCase.id },
     ]);
+  });
+});
+
+describe("the cause column", () => {
+  // A fixed list in the table would make each new cause a table rebuild, which fails once events
+  // point at the cases; the closed set lives in the `FilingCaseCause` type instead.
+  const insertCase = (registroId: string, cause: string) =>
+    suite.db.execute(sql`
+      insert into filing_cases (id, registro_id, cause, evidence, opened_at)
+      values (${newId()}, ${registroId}, ${cause}, '{}', ${OPENED_AT.toISOString()})
+    `);
+
+  it("accepts a cause the code does not name yet, and refuses an empty one", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [first, second] = seeded.registroIds as [string, string];
+
+    await insertCase(first, "fiscal.cause_added_later");
+    const error = await captureError(() => insertCase(second, ""));
+
+    expect(checkFailed(error, "filing_cases_cause_ck")).toBe(true);
+    expect(await rowCount("filing_cases")).toBe(1);
   });
 });
 
