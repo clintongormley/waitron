@@ -2302,3 +2302,44 @@ This finishes the certificate child stage only. Connect/reset/restore/bucket/clo
 till shell and page/tab/context routes, receipt/login and other page owners, activated native
 reload and final advancing-owner classification remain open. Tasks 2/3 stay complete and Tasks
 1/4/5/6 stay partial; neither W69 PR is ready for finish-branch.
+
+## Setup Connect child, 2026-10-06
+
+Connect registers its URL, person ID, password and one-time code with the existing leave
+coordinator. Its comparison uses the submission's existing trimming for URL, person ID and
+code, while preserving password whitespace. Back asks for this child only. Keep and warning
+Escape preserve the draft and focus; Discard restores its original fields before leaving.
+A request returned after refusal is not a saved baseline: its credentials stay protected,
+with the one-time code empty under the existing refusal rule. Connect itself submits directly;
+the busy screen removes the child and a successful response has no child unload protection.
+The tests use a synthetic API response; they do not exercise a real adoption or restart.
+
+The initial browser run failed 16 of 17 cases on missing unload/Back protection. After wiring
+the scope, five new assertions failed because two fixtures listened or dispatched outside the
+shell's event container. Dispatching the root patch and capturing adoption on the form itself
+passed all 41 new and existing Connect cases. No production event-routing change was made.
+The broader family then failed the existing Connect-retention test: it requested departure
+without answering the new question. That test now answers Discard before returning, retaining
+every empty-field assertion. This follows the design's failed-write/voluntary-leave contract;
+the changed-test-check FYI is recorded in Lane E questions and must reach the eventual PR.
+
+Receipts: Lane E `receipts/w69-setup-connect-20261006/`. The final seven-suite setup run passed
+491 cases, including the unchanged Connect accessibility cases; the two unedited fiscal
+write-path/immutability suites passed 20. Setup typechecking and changed-file lint passed.
+Six deletions in a separate frozen-installed candidate each failed one intended assertion
+beside a passing clean-Back control: registration, input notification, disposal, restoring the
+original baseline, exact password comparison and replacement-request notification. Restoring
+the candidate passed 41 cases. Both candidate source/test files were byte-compared with the
+feature worktree and its owned temporary parent was removed.
+
+Eight temporary native Back/Keep/Escape flows covered EN/ES, light/dark and 390/1280 widths.
+Their 16 axe scans passed, and 16 captures were inspected in four contact sheets. API reads
+were stubbed and only a synthetic password was typed. These captures establish the warning
+and retained form layouts; hover colours, real adoption, deployment canvas and activated native
+reload remain unverified. Prior shared hover findings stay open. Temporary visual source,
+captures and failure images are archived outside product source.
+
+This completes the Connect child stage only. Reset/archive/bucket/cloud setup children,
+remaining page/tab/context routes, final advancing-owner classification and activated native
+reload remain open. Tasks 2/3 stay complete and Tasks 1/4/5/6 partial; W69 is not ready for
+finish-branch or landing.

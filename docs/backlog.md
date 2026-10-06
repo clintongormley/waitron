@@ -1208,7 +1208,12 @@ an unanswered leave. The certificate step now protects the exact passphrase, typ
 certificate bytes, including a selection whose read is still pending. Next commits the submitted
 child before navigation; input delivered during that handoff remains protected. Discard restores
 the native file selection, and old file reads cannot replace a later selection or discarded values.
-Connect, reset and restore setup forms still need work.
+Connect now protects its four request fields before Back, preserving exact password whitespace
+and using the existing trimming for URL, person ID and one-time code. A refusal restores the
+credential fields with the one-time code empty and keeps them protected. Clean/reverted values
+leave without a warning, and a successful Connect leaves no child unload listener. Disconnect,
+replacement requests and edits invalidate old Back answers; reconnect keeps the original baseline.
+Reset and restore setup forms still need work.
 See the dated setup entries in the W69 audit for commands and limits; activated native reload
 has not been verified.
 Dashboard voluntary logout and a language change also request the shared warning before their

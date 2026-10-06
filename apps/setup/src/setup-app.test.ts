@@ -1703,7 +1703,7 @@ describe("setup-app", () => {
       expect(readState(el, ["connectRequest"])).toEqual({ connectRequest: undefined });
     });
 
-    it("is not kept once the operator leaves the connect screen", async () => {
+    it("is not kept once the operator discards changes and leaves the connect screen", async () => {
       const adopt = vi.fn().mockRejectedValue({
         code: "mirror.bundle_fetch_failed",
         params: {},
@@ -1713,6 +1713,18 @@ describe("setup-app", () => {
       await typeAndConnect(el);
       goto(el, "role");
       await el.updateComplete;
+      const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "wt-unsaved-changes",
+      )!;
+      await expect.poll(() => warning.open).toBe(true);
+      warning.dispatchEvent(
+        new CustomEvent("wt-unsaved-choice", {
+          detail: { decision: "discard" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await expect.poll(() => readState(el, ["screen"]).screen).toBe("role");
       goto(el, "connect");
       await el.updateComplete;
       const connect = await screenHost(el, "connect");
