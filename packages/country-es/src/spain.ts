@@ -261,12 +261,6 @@ const unsupportedAreaCodes = new Set(
   unsupportedFiscalJurisdictions.flatMap(({ areaCodes }) => areaCodes),
 );
 
-/**
- * Reducing a 32-bit draw at or above this would favour the lowest 4,967,296 numbers, so it is
- * redrawn.
- */
-const UNBIASED_DRAW_LIMIT = Math.floor(2 ** 32 / 10_000_000) * 10_000_000;
-
 export const SPAIN: CountryPack = {
   countryCode: "ES",
   defaultLocale: "es-ES",
@@ -289,13 +283,10 @@ export const SPAIN: CountryPack = {
     ...unsupportedFiscalJurisdictions,
   ],
   demo: {
-    createCompanyTaxId(): string {
-      const draw = new Uint32Array(1);
-      do crypto.getRandomValues(draw);
-      while (draw[0]! >= UNBIASED_DRAW_LIMIT);
-      const digits = String(draw[0]! % 10_000_000).padStart(7, "0");
-      return `B${digits}${entityControl(digits).digit}`;
-    },
+    legalName: "Waitron Demo S.L.",
+    taxId: "B00000000",
+    locationName: "Casa Delgado",
+    departmentTradingNames: { restaurant: "Bar Casa Delgado", deli: "Deli Delgado" },
   },
   taxIdentifier: { label: "NIF", validate: validateSpanishNif },
   postalCode: { validate: validateSpanishPostalCode },

@@ -1,5 +1,5 @@
 import { userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -799,7 +799,7 @@ describe("A2 shop form", () => {
       expect((q(el, `[data-test=${field}]`) as HTMLInputElement).value).toBe(value);
     }
   });
-  it("collects only a location name and address in Demo, generating a valid company identity", async () => {
+  it("collects only a location name and address in Demo, taking the country's fixed demo identity", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo" },
       defaults,
@@ -825,8 +825,9 @@ describe("A2 shop form", () => {
     q(el, "[data-test=next]")!.click();
     expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
     const venue = (events[0]!.detail as { patch: ProvisionBody }).patch.venue;
-    expect(venue.taxId).toMatch(/^B[0-9]{8}$/);
-    expect(venue.legalName).toBe("Calle Mayor");
+    expect(venue.taxId).toBe("B00000000");
+    expect(venue.legalName).toBe("Waitron Demo S.L.");
+    expect(venue.location.name).toBe("Calle Mayor");
     expect(venue.seriesCode).toBe("FS");
     expect(venue.rectificativeSeriesCode).toBe("FR");
     expect(venue.location.operationDescription).toBe("Venta en establecimiento");
@@ -865,20 +866,95 @@ describe("A2 shop form", () => {
 });
 
 it.each(["prepare", "live"] as const)(
-  "never calls the company identity generator in %s",
+  "leaves the demo identity out of %s: tax ID, legal name and location name start empty",
   async (mode) => {
-    const generator = vi.spyOn(getVenueSetupCountryPack("ES")!.demo!, "createCompanyTaxId");
-    try {
-      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { draft: { mode } });
-      await type(el, "postalCode", "28013");
-      q(el, "[data-test=next]")!.click();
-      expect(generator).not.toHaveBeenCalled();
-      expect((q(el, "[data-test=taxId]") as HTMLInputElement).value).toBe("");
-    } finally {
-      generator.mockRestore();
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { draft: { mode } });
+    await type(el, "postalCode", "28013");
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    for (const field of ["taxId", "legalName", "name"]) {
+      expect((q(el, `[data-test=${field}]`) as HTMLInputElement).value, field).toBe("");
     }
   },
 );
+it("starts the Demo location name as the demo location, which the operator may keep or change", async () => {
+  const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
+  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: { mode: "demo" },
+    defaults,
+  });
+  expect((q(el, "[data-test=name]") as HTMLInputElement).value).toBe("Casa Delgado");
+  const events = collect(host);
+  for (const [field, value] of Object.entries({
+    addressLine1: "Calle Mayor 1",
+    postalCode: "28013",
+    city: "Madrid",
+  }))
+    await type(el, field, value);
+  q(el, "[data-test=next]")!.click();
+  const venue = (events[0]!.detail as { patch: ProvisionBody }).patch.venue;
+  expect(venue.location.name).toBe("Casa Delgado");
+  expect(venue.legalName).toBe("Waitron Demo S.L.");
+});
+it("keeps a location name the Demo draft already holds rather than the demo location", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: { mode: "demo", venue: { location: { name: "Bar Pepe" } } },
+  });
+  expect((q(el, "[data-test=name]") as HTMLInputElement).value).toBe("Bar Pepe");
+});
+it("explains the Demo location name with a ? rather than a hint the filled-in field would never show", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: { mode: "demo" },
+  });
+  const name = q(el, "[data-test=name]")!;
+  expect(name.getAttribute("hint")).toBe("");
+  const help = name.querySelector("wt-help-tooltip[slot=help]")!;
+  expect(help.getAttribute("aria-label")).toBe("Help with location name");
+  expect(help.textContent!.trim()).toBe(
+    "The name you use for this location. You can keep the suggested name or change it.",
+  );
+});
+it("explains the Demo location name's ? in Spanish", async () => {
+  setLocale("es-ES");
+  try {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "demo" },
+    });
+    const help = q(el, "[data-test=name] wt-help-tooltip[slot=help]")!;
+    expect(help.getAttribute("aria-label")).toBe("Ayuda sobre el nombre del local");
+    expect(help.textContent!.trim()).toBe(
+      "El nombre que usas para este local. Puedes mantener el nombre propuesto o cambiarlo.",
+    );
+  } finally {
+    setLocale("en-GB");
+  }
+});
+it.each(["prepare", "live"] as const)(
+  "keeps the location name's hint and no ? in %s, where the field starts empty",
+  async (mode) => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { draft: { mode } });
+    const name = q(el, "[data-test=name]")!;
+    expect(name.getAttribute("hint")).toBe("The name you use for this location");
+    expect(name.querySelector("wt-help-tooltip")).toBeNull();
+  },
+);
+it("sends the current country's demo identity in Demo, not a tax ID or legal name the draft held", async () => {
+  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: { mode: "demo", venue: { taxId: "B12345674", legalName: "Otra Empresa SL" } },
+    defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
+  });
+  const events = collect(host);
+  for (const [field, value] of Object.entries({
+    addressLine1: "Calle Mayor 1",
+    postalCode: "28013",
+    city: "Madrid",
+  }))
+    await type(el, field, value);
+  q(el, "[data-test=next]")!.click();
+  const venue = (events[0]!.detail as { patch: ProvisionBody }).patch.venue;
+  expect(venue.taxId).toBe("B00000000");
+  expect(venue.legalName).toBe("Waitron Demo S.L.");
+});
 it("keeps edited descriptions when defaults arrive late", async () => {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
   await type(el, "operationDescription", "Venta de comidas");
@@ -906,14 +982,16 @@ it("offers a retry when Demo defaults are unavailable, without generating a part
   expect(q(el, "[data-test=retry-defaults]")).not.toBeNull();
   expect(el.shadowRoot!.activeElement).toBe(q(el, "[role=alert]"));
 });
-it("maps a Demo legal-name refusal to the visible location name", async () => {
+it("shows a Demo legal-name refusal above Next, leaving the location name unmarked", async () => {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo" },
     invalidField: "legalName",
   });
   const name = q(el, "[data-test=name]")!;
-  expect(name.hasAttribute("invalid")).toBe(true);
-  expect(name.getAttribute("error")).toContain("characters");
+  expect(name.hasAttribute("invalid")).toBe(false);
+  expect(name.getAttribute("error")).toBe("");
+  expect(await bottomOf(el)).toBe(t("server_fields.legal_name"));
+  expect(t("server_fields.legal_name")).toContain("characters");
 });
 
 it.each([
@@ -1225,15 +1303,15 @@ describe("setup-venue-screen in Spanish", () => {
     );
   });
 
-  it("redraws a Demo legal-name refusal, shown on the location name, in Spanish", async () => {
+  it("redraws a Demo legal-name refusal, shown above Next, in Spanish", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo" },
       invalidField: "legalName",
     });
-    const english = q(el, "[data-test=name]")!.getAttribute("error");
+    const english = await bottomOf(el);
     setLocale("es-ES");
     await el.updateComplete;
-    expect(q(el, "[data-test=name]")!.getAttribute("error")).toBe(t("server_fields.legal_name"));
+    expect(await bottomOf(el)).toBe(t("server_fields.legal_name"));
     expect(t("server_fields.legal_name")).not.toBe(english);
   });
 

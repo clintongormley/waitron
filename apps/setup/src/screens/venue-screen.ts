@@ -100,7 +100,8 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
 
 type HintedField =
   "taxId" | "legalName" | "name" | "addressLine1" | "addressLine2" | "postalCode" | "city";
-type HelpedField = Exclude<TextField, HintedField>;
+/** Demo starts the location name filled in, so there it takes a "?" rather than its hint. */
+type HelpedField = Exclude<TextField, HintedField> | "name";
 
 /** A short explanation shown in the empty field. */
 const FIELD_HINT: Record<HintedField, StringKey> = {
@@ -116,6 +117,7 @@ const FIELD_HINT: Record<HintedField, StringKey> = {
 /** An explanation too long for a hint, or for a field that starts filled in, so a hint would never show. */
 const FIELD_HELP: Record<HelpedField, StringKey> = {
   country: "venue.help.country",
+  name: "venue.help.name",
   operationDescription: "venue.help.operation_description",
   province: "venue.help.province",
   dayCutover: "venue.help.day_cutover",
@@ -267,8 +269,9 @@ export class SetupVenueScreen extends LitElement {
     if (!this.#seeded) {
       this.#seeded = true;
       this.#seedFromDraft();
-      if (this.#demo && this.values.taxId === "") {
-        this.values = { ...this.values, taxId: this.#pack()?.demo?.createCompanyTaxId() ?? "" };
+      const demoLocation = this.#demo ? this.#pack()?.demo?.locationName : undefined;
+      if (demoLocation !== undefined && this.values.name === "") {
+        this.values = { ...this.values, name: demoLocation };
       }
     }
     if (
@@ -282,10 +285,7 @@ export class SetupVenueScreen extends LitElement {
     if (changed.has("invalidField")) {
       const refusal =
         this.invalidField === undefined ? undefined : SERVER_FIELDS[this.invalidField];
-      this.serverInvalid =
-        refusal === undefined
-          ? undefined
-          : { key: this.#demo && refusal.key === "legalName" ? "name" : refusal.key, refusal };
+      this.serverInvalid = refusal === undefined ? undefined : { key: refusal.key, refusal };
     }
     if (changed.has("errorMessage")) this.refusalDismissed = false;
     this.#errors = this.#collectErrors();
@@ -422,8 +422,6 @@ export class SetupVenueScreen extends LitElement {
   #invalidFields(): Set<FieldKey> {
     const invalid = new Set<FieldKey>();
     for (const key of REQUIRED_TEXT_FIELDS) {
-      // Demo copies the location name into the legal name on Next.
-      if (this.#demo && key === "legalName") continue;
       if (this.values[key].trim() === "") invalid.add(key);
     }
     const pack = this.#pack();
@@ -486,6 +484,12 @@ export class SetupVenueScreen extends LitElement {
       this.shadowRoot?.querySelector<HTMLElement>("[data-test=defaults-error]")?.focus();
       return;
     }
+    // From the pack chosen NOW, so a country changed after the form was seeded cannot send another
+    // country's demo identity.
+    const identity = this.#demo ? this.#pack()?.demo : undefined;
+    if (identity !== undefined) {
+      this.values = { ...this.values, taxId: identity.taxId, legalName: identity.legalName };
+    }
     this.attempted = true;
     this.refusalDismissed = true;
     this.serverInvalid = undefined;
@@ -493,7 +497,6 @@ export class SetupVenueScreen extends LitElement {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    if (this.#demo) this.values = { ...this.values, legalName: this.values.name };
     const pack = this.#pack();
     const area = this.#area(pack);
     const postalValidation = pack?.postalCode?.validate(this.values.postalCode);
@@ -565,6 +568,8 @@ export class SetupVenueScreen extends LitElement {
 
   #field(label: string, key: TextField, type = "text"): TemplateResult {
     const error = this.#errors.get(key) ?? "";
+    const demoName = this.#demo && key === "name";
+    const help = !hasHint(key) ? this.#help(key) : demoName ? this.#help("name") : nothing;
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
@@ -573,13 +578,13 @@ export class SetupVenueScreen extends LitElement {
       autocomplete=${FIELD_AUTOCOMPLETE[key]}
       data-test=${key}
       type=${type}
-      hint=${hasHint(key) ? t(FIELD_HINT[key]) : ""}
+      hint=${hasHint(key) && !demoName ? t(FIELD_HINT[key]) : ""}
       ?invalid=${error !== ""}
       ?required=${key !== "addressLine2"}
       error=${error}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
-      >${hasHint(key) ? nothing : this.#help(key)}</wt-input
+      >${help}</wt-input
     >`;
   }
 

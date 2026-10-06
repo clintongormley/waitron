@@ -18,6 +18,7 @@ import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";
+const TRADING_NAMES = { restaurant: "Front Bar", deli: "Back Deli" };
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -34,7 +35,7 @@ describe("seedFloor", () => {
     const { locationId } = await provisionVenue();
 
     const policies = await withTransaction(suite.db, async (tx) => {
-      await seedFloor(tx, { locationId, locale: LOCALE });
+      await seedFloor(tx, { locationId, locale: LOCALE, departmentTradingNames: TRADING_NAMES });
       return listSalePolicies(tx, { locationId: brandLocationId(locationId) });
     });
 
@@ -53,7 +54,7 @@ describe("seedFloor", () => {
     const { locationId } = await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
-      await seedFloor(tx, { locationId, locale: LOCALE });
+      await seedFloor(tx, { locationId, locale: LOCALE, departmentTradingNames: TRADING_NAMES });
 
       const { rows: zones } = await tx.execute<{ name: string; active: number }>(
         sql`select name, active from floor_zones where location_id = ${locationId} order by display_order`,
@@ -95,4 +96,31 @@ describe("seedFloor", () => {
     expect(res.statuses.map((s) => s.label)).toEqual(["VIP", "Allergy at this table", "Birthday"]);
     expect(new Set(res.statuses.map((s) => s.color)).size).toBe(3);
   });
+
+  it.each(["en", "es"] as const)(
+    "gives the departments the trading names it is handed, whatever the seed language (%s)",
+    async (locale) => {
+      const { locationId } = await provisionVenue();
+
+      const rows = await withTransaction(suite.db, async (tx) => {
+        await seedFloor(tx, { locationId, locale, departmentTradingNames: TRADING_NAMES });
+        const { rows } = await tx.execute<{ name: string; trading_name: string }>(
+          sql`select name, trading_name from departments where location_id = ${locationId} order by default_service_mode desc`,
+        );
+        return rows;
+      });
+
+      expect(rows).toEqual(
+        locale === "en"
+          ? [
+              { name: "Restaurant and bar", trading_name: "Front Bar" },
+              { name: "Deli", trading_name: "Back Deli" },
+            ]
+          : [
+              { name: "Restaurante y bar", trading_name: "Front Bar" },
+              { name: "Charcutería", trading_name: "Back Deli" },
+            ],
+      );
+    },
+  );
 });

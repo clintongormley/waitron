@@ -20,12 +20,14 @@ import {
 import { locationId as brandLocationId } from "@waitron/shared";
 import { resolveMakers, setClaim } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
+import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";
+const DEPARTMENT_TRADING_NAMES = getCountryPack("ES")!.demo!.departmentTradingNames;
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -46,7 +48,12 @@ describe("seedDemoRestaurant", () => {
 
   it("connects the demo printer to every device profile and the preparation stations", async () => {
     const venue = await provisionVenue();
-    await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 0 });
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 0,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+    });
 
     const { rows: printers } = await suite.db.execute<{
       id: string;
@@ -91,7 +98,12 @@ describe("seedDemoRestaurant", () => {
     vi.stubEnv("WAITRON_ENV", "production");
 
     await expect(
-      seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 7 }),
+      seedDemoRestaurant(suite.db, {
+        venue,
+        locale: LOCALE,
+        salesDays: 7,
+        departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      }),
     ).rejects.toMatchObject({ code: "deployment.demo_data_refused" });
 
     const after = await withTransaction(suite.db, async (tx) => ({
@@ -106,7 +118,12 @@ describe("seedDemoRestaurant", () => {
 
   it("routes seeded drinks by zone, dishes to Kitchen, and a test-only no-preparation folder without work", async () => {
     const venue = await provisionVenue();
-    await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 1 });
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 1,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+    });
 
     await withTransaction(suite.db, async (tx) => {
       const { rows: pass } = await tx.execute<{
@@ -206,7 +223,12 @@ describe("seedDemoRestaurant", () => {
 
   it("opens Upstairs bar on Friday and Saturday evenings and routes closed evenings to Downstairs bar", async () => {
     const venue = await provisionVenue();
-    await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 1 });
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 1,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+    });
 
     await withTransaction(suite.db, async (tx) => {
       const cfg = { locationId: brandLocationId(venue.locationId) };
@@ -254,7 +276,12 @@ describe("seedDemoRestaurant", () => {
   it("runs every sub-seed: both menus, the floor, the staff, the adjustment reasons, a sale, and content-addressed media", async () => {
     const venue = await provisionVenue();
 
-    await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 7 });
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 7,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+    });
 
     const read = await withTransaction(suite.db, async (tx) => {
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
@@ -406,12 +433,12 @@ describe("seedDemoRestaurant", () => {
     expect(read.departments).toEqual([
       {
         name: "Deli",
-        trading_name: "Casa Delgado Deli",
+        trading_name: "Deli Delgado",
         default_service_mode: "prepay",
       },
       {
         name: "Restaurant and bar",
-        trading_name: "Casa Delgado",
+        trading_name: "Bar Casa Delgado",
         default_service_mode: "table_tab",
       },
     ]);

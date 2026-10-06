@@ -25,6 +25,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
+import type { CountryDemoIdentity } from "@waitron/country";
 import { createTable, createZone, setTablePlacement } from "../../src/tables.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "./floor.js";
@@ -33,6 +34,7 @@ import { CASA_DELGADO, SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 export interface SeedFloorInput {
   locationId: string;
   locale: SeedLocale;
+  departmentTradingNames: CountryDemoIdentity["departmentTradingNames"];
   menuIds?: { restaurant: string; lunch: string; deli: string };
 }
 
@@ -55,7 +57,7 @@ function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
  *  zone of this location. */
 export async function seedFloor(
   tx: Transaction,
-  { locationId, locale, menuIds }: SeedFloorInput,
+  { locationId, locale, departmentTradingNames, menuIds }: SeedFloorInput,
 ): Promise<void> {
   const cfg = toTableCfg(locationId, locale);
 
@@ -69,10 +71,9 @@ export async function seedFloor(
   }
 
   const restaurantName = locale === "en" ? "Restaurant and bar" : "Restaurante y bar";
-  const restaurantTradingName = "Casa Delgado";
   await tx.execute(sql`
     update departments
-    set name = ${restaurantName}, trading_name = ${restaurantTradingName},
+    set name = ${restaurantName}, trading_name = ${departmentTradingNames.restaurant},
         default_service_mode = 'table_tab'
     where id = ${defaultPolicy.department_id}`);
   const [deliRow] = await tx
@@ -80,7 +81,7 @@ export async function seedFloor(
     .values({
       locationId,
       name: locale === "en" ? "Deli" : "Charcutería",
-      tradingName: locale === "en" ? "Casa Delgado Deli" : "Charcutería Casa Delgado",
+      tradingName: departmentTradingNames.deli,
       defaultServiceMode: "prepay",
       active: true,
     })

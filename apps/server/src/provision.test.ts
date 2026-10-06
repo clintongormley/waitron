@@ -102,6 +102,25 @@ function ownerDb(): Database {
 }
 
 describe("provisionVenue", () => {
+  it.each(["preproduction", "production"] as const)(
+    "names the default department, and its trading name, after the location when provisioning under %s",
+    async (environment) => {
+      const db = ownerDb();
+      const venue = venueRequest(nextNif());
+      venue.location.name = "Bar Pepe";
+
+      await provisionVenue(
+        { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+        { environment, venue },
+      );
+
+      const { rows } = await db.execute<{ name: string; trading_name: string }>(
+        sql`select name, trading_name from departments where is_default`,
+      );
+      expect(rows).toEqual([{ name: "Bar Pepe", trading_name: "Bar Pepe" }]);
+    },
+  );
+
   it("stamps the environment and mints one venue with three ids, exactly one SIF + series set, and no till", async () => {
     const db = ownerDb();
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });

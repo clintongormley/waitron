@@ -1430,7 +1430,9 @@ above.
 A short explanation of a field is its hint (below), not a question-mark button (owner, 2026-10-03).
 Use `wt-help-tooltip` for an explanation too long for a hint, and for a field that starts filled in,
 where a hint would never show. The setup wizard's shop step decides which field gets which in its
-`FIELD_HINT` and `FIELD_HELP` maps for its text fields; the receipt-language choice keeps its own
+`FIELD_HINT` and `FIELD_HELP` maps for its text fields. The location name is in both: `#field` gives
+it the "?" and no hint in Demo, where it starts filled in, and the hint otherwise. The
+receipt-language choice keeps its own
 "?" (`apps/setup/src/screens/venue-screen.ts`).
 Give its question-mark button a localized `aria-label`. It opens on click, stays open while you
 interact with it, and closes when you press Escape or click anywhere outside it. Place it in the

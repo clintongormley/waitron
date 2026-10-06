@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   RECEIPT_LABEL_KEYS,
   findAdministrativeAreaByPostalCode,
@@ -273,47 +273,20 @@ describe("validateSpanishPhone", () => {
 });
 
 describe("demo company identity", () => {
-  it("generates company identifiers accepted by the country's real validator", () => {
-    const values = new Set<string>();
-    for (let index = 0; index < 100; index++) {
-      const taxId = SPAIN.demo!.createCompanyTaxId();
-      expect(taxId).toMatch(/^B[0-9]{8}$/);
-      expect(validateSpanishNif(taxId)).toEqual({ valid: true, normalized: taxId, kind: "entity" });
-      values.add(taxId);
-    }
-    expect(values.size).toBeGreaterThan(1);
+  it("is Waitron's fixed demo identity", () => {
+    expect(SPAIN.demo).toEqual({
+      legalName: "Waitron Demo S.L.",
+      taxId: "B00000000",
+      locationName: "Casa Delgado",
+      departmentTradingNames: { restaurant: "Bar Casa Delgado", deli: "Deli Delgado" },
+    });
   });
 
-  describe("throws away a draw at or above 4,290,000,000 and draws again", () => {
-    const draws = (...values: number[]) => {
-      const queue = [...values];
-      vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation((array) => {
-        (array as Uint32Array)[0] = queue.shift()!;
-        return array;
-      });
-    };
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
-    it("draws again when a draw lands on the first value past the last whole block", () => {
-      draws(4_290_000_000, 1_234_567);
-      expect(SPAIN.demo!.createCompanyTaxId()).toMatch(/^B1234567[0-9]$/);
-    });
-
-    it("draws again for the largest 32-bit value", () => {
-      draws(4_294_967_295, 7_654_321);
-      expect(SPAIN.demo!.createCompanyTaxId()).toMatch(/^B7654321[0-9]$/);
-    });
-
-    it("keeps drawing through several rejected draws in a row", () => {
-      draws(4_290_000_000, 4_294_967_295, 1_234_567);
-      expect(SPAIN.demo!.createCompanyTaxId()).toMatch(/^B1234567[0-9]$/);
-    });
-
-    it("keeps the last value inside the last whole block", () => {
-      draws(4_289_999_999, 1_234_567);
-      expect(SPAIN.demo!.createCompanyTaxId()).toMatch(/^B9999999[0-9]$/);
+  it("has a tax ID the country's own validator accepts as a company's", () => {
+    expect(validateSpanishNif(SPAIN.demo!.taxId)).toEqual({
+      valid: true,
+      normalized: "B00000000",
+      kind: "entity",
     });
   });
 });

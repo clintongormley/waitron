@@ -371,7 +371,7 @@ describe("setup-review-screen", () => {
   });
 });
 
-it("shows the generated demo choices and full location details for review", async () => {
+it("shows the fixed demo identity's note and full location details for review", async () => {
   const draft = fullDraft();
   draft.mode = "demo";
   Object.assign(draft.venue!.location!, {
@@ -383,7 +383,9 @@ it("shows the generated demo choices and full location details for review", asyn
     province: "Madrid",
   });
   const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
-  expect(text(el, "[data-test=demo-defaults]")).toContain("generated");
+  expect(text(el, "[data-test=demo-defaults]")).toBe(
+    "The legal name and tax ID below are Waitron's fixed demo values. They are made up. Waitron also supplied the other business and invoice defaults below. Demo does not submit invoices to the tax agency.",
+  );
   expect(text(el, "[data-test=summary-operationDescription]")).toBe("Venta en establecimiento");
   expect(q(el, "[data-test=summary-tillName]")).toBeNull();
   expect(el.shadowRoot!.textContent).not.toMatch(/\btill\b/i);
@@ -408,6 +410,16 @@ describe("setup-review-screen in Spanish", () => {
     expect(text(el, "[data-test=summary-cert]")).toBe("adjunto");
     expect(text(el, "[data-test=provision]")).toBe("Configurar este servidor");
     expect(text(el, "[data-test=back]")).toBe("Volver");
+  });
+
+  it("says in Spanish that the demo's legal name and tax ID are Waitron's fixed demo values", async () => {
+    setLocale("es-ES");
+    const draft = fullDraft();
+    draft.mode = "demo";
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+    expect(text(el, "[data-test=demo-defaults]")).toBe(
+      "La razón social y el número de identificación fiscal de abajo son los valores fijos de demostración de Waitron. Son inventados. Waitron también ha puesto los demás valores del negocio y de factura de abajo. La demostración no envía facturas a la Agencia Tributaria.",
+    );
   });
 
   it("names each mode in Spanish, and shows an unknown mode as it came", async () => {
