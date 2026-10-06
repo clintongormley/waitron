@@ -124,27 +124,19 @@ export class MenuStructureTable extends LitElement {
         flex: none;
         justify-content: center;
         width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        align-items: center;
         margin-inline-end: var(--wt-space-3);
       }
       /* The table's arrow, the grip while reordering, and the swatch slot come before the menu's name. */
       wt-data-table::part(tree-heading) {
         margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
       }
-      :host([reordering]) wt-data-table::part(tree-heading) {
-        margin-inline-start: calc(
-          var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
-        );
-      }
-      /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
-         would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
       wt-data-table::part(product-cell) {
         display: block;
       }
       wt-data-table[narrow]::part(tree-heading) {
         margin-inline-start: var(--tree-arrow-width);
-      }
-      :host([reordering]) wt-data-table[narrow]::part(tree-heading) {
-        margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min));
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -714,7 +706,7 @@ export class MenuStructureTable extends LitElement {
   /** The Device Home Page's and the menu's rows: no grip, a blank slot, and a note when empty. */
   #topCell(row: HomeRow | RootRow, empty: string | null, emptyTest: string) {
     return html`<span part="folder-cell"
-      >${this.reordering ? gripSpace : nothing}${folderFrame()}<span part="name-stack folder-stack"
+      >${folderFrame()}<span part="name-stack folder-stack"
         >${this.#nameSpan(row)}${
           empty === null ? nothing : html`<span part="note" data-test=${emptyTest}>${empty}</span>`
         }</span
@@ -737,10 +729,9 @@ export class MenuStructureTable extends LitElement {
       );
     if (row.kind === "shortcut")
       return html`<span part="product-cell"
-        >${this.#grip(row)}<span part="name-stack">${this.#nameSpan(row)}</span></span
+        ><span part="name-stack">${this.#nameSpan(row)}</span></span
       >`;
     const { node, key } = row;
-    const grip = this.#grip(row);
     const stack = html`<span
       part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
       >${this.#nameSpan(row)}${
@@ -752,10 +743,10 @@ export class MenuStructureTable extends LitElement {
       }</span
     >`;
     if (node.ref.kind === "section")
-      return html`<span part="folder-cell">${grip}${folderFrame(this.#swatch(row))}${stack}</span>`;
+      return html`<span part="folder-cell">${folderFrame(this.#swatch(row))}${stack}</span>`;
     const image = this.#productById.get(node.ref.productId)?.image ?? null;
     return html`<span part="product-cell"
-      >${grip}${
+      >${
         image === null
           ? html`<span
               part="thumb-placeholder"
@@ -923,6 +914,9 @@ export class MenuStructureTable extends LitElement {
         expandAllLabel=${t("folders.expand_all")}
         collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
+        .rowControls=${this.reordering ? (row: Row) => (row.kind === "member" || row.kind === "shortcut" ? this.#grip(row) : gripSpace) : undefined}
+        rowControlsLabel=${t("folders.drag")}
+        rowControlsAlign="center"
         .rowCollapsible=${(row: Row) => row.kind !== "root"}
         .rowActivation=${(row: Row) =>
           row.kind === "home" || (row.kind === "member" && row.node.ref.kind === "section")

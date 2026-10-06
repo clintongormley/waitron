@@ -48,10 +48,12 @@ export class CatalogueBrowser extends LitElement {
         flex: 1 1 0;
         flex-direction: column;
       }
-      /* Its controls wrap one by one with the table's own, rather than as one block on a line of
-         its own. */
       .actions {
-        display: contents;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-3) 0;
       }
       fieldset {
         margin: var(--wt-space-4) 0;
@@ -788,7 +790,13 @@ export class CatalogueBrowser extends LitElement {
         ></wt-input>
         ${
           this.selecting || this.summaryLoading || this.operationBusy
-            ? html`<div slot="toolbar-end" class="actions">
+            ? html`<div
+                slot="toolbar-bottom"
+                class="actions"
+                data-test="selection-bar"
+                role="group"
+                aria-label=${t("folders.select")}
+              >
                 ${
                   !this.operation && (this.summaryLoading || this.operationBusy)
                     ? html`<wt-spinner></wt-spinner>`

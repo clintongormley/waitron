@@ -923,9 +923,10 @@ unused `units` property is gone (it closes W75's leftover).
 - **A303, owner 2026-10-06, in progress:** one `--wt-tap-min` box for colour squares and photos;
   both trees hide their media slots at ≤440px. The Products count is visually hidden there but
   remains in the row's accessible name. Slot and count browser checks added; the count check's
-  phone and desktop controls replace the old hidden-box measurement. Still to implement: the
-  unindented grip column, selection bar below Search, Select wording, and leading product slot
-  with a colour/photo menu and the photo's colour ring. Visual and whole-item finish checks remain
+  phone and desktop controls replace the old hidden-box measurement. The grip/checkbox column now
+  precedes the indentation, and Select mode has a separate action bar below Search with Done and
+  focus return. Still to implement: the leading product colour/photo menu, colour ring and editor
+  photo-field focus. Visual and whole-item finish checks remain
   pending.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
   not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the bottom

@@ -146,18 +146,11 @@ export class ProductList extends LitElement {
       wt-data-table::part(tree-heading) {
         margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
       }
-      :host([reordering]) wt-data-table::part(tree-heading) {
-        margin-inline-start: calc(
-          var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
-        );
-      }
       wt-data-table[narrow]::part(folder-frame),
       wt-data-table[narrow]::part(thumb-frame),
       wt-data-table[narrow]::part(thumb-placeholder) {
         display: none;
       }
-      /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
-         would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
       wt-data-table::part(product-cell) {
         display: block;
       }
@@ -166,9 +159,6 @@ export class ProductList extends LitElement {
       }
       wt-data-table[narrow]::part(tree-heading) {
         margin-inline-start: var(--tree-arrow-width);
-      }
-      :host([reordering]) wt-data-table[narrow]::part(tree-heading) {
-        margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min));
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -191,6 +181,14 @@ export class ProductList extends LitElement {
         flex: none;
         vertical-align: middle;
         width: var(--wt-tap-min);
+      }
+      wt-data-table::part(name-line) {
+        display: none;
+      }
+      wt-data-table[narrow]::part(name-line) {
+        display: inline-block;
+        width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
       }
       wt-data-table::part(thumb-frame),
       wt-data-table::part(thumb-placeholder) {
@@ -258,14 +256,8 @@ export class ProductList extends LitElement {
       wt-data-table::part(variant-name) {
         padding-inline-start: calc(var(--wt-tap-min) + var(--wt-space-3));
       }
-      :host([reordering]) wt-data-table::part(variant-name) {
-        padding-inline-start: calc(2 * var(--wt-tap-min) + var(--wt-space-3));
-      }
       wt-data-table[narrow]::part(variant-name) {
         padding-inline-start: 0;
-      }
-      :host([reordering]) wt-data-table[narrow]::part(variant-name) {
-        padding-inline-start: var(--wt-tap-min);
       }
       wt-data-table::part(price-unit) {
         color: var(--wt-color-text-muted);
@@ -983,7 +975,7 @@ export class ProductList extends LitElement {
           variant
             ? html`<span part="variant-name">${variant.name}</span>`
             : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
-                ${this.#grip(product.name)}${
+                ${
                   product.image === null
                     ? html`<span
                         part="thumb-placeholder"
@@ -1196,8 +1188,14 @@ export class ProductList extends LitElement {
       : nothing;
   }
 
-  #gripSpace() {
-    return this.reordering ? html`<span part="grip-space"></span>` : nothing;
+  #nameLine() {
+    return this.reordering ? html`<span part="name-line" aria-hidden="true"></span>` : nothing;
+  }
+
+  #rowControls(row: ListRow) {
+    if (row.kind === "folder") return this.#grip(row.folder.name);
+    if (row.kind === "product" && row.variant === null) return this.#grip(row.product.name);
+    return html`<span part="grip-space"></span>`;
   }
 
   #columns(): DataTableColumn<ListRow>[] {
@@ -1212,13 +1210,13 @@ export class ProductList extends LitElement {
         if (row.kind === "draft")
           return column.key === "name"
             ? html`<span part="folder-cell naming"
-                >${this.#gripSpace()}${folderFrame()}${this.#nameBox()}</span
+                >${this.#nameLine()}${folderFrame()}${this.#nameBox()}</span
               >`
             : nothing;
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
-              >${this.#gripSpace()}${folderFrame()}<span part="folder-name"
+              >${folderFrame()}<span part="folder-name"
                 ><span
                   ><strong>${t("folders.all_products")}</strong
                   ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
@@ -1251,9 +1249,11 @@ export class ProductList extends LitElement {
                 : nothing
             }`;
           return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
-            >${this.#grip(folder.name)}${
+            >${
               this.#renaming(folder.id)
-                ? html`${folderFrame()}${this.#nameBox()}<span part="name-after">${after}</span>`
+                ? html`${this.#nameLine()}${folderFrame()}${this.#nameBox()}<span part="name-after"
+                      >${after}</span
+                    >`
                 : html`${folderFrame(
                       html`<button
                         part="swatch-button"
@@ -1422,6 +1422,8 @@ export class ProductList extends LitElement {
         collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
         .searchTerm=${this.search}
+        .rowControls=${this.reordering ? (row: ListRow) => this.#rowControls(row) : undefined}
+        rowControlsLabel=${t("folders.drag")}
         .selectable=${this.selecting}
         .selected=${this.selected}
         .rowSelectable=${(row: ListRow) =>
@@ -1463,7 +1465,8 @@ export class ProductList extends LitElement {
         @pointerdown=${this.#pointerDown}
         @wt-expand-change=${this.#expandChange}
         ><slot name="toolbar-start" slot="toolbar-start"></slot
-        ><slot name="toolbar-end" slot="toolbar-end"></slot></wt-data-table
+        ><slot name="toolbar-end" slot="toolbar-end"></slot
+        ><slot name="toolbar-bottom" slot="toolbar-bottom"></slot></wt-data-table
       >${dragGhost(this.ghost)}`;
   }
 }

@@ -3,7 +3,7 @@ import type { PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { iconButtonStyles, trackIconTooltip } from "../icon-button.js";
 import { holdPageCursor, releasePageCursor } from "../reorder-table.js";
 import { registerIcons } from "./wt-icon.js";
@@ -78,6 +78,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      .visually-hidden {
+        ${visuallyHiddenStyles}
+      }
       :host {
         display: block;
         min-width: 0;
@@ -272,7 +275,23 @@ export class WtDataTable<Row = unknown> extends LitElement {
       th.select,
       td.select {
         width: var(--wt-tap-min);
+        white-space: nowrap;
         text-align: center;
+      }
+      table[data-center-controls] td {
+        vertical-align: middle;
+      }
+      table[data-center-controls] .tree-cell {
+        align-items: center;
+      }
+      .row-controls {
+        display: contents;
+      }
+      table[data-center-controls] .row-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--wt-space-2);
       }
 
       .select input {
@@ -718,6 +737,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ attribute: false }) selected: readonly string[] = [];
   @property({ attribute: false }) selectionLabel: (row: Row) => string = () => "Select row";
   @property() selectAllLabel = "Select all";
+  @property({ attribute: false }) rowControls?: (row: Row) => unknown;
+  @property() rowControlsLabel = "Row controls";
+  @property() rowControlsAlign: "baseline" | "center" = "baseline";
 
   @property() sortKey: string | null = null;
   @property() sortDirection: SortDirection = "ascending";
@@ -1806,7 +1828,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         ${
           hasGroups
             ? html`<tr role="row" class="column-groups">
-                ${this.selectable ? html`<td aria-hidden="true"></td>` : nothing}
+                ${this.selectable || this.rowControls ? html`<td aria-hidden="true"></td>` : nothing}
                 ${groups.map((group) =>
                   group.label
                     ? html`<th role="columnheader" scope="colgroup" colspan=${group.span}>
@@ -1819,19 +1841,29 @@ export class WtDataTable<Row = unknown> extends LitElement {
         }
         <tr role="row">
           ${
-            this.selectable
-              ? html`<th scope="col" role="columnheader" class="select">
-                  <input
-                    type="checkbox"
-                    data-test="select-all"
-                    aria-label=${this.selectAllLabel}
-                    .checked=${allSelected}
-                    .indeterminate=${someSelected && !allSelected}
-                    @change=${(event: Event) => {
-                      event.stopPropagation();
-                      this.#toggleAll(visibleKeys);
-                    }}
-                  />
+            this.selectable || this.rowControls
+              ? html`<th
+                  scope="col"
+                  role="columnheader"
+                  class="select"
+                  aria-label=${this.rowControls ? this.rowControlsLabel : nothing}
+                >
+                  ${this.rowControls ? html`<span class="visually-hidden">${this.rowControlsLabel}</span>` : nothing}
+                  ${
+                    this.selectable
+                      ? html`<input
+                          type="checkbox"
+                          data-test="select-all"
+                          aria-label=${this.selectAllLabel}
+                          .checked=${allSelected}
+                          .indeterminate=${someSelected && !allSelected}
+                          @change=${(event: Event) => {
+                            event.stopPropagation();
+                            this.#toggleAll(visibleKeys);
+                          }}
+                        />`
+                      : nothing
+                  }
                 </th>`
               : nothing
           }
@@ -1899,20 +1931,25 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** The per-row checkbox cell both rendering paths share; `role="gridcell"` only in tree mode,
    * where the table's own role is overridden to `treegrid` and every cell needs one. */
   #renderSelectCell(key: string, row: Row, isTree: boolean) {
-    if (!this.selectable) return nothing;
-    if (!this.rowSelectable(row))
-      return html`<td class="select" role=${isTree ? "gridcell" : nothing}></td>`;
+    if (!this.selectable && !this.rowControls) return nothing;
     return html`<td class="select" role=${isTree ? "gridcell" : nothing}>
-      <input
-        type="checkbox"
-        data-test=${`select-${key}`}
-        aria-label=${this.selectionLabel(row)}
-        .checked=${this.selected.includes(key)}
-        @change=${(event: Event) => {
-          event.stopPropagation();
-          this.#toggleRow(key);
-        }}
-      />
+      <span class="row-controls">
+        ${
+          this.selectable && this.rowSelectable(row)
+            ? html`<input
+                type="checkbox"
+                data-test=${`select-${key}`}
+                aria-label=${this.selectionLabel(row)}
+                .checked=${this.selected.includes(key)}
+                @change=${(event: Event) => {
+                  event.stopPropagation();
+                  this.#toggleRow(key);
+                }}
+              />`
+            : nothing
+        }
+        ${this.rowControls?.(row) ?? nothing}
+      </span>
     </td>`;
   }
 
@@ -2131,9 +2168,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * or brings them back keeps the toolbar and the filters panel, and the focus inside them. */
   #withToolbar(content: unknown) {
     const side = this.leadingFilters && this.columns.some((column) => column.filter);
-    return html`${this.#renderToolbar()}${
-      side ? html`<div class="table-body">${this.#renderFiltersPanel()}${content}</div>` : content
-    }`;
+    return html`${this.#renderToolbar()}<slot name="toolbar-bottom"></slot>${
+        side ? html`<div class="table-body">${this.#renderFiltersPanel()}${content}</div>` : content
+      }`;
   }
 
   /** Whether the chooser could change anything: a table opts in with a `choosable` column, and
@@ -2292,7 +2329,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
     const shown = this.#shownColumns();
     const widths =
-      this.filterColumnWidths?.length === shown.length + Number(this.selectable)
+      this.filterColumnWidths?.length ===
+      shown.length + Number(this.selectable || this.rowControls !== undefined)
         ? this.filterColumnWidths
         : null;
     const lockedWidth = widths?.reduce((sum, width) => sum + width, 0);
@@ -2306,6 +2344,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return this.#withToolbar(
         html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
           <table
+            ?data-center-controls=${this.rowControls !== undefined && this.rowControlsAlign === "center"}
             data-locked-columns=${widths ? "" : nothing}
             style=${lockedWidth === undefined ? nothing : `width: ${lockedWidth}px`}
           >
@@ -2366,6 +2405,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table
           role="treegrid"
+          ?data-center-controls=${this.rowControls !== undefined && this.rowControlsAlign === "center"}
           data-locked-columns=${widths ? "" : nothing}
           style=${lockedWidth === undefined ? nothing : `width: ${lockedWidth}px`}
         >

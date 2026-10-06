@@ -1448,7 +1448,7 @@ it("keeps touch scrolling on the name cell and starts a drag from its grip", asy
     offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
   );
   expect(getComputedStyle(cell).touchAction).toBe("auto");
-  const grip = cell.querySelector<HTMLElement>(".drag-grip")!;
+  const grip = cell.closest("tr")!.querySelector<HTMLElement>(".drag-grip")!;
   expect(getComputedStyle(grip).touchAction).toBe("none");
   cell.dispatchEvent(
     new PointerEvent("pointerdown", {
@@ -1823,7 +1823,10 @@ describe("the product list at phone width", () => {
       edges,
       box: box.getBoundingClientRect(),
       grip:
-        row.querySelector('.drag-grip, [part~="grip-space"]')?.getBoundingClientRect() ??
+        (root.host.hasAttribute("narrow")
+          ? row.querySelector('[part~="name-line"]')
+          : row.querySelector('.drag-grip, [part~="grip-space"]')
+        )?.getBoundingClientRect() ??
         (root.host.hasAttribute("narrow")
           ? {
               left: row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect().left,
@@ -3209,7 +3212,7 @@ describe("a product's variants in the list", () => {
 
   const nameCell = (root: ShadowRoot, key: string) => cellUnder(root, key, t("product.name"));
 
-  it("draws a small, muted arrow on a product with variants, against its grip", async () => {
+  it("draws a small, muted arrow on a product with variants, at its arrow box's end", async () => {
     const { root } = await mountDeli();
     const arrow = root.querySelector<HTMLElement>('tr[data-row-key="cecina"] .tree-toggle')!;
     const name = nameCell(root, "cecina").querySelector("strong")!;
@@ -3219,13 +3222,14 @@ describe("a product's variants in the list", () => {
       getComputedStyle(nameCell(root, "cecina").querySelector('[data-test="variant-count"]')!)
         .color,
     );
-    const grip = nameCell(root, "cecina").querySelector<HTMLElement>(".drag-grip")!;
+    const grip = nameCell(root, "cecina").closest("tr")!.querySelector<HTMLElement>(".drag-grip")!;
     const glyph = document.createRange();
     glyph.selectNodeContents(arrow);
-    // The arrow is drawn at the end of its box, against the grip, not in the middle of it.
-    expect(grip.getBoundingClientRect().left - glyph.getBoundingClientRect().right).toBeLessThan(
-      grip.getBoundingClientRect().width / 2,
+    // The arrow stays at its box's trailing edge; the grip is in the preceding column.
+    expect(arrow.getBoundingClientRect().right - glyph.getBoundingClientRect().right).toBeLessThan(
+      arrow.getBoundingClientRect().width / 2,
     );
+    expect(grip.getBoundingClientRect().right).toBeLessThan(arrow.getBoundingClientRect().left);
   });
 
   it.each([
@@ -3522,7 +3526,7 @@ describe("the Products tree's Name column", () => {
     text.selectNodeContents(name);
     return {
       level: Number(row.getAttribute("aria-level")),
-      grip: box(cell.querySelector('.drag-grip, [part="grip-space"]')),
+      grip: box(row.querySelector('.drag-grip, [part="grip-space"]')),
       media: box(
         cell.querySelector(
           '[part="folder-frame"], [part="thumb-frame"], [part="thumb-placeholder"]',
@@ -3626,7 +3630,7 @@ describe("the Products tree's Name column", () => {
 
     const PRODUCTS = new Set(["cola", "salad", "chop", "loin", "ribs", "bread"]);
 
-    it("draws no photo, placeholder or category slot, so names start right after their grips", async () => {
+    it("draws no photo, placeholder or category slot, so names start after their arrows", async () => {
       const { root } = await mountPhone();
       const photos = [
         ...root.querySelectorAll<HTMLElement>('[part~="thumb-frame"], [part~="thumb-placeholder"]'),
@@ -3635,7 +3639,13 @@ describe("the Products tree's Name column", () => {
       for (const photo of photos) expect(photo.getBoundingClientRect().width).toBe(0);
       for (const key of PRODUCTS) {
         const grip = root.querySelector(`tr[data-row-key="${key}"] .drag-grip`)!;
-        expect(pieces(root, key).name.left - grip.getBoundingClientRect().right, key).toBe(0);
+        expect(grip.closest("td")).toBe(grip.closest("tr")!.querySelector("td"));
+        const cell = grip.closest("tr")!.querySelector(".tree-cell")!;
+        const arrow = cell.querySelector(".tree-spacer, .tree-toggle, .tree-arrow")!;
+        expect(pieces(root, key).name.left, key).toBeCloseTo(
+          arrow.getBoundingClientRect().right,
+          0,
+        );
       }
       for (const key of ["root", "folder:d", "folder:f", "folder:m", "folder:g"]) {
         const row = key === "root" ? ROOT_KEY : key;
@@ -3830,7 +3840,7 @@ describe("the Products tree's Name column", () => {
       JSON.stringify(["reporting-category", "price", "made-at"]),
     );
     const { root } = await mountDeep();
-    const headings = [...root.querySelectorAll("thead th")].map((th) =>
+    const headings = [...root.querySelectorAll("thead th:not(.select)")].map((th) =>
       th.textContent!.replace(/[▲▼]/g, "").trim(),
     );
     expect(headings[1]).toBe(t("product.price"));
@@ -4499,3 +4509,34 @@ describe("A303 tree media slots", () => {
     },
   );
 });
+
+it.each([390, 1280])(
+  "aligns tree grips and selection boxes at every depth at %s px",
+  async (width) => {
+    await page.viewport(width, 844);
+    const { table, root } = await mountTree({ selecting: true });
+    table.setExpanded("folder:d", true);
+    table.setExpanded("folder:b", true);
+    await table.updateComplete;
+    const controls = ["folder:d", "folder:b", "cola", "lager"].map((key) => {
+      const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
+      return {
+        grip: row.querySelector<HTMLElement>(".drag-grip")!,
+        box: row.querySelector<HTMLElement>('input[type="checkbox"]')!,
+      };
+    });
+    expect(controls[0]!.grip).not.toBeNull();
+    for (const { grip, box } of controls) {
+      expect(grip.getBoundingClientRect().left).toBeCloseTo(
+        controls[0]!.grip.getBoundingClientRect().left,
+        0,
+      );
+      expect(box.getBoundingClientRect().left).toBeCloseTo(
+        controls[0]!.box.getBoundingClientRect().left,
+        0,
+      );
+      expect(grip.closest("td")).toBe(box.closest("td"));
+      expect(grip.closest("td")).toBe(grip.closest("tr")!.querySelector("td"));
+    }
+  },
+);

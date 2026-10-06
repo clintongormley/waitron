@@ -638,8 +638,8 @@ it("keeps a blank grip slot on the menu's row, so its name starts where the Prod
   const gap = parseFloat(tokens.getPropertyValue("--wt-space-3"));
   expect(tap).toBeGreaterThan(0);
   const start = tr.querySelector(".tree-cell")!.getBoundingClientRect().left;
-  // The table's arrow, the grip, the leading slot, then the gap before the name.
-  expect(pieces(el, "root").name.left - start).toBeCloseTo(3 * tap + gap, 0);
+  // The control column precedes the name cell; its arrow and media slot stay inside it.
+  expect(pieces(el, "root").name.left - start).toBeCloseTo(2 * tap + gap, 0);
 });
 
 // The name and any note under it (an included menu's "read only here") are centred as one.
@@ -1863,3 +1863,20 @@ describe("A303 tree media slots", () => {
     },
   );
 });
+
+it.each([390, 1280])(
+  "aligns Structure grips in the first column at every depth at %s px",
+  async (width) => {
+    await page.viewport(width, 844);
+    const el = await mountDeep();
+    const grips = all<HTMLElement>(el, '[part~="drag-grip"]');
+    expect(grips.length).toBeGreaterThan(3);
+    for (const grip of grips) {
+      expect(grip.getBoundingClientRect().left).toBeCloseTo(
+        grips[0]!.getBoundingClientRect().left,
+        0,
+      );
+      expect(grip.closest("td")).toBe(grip.closest("tr")!.querySelector("td"));
+    }
+  },
+);

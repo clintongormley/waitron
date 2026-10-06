@@ -6984,3 +6984,34 @@ test("the leading Filters button's tooltip stays shown while the pointer moves f
     expect(hit === null || !trigger.contains(hit)).toBe(true);
   });
 });
+
+for (const tree of [false, true])
+  for (const selectable of [false, true]) {
+    test(`keeps row controls in the leading column with selection ${selectable} and tree ${tree}`, async () => {
+      const el = await table({
+        rowControls: (row) => html`<button data-controls=${row.id}>Move ${row.name}</button>`,
+        rowControlsLabel: "Move row",
+        rowControlsAlign: tree ? "center" : "baseline",
+        selectable,
+        rowSelectable: (row) => row.id === "b",
+        rowParent: tree ? (row) => (row.id === "b" ? "a" : null) : undefined,
+      });
+      const root = el.shadowRoot!;
+      expect(root.querySelector("thead th")!.textContent!.trim()).toBe("Move row");
+      for (const id of ["a", "b"]) {
+        const row = root.querySelector(`tr[data-row-key="${id}"]`)!;
+        const first = row.querySelector("td")!;
+        expect(first.querySelector(`[data-controls="${id}"]`)).not.toBeNull();
+        expect(first.querySelector('input[type="checkbox"]') !== null).toBe(
+          selectable && id === "b",
+        );
+        expect(row.querySelector(".tree-cell")?.contains(first)).not.toBe(true);
+      }
+      if (selectable) {
+        const changed = vi.fn();
+        el.addEventListener("wt-selection-change", changed);
+        root.querySelector<HTMLInputElement>('[data-test="select-b"]')!.click();
+        expect(changed.mock.calls[0]![0].detail).toEqual({ selected: ["b"] });
+      }
+    });
+  }
