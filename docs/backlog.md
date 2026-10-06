@@ -2871,10 +2871,13 @@ measured drift in an alert and till banner, and treats unusable or ambiguous tim
 The banner describes the last comparison; it does not promise current clock accuracy. Readiness
 refusals show the saved AEAT code and message, and acceptance explains the measured limit of name
 checking in W41s-1's protocol receipt. Cash-sale tests cover both warning and unavailable reads.
-**Next action:** complete current-head CI after the W111 rebase, then leave W41s-10c for owner
-review. Its Claude run-it review is complete; retain that review across the rebase. Lane A's
-receipt overlap is explicitly waived by the campaign queue. A231 remains parked with its owner
-and physical-paper gates; its earlier-head CI passed, and W111 requires a separate rebase.
+**Update, 2026-10-06:** the owner approved landing W41s-10c [#1264](https://github.com/clintongormley/waitron/pull/1264)
+and A231 [#1256](https://github.com/clintongormley/waitron/pull/1256), in that order. W41s-10c
+is rebased over Venue details; the error registry retains both venue-detail errors and the fiscal
+clock warning. Its completed Claude review is retained.
+**Next action:** finish current-head validation and land W41s-10c, then rebase and land A231.
+Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A231p
+and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
 old-chain evidence and its adviser answer. Independent queue items may proceed under the plan. The following paragraph records the 2026-10-03 state;
 its old next action and allocation assumptions are superseded by this update.
