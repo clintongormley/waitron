@@ -497,6 +497,22 @@ const en = {
   "hours.date_twice": "This date is listed twice.",
   "hours.delete_heading": "Delete special date",
   "hours.delete_confirm": "Delete {name} on {date}? Its hours go back to the standard week.",
+  "hours.tab.calendar": "Calendar",
+  "hours.calendar.previous_year": "Previous year",
+  "hours.calendar.previous_month": "Previous month",
+  "hours.calendar.next_month": "Next month",
+  "hours.calendar.next_year": "Next year",
+  "hours.calendar.this_month": "This month",
+  "hours.calendar.legend_standard": "Standard day",
+  "hours.calendar.legend_closed": "Closed: every department shut",
+  "hours.calendar.legend_special": "Special date: its own colour",
+  "hours.calendar.pick": "Choose a date to see its hours.",
+  "hours.calendar.special_closed": "{name} · Closed",
+  "hours.calendar.holiday_standard": "{name} · standard hours",
+  "hours.calendar.holiday": "Public holiday: {name}",
+  "hours.calendar.subject": "Department or prep station",
+  "hours.calendar.hours": "Hours",
+  "hours.make_special": "Make this a special date",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -1008,6 +1024,22 @@ const es: Record<keyof typeof en, string> = {
   "hours.delete_heading": "Borrar fecha especial",
   "hours.delete_confirm":
     "¿Borrar {name} del {date}? Su horario vuelve a ser el de la semana habitual.",
+  "hours.tab.calendar": "Calendario",
+  "hours.calendar.previous_year": "Año anterior",
+  "hours.calendar.previous_month": "Mes anterior",
+  "hours.calendar.next_month": "Mes siguiente",
+  "hours.calendar.next_year": "Año siguiente",
+  "hours.calendar.this_month": "Este mes",
+  "hours.calendar.legend_standard": "Día habitual",
+  "hours.calendar.legend_closed": "Cerrado: todos los departamentos cerrados",
+  "hours.calendar.legend_special": "Fecha especial: su propio color",
+  "hours.calendar.pick": "Elige una fecha para ver su horario.",
+  "hours.calendar.special_closed": "{name} · Cerrado",
+  "hours.calendar.holiday_standard": "{name} · horario habitual",
+  "hours.calendar.holiday": "Festivo: {name}",
+  "hours.calendar.subject": "Departamento o estación de preparación",
+  "hours.calendar.hours": "Horario",
+  "hours.make_special": "Convertir en fecha especial",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };

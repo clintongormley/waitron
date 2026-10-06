@@ -67,7 +67,7 @@ export interface ResolvedHours {
 /** How the calendar colours a date: a special date's own colour, or one of the two reserved. */
 export type CalendarTone = CalendarColour | "standard" | "closed";
 
-/** A public holiday fact for a date. Step 5 supplies none; a later holiday provider fills them. */
+/** A public holiday fact for a date, supplied by a `HolidayReader` (`./hours.ts`) when one is given. */
 export interface HolidayFact {
   id: string;
   date: LocalDate;

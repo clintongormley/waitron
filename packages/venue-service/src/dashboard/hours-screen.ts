@@ -1,18 +1,10 @@
-import { codeOf, currentLocale } from "@waitron/dashboard-kit";
+import { codeOf } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import {
-  baseStyles,
-  focusFirstInvalid,
-  submitOnEnter,
-  UrlStateController,
-  visuallyHiddenStyles,
-  type DataTableColumn,
-} from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, UrlStateController } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
-import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -37,7 +29,6 @@ import { addDays, weekdayOf } from "../hours-rules.js";
 import type { HoursApi } from "./hours-client.js";
 import {
   cellChecks,
-  cellText,
   format,
   weekChecks,
   type CellDraft,
@@ -45,9 +36,23 @@ import {
   type HoursCellEditor,
 } from "./hours-cell-editor.js";
 import "./hours-cell-editor.js";
+import type { CalendarAction } from "./hours-calendar.js";
+import "./hours-calendar.js";
+import { datesListStyles, renderDatesList } from "./hours-dates-list.js";
+import {
+  browserToday,
+  formatDate,
+  isDefaultStation,
+  keyOf,
+  standardText,
+  storedCells,
+  weekCellOf,
+} from "./hours-view.js";
 import { t } from "./strings.js";
 
-type View = "week" | "dates";
+export { formatDate } from "./hours-view.js";
+
+type View = "week" | "dates" | "calendar";
 type Subject = HoursModelSubject;
 type Key = Parameters<typeof t>[0];
 
@@ -89,37 +94,13 @@ type Editor =
   | { kind: "duplicate"; source: SpecialDate; dates: string[] }
   | { kind: "delete"; source: SpecialDate };
 
-interface ListRow {
-  special: SpecialDate;
-  cells: DateHoursCell[];
-}
-
-const keyOf = (subject: HoursSubject) => `${subject.kind}:${subject.id}`;
 const dayName = (weekday: number) => t(`hours.day.${weekday}` as Key);
-const isDefaultStation = (subject: Subject) => subject.kind === "station" && subject.isDefault;
 const draftOf = (cell: { mode: string; periods: readonly { id: string }[] }): CellDraft =>
   structuredClone(cell) as CellDraft;
 const wire = (draft: CellDraft) =>
   draft.mode === "periods"
     ? { mode: "periods" as const, periods: draft.periods }
     : { mode: draft.mode, periods: [] as [] };
-
-/** A date as the dashboard reads it, "Mon 12 Oct 2026", in the dashboard's language. */
-export function formatDate(date: LocalDate): string {
-  return new Intl.DateTimeFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T00:00:00Z`));
-}
-
-function browserToday(): LocalDate {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
 
 @customElement("dashboard-hours-screen")
 export class HoursScreen extends LitElement {
@@ -239,17 +220,8 @@ export class HoursScreen extends LitElement {
       .target wt-input {
         flex: 1;
       }
-      wt-data-table::part(inherited),
-      wt-data-table::part(colour-name) {
-        color: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(colour-name) {
-        font-size: var(--wt-font-size-sm);
-      }
-      wt-data-table::part(visually-hidden) {
-        ${visuallyHiddenStyles}
-      }
     `,
+    datesListStyles,
   ];
 
   @property({ attribute: false }) api!: HoursApi;
@@ -285,7 +257,8 @@ export class HoursScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "hours") return;
-      this.view = this.#url.read("view") === "dates" ? "dates" : "week";
+      const view = this.#url.read("view");
+      this.view = view === "dates" || view === "calendar" ? view : "week";
       const department = this.#url.read("department");
       const station = this.#url.read("station");
       this.#linked =
@@ -330,6 +303,7 @@ export class HoursScreen extends LitElement {
   }
 
   async #reload(): Promise<void> {
+    void this.renderRoot.querySelector("hours-calendar")?.reload();
     try {
       this.#apply(await this.api.load(this.#from, this.#to));
     } catch {
@@ -357,23 +331,15 @@ export class HoursScreen extends LitElement {
   }
 
   #weekCell(subject: HoursSubject, weekday: number): WeekCell {
-    const days = this.model!.week.find((entry) => keyOf(entry.subject) === keyOf(subject))?.days;
-    return days?.find((day) => day.weekday === weekday)?.cell ?? { mode: "not_set", periods: [] };
+    return weekCellOf(this.model!, subject, weekday);
   }
 
   #notSet(subject: Subject): boolean {
     return this.#weekCell(subject, 1).mode === "not_set";
   }
 
-  /** How a subject's standard hours read on a weekday. */
   #standardText(subject: Subject, weekday: number): string {
-    if (isDefaultStation(subject)) return t("hours.always_open_cell");
-    const cell = this.#weekCell(subject, weekday);
-    if (cell.mode === "not_set")
-      return t(
-        subject.kind === "department" ? "hours.not_set_department" : "hours.not_set_station",
-      );
-    return cellText(cell);
+    return standardText(this.model!, subject, weekday);
   }
 
   // --- Editors -------------------------------------------------------------------------------
@@ -434,13 +400,17 @@ export class HoursScreen extends LitElement {
     );
   }
 
+  /**
+   * `options.cells` are the date's stored cells when the caller read them itself, as the calendar
+   * does for a month outside the page's own range; `options.date` fills in a new date.
+   */
   #openDate(
     special: SpecialDate | null,
     heading: Key,
     returnTo: () => HTMLElement | null,
-    closeWholeVenue = false,
+    options: { closeWholeVenue?: boolean; cells?: DateHoursCell[]; date?: LocalDate } = {},
   ): void {
-    const stored = special === null ? [] : this.#storedCells(special.id);
+    const stored = special === null ? [] : (options.cells ?? storedCells(this.model!, special.id));
     const shown = this.model!.subjects.filter(
       (subject) => subject.active && !isDefaultStation(subject),
     );
@@ -461,22 +431,16 @@ export class HoursScreen extends LitElement {
         id: special?.id ?? null,
         heading,
         draft: {
-          date: special?.date ?? "",
+          date: special?.date ?? options.date ?? "",
           name: special?.name ?? "",
           colour: special?.colour ?? "",
-          closeWholeVenue: special?.closeWholeVenue ?? closeWholeVenue,
+          closeWholeVenue: special?.closeWholeVenue ?? options.closeWholeVenue ?? false,
           cells,
         },
         stored: kept,
         hidden: kept.filter((entry) => !shownKeys.has(keyOf(entry.subject))),
       },
       returnTo,
-    );
-  }
-
-  #storedCells(specialDateId: string): DateHoursCell[] {
-    return (
-      this.model!.specialCells.find((entry) => entry.specialDateId === specialDateId)?.cells ?? []
     );
   }
 
@@ -1183,105 +1147,36 @@ export class HoursScreen extends LitElement {
     </div>`;
   }
 
-  // --- Special dates -------------------------------------------------------------------------
-
-  #rows(): ListRow[] {
-    return this.model!.specialDates.map((special) => ({
-      special,
-      cells: this.#storedCells(special.id),
-    }));
-  }
-
-  #dateCell(row: ListRow, subject: Subject) {
-    if (isDefaultStation(subject)) return t("hours.always_open_cell");
-    if (row.special.closeWholeVenue) return t("hours.closed");
-    const own = row.cells.find((entry) => keyOf(entry.subject) === keyOf(subject));
-    if (own !== undefined) return cellText(own.cell);
-    return html`<span part="inherited"
-      ><span part="visually-hidden">${t("hours.inherited_prefix")}</span>${this.#standardText(
-        subject,
-        weekdayOf(row.special.date),
-      )}</span
-    >`;
-  }
-
-  #rowActions(row: ListRow) {
-    const action = (test: string, label: Key, run: (returnTo: () => HTMLElement | null) => void) =>
-      html`<wt-button
-        variant="secondary"
-        data-test=${test}
-        @click=${(event: Event) => run(this.#menuTrigger(event))}
-        >${t(label)}</wt-button
-      >`;
-    const { special } = row;
-    return html`<wt-row-actions label=${format("hours.row_actions", { name: special.name })}>
-      ${action("edit-date", "hours.edit", (returnTo) =>
-        this.#openDate(special, "hours.edit_heading", returnTo),
-      )}
-      ${action("duplicate-date", "hours.duplicate", (returnTo) =>
-        this.#open({ kind: "duplicate", source: special, dates: [""] }, returnTo),
-      )}
-      ${action("delete-date", "hours.delete", (returnTo) =>
-        this.#open({ kind: "delete", source: special }, returnTo),
-      )}
-    </wt-row-actions>`;
-  }
+  // --- Special dates and the calendar ------------------------------------------------------
 
   #dates() {
-    const actions: DataTableColumn<ListRow> = {
-      key: "actions",
-      label: t("hours.actions"),
-      pinned: "end",
-      cell: (row) => this.#rowActions(row),
-    };
-    const columns: DataTableColumn<ListRow>[] = [
-      { key: "date", label: t("hours.date"), cell: (row) => formatDate(row.special.date) },
-      {
-        key: "name",
-        label: t("hours.name"),
-        cell: (row) =>
-          html`${row.special.name}
-            <span part="colour-name">${t(`hours.colour.${row.special.colour}` as Key)}</span>`,
-      },
-      ...this.#subjects().map((subject) => ({
-        key: keyOf(subject),
-        label: subject.active ? subject.name : `${subject.name} ${t("hours.inactive")}`,
-        group: t(subject.kind === "department" ? "hours.departments" : "hours.stations"),
-        cell: (row: ListRow) => this.#dateCell(row, subject),
-      })),
-      ...(this.readOnly ? [] : [actions]),
-    ];
-    const trigger = (test: string) => () =>
-      this.renderRoot.querySelector<HTMLElement>(`[data-test="${test}"]`);
-    return html`${
-        this.readOnly
-          ? nothing
-          : html`<div class="toolbar">
-              <div>
-                <wt-button
-                  variant="primary"
-                  data-test="add-date"
-                  @click=${() => this.#openDate(null, "hours.add_heading", trigger("add-date"))}
-                  >${t("hours.add_date")}</wt-button
-                >
-                <wt-button
-                  variant="secondary"
-                  data-test="close-venue"
-                  @click=${() =>
-                    this.#openDate(null, "hours.close_heading", trigger("close-venue"), true)}
-                  >${t("hours.close_venue")}</wt-button
-                >
-              </div>
-            </div>`
-      }
-      <wt-data-table
-        data-test="special-dates"
-        aria-label=${t("hours.tab.dates")}
-        .columns=${columns}
-        .rows=${this.#rows()}
-        .rowKey=${(row: ListRow) => row.special.id}
-        .emptyMessage=${t("hours.no_dates")}
-      ></wt-data-table>`;
+    return renderDatesList({
+      model: this.model!,
+      readOnly: this.readOnly,
+      subjects: this.#subjects(),
+      root: this.renderRoot,
+      menuTrigger: (event) => this.#menuTrigger(event),
+      add: (returnTo, closeWholeVenue) =>
+        this.#openDate(
+          null,
+          closeWholeVenue ? "hours.close_heading" : "hours.add_heading",
+          returnTo,
+          { closeWholeVenue },
+        ),
+      edit: (special, returnTo) => this.#openDate(special, "hours.edit_heading", returnTo),
+      duplicate: (source, returnTo) =>
+        this.#open({ kind: "duplicate", source, dates: [""] }, returnTo),
+      remove: (source, returnTo) => this.#open({ kind: "delete", source }, returnTo),
+    });
+  }
+
+  #calendarAction(event: CustomEvent<CalendarAction>): void {
+    const { kind, special, cells, date, returnTo } = event.detail;
+    if (kind === "make_special") this.#openDate(null, "hours.add_heading", returnTo, { date });
+    else if (kind === "edit") this.#openDate(special!, "hours.edit_heading", returnTo, { cells });
+    else if (kind === "duplicate")
+      this.#open({ kind: "duplicate", source: special!, dates: [""] }, returnTo);
+    else this.#open({ kind: "delete", source: special! }, returnTo);
   }
 
   override render() {
@@ -1318,6 +1213,7 @@ export class HoursScreen extends LitElement {
                 .items=${[
                   { key: "week", label: t("hours.tab.week") },
                   { key: "dates", label: t("hours.tab.dates") },
+                  { key: "calendar", label: t("hours.tab.calendar") },
                 ]}
                 @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
                   this.view = event.detail.value;
@@ -1326,6 +1222,18 @@ export class HoursScreen extends LitElement {
               >
                 <div slot="week">${this.view === "week" ? this.#week() : nothing}</div>
                 <div slot="dates">${this.view === "dates" ? this.#dates() : nothing}</div>
+                <div slot="calendar">
+                  ${
+                    this.view === "calendar"
+                      ? html`<hours-calendar
+                          .api=${this.api}
+                          ?readOnly=${this.readOnly}
+                          .today=${model.civilDate}
+                          @hours-calendar-action=${this.#calendarAction}
+                        ></hours-calendar>`
+                      : nothing
+                  }
+                </div>
               </wt-tabs>
               ${this.#modal()}`
       }`;

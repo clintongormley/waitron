@@ -171,6 +171,13 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
     await showTab(el, "dates");
     return el;
   },
+  "the calendar with a special date open": async (theme) => {
+    const el = await mount(theme);
+    await showTab(el, "calendar");
+    await press(el, 'td[data-date="2026-10-12"] button');
+    expect(deep(el, '[data-test="calendar-edit"]')).not.toBeNull();
+    return el;
+  },
   "a day's editor after a failed press": async (theme) => {
     const el = await mount(theme);
     await press(el, 'td[data-subject="department:restaurant"][data-weekday="2"] button');

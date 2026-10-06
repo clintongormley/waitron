@@ -17,16 +17,21 @@ import {
   deleteSpecialDate,
   duplicateSpecialDate,
   readCalendarDays,
+  readHoursModel,
   readSpecialDate,
   readWeekHours,
   replaceWeekHours,
   resolveOpeningDateHours,
   saveSpecialDate,
+  type HolidayReader,
   type SpecialDateParticipant,
 } from "./hours.js";
+import { readCalendarDays as packageReadCalendarDays } from "./index.js";
 import {
   WEEK_DISPLAY_ORDER,
+  type CalendarDay,
   type DateHoursCell,
+  type HolidayFact,
   type HourPeriod,
   type HoursSubject,
   type LocalDate,
@@ -1393,6 +1398,162 @@ describe("the calendar's Closed colour", () => {
     // An ordinary date is Closed once every active department's week is Closed that day.
     await save(f, f.deli, week());
     expect(await tone(f, "2026-10-20")).toBe("closed");
+  });
+});
+
+describe("holiday facts beside the calendar", () => {
+  // Invented facts: no fixture here claims a real public holiday.
+  const fact = (id: string, date: LocalDate, name: string): HolidayFact => ({
+    id,
+    date,
+    name,
+    scope: "local",
+    sourceId: "test-source",
+  });
+  const FACTS = [
+    fact("h1", "2026-10-14", "Invented feast"),
+    fact("h2", "2026-10-14", "Second invented feast"),
+    fact("h3", "2026-10-16", "Another invented day"),
+    fact("h4", "2026-11-30", "Outside the range"),
+  ];
+  /** A reader standing in for a later holiday provider; it records every call it gets. */
+  function fakeReader() {
+    const calls: { tx: Transaction; cfg: VenueScope; from: LocalDate; to: LocalDate }[] = [];
+    const reader: HolidayReader = async (tx, cfg, from, to) => {
+      calls.push({ tx, cfg, from, to });
+      return FACTS;
+    };
+    return { reader, calls };
+  }
+  const calendar = (f: Fixture, reader?: HolidayReader) =>
+    withTransaction(db, (tx) => readCalendarDays(tx, f.cfg, "2026-10-13", "2026-10-16", reader));
+  const holidaysOn = (days: CalendarDay[], date: LocalDate) =>
+    days.find((day) => day.date === date)!.holidays.map((holiday) => holiday.id);
+
+  it("merges each date's facts by date, asking the reader once with the caller's transaction", async () => {
+    const f = await fixture();
+    const { reader, calls } = fakeReader();
+    let outer: Transaction | undefined;
+    const days = await withTransaction(db, (tx) => {
+      outer = tx;
+      return readCalendarDays(tx, f.cfg, "2026-10-13", "2026-10-16", reader);
+    });
+    expect(calls).toEqual([{ tx: outer, cfg: f.cfg, from: "2026-10-13", to: "2026-10-16" }]);
+    expect(calls[0]!.tx).toBe(outer);
+    expect(days.map((day) => [day.date, day.holidays.map((holiday) => holiday.name)])).toEqual([
+      ["2026-10-13", []],
+      ["2026-10-14", ["Invented feast", "Second invented feast"]],
+      ["2026-10-15", []],
+      ["2026-10-16", ["Another invented day"]],
+    ]);
+    expect(days[1]!.holidays[0]).toEqual(FACTS[0]);
+    // With no reader, no date has a fact.
+    expect((await calendar(f)).every((day) => day.holidays.length === 0)).toBe(true);
+  });
+
+  it("reads a date with a fact and no special date as that fact with the standard hours", async () => {
+    const f = await fixture();
+    await save(f, f.restaurant, week({ 3: periods(period("12:00", "16:00")) }));
+    const { reader } = fakeReader();
+    const wednesday = (await calendar(f, reader))[1]!;
+    expect(wednesday).toEqual({
+      date: "2026-10-14",
+      specialDate: null,
+      holidays: [FACTS[0], FACTS[1]],
+      tone: "standard",
+    });
+    const hours = await resolve(f, f.restaurant, "2026-10-14");
+    expect([hours.source, hours.specialDateId, hours.cell.mode]).toEqual([
+      "standard",
+      null,
+      "periods",
+    ]);
+    expect(hours.cell.periods.map((p) => [p.opensAt, p.closesAt])).toEqual([["12:00", "16:00"]]);
+  });
+
+  it("keeps a date's facts as they are while a special date there is added, renamed and deleted", async () => {
+    const f = await fixture();
+    const { reader } = fakeReader();
+    const before = holidaysOn(await calendar(f, reader), "2026-10-14");
+    expect(before).toEqual(["h1", "h2"]);
+
+    const added = await saveDate(
+      f,
+      null,
+      specialInput({ date: "2026-10-14", name: "Our own party", colour: "purple" }),
+    );
+    let days = await calendar(f, reader);
+    expect(days[1]!.specialDate).toEqual({
+      id: added.id,
+      date: "2026-10-14",
+      name: "Our own party",
+      colour: "purple",
+      closeWholeVenue: false,
+    });
+    expect(holidaysOn(days, "2026-10-14")).toEqual(before);
+
+    await saveDate(
+      f,
+      added.id,
+      specialInput({ date: "2026-10-14", name: "Renamed party", colour: "blue" }),
+    );
+    days = await calendar(f, reader);
+    expect(days[1]!.specialDate?.name).toBe("Renamed party");
+    expect(holidaysOn(days, "2026-10-14")).toEqual(before);
+
+    await withTransaction(db, (tx) => deleteSpecialDate(tx, f.cfg, added.id, AT));
+    days = await calendar(f, reader);
+    expect(days[1]!.specialDate).toBeNull();
+    expect(holidaysOn(days, "2026-10-14")).toEqual(before);
+  });
+
+  it("lets another module read facts and a special date's id from the package, without the page", async () => {
+    const f = await fixture();
+    const added = await saveDate(f, null, specialInput({ date: "2026-10-16" }));
+    const { reader } = fakeReader();
+    const days = await withTransaction(db, (tx) =>
+      packageReadCalendarDays(tx, f.cfg, "2026-10-16", "2026-10-16", reader),
+    );
+    expect(days).toEqual([
+      {
+        date: "2026-10-16",
+        specialDate: {
+          id: added.id,
+          date: "2026-10-16",
+          name: "Harvest festival",
+          colour: "amber",
+          closeWholeVenue: false,
+        },
+        holidays: [FACTS[2]],
+        tone: "amber",
+      },
+    ]);
+  });
+
+  it("refuses the standard and Closed colours, which no special date may take", async () => {
+    const f = await fixture();
+    for (const colour of ["standard", "closed"])
+      await expect(
+        saveDate(f, null, specialInput({ colour: colour as never })),
+      ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "colour" } });
+    expect(
+      await withTransaction(db, (tx) => readCalendarDays(tx, f.cfg, "2026-10-09", "2026-10-09")),
+    ).toMatchObject([{ specialDate: null }]);
+  });
+
+  it("gives the page model the same facts", async () => {
+    const f = await fixture();
+    const { reader, calls } = fakeReader();
+    const model = await withTransaction(db, (tx) =>
+      readHoursModel(tx, f.cfg, "2026-10-13", "2026-10-16", AT, reader),
+    );
+    expect(calls.map(({ from, to }) => [from, to])).toEqual([["2026-10-13", "2026-10-16"]]);
+    expect(model.days.map((day) => day.holidays.map((holiday) => holiday.id))).toEqual([
+      [],
+      ["h1", "h2"],
+      [],
+      ["h3"],
+    ]);
   });
 });
 

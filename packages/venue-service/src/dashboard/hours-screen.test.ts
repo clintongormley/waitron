@@ -1537,3 +1537,213 @@ describe("Hours: special dates", () => {
     ]);
   });
 });
+
+describe("Hours: the calendar", () => {
+  const calendar = (el: HoursScreen) =>
+    el.shadowRoot!.querySelector<
+      HTMLElement & { readOnly: boolean; updateComplete: Promise<unknown> }
+    >("hours-calendar");
+  const day = (el: HoursScreen, date: string) =>
+    calendar(el)!.shadowRoot!.querySelector<HTMLButtonElement>(`td[data-date="${date}"] button`)!;
+  async function openDay(el: HoursScreen, date: string) {
+    await click(el, day(el, date));
+    await settle(el);
+  }
+  async function panelAction(el: HoursScreen, kind: string) {
+    await click(el, calendar(el)!.shadowRoot!.querySelector(`[data-test="calendar-${kind}"]`));
+    await settle(el);
+  }
+  const renamed = (name: string): HoursModel => {
+    const next = structuredClone(model());
+    next.specialDates[0]!.name = name;
+    next.days[1]!.specialDate!.name = name;
+    return next;
+  };
+
+  it("opens from its link, and records choosing it in the address", async () => {
+    history.replaceState(null, "", "/manage/hours/view/calendar");
+    const { api } = server();
+    const el = await mount(api);
+    expect(calendar(el)).not.toBeNull();
+    await selectTab(el, "week");
+    expect(calendar(el)).toBeNull();
+    await selectTab(el, "calendar");
+    expect(location.pathname).toBe("/manage/hours/view/calendar");
+    expect(text(calendar(el)!.shadowRoot!.querySelector('[data-test="month"]'))).toBe(
+      "October 2026",
+    );
+    expect(calendar(el)!.readOnly).toBe(false);
+  });
+
+  it("edits a date from the calendar, and the calendar and the list show it at once under the same id", async () => {
+    const { api, state, calls } = server();
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await openDay(el, "2026-10-12");
+    await panelAction(el, "edit");
+    expect(modal(el)!.getAttribute("heading")).toBe("Edit special date");
+    expect(field(el, "name")!.value).toBe("Fiesta Nacional");
+    await setField(el, "name", "Fiesta renamed");
+    state.model = renamed("Fiesta renamed");
+    await click(el, saveButton(el));
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    await settle(el);
+    expect(calls("PUT")).toEqual([
+      [
+        "/management-api/venue-service/special-dates/fiesta",
+        {
+          date: "2026-10-12",
+          name: "Fiesta renamed",
+          colour: "red",
+          closeWholeVenue: false,
+          cells: model().specialCells[0]!.cells,
+        },
+      ],
+    ]);
+    // Still on the calendar, which has read its month again.
+    expect(text(day(el, "2026-10-12"))).toBe("12 Fiesta renamed");
+    await selectTab(el, "dates");
+    await listTable(el).updateComplete;
+    const table = listTable(el) as ListTable & {
+      rows: { special: { id: string } }[];
+      rowKey: (row: unknown) => string;
+    };
+    expect(listRows(el)[0]!.slice(0, 2)).toEqual(["Mon, 12 Oct 2026", "Fiesta renamed Red"]);
+    expect(table.rowKey(table.rows[0])).toBe("fiesta");
+  });
+
+  it("shows a date added in the list on the calendar at once", async () => {
+    const { api, state } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
+    await setField(el, "date", "2026-10-21");
+    await setField(el, "name", "Market day");
+    await choose(el, "colour", "blue");
+    const market = {
+      id: "market",
+      date: "2026-10-21",
+      name: "Market day",
+      colour: "blue" as const,
+      closeWholeVenue: false,
+    };
+    state.writes.push(market);
+    state.model.specialDates.push(market);
+    state.model.days.push({ date: market.date, specialDate: market, holidays: [], tone: "blue" });
+    state.model.specialCells.push({ specialDateId: "market", cells: [] });
+    await click(el, saveButton(el));
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    await selectTab(el, "calendar");
+    await settle(el);
+    expect(text(day(el, "2026-10-21"))).toBe("21 Market day");
+  });
+
+  it("makes an ordinary date special with the date already filled in", async () => {
+    const { api, calls } = server();
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await openDay(el, "2026-10-15");
+    await panelAction(el, "make_special");
+    expect(modal(el)!.getAttribute("heading")).toBe("Add a special date");
+    expect(field(el, "date")!.value).toBe("2026-10-15");
+    expect(field(el, "name")!.value).toBe("");
+    await setField(el, "name", "Our party");
+    await choose(el, "colour", "green");
+    await click(el, saveButton(el));
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    expect(calls("POST")).toEqual([
+      [
+        "/management-api/venue-service/special-dates",
+        {
+          date: "2026-10-15",
+          name: "Our party",
+          colour: "green",
+          closeWholeVenue: false,
+          cells: [],
+        },
+      ],
+    ]);
+  });
+
+  it("edits a date outside the page's own window with the cells the calendar read for it", async () => {
+    const { api, state, calls } = server();
+    const past = {
+      id: "past",
+      date: "2026-10-01",
+      name: "Past party",
+      colour: "amber" as const,
+      closeWholeVenue: false,
+    };
+    const deliClosed = {
+      subject: { kind: "department" as const, id: "deli" },
+      cell: { mode: "closed" as const, periods: [] as [] },
+    };
+    // The page's first read starts at yesterday; the calendar's month read holds the past date.
+    state.reads.push(model());
+    state.model.days.push({ date: past.date, specialDate: past, holidays: [], tone: "amber" });
+    state.model.specialCells.push({ specialDateId: "past", cells: [deliClosed] });
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await openDay(el, "2026-10-01");
+    await panelAction(el, "edit");
+    expect(field(el, "name")!.value).toBe("Past party");
+    await click(el, saveButton(el));
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    expect(calls("PUT")).toEqual([
+      [
+        "/management-api/venue-service/special-dates/past",
+        {
+          date: "2026-10-01",
+          name: "Past party",
+          colour: "amber",
+          closeWholeVenue: false,
+          cells: [deliClosed],
+        },
+      ],
+    ]);
+  });
+
+  it("duplicates and deletes the date the calendar shows, returning focus to the panel", async () => {
+    const { api, calls } = server();
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await openDay(el, "2026-10-12");
+    await panelAction(el, "duplicate");
+    expect(modal(el)!.getAttribute("heading")).toBe("Duplicate Fiesta Nacional");
+    await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
+    await vi.waitFor(() =>
+      expect(calendar(el)!.shadowRoot!.activeElement).toBe(
+        calendar(el)!.shadowRoot!.querySelector('[data-test="calendar-duplicate"]'),
+      ),
+    );
+    await panelAction(el, "delete");
+    expect(text(el.shadowRoot!.querySelector('[data-test="confirm-text"]'))).toBe(
+      "Delete Fiesta Nacional on Mon, 12 Oct 2026? Its hours go back to the standard week.",
+    );
+    await click(el, saveButton(el));
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    expect(calls("DELETE")).toEqual([
+      ["/management-api/venue-service/special-dates/fiesta", undefined],
+    ]);
+  });
+
+  it("offers a read-only viewer the calendar with nothing to change", async () => {
+    const { api } = server();
+    const el = await mount(api, true);
+    await selectTab(el, "calendar");
+    expect(calendar(el)!.readOnly).toBe(true);
+  });
+
+  it("paints each special date's colour beside its name in the list", async () => {
+    const { api } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await listTable(el).updateComplete;
+    const swatch = rowOf(el, "Fiesta").querySelector<HTMLElement>('[part~="colour-swatch"]')!;
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-palette-red)";
+    el.shadowRoot!.append(probe);
+    expect(getComputedStyle(swatch).backgroundColor).toBe(getComputedStyle(probe).color);
+    probe.remove();
+  });
+});

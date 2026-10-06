@@ -26,6 +26,7 @@ export {
   replaceWeekHours,
   resolveOpeningDateHours,
   saveSpecialDate,
+  type HolidayReader,
   type SpecialDateParticipant,
 } from "./hours.js";
 export { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";

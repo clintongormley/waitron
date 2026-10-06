@@ -269,3 +269,44 @@ describe.each(["light", "dark"] as const)("Google button tokens (%s)", (theme) =
       expect(ratio(line, token(el, surface)), surface).toBeGreaterThanOrEqual(3);
   });
 });
+
+// The Hours calendar's day colours: six a special date may pick, and two reserved ones no special
+// date can take (a standard day, and a day every department is Closed).
+const PALETTE = ["red", "amber", "grey", "blue", "green", "purple"] as const;
+const CALENDAR_FILLS = [
+  ...PALETTE.map((name) => `--wt-color-palette-${name}`),
+  "--wt-color-day-standard",
+  "--wt-color-day-closed",
+];
+const onFill = (fill: string) => fill.replace("--wt-color-", "--wt-color-on-");
+
+describe.each(["light", "dark"] as const)("calendar day colours (%s)", (theme) => {
+  test("each fill has its own text colour, readable on it at 4.5:1 or more", () => {
+    const el = mount(theme);
+    for (const fill of CALENDAR_FILLS)
+      expect(ratio(token(el, onFill(fill)), token(el, fill)), fill).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("the standard and Closed colours are not in the palette and stand apart from each other", () => {
+    const el = mount(theme);
+    const palette = PALETTE.map((name) => token(el, `--wt-color-palette-${name}`));
+    expect(new Set(palette).size).toBe(PALETTE.length);
+    for (const reserved of ["--wt-color-day-standard", "--wt-color-day-closed"])
+      expect(palette, reserved).not.toContain(token(el, reserved));
+    expect(
+      ratio(token(el, "--wt-color-day-standard"), token(el, "--wt-color-day-closed")),
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  test("the OS preference gives them the same values as the explicit theme", async () => {
+    const names = CALENDAR_FILLS.flatMap((fill) => [fill, onFill(fill)]);
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    const explicit = mount(theme);
+    const fromTheme = names.map((name) => token(explicit, name));
+    expect(fromTheme).not.toContain("");
+    explicit.remove();
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
+  });
+});

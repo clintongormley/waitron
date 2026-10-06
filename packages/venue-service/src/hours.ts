@@ -22,6 +22,7 @@ import {
   type CalendarDay,
   type DateCell,
   type DateHoursCell,
+  type HolidayFact,
   type HourPeriod,
   type HoursModel,
   type HoursModelSubject,
@@ -1081,8 +1082,11 @@ async function readRange(
 function calendarDays(
   dates: readonly LocalDate[],
   range: Awaited<ReturnType<typeof readRange>>,
+  holidays: readonly HolidayFact[],
 ): CalendarDay[] {
   const specialOn = new Map(range.specials.map((special) => [special.date, special]));
+  const factsOn = new Map<LocalDate, HolidayFact[]>();
+  for (const fact of holidays) factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
   const active = range.subjects.filter((s) => s.kind === "department" && s.active);
   return dates.map((date) => {
     const special = specialOn.get(date) ?? null;
@@ -1096,21 +1100,44 @@ function calendarDays(
     return {
       date,
       specialDate: special,
-      holidays: [],
+      holidays: factsOn.get(date) ?? [],
       tone: calendarTone(special?.colour ?? null, modes as ResolvedHours["cell"]["mode"][]),
     };
   });
 }
 
-/** The calendar from `from` to `to`, both included. */
+/**
+ * Public holiday facts for a range of dates. It reads on the caller's transaction and makes no
+ * network call while it is open; the facts are separate from special dates, so no special-date
+ * write changes them.
+ */
+export type HolidayReader = (
+  tx: Transaction,
+  cfg: VenueScope,
+  from: LocalDate,
+  to: LocalDate,
+) => Promise<readonly HolidayFact[]>;
+
+async function readHolidays(
+  tx: Transaction,
+  cfg: VenueScope,
+  dates: readonly LocalDate[],
+  holidays: HolidayReader | undefined,
+): Promise<readonly HolidayFact[]> {
+  return holidays === undefined ? [] : holidays(tx, cfg, dates[0]!, dates[dates.length - 1]!);
+}
+
+/** The calendar from `from` to `to`, both included, with any holiday facts `holidays` supplies. */
 export async function readCalendarDays(
   tx: Transaction,
   cfg: VenueScope,
   from: LocalDate,
   to: LocalDate,
+  holidays?: HolidayReader,
 ): Promise<CalendarDay[]> {
   const dates = rangeDates(from, to);
-  return calendarDays(dates, await readRange(tx, cfg, dates));
+  const range = await readRange(tx, cfg, dates);
+  return calendarDays(dates, range, await readHolidays(tx, cfg, dates, holidays));
 }
 
 /** Everything the Hours page shows for one range of dates, with the venue's date at `at`. */
@@ -1120,6 +1147,7 @@ export async function readHoursModel(
   from: LocalDate,
   to: LocalDate,
   at: Date,
+  holidays?: HolidayReader,
 ): Promise<HoursModel> {
   const dates = rangeDates(from, to);
   const clock = await readLocationClock(tx, cfg.locationId);
@@ -1139,7 +1167,7 @@ export async function readHoursModel(
         cell: range.weeks.get(keyOf({ kind, id }))?.[weekday] ?? { mode: "not_set", periods: [] },
       })),
     })),
-    days: calendarDays(dates, range),
+    days: calendarDays(dates, range, await readHolidays(tx, cfg, dates, holidays)),
     specialDates: range.specials.filter((special) => special.date >= listFrom),
     specialCells: range.specials.map((special) => ({
       specialDateId: special.id,
