@@ -332,4 +332,58 @@ describe("HoursApi.rereadWatches", () => {
     api.rereadWatches();
     expect(request).toHaveBeenCalledTimes(3);
   });
+
+  it("without live data keeps a write's failed reread showing when an earlier timer read answers after it", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const answers: { resolve: (value: HoursModel) => void; reject: (error: unknown) => void }[] =
+      [];
+    const request = vi.fn(
+      () => new Promise<HoursModel>((resolve, reject) => answers.push({ resolve, reject })),
+    );
+    const api = new HoursApi(request as DashboardRequest);
+    const apply = vi.fn();
+    const failed = vi.fn();
+    const recovered = vi.fn();
+    const detach = api.watchHours("2030-10-01", "2030-10-31", apply, failed, recovered);
+    answers[0]!.resolve(model("2030-10-06"));
+    await settled();
+    vi.advanceTimersByTime(60_000);
+    api.rereadWatches();
+    answers[2]!.reject({ code: "connection.failed" });
+    await settled();
+    answers[1]!.resolve(model("2030-10-07"));
+    await settled();
+    expect(apply.mock.calls).toEqual([[model("2030-10-06")]]);
+    expect(failed.mock.calls).toEqual([[{ code: "connection.failed" }]]);
+    expect(recovered).not.toHaveBeenCalled();
+    detach();
+  });
+
+  it("without live data drops an earlier timer read after a write's reread fails while a later read is still out", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const answers: { resolve: (value: HoursModel) => void; reject: (error: unknown) => void }[] =
+      [];
+    const request = vi.fn(
+      () => new Promise<HoursModel>((resolve, reject) => answers.push({ resolve, reject })),
+    );
+    const api = new HoursApi(request as DashboardRequest);
+    const apply = vi.fn();
+    const failed = vi.fn();
+    const detach = api.watchHours("2030-10-01", "2030-10-31", apply, failed, vi.fn());
+    answers[0]!.resolve(model("2030-10-06"));
+    await settled();
+    vi.advanceTimersByTime(60_000);
+    api.rereadWatches();
+    vi.advanceTimersByTime(60_000);
+    answers[2]!.reject({ code: "connection.failed" });
+    await settled();
+    answers[1]!.resolve(model("2030-10-07"));
+    await settled();
+    expect(apply.mock.calls).toEqual([[model("2030-10-06")]]);
+    answers[3]!.resolve(model("2030-10-08"));
+    await settled();
+    expect(apply.mock.calls).toEqual([[model("2030-10-06")], [model("2030-10-08")]]);
+    expect(failed).not.toHaveBeenCalled();
+    detach();
+  });
 });

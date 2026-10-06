@@ -62,16 +62,16 @@ export class HoursApi {
         },
       );
     if (this.liveData === undefined) {
-      // A slow read can answer after a later one. An answer counts only when it started after the
-      // last one applied, and a failure only when no later read has started that may yet answer.
+      // A slow read can answer after a later one. A success is applied only when no read that
+      // started after it has answered yet, and a failure shown only when no later read has started.
       let started = 0;
-      let applied = 0;
+      let answered = 0;
       const read = () => {
         const own = ++started;
         void settle(this.#read(from, to), (succeeded) => {
-          if (succeeded ? own <= applied : own !== started) return false;
-          if (succeeded) applied = own;
-          return true;
+          const newest = own > answered;
+          if (newest) answered = own;
+          return succeeded ? newest : own === started;
         });
       };
       read();
