@@ -2041,9 +2041,9 @@ which deleted the Home page tab's layout editor that drew it, so all of it is re
 tests alone; the Menus screen and the two structure widgets still import its `memberName`, and the
 two widgets its `memberKindLabel`. `dashboard-menu-structure-tree`
 (`apps/dashboard/src/widgets/menu-structure-tree.ts`) is no longer drawn by Preview after W95;
-Preview uses the frozen customer renderer. The owner authorised deletion as A299 on 2026-10-06,
-after W95 lands, retaining the shared name helpers and listing deleted test checks. The deletion
-remains open.
+Preview uses the frozen customer renderer. W95 landed in #1302. The owner authorised deletion
+as A299 on 2026-10-06, retaining the shared name helpers and listing deleted test checks.
+The deletion remains open.
 
 **Two copies of the tree pointer drag — OPEN (W88).** W88 moved what Products and the Menus tree
 draw during a drag into `apps/dashboard/src/widgets/tree-drag.ts` (the ghost, the row and gap marks,
@@ -2064,7 +2064,7 @@ shown. An event from the table for "these branches changed" would be cleaner; it
 other items in the tree's row menus are greyed out while a change is out; the link to the included
 menu's own editor is a link, which has no greyed-out state, so it stays live.
 
-**Inspect the proposed menu and follow every change — DONE (W95, 2026-10-06).**
+**Inspect the proposed menu and follow every change — DONE (W95, #1302, 2026-10-06).**
 The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
 [implementation plan](superpowers/plans/2026-10-06-w95-menu-preview.md) define a customer-language
 hierarchy, product inspection and linked before/after changes, with explicit translation
@@ -2096,7 +2096,7 @@ real-stack checks inspected eight removal views and received the exact stale-has
 acceptance audit checks all sixteen change kinds and the exact before/after destinations. Row IDs also retain subject and field identity when a destination is unavailable. Untagged staff names and internal titles do not inherit the interface language; frozen translations retain their actual language tags.
 
 **A menu's Preview tab is wider than a phone for a one-word menu name — FIXED IN W95
-(2026-10-06; branch validation, not yet landed).** Dense full-screen checks in
+(#1302, 2026-10-06).** Dense full-screen checks in
 `apps/dashboard/src/screens/menus-screen.test.ts` assert no page or pane horizontal overflow at
 390 and 1280 px in English and Spanish, both themes, including Internal/customer content,
 long words, missing translations, removal and Home targets. The embedded Home label now wraps

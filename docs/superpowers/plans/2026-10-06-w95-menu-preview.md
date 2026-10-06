@@ -440,7 +440,7 @@ checks `menus-screen.test.ts:5194`, `:5264`, `:5275`, `:5395`, `:5457`.
       problem; normal scoped typechecks also run in the push hook. Formatting of docs needs
       explicit `pnpm exec prettier --ignore-path /dev/null --check docs/developers/design-system.md docs/backlog.md` because
       normal docs paths are ignored. Do not count an ignored check as formatting evidence.
-- [ ] Parent runs `finish-branch`: initial rebase where required, one Claude run-it review
+- [x] Parent runs `finish-branch`: initial rebase where required, one Claude run-it review
       of complete candidate, fixes with focused checks, normal push hook, current-head CI
       package coverage and job-by-job results. Keep one implementation PR; no repeating
       whole-branch review solely for a later rebase. Recheck shared W69/lane edits when rebasing.
@@ -479,3 +479,13 @@ product moves and section cross-links; modifier limits and expanded hierarchy ha
 own behavioral/accessibility cases. This is combined evidence, not a claim that every
 interaction was screenshot-inspected in every state. Real-stack receipts include eight
 removal views and the exact stale-hash 409. Review/push/current-head CI remain to finish.
+
+Completion receipt (2026-10-06): [implementation #1302](https://github.com/clintongormley/waitron/pull/1302)
+merged as `7567061408589c81389e199c27194737b814538b`. The Claude run-it review took
+574 seconds. Its row-identity and unknown-language findings were fixed test-first;
+existing parent-path and failed-publish guards failed their intended tests when deleted,
+with unrelated controls passing. The normal push hooks, focused checks and every selected
+job in [current-head CI](https://github.com/clintongormley/waitron/actions/runs/37503468833)
+passed; licence/sign-off and CodeQL passed on the same head. Main’s own
+[merge CI](https://github.com/clintongormley/waitron/actions/runs/37504455769)
+is recorded for readback separately. A290 and A299 remain separate work.
