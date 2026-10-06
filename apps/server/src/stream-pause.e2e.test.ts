@@ -359,7 +359,6 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
           await assignCatalogueToLocation(tx, brandLocationId(venue.locationId), catalogue.id);
           const offers = await offerProducts(tx, {
             locationId: brandLocationId(venue.locationId),
-            orderFlow: "prepay",
           });
           return offers.offerFor(water.id);
         });

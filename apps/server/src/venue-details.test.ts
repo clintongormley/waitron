@@ -164,12 +164,11 @@ describe("venue detail edits", () => {
     );
     expect(saved.model.details.addressLine2).toBeNull();
     const rows = await suite.db.execute(
-      sql`select operation_description, order_flow, fiscal_territory from locations where id = ${venue.cfg.locationId}`,
+      sql`select operation_description, fiscal_territory from locations where id = ${venue.cfg.locationId}`,
     );
     expect(rows.rows).toEqual([
       {
         operation_description: "Venta en establecimiento",
-        order_flow: "ticket_then_pay",
         fiscal_territory: "ES-common",
       },
     ]);

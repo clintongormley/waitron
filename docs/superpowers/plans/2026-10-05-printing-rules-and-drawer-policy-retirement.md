@@ -1,5 +1,11 @@
 # Printing rules and drawer policy retirement implementation plan (A261 step 8)
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 > **For the future implementer:** Execute these checkbox tasks inline, in order, using `superpowers:executing-plans`. Load `superpowers:test-driven-development` before writing implementation or tests. Observe each new behavioral check failing for the intended reason, implement the smallest change, then observe it passing. The driver owns commits, review and landing.
 
 **Review status:** Plan awaiting owner approval, 2026-10-05. A fresh-context Claude `review-branch` seat compared only the frozen draft and three source specs (374 seconds); its findings were triaged and the plan corrected. An independent narrow reader checked the corrections, found one remaining printer-versus-drawer test ambiguity, and reported no remaining issue after that paragraph was corrected and reread. These were document reads, not behavior execution. Source receipts remain UNVERIFIED at runtime; no implementation, behavioral test, migration generation or server was run for this plan.

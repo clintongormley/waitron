@@ -1,5 +1,11 @@
 # A231 implementation plan: full invoices at the till
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 **Status:** approved for implementation; landing still needs the owner's review and the design's asesor remedy. A230 has landed with the tax-ID validator and the €3,000 refusal. The owner accepted a venue reset for populated preproduction databases on 2026-10-04; the new series purpose preserves existing rows and counters only on a database whose invoice series have no referencing sales. Read the design's primary-source register before deciding a fiscal or delivery detail, and preserve the unedited golden gate.
 
 ## 0. Reconcile the build boundary

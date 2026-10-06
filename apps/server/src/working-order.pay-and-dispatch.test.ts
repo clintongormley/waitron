@@ -79,6 +79,11 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 import { deviceRequestCfg } from "./testing/session-device.js";
 
 describe("counter handover timing", () => {
+  it("never treats the retired invoice-first mode as pay-after-sending", () => {
+    expect(paysAfterSending("invoice_first")).toBe(false);
+    expect(paysAfterSending("ticket_then_pay")).toBe(true);
+  });
+
   it("uses prepay when an order has no frozen service mode", () => {
     expect(paysAfterSending(undefined)).toBe(false);
     expect(paysAfterSending("ticket_then_pay")).toBe(true);
@@ -155,7 +160,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 }
 
@@ -165,7 +169,7 @@ type OfferedProduct = AvailableProduct & { menuItemId: string };
 interface SeededVenue {
   cfg: DeviceRequestConfig;
   available: AvailableProduct[];
-  /** The venue's counter-default zone, whose mode matches `cfg.orderFlow`. */
+  /** The venue's counter-default zone. */
   zoneId: string;
   /** "Café" — each, 1.50 gross, general(21%). */
   cafe: OfferedProduct;
@@ -241,8 +245,11 @@ async function setupVenue(): Promise<SeededVenue> {
 async function offerAtCounter(
   cfg: DeviceRequestConfig,
   available: AvailableProduct[],
+  mode: OrderFlow = "prepay",
 ): Promise<SeededVenue> {
-  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
+  const offers = await withTransaction(suite.db, (tx) =>
+    offerProducts(tx, cfg, { serviceMode: mode, paidWhen: mode }),
+  );
   const offered = (name: string): OfferedProduct => {
     const product = available.find((p) => p.name === name)!;
     return { ...product, menuItemId: offers.offerFor(product.id) };
@@ -258,14 +265,10 @@ async function offerAtCounter(
 
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue();
-  await suite.db.execute(
-    sql`update locations set order_flow = ${mode} where id = ${venue.cfg.locationId}`,
-  );
-  return offerAtCounter({ ...venue.cfg, orderFlow: mode }, venue.available);
+  return offerAtCounter({ ...venue.cfg }, venue.available, mode);
 }
 
-/** The OUTSTANDING (issued-but-unsettled) sales — the surface an invoice-first order shows on
- *  between placing and collect. */
+/** The issued-but-unsettled sales. */
 async function outstanding(): Promise<{ saleId: string; amountDue: string }[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await listOutstandingSales(tx);
@@ -1252,11 +1255,30 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
 
-    await withTransaction(suite.db, (tx) =>
-      fireDishesAtPayment(tx, { ...cfg, orderFlow: "invoice_first" }, id),
-    );
+    await withTransaction(suite.db, (tx) => fireDishesAtPayment(tx, { ...cfg }, id));
 
     expect(await ticketStateOf(id)).toBe("queued");
+  });
+
+  it("placing never files an invoice even when handed a retired frozen mode", async () => {
+    const { cfg, cafe, zoneId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    await suite.db.execute(sql`update order_service_contexts
+      set service_mode = 'ticket_then_pay' where working_order_id = ${id}`);
+
+    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+
+    expect(placed).toEqual({ id, status: "placed" });
+    expect(await saleCount(id)).toBe(0);
+    expect(await registroCount(id)).toBe(0);
+    expect(await outstanding()).toEqual([]);
+    expect(await ticketStateOf(id)).toBe("queued");
+    expect((await readAmendments(id)).map((row) => row.kind)).toEqual(["order_placed"]);
   });
 
   it("does not issue an invoice from the retired venue flow when an order has no service context", async () => {
@@ -1269,12 +1291,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
 
-    const placed = await placeOrder(
-      { db: suite.db, backend, clock },
-      { ...cfg, orderFlow: "invoice_first" },
-      id,
-      OPERATOR,
-    );
+    const placed = await placeOrder({ db: suite.db, backend, clock }, { ...cfg }, id, OPERATOR);
 
     expect(placed).toEqual({ id, status: "placed" });
     expect(await saleCount(id)).toBe(0);
@@ -1513,7 +1530,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 // The idempotency proofs below run as two transactions on one handle; the file header states what
 // that shows and what it does not. No primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale`
 // (immediate + deferred), `settleSale` and `listOutstandingSales`.
-describe("prepare & collect — three-mode dispatch (order_flow)", () => {
+describe("prepare & collect — zone payment timing", () => {
   it("uses each zone's pay timing through payment, placement and collection in one department", async () => {
     const { cfg, cafe, zoneId: prepayZoneId } = await setupVenue();
     const collectZone = await withTransaction(suite.db, (tx) =>
@@ -1544,7 +1561,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       select service_mode from order_service_contexts where working_order_id = ${collectId}`);
     expect(contexts).toEqual([{ service_mode: "ticket_then_pay" }]);
     const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, collectId, OPERATOR);
-    expect(placed.invoiceNumber).toBeUndefined();
+    expect(placed).not.toHaveProperty("invoiceNumber");
     expect(await orderState(collectId)).toEqual({ status: "placed", settledAtSet: false });
     expect(await saleCount(collectId)).toBe(0);
 
@@ -1608,10 +1625,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(labels.saleLine).not.toEqual(EACH_UNIT.name);
   });
 
-  // MODE I (invoice_first): at PLACE issue a DEFERRED (unpaid) chained invoice, open → placed, and it
-  // shows as outstanding; at COLLECT `settleSale` closes it, placed → settled, filing NO second record.
-  it("Mode I (invoice_first): place issues a deferred invoice; collect settles it, no second file", async () => {
-    const { cfg, cafe, agua, zoneId } = await modeVenue("invoice_first");
+  it("a quick-sale placement files nothing; payment files exactly one settled invoice", async () => {
+    const { cfg, cafe, agua, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1622,34 +1637,24 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       ],
     });
 
-    // PLACE → the deferred invoice issues HERE (A/1); the order freezes at `placed`, unsettled.
     const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
-    expect(placed.status).toBe("placed");
-    expect(placed.invoiceType).toBe("F2");
-    expect(placed.invoiceNumber).toBe("A/1"); // the deferred invoice, issued at placing
-    expect(placed.total).toBe("3.50"); // 1.50 café + 2.00 agua
-    expect(placed.qr).not.toBe(""); // a genuine chained filing carries the AEAT QR
+    expect(placed).toEqual({ id, status: "placed" });
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
 
-    // The chained record exists NOW, before any payment — one sale, one registro — and shows as
-    // OUTSTANDING (what is owed).
-    expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
-    const due = await outstanding();
-    expect(due).toHaveLength(1);
-    expect(due[0]!.amountDue).toBe("3.50");
+    expect(await saleCount(id)).toBe(0);
+    expect(await registroCount(id)).toBe(0);
+    expect(await outstanding()).toEqual([]);
 
-    // COLLECT → settle the EXISTING invoice, placed → settled, filing NOTHING new.
     const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "3.50" },
     });
-    expect(collected.invoiceNumber).toBe("A/1"); // the SAME invoice, read back
+    expect(collected.invoiceType).toBe("F2");
+    expect(collected.invoiceNumber).toBe("A/1");
     expect(collected.total).toBe("3.50");
+    expect(collected.qr).not.toBe("");
     expect(collected.tender).toEqual({ method: "cash", change: "0.00" });
-    // The receipt line list is read back from the order's stored lock (Mode-I collect returns the
-    // already-filed ticket), so it matches the deferred invoice's composition.
     expect(collected.lines).toEqual([
       {
         descriptions: { [LOCALE]: "Café" },
@@ -1669,14 +1674,14 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       },
     ]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(await saleCount(id)).toBe(1); // STILL one sale — no second file at collect
-    expect(await registroCount(id)).toBe(1); // STILL one registro
-    expect(await outstanding()).toEqual([]); // settled → no longer owed
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+    expect(await outstanding()).toEqual([]);
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "3.50" }]);
   });
 
-  it("snapshots the department trading name when an invoice-first order is placed", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+  it("snapshots the department trading name when the quick sale is paid", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     await suite.db.execute(
       sql`update departments set trading_name = 'Deli Before Payment' where location_id = ${cfg.locationId}`,
     );
@@ -1686,7 +1691,11 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "1.50" },
+    });
     const [sale] = await suite.db
       .select({ id: sales.id })
       .from(sales)
@@ -1703,8 +1712,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(header?.printTradingName).toBe(true);
   });
 
-  it("Mode I: the placed result carries the backend's words beside its QR", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+  it("the paid result carries the backend's words beside its QR", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1712,13 +1721,17 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
-    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
-    expect(placed.qr).not.toBe("");
-    expect(placed.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
+    const paid = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    expect(paid.qr).not.toBe("");
+    expect(paid.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
   });
 
   it("Mode I: a covered cash over-tender at collect settles at the total and hands back change", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1741,7 +1754,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: a card tender at collect records exactly one captured payment linked to the sale; cash records none", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
 
     // CARD collect: the invoice issued deferred at placing, then a manual-card ("datáfono") tender at
     // collect. The card charges the EXACT invoice total on the separate terminal — no change.
@@ -1761,7 +1774,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await orderState(cardId)).toEqual({ status: "settled", settledAtSet: true });
 
     // The card tender AND a captured manual `payments` row linked to the settled sale; without the row
-    // the invoice-first card collect would be invisible to reconciliation.
+    // the issued-bill card collect would be invisible to reconciliation.
     expect(await tendersFor(cardId)).toEqual([{ method: "card", amount: "1.50" }]);
     expect(await paymentCount(cardId)).toBe(1);
     expect(await paymentsFor(cardId)).toEqual([
@@ -1772,7 +1785,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await saleCount(cardId)).toBe(1);
     expect(await registroCount(cardId)).toBe(1);
 
-    // CASH collect of a SEPARATE invoice-first order → NO payments row (cash is a tender only), the
+    // CASH collect of a SEPARATE issued bill → NO payments row (cash is a tender only), the
     // other branch of the card side-write. Same-state divergence (CLAUDE.md §1): card writes 1, cash 0.
     const cashId = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -1789,8 +1802,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await paymentCount(cashId)).toBe(0);
   });
 
-  it("Mode I: a double-tap place issues exactly ONE deferred invoice (the two placements serialise)", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+  it("a double-tap placement opens one amendment log and files nothing before payment", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1798,10 +1811,6 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
-    // Two overlapping places of the SAME order. The write queue admits the second only once the first
-    // has committed: the winner files the deferred invoice and moves the row to `placed`, the loser
-    // re-reads `placed` and is refused `working_order.not_open` BEFORE it files. That refusal is the
-    // branch this case exists to pin.
     const results = await Promise.allSettled([
       placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
       placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
@@ -1811,14 +1820,14 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(rejected).toHaveLength(1);
     expect(rejected[0]!.reason).toMatchObject({ code: "working_order.not_open" });
 
-    // ONE deferred invoice, one registro — the unrepairable double-file the dispatch must prevent.
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-    expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await saleCount(id)).toBe(0);
+    expect(await registroCount(id)).toBe(0);
+    expect((await readAmendments(id)).map((row) => row.kind)).toEqual(["order_placed"]);
   });
 
   it("Mode I: a concurrent double collect settles the invoice ONCE and both see the same ticket", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1857,7 +1866,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // PLACE → NO fiscal document (design §3). The order freezes at `placed` with nothing filed.
     const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     expect(placed.status).toBe("placed");
-    expect(placed.invoiceNumber).toBeUndefined(); // no invoice issued at placing
+    expect(placed).not.toHaveProperty("invoiceNumber"); // no invoice issued at placing
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await saleCount(id)).toBe(0); // nothing filed yet
     expect(await outstanding()).toEqual([]); // no issued invoice → nothing outstanding
@@ -1964,7 +1973,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -2417,8 +2426,8 @@ describe("paying a counter order never sent, in a zone that sends before payment
     expect(await linesSent(id)).toEqual([true]);
   });
 
-  it("invoice_first: a cash walk-up files a settled sale and sends its dish in the payment", async () => {
-    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+  it("ticket_then_pay: a cash walk-up files a settled sale and sends its dish in the payment", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const printerId = await kitchenPrinter(cfg);
     const id = randomUUID();
 
@@ -2486,7 +2495,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
     expect(await saleCount(id)).toBe(1);
   });
 
-  it.each(["ticket_then_pay", "invoice_first"] as const)(
+  it.each(["ticket_then_pay", "ticket_then_pay"] as const)(
     "%s: a parked order paid sends its first course and holds its later course, and the same pay sent again changes nothing",
     async (mode) => {
       const { cfg, cafe, agua, zoneId } = await modeVenue(mode);

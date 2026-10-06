@@ -1378,7 +1378,6 @@ async function bootServer(
   const tillBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
   const till: TillConfig = {
     ...config.till,
-    orderFlow: "prepay",
     simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };

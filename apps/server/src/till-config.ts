@@ -4,15 +4,11 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, locationId, nodeId, seriesId } from "@waitron/shared";
 import type { Decimal, DeviceOrigin, LocationId, NodeId, Origin, SeriesId } from "@waitron/shared";
-import { nodes, orderFlow, withTransaction } from "@waitron/db";
+import { nodes, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
 
-/**
- * A pay-timing mode. It decides which issuance primitive fires and when, so a wrong
- * dispatch files the wrong kind of unrepairable fiscal record.
- */
-export type OrderFlow = (typeof orderFlow.enumValues)[number];
+export type OrderFlow = "prepay" | "ticket_then_pay";
 
 /** The venue's identity on this node, resolved once at boot from the environment provisioning
  * stamped. */
@@ -43,7 +39,6 @@ export interface TillConfig {
   sendingDeviceId?: string;
   /** Line ids of made-here records this request writes, for its till answer. */
   madeHereSink?: Set<string>;
-  orderFlow: OrderFlow;
   /**
    * The largest total this regime records for a sale with no named customer, from the fiscal
    * backend's `simplifiedInvoiceLimit` at boot, or null when the regime sets none.
@@ -63,7 +58,7 @@ export interface DeviceRequestConfig extends TillConfig {
 
 /** What the environment alone says about the venue's identity on this node: boot adds the rest
  * from the database and the fiscal backend. */
-export type TillIdentityConfig = Omit<TillConfig, "orderFlow" | "simplifiedInvoiceLimit">;
+export type TillIdentityConfig = Omit<TillConfig, "simplifiedInvoiceLimit">;
 
 /** Only the variable NAME travels in the error, never the value. */
 function required(env: NodeJS.ProcessEnv, key: string): string {

@@ -92,7 +92,6 @@ function makeCfg(locationId: string, nodeId: string): TillConfig {
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 }
 

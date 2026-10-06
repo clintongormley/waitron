@@ -2679,8 +2679,6 @@ export class TillApp extends LitElement {
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
     const sendsToKitchen = this.#paySendsToKitchen();
-    // Paying an invoice-first order before it is placed issues its invoice now.
-    const invoiceIssuedNow = this.stage === "order" || this.#basketFlow() !== "invoice_first";
     this.errorKey = undefined;
     this.cardOutcome = undefined;
     let reachedFiscal = false;
@@ -2709,7 +2707,7 @@ export class TillApp extends LitElement {
       if (session !== this.#operatorSession) return;
       if (out.outcome === "captured") {
         this.result = out.ticket;
-        this.#showTicket(id, invoiceIssuedNow);
+        this.#showTicket(id);
         await this.#refreshAfterWrite("held", "refresh.held_after_sale");
         if (session !== this.#operatorSession) return;
         if (sendsToKitchen) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
@@ -2965,7 +2963,6 @@ export class TillApp extends LitElement {
     clearInactiveChoices = false,
   ): Promise<void> {
     if (this.placing) return;
-    if (this.#basketFlow() === "invoice_first" && this.#askInvoiceRecipientForLargeBill()) return;
     this.placing = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -3051,7 +3048,7 @@ export class TillApp extends LitElement {
       const result = await this.api.collectOrder(id, tender);
       if (session !== this.#operatorSession) return;
       this.result = result;
-      this.#showTicket(id, this.#basketFlow() !== "invoice_first");
+      this.#showTicket(id);
       // A collect settles the order, and the counter's prep-queue card offers Collect only on a
       // settled order. Only a collect opened from the waiting list re-reads the queue
       // (docs/backlog.md, B16).
@@ -3225,7 +3222,7 @@ export class TillApp extends LitElement {
    * the operator's session has overtaken it.
    */
   async #onPayWaitingOrder(event: Event): Promise<void> {
-    const { id, serviceMode } = (event as CustomEvent<PayWaitingOrderDetail>).detail;
+    const { id } = (event as CustomEvent<PayWaitingOrderDetail>).detail;
     if (this.#counterOrderInFlight()) return;
     const request = ++this.#payWaitingRequest;
     const session = this.#operatorSession;
@@ -3247,9 +3244,7 @@ export class TillApp extends LitElement {
       if (movedOn()) return;
       this.#loadIntoBasket(order, null);
       this.stage = "collect";
-      // Only an invoice_first order's invoice was issued when it was placed (`placeOrder`); any
-      // other files its invoice when it is collected.
-      this.collectFlow = serviceMode === "invoice_first" ? "invoice_first" : "ticket_then_pay";
+      this.collectFlow = "ticket_then_pay";
     } catch (error) {
       if (movedOn()) return;
       const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";

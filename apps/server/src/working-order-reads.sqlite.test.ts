@@ -102,7 +102,6 @@ beforeAll(async () => {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 });
 

@@ -16,7 +16,7 @@ import {
   billlessSale,
   collect,
   parked,
-  placedInvoiceFirst,
+  placedIssuedBill,
   provisionOrderVenue,
   voidInvoice,
   type OrderVenue,
@@ -64,7 +64,7 @@ async function counts() {
 
 describe("dashboard receipt reprint", () => {
   it("does not queue a job or audit row when a copy cannot be built", async () => {
-    const billId = await placedInvoiceFirst(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Caña");
     const before = await counts();
     const [taxpayer] = await inTx(venue, (tx) => tx.select().from(tenants));
     await inTx(venue, (tx) => tx.delete(tenants));
@@ -80,7 +80,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("logs an Orders failure when receipt reconstruction throws, without queuing a copy", async () => {
-    const billId = await placedInvoiceFirst(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Caña");
     const backend = Object.create(venue.backend) as FiscalBackend;
     vi.spyOn(backend, "filedReceiptFor").mockRejectedValue(new Error("reconstruction probe"));
     const events: string[] = [];
@@ -101,7 +101,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("prints one marked copy on the picked printer without opening a drawer or filing", async () => {
-    const billId = await placedInvoiceFirst(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Caña");
     expect((await collect(venue, billId, "3.00")).status).toBe(200);
     const [sale] = await inTx(venue, (tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
@@ -142,7 +142,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("prints on a second printer chosen for this copy", async () => {
-    const billId = await placedInvoiceFirst(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Caña");
     const printer = await inTx(venue, (tx) =>
       createPrinter(
         tx,
@@ -167,8 +167,8 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("lets a staff dashboard session copy a receipt and a voided invoice", async () => {
-    const paid = await placedInvoiceFirst(venue, "Caña");
-    const voided = await placedInvoiceFirst(venue, "Caña");
+    const paid = await placedIssuedBill(venue, "Caña");
+    const voided = await placedIssuedBill(venue, "Caña");
     await voidInvoice(venue, voided);
     const first = await post(venue.staffDashboard, paid, venue.printerId);
     const second = await post(venue.staffDashboard, voided, venue.printerId);
@@ -189,7 +189,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("applies the till copy's print-receipt capability to a bound dashboard device", async () => {
-    const billId = await placedInvoiceFirst(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Caña");
     const [profile] = await inTx(venue, (tx) =>
       tx
         .insert(deviceProfiles)
@@ -212,7 +212,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("checks a development device header through the same print-receipt gate", async () => {
-    const billId = await placedInvoiceFirst(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Caña");
     const [profile] = await inTx(venue, (tx) =>
       tx
         .insert(deviceProfiles)
@@ -255,7 +255,7 @@ describe("dashboard receipt reprint", () => {
     vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
     let oldPaid: string;
     try {
-      oldPaid = await placedInvoiceFirst(venue, "Caña");
+      oldPaid = await placedIssuedBill(venue, "Caña");
       expect((await collect(venue, oldPaid, "3.00")).status).toBe(200);
     } finally {
       vi.useRealTimers();
@@ -270,7 +270,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("refuses an uninvoiced bill and an inactive printer without writing", async () => {
-    const valid = await placedInvoiceFirst(venue, "Caña");
+    const valid = await placedIssuedBill(venue, "Caña");
     const open = await parked(venue, "Caña");
     const noBill = await billlessSale(venue);
     const other = await inTx(venue, (tx) =>

@@ -53,7 +53,6 @@ async function setupTwoVenues(): Promise<{ a: TillConfig; b: TillConfig }> {
       invoiceLocales: [LOCALE],
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
-      orderFlow: "prepay",
     };
   };
   return { a: await make("Loc A"), b: await make("Loc B") };

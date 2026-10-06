@@ -521,12 +521,12 @@ describe("venue service routing", () => {
         {
           zoneId: zone,
           departmentId: department.id,
-          serviceMode: "invoice_first",
+          serviceMode: "ticket_then_pay",
         },
       );
 
       await expect(resolveZoneContext(tx, { locationId }, zone)).resolves.toMatchObject({
-        serviceMode: "invoice_first",
+        serviceMode: "ticket_then_pay",
       });
       await expect(
         getOrderServiceContext(tx, { locationId }, "00000000-0000-4000-8000-000000000001"),
@@ -543,7 +543,7 @@ describe("venue service routing", () => {
       await expect(resolveNewOrderZone(tx, { locationId }, {})).resolves.toMatchObject({
         zoneId: zone,
         departmentId: department.id,
-        serviceMode: "invoice_first",
+        serviceMode: "ticket_then_pay",
       });
       expect(visible.offers).toHaveLength(1);
       expect(visible.offers[0]).toMatchObject({
@@ -1501,6 +1501,36 @@ it("records an empty receipt heading for a sale without a service zone", async (
   });
   await expect(scoped((tx) => readSaleReceiptHeader(tx, randomUUID()))).resolves.toBeNull();
 });
+
+it.each(["prepay", "ticket_then_pay"] as const)(
+  "snapshots %s policy for new and moved quick sales despite the retired invoice-first setting",
+  async (paidWhen) => {
+    const venue = await seedSellingVenue();
+    await scoped(async (tx) => {
+      await configureZone(tx, venue.cfg, {
+        zoneId: venue.barZone,
+        departmentId: venue.barId,
+        serviceMode: "ticket_then_pay",
+      });
+      await setZoneSalePolicyOverride(tx, venue.cfg, venue.barZone, "paidWhen", paidWhen);
+      const fresh = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, venue.cfg, fresh, venue.barZone);
+      expect(await getOrderServiceContext(tx, venue.cfg, fresh)).toEqual({
+        zoneId: venue.barZone,
+        departmentId: venue.barId,
+        serviceMode: paidWhen,
+      });
+      const moved = await openOrder(tx, venue, 2);
+      await recordOrderServiceContext(tx, venue.cfg, moved, venue.diningZone);
+      await retargetOrderServiceContext(tx, venue.cfg, moved, venue.barZone);
+      expect(await getOrderServiceContext(tx, venue.cfg, moved)).toEqual({
+        zoneId: venue.barZone,
+        departmentId: venue.barId,
+        serviceMode: paidWhen,
+      });
+    });
+  },
+);
 
 it("uses an explicitly selected zone instead of the venue fallback", async () => {
   const venue = await seedSellingVenue();
@@ -2662,3 +2692,31 @@ describe("findOrderServiceZones", () => {
     });
   });
 });
+
+for (const { statement, constraint } of [
+  {
+    statement: sql`update departments set default_service_mode = 'invoice_first'`,
+    constraint: "departments_service_mode_ck",
+  },
+  {
+    statement: sql`update zone_service_policies set service_mode = 'invoice_first'`,
+    constraint: "zone_service_policies_mode_ck",
+  },
+  {
+    statement: sql`update order_service_contexts set service_mode = 'invoice_first'`,
+    constraint: "order_service_contexts_mode_ck",
+  },
+]) {
+  it(`refuses retired invoice-first storage through ${constraint}`, async () => {
+    const venue = await seedSellingVenue();
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, venue.cfg, orderId, venue.barZone);
+    });
+    const refused = await captureError(() => scoped(async (tx) => tx.execute(statement)));
+    expect(engineErrorMessage(refused)).toContain(`CHECK constraint failed: ${constraint}`);
+    await expect(
+      scoped((tx) => resolveZoneContext(tx, venue.cfg, venue.barZone)),
+    ).resolves.toMatchObject({ serviceMode: "prepay" });
+  });
+}

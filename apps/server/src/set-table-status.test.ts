@@ -66,7 +66,6 @@ async function setupVenue(): Promise<Seeded> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
   const seeded = await withTransaction(db, async (tx) => {
     const { id: tableId } = await createTable(tx, cfg, { label: "T1" });

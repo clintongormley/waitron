@@ -1,3 +1,4 @@
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -22,7 +23,7 @@ import "./errors.js";
 // Money through `POST /api/bills/:id/move` (table actions plan, Task 7; spec §7, §9, §15). The move
 // itself is tested in `party-move-bill.test.ts`.
 let venue: BillVenue;
-let invoiceFirstZone: string;
+let ticketThenPayZone: string;
 /** A counter zone of its own whose orders are paid before they are sent to the kitchen. */
 let prepayZone: string;
 
@@ -32,9 +33,9 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    invoiceFirstZone = (
+    ticketThenPayZone = (
       await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
       )
     ).zoneId;
     prepayZone = await inTx(venue, async (tx) => {
@@ -285,15 +286,30 @@ describe("a bill moved between service modes sends each dish to the kitchen once
     },
   );
 
-  it("places a table bill whose dish was sent, moved to an invoice-first counter, issuing its one invoice", async () => {
+  it("places a sent table bill moved to a ticket-then-pay counter without filing, then collects its one invoice without sending again", async () => {
     const ana = await seatedWith(venue, "Pulpo");
 
-    const moved = await toCounter(ana, invoiceFirstZone);
+    const moved = await toCounter(ana, ticketThenPayZone);
     const placed = await post(`/api/working-orders/${ana.tabId}/place`, {});
 
     expect(moved.status).toBe(200);
     expect(placed.status).toBe(200);
-    expect(placed.json).toMatchObject({ status: "placed", total: "20.00" });
+    expect(placed.json).toEqual({ id: ana.tabId, status: "placed" });
+    expect(registroCount(venue, ana.tabId)).toBe(0);
+    expect(venue.db.all(sql`select id from sales where working_order_id = ${ana.tabId}`)).toEqual(
+      [],
+    );
+    expect(kitchenItems(ana.tabId)).toEqual({ items: 1, fired: 1 });
+
+    const collected = await post(`/api/working-orders/${ana.tabId}/collect`, {
+      tender: { method: "cash", amount: "20.00" },
+    });
+    expect(collected.status).toBe(200);
+    expect(collected.json).toMatchObject({
+      total: "20.00",
+      invoiceNumber: expect.stringMatching(/^A\/\d+$/),
+    });
+    expect(await statusOf(venue, ana.tabId)).toBe("settled");
     expect(registroCount(venue, ana.tabId)).toBe(1);
     expect(kitchenItems(ana.tabId)).toEqual({ items: 1, fired: 1 });
   });
@@ -470,10 +486,11 @@ describe("money on a moved bill", () => {
     await parkOrder(deps, venue.cfg, {
       id,
       lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
-      zoneId: invoiceFirstZone,
+      zoneId: ticketThenPayZone,
       operatorId: venue.operatorId,
     });
     await placeOrder(deps, venue.cfg, id, venue.operatorId);
+    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
     const issued = venue.db.all<{ id: string }>(
       sql`select id from sales where working_order_id = ${id}`,
     );
@@ -597,10 +614,11 @@ describe("paying a moved bill, by its state", () => {
     await parkOrder(deps, venue.cfg, {
       id,
       lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
-      zoneId: invoiceFirstZone,
+      zoneId: ticketThenPayZone,
       operatorId: venue.operatorId,
     });
     await placeOrder(deps, venue.cfg, id, venue.operatorId);
+    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
     const issued = venue.db.all<{ id: string }>(
       sql`select id from sales where working_order_id = ${id}`,
     );
@@ -1121,7 +1139,7 @@ describe("the move route", () => {
     const { ana, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
 
     const answer = await post(`/api/bills/${billId}/move`, {
-      to: { counter: { zoneId: invoiceFirstZone.toUpperCase() } },
+      to: { counter: { zoneId: ticketThenPayZone.toUpperCase() } },
       bills: "separate",
       partyId: ana.partyId,
       expectedPartyRevision: revisionOf(ana.partyId),
@@ -1132,6 +1150,6 @@ describe("the move route", () => {
     const [context] = venue.db.all<{ zone_id: string }>(
       sql`select zone_id from order_service_contexts where working_order_id = ${billId}`,
     );
-    expect(context!.zone_id).toBe(invoiceFirstZone);
+    expect(context!.zone_id).toBe(ticketThenPayZone);
   });
 });

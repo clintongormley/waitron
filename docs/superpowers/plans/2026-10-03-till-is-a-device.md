@@ -1,5 +1,11 @@
 # A till is a device (A238) — Implementation Plan
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 > **2026-10-04 follow-up:** the [devices, menus and service zones design](../specs/2026-10-04-devices-menus-and-service-zones-design.md)
 > records independent drawer selection and expanded profile/device choices as subsequent work.
 > Its written spec awaits review; do not read this historical plan as that follow-up implementation.

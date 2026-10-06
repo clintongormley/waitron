@@ -52,7 +52,6 @@ function tillConfigFromVenue(venue: VenueResult): OriginConfig {
     simplifiedInvoiceLimit: null,
     // ticket_then_pay so `placeOrder` FIRES the lines to the kitchen (open → placed) without filing a
     // fiscal doc — the lightest fire path that puts real ticket items on the station queue.
-    orderFlow: "ticket_then_pay",
   };
 }
 
@@ -64,8 +63,7 @@ function nextNif(): string {
 
 /**
  * A provisioned venue in `ticket_then_pay`, a two-product catalogue, and a manager and a staff
- * management session. The venue provisions as `prepay`, so `order_flow` is flipped to agree with
- * `cfg`.
+ * management session.
  */
 export async function setupVenue(db: Database): Promise<Venue> {
   const venue = await applyVenue(
@@ -104,9 +102,6 @@ export async function setupVenue(db: Database): Promise<Venue> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  await db.execute(
-    sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
-  );
 
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });

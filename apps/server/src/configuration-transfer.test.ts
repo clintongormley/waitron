@@ -451,9 +451,6 @@ describe("configuration transfer database path", () => {
         and id <> '12121212-aaaa-aaaa-aaaa-121212121212'
     `);
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-    await suite.db.execute(
-      sql`update locations set order_flow = 'invoice_first' where id = ${source.locationId}`,
-    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       { ...source, sourceOperatorId: sourceOperator.rows[0]!.id },
@@ -489,10 +486,10 @@ describe("configuration transfer database path", () => {
         );
       },
     });
-    const targetOrderFlow = await targetSuite.db.execute<{ order_flow: string }>(sql`
-      select order_flow from locations where id = ${target.locationId}
+    const locationColumns = await targetSuite.db.execute<{ name: string }>(sql`
+      select name from pragma_table_info('locations')
     `);
-    expect(targetOrderFlow.rows).toEqual([{ order_flow: "prepay" }]);
+    expect(locationColumns.rows.map((column) => column.name)).not.toContain("order_flow");
     await withTransaction(targetSuite.db, async (tx) => {
       const [metadata] = transferred.tables.media_images!;
       const bytes = await readImageBytes(tx, metadata!.filename as string);
@@ -1618,7 +1615,6 @@ it("leaves out a print agent's node, so the importing venue does not show it as 
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
-    orderFlow: "prepay",
     simplifiedInvoiceLimit: null,
   });
   const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {

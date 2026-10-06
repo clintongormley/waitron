@@ -998,7 +998,7 @@ export async function recordOrderServiceContext(
 ): Promise<void> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
   const serviceMode =
-    context.serviceMode === "table_tab" || context.serviceMode === "invoice_first"
+    context.serviceMode === "table_tab"
       ? context.serviceMode
       : (await resolveSalePolicy(tx, cfg, zoneId)).paidWhen;
   await tx.insert(orderServiceContexts).values({
@@ -1019,7 +1019,7 @@ export async function retargetOrderServiceContext(
 ): Promise<void> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
   const serviceMode =
-    context.serviceMode === "table_tab" || context.serviceMode === "invoice_first"
+    context.serviceMode === "table_tab"
       ? context.serviceMode
       : (await resolveSalePolicy(tx, cfg, zoneId)).paidWhen;
   const updated = await tx

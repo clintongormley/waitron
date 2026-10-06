@@ -10,7 +10,7 @@ import {
   credit,
   departed,
   parked,
-  placedInvoiceFirst,
+  placedIssuedBill,
   provisionOrderVenue,
   voidInvoice,
   type OrderVenue,
@@ -97,8 +97,8 @@ describe("each status, from the product's own write paths", () => {
     });
   });
 
-  it("reads a bill sent under invoice-first as Waiting for payment, with its invoice", async () => {
-    const id = await placedInvoiceFirst(venue, "Tarta");
+  it("reads an explicitly issued unpaid bill as Waiting for payment, with its invoice", async () => {
+    const id = await placedIssuedBill(venue, "Tarta");
     expect(await rowOf(id)).toMatchObject({
       status: "waiting_for_payment",
       invoiceNumber: expect.stringMatching(/^A\/\d+$/),
@@ -132,7 +132,7 @@ describe("each status, from the product's own write paths", () => {
     });
 
   it("reads a sent bill cancelled at the till as Cancelled and credited in full, with its credit note", async () => {
-    const id = await placedInvoiceFirst(venue, "Caña");
+    const id = await placedIssuedBill(venue, "Caña");
     expect((await cancel(id)).status).toBe(200);
     expect(await rowOf(id)).toMatchObject({
       status: "cancelled",
@@ -144,7 +144,7 @@ describe("each status, from the product's own write paths", () => {
   });
 
   it("refuses to cancel a bill whose credit notes already bring its invoice to nothing, leaving its row as it was", async () => {
-    const id = await placedInvoiceFirst(venue, "Caña");
+    const id = await placedIssuedBill(venue, "Caña");
     await credit(venue, id, "2.48", "-3.00");
     const before = await rowOf(id);
     expect(before).toMatchObject({ credited: "in_full", creditNotes: [expect.any(String)] });
@@ -191,7 +191,7 @@ describe("each status, from the product's own write paths", () => {
   });
 
   it("reads a voided invoice's bill as Voided, ahead of Waiting for payment", async () => {
-    const id = await placedInvoiceFirst(venue, "Caña");
+    const id = await placedIssuedBill(venue, "Caña");
     await voidInvoice(venue, id);
     expect(await rowOf(id)).toMatchObject({
       status: "voided",
@@ -214,7 +214,7 @@ describe("each status, from the product's own write paths", () => {
 
 describe("credit notes and what is still owed", () => {
   it("marks a part credit, and owes what the till's collect then charges, to the cent", async () => {
-    const id = await placedInvoiceFirst(venue, "Botella tinto");
+    const id = await placedIssuedBill(venue, "Botella tinto");
     await credit(venue, id, "2.00", "-2.42");
     const row = await rowOf(id);
     expect(row).toMatchObject({
@@ -252,7 +252,7 @@ describe("credit notes and what is still owed", () => {
 
 describe("filters and search", () => {
   it("limits a till lookup to bills that still owe money", async () => {
-    const waiting = await placedInvoiceFirst(venue, "Caña");
+    const waiting = await placedIssuedBill(venue, "Caña");
     const fullyCredited = await departed(venue, "Botella tinto");
     await credit(venue, fullyCredited.tabId, "24.79", "-30.00");
     const sale = await billlessSale(venue);
@@ -272,7 +272,7 @@ describe("filters and search", () => {
   });
 
   it("Unpaid takes Waiting for payment and Left without paying, and nothing else", async () => {
-    const waiting = await placedInvoiceFirst(venue, "Caña");
+    const waiting = await placedIssuedBill(venue, "Caña");
     const debt = await departed(venue, "Caña");
     const open = await seatedWith(venue, "Caña");
     const found = ids((await list("status=unpaid&anyDate=true&limit=200")).rows);
@@ -281,7 +281,7 @@ describe("filters and search", () => {
   });
 
   it("finds an invoice by A/12, by its bare number, and by its credit note's number", async () => {
-    const id = await placedInvoiceFirst(venue, "Croquetas");
+    const id = await placedIssuedBill(venue, "Croquetas");
     await credit(venue, id, "2.00", "-2.42");
     const row = await rowOf(id);
     const [, number] = (row.invoiceNumber as string).split("/");
@@ -325,7 +325,7 @@ describe("filters and search", () => {
   });
 
   it("filters by who a line is credited to, and by having a credit note", async () => {
-    const id = await placedInvoiceFirst(venue, "Pulpo");
+    const id = await placedIssuedBill(venue, "Pulpo");
     await credit(venue, id, "2.00", "-2.42");
     expect(ids((await list(`anyDate=true&limit=200&staff=${venue.operatorId}`)).rows)).toContain(
       id,

@@ -53,7 +53,7 @@ describe.each(["light", "dark"] as const)("till-counter-waiting a11y (%s theme)"
   it("an invoiced, unpaid order with Cancel and credit has no violations", async () => {
     const { el, host } = await mountWidget<TillCounterWaiting>(
       "till-counter-waiting",
-      { orders: [{ ...sent, serviceMode: "invoice_first", invoiceNumber: "A/12" }] },
+      { orders: [{ ...sent, serviceMode: "ticket_then_pay", invoiceNumber: "A/12" }] },
       theme,
     );
     expect(el.shadowRoot!.querySelector("[data-waiting-cancel-credit]")).not.toBeNull();

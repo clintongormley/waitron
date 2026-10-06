@@ -124,7 +124,6 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 
   // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`

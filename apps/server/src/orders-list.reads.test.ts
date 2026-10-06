@@ -8,7 +8,7 @@ import {
   contribute,
   credit,
   departed,
-  placedInvoiceFirst,
+  placedIssuedBill,
   provisionOrderVenue,
   type OrderVenue,
 } from "./testing/order-venue.js";
@@ -40,7 +40,7 @@ const ANY: OrderListFilter = {
 async function oneOfEach(): Promise<void> {
   const party = await seatedWith(venue, "Caña", "Tarta");
   await contribute(venue, party.tabId, "5.00");
-  const invoiced = await placedInvoiceFirst(venue, "Botella tinto");
+  const invoiced = await placedIssuedBill(venue, "Botella tinto");
   await credit(venue, invoiced, "2.00", "-2.42");
   await departed(venue, "Croquetas");
 }

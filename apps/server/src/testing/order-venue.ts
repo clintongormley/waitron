@@ -20,11 +20,12 @@ import {
   type BillVenue,
 } from "./bill-venue.js";
 import { offerProducts } from "./zone-offers.js";
+import { issueOrderInvoice } from "./issue-order.js";
 
-/** {@link provisionBillVenue} with a supervisor, the Orders routes, and an invoice-first counter. */
+/** {@link provisionBillVenue} with a supervisor, the Orders routes, and a ticket-then-pay counter. */
 export interface OrderVenue extends BillVenue {
   printerId: string;
-  invoiceFirstZone: string;
+  counterZone: string;
   supervisorId: string;
   /** The supervisor's till session on the first till's device. */
   supervisorTill: string;
@@ -45,9 +46,13 @@ export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
     .select({ id: devices.receiptPrinterId })
     .from(devices)
     .where(eq(devices.id, venue.deviceId));
-  const invoiceFirstZone = (
+  const counterZone = (
     await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+      offerProducts(tx, venue.cfg, {
+        zone: "counter",
+        serviceMode: "ticket_then_pay",
+        paidWhen: "ticket_then_pay",
+      }),
     )
   ).zoneId;
   const made = await inTx(venue, async (tx) => {
@@ -81,7 +86,7 @@ export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
   return {
     ...venue,
     printerId: assigned!.id!,
-    invoiceFirstZone,
+    counterZone,
     supervisorId: made.supervisorId,
     supervisorTill: [`${SESSION_COOKIE}=${made.till}`, ...device].join("; "),
     supervisorDashboard: `${MANAGEMENT_COOKIE}=${made.dashboard}`,
@@ -91,17 +96,18 @@ export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
   };
 }
 
-/** A counter bill of the named dishes, sent under invoice-first, so it is invoiced and unpaid. */
-export async function placedInvoiceFirst(venue: OrderVenue, ...names: string[]): Promise<string> {
+/** A sent counter bill with a real unpaid invoice. */
+export async function placedIssuedBill(venue: OrderVenue, ...names: string[]): Promise<string> {
   const id = randomUUID();
   const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
   await parkOrder(deps, venue.cfg, {
     id,
     lines: names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
-    zoneId: venue.invoiceFirstZone,
+    zoneId: venue.counterZone,
     operatorId: venue.operatorId,
   });
   await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
   return id;
 }
 
@@ -120,7 +126,7 @@ export async function parkedBy(
   await parkOrder({ db: venue.db }, venue.cfg, {
     id,
     lines: names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
-    zoneId: venue.invoiceFirstZone,
+    zoneId: venue.counterZone,
     operatorId,
   });
   return id;

@@ -1197,7 +1197,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         onboardingIntent: deps.onboardingIntent,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
-        orderFlow: "prepay",
         bumpMode: boot.bumpMode,
         fireControl: boot.fireControl,
         courses: boot.courses,
@@ -1264,9 +1263,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           context: {
             ...context,
             serviceMode:
-              context.serviceMode === "table_tab" || context.serviceMode === "invoice_first"
-                ? context.serviceMode
-                : salePolicy.paidWhen,
+              context.serviceMode === "table_tab" ? context.serviceMode : salePolicy.paidWhen,
             receiptPrintMode: salePolicy.receiptPrintMode,
           },
           zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter(
@@ -1295,9 +1292,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           context: {
             ...context,
             serviceMode:
-              context.serviceMode === "table_tab" || context.serviceMode === "invoice_first"
-                ? context.serviceMode
-                : salePolicy.paidWhen,
+              context.serviceMode === "table_tab" ? context.serviceMode : salePolicy.paidWhen,
             receiptPrintMode: salePolicy.receiptPrintMode,
           },
           ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId, {

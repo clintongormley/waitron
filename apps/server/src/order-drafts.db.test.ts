@@ -120,7 +120,6 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
   await db.insert(persons).values([
     { id: ALEX, displayName: "Alex" },

@@ -747,10 +747,10 @@ describe("the other counter requests refused because the menu changed", () => {
 
   it("retries placing an order once after a silent adoption", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       listDefaultZoneOffers: vi.fn().mockResolvedValue({
         ...V1,
-        context: { ...V1.context, serviceMode: "invoice_first" },
+        context: { ...V1.context, serviceMode: "ticket_then_pay" },
       }),
       listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", V1.offers)),
       parkOrder: vi

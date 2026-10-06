@@ -1,5 +1,11 @@
 # Menus, reusable categories and service home layouts
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 **Status:** product decisions agreed with the owner on 2026-09-20; implementation deferred.
 **2026-09-30:** the [folders, menus and routing design](2026-09-30-catalogue-menus-routing-design.md)
 replaces parts of this document: reusable library sections and the Sections screen, labels

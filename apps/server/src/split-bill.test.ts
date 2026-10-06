@@ -108,7 +108,6 @@ async function setupVenue(): Promise<Seeded> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   } satisfies TillConfig);
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });

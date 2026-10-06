@@ -161,7 +161,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
         locale: "es-ES",
         venueName: "Bar Pepe",
         nif: "B12345678",
-        orderFlow: "invoice_first",
+        orderFlow: "ticket_then_pay",
         capabilities: ["show-station", "show-expo", "show-schedule"],
       }),
       getStationQueue: vi.fn().mockResolvedValue({

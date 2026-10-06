@@ -51,7 +51,7 @@ it("Hold at the order stage of a pay-later flow opens the label prompt instead o
   store.addProduct(cafe, "1");
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
     store,
-    mode: "invoice_first",
+    mode: "ticket_then_pay",
     stage: "order",
   });
   const placed = vi.fn();

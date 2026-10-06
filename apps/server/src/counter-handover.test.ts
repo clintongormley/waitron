@@ -8,7 +8,7 @@ import { floorZones, invoiceSeries, workingOrders } from "@waitron/db";
 import { recordCorrection } from "@waitron/core";
 import { loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
-import type { ServiceMode } from "@waitron/module";
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   listStationQueue,
@@ -28,7 +28,8 @@ import "./errors.js";
 
 // Counter service (spec §5): a counter order may be handed over before or after it is paid.
 let venue: BillVenue;
-const zones = {} as Record<"ticket_then_pay" | "invoice_first" | "prepay", string>;
+type CounterFixture = "ticket_then_pay" | "issued" | "prepay";
+const zones = {} as Record<"ticket_then_pay" | "prepay", string>;
 
 useVenueDb({
   resetPerTest: false,
@@ -36,7 +37,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    for (const mode of ["ticket_then_pay", "invoice_first", "prepay"] as const) {
+    for (const mode of ["ticket_then_pay", "prepay"] as const) {
       zones[mode] = await inTx(venue, async (tx) => {
         const [zone] = await tx
           .insert(floorZones)
@@ -72,11 +73,11 @@ useVenueDb({
 const deps = () => ({ db: venue.db, backend: venue.backend, clock: venue.clock });
 
 /** A counter order of one of each named dish in the zone of `mode`, parked and still open. */
-async function parked(mode: ServiceMode, ...names: string[]): Promise<string> {
+async function parked(mode: CounterFixture, ...names: string[]): Promise<string> {
   const id = randomUUID();
   await parkOrder(deps(), venue.cfg, {
     id,
-    zoneId: zones[mode as keyof typeof zones],
+    zoneId: zones[mode === "issued" ? "ticket_then_pay" : mode],
     lines: names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
     operatorId: venue.operatorId,
   });
@@ -84,9 +85,10 @@ async function parked(mode: ServiceMode, ...names: string[]): Promise<string> {
 }
 
 /** A counter order sent to the kitchen without payment. */
-async function placed(mode: ServiceMode, ...names: string[]): Promise<string> {
+async function placed(mode: CounterFixture, ...names: string[]): Promise<string> {
   const id = await parked(mode, ...names);
   await placeOrder(deps(), venue.cfg, id, venue.operatorId);
+  if (mode === "issued") await issueOrderInvoice(deps(), venue.cfg, id, venue.operatorId);
   return id;
 }
 
@@ -147,7 +149,7 @@ describe("handing over a counter order sent without payment", () => {
   });
 
   it("refuses to change a placed order after its simplified invoice was issued", async () => {
-    const id = await placed("invoice_first", "Tarta");
+    const id = await placed("issued", "Tarta");
     const before = await orderRow(id);
     expect(before.status).toBe("placed");
     expect(saleCount(id)).toBe(1);
@@ -177,7 +179,7 @@ describe("handing over a counter order sent without payment", () => {
     expect(saleCount(id)).toBe(1);
   });
 
-  it.each(["ticket_then_pay", "invoice_first"] as const)(
+  it.each(["ticket_then_pay", "issued"] as const)(
     "hands over a placed, fired %s order: only collected_at changes and it stays placed",
     async (mode) => {
       const id = await placed(mode, "Tarta");
@@ -345,10 +347,10 @@ describe("paying a counter order that was handed over before payment", () => {
   it.each([
     ["ticket_then_pay", "cash", collectCash],
     ["ticket_then_pay", "card", collectByCard],
-    ["invoice_first", "cash", collectCash],
-    ["invoice_first", "card", collectByCard],
+    ["issued", "cash", collectCash],
+    ["issued", "card", collectByCard],
     ["ticket_then_pay", "card, its reply lost,", collectByCardAfterLostReply],
-    ["invoice_first", "card, its reply lost,", collectByCardAfterLostReply],
+    ["issued", "card, its reply lost,", collectByCardAfterLostReply],
   ] as const)(
     "a %s order paid by %s settles once, keeps its handover time and fires nothing again",
     async (mode, _method, pay) => {
@@ -367,14 +369,14 @@ describe("paying a counter order that was handed over before payment", () => {
       expect(after.settledAt).not.toBe(handedOverAt);
       expect(after.collectedAt).toBe(handedOverAt);
       expect(saleCount(id)).toBe(1);
-      expect(salesBefore).toBe(mode === "invoice_first" ? 1 : 0);
+      expect(salesBefore).toBe(mode === "issued" ? 1 : 0);
       expect(registroCount(venue, id)).toBe(1);
       expect(ticketItemCount(id)).toBe(tickets);
     },
   );
 
-  it("an invoice_first order that owes nothing once corrected keeps its handover time", async () => {
-    const id = await placed("invoice_first", "Tarta");
+  it("an already-issued order that owes nothing once corrected keeps its handover time", async () => {
+    const id = await placed("issued", "Tarta");
     await markCollected({ db: venue.db }, venue.cfg, id);
     const handedOverAt = (await orderRow(id)).collectedAt;
     await creditWholeInvoice(id);
@@ -418,7 +420,7 @@ async function stationQueuesListing(id: string): Promise<{ listing: number; stat
   return { listing, stations: stations.length };
 }
 
-/** Pays a placed invoice_first order whose credit note leaves nothing owed. */
+/** Pays a placed already-issued order whose credit note leaves nothing owed. */
 async function collectOwingNothing(id: string): Promise<void> {
   await creditWholeInvoice(id);
   expect((await collectCash(id)).tender).toEqual({ method: "unpaid" });
@@ -428,11 +430,11 @@ describe("paying a counter order sent without payment, before it is handed over"
   it.each([
     ["ticket_then_pay", "cash", collectCash],
     ["ticket_then_pay", "card", collectByCard],
-    ["invoice_first", "cash", collectCash],
-    ["invoice_first", "card", collectByCard],
+    ["issued", "cash", collectCash],
+    ["issued", "card", collectByCard],
     ["ticket_then_pay", "card, its reply lost,", collectByCardAfterLostReply],
-    ["invoice_first", "card, its reply lost,", collectByCardAfterLostReply],
-    ["invoice_first", "a credit note owing nothing", collectOwingNothing],
+    ["issued", "card, its reply lost,", collectByCardAfterLostReply],
+    ["issued", "a credit note owing nothing", collectOwingNothing],
   ] as const)(
     "a %s order paid by %s records no handover, and stays waiting and on its station queue",
     async (mode, _method, pay) => {
@@ -455,7 +457,7 @@ describe("paying a counter order sent without payment, before it is handed over"
 
   it.each([
     ["ticket_then_pay", "cash", collectCash],
-    ["invoice_first", "card", collectByCard],
+    ["issued", "card", collectByCard],
   ] as const)(
     "a %s order paid by %s, then handed over, records the handover's own time and leaves the waiting list and its station queue",
     async (mode, _method, pay) => {
@@ -517,7 +519,7 @@ describe("paying a counter order never sent, in a mode that sends before payment
     );
   }
 
-  it.each(["ticket_then_pay", "invoice_first"] as const)(
+  it.each(["ticket_then_pay", "issued"] as const)(
     "%s: an order paid off by a bill payment sends its dish, and the same payment sent again sends nothing more",
     async (mode) => {
       const id = await parked(mode, "Tarta");
@@ -765,10 +767,7 @@ describe("GET /api/orders/counter-waiting", () => {
       await tx.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
     });
 
-    const rows = await listCounterWaiting(
-      { db: venue.db },
-      { ...venue.cfg, orderFlow: "invoice_first" },
-    );
+    const rows = await listCounterWaiting({ db: venue.db }, venue.cfg);
     expect(rows.find((row) => row.id === id)).toMatchObject({
       status: "placed",
       serviceMode: "prepay",
@@ -778,7 +777,7 @@ describe("GET /api/orders/counter-waiting", () => {
 
   it("lists sent-not-paid, handed-over-not-paid and paid-not-handed-over counter orders, with what can be handed over now", async () => {
     const sent = await placed("ticket_then_pay", "Tarta");
-    const handedOver = await placed("invoice_first", "Tarta");
+    const handedOver = await placed("issued", "Tarta");
     await markCollected({ db: venue.db }, venue.cfg, handedOver);
     const sentPrepay = await placed("prepay", "Tarta");
     const sentNothingToCook = await placed("ticket_then_pay", "Caña");
@@ -803,7 +802,7 @@ describe("GET /api/orders/counter-waiting", () => {
       status: "placed",
       collectedAt: (await orderRow(handedOver)).collectedAt,
       canHandOver: false,
-      serviceMode: "invoice_first",
+      serviceMode: "ticket_then_pay",
     });
     expect(row(handedOver)!.collectedAt).not.toBeNull();
     expect(row(sentPrepay)).toMatchObject({
@@ -821,10 +820,10 @@ describe("GET /api/orders/counter-waiting", () => {
     });
   });
 
-  it("totals a placed order by the sale already issued for it (here the invoice issued at placing), net of its credit notes, which is what collecting it charges", async () => {
-    const credited = await placed("invoice_first", "Tarta");
+  it("totals a placed order by the sale already issued for it (here a seeded unpaid invoice), net of its credit notes, which is what collecting it charges", async () => {
+    const credited = await placed("issued", "Tarta");
     await creditWholeInvoice(credited);
-    const uncredited = await placed("invoice_first", "Tarta");
+    const uncredited = await placed("issued", "Tarta");
 
     const rows = await waiting();
 
@@ -883,7 +882,7 @@ describe("GET /api/orders/counter-waiting", () => {
 
   it("reads the service modes once, however many placed orders it lists", async () => {
     await placed("ticket_then_pay", "Tarta");
-    await placed("invoice_first", "Tarta");
+    await placed("issued", "Tarta");
     const batch = vi.spyOn(VENUE_SERVICE, "findOrderModes");
     const single = vi.spyOn(VENUE_SERVICE, "findOrderContext");
     try {
@@ -907,8 +906,8 @@ describe("GET /api/orders/counter-waiting", () => {
     return `${row!.code}/${row!.number}`;
   }
 
-  it("names the invoice an invoice_first order filed when it was placed", async () => {
-    const id = await placed("invoice_first", "Tarta");
+  it("names the unpaid invoice already issued for a placed order", async () => {
+    const id = await placed("issued", "Tarta");
 
     expect(await waitingRow(id)).toMatchObject({
       status: "placed",
@@ -918,7 +917,7 @@ describe("GET /api/orders/counter-waiting", () => {
 
   it("names no invoice on an order not yet invoiced, or on an invoiced one already paid", async () => {
     const notInvoiced = await placed("ticket_then_pay", "Tarta");
-    const paid = await placed("invoice_first", "Tarta");
+    const paid = await placed("issued", "Tarta");
     await collectCash(paid);
     expect(saleCount(paid)).toBe(1);
 
@@ -965,7 +964,7 @@ describe("GET /api/working-orders/:id/placed", () => {
   });
 
   it("answers one that was handed over before it was paid", async () => {
-    const id = await placed("invoice_first", "Tarta");
+    const id = await placed("issued", "Tarta");
     await markCollected({ db: venue.db }, venue.cfg, id);
     expect((await read(id)).status).toBe(200);
   });

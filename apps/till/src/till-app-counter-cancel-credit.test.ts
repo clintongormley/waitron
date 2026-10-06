@@ -36,7 +36,7 @@ const till = {
   invoiceLocale: "es-ES",
   venueName: "Bar Pepe",
   nif: "B12345678",
-  orderFlow: "invoice_first" as const,
+  orderFlow: "ticket_then_pay" as const,
   receiptPrintMode: "auto" as const,
   bumpMode: "line" as const,
   fireControl: "waiter" as const,
@@ -54,7 +54,7 @@ const offers: ZoneOfferCatalogue = {
   context: {
     zoneId: "zone-counter",
     departmentId: "department-default",
-    serviceMode: "invoice_first",
+    serviceMode: "ticket_then_pay",
   },
   defaultMenuId: null,
   menus: [],
@@ -71,7 +71,7 @@ const notInvoiced: CounterWaitingOrder = {
   collectedAt: null,
   total: "7.50",
   canHandOver: true,
-  serviceMode: "invoice_first",
+  serviceMode: "ticket_then_pay",
 };
 const invoiced: CounterWaitingOrder = { ...notInvoiced, invoiceNumber: "A/12" };
 
@@ -319,7 +319,7 @@ describe("till-app: cancelling and crediting an invoiced counter order", () => {
         ],
       }),
     });
-    emit(waitingList(el)!, "pay-waiting-order", { id: "wo-sent", serviceMode: "invoice_first" });
+    emit(waitingList(el)!, "pay-waiting-order", { id: "wo-sent", serviceMode: "ticket_then_pay" });
     await flush(el);
     expect(counter(el).store.id).toBe("wo-sent");
     expect(counter(el).store.lineCount).toBe(1);
@@ -344,7 +344,7 @@ describe("till-app: cancelling and crediting an invoiced counter order", () => {
     const el = await signedIn({
       retrievePlacedOrder: vi.fn(() => new Promise((resolve) => (answer = resolve))),
     });
-    emit(waitingList(el)!, "pay-waiting-order", { id: "wo-sent", serviceMode: "invoice_first" });
+    emit(waitingList(el)!, "pay-waiting-order", { id: "wo-sent", serviceMode: "ticket_then_pay" });
     await flush(el);
     expect(counter(el).store.editsLocked).toBe(true);
 
@@ -377,7 +377,7 @@ describe("till-app: cancelling and crediting an invoiced counter order", () => {
     });
     emit(waitingList(el)!, "pay-waiting-order", {
       id: "wo-other",
-      serviceMode: "invoice_first",
+      serviceMode: "ticket_then_pay",
     });
     await flush(el);
     offered(el)!.click();

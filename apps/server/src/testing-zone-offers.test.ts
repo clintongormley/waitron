@@ -11,7 +11,11 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { allowMenuInZone, resolveZoneContext } from "@waitron/venue-service";
+import {
+  allowMenuInZone,
+  getOrderServiceContext,
+  resolveZoneContext,
+} from "@waitron/venue-service";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -71,7 +75,6 @@ async function seedVenue(db: Database): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "ticket_then_pay",
   };
   return withTransaction(db, async (tx) => {
     const carta = await createCatalogue(tx, { name: "Carta" });
@@ -148,6 +151,39 @@ async function counts(db: Database) {
 }
 
 describe("offerProducts", () => {
+  it("defaults quick-sale offers to prepay without reading the retired till setting", async () => {
+    const venue = await seedVenue(suite.db);
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    const context = await withTransaction(suite.db, (tx) =>
+      resolveZoneContext(tx, venue.cfg, offers.zoneId),
+    );
+    expect(context.serviceMode).toBe("prepay");
+  });
+
+  it.each(["prepay", "ticket_then_pay"] as const)(
+    "snapshots explicit %s zone payment timing onto a quick sale",
+    async (paidWhen) => {
+      const venue = await seedVenue(suite.db);
+      const offers = await withTransaction(suite.db, (tx) =>
+        offerProducts(tx, venue.cfg, { paidWhen }),
+      );
+      const id = randomUUID();
+      await parkOrder({ db: suite.db }, venue.cfg, {
+        id,
+        zoneId: offers.zoneId,
+        lines: offers.toOfferLines([{ productId: venue.cafe, quantity: "1" }]),
+      });
+      const context = await withTransaction(suite.db, (tx) =>
+        getOrderServiceContext(tx, venue.cfg, id),
+      );
+      expect(context).toEqual({
+        zoneId: offers.zoneId,
+        departmentId: expect.any(String),
+        serviceMode: paidWhen,
+      });
+    },
+  );
+
   it("offers each product at the product's own price, even beside a menu that reprices it", async () => {
     const venue = await seedVenue(suite.db);
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
@@ -199,10 +235,10 @@ describe("offerProducts", () => {
     ]);
   });
 
-  it("aligns the counter zone's mode with the till's flow, and a tables zone's with table_tab", async () => {
+  it("keeps an explicit counter style separate from a table-tab zone", async () => {
     const venue = await seedVenue(suite.db);
     const context = await withTransaction(suite.db, async (tx) => {
-      const counter = await offerProducts(tx, venue.cfg);
+      const counter = await offerProducts(tx, venue.cfg, { serviceMode: "ticket_then_pay" });
       const tables = await offerProducts(tx, venue.cfg, { zone: "tables" });
       return {
         counter: await resolveZoneContext(tx, venue.cfg, counter.zoneId),

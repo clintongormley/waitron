@@ -94,7 +94,6 @@ export interface TillInfo {
   receiptLanguages: string[];
   venueName: string;
   nif: string;
-  orderFlow: OrderFlow;
   /** Whether issuance auto-enqueues the original receipt or leaves it for the completion prompt. */
   receiptPrintMode: "auto" | "on_request" | "never";
   /**
@@ -379,7 +378,7 @@ export interface ZoneOfferCatalogue {
   context: {
     zoneId: string;
     departmentId: string;
-    serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+    serviceMode: "table_tab" | "prepay" | "ticket_then_pay";
     receiptPrintMode?: "auto" | "on_request" | "never";
   };
   defaultMenuId: string | null;
@@ -393,7 +392,7 @@ export interface ServiceZoneSummary {
   name: string;
   departmentId: string;
   departmentName: string;
-  serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+  serviceMode: "table_tab" | "prepay" | "ticket_then_pay";
 }
 
 export type { MenuState, MenuUnavailable };
@@ -1127,11 +1126,7 @@ export interface HeldOrder {
   })[];
 }
 
-/**
- * The per-location pay-timing mode. `prepay` pays at order; `invoice_first` and `ticket_then_pay`
- * either pay at order or place the order first and collect payment later.
- */
-export type OrderFlow = "prepay" | "invoice_first" | "ticket_then_pay";
+export type OrderFlow = "prepay" | "ticket_then_pay";
 
 /** The kitchen state a ticket item advances through: `queued → preparing → ready`. */
 export type TicketState = "queued" | "preparing" | "ready";
@@ -1143,19 +1138,9 @@ export type TicketState = "queued" | "preparing" | "ready";
  */
 export type WorkingOrderStatus = "open" | "placed" | "settled" | "abandoned";
 
-/**
- * `POST /api/working-orders/:id/place` success. `invoice_first` files a deferred invoice at placing;
- * the other modes file nothing then, so every field past `id`/`status` is present only for it.
- */
 export interface PlaceOrderResult {
   id: string;
-  status: "placed" | "settled";
-  invoiceNumber?: string;
-  issuedAt?: string;
-  total?: string;
-  qr?: string;
-  qrText?: { caption: string; legend: string };
-  vatBreakdown?: VatBreakdownEntry[];
+  status: "placed";
 }
 
 /**
@@ -2259,8 +2244,8 @@ export class TillApi {
 
   /**
    * Place a working order → `POST /api/working-orders/:id/place` (`open → placed`): freezes its
-   * composition and opens its amendment log; for `invoice_first` also files a deferred (unpaid) chained
-   * invoice. A non-open or absent id rejects with `working_order.not_open`.
+   * composition and opens its amendment log. A non-open or absent id rejects with
+   * `working_order.not_open`.
    */
   placeOrder(id: string): Promise<PlaceOrderResult> {
     return this.#request<PlaceOrderResult>(`/api/working-orders/${id}/place`, "POST");

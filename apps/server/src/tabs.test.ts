@@ -127,7 +127,6 @@ async function setupVenue(): Promise<Seeded> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   } satisfies TillConfig);
   const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId, offers } =
     await withTransaction(db, async (tx) => {

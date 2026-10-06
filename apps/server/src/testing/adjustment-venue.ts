@@ -314,7 +314,6 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   });
   const seeded = await withTransaction(db, async (tx) => {
     const [station] = await tx

@@ -18,9 +18,6 @@ import { catalogues } from "./catalogue.js";
 /** The venue time-zone default, shared with runtime fallbacks. */
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
 
-/** The per-venue pay-timing / service mode — the three modes are on the `orderFlow` column below. */
-export const orderFlow = enumType(["prepay", "invoice_first", "ticket_then_pay"]);
-
 /**
  * The per-venue KDS bump mode. `line` (default): each line bumped on its own. `ticket`: the display
  * additionally offers a whole-ticket bump that advances every one of an order's lines at a station
@@ -103,12 +100,6 @@ export const locations = table(
     province: label("province"),
     timeZone: label("time_zone").notNull().default(DEFAULT_TIME_ZONE),
     dayCutover: timeOfDay("day_cutover").notNull().default("06:00:00"),
-    // WHEN payment happens (order vs collect) × WHEN the invoice issues (placing vs pay), collapsed
-    // to three meaningful modes by a single enum (the degenerate fourth cell is unrepresentable).
-    // `prepay` = pay+issue at order, open → settled, no placed state. `invoice_first` = issue
-    // deferred at placing, settle at collect (open → placed → settled). `ticket_then_pay` = place
-    // with no fiscal doc, pay+issue at collect.
-    orderFlow: orderFlow("order_flow").notNull().default("prepay"),
     bumpMode: bumpMode("bump_mode").notNull().default("line"),
     fireControl: fireControlMode("fire_control").notNull().default("waiter"),
     receiptPrintMode: receiptPrintMode("receipt_print_mode").notNull().default("auto"),
@@ -125,7 +116,6 @@ export const locations = table(
       "locations_invoice_locales_len",
       sql`json_array_length(${t.invoiceLocales}) between 1 and 2`,
     ),
-    check("locations_order_flow_ck", enumCheck(t.orderFlow)),
     check("locations_bump_mode_ck", enumCheck(t.bumpMode)),
     check("locations_fire_control_ck", enumCheck(t.fireControl)),
     check("locations_receipt_print_mode_ck", enumCheck(t.receiptPrintMode)),

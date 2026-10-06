@@ -304,7 +304,6 @@ function makeCfg(locationId: string, nodeId: string): TillConfig {
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 }
 
@@ -1174,17 +1173,13 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
 });
 
 describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)", () => {
-  it("starts an unscoped till at prepay even when the retired venue mode differs", async () => {
+  it("omits the retired venue mode from public boot info", async () => {
     const app = new Hono();
-    mountTillApi(
-      app,
-      { ...deps(suite.db), cfg: { ...cfg, orderFlow: "invoice_first" } },
-      collect([]),
-    );
+    mountTillApi(app, { ...deps(suite.db), cfg: { ...cfg } }, collect([]));
 
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);
-    expect((await res.json()).orderFlow).toBe("prepay");
+    expect(await res.json()).not.toHaveProperty("orderFlow");
   });
 
   it("GET /api/staff lists ACTIVE staff sorted by name, no cookie required, no secrets", async () => {
@@ -1205,14 +1200,14 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(JSON.stringify(staff)).not.toMatch(/pin|secret|password|url|cert|role|status|hash/i);
   });
 
-  it("GET /api/till returns locale + issuer identity + orderFlow + card fields, and no secret", async () => {
+  it("GET /api/till returns locale + issuer identity + card fields, and no secret", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);
     const body = await res.json();
-    // The receipt-issuer identity (legal name + NIF), the UI locale, the pay-timing mode and the card
+    // The receipt-issuer identity (legal name + NIF), the UI locale and the card
     // fields. The tenant has authored no receipt or canvas, so `receipt` is the built-in default and
     // `canvas` is the `till` form-factor default, even for this cookieless request.
     expect(body).toEqual({
@@ -1226,7 +1221,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       onboardingIntent: "prepare",
       venueName: "Test SL",
       nif: venueTaxId,
-      orderFlow: "prepay",
       // The venue's KDS whole-ticket bump mode (KDS-1 §2e), read from the location — the seeded
       // location never set it, so the column default `line` reaches the wire (per-line bump only).
       bumpMode: "line",
@@ -1741,6 +1735,41 @@ describe("GET /api/products (session-guarded catalogue)", () => {
         where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
     }
   });
+
+  it.each(["prepay", "ticket_then_pay"] as const)(
+    "offers %s policy even when the zone retains the retired invoice-first setting",
+    async (paidWhen) => {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const token = await openSession(suite.db);
+      const headers = { cookie: `${SESSION_COOKIE}=${token}` };
+      await suite.db.execute(sql`
+        update zone_service_policies set service_mode = 'ticket_then_pay'
+        where zone_id = ${counterZoneId}`);
+      await suite.db.execute(sql`
+        update department_sale_policies set paid_when = ${paidWhen}
+        where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+      try {
+        for (const path of [
+          "/api/default-service-zone/offers",
+          `/api/service-zones/${counterZoneId}/offers`,
+        ]) {
+          const response = await app.request(path, { headers });
+          expect(response.status).toBe(200);
+          expect(await response.json()).toMatchObject({
+            context: { zoneId: counterZoneId, serviceMode: paidWhen },
+          });
+        }
+      } finally {
+        await suite.db.execute(sql`
+          update zone_service_policies set service_mode = 'prepay'
+          where zone_id = ${counterZoneId}`);
+        await suite.db.execute(sql`
+          update department_sale_policies set paid_when = 'prepay'
+          where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+      }
+    },
+  );
 
   it("offers different pay timing for two zones in the same department", async () => {
     const app = new Hono();

@@ -42,7 +42,7 @@ export interface RecordedDeparture {
  * authorised it, and the party then closes as Finish table closes it ({@link closeParty}). Needs
  * `sale.void` from the operator or the override.
  *
- * An open bill is invoiced now, as an invoice-first placing invoices it, without a receipt; a
+ * An open bill is invoiced now without a receipt; a
  * presented bill keeps the invoice it has, and one presented without an invoice is invoiced now.
  * A bill owing nothing once invoiced (its credit notes cancel its invoice, or every line was given
  * away) gets no row and is settled as collecting it settles it ({@link settleIssuedOwingNothing}),

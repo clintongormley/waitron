@@ -57,7 +57,7 @@ function minutesAgo(minutes: number): string {
 // can mark them and the waiter can release what is unsent (table actions plan, Task 9; A96, P16).
 let v: PartyVenue;
 /** A counter zone whose orders are invoiced when placed. */
-let invoiceFirstZone: string;
+let ticketThenPayZone: string;
 let entrantes: string;
 let principales: string;
 let postres: string;
@@ -69,13 +69,16 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
-    invoiceFirstZone = await inTx(v, async (tx) => {
+    ticketThenPayZone = await inTx(v, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
         .values({ locationId: v.cfg.locationId, name: "Barra factura" })
         .returning({ id: floorZones.id });
       return (
-        await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, serviceMode: "invoice_first" })
+        await offerProducts(tx, v.cfg, {
+          zone: { zoneId: zone!.id },
+          serviceMode: "ticket_then_pay",
+        })
       ).zoneId;
     });
     [entrantes, principales, postres] = await inTx(v, async (tx) => [
@@ -573,7 +576,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const deps = { db: v.db, backend: v.backend, clock: v.clock };
     await parkOrder(deps, v.cfg, {
       id,
-      zoneId: invoiceFirstZone,
+      zoneId: ticketThenPayZone,
       lines: ["Burger", "Vino"].map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
       operatorId: OPERATOR,
     });

@@ -1,5 +1,11 @@
 # Tables, parties and bills: the till's table actions — Implementation Plan
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Separate what happened in the room (table actions: seat, move guests, join tables, split a

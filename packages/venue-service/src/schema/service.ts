@@ -51,7 +51,7 @@ export const departments = table(
     }),
     check(
       "departments_service_mode_ck",
-      sql`${t.defaultServiceMode} in ('table_tab','prepay','invoice_first','ticket_then_pay')`,
+      sql`${t.defaultServiceMode} in ('table_tab','prepay','ticket_then_pay')`,
     ),
   ],
 );
@@ -103,7 +103,7 @@ export const zoneServicePolicies = table(
       .where(sql`${t.isCounterDefault}`),
     check(
       "zone_service_policies_mode_ck",
-      sql`${t.serviceMode} is null or ${t.serviceMode} in ('table_tab','prepay','invoice_first','ticket_then_pay')`,
+      sql`${t.serviceMode} is null or ${t.serviceMode} in ('table_tab','prepay','ticket_then_pay')`,
     ),
   ],
 );
@@ -274,7 +274,7 @@ export const orderServiceContexts = table(
     }),
     check(
       "order_service_contexts_mode_ck",
-      sql`${t.serviceMode} in ('table_tab','prepay','invoice_first','ticket_then_pay')`,
+      sql`${t.serviceMode} in ('table_tab','prepay','ticket_then_pay')`,
     ),
   ],
 );

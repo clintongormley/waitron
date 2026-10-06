@@ -114,7 +114,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       from zone_service_policies`);
     await db.execute(sql`
       update zone_service_policies
-      set service_mode = 'invoice_first', default_menu_id = ${menus[1]!.id}`);
+      set service_mode = 'ticket_then_pay', default_menu_id = ${menus[1]!.id}`);
     await runSeed();
 
     const departments = await db.execute<{ count: number }>(sql`
@@ -126,7 +126,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     expect(departments.rows[0]!.count).toBe(1);
     expect(zones.rows[0]!.count).toBe(1);
     expect(policies.rows).toEqual([
-      { service_mode: "invoice_first", default_menu_id: menus[1]!.id },
+      { service_mode: "ticket_then_pay", default_menu_id: menus[1]!.id },
     ]);
   });
 

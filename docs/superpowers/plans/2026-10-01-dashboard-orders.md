@@ -1,5 +1,11 @@
 # The dashboard's Orders screen — Implementation Plan
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 > **Update, 2026-10-02 (B27c):** Task 3 replaces the till's read-only Left without paying list
 > with Find a bill and retires GET /api/unpaid-departures. Earlier references to the list describe
 > the starting code and the work this task removes.

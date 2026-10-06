@@ -125,7 +125,6 @@ async function setupVenue(): Promise<SeededVenue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
   const st = await withTransaction(admin, async (tx) => {
     return createStation(tx, cfg, { name: "Cocina", isDefault: true });

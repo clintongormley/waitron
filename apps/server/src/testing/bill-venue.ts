@@ -1,3 +1,4 @@
+import { issueOrderInvoice } from "./issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -148,7 +149,6 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   });
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
@@ -412,15 +412,12 @@ export async function seatedWith(
   return { partyId, tabId: seated.json.tabId as string, tableId, revision: row!.revision };
 }
 
-/**
- * A counter order of one Tarta (18.00) placed in `zoneId`, then moved through the till's route to
- * the party at `party.tableId`; answers its id. Placed in an `invoice_first` zone, its invoice is
- * filed at placing; in a `prepay` zone, none is.
- */
+/** Park and place a Tarta order, optionally seed its invoice, then move it through the route. */
 export async function placedCounterBillMovedTo(
   venue: BillVenue,
   zoneId: string,
   party: { partyId: string; tableId: string },
+  issued = false,
 ): Promise<string> {
   const id = randomUUID();
   const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
@@ -430,6 +427,7 @@ export async function placedCounterBillMovedTo(
     zoneId,
     operatorId: venue.operatorId,
   });
+  if (issued) await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
   await placeOrder(deps, venue.cfg, id, venue.operatorId);
   const [row] = venue.db.all<{ revision: number }>(
     sql`select revision from parties where id = ${party.partyId}`,

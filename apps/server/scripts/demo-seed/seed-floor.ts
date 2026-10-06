@@ -49,7 +49,6 @@ function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
     invoiceLocales: [SEED_INVOICE_LOCALE[locale]],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow: "prepay",
   };
 }
 

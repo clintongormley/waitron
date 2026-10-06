@@ -15,7 +15,6 @@ import type {
   SaleLineClassification,
   TableSignal,
 } from "@waitron/shared";
-import { readReceiptIssuer } from "./receipt-issuer.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
@@ -187,10 +186,8 @@ import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
-import { receiptLines } from "./receipt-adjustments.js";
-import { enqueueCollectionTicket, enqueueOriginalReceipt } from "./receipt-print.js";
-import { ordersWithUnfiledPayment, paymentAttemptIsLive, receiptQr } from "./till-sale.js";
-import type { TillSaleResult } from "./till-sale.js";
+import { enqueueCollectionTicket } from "./receipt-print.js";
+import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
@@ -3049,7 +3046,7 @@ async function clampServed(tx: Transaction, lineIds: readonly string[]): Promise
 
 /**
  * Lines pass between two orders only when both have the same service mode, or neither has a service
- * context. A table bill sends nothing when it is paid, so a pay-first or invoice-first bill's unsent
+ * context. A table bill sends nothing when it is paid, so a quick-sale bill's unsent
  * dishes moved into it would never reach the kitchen.
  */
 export async function assertServiceModesMatch(
@@ -5497,26 +5494,11 @@ export async function abandonHeldOrder(
   });
 }
 
-/** The fiscal fields are filled only when placing files an invoice. */
 export interface PlaceOrderResult {
   id: string;
-  status: "placed" | "settled";
-  invoiceType?: "F1" | "F2";
-  invoiceNumber?: string;
-  issuedAt?: string;
-  total?: string;
-  qr?: string;
-  qrText?: TillSaleResult["qrText"];
-  vatBreakdown?: { rate: string; base: string; tax: string }[];
+  status: "placed";
 }
 
-/**
- * Place an open order, append its genesis amendment and fire kitchen items in one transaction.
- * invoice_first also files a deferred invoice from the stored prices, under the request's device.
- *
- * A second placement cannot file a second invoice: `withTransaction` IS the venue file's write lock,
- * so it reads `placed` and is refused before it reaches the file.
- */
 export async function placeOrder(
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
@@ -5532,8 +5514,6 @@ export async function placeOrder(
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
     await refusePaymentInFlight(tx, [id]);
-    // An invoice_first placing files the whole total as one sale, and any other leaves an order
-    // whose collect `refuseBillWithPayments` refuses.
     await refuseBillWithPayments(tx, id);
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? "prepay";
@@ -5551,32 +5531,6 @@ export async function placeOrder(
       .set({ sentAt: nowIso() })
       .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)));
 
-    // Only invoice-first files at placing, from the stored locked lines at the rates of the day it
-    // is placed: the day its invoice is issued.
-    let placeResult: PlaceOrderResult = { id, status: "placed" };
-    if (orderFlow === "invoice_first") {
-      const invoice = await priceForIssuance(tx, deps.clock, cfg, id);
-      const issued = await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, operatorId);
-      const { saleId } = issued;
-      const ticket = await unpaidReceipt(tx, deps.backend, invoice, issued);
-      const [filed] = await tx
-        .select({ counterpartyTaxId: sales.counterpartyTaxId })
-        .from(sales)
-        .where(eq(sales.id, saleId));
-      placeResult = {
-        id,
-        status: "placed",
-        invoiceType: filed!.counterpartyTaxId === null ? "F2" : "F1",
-        invoiceNumber: ticket.invoiceNumber,
-        issuedAt: ticket.issuedAt,
-        total: ticket.total,
-        qr: ticket.qr,
-        ...(ticket.qrText === undefined ? {} : { qrText: ticket.qrText }),
-        vatBreakdown: ticket.vatBreakdown,
-      };
-      await enqueueOriginalReceipt(tx, cfg, ticket, saleId);
-    }
-
     await markOrderPlaced(tx, deps.clock, cfg, id, operatorId);
 
     if (orderFlow === "ticket_then_pay" && serviceContext !== null) {
@@ -5585,7 +5539,7 @@ export async function placeOrder(
 
     await fireLines(tx, cfg, id, lines);
 
-    return placeResult;
+    return { id, status: "placed" };
   });
 }
 
@@ -5659,29 +5613,6 @@ export async function issueUnpaidInvoice(
     .set({ label: order.orderLabel })
     .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
   return { saleId, fiscal, locale: language.locale, ...order };
-}
-
-/** The receipt of an invoice {@link issueUnpaidInvoice} filed. */
-async function unpaidReceipt(
-  tx: Transaction,
-  backend: FiscalBackend,
-  invoice: PricedInvoice,
-  issued: IssuedInvoice,
-): Promise<TillSaleResult> {
-  const { priced } = invoice;
-  return {
-    ...(await readReceiptIssuer(backend, tx, issued.saleId)),
-    locale: issued.locale,
-    orderLabel: issued.orderLabel,
-    orderNumber: issued.orderNumber,
-    invoiceNumber: await readInvoiceNumber(tx, issued.saleId),
-    issuedAt: issued.fiscal.issuedAt.toISOString(),
-    total: priced.total,
-    ...receiptQr(backend, issued.fiscal.verificationUrl),
-    vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    ...(await receiptLines(tx, invoice.id, priced, invoice.identities, issued.saleId)),
-    tender: { method: "unpaid" },
-  };
 }
 
 /** An open order becomes placed, and its `order_placed` amendment is appended. */
@@ -5897,7 +5828,7 @@ async function handOver(tx: Transaction, cfg: TillConfig, id: string): Promise<v
 }
 
 /** The service modes in which a counter order is sent to the kitchen before it is paid. */
-const PAY_AFTER_SENDING: ReadonlySet<string> = new Set(["ticket_then_pay", "invoice_first"]);
+const PAY_AFTER_SENDING: ReadonlySet<string> = new Set(["ticket_then_pay"]);
 
 async function sentUnpaidCounterOrder(
   tx: Transaction,

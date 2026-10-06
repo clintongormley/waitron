@@ -2273,6 +2273,29 @@ describe("venue operations screen", () => {
     expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
   });
 
+  it("offers only current service styles for departments and zones", async () => {
+    const api = { load: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "departments");
+    await action(el, "new-department");
+    const department = field(el, "department-mode") as unknown as { options: { value: string }[] };
+    expect(department.options.map((option) => option.value)).toEqual([
+      "table_tab",
+      "prepay",
+      "ticket_then_pay",
+    ]);
+    await action(el, "cancel-editor");
+    await selectTab(el, "zones");
+    await action(el, "edit-zone-z1");
+    const zone = field(el, "zone-mode-z1") as unknown as typeof department;
+    expect(zone.options.map((option) => option.value)).toEqual([
+      "",
+      "table_tab",
+      "prepay",
+      "ticket_then_pay",
+    ]);
+  });
+
   it("creates a second department from the required management fields", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
@@ -2283,12 +2306,12 @@ describe("venue operations screen", () => {
     await action(el, "new-department");
     field(el, "department-name").value = "Events";
     field(el, "trading-name").value = "Casa Delgado Events";
-    field(el, "department-mode").value = "invoice_first";
+    field(el, "department-mode").value = "ticket_then_pay";
     await action(el, "save-editor");
     expect(api.createDepartment).toHaveBeenCalledWith({
       name: "Events",
       tradingName: "Casa Delgado Events",
-      defaultServiceMode: "invoice_first",
+      defaultServiceMode: "ticket_then_pay",
     });
   });
 
@@ -2491,11 +2514,11 @@ it("edits a zone policy and can return it to the department's service mode", asy
   expect(api.configureZone).toHaveBeenCalledWith("z1", { departmentId: "d2", serviceMode: null });
   await action(el, "edit-zone-z2");
   field(el, "zone-department-z2").value = "d1";
-  field(el, "zone-mode-z2").value = "invoice_first";
+  field(el, "zone-mode-z2").value = "ticket_then_pay";
   await action(el, "save-editor");
   expect(api.configureZone).toHaveBeenLastCalledWith("z2", {
     departmentId: "d1",
-    serviceMode: "invoice_first",
+    serviceMode: "ticket_then_pay",
   });
 });
 
@@ -3666,17 +3689,16 @@ describe("the venue screen's fields are the shared field components", () => {
     expect(options(mode)).toEqual([
       ["table_tab", "Table service"],
       ["prepay", "Pay before preparation"],
-      ["invoice_first", "Pay then prepare"],
       ["ticket_then_pay", "Prepare then pay"],
     ]);
     await type(el, "department-name", "Events");
     await type(el, "trading-name", "Casa Delgado Events");
-    await chooseOption(mode, "invoice_first");
+    await chooseOption(mode, "ticket_then_pay");
     await action(el, "save-editor");
     expect(api.createDepartment).toHaveBeenCalledWith({
       name: "Events",
       tradingName: "Casa Delgado Events",
-      defaultServiceMode: "invoice_first",
+      defaultServiceMode: "ticket_then_pay",
     });
   });
 

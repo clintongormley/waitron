@@ -28,7 +28,7 @@ const sent: CounterWaitingOrder = {
   collectedAt: null,
   total: "7.50",
   canHandOver: true,
-  serviceMode: "invoice_first",
+  serviceMode: "ticket_then_pay",
 };
 
 const handedOver: CounterWaitingOrder = {
@@ -136,7 +136,7 @@ describe("till-counter-waiting", () => {
     row.querySelector<HTMLElement>("wt-button[data-waiting-pay]")!.click();
     expect(seen).toEqual([
       ["hand-over-order", { id: "wo-sent" }],
-      ["pay-waiting-order", { id: "wo-sent", serviceMode: "invoice_first" }],
+      ["pay-waiting-order", { id: "wo-sent", serviceMode: "ticket_then_pay" }],
     ]);
   });
 

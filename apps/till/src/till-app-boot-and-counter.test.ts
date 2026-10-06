@@ -1043,7 +1043,7 @@ describe("till-app receipt issuance", () => {
 describe("till-app counter menus and service zones", () => {
   it("uses pay-first controls when zone offers fail despite a retired venue-wide mode", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       listDefaultZoneOffers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
 
@@ -1088,9 +1088,9 @@ describe("till-app counter menus and service zones", () => {
     const catalogue = zoneOffers(
       { menus: [defaultMenu], products: [cafe] },
       "zone-counter",
-      "invoice_first",
+      "ticket_then_pay",
     );
-    catalogue.zones = [zone("zone-counter", "invoice_first"), zone("zone-terrace", "table_tab")];
+    catalogue.zones = [zone("zone-counter", "ticket_then_pay"), zone("zone-terrace", "table_tab")];
     const terrace = zoneOffers(
       {
         menus: twoMenus,
@@ -1108,13 +1108,13 @@ describe("till-app counter menus and service zones", () => {
       listZoneOffers: vi.fn().mockResolvedValue(terrace),
     });
     const c = await toCounter(el);
-    expect(c.orderFlow).toBe("invoice_first");
+    expect(c.orderFlow).toBe("ticket_then_pay");
 
     emit(c, "counter-zone-selected", { zoneId: "zone-terrace" });
     await flush(el);
 
     expect(c.selectedServiceZoneId).toBe("zone-terrace");
-    expect(c.orderFlow).toBe("invoice_first");
+    expect(c.orderFlow).toBe("ticket_then_pay");
     expect(c.selectedMenuId).toBe("menu-drinks");
   });
 

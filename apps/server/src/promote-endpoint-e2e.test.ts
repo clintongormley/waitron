@@ -274,7 +274,6 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
     await assignCatalogueToLocation(tx, brandLocationId(MIRROR_LOCATION_ID), cat.id);
     const offers = await offerProducts(tx, {
       locationId: brandLocationId(MIRROR_LOCATION_ID),
-      orderFlow: "prepay",
     });
     return offers.offerFor(water.id);
   });

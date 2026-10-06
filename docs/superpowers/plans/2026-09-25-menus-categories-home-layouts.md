@@ -1,5 +1,11 @@
 # Menus, reusable sections and home layouts — Implementation Plan
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 _2026-10-01: [slice 2 plan](2026-09-30-menus-include-menus-slice-2.md) replaces the library model and Sections screen with menu-owned

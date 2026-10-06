@@ -312,7 +312,6 @@ beforeAll(async () => {
   await sharedDb.insert(locations).values({
     id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
     name: "Barra",
-    orderFlow: "invoice_first",
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
@@ -2272,7 +2271,6 @@ describe("startServer, against a migrated venue directory", () => {
       expect(till.status).toBe(200);
       expect(await till.json()).toMatchObject({
         simplifiedInvoiceLimit: "3010.00",
-        orderFlow: "prepay",
       });
 
       // A bare 404: no setup routes, and no till SPA catch-all since WAITRON_TILL_APP_DIR is unset.
@@ -3036,7 +3034,6 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   beforeAll(async () => {
     const cfg: TillConfig = {
       ...loadTillConfig(TILL_ENV),
-      orderFlow: "prepay",
       simplifiedInvoiceLimit: null,
     };
     const enrolDevice = async (name: string): Promise<string> => {
@@ -3722,7 +3719,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
       const cfg: TillConfig = {
         ...loadTillConfig(trading),
-        orderFlow: "prepay",
         simplifiedInvoiceLimit: null,
       };
       const [profile] = await venue.store.venue
@@ -3749,7 +3745,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           vatClass: "general",
         });
         await assignCatalogueToLocation(tx, brandLocationId(cfg.locationId), catalogue.id);
-        const offers = await offerProducts(tx, { locationId: cfg.locationId, orderFlow: "prepay" });
+        const offers = await offerProducts(tx, { locationId: cfg.locationId });
         return offers.offerFor(water.id);
       });
 

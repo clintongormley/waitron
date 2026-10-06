@@ -241,6 +241,12 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
  * key naming no step the walk takes, fails the guard.
  */
 const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly string[] }> = {
+  "venue-service/0020_retire_invoice_first": {
+    refused: ["DROP TABLE `departments`", "FOREIGN KEY constraint failed"],
+  },
+  "core/0106_retire_location_order_flow": {
+    refused: ["DROP TABLE `locations`", "FOREIGN KEY constraint failed"],
+  },
   // Rebuilds `menu_items`; dropping the old one is refused while a non-cascading child holds rows.
   "catalogue/0003_menu_price_nullable": {
     refused: ["DROP TABLE `menu_items`", "FOREIGN KEY constraint failed"],

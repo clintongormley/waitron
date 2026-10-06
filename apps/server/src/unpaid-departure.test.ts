@@ -57,7 +57,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 // who authorised it, one owing nothing is settled, and the party closes as Finish closes it. Driven
 // over HTTP against a venue that files real Veri*Factu records; every case seats its own party.
 let venue: BillVenue;
-let invoiceFirstZone: string;
+let ticketThenPayZone: string;
 let prepayZone: string;
 let supervisorId: string;
 /** The supervisor's own session on the first till's device. */
@@ -74,9 +74,9 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    invoiceFirstZone = (
+    ticketThenPayZone = (
       await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
       )
     ).zoneId;
     prepayZone = await inTx(venue, async (tx) => {
@@ -645,7 +645,7 @@ describe("the reason", () => {
 describe("bills already presented", () => {
   it("files no second invoice for a bill invoiced when it was placed, and records what that invoice still owes", async () => {
     const party = await seatedWith(venue, "Caña");
-    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     await creditTwoEuros(placedId);
     const [invoiced] = await salesOf(placedId);
 
@@ -688,7 +688,7 @@ describe("bills already presented", () => {
 describe("a bill that owes nothing", () => {
   it("settles a presented bill whose credit note brought it to nothing, so no sale is left owing nothing", async () => {
     const party = await seatedWith(venue, "Botella tinto");
-    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     await credit(placedId, "14.88", "-18.00");
     const [invoiced] = await salesOf(placedId);
 
@@ -749,7 +749,7 @@ describe("a bill that owes nothing", () => {
 
   it("closes a party whose only owing bill a credit note has brought to nothing, settling it and recording no departure", async () => {
     const party = await seatedWith(venue);
-    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     await credit(placedId, "14.88", "-18.00");
     const [invoiced] = await salesOf(placedId);
 
@@ -799,7 +799,7 @@ describe("what the departure dialog lists for each bill (GET /api/parties/:id/bi
 
   it("reads a presented bill whose credit note cancels its invoice as owing nothing, leaving its outstanding as it was", async () => {
     const party = await seatedWith(venue);
-    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     await credit(placedId, "14.88", "-18.00");
 
     const bill = (await billsOf(party.partyId)).find((b) => b.workingOrderId === placedId);
@@ -809,7 +809,7 @@ describe("what the departure dialog lists for each bill (GET /api/parties/:id/bi
 
   it("reads a partly credited presented bill at what its invoice still owes, the amount the departure then records", async () => {
     const party = await seatedWith(venue);
-    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     await creditTwoEuros(placedId);
 
     const bill = (await billsOf(party.partyId)).find((b) => b.workingOrderId === placedId);
@@ -1117,7 +1117,7 @@ describe("a departure sent together with a payment or Finish table on the same p
 describe("the party's other bills", () => {
   it("abandons an empty bill, as Finish does", async () => {
     const party = await seatedWith(venue);
-    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
 
     const answer = await depart(party.partyId, {
       expectedPartyRevision: revisionOf(party.partyId),

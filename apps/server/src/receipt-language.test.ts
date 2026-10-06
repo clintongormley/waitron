@@ -1,3 +1,4 @@
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -28,7 +29,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { loadTillConfig } from "./till-config.js";
 import type { DeviceRequestConfig } from "./till-config.js";
-import { payWorkingOrderIntegrated } from "./till-sale.js";
+import { payWorkingOrderIntegrated, printSaleReceipt } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
@@ -119,7 +120,6 @@ async function venueWith(
       WAITRON_TILL_LOCATION_ID: venue.locationId,
       ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),
-    orderFlow: "prepay",
     simplifiedInvoiceLimit: null,
   });
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {
@@ -392,7 +392,7 @@ async function takeReceipt(db: Database): Promise<string[]> {
   return receipts[0]!;
 }
 
-describe("a bill paid in parts and an invoice issued at placing file the location's language", () => {
+describe("a bill paid in parts and an unpaid invoice file the location's language", () => {
   function cashContribution(venue: BillVenue, billId: string, amount: string) {
     return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
       submissionId: randomUUID(),
@@ -419,10 +419,10 @@ describe("a bill paid in parts and an invoice issued at placing file the locatio
     });
   });
 
-  it("files an invoice issued when an order is placed in Catalan", async () => {
+  it("files and explicitly prints an unpaid invoice in Catalan", async () => {
     const venue = await catalanBillVenue();
     const { zoneId } = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
     );
     const id = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
@@ -434,6 +434,8 @@ describe("a bill paid in parts and an invoice issued at placing file the locatio
     });
     await takePrinted(suite.db);
     await placeOrder(deps, venue.cfg, id, venue.operatorId);
+    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+    await printSaleReceipt(deps, venue.cfg, id, false);
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
     const receipt = await takeReceipt(suite.db);
     expect(startsWith(receipt, "Data"), "Data").toBe(true);

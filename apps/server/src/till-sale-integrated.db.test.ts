@@ -1,3 +1,4 @@
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -132,7 +133,7 @@ function nextNif(): string {
   return nifWithControlLetter(70_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -141,7 +142,6 @@ function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConf
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow,
   };
 }
 
@@ -189,7 +189,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, orderFlow));
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -204,7 +204,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     return {
       available: (await listAvailableProducts(tx, cfg.locationId)).products,
-      offers: await offerProducts(tx, cfg),
+      offers: await offerProducts(tx, cfg, { serviceMode: orderFlow, paidWhen: orderFlow }),
     };
   });
   const cafe = available.find((p) => p.name === "Café")!;
@@ -214,11 +214,9 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   };
 }
 
-/** Set the location's `order_flow` AND the in-memory cfg to `mode`, so both agree. */
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue(mode);
-  suite.db.run(sql`update locations set order_flow = ${mode} where id = ${venue.cfg.locationId}`);
-  return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
+  return { ...venue, cfg: { ...venue.cfg } };
 }
 
 /** The split-flow deps with a real `StripeTerminalProvider` over `FakeStripe`. A tips-on test
@@ -1586,12 +1584,9 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 });
 
-// Invoice-first: the invoice is issued at placing, so the card collect must SETTLE it rather than
-// file again, and associate the captured payment. A decline leaves the invoice outstanding.
-describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)", () => {
-  /** Park, then `placeOrder` issues the deferred invoice (open → placed), leaving one unsettled
-   *  sale. Returns the order id and its sale id. */
-  async function placeInvoiceFirst(
+describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
+  /** Place an order and seed an unpaid invoice for the settlement tests. */
+  async function placedIssuedBill(
     cfg: DeviceRequestConfig,
     cafe: OfferedProduct,
     quantity = "1",
@@ -1603,15 +1598,16 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       lines: [{ menuItemId: cafe.menuItemId, quantity }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await issueOrderInvoice({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     return { id, saleId: await saleIdFor(id) };
   }
 
   it("settles the already-issued outstanding invoice on capture (settleSale, not recordSale), records no handover, stays on the station queue", async () => {
-    const { cfg, cafe } = await modeVenue("invoice_first");
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const app = suite.db;
-    const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
-    // Issued at placing and outstanding; placing also fired the order to the default station.
+    const { id, saleId } = await placedIssuedBill(cfg, cafe);
+    // The seeded invoice is outstanding; placement fired the order to the default station.
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
@@ -1644,11 +1640,10 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
   });
 
   it("tips on: charges amountDue+tip, settles the invoice at the total, records the tip on the tender", async () => {
-    const { cfg: baseCfg, cafe } = await modeVenue("invoice_first");
-    // `placeInvoiceFirst` dispatches only on `orderFlow`, so the tips override does not affect it.
+    const { cfg: baseCfg, cafe } = await modeVenue("ticket_then_pay");
     const cfg = { ...baseCfg, tipsEnabled: true };
     const app = suite.db;
-    const { id } = await placeInvoiceFirst(cfg, cafe);
+    const { id } = await placedIssuedBill(cfg, cafe);
     const { deps, client } = integratedDeps(cfg, app);
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
@@ -1661,9 +1656,9 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
   });
 
   it("a decline leaves the invoice OUTSTANDING — nothing re-filed or voided; listOutstandingSales still lists it", async () => {
-    const { cfg, cafe } = await modeVenue("invoice_first");
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const app = suite.db;
-    const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+    const { id, saleId } = await placedIssuedBill(cfg, cafe);
 
     const client = new FakeStripe();
     client.declineNext();
@@ -1681,9 +1676,9 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
   });
 
   it("a concurrent collect that settles the invoice first makes finalizeSettle REPLAY via sale.already_settled", async () => {
-    const { cfg, cafe } = await modeVenue("invoice_first");
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const app = suite.db;
-    const { id } = await placeInvoiceFirst(cfg, cafe);
+    const { id } = await placedIssuedBill(cfg, cafe);
 
     // Mid-`collect` (after P1, before P3) a concurrent cash collect settles the invoice. P3's
     // `settleSale` refuses with `sale.already_settled`, and this replays rather than settling twice.
@@ -1709,9 +1704,9 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
   });
 
   it("a settle whose payment cannot be associated rolls back — the invoice stays OUTSTANDING (P3 is atomic)", async () => {
-    const { cfg, cafe } = await modeVenue("invoice_first");
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const app = suite.db;
-    const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+    const { id, saleId } = await placedIssuedBill(cfg, cafe);
 
     // The provider reports `captured` but wrote no `payments` row, so the association throws
     // `payment.not_found`: it must be re-raised, and the settlement rolled back.
@@ -1730,10 +1725,10 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
 
   describe("a bill whose corrections leave nothing owed", () => {
     it("closes the bill without asking the reader, writing no tender and no payment", async () => {
-      const { cfg: baseCfg, cafe } = await modeVenue("invoice_first");
+      const { cfg: baseCfg, cafe } = await modeVenue("ticket_then_pay");
       const cfg = { ...baseCfg, tipsEnabled: true };
       const station = await defaultStationId(cfg);
-      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+      const { id, saleId } = await placedIssuedBill(cfg, cafe);
       await correctToZero(cfg, saleId);
       expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
       expect(await stationQueueOrderIds(station)).toEqual([id]);
@@ -1759,9 +1754,9 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     });
 
     it("refuses a malformed tip without asking the reader, and leaves the bill open", async () => {
-      const { cfg: baseCfg, cafe } = await modeVenue("invoice_first");
+      const { cfg: baseCfg, cafe } = await modeVenue("ticket_then_pay");
       const cfg = { ...baseCfg, tipsEnabled: true };
-      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+      const { id, saleId } = await placedIssuedBill(cfg, cafe);
       await correctToZero(cfg, saleId);
       const { deps, client } = integratedDeps(cfg, suite.db);
 
@@ -1778,8 +1773,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     });
 
     it("two pays at once close the bill once, and neither asks the reader", async () => {
-      const { cfg, cafe } = await modeVenue("invoice_first");
-      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+      const { cfg, cafe } = await modeVenue("ticket_then_pay");
+      const { id, saleId } = await placedIssuedBill(cfg, cafe);
       await correctToZero(cfg, saleId);
       const { deps: depsA, client: clientA } = integratedDeps(cfg, suite.db);
       const { deps: depsB, client: clientB } = integratedDeps(cfg, suite.db);
@@ -1810,8 +1805,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     });
 
     it("refuses a bill already below zero with the domain code, without asking the reader", async () => {
-      const { cfg, cafe } = await modeVenue("invoice_first");
-      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+      const { cfg, cafe } = await modeVenue("ticket_then_pay");
+      const { id, saleId } = await placedIssuedBill(cfg, cafe);
       // Written straight to `sales`: `recordCorrection` refuses a correction this large, but a
       // bill below zero must still be refused at collection. No fiscal record is written for it.
       await withTransaction(suite.db, async (tx) => {
@@ -1850,11 +1845,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     });
   });
 
-  // A captured payment with no sale on an invoice-first order is recovered by SETTLING the issued
-  // invoice: no second charge, and no `recordSale`.
   describe("lost-T2 recovery settles (never re-files)", () => {
-    /** Seed a captured stripe payment with a NULL `sale_id` on a placed invoice-first order.
-     *  `capturedAmount` is the gross the card was charged. */
     async function seedLostCaptureOnPlaced(id: string, capturedAmount: string): Promise<string> {
       const externalRef = `pi_lost_${randomUUID()}`;
       const origin = await orderDeviceOrigin(suite.db, id);
@@ -1873,10 +1864,10 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     }
 
     it("recovers by settling the issued invoice: no re-charge, no second file, links the existing row, records no handover, stays on the station queue", async () => {
-      const { cfg, cafe } = await modeVenue("invoice_first");
+      const { cfg, cafe } = await modeVenue("ticket_then_pay");
       const station = await defaultStationId(cfg);
       const app = suite.db;
-      const { id } = await placeInvoiceFirst(cfg, cafe); // placing fires the ticket item to the station
+      const { id } = await placedIssuedBill(cfg, cafe); // placing fires the ticket item to the station
       const externalRef = await seedLostCaptureOnPlaced(id, "1.50"); // charged exactly the total
       expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
@@ -1903,9 +1894,9 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     });
 
     it("reconstructs a tip when the captured amount exceeds the amount due", async () => {
-      const { cfg, cafe } = await modeVenue("invoice_first");
+      const { cfg, cafe } = await modeVenue("ticket_then_pay");
       const app = suite.db;
-      const { id } = await placeInvoiceFirst(cfg, cafe);
+      const { id } = await placedIssuedBill(cfg, cafe);
       await seedLostCaptureOnPlaced(id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
 
       const { deps, client } = integratedDeps(cfg, app);
@@ -1921,9 +1912,9 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     });
 
     it("a captured amount BELOW the amount due is corruption: settles nothing, leaves the payment for reconcile", async () => {
-      const { cfg, cafe } = await modeVenue("invoice_first");
+      const { cfg, cafe } = await modeVenue("ticket_then_pay");
       const app = suite.db;
-      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+      const { id, saleId } = await placedIssuedBill(cfg, cafe);
       await seedLostCaptureOnPlaced(id, "1.00"); // below the 1.50 amount due — cannot even cover it
 
       const { deps, client } = integratedDeps(cfg, app);
@@ -1938,8 +1929,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     });
 
     it("two concurrent recoveries settle the invoice ONCE; the loser replays", async () => {
-      const { cfg, cafe } = await modeVenue("invoice_first");
-      const { id } = await placeInvoiceFirst(cfg, cafe);
+      const { cfg, cafe } = await modeVenue("ticket_then_pay");
+      const { id } = await placedIssuedBill(cfg, cafe);
       await seedLostCaptureOnPlaced(id, "1.50");
 
       // ONE lost capture, TWO retries: one settles, and the other's transaction runs after that
@@ -2518,9 +2509,10 @@ describe("a party's bill request goes when a card or collect settles its last ow
     return { ...venue, ...seated };
   }
 
-  /** The tab placed, which in an `invoice_first` zone issues its invoice and leaves it outstanding. */
+  /** Place the tab and seed an outstanding invoice for settlement tests. */
   async function placed(cfg: DeviceRequestConfig, tabId: string): Promise<void> {
     await placeOrder({ db: suite.db, backend, clock }, cfg, tabId, OPERATOR);
+    await issueOrderInvoice({ db: suite.db, backend, clock }, cfg, tabId, OPERATOR);
     expect(await outstandingSalesFor()).toHaveLength(1);
   }
 
@@ -2617,7 +2609,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
     ],
     [
       "a card settling a presented bill's invoice",
-      "invoice_first",
+      "ticket_then_pay",
       async (cfg, tabId, log) => {
         await placed(cfg, tabId);
         await payByCard(cfg, tabId, log);
@@ -2625,7 +2617,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
     ],
     [
       "the recovery of a card capture of a presented bill's invoice",
-      "invoice_first",
+      "ticket_then_pay",
       async (cfg, tabId, log) => {
         await placed(cfg, tabId);
         await lostCapture(tabId);
@@ -2634,7 +2626,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
     ],
     [
       "a card closing a presented bill whose corrections leave nothing owed",
-      "invoice_first",
+      "ticket_then_pay",
       async (cfg, tabId, log) => {
         await placed(cfg, tabId);
         const saleId = await saleIdFor(tabId);
@@ -2647,7 +2639,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
     ],
     [
       "collecting a presented bill's invoice",
-      "invoice_first",
+      "ticket_then_pay",
       async (cfg, tabId, log) => {
         await placed(cfg, tabId);
         await collectInCash(cfg, tabId, log);

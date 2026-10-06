@@ -836,11 +836,6 @@ async function fileImmediateSale(
   return ticket;
 }
 
-/**
- * The already-issued sale for a working order, if any ({@link readIssuedSales}). An order placed
- * under `invoice_first` carries its sale from placing; one placed under any other mode files at pay.
- * The presence of the row, not the order's service mode, is the discriminator.
- */
 async function readOutstandingSaleForOrder(
   tx: Transaction,
   workingOrderId: string,
@@ -1818,6 +1813,7 @@ export async function collectOrder(
       return ticket;
     }
 
+    await refuseUnavailableFullInvoice(tx, req.id);
     const order = await priceStoredOrderForIssuance(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
   });

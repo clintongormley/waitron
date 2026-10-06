@@ -39,7 +39,6 @@ import { deploymentEnvironment } from "./config.js";
 import { issuancePass } from "./issuance-pass.js";
 import { ALL_MODULES } from "./modules.js";
 import { systemClock } from "./till-backend.js";
-import type { OrderFlow } from "./till-config.js";
 import {
   collectOrder,
   payWorkingOrder,
@@ -106,7 +105,7 @@ type Entry = { id: string; name: string };
  * also under Bebidas, and Comida and Añadidos at the top. Every product's staff, customer and
  * kitchen names differ.
  */
-async function setupVenue(orderFlow: OrderFlow = "prepay") {
+async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
   const venue = await applyVenue(
     planVenue(
       {
@@ -147,9 +146,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow,
   });
-  suite.db.run(sql`update locations set order_flow = ${orderFlow} where id = ${cfg.locationId}`);
 
   const seeded = await withTransaction(suite.db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Carta" });
@@ -224,7 +221,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     };
   });
   const { counter, tables } = await withTransaction(suite.db, async (tx) => ({
-    counter: await offerProducts(tx, cfg),
+    counter: await offerProducts(tx, cfg, { paidWhen }),
     tables: await offerProducts(tx, cfg, { zone: "tables" }),
   }));
   return { cfg, ...seeded, counter, tables };
@@ -576,8 +573,8 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     expect(await reportingOf(checkId)).toEqual([underAlcoholic(v)]);
   });
 
-  it("invoice-first: an order placed before the move keeps it when collected after; one parked before and placed after keeps it too; one parked after records the move", async () => {
-    const v = await setupVenue("invoice_first");
+  it("ticket then pay: an order placed before the move keeps it when collected after; one parked before and placed after keeps it too; one parked after records the move", async () => {
+    const v = await setupVenue("ticket_then_pay");
     const before = randomUUID();
     const parkedBefore = randomUUID();
     const parkedAfter = randomUUID();
@@ -600,6 +597,13 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     });
     await placeOrder(deps(), v.cfg, parkedBefore, OPERATOR);
     await placeOrder(deps(), v.cfg, parkedAfter, OPERATOR);
+    for (const id of [parkedBefore, parkedAfter]) {
+      await collectOrder(deps(), v.cfg, {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "9.00" },
+      });
+    }
 
     expect(await reportingOf(before)).toEqual([underAlcoholic(v)]);
     expect(await reportingOf(parkedBefore)).toEqual([underAlcoholic(v)]);

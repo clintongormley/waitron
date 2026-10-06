@@ -1,5 +1,11 @@
 # Sales classification and category reports
 
+> **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
+> venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
+> `ticket_then_pay` policy; placement files no invoice. References below to
+> invoice-first placement or preserving that legacy style describe the earlier design.
+
+
 **Status:** owner decisions of 2026-09-25, after outside review; revised the same day after a
 second review (§3's timing table and §5's two report details); not built. It sits beside
 [the menus spec](2026-09-20-menus-categories-and-home-layouts-design.md). §10 of that spec
