@@ -302,12 +302,13 @@ export async function updateZone(
       .returning({ id: floorZones.id });
   } catch (error) {
     if (
+      patch.name !== undefined &&
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "floor_zones",
         columns: ["location_id", "name"],
       })
     ) {
-      throw new AppError("zone.name_taken", { name: patch.name! });
+      throw new AppError("zone.name_taken", { name: patch.name });
     }
     throw error;
   }

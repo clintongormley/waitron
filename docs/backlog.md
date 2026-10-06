@@ -6516,13 +6516,17 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   follow-up A261-2c removes the retired `locations.order_flow` column after a separate rebuild audit.
   Review follow-ups: the Numbered collection choice applies to the new `prepay` and
   `ticket_then_pay` quick-sale paths; decide whether to extend it to retained legacy
-  `invoice_first` zones before changing their behavior. A261-2d identifies the `floor_zones` name key in `createServiceZone` and the
+  `invoice_first` zones before changing their behavior.
+  A261-2d identifies the `floor_zones` name key in `createServiceZone` and the
   server's `createZone`/`updateZone`; primary-key clashes remain database errors. Focused
   real-database tests force all three clashes and retain duplicate-name and rollback checks.
+  A rename refusal without a supplied name remains a database error, rather than returning an
+  undefined name.
   The sibling audit found no such translation in department create/rename. Outside this zone
   item, `apps/server/src/tables.ts` still translates every unique refusal in `createTable`,
   `updateTable`, `createStatus` and `updateStatus` to a label collision; a separate
-  follow-up should identify each label key and force another-key clash. Old configuration-bundle import was not
+  follow-up should identify each label key and force another-key clash. Old configuration-bundle
+  import was not
   verified in this review and remains outside the pre-live compatibility policy.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;

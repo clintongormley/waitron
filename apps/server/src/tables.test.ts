@@ -354,6 +354,30 @@ describe("zone CRUD", () => {
     ]);
   });
 
+  it("updateZone keeps a name-key refusal internal when the patch supplies no name", async () => {
+    const cfg = await setupVenue();
+    const existing = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    await db.execute(sql`create trigger test_zone_name_clash before update on floor_zones
+      when new.name = old.name
+      begin
+        insert into floor_zones (id, location_id, name, created_at)
+        values ('name-clash-control', old.location_id, old.name, old.created_at);
+      end`);
+    try {
+      await expect(
+        asApp(cfg, (tx) => updateZone(tx, cfg, existing.id, { displayOrder: 4 })),
+      ).rejects.toMatchObject({
+        errcode: 2067,
+        message: "UNIQUE constraint failed: floor_zones.location_id, floor_zones.name",
+      });
+    } finally {
+      await db.execute(sql`drop trigger test_zone_name_clash`);
+    }
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([
+      { id: existing.id, name: "Terrace", displayOrder: 0, active: true },
+    ]);
+  });
+
   it("updateZone surfaces a name collision as zone.name_taken", async () => {
     const cfg = await setupVenue();
     await asApp(cfg, (tx) => createZone(tx, cfg, { name: "A" }));
