@@ -8,6 +8,8 @@ import { AppError, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
+import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
+import type { VenueDetailWrite } from "./venue-detail-types.js";
 import "./errors.js";
 
 const run = createErrorBoundary(
@@ -19,6 +21,10 @@ const run = createErrorBoundary(
     "management.request_invalid": 400,
     "receipt.language_fixed": 400,
     "receipt.language_orders_open": 409,
+    "venue.detail_invalid": 400,
+    "venue.detail_read_only": 409,
+    "venue.detail_locked": 409,
+    "venue.detail_changed": 409,
   },
   "management.failed",
 );
@@ -60,14 +66,38 @@ export function mountLocationSettingsApi(
   log: Logger,
 ): void {
   const scope = eq(locations.id, deps.cfg.locationId);
-  const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
+  const gated = <T>(
+    sessionId: string,
+    fn: (tx: Transaction) => Promise<T>,
+    permission: "venue.configure" | "venue.view" = "venue.configure",
+  ) =>
     withTransaction(deps.db, async (tx) => {
       await authorizeManager(tx, {
         managementSessionId: sessionId,
-        permission: "venue.configure",
+        permission,
       });
       return fn(tx);
     });
+  app.get("/management-api/venue-details", (c) =>
+    run(c, log, async () => {
+      const model = await gated(
+        requireManagementSession(c),
+        (tx) => readVenueDetails(tx, deps.cfg),
+        "venue.view",
+      );
+      return c.json(model);
+    }),
+  );
+  app.patch("/management-api/venue-details", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<unknown>(c);
+      const result = await gated(sessionId, (tx) =>
+        writeVenueDetails(tx, deps.cfg, body as VenueDetailWrite),
+      );
+      return c.json(result);
+    }),
+  );
   app.get("/management-api/location-settings", (c) =>
     run(c, log, async () => {
       const result = await gated(requireManagementSession(c), async (tx) => {

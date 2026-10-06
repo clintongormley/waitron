@@ -6411,9 +6411,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Eight build steps, each its own queue item.
   Step 7 (venue details) is in progress on `feat/venue-details-editing`. Its shared server
   reader/writer now has focused checks for normalization, field-specific stale drafts, no-op
-  retries and province/clock refusals after a sale, order history or daily close. The HTTP editor,
-  live email-clock integration, dashboard panel and remaining consumer/race controls are still
-  pending; this checkpoint exposes no new route and changes no schema.
+  retries and province/clock refusals after a sale, order history or daily close. The new
+  venue-details GET/PATCH routes use venue-view/configuration permissions and return field
+  refusals. Creation/import controls, live email-clock integration, the dashboard panel and
+  remaining consumer/race controls are still pending. This build changes no schema.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
   its build landed as [PR #1269](https://github.com/clintongormley/waitron/pull/1269) on
   2026-10-06 at `924a94b745275627003db2912156dfbb266aa3ae`. Current-head package checks
