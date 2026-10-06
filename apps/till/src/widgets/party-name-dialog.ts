@@ -1,8 +1,9 @@
 import { LitElement, css, html } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
-import type { WtDialog } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { PARTY_NAME_MAX } from "@waitron/shared";
@@ -13,10 +14,6 @@ export interface PartyNameDetail {
   name: string | null;
 }
 
-/**
- * Names the party, or clears its name. The field is optional; the dialog checks the length the server
- * allows before reporting the name, and shows `refusal`, a server's refusal of the field, under it.
- */
 @customElement("till-party-name-dialog")
 export class TillPartyNameDialog extends LitElement {
   static override styles = [
@@ -33,9 +30,43 @@ export class TillPartyNameDialog extends LitElement {
   /** The party's tables, as the heading names them. */
   @property() tables = "";
   @property() value = "";
+  @property({ attribute: false }) savedValue: string | undefined;
   @property() refusal = "";
 
   @state() private attempted = false;
+
+  @state() private active = true;
+  #scope?: DraftScope<string>;
+  #leave?: LeaveCoordinator;
+  #baseline?: string;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override willUpdate(): void {
+    if (!this.active || this.#scope) return;
+    this.#baseline ??= this.savedValue ?? this.value;
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<string>({
+      id: this,
+      current: () => this.value,
+      snapshot: (value) => value,
+      equal: (a, b) => a.trim() === b.trim(),
+      restore: (value) => (this.value = value),
+    });
+    this.#scope?.commit(this.#baseline);
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
 
   override async firstUpdated(): Promise<void> {
     await this.renderRoot.querySelector<WtDialog>("wt-dialog")!.updateComplete;
@@ -51,18 +82,24 @@ export class TillPartyNameDialog extends LitElement {
     return this.refusal;
   }
 
-  #onInput(value: string): void {
-    this.value = value;
+  #onInput(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    if (!this.isConnected || !this.active) return;
+    this.value = event.detail.value;
+    this.#scope?.changed();
     this.refusal = "";
   }
 
   async #save(): Promise<void> {
+    if (!this.isConnected || !this.active) return;
     this.attempted = true;
     this.refusal = "";
     if (this.#tooLong()) {
       await focusFirstInvalid(this.shadowRoot!);
       return;
     }
+    this.#baseline = this.value;
+    this.#scope?.commit(this.value);
     const trimmed = this.value.trim();
     this.dispatchEvent(
       new CustomEvent<PartyNameDetail>("party-name-confirm", {
@@ -74,6 +111,24 @@ export class TillPartyNameDialog extends LitElement {
   }
 
   #cancel(): void {
+    if (!this.isConnected || !this.active) return;
+    if (this.#scope) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+      return;
+    }
+    this.#reportClose();
+  }
+
+  #closed(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#reportClose();
+  }
+
+  #reportClose(): void {
     this.dispatchEvent(new CustomEvent("party-name-cancel", { bubbles: true, composed: true }));
   }
 
@@ -81,9 +136,10 @@ export class TillPartyNameDialog extends LitElement {
     const error = this.#fieldError();
     return html`<wt-dialog
       ${trackDialog()}
-      .open=${true}
+      .open=${this.active}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       .heading=${t("table.name_title").replace("{tables}", () => this.tables)}
-      @wt-close=${() => this.#cancel()}
+      @wt-close=${(event: Event) => this.#closed(event)}
     >
       <div class="fields">
         <wt-input
@@ -92,9 +148,9 @@ export class TillPartyNameDialog extends LitElement {
           .maxlength=${PARTY_NAME_MAX}
           .label=${t("table.name_label")}
           .hint=${t("table.name_hint")}
-          .value=${this.value}
+          .value=${live(this.value)}
           .error=${error}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event.detail.value)}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
           @keydown=${(event: KeyboardEvent) =>
             submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-name-save]"))}
         ></wt-input>

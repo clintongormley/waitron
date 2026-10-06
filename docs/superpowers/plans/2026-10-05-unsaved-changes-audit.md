@@ -882,3 +882,33 @@ cases. Eight temporary visual flows passed sixteen axe scans, and their sixteen 
 light/dark, 390/1280 captures were inspected. Synthetic unload checks establish listener
 cancellation only. Types, changed-file lint, formatting and diff checks passed; existing test
 assertions were not edited. Other till modal owners and Tasks 5–6 remain pending.
+
+
+### Party-name modal checkpoint, 2026-10-06
+
+You can keep a typed party name when cancelling or pressing native Escape. Discard restores the
+starting value and reports cancellation once. Comparisons use the trimmed name already emitted
+by this form; validation and blank-name null submission keep their existing meanings. Explicit
+Save commits the submitted name before reporting `party-name-confirm`. The table screen removes
+the form and hands that action to the existing naming request without another question.
+
+The table screen also passes its stored party name as `savedValue`. When an existing request
+refusal reopens a submitted name, that form compares against the stored value rather than treating
+the refused value as saved. Keep preserves the refused value; Discard sends no naming action.
+Other rerenders keep the existing baseline and pending question. Disconnect aborts a question and
+unregisters unload tracking; reconnect retains the starting or submitted baseline. Detached input,
+Cancel, Save and Enter controls cannot replace the retained draft or submit it.
+
+The initial new widget run failed nine cases. After the close/lifetime implementation, a corrected
+long-name fixture uses a native input event to exercise validation beyond the field's maxlength;
+real typing stops at 40 characters. The refused-name widget and actual table-screen tests each
+failed before adding the stored baseline and its parent binding. The final command was
+`pnpm --filter @waitron/till exec vitest run src/widgets/party-name-dialog.unsaved.test.ts src/widgets/party-name-dialog.test.ts src/screens/party-name.unsaved.test.ts src/screens/till-table-order-screen.test.ts src/till-app-table-service.test.ts`:
+336 cases passed. Existing assertions were not edited.
+
+Five installed disposable-checkout deletions each failed its intended case: close gate, submitted
+commit, reconnect baseline, departed-input guard and table-screen stored-name binding. Restoring
+the candidate passed 19 party-name cases. Eight temporary visual flows passed 16 axe scans;
+their 16 EN/ES, light/dark, 390/1280 editor/warning captures were inspected. Types, changed-file
+lint, formatting and diff checks passed. Synthetic unload events establish listener cancellation
+only. Other till modal owners and Tasks 5–6 remain pending; public F1 issuance stays disabled.

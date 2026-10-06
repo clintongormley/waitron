@@ -1407,6 +1407,16 @@ The actual Floor screen has Keep/Discard/reopen/seat coverage in
 `apps/till/src/screens/till-floor-screen.unsaved.test.ts`, alongside the widget's new
 `seat-dialog.unsaved.test.ts`. Other till modal families and page/history work remain open.
 
+Party-name input now uses the shared warning on the branch. Cancel and native Escape retain
+edits until Discard; reverting to the trimmed starting name closes directly. An explicit Save
+commits the submitted name at the table screen's existing handoff, without a discard question.
+The table screen supplies the stored name separately when a refusal reopens the submitted name,
+so that refused value remains protected. Reconnection retains the baseline, and departed controls
+cannot submit, cancel or change the retained draft. The final party-name and table-service focused
+run passed 336 browser cases; five installed deletion controls failed their intended assertions
+and restoration passed 19 party-name cases. Other till modal owners and page/navigation work remain.
+
+
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
 **What a description reader shows — checked by running, 2026-10-02.** A throwaway catalogue test

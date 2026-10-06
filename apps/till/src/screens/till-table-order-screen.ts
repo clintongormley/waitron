@@ -4134,6 +4134,7 @@ export class TillTableOrderScreen extends LitElement {
     return html`<till-party-name-dialog
       .tables=${partyTablesLabel(party, this.tables)}
       .value=${naming.value}
+      .savedValue=${party.name ?? ""}
       .refusal=${naming.refusal}
       @party-name-confirm=${(event: Event) => {
         event.stopPropagation();
