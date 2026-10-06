@@ -2565,7 +2565,7 @@ reads Disable while only products are selected (and is not offered when every se
 disabled already) and Delete once a category is in the selection,
 because the category itself is deleted. Products selected directly are disabled; the products
 inside the category, its subcategories included, are disabled only with the delete dialog's
-"Also: deletes … and disables …" answer, and with the answer that moves them to the parent they
+"Also: …" answer, and with the answer that moves them to the parent they
 stay active.
 
 ### Products: Active and Available are two different words

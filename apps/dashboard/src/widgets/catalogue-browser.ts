@@ -17,8 +17,9 @@ import type {
 import type { ModifierListChoice } from "./product-editor-model.js";
 import { categoryPath, categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { conjunctionList } from "../i18n/list.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -345,20 +346,18 @@ export class CatalogueBrowser extends LitElement {
     return fresh as FolderSummary[];
   }
   /** When the subcategories, switched-on products or routing rules the dialog showed have changed,
-   * shows the new counts instead; so does any change in products when the dialog asked nothing
-   * about contents. Otherwise the delete sends this read's counts: a dialog that asked about
-   * contents does not ask again for a change in disabled products alone. */
+   * shows the new counts instead. A change in disabled products alone is not compared: the dialog
+   * neither counts them nor asks about them. The delete sends this read's counts, disabled products
+   * included, for the server to check against. */
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
-    const asked = this.#asksContents();
     const same = fresh.every((summary, index) => {
       const shown = this.summaries[index];
       return (
         shown !== undefined &&
         summary.folders === shown.folders &&
         summary.activeProducts === shown.activeProducts &&
-        (asked || summary.products === shown.products) &&
         summary.routes === shown.routes &&
         summary.ownRoutes === shown.ownRoutes
       );
@@ -380,9 +379,6 @@ export class CatalogueBrowser extends LitElement {
       "{count}",
       String(count),
     );
-  }
-  #conjoin(items: readonly string[]): string {
-    return new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(items);
   }
   /** Where the contents of the outermost selected categories go: their parent when they share one. */
   #contentsParent(roots: readonly FolderSummary[]): string {
@@ -470,7 +466,7 @@ export class CatalogueBrowser extends LitElement {
     ];
     const keepLabel = this.#fill(
       totals.folders + totals.active === 1 ? "folders.contents_keep_one" : "folders.contents_keep",
-      { items: this.#conjoin(moving), parent },
+      { items: conjunctionList(moving), parent },
     );
     const deleted = [
       ...(totals.folders ? [folderCount] : []),
@@ -478,12 +474,12 @@ export class CatalogueBrowser extends LitElement {
     ];
     const actions = [
       ...(deleted.length
-        ? [this.#fill("folders.also_deletes", { items: this.#conjoin(deleted) })]
+        ? [this.#fill("folders.also_deletes", { items: conjunctionList(deleted) })]
         : []),
       ...(totals.active ? [this.#fill("folders.also_disables", { products: productCount })] : []),
     ];
     const deleteLabel = [
-      this.#fill("folders.contents_also", { actions: this.#conjoin(actions) }),
+      this.#fill("folders.contents_also", { actions: conjunctionList(actions) }),
       ...(totals.active
         ? [
             this.#fill(

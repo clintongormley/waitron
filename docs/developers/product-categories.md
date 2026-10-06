@@ -311,7 +311,8 @@ category** for the top level, or "each category's parent" when the outermost sel
 sit under different parents.
 
 - "1 category and 3 products move to Drinks" keeps the products active and moves the category's
-  direct products and subcategories to its parent. Its subcategories that are not selected keep
+  direct products and subcategories to its parent. The counts include what sits inside those
+  subcategories, which moves with them. Its subcategories that are not selected keep
   their routing rules.
 - "Also: deletes 1 category and 2 kitchen routing rules and disables 3 products. They move to
   Drinks." removes the subtree and disables its products. The rules it lists are the category
@@ -331,16 +332,17 @@ to approve unknown contents. The dialog lists each category being deleted by its
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
 again; if the numbers of subcategories, active products or routing rules (in the subtree, or
 naming the category itself) have changed, it deletes nothing, shows the new counts and asks you to
-confirm again. When the dialog asked what happens to the contents, a change in disabled products
-alone does not stop it, because those products are switched off already; when it asked nothing
-about contents, any change in products, disabled ones included, shows the new counts. The delete
+confirm again. A change in disabled products alone never stops that check, whether or not the dialog
+asked about contents: the dialog neither counts those products nor asks about them. The delete
 request carries the counts
 the dashboard read before deleting, the number of all products, disabled ones included, among them,
 and the server compares them again inside the delete itself: if
 they no longer match, nothing is deleted and the dialog shows the new counts with the refusal's own
 message. If a category with nothing in it at all, which is deleted without confirmation, has
-gained subcategories, products (disabled ones included) or routing rules by then, the dialog opens
-with its new counts.
+gained subcategories, products (disabled ones included) or routing rules by then, the server
+refuses and the dialog opens with that message, showing the new counts of subcategories, active
+products and routing rules; when all it gained is disabled products, it shows the message but no
+counts of contents, asks nothing about contents, and its **Delete** moves them up.
 A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes its station claim and every exception naming it, because both tables

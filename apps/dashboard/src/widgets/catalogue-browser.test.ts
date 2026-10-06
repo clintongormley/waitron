@@ -2249,7 +2249,7 @@ it.each([
     expect(dialog(el)!.textContent).not.toMatch(/already|ya deshabilitad/);
   },
 );
-it("says nothing about disabled products when none of the products to delete is disabled", async () => {
+it("words the whole English delete choice when every product to delete is active", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
     { id: "f", folders: 1, products: 2, activeProducts: 2, routes: 0, ownRoutes: 0 },
@@ -2368,7 +2368,7 @@ it("at Delete, sends the count of every product read then when only inactive pro
     ),
   );
 });
-it("at Delete, a disabled product joining a category that held only routing rules is shown as a change, not deleted, and asks nothing about it", async () => {
+it("at Delete, a disabled product joining a category that held only routing rules is no change: the first confirm deletes it, saying nothing about the product", async () => {
   const el = await mountBrowser();
   const shown = { id: "f", folders: 0, products: 0, activeProducts: 0, routes: 2, ownRoutes: 2 };
   const changed = { ...shown, products: 1 };
@@ -2376,15 +2376,6 @@ it("at Delete, a disabled product joining a category that held only routing rule
   await selectKeys(el, ["folder:f"]);
   await press(el, "delete");
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-  expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
-  await press(el, "confirm");
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
-      en["folders.summary_changed"],
-    ),
-  );
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
-  expect(dialog(el)).not.toBeNull();
   expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
   expect(dialog(el)!.textContent).not.toMatch(/disabl/i);
   await press(el, "confirm");
@@ -2395,9 +2386,35 @@ it("at Delete, a disabled product joining a category that held only routing rule
       [changed],
     ),
   );
+  await vi.waitFor(() => expect(dialog(el)).toBeNull());
 });
+it.each([
+  ["a subcategory", { folders: 1 }],
+  ["an active product", { products: 1, activeProducts: 1 }],
+] as const)(
+  "at Delete, %s joining a category whose dialog asked nothing about contents shows the new counts instead of deleting",
+  async (_what, change) => {
+    const el = await mountBrowser();
+    const shown = { id: "f", folders: 0, products: 0, activeProducts: 0, routes: 2, ownRoutes: 2 };
+    vi.mocked(el.api.summariseFolders)
+      .mockResolvedValueOnce([shown])
+      .mockResolvedValue([{ ...shown, ...change }]);
+    await selectKeys(el, ["folder:f"]);
+    await press(el, "delete");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
+    await press(el, "confirm");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+        en["folders.summary_changed"],
+      ),
+    );
+    expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("fieldset")).not.toBeNull();
+  },
+);
 it.each(["the read at Delete", "the server's refusal"])(
-  "after Delete it too was chosen, a category found by %s to hold only routing rules is deleted moving nothing up",
+  'after the "Also: …" answer was chosen, a category found by %s to hold only routing rules is deleted moving nothing up',
   async (path) => {
     const el = await mountBrowser();
     const full = { id: "f", folders: 0, products: 1, activeProducts: 1, routes: 2, ownRoutes: 2 };
