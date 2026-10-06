@@ -1179,6 +1179,9 @@ unindexed and old-epoch fallback, one pending destination, multiple controllers 
 requests. Application shells do not yet install it: sidebar, links, logout, direct receipt/login
 history calls, page/setup owners and native reload remain open. Lane C's pending Hours change
 replaces the audited station-hours form; reconcile its editors after that branch lands.
+The A279 rebase also required comparing the effective delete contents value after a fresh
+summary hides that choice. Its new browser case failed at the retained unload listener before
+the comparison/notification fix; the final catalogue pair passed 197 cases.
 
 Refund amount/reason entry now uses the same registry on the branch. Cancel and native Escape
 retain the raw fields until Discard; reverts and untouched suggested amounts remain clean.

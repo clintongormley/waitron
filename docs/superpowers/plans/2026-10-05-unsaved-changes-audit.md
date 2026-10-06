@@ -36,6 +36,15 @@ Keep its worktree unchanged and reconcile the new editor owners against main whe
 The final advancing-owner audit and shell/page rollout remain pending; neither proposed W69 PR
 is ready for finish-branch.
 
+Rebased 63 commits over main `f048de959`: two patches needed conflict resolution. The Menu suite
+retains both A291's reset-refusal cases and W69's selection cases. Catalogue markup retains A279's
+contents-question gate and W69's connected/busy/change handlers. The combined three-suite run
+passed 553 cases. A new catalogue case then failed at unload protection after fresh counts hid
+the contents choice. The dirty reader now uses the same effective choice as the delete request;
+a summary change updates its registry notification. The final catalogue pair passed 197 cases.
+No existing assertion changed. Logs: `rebase-consumers.log`, `hidden-choice-red.log` and
+`hidden-choice-green.log` in the same local receipt directory.
+
 Baseline: `5597e06923b64acacf9df54ed6e8fb42e7fa411e`, inspected 2026-10-05 in the W69 documentation worktree. This inventory records **observed source owners** and **proposed protection**. None of its rows is a claim that a browser behavior was run or verified. Read it with the [design](../specs/2026-10-05-unsaved-changes-warning-design.md) and [implementation plan](2026-10-05-unsaved-changes-warning.md).
 
 2026-10-06 implementation checkpoint: Product Add/Edit and its nested Variant form now register

@@ -82,6 +82,30 @@ function protectedUnload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
+
+it("a contents choice hidden by the fresh counts is no longer an unsaved submitted value", async () => {
+  const summariseFolders = vi
+    .fn()
+    .mockResolvedValueOnce([counts])
+    .mockResolvedValue([
+      { id: "d", folders: 0, products: 0, activeProducts: 0, routes: 1, ownRoutes: 1 },
+    ]);
+  const f = await fixture("delete", { summariseFolders });
+  await edit(f);
+  expect(protectedUnload()).toBe(true);
+  f.modal.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  await expect.poll(() => f.modal.querySelector("input[name=contents]")).toBeNull();
+  await expect
+    .poll(() => f.modal.querySelector("[data-test=confirm]")?.hasAttribute("disabled"))
+    .toBe(false);
+  expect(f.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(f.modal.textContent).toContain(t("folders.summary_changed"));
+  expect(protectedUnload()).toBe(false);
+  await cancel(f, "cancel");
+  await expect.poll(() => f.browser.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect((await question(f)).open).toBe(false);
+  expect(f.api.deleteCatalogueItems).not.toHaveBeenCalled();
+});
 async function question(f: Fixture) {
   await f.app.updateComplete;
   const q = f.app.shadowRoot!.querySelector("wt-unsaved-changes")!;

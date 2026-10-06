@@ -156,7 +156,7 @@ export class CatalogueBrowser extends LitElement {
   #operationDraft(): OperationDraft {
     return {
       destination: this.operation === "move" ? this.destination : "",
-      contents: this.operation === "delete" ? this.contents : "move_up",
+      contents: this.operation === "delete" ? this.#contentsChoice() : "move_up",
     };
   }
   #releaseOperation(): void {
@@ -218,6 +218,7 @@ export class CatalogueBrowser extends LitElement {
       });
       this.#operationScope?.commit(this.#operationBaseline);
     }
+    if (changed.has("summaries")) this.#operationScope?.changed();
     if (changed.has("search")) this.selected = [];
     if (changed.has("nameDraft")) this.nameColor = undefined;
     // Worked out once per change of its inputs, not on every redraw of the browser.
