@@ -967,9 +967,9 @@ export class DeviceProfilesScreen extends LitElement {
 
   /**
    * A copy keeps where the profile serves and who signs in on it, less the zones switched off since.
-   * With its department off, or none of its zones left, the copy carries no department, so the
-   * refusal says one is needed. A kitchen display's copy lists the switched-on stations and watchers
-   * the original lists.
+   * With its department off, or none of its zones left, the copy carries no department, and the
+   * server refuses it. A kitchen display's copy lists the switched-on stations and watchers the
+   * original lists.
    */
   #duplicate(profile: DeviceProfile): void {
     const name = `${profile.name}${t("device_profiles.copy_suffix")}`;

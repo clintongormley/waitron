@@ -399,6 +399,15 @@ function draftRefusalError({ refused, ownerName }: DraftRefused, unsent = false)
     : tableWriteError({ code: refused });
 }
 
+/** The device's profile refusing a zone's offers says so in its own words; any other failure to
+ * read them is a load failure. */
+function zoneLoadError(error: unknown): CounterError {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === "device_profile.no_service_zone" || code === "service_zone.not_allowed"
+    ? { code }
+    : "service_zone.load_error";
+}
+
 /** A refused take-over: the drafts have been read again, so each says what changed. */
 function takeOverRefusalError(code: string): CounterError {
   if (code === "draft.out_of_date" || code === "draft.taken_over") return "table.take_over_changed";
@@ -1547,6 +1556,7 @@ export class TillApp extends LitElement {
   @state() private profileOrderOpen = false;
   /** A switch was asked for while the open order's draft held a change the server has not got. */
   @state() private profileDraftUnsaved = false;
+  @state() private profileDraftReplaced = false;
   /** Printer switches are sent one at a time, each once the one before has answered or been cut
    * off, so each answer is newer than the one before. A switch with no answer within
    * `TABLE_REQUEST_LIMIT_MS` is cut off, so it cannot hold back the picks after it; a cut-off
@@ -1695,7 +1705,7 @@ export class TillApp extends LitElement {
     } as const satisfies Record<NavigationScreen, TillDestination>;
     const destination = destinations[screen];
     if (this.canvas?.tabs.some((tab) => tab.key === destination)) {
-      if (this.capabilities.includes(screen)) this.#onTabSelect(destination);
+      if (this.capabilities.includes(screen)) this.#onTabSelect(destination, false, true);
       return;
     }
     this.#pushDrill({ kind: destination });
@@ -1957,9 +1967,7 @@ export class TillApp extends LitElement {
       if (returning?.zoneId === context.zoneId) keptMenu = returning.menuId;
     } catch (error) {
       if (replaced()) return;
-      const code = (error as { code?: unknown } | null)?.code;
-      offerLoadFailed =
-        code === "device_profile.no_service_zone" ? { code } : "service_zone.load_error";
+      offerLoadFailed = zoneLoadError(error);
       this.#loadCounterOffers({ offers: [], menus: [] }, false);
       this.counterServiceZones = [];
       this.counterServiceZoneId = "";
@@ -1976,6 +1984,7 @@ export class TillApp extends LitElement {
     this.#loginPending = false;
     this.operatorPersonId = personId;
     this.#resumeOrderDraft();
+    if (switched) this.#endProfileSwitch();
     this.permissions = permissions;
     this.errorKey = offerLoadFailed === false ? undefined : offerLoadFailed;
     this.#configureSessionActivity();
@@ -1986,8 +1995,9 @@ export class TillApp extends LitElement {
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
     if (landsOnFloor) await this.#loadFloorData(replaced);
     if (replaced()) return;
-    // History may change while login data loads and the lock screen still owns the page.
-    this.#setActiveTab(this.#requestedTab(), true, true);
+    // History may change while login data loads and the lock screen still owns the page. A switched
+    // profile starts on its own canvas's first tab, whatever tab the address names.
+    this.#setActiveTab(switched ? this.canvas?.tabs[0]?.key : this.#requestedTab(), true, true);
     this.#setScreen(landsOnFloor ? "floor" : "counter");
     if (switched)
       this.#url.write({ "till-view": null, "till-station": null, "till-watcher": null }, true);
@@ -2009,7 +2019,7 @@ export class TillApp extends LitElement {
     if (showsCounterLists || this.#affordances().includes("schedule")) {
       // Loaded after the landing screen is shown, and a failure is swallowed, so the roster never blocks a sale.
       try {
-        const staff = await this.api.listStaff();
+        const staff = await this.api.listStaff({ everyone: true });
         if (replaced()) return;
         this.staff = staff;
       } catch {
@@ -2316,9 +2326,9 @@ export class TillApp extends LitElement {
       this.#selectMenu(defaultMenuId ?? this.#defaultCatalogueId(menus));
       this.#browsing = { personId: this.operatorPersonId, zoneId: context.zoneId, menuId: null };
       this.errorKey = undefined;
-    } catch {
+    } catch (error) {
       if (request === this.#counterOfferRequest && session === this.#operatorSession)
-        this.errorKey = "service_zone.load_error";
+        this.errorKey = zoneLoadError(error);
     }
   }
 
@@ -3867,6 +3877,7 @@ export class TillApp extends LitElement {
     this.profileError = null;
     this.profileOrderOpen = false;
     this.profileDraftUnsaved = false;
+    this.profileDraftReplaced = false;
     this.profileBusy = false;
     this.profileOpen = true;
   }
@@ -3874,7 +3885,8 @@ export class TillApp extends LitElement {
   /**
    * The counter basket and an order with no party are this browser's alone, and a table draft's
    * last change may not have reached the server, so the server cannot refuse the switch for them:
-   * re-entering after it starts a new draft and drops the old one unsaved.
+   * re-entering after it starts a new draft and drops the old one unsaved. The dialog stays open
+   * over the screen until that new draft is started, so no edit lands in the one being dropped.
    */
   async #onProfileSwitch(event: CustomEvent<{ profileId: string }>): Promise<void> {
     if (this.profileBusy) return;
@@ -3884,6 +3896,7 @@ export class TillApp extends LitElement {
       return;
     }
     this.profileDraftUnsaved = false;
+    this.profileDraftReplaced = false;
     if (this.#store.lines.length > 0 || this.#partylessDraft.lines.length > 0) {
       this.profileOrderOpen = true;
       return;
@@ -3897,7 +3910,9 @@ export class TillApp extends LitElement {
       if (session !== this.#operatorSession) return;
       if (saved !== "saved") {
         this.profileBusy = false;
-        this.profileDraftUnsaved = true;
+        if (saved !== "failed" && DRAFT_REFUSALS.has(saved.refused))
+          this.profileDraftReplaced = true;
+        else this.profileDraftUnsaved = true;
         return;
       }
     }
@@ -3910,10 +3925,14 @@ export class TillApp extends LitElement {
       this.profileBusy = false;
       return;
     }
-    this.profileBusy = false;
-    this.profileOpen = false;
     if (session !== this.#operatorSession) return;
     await this.#enterSwitchedProfile(session);
+    this.#endProfileSwitch();
+  }
+
+  #endProfileSwitch(): void {
+    this.profileBusy = false;
+    this.profileOpen = false;
   }
 
   /** The new profile's setup, and browsing begun again from its starting zone and default menu. */
@@ -4212,13 +4231,14 @@ export class TillApp extends LitElement {
   /** Select a validated canvas tab and load its floor data when needed. Explicit selection closes the
    * overlay; history restores a permitted regular destination over the tab. The first floor visit
    * loads zones and statuses too, while later visits refresh only live occupancy. */
-  #onTabSelect(key: string, fromHistory = false): void {
+  /** `replace` puts the tab in the current history entry rather than a new one. */
+  #onTabSelect(key: string, fromHistory = false, replace = fromHistory): void {
     if (!this.#inShell()) return;
     const tab = this.canvas?.tabs.find((candidate) => candidate.key === key);
     if (tab === undefined) return;
     this.#dismissStationChoices();
     const wasShowingOrder = this.#tableCatalogueActive();
-    this.#setActiveTab(key, fromHistory, fromHistory);
+    this.#setActiveTab(key, replace, fromHistory);
     if (key === "counter") void this.#loadStations();
     if (fromHistory) this.#restoreDestination();
     else if (this.drill !== undefined) this.#popDrill();
@@ -8089,6 +8109,7 @@ export class TillApp extends LitElement {
                 .error=${this.profileError}
                 .orderOpen=${this.profileOrderOpen}
                 .draftUnsaved=${this.profileDraftUnsaved}
+                .draftReplaced=${this.profileDraftReplaced}
                 .busy=${this.profileBusy}
                 @profile-switch=${(event: CustomEvent<{ profileId: string }>) =>
                   void this.#onProfileSwitch(event)}

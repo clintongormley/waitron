@@ -92,9 +92,10 @@ import {
  * checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-printer
  * routes; and table placement, which needs `venue.configure`. Left ungated by decision, each with
  * its reason:
- * - the watcher "done" marks (`/api/watchers/:id/done`, `/api/device/watcher/done`): a watcher is
- *   watched from a shared display, which is allowed only `prepare-orders`, and the mark is the
- *   watcher's own record of what it has seen, not preparing or handing over;
+ * - the watcher "done" marks: each is the watcher's own record of what it has seen, not preparing
+ *   or handing over. `/api/device/watcher/done` is made by the watcher's own display, which is
+ *   allowed only `prepare-orders`; `/api/watchers/:id/done` by a person signed in on a till that
+ *   shows the watcher, so the session is its only check;
  * - the table status and cleared marks, and `/api/sales/:id/receipt/handover` (a printed receipt
  *   handed over): none is an ordering, payment or drawer write;
  * - `/api/demo-reader/cancel`: mounted only when the card provider is the simulator.

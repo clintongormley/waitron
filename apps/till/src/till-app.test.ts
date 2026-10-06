@@ -1648,6 +1648,16 @@ describe("till-app", () => {
     expect(currentApi.setServiceZone).toHaveBeenLastCalledWith("deli");
   });
 
+  it("asks for every colleague for the roster loaded after sign-in, and only the profile's people for the sign-in list", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    await flush(el);
+
+    const calls = vi.mocked(currentApi.listStaff).mock.calls;
+    expect(calls[0]).toEqual([]);
+    expect(calls.at(-1)).toEqual([{ everyone: true }]);
+  });
+
   it("a failing listStaff on the first login leaves the roster empty and never blocks the counter (no unhandled rejection)", async () => {
     // `#onLoggedIn` loads the colleague roster AFTER the counter is shown, so a roster failure must
     // degrade gracefully. The assertion that tells the two apart is `rejections === []`: `staff` is
@@ -5917,6 +5927,27 @@ describe("till-app", () => {
       await toCounter(el);
       expect(shell(el)!.activeTabKey).toBe("schedule");
       expect(schedule(el)).toBeNull();
+    });
+
+    it("selects a starting tab in place of the sign-in's history entry, so Back does not return to the first tab", async () => {
+      const withScheduleTab = {
+        ...till.canvas,
+        tabs: [...till.canvas.tabs, { key: "schedule", title: "Horario", columns: 24, cards: [] }],
+      };
+      history.replaceState(null, "", "/");
+      const { el } = await mountApp({
+        ...rosterApi,
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          canvas: withScheduleTab,
+          startingScreen: "show-schedule",
+        }),
+      });
+      await flush(el);
+      const entries = history.length;
+      await toCounter(el);
+      expect(shell(el)!.activeTabKey).toBe("schedule");
+      expect(history.length).toBe(entries);
     });
 
     it("opens again for the next person after a logout", async () => {
@@ -14618,6 +14649,25 @@ describe("switching the device's profile from the header", () => {
 
     expect(el.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
     expect(counter(el)).not.toBeNull();
+  });
+
+  it("a switch to a profile with no starting screen lands on the first tab, though the tab left is also on the new canvas", async () => {
+    const withScheduleTab = {
+      ...till.canvas,
+      tabs: [...till.canvas.tabs, { key: "schedule", title: "Horario", columns: 24, cards: [] }],
+    };
+    const { el } = await openProfile({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: withScheduleTab }),
+    });
+    emit(shell(el)!, "tab-select", { key: "schedule" });
+    await flush(el);
+    expect(shell(el)!.activeTabKey).toBe("schedule");
+
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    await flush(el);
+
+    expect(shell(el)!.activeTabKey).toBe(withScheduleTab.tabs[0]!.key);
   });
 
   it("a switch starts at the new profile's starting zone, not the zone the same person left", async () => {

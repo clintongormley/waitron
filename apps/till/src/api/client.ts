@@ -1967,8 +1967,12 @@ export class TillApi {
     return this.#localesPromise;
   }
 
-  listStaff(): Promise<StaffMember[]> {
-    return this.#request<StaffMember[]>("/api/staff", "GET");
+  /** The people who may sign in on this device; with `everyone`, every active colleague. */
+  listStaff(options: { everyone?: boolean } = {}): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      options.everyone === true ? "/api/staff?everyone=true" : "/api/staff",
+      "GET",
+    );
   }
 
   login(personId: string, pin: string): Promise<SessionResult> {

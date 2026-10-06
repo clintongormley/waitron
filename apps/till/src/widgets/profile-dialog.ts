@@ -12,7 +12,12 @@ import { codeMessage } from "../i18n/codes.js";
 import type { ProfileChoice } from "../api/client.js";
 
 /** Refusals about the profile chosen, shown under it rather than at the bottom. */
-const ABOUT_CHOICE = new Set(["device_profile.not_approved", "device_profile.not_admitted"]);
+const ABOUT_CHOICE = new Set([
+  "device_profile.not_approved",
+  "device_profile.not_admitted",
+  "station.not_allowed",
+  "watcher.not_allowed",
+]);
 
 /**
  * Lets a signed-in person switch the device to another profile it is approved for. The dialog only
@@ -40,6 +45,8 @@ export class TillProfileDialog extends LitElement {
   @property({ type: Boolean }) orderOpen = false;
   /** The open order's last change could not be saved, so the switch waits until it is. */
   @property({ type: Boolean }) draftUnsaved = false;
+  /** The server refused the open order's last change and its saved order now shows instead. */
+  @property({ type: Boolean }) draftReplaced = false;
   @property({ type: Boolean }) busy = false;
 
   @state() private chosen = "";
@@ -66,6 +73,7 @@ export class TillProfileDialog extends LitElement {
   #bottomMessage(): string {
     if (this.orderOpen) return t("profile.order_open");
     if (this.draftUnsaved) return t("profile.draft_unsaved");
+    if (this.draftReplaced) return t("profile.draft_replaced");
     if (this.error === null) return "";
     if (ABOUT_CHOICE.has(this.error.code)) return this.refusalShown ? t("form.fix_fields") : "";
     return codeMessage(this.error.code);

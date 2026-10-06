@@ -2381,6 +2381,20 @@ describe("a device's profile decides who may sign in on it", () => {
     ]);
   });
 
+  it("GET /api/staff?everyone=true lists every active person whatever device asks, for a roster rather than a sign-in list", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { cookie } = await managersAndAnaDevice();
+
+    const res = await app.request("/api/staff?everyone=true", { headers: { cookie } });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([
+      { personId: abel.id, displayName: "Abel" },
+      { personId: ana.id, displayName: "Ana" },
+    ]);
+  });
+
   it("GET /api/staff reads the device from the dev header in dev mode", async () => {
     const app = new Hono();
     mountTillApi(app, { ...deps(suite.db), devMode: true }, collect([]));

@@ -2392,7 +2392,10 @@ export class DashboardApi {
   }
 
   async getProfileScopeChoices(): Promise<ProfileScopeChoices> {
-    const venue = await this.#request<ProfileScopeChoices>("/management-api/venue-service", "GET");
+    const venue = await this.#request<ProfileScopeChoices>(
+      "/management-api/venue-service/departments-and-zones",
+      "GET",
+    );
     return {
       departments: venue.departments.map(({ id, name, active }) => ({ id, name, active })),
       zones: venue.zones.map(({ id, name, departmentId, active }) => ({

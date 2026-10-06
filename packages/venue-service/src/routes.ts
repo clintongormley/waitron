@@ -612,6 +612,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
+    // The departments and zones alone, for a screen that needs nothing else of the venue's setup.
+    app.get("/management-api/venue-service/departments-and-zones", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const result = await gated(sessionId, async (tx) => ({
+          departments: await listDepartments(tx, ctx.cfg),
+          zones: await listServiceZones(tx, ctx.cfg, { includeInactive: true }),
+        }));
+        return c.json(result);
+      }),
+    );
+
     app.get("/management-api/venue-service", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);

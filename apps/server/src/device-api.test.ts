@@ -2702,6 +2702,51 @@ describe("a device's approved profiles and switching its active one", () => {
         ],
       });
     });
+
+    it("with a person signed in on the device, leaves out the profiles that person may not use", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const managersOnly = await seedProfile("till");
+      const everyone = await seedProfile("till");
+      await approve(app, venue, t.deviceId, [managersOnly, everyone]);
+      await admitOnly(managersOnly, "manager");
+      const offered = async (cookie: string) =>
+        (
+          (await (await send(app, "GET", "/api/device/me", { cookie })).json()) as {
+            approvedProfiles: { id: string }[];
+          }
+        ).approvedProfiles.map((profile) => profile.id);
+
+      const staff = await signIn(t.deviceId, "staff");
+      expect(await offered(`${t.jar}; ${staff.cookie}`)).toEqual([t.profileId, everyone]);
+
+      const manager = await signIn(t.deviceId, "manager");
+      const [active, ...alternatives] = await offered(`${t.jar}; ${manager.cookie}`);
+      expect(active).toBe(t.profileId);
+      expect(alternatives.sort()).toEqual([managersOnly, everyone].sort());
+    });
+
+    it("judges by no one when the session belongs to another device", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const other = await till(app, venue, "Barra");
+      const managersOnly = await seedProfile("till");
+      await approve(app, venue, t.deviceId, [managersOnly]);
+      await admitOnly(managersOnly, "manager");
+      const elsewhere = await signIn(other.deviceId, "staff");
+
+      const res = await send(app, "GET", "/api/device/me", {
+        cookie: `${t.jar}; ${elsewhere.cookie}`,
+      });
+
+      expect(
+        ((await res.json()) as { approvedProfiles: { id: string }[] }).approvedProfiles.map(
+          (profile) => profile.id,
+        ),
+      ).toEqual([t.profileId, managersOnly]);
+    });
   });
 
   describe("POST /api/device/active-profile", () => {

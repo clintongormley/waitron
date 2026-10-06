@@ -430,6 +430,18 @@ it("says in both languages that a printer cannot be chosen for this device, nami
   expect(codeMessage("device.binding_invalid", "es")).toMatch(/impresora/i);
 });
 
+it("words a profile switch refused for the station or watcher the device shows, in both languages", () => {
+  for (const [code, en, es] of [
+    ["station.not_allowed", /station/i, /estación/i],
+    ["watcher.not_allowed", /watcher/i, /seguimiento/i],
+  ] as const) {
+    expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
+    expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
+    expect(codeMessage(code, "en")).toMatch(en);
+    expect(codeMessage(code, "es")).toMatch(es);
+  }
+});
+
 it("explains that unsupported published menus require a venue reset in both languages", () => {
   expect(codeMessage("menu.reset_required", "en")).toBe(
     "This venue has a menu in an unsupported format. Reset the venue before using menus.",

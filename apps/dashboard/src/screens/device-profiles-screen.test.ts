@@ -1727,7 +1727,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     ],
     ["none of its zones is still on", scopeChoices, ["z4"]],
   ] as const)(
-    "duplicates no scope when %s, so the refusal says a department is needed",
+    "duplicates no scope when %s, leaving the server to refuse the copy",
     async (_case, choices, zones) => {
       const api = stubApi({
         listDeviceProfiles: vi

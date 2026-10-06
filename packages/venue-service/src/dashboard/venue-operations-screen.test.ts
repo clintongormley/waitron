@@ -131,8 +131,6 @@ function field(el: VenueOperationsScreen, name: string) {
 function input(el: VenueOperationsScreen, name: string) {
   return el.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
 }
-/** One of the kitchen settings' dropdowns. */
-/** A till's starting-zone dropdown. */
 /** A dropdown's choices, as the text a person reads. */
 function options(box: Element) {
   return (box as Element & { options: { label: string }[] }).options

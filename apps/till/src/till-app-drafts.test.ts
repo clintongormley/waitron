@@ -978,6 +978,57 @@ describe("till-app: switching the device's profile with a table order open", () 
     expect(savedLines()).toHaveLength(1);
   });
 
+  it("holds the dialog open over the screen until the order's draft is opened again, so no edit lands in the draft being replaced", async () => {
+    let answerTill: (value: unknown) => void = () => {};
+    const switchDeviceProfile = switchStub();
+    const { el } = await mountApp({
+      ...profiles,
+      switchDeviceProfile,
+      getTill: vi
+        .fn()
+        .mockResolvedValueOnce(till(drillCanvas))
+        .mockImplementationOnce(() => new Promise((resolve) => (answerTill = resolve))),
+    });
+    await openMesa(el);
+
+    await askToSwitch(el);
+
+    expect(switchDeviceProfile).toHaveBeenCalledOnce();
+    const dialog = profileDialog(el);
+    expect(dialog).not.toBeNull();
+    expect(dialog!.busy).toBe(true);
+    const native = dialog!
+      .shadowRoot!.querySelector("wt-dialog")!
+      .shadowRoot!.querySelector("dialog")!;
+    expect(native.matches(":modal")).toBe(true);
+
+    answerTill(till(drillCanvas));
+    await flush(el, 6);
+
+    expect(profileDialog(el)).toBeNull();
+  });
+
+  it("says the order's change was refused and replaced, not that it could not be saved, when the switch's save is refused", async () => {
+    const switchDeviceProfile = switchStub();
+    const { el } = await mountApp({
+      ...profiles,
+      switchDeviceProfile,
+      saveDraft: vi.fn(server.saveDraft).mockRejectedValueOnce({
+        code: "draft.out_of_date",
+        status: 409,
+      }),
+    });
+    await openMesa(el);
+    press(el, "Beer");
+
+    await askToSwitch(el);
+
+    expect(switchDeviceProfile).not.toHaveBeenCalled();
+    expect(profileDialog(el)!.draftUnsaved).toBe(false);
+    expect(profileDialog(el)!.draftReplaced).toBe(true);
+    expect(rows(el)).toEqual([]);
+  });
+
   it("refuses to switch while an order with no party holds lines, which are never saved", async () => {
     const switchDeviceProfile = switchStub();
     const unseated = table("t9", "9", null);

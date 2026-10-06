@@ -294,6 +294,8 @@ export const en = {
   "profile.order_open": "Hold or clear the order in progress before switching profile.",
   "profile.draft_unsaved":
     "The order's last change could not be saved. Try again, or remove it, before switching profile.",
+  "profile.draft_replaced":
+    "The order's last change was refused, and the saved order is shown instead. Check it, then switch profile.",
   "printers.open": "Printers",
   "printers.title": "This device's printers",
   "printers.receipt": "Receipt printer",
@@ -1299,6 +1301,8 @@ export const es: Record<StringKey, string> = {
   "profile.order_open": "Aparca o vacía el pedido en curso antes de cambiar de perfil.",
   "profile.draft_unsaved":
     "No se pudo guardar el último cambio del pedido. Vuelve a intentarlo, o quítalo, antes de cambiar de perfil.",
+  "profile.draft_replaced":
+    "Se rechazó el último cambio del pedido y se muestra el pedido guardado. Revísalo y luego cambia de perfil.",
   "printers.open": "Impresoras",
   "printers.title": "Impresoras de este dispositivo",
   "printers.receipt": "Impresora de tickets",

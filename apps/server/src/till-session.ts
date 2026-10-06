@@ -4,7 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { AppError, deviceId as brandDeviceId, isUuid } from "@waitron/shared";
 import type { DeviceId } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { authorize, hashSessionToken, sessions, type Permission } from "@waitron/identity";
 import type { ProfileAction } from "@waitron/layouts";
 import {
@@ -57,6 +57,28 @@ export function clearSessionCookie(c: Context): void {
 
 export function readSessionToken(c: Context): string | null {
   return getCookie(c, SESSION_COOKIE) ?? null;
+}
+
+/** The person of the request's open session on `deviceId`, or `null` when there is none: a
+ * missing, unknown or ended session, or one opened on another device. */
+export async function signedInPersonOn(
+  tx: Transaction,
+  c: Context,
+  deviceId: string,
+): Promise<string | null> {
+  const token = readSessionToken(c);
+  if (token === null || !isUuid(token)) return null;
+  const [found] = await tx
+    .select({ personId: sessions.personId })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.tokenHash, hashSessionToken(token)),
+        eq(sessions.deviceId, deviceId),
+        isNull(sessions.endedAt),
+      ),
+    );
+  return found?.personId ?? null;
 }
 
 /**

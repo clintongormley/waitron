@@ -71,21 +71,23 @@ describe("till-profile-dialog", () => {
     expect(seen).toEqual([]);
   });
 
-  it.each(["device_profile.not_admitted", "device_profile.not_approved"])(
-    "a %s refusal shows under the profile, and choosing another clears it",
-    async (code) => {
-      const el = await mountDialog();
-      await chooseOption(picker(el), "pr-bar");
-      el.error = { code };
-      await el.updateComplete;
-      expect(picker(el).error).toBe(codeMessage(code));
-      expect(await bottom(el)).toBe(t("form.fix_fields"));
-      expect(button(el, "profile-switch").disabled).toBe(false);
-      await chooseOption(picker(el), "pr-counter");
-      await el.updateComplete;
-      expect(picker(el).error).toBe("");
-    },
-  );
+  it.each([
+    "device_profile.not_admitted",
+    "device_profile.not_approved",
+    "station.not_allowed",
+    "watcher.not_allowed",
+  ])("a %s refusal shows under the profile, and choosing another clears it", async (code) => {
+    const el = await mountDialog();
+    await chooseOption(picker(el), "pr-bar");
+    el.error = { code };
+    await el.updateComplete;
+    expect(picker(el).error).toBe(codeMessage(code));
+    expect(await bottom(el)).toBe(t("form.fix_fields"));
+    expect(button(el, "profile-switch").disabled).toBe(false);
+    await chooseOption(picker(el), "pr-counter");
+    await el.updateComplete;
+    expect(picker(el).error).toBe("");
+  });
 
   it("a refusal naming no field is said at the bottom", async () => {
     const el = await mountDialog({ error: { code: "device.payment_in_progress" } });
@@ -102,6 +104,11 @@ describe("till-profile-dialog", () => {
   it("an unsaved order change is said at the bottom", async () => {
     const el = await mountDialog({ draftUnsaved: true });
     expect(await bottom(el)).toBe(t("profile.draft_unsaved"));
+  });
+
+  it("a refused order change, replaced by the saved order, is said at the bottom", async () => {
+    const el = await mountDialog({ draftReplaced: true });
+    expect(await bottom(el)).toBe(t("profile.draft_replaced"));
   });
 
   it("shows the switch as busy while it is out", async () => {

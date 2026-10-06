@@ -826,6 +826,44 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(await pendingCount()).toBe(1);
   });
 
+  it("a station or watcher the kds profile does not list is 400, and the request survives", async () => {
+    const venue = await setupVenue(suite.db);
+    const { app, holdId } = openApp(venue.cfg);
+    const profileId = await seedProfile("kds");
+    const { id: watcherId } = await withTransaction(suite.db, (tx) =>
+      createWatcher(tx, venue.cfg, {
+        name: "Unlisted pass",
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+      }),
+    );
+    const cases = [
+      [{ stationId: venue.defaultStationId }, "station.not_allowed"],
+      [{ watcherId }, "watcher.not_allowed"],
+    ] as const;
+    for (const [index, [binding, code]] of cases.entries()) {
+      const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
+      await claimFor(app, venue, made, holdId);
+      const res = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${made.joinId}/accept`,
+        { cookie: venue.managerCookie, body: { name: "Pantalla Cocina", profileId, ...binding } },
+      );
+      expect({ code, status: res.status }).toEqual({ code, status: 400 });
+      expect((await errorOf(res)).code).toBe(code);
+      expect(await pendingCount()).toBe(index + 1);
+      const [enrolled] = await suite.db
+        .select({ id: devices.id })
+        .from(devices)
+        .where(eq(devices.id, made.joinId));
+      expect(enrolled).toBeUndefined();
+    }
+  });
+
   it("screens the body, and refuses the request before any of it is acted on", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);

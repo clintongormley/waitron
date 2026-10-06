@@ -1448,6 +1448,37 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     expect(await read(id)).toMatchObject({ ...narrowed, allowedZoneIds: null });
   });
 
+  it("refuses a PUT that moves a narrowed profile to another department without naming its zones, and keeps what was stored", async () => {
+    const name = uniqueName("Moved department");
+    const created = await send(
+      "POST",
+      handheld(name, {
+        departmentId: ordering.departmentId,
+        allowedZoneIds: [place.terrace],
+        startingZoneId: place.terrace,
+      }),
+    );
+    const id = (created.body as Detail).id;
+    const before = await read(id);
+
+    const res = await send(
+      "PUT",
+      handheld(name, { departmentId: place.deli, startingZoneId: place.deliCounter }),
+      id,
+    );
+
+    expect(res).toEqual({
+      status: 400,
+      body: {
+        error: {
+          code: "device_profile.access_invalid",
+          params: expect.objectContaining({ field: "allowedZoneIds" }),
+        },
+      },
+    });
+    expect(await read(id)).toEqual(before);
+  });
+
   it("keeps a starting screen a PUT omits, and clears it on an explicit null", async () => {
     const name = uniqueName("Start screen");
     const created = await send(

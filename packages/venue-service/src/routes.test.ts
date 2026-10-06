@@ -1253,6 +1253,36 @@ describe("venue service management routes", () => {
     ).not.toContainEqual(expect.objectContaining({ id: fx.zoneId }));
   });
 
+  it("lists only the venue's departments and every one of its zones, switched off included, for a manager", async () => {
+    const fx = await fixture();
+    const other = await fixture();
+    for (const venue of [fx, other]) {
+      const scope = { locationId: venue.locationId };
+      const department = await withTransaction(db, (tx) =>
+        createDepartment(tx, scope, { name: "Restaurant", defaultServiceMode: "table_tab" }),
+      );
+      await withTransaction(db, (tx) =>
+        configureZone(tx, scope, { zoneId: venue.zoneId, departmentId: department.id }),
+      );
+    }
+    await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, fx.zoneId));
+    const path = "/management-api/venue-service/departments-and-zones";
+
+    expect((await send(fx.app, "GET", path)).status).toBe(401);
+    expect((await send(fx.app, "GET", path, fx.staffCookie)).status).toBe(403);
+    const response = await send(fx.app, "GET", path, fx.managerCookie);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, { id: string; active?: boolean }[]>;
+    const whole = (await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json()) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(["departments", "zones"]);
+    expect(body.departments).toEqual(whole.departments);
+    expect(body.zones).toEqual(whole.zones);
+    expect(body.zones).toContainEqual(expect.objectContaining({ id: fx.zoneId, active: false }));
+    expect(body.zones).not.toContainEqual(expect.objectContaining({ id: other.zoneId }));
+  });
+
   it("scopes edited departments to their venue", async () => {
     // A manager cannot edit a department in another location sharing the same database.
     const fx = await fixture();

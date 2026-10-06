@@ -252,15 +252,25 @@ async function resolveHttpOrderZone(
   requestedZoneId: string | undefined,
 ): Promise<string | undefined> {
   if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
-  return withTransaction(
-    deps.db,
-    async (tx) =>
-      (
-        await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
-          profileId: session.device.deviceProfileId,
-        })
-      ).zoneId,
+  return withTransaction(deps.db, (tx) =>
+    newOrderZoneIn(tx, deps, session, lineCount, requestedZoneId),
   );
+}
+
+/** {@link resolveHttpOrderZone} for a route already inside its transaction. */
+async function newOrderZoneIn(
+  tx: Transaction,
+  deps: TillApiDeps,
+  session: { device: { deviceProfileId: string } },
+  lineCount: number,
+  requestedZoneId: string | undefined,
+): Promise<string | undefined> {
+  if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
+  return (
+    await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
+      profileId: session.device.deviceProfileId,
+    })
+  ).zoneId;
 }
 
 /** The subjects that are named: a request's optional body ids leave out what they do not carry. */
@@ -1101,11 +1111,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Deliberately unauthenticated: the lock screen's roster. No PIN material, role or status. A
-  // request that identifies a device lists only the people its profile admits.
+  // request that identifies a device lists only the people its profile admits, unless it asks for
+  // `everyone`, as a roster of colleagues does: that is the list a request with no device gets.
   app.get("/api/staff", (c) =>
     run(c, log, async () => {
       // Before the transaction: `tryReadDevice` opens one of its own when a sighting is due.
-      const device = await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device =
+        c.req.query("everyone") === "true"
+          ? null
+          : await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
       const staff = await withTransaction(deps.db, async (tx) => {
         return device === null
           ? listActiveStaff(tx)
@@ -1398,7 +1412,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           order === undefined ? null : await VENUE_SERVICE.findOrderContext(tx, cfg, order.id);
         const zoneId =
           order === undefined
-            ? await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId)
+            ? await newOrderZoneIn(tx, deps, session, body.lines.length, body.zoneId)
             : context?.zoneId;
         const mode =
           context?.serviceMode ??

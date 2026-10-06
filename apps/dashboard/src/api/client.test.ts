@@ -2373,15 +2373,18 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     ]);
   });
 
-  it("reads the departments and zones a profile can serve from the venue service", async () => {
+  it("reads the departments and zones a profile can serve, and nothing else of the venue's setup", async () => {
     const departments = [{ id: "d1", name: "Restaurant", active: true }];
     const zones = [{ id: "z1", name: "Terrace", departmentId: "d1", active: false }];
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ departments, zones, readiness: [], salePolicies: [] }));
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        departments: departments.map((department) => ({ ...department, tradingName: "R" })),
+        zones: zones.map((zone) => ({ ...zone, serviceMode: "prepay" })),
+      }),
+    );
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getProfileScopeChoices()).toEqual({ departments, zones });
-    expect(fetchImpl.mock.calls[0]![0]).toBe("/management-api/venue-service");
+    expect(fetchImpl.mock.calls[0]![0]).toBe("/management-api/venue-service/departments-and-zones");
   });
 
   it("updateDevice PATCHes the whole edit to the device's route (204)", async () => {

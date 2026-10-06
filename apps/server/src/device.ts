@@ -275,8 +275,9 @@ export async function endSessionsNotAdmitted(
 /**
  * Switch the device's active profile to `profileId` for the person signed in on `sessionId`: one
  * the device is approved for and the person may sign in on, whose list names the station or watcher
- * the device shows, with no payment of the device's in progress. Printers follow {@link updateDeviceSettings}; the sessions of people the new profile
- * does not admit end. Choosing the active profile changes nothing.
+ * the device shows, with no payment of the device's in progress. Printers follow
+ * {@link updateDeviceSettings}; the sessions of people the new profile does not admit end.
+ * Choosing the active profile changes nothing.
  */
 export async function switchActiveProfile(
   tx: Transaction,

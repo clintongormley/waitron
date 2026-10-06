@@ -472,7 +472,6 @@ function parseInactivityTimeoutSeconds(value: unknown): number | null {
   return value;
 }
 
-/** Absent stays absent; a present list must hold printer ids, each at most once. */
 /**
  * The id lists `fields` names, each an array of distinct uuids; an absent one is left out, and any
  * other value is refused `management.request_invalid` naming the field.

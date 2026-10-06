@@ -8,6 +8,7 @@ import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
 import { setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -1143,6 +1144,25 @@ describe("till-app counter menus and service zones", () => {
     rejectB(new TypeError("Failed to fetch"));
     await flush(el);
     expect(banner(el)!.textContent).toContain(t("service_zone.load_error"));
+    expect(c.selectedServiceZoneId).toBe("zone-counter");
+  });
+
+  it("says in its own words that the profile no longer works in the zone chosen", async () => {
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-a", "prepay")];
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      listZoneOffers: vi
+        .fn()
+        .mockRejectedValue({ code: "service_zone.not_allowed", status: 403, zoneId: "zone-a" }),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "counter-zone-selected", { zoneId: "zone-a" });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("service_zone.not_allowed"));
+    expect(banner(el)!.textContent).not.toContain(t("service_zone.load_error"));
     expect(c.selectedServiceZoneId).toBe("zone-counter");
   });
 

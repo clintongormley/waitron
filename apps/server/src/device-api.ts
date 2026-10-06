@@ -13,7 +13,12 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorizeManager, endDeviceSessions, type Permission } from "@waitron/identity";
+import {
+  authorizeManager,
+  canUseDeviceProfile,
+  endDeviceSessions,
+  type Permission,
+} from "@waitron/identity";
 import {
   chooseDevicePrinter,
   kindOfFormFactor,
@@ -56,7 +61,7 @@ import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
-import { isUuid, requireSession } from "./till-session.js";
+import { isUuid, requireSession, signedInPersonOn } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TillConfig } from "./till-config.js";
@@ -254,7 +259,16 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       const choices = await printerChoices(deps.db, device.deviceProfileId, device.locationId);
-      const approvedProfiles = await readApprovedProfiles(deps.db, device.deviceId);
+      const approvedProfiles = await withTransaction(deps.db, async (tx) => {
+        const [active, ...alternatives] = await readApprovedProfiles(tx, device.deviceId);
+        if (active === undefined) return [];
+        const personId = await signedInPersonOn(tx, c, device.deviceId);
+        if (personId === null) return [active, ...alternatives];
+        const usable = [active];
+        for (const profile of alternatives)
+          if (await canUseDeviceProfile(tx, profile.id, personId)) usable.push(profile);
+        return usable;
+      });
       // Non-secret config only: the reader's credentials never ride this response.
       return c.json({
         deviceId: device.deviceId,
@@ -267,7 +281,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         paymentSlipPrinterId: device.paymentSlipPrinterId,
         printerChoices: choices,
         profileId: device.deviceProfileId,
-        // The profiles a signed-in person may switch the device to, its active one first.
+        // Its active profile first, then the approved ones the person signed in on it may use; every
+        // approved one with nobody signed in. Display only: the switch checks both again.
         approvedProfiles,
       });
     }),
