@@ -1290,8 +1290,14 @@ until Discard; trimmed reverts close directly. Each accepted name commits before
 while another edited discovery name or newer delivered input stays unsaved. Pending writes block
 dismissal. Details and unpair confirmations remain exempt. Replacement, disconnect and delayed
 native close reports are covered in `apps/dashboard/src/screens/payment-readers.unsaved.test.ts`,
-alongside the unchanged Payments behavior and accessibility suites. Manual outcome/note/PIN
-attestation and independent provider forms remain pending, as do the other modal owners.
+alongside the unchanged Payments behavior and accessibility suites. Manual payment/refund
+outcome, note and PIN inputs now use the registry until submission. Cancel and native Escape
+retain those values until Discard; normalized reverts close directly. Accepted attestations commit
+before refresh, while newer delivered input remains dirty. Disconnect clears the PIN and invalidates
+pending questions; departed replies and controls leave replacement forms alone. Provider checks
+remain direct-close confirmations. Focused cases are in
+`apps/dashboard/src/screens/payment-attestation.unsaved.test.ts`. Independent provider forms
+remain pending, as do the other modal owners.
 Printer detail name/connection are page owners for the remaining page/navigation work. Other audited
 modal owners also remain to be wired. Keep automatic saves on their existing paths.
 

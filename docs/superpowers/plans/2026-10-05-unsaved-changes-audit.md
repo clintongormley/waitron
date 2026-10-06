@@ -376,3 +376,21 @@ editor alone. An Add dialog closed during an awaited child opening cannot reopen
 device suites. Eight English/Spanish, light/dark, phone/desktop confirmation renderings ran with axe
 and were inspected. Synthetic unload cases test listener cancellation, not the native reload prompt.
 Device modal owners are wired; Payments reader dialogs and the other modal/page owners remain pending.
+
+
+### Payments attestation checkpoint (2026-10-06)
+
+On the W69 branch, payment and refund attestation forms compare outcome, trimmed note and exact
+PIN with the empty opening values. Cancel and native Escape ask through the shared registry;
+Keep retains the entered values, Discard closes, and normalized reverts close directly. Successful
+attestations commit the submitted values before refreshing recovery lists; newer delivered input
+remains dirty. Refused writes retain their draft. Pending requests keep disabled inputs and
+nondismissible Escape. Provider-check confirmations remain direct-close exemptions.
+
+Disconnect disposes the scope, cancels its question and clears the local fields. Departed replies,
+control events and native close reports leave a replacement form alone. The focused cases are in
+`apps/dashboard/src/screens/payment-attestation.unsaved.test.ts`, alongside the unchanged Payments
+behavior and accessibility suites. English/Spanish, light/dark, phone/desktop editor and confirmation
+renderings ran with axe. Synthetic unload checks cover listener cancellation, not a native reload
+prompt. Reader naming was wired at the preceding checkpoint; the earlier device checkpoints' pending
+reader references are superseded. SumUp/Stripe forms and the other modal/page owners remain pending.

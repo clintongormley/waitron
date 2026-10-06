@@ -73,6 +73,8 @@ function stuckOutcomeText(resolution: StuckPaymentResolution): string | null {
 type BillTarget =
   { kind: "payment"; row: StuckBillPaymentRow } | { kind: "refund"; row: StuckBillRefundRow };
 
+type BillDraft = { outcome: string; note: string; pin: string };
+
 function billAmount(target: BillTarget): string {
   return target.kind === "payment"
     ? centsToDecimal(stringToCents(target.row.applied) + stringToCents(target.row.tip))
@@ -386,6 +388,39 @@ export class PaymentsScreen extends LitElement {
     },
   );
 
+  #billLeave?: LeaveCoordinator;
+  #billScope?: DraftScope<BillDraft>;
+  #billOperation?: object;
+  readonly #beforeBillClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.#billLeave ||
+    !this.#billScope ||
+    (await this.#billLeave.request({ scopes: [this.#billScope.id], reason, proceed() {} })) ===
+      "proceeded";
+
+  #billDraft(): BillDraft {
+    return { outcome: this.billOutcome, note: this.billNote.trim(), pin: this.billPin };
+  }
+
+  #closeBillAction(): void {
+    this.#billScope?.dispose();
+    this.#billScope = undefined;
+    this.billAction = null;
+    this.billOutcome = "";
+    this.billNote = "";
+    this.billPin = "";
+  }
+
+  async #requestBillClose(): Promise<void> {
+    const action = this.billAction;
+    if (
+      await this.renderRoot
+        .querySelector<WtDialog>("[data-test=bill-attest-dialog]")
+        ?.requestClose("cancel")
+    ) {
+      if (this.billAction === action) this.#closeBillAction();
+    }
+  }
+
   #readerLeave?: LeaveCoordinator;
   #editScope?: DraftScope<string>;
   readonly #discoveryScopes = new Map<string, DraftScope<string>>();
@@ -437,6 +472,12 @@ export class PaymentsScreen extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#statusVersion++;
+    this.#billOperation = undefined;
+    this.renderRoot
+      .querySelector<WtDialog>("[data-test=bill-attest-dialog]")
+      ?.closeAfter("security");
+    this.#closeBillAction();
+    this.billBusy = false;
     this.#readerOperation = undefined;
     this.#editScope?.dispose();
     this.#editScope = undefined;
@@ -785,6 +826,7 @@ export class PaymentsScreen extends LitElement {
 
   #openBillAction(target: BillTarget, mode: "check" | "attest"): void {
     if (this.billBusy) return;
+    this.#closeBillAction();
     this.billAction = { target, mode };
     this.billOutcome = "";
     this.billNote = "";
@@ -792,6 +834,15 @@ export class PaymentsScreen extends LitElement {
     this.billAttempted = false;
     this.billFormError = null;
     this.billFormErrorText = null;
+    this.#billLeave = leaveCoordinatorFor(this);
+    if (mode === "attest")
+      this.#billScope = this.#billLeave?.register({
+        id: {},
+        current: () => this.#billDraft(),
+        snapshot: (value) => ({ ...value }),
+        equal: (a, b) => a.outcome === b.outcome && a.note === b.note && a.pin === b.pin,
+        restore: () => {},
+      });
   }
 
   #billOutcomeText(answer: BillRecoveryOutcome): string | null {
@@ -845,6 +896,8 @@ export class PaymentsScreen extends LitElement {
     const outcome = this.billOutcome;
     const note = this.billNote.trim();
     const pin = this.billPin;
+    const scope = this.#billScope;
+    const operation = {};
     this.billAttempted = true;
     this.billFormError = null;
     this.billFormErrorText = null;
@@ -852,6 +905,7 @@ export class PaymentsScreen extends LitElement {
       this.#focusFirstInvalid("[data-test=bill-attest-dialog]");
       return;
     }
+    this.#billOperation = operation;
     this.billBusy = true;
     try {
       const target = action.target;
@@ -867,14 +921,22 @@ export class PaymentsScreen extends LitElement {
               note,
               pin,
             });
+      if (!this.isConnected || this.billAction !== action) return;
+      scope?.commit({ outcome, note, pin });
       const message = this.#billOutcomeText(answer);
       this.billResult = {
         text: `${this.#billOrder(target.row)}: ${message ?? t("payments.bill.check_failed")}`,
         refused: message === null,
       };
-      this.billAction = null;
+      if (!scope?.isDirty()) {
+        this.renderRoot
+          .querySelector<WtDialog>("[data-test=bill-attest-dialog]")
+          ?.closeAfter("saved");
+        this.#closeBillAction();
+      }
       await this.#loadBillRecovery(true);
     } catch (error) {
+      if (!this.isConnected || this.billAction !== action) return;
       const code = codeOf(error);
       if (
         code === "bill.payment_not_stuck" ||
@@ -882,7 +944,10 @@ export class PaymentsScreen extends LitElement {
         code === "bill.payment_not_found" ||
         code === "bill.refund_not_found"
       ) {
-        this.billAction = null;
+        this.renderRoot
+          .querySelector<WtDialog>("[data-test=bill-attest-dialog]")
+          ?.closeAfter("security");
+        this.#closeBillAction();
         this.billResult = {
           text: `${this.#billOrder(action.target.row)}: ${billRefusalText(error)}`,
           refused: true,
@@ -893,7 +958,10 @@ export class PaymentsScreen extends LitElement {
         this.billFormErrorText = billRefusalText(error);
       }
     } finally {
-      this.billBusy = false;
+      if (this.#billOperation === operation) {
+        this.#billOperation = undefined;
+        this.billBusy = false;
+      }
     }
     if (this.#billPinRefused()) this.#focusFirstInvalid("[data-test=bill-attest-dialog]");
   }
@@ -1085,10 +1153,12 @@ export class PaymentsScreen extends LitElement {
     return html`<wt-dialog
       data-test="bill-attest-dialog"
       .open=${true}
+      .beforeClose=${this.#billScope ? this.#beforeBillClose : undefined}
       ?dismissible=${!this.billBusy}
       heading=${t("payments.bill.attest_heading")}
-      @wt-close=${() => {
-        if (!this.billBusy) this.billAction = null;
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (!this.billBusy && this.billAction === action) this.#closeBillAction();
       }}
     >
       <p>
@@ -1120,7 +1190,9 @@ export class PaymentsScreen extends LitElement {
         error=${errors.outcome ?? ""}
         ?disabled=${this.billBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          if (!this.isConnected || this.billAction !== action) return;
           this.billOutcome = event.detail.value;
+          this.#billScope?.changed();
         }}
       ></wt-combobox>
       <wt-input
@@ -1132,7 +1204,9 @@ export class PaymentsScreen extends LitElement {
         .error=${errors.note ?? ""}
         ?disabled=${this.billBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          if (!this.isConnected || this.billAction !== action) return;
           this.billNote = event.detail.value;
+          this.#billScope?.changed();
         }}
       ></wt-input>
       <wt-input
@@ -1146,7 +1220,9 @@ export class PaymentsScreen extends LitElement {
         .error=${errors.pin ?? ""}
         ?disabled=${this.billBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          if (!this.isConnected || this.billAction !== action) return;
           this.billPin = event.detail.value;
+          this.#billScope?.changed();
           if (this.#billPinRefused()) {
             this.billFormError = null;
             this.billFormErrorText = null;
@@ -1158,9 +1234,7 @@ export class PaymentsScreen extends LitElement {
           slot="cancel"
           variant="secondary"
           ?disabled=${this.billBusy}
-          @click=${() => {
-            this.billAction = null;
-          }}
+          @click=${() => void this.#requestBillClose()}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
@@ -1771,7 +1845,7 @@ export class PaymentsScreen extends LitElement {
       ></wt-data-table>
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
       ${keyed(this.editor, this.#renderEditor())} ${this.#renderResolveDialog()}
-      ${this.#renderBillDialog()}
+      ${keyed(this.billAction, this.#renderBillDialog())}
     `;
   }
 }
