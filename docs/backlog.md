@@ -2932,6 +2932,10 @@ focused checks, normal push hook and every current-head CI job passed before lan
 The merge has its own CI run `37425891984`; its result is still pending at this update.
 This dated landing supersedes the implementation checkpoint above.
 **Next action:** read the merge's CI result, then rebase and land the approved A231 [#1256](https://github.com/clintongormley/waitron/pull/1256).
+**Update, 2026-10-06 (A231 CI):** the rebased provisioning CLI fixture omitted the required
+taxpayer domicile. Its eight refusal cases failed locally with `Unexpected prompt`; supplying
+the domicile restores them without changing their assertions. The provisioning coverage run
+passes all 207 tests. A231 still needs green CI on the corrected head before landing.
 Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A231p
 and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs

@@ -18,6 +18,7 @@ const fields = {
   country: "ES",
   "tax-id": "B12345678",
   "legal-name": "Issuer SL",
+  "taxpayer-domicile": "Calle Fiscal 8, 28013 Madrid",
   "location-name": "Venue",
   territory: "ES-common",
   locale: "es-ES",
