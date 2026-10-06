@@ -1212,8 +1212,12 @@ Keep retains the destination or disposition; Discard closes without a move/delet
 the browsing selection. Refusals and changed deletion counts retain the staged choice; successful
 writes retire the scope. Focused real-browser tests cover reverts, busy answers, reconnect,
 child close reports and detached controls acting on a replacement dialog. Canvas Create/Duplicate
-name dialogs and the remaining modal audit, followed by page/history/navigation work, still keep
-W69 incomplete.
+name dialogs now protect changed names and the Create form factor through native Escape and
+request-close. Keep retains values and returns focus; Discard closes once without writing.
+Create proceeds directly into the local editor. Duplicate retains entry during its write and after
+refusal, then releases the scope before refresh on success. Focused browser tests cover reverts,
+ancestor leave, child reports, reconnect, busy controls and stale answers. Remaining table-order
+review/serve inputs, the profile container close, and page/history/navigation work keep W69 incomplete.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
 redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue

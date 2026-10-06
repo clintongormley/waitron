@@ -1519,3 +1519,72 @@ Rebase onto `53659aa27965e188a567986c0630fcad9a8a3944` retained 56 equal patches
 the frozen install passed. Tasks 1/4 remain partial: canvas Create/Duplicate name dialogs and the
 remaining modal classification still precede Tasks 5–6 page/history/navigation/native reload.
 Neither proposed W69 PR is ready for finish-branch.
+
+
+## Canvas name-dialog checkpoint, 2026-10-06
+
+Create and Duplicate name dialogs now register separate scopes with the existing coordinator.
+Create compares the raw name and form factor passed into the local editor; Duplicate compares
+its trimmed submitted name, retaining invalid whitespace as a distinguishable value. Native
+Escape and request-close ask about changes; Keep retains the entry and returns native input
+focus, while Discard closes once without a canvas write. Reverts remove unload protection.
+Create transfers its fields into the existing local editor directly. That editor's independent
+page scope remains Task 6 work.
+
+Duplicate stays open and nondismissible while its create request runs. A refusal keeps the name
+and its protection. Success commits and unregisters before the list refresh, including a failing
+refresh. Submission invalidates an earlier question, and detached controls cannot mutate or
+submit retained entry. Parent requests scoped to the screen cover the name dialogs. These
+boundaries are exercised by `apps/dashboard/src/screens/canvas-editor-screen.unsaved.test.ts`.
+
+Receipts from the feature worktree:
+
+- `pnpm --filter @waitron/dashboard exec vitest run src/screens/canvas-editor-screen.unsaved.test.ts`
+  first failed all twelve added cases: missing unload notification, child close propagation,
+  detached input/submission, and the immediate Duplicate close. No production code preceded it.
+- The focused existing behavior, accessibility and expanded unsaved suites passed 110 tests.
+  A refusal test initially sent Escape after disabling its focused input; explicitly refocusing
+  the re-enabled native input exercised its native cancellation. No existing assertion changed.
+- Nine independently removed guards in an installed disposable clone each produced the intended
+  one failing case and one passing untouched Duplicate control. Restoring the clone passed all
+  21 new cases. The controls removed each name dialog's close gate, Create name/form-factor
+  notifications, Create parent association, child-report filtering, busy-question invalidation,
+  Create disconnect disposal and detached-input protection.
+- A temporary browser harness passed 16 flows across English/Spanish, light/dark and 390/1280 px,
+  with 32 axe scans and 32 captures inspected in four contact sheets. The initial screenshot
+  path outside Vite's allowed tree was refused; captures from the corrected path supply the
+  visual receipt. The harness and captures are archived outside product source.
+- Unedited fiscal golden-write and immutability suites passed 20 tests. Dashboard typechecking
+  passed after adding explicit registry type parameters. Scoped lint passed after removing an
+  unused lifecycle parameter; this cleanup leaves the tested guard expressions unchanged.
+
+The command logs, deletion controls, source inventories and visual artifacts live under the
+lane's local `receipts/w69-canvas-20261006/`. This checkpoint does not complete W69 or replace
+current-head CI and the whole-branch review.
+
+### Remaining modal boundary, source inspection on 2026-10-06
+
+Re-ran the literal `<wt-modal`/`<wt-dialog` inventory over dashboard, till, setup and the contributed
+media/bookings/venue-service/adjustment screens. This scan finds literal markup; it does not prove
+that a dynamically constructed dialog is absent. Read the owners without close gates against the
+original P/E classification. The remaining staged modal inputs are:
+
+- `till-table-order-screen` preview (`#previewDialog`) and count (`#serveDialog`), including the
+  `pendingDraft` review choices and `servePending.count`. Their Back and native `wt-close` routes
+  currently remove local entry. Read their command-acceptance boundary before adding scopes.
+- `till-app` line-edit dead-end station choice (`#renderEditDeadEnds`): Cancel and native close
+  currently remove the selected station. This is distinct from the protected standalone
+  `dead-ends-dialog` and remains Task 4 work.
+- The outer profile container in `dashboard-app` still closes through `#closeProfile` without
+  consulting the protected `profile-screen` child. Its native Close/Cancel path and shell
+  profile/history paths remain to be wired. The child scope's ID is the profile-screen element.
+
+Other ungated literal dialogs in that scan match the existing E rows: delete/publish/security
+confirmations, report/detail views, immediate language/colour/device/printer choices, held-order
+move target buttons, table takeover/fire/move-target confirmations, and station-health drilldowns.
+This is source classification, not new runtime verification of every exemption. Existing owner
+suites retain their assertions. Split/transfer selections and other inline table action inputs
+remain staged page work in Tasks 4/6 even though their markup is not a dialog.
+
+Tasks 1/4 remain partial. Shared history/shell integration and all page/setup owners in Tasks 5/6
+remain open. Neither proposed PR is ready for finish-branch.

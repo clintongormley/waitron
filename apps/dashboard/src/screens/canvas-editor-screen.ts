@@ -2,7 +2,9 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, UrlStateController } from "@waitron/ui";
+import { submitOnEnter, baseStyles, UrlStateController, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
+import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -30,6 +32,11 @@ import {
 } from "./canvas-editor/card-contracts.js";
 import { validateCanvasDraft } from "./canvas-editor/validate-canvas.js";
 import type { Canvas, DashboardApi } from "../api/client.js";
+
+interface CreateEntry {
+  name: string;
+  formFactor: FormFactor;
+}
 
 function clampSpan(field: "colSpan" | "rowSpan", value: number, columns: number): number {
   return field === "colSpan" ? Math.min(Math.max(value, 1), columns) : Math.max(value, 1);
@@ -222,6 +229,88 @@ export class CanvasEditorScreen extends LitElement {
 
   @state() private saving = false;
 
+  @state() private duplicating = false;
+  #leave?: LeaveCoordinator;
+  readonly #createId = {};
+  readonly #duplicateId = {};
+  #createScope?: DraftScope<CreateEntry>;
+  #duplicateScope?: DraftScope<string>;
+  #createBaseline?: CreateEntry;
+  #duplicateBaseline?: string;
+
+  #createEntry(): CreateEntry {
+    return { name: this.createName, formFactor: this.createFormFactor };
+  }
+
+  #duplicateEntry(): string {
+    return this.duplicateName.trim() || this.duplicateName;
+  }
+
+  #nameDialog(kind: "create" | "duplicate"): WtDialog | null {
+    return this.shadowRoot?.querySelector<WtDialog>(`[data-dialog=${kind}]`) ?? null;
+  }
+
+  readonly #beforeCreateClose = (reason: LeaveReason): Promise<boolean> =>
+    this.#beforeNameClose(this.#createId, reason);
+  readonly #beforeDuplicateClose = (reason: LeaveReason): Promise<boolean> =>
+    this.#beforeNameClose(this.#duplicateId, reason);
+
+  async #beforeNameClose(id: object, reason: LeaveReason): Promise<boolean> {
+    if (!this.isConnected || (id === this.#duplicateId && this.duplicating)) return false;
+    return (await this.#leave!.request({ scopes: [id], reason, proceed() {} })) === "proceeded";
+  }
+
+  override willUpdate(): void {
+    if (!this.isConnected) return;
+    this.#leave ??= leaveCoordinatorFor(this);
+    if (!this.createOpen) {
+      this.#createScope?.dispose();
+      this.#createScope = undefined;
+      this.#createBaseline = undefined;
+    } else if (!this.#createScope) {
+      this.#createBaseline ??= this.#createEntry();
+      this.#createScope = this.#leave?.register<CreateEntry>({
+        id: this.#createId,
+        parent: this,
+        current: () => this.#createEntry(),
+        snapshot: (value) => ({ ...value }),
+        equal: sameValue,
+        restore: (value) => {
+          this.createName = value.name;
+          this.createFormFactor = value.formFactor;
+        },
+      });
+      this.#createScope?.commit(this.#createBaseline);
+    }
+    if (this.duplicateTarget === null) {
+      this.#duplicateScope?.dispose();
+      this.#duplicateScope = undefined;
+      this.#duplicateBaseline = undefined;
+    } else if (!this.#duplicateScope) {
+      this.#duplicateBaseline ??= this.#duplicateEntry();
+      this.#duplicateScope = this.#leave?.register<string>({
+        id: this.#duplicateId,
+        parent: this,
+        current: () => this.#duplicateEntry(),
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        restore: (value) => {
+          this.duplicateName = value;
+        },
+      });
+      this.#duplicateScope?.commit(this.#duplicateBaseline);
+    }
+  }
+
+  override disconnectedCallback(): void {
+    this.#createScope?.dispose();
+    this.#duplicateScope?.dispose();
+    this.#createScope = undefined;
+    this.#duplicateScope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
   #editorRequest = 0;
   #savedTabKeys = new Set<string>();
   readonly #url = new UrlStateController(
@@ -265,6 +354,7 @@ export class CanvasEditorScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#showError(null);
+    this.requestUpdate();
     void this.#load();
   }
 
@@ -317,6 +407,7 @@ export class CanvasEditorScreen extends LitElement {
   // ── Crear ────────────────────────────────────────────────────────────────────────────────────────
 
   #openCreate(): void {
+    if (!this.isConnected || this.createOpen) return;
     this.createName = "";
     this.createFormFactor = FORM_FACTORS[0];
     this.createOpen = true;
@@ -325,18 +416,31 @@ export class CanvasEditorScreen extends LitElement {
   #bindField(field: "createName" | "draftName" | "duplicateName") {
     return (event: CustomEvent<{ value: string }>): void => {
       event.stopPropagation();
+      if (
+        !this.isConnected ||
+        (field === "createName" && !this.createOpen) ||
+        (field === "duplicateName" && (this.duplicateTarget === null || this.duplicating))
+      )
+        return;
       this[field] = event.detail.value;
+      if (field === "createName") this.#createScope?.changed();
+      if (field === "duplicateName") this.#duplicateScope?.changed();
     };
   }
 
   #onCreateFormFactor(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    if (!this.isConnected || !this.createOpen) return;
     this.createFormFactor = event.detail.value as FormFactor;
+    this.#createScope?.changed();
   }
 
   /** Nothing is written until Guardar. `structuredClone` keeps the shared `DEFAULT_CANVASES` template
    * untouched by the editor's edits. */
   #confirmCreate(): void {
+    if (!this.isConnected || !this.createOpen) return;
+    this.#createScope?.commit(this.#createEntry());
+    this.#nameDialog("create")?.closeAfter("saved");
     ++this.#editorRequest;
     this.draft = structuredClone(DEFAULT_CANVASES[this.createFormFactor]);
     this.draftName = this.createName;
@@ -684,19 +788,31 @@ export class CanvasEditorScreen extends LitElement {
   // ── Duplicar ───────────────────────────────────────────────────────────────────────────────────
 
   #openDuplicate(canvas: Canvas): void {
+    if (!this.isConnected || this.duplicateTarget !== null) return;
     this.duplicateTarget = canvas;
     this.duplicateName = `${canvas.name}${t("canvas_editor.copy_suffix")}`;
   }
 
-  /** Duplicar writes immediately and the server accepts `""` as a name, so a blank name is refused
-   * here and the dialog stays open for a correction. */
-  #confirmDuplicate(): void {
+  async #confirmDuplicate(): Promise<void> {
     const target = this.duplicateTarget;
-    if (target === null) return;
+    if (!this.isConnected || this.duplicating || target === null) return;
     const name = this.duplicateName.trim();
     if (name === "") return;
-    this.duplicateTarget = null;
-    void this.#mutate(() => this.api.createCanvas(name, target.definition));
+    this.duplicating = true;
+    this.#duplicateScope?.commit(this.#duplicateBaseline!);
+    try {
+      await this.#mutate(async () => {
+        await this.api.createCanvas(name, target.definition);
+        if (this.duplicateTarget !== target) return;
+        this.#duplicateScope?.commit(name);
+        this.#duplicateScope?.dispose();
+        this.#duplicateScope = undefined;
+        this.duplicateTarget = null;
+        this.#nameDialog("duplicate")?.closeAfter("saved");
+      });
+    } finally {
+      this.duplicating = false;
+    }
   }
 
   // ── Eliminar ───────────────────────────────────────────────────────────────────────────────────
@@ -800,14 +916,19 @@ export class CanvasEditorScreen extends LitElement {
 
   #renderCreateDialog(): TemplateResult {
     return html`<wt-dialog
+      data-dialog="create"
       heading=${t("canvas_editor.create_title")}
+      .beforeClose=${this.#createScope ? this.#beforeCreateClose : undefined}
       .open=${this.createOpen}
-      @wt-close=${() => (this.createOpen = false)}
+      @wt-close=${(event: Event) => {
+        if (event.target === event.currentTarget && this.isConnected) this.createOpen = false;
+      }}
     >
       <wt-input
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-create]"))}
         class="field"
         data-test="create-name"
+        name="name"
         label=${t("canvas_editor.create_name_label")}
         .value=${this.createName}
         @wt-change=${this.#bindField("createName")}
@@ -827,14 +948,21 @@ export class CanvasEditorScreen extends LitElement {
 
   #renderDuplicateDialog(): TemplateResult {
     return html`<wt-dialog
+      data-dialog="duplicate"
       heading=${t("canvas_editor.duplicate_title")}
+      .dismissible=${!this.duplicating}
+      .beforeClose=${this.#duplicateScope ? this.#beforeDuplicateClose : undefined}
       .open=${this.duplicateTarget !== null}
-      @wt-close=${() => (this.duplicateTarget = null)}
+      @wt-close=${(event: Event) => {
+        if (event.target === event.currentTarget && this.isConnected) this.duplicateTarget = null;
+      }}
     >
       <wt-input
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-duplicate]"))}
         class="field"
         data-test="duplicate-name"
+        name="name"
+        ?disabled=${this.duplicating}
         label=${t("canvas_editor.duplicate_name_label")}
         .value=${this.duplicateName}
         @wt-change=${this.#bindField("duplicateName")}
@@ -843,8 +971,8 @@ export class CanvasEditorScreen extends LitElement {
         slot="footer"
         variant="primary"
         data-test="confirm-duplicate"
-        ?disabled=${this.duplicateName.trim() === ""}
-        @click=${() => this.#confirmDuplicate()}
+        ?disabled=${this.duplicating || this.duplicateName.trim() === ""}
+        @click=${() => void this.#confirmDuplicate()}
         >${t("canvas_editor.duplicate")}</wt-button
       >
     </wt-dialog>`;
