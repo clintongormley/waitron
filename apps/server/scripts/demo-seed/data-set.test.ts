@@ -20,6 +20,12 @@ describe("demo data sets", () => {
     expect(() => demoDataSet("no-such-set")).toThrow(/no-such-set/);
   });
 
+  it("refuses an id an object inherits rather than one a data set has", () => {
+    for (const id of ["toString", "constructor", "__proto__"]) {
+      expect(() => demoDataSet(id)).toThrow(`demoDataSet: no demo data set "${id}"`);
+    }
+  });
+
   it("holds Casa Delgado's existing data unchanged", () => {
     const set = DEMO_DATA_SETS["casa-delgado-es"]!;
     expect(set.menus.restaurant).toBe(CASA_DELGADO);

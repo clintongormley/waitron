@@ -4,14 +4,15 @@ import type { SeedPerson } from "./staff.js";
 import type { SeedReason } from "./seed-adjustments.js";
 import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
-// In a module of its own because `seed-adjustments.ts` uses it and the data set imports that file.
+// In a module of its own: `seed-adjustments.ts` uses it, and `data-sets/casa-delgado-es.ts`, which
+// this file imports, imports `seed-adjustments.ts`.
 export { inLanguages } from "./in-languages.js";
 
 /** The language staff-facing plain names are written in; the staff apps exist in these two. */
 export type StaffLanguage = SeedLocale;
 export type StaffText = Readonly<Record<StaffLanguage, string>>;
 
-/** Everything a demo venue's seed writes that belongs to its country; a pack names one by `id`. */
+/** What a demo seed writes from one data set; a pack names one by `id`. */
 export interface DemoDataSet {
   readonly id: string;
   readonly menus: {
@@ -40,7 +41,6 @@ export const DEMO_DATA_SETS: Readonly<Record<string, DemoDataSet>> = {
 
 /** Throws for an id no data set has; `data-set.test.ts` holds that every pack's id resolves. */
 export function demoDataSet(id: string): DemoDataSet {
-  const set = DEMO_DATA_SETS[id];
-  if (set === undefined) throw new Error(`no demo data set "${id}"`);
-  return set;
+  if (!Object.hasOwn(DEMO_DATA_SETS, id)) throw new Error(`demoDataSet: no demo data set "${id}"`);
+  return DEMO_DATA_SETS[id]!;
 }

@@ -79,7 +79,10 @@ async function resolveStationIds(tx: Transaction, locationId: string): Promise<S
   return { kitchen, bar: bar.id, upstairsBar: upstairsBar.id, deli: deli.id };
 }
 
-/** Casa Delgado becomes the location's default menu; the other menus are added beside it. */
+/**
+ * The data set's restaurant menu becomes the location's default menu; the others are added beside
+ * it.
+ */
 export async function seedCatalogues(
   tx: Transaction,
   { locationId, locale, dataSet }: SeedCataloguesInput,

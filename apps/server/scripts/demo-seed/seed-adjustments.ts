@@ -84,14 +84,17 @@ export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason[] = [
   },
 ];
 
+export interface SeedAdjustmentReasonsInput {
+  locale: SeedLocale;
+  dataSet: DemoDataSet;
+  /** The venue's content languages; each reason's names are cut to them. */
+  languages: readonly string[];
+}
+
 /** Creates each example reason not already present under its name in the seed's language. */
 export async function seedAdjustmentReasons(
   tx: Transaction,
-  {
-    locale,
-    dataSet,
-    languages,
-  }: { locale: SeedLocale; dataSet: DemoDataSet; languages: readonly string[] },
+  { locale, dataSet, languages }: SeedAdjustmentReasonsInput,
 ): Promise<void> {
   const present = new Set(
     (await listAdjustmentReasons(tx, { includeInactive: true })).map((reason) => reason.name),

@@ -1,6 +1,5 @@
-// The seeded staff names are Spanish because a staff name is one plain string, never translated at
-// read time. `createOptionList` and `writeProductModifiers` are not session-gated, so this calls
-// them directly rather than raw-inserting.
+// `createOptionList` and `writeProductModifiers` are not session-gated, so this calls them directly
+// rather than raw-inserting.
 
 import { randomUUID } from "node:crypto";
 import { createOptionList, writeProductModifiers } from "@waitron/catalogue";
