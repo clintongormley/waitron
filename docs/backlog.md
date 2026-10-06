@@ -6191,7 +6191,7 @@ bump it when a fixed version is published, and run the certificate suites in tho
   `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) writes
   `look/venue-defaults-*.png` screenshots into `apps/dashboard/src/screens/` on every run, which git
   shows as untracked. (d) Zones and adjustment reasons offer Enable (W110d, #1273); departments
-  and floor tables do too (W110e). A department is enabled through `active` on
+  and floor tables do too (W110e, #1290). A department is enabled through `active` on
   `PATCH /management-api/venue-service/departments/:departmentId`, from its policy-tree row and
   the departments tab; floor tables through `active` on `PATCH /management-api/tables/:id`, which
   refuses `table.zone_inactive` while the table's zone, or that zone's department, is disabled;
