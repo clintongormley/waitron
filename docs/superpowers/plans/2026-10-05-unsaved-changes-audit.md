@@ -43,6 +43,21 @@ in the inventory. The retired location drawer policy adds no draft; device/profi
 and the manual drawer command retain their own behavior. This reconciliation does not complete
 bill payment, collection, the other pending modal owners or page/navigation protection.
 
+## 2026-10-06 table-dialog checkpoint
+
+The table screen's send-preview bill choice and serving count now register separate child scopes.
+`apps/till/src/screens/till-table-order-screen.preview-unsaved.test.ts` and
+`apps/till/src/screens/till-table-order-screen.serve-unsaved.test.ts` exercise Back/native Escape,
+Keep/local Discard, unchanged/reverted entry, direct Confirm, reconnect, child close reports and
+replacement openings. Confirm retires its scope before emitting the existing command. These
+suites use the real table screen, shared coordinator and native dialogs.
+
+The preview's station choices and Remove action already change the retained party draft through
+`setLineMakeAt` and `removeLine`; the new suite checks that Back retains those changes without a
+second warning. Discard of the separate bill choice does not restore or delete party draft lines.
+Page-level destination/join selections and inline split/transfer remain for Tasks 5–6; this
+checkpoint does not mark the whole table-screen inventory row complete.
+
 ## How to reproduce discovery
 
 Run each command separately and inspect its exit status. The broad search deliberately includes helpers before classifying their owners.

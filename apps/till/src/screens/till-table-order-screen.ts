@@ -1,5 +1,6 @@
 import { optionAnswers } from "../widgets/option-snapshot.js";
-import { ContentLanguageController } from "@waitron/ui";
+import { ContentLanguageController, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
@@ -354,17 +355,6 @@ class TabPayStore extends WorkingOrderStore {
   }
 }
 
-/**
- * The TILL table-ordering screen: one open table's tab. The draft bar holds the CURRENT draft only,
- * never the whole tab.
- *
- * FISCAL FIREWALL. The screen owns NO fiscal path: every write is dispatched upward for the app to
- * persist. Pay reuses `tender-pay` against the {@link TabPayStore}, and the screen re-emits its
- * `confirm-payment` as `pay-tab`, so the app settles the whole tab through the existing `recordSale`
- * verb, never a new fiscal verb and never a re-price.
- *
- * Every handler only writes reactive state or dispatches upward, so no `isConnected` guard is needed.
- */
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
   static override styles = [
@@ -1182,6 +1172,61 @@ export class TillTableOrderScreen extends LitElement {
   @state() private servePending: { row: CurrentOrderRow; undo: boolean; count: Decimal } | null =
     null;
 
+  readonly #serveId = {};
+  #serveScope?: DraftScope<Decimal>;
+  #serveBaseline?: Decimal;
+  #serveLeave?: LeaveCoordinator;
+  #serveOpening = 0;
+  readonly #beforeServeClose = async (reason: LeaveReason): Promise<boolean> => {
+    const opening = this.#serveOpening;
+    const outcome = await this.#serveLeave!.request({
+      scopes: [this.#serveId],
+      reason,
+      proceed() {},
+    });
+    return outcome === "proceeded" && opening === this.#serveOpening;
+  };
+
+  #watchServe(): void {
+    if (this.servePending === null) {
+      this.#serveScope?.dispose();
+      this.#serveScope = undefined;
+      this.#serveBaseline = undefined;
+      return;
+    }
+    if (this.#serveScope) return;
+    this.#serveLeave = leaveCoordinatorFor(this);
+    if (!this.#serveLeave) return;
+    this.#serveBaseline ??= this.servePending.count;
+    this.#serveScope = this.#serveLeave.register<Decimal>({
+      id: this.#serveId,
+      parent: this,
+      current: () => this.servePending!.count,
+      snapshot: (value) => value,
+      equal: (a, b) => compareDecimal(a, b) === 0,
+      restore: (count) => {
+        if (this.servePending) this.servePending = { ...this.servePending, count };
+      },
+    });
+    this.#serveScope.commit(this.#serveBaseline);
+  }
+
+  #closeServe(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.servePending) return;
+    this.servePending = null;
+    this.#watchServe();
+  }
+
+  #dismissServe(): void {
+    if (!this.isConnected || !this.servePending) return;
+    if (this.#serveScope) {
+      void this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]")!.requestClose("cancel");
+    } else {
+      this.servePending = null;
+    }
+  }
+
   /** The line open in the Change editor. */
   @state() private changeLine: TabLine | null = null;
   /** Built once when the editor opens, not per render: the picker seeds from these once. */
@@ -1287,6 +1332,7 @@ export class TillTableOrderScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.requestUpdate();
     this.#watchDraft();
     this.#measure(this.getBoundingClientRect().width);
     if (this.hasUpdated) {
@@ -1312,6 +1358,12 @@ export class TillTableOrderScreen extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#serveScope?.dispose();
+    this.#serveScope = undefined;
+    this.#serveLeave = undefined;
+    this.#previewScope?.dispose();
+    this.#previewScope = undefined;
+    this.#previewLeave = undefined;
     this.#watchedDraft?.stop();
     this.#watchedDraft = undefined;
     this.#resizing?.disconnect();
@@ -1334,6 +1386,55 @@ export class TillTableOrderScreen extends LitElement {
   /** The held group Add to held group joins; the first held group when unset or gone. */
   @state() private joinTarget: string | null = null;
   @state() private pendingDraft: PendingDraft | null = null;
+  readonly #previewId = {};
+  #previewScope?: DraftScope<{ value: string; label: string } | null>;
+  #previewLeave?: LeaveCoordinator;
+  #previewOpening = 0;
+  readonly #beforePreviewClose = async (reason: LeaveReason): Promise<boolean> => {
+    const opening = this.#previewOpening;
+    const outcome = await this.#previewLeave!.request({
+      scopes: [this.#previewId],
+      reason,
+      proceed() {},
+    });
+    return outcome === "proceeded" && opening === this.#previewOpening;
+  };
+
+  #watchPreview(): void {
+    if (this.pendingDraft === null) {
+      this.#previewScope?.dispose();
+      this.#previewScope = undefined;
+      return;
+    }
+    if (this.#previewScope) return;
+    this.#previewLeave = leaveCoordinatorFor(this);
+    if (!this.#previewLeave) return;
+    this.#previewScope = this.#previewLeave.register({
+      id: this.#previewId,
+      parent: this,
+      current: () => this.sendTo,
+      snapshot: (value) => (value === null ? null : { ...value }),
+      equal: (a, b) => a?.value === b?.value,
+      restore: (value) => (this.sendTo = value),
+    });
+    this.#previewScope.commit(null);
+  }
+
+  #previewClosed(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.pendingDraft) return;
+    this.#dismissPreview();
+  }
+
+  #requestPreviewClose(): void {
+    if (!this.isConnected || !this.pendingDraft) return;
+    if (this.#previewScope) {
+      void this.renderRoot.querySelector<WtDialog>("[data-draft-preview]")!.requestClose("cancel");
+    } else {
+      this.#dismissPreview();
+    }
+  }
+
   #checkId = 0;
   #lastPreview?: { store: WorkingOrderStore; action: DraftAction };
   /** The bill the waiter chose in the open preview, under the name it had then; null sends no
@@ -1394,6 +1495,8 @@ export class TillTableOrderScreen extends LitElement {
       this.reviewing = false;
       this.#browsingScroll = undefined;
     }
+    this.#watchServe();
+    this.#watchPreview();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
@@ -1543,6 +1646,9 @@ export class TillTableOrderScreen extends LitElement {
     check = true,
     deadEnds?: PendingDraft["deadEnds"],
   ): void {
+    this.#previewOpening++;
+    this.#previewScope?.dispose();
+    this.#previewScope = undefined;
     const checkId = ++this.#checkId;
     this.#lastPreview = { store, action };
     const lines = store.lines;
@@ -1585,6 +1691,9 @@ export class TillTableOrderScreen extends LitElement {
       checking: check && sent.length > 0,
       ...(deadEnds === undefined ? {} : { deadEnds }),
     };
+    this.#watchPreview();
+    const dialog = this.renderRoot.querySelector<WtDialog>("[data-draft-preview]");
+    if (dialog) dialog.open = true;
     if (check && sent.length > 0) {
       const request = new CustomEvent("check-dead-ends", {
         detail: { sent, checkId },
@@ -1687,14 +1796,17 @@ export class TillTableOrderScreen extends LitElement {
           };
     this.#openPreview(store, pending.action, false, deadEnds);
     this.sendTo = sendTo;
+    this.#previewScope?.changed();
   }
 
   #confirmPreview(): void {
     const pending = this.pendingDraft;
-    if (pending === null) return;
+    if (!this.isConnected || pending === null) return;
     if (pending.checking || [...(pending.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt))
       return;
     this.pendingDraft = null;
+    this.#watchPreview();
+    this.renderRoot.querySelector<WtDialog>("[data-draft-preview]")!.closeAfter("saved");
     // Sent by id even when it is the main bill: the server refuses a chosen bill that is no longer
     // open, where sending none would put the order on the party's main bill as it stands then, or
     // on a new one.
@@ -1761,8 +1873,15 @@ export class TillTableOrderScreen extends LitElement {
               .checked=${offered.checked === choice.value}
               @change=${(event: Event) => {
                 event.stopPropagation();
+                if (
+                  !this.isConnected ||
+                  !this.pendingDraft ||
+                  !(event.currentTarget as HTMLElement).isConnected
+                )
+                  return;
                 this.sendTo =
                   choice.value === "" ? null : { value: choice.value, label: choice.label };
+                this.#previewScope?.changed();
               }}
             />
             <span
@@ -1779,6 +1898,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #dismissPreview(): void {
     this.pendingDraft = null;
+    this.#watchPreview();
   }
 
   #selectedCourseId(line: OrderLine): string {
@@ -2913,7 +3033,8 @@ export class TillTableOrderScreen extends LitElement {
       data-draft-preview
       .open=${pending !== null}
       .heading=${t("table.preview_title")}
-      @wt-close=${() => this.#dismissPreview()}
+      .beforeClose=${this.#previewScope ? this.#beforePreviewClose : undefined}
+      @wt-close=${(event: Event) => this.#previewClosed(event)}
     >
       <div class="preview-body" data-preview-body>
         ${
@@ -2977,7 +3098,7 @@ export class TillTableOrderScreen extends LitElement {
           class="preview-back"
           variant="secondary"
           data-draft-dismiss
-          @click=${() => this.#dismissPreview()}
+          @click=${() => this.#requestPreviewClose()}
         >
           ${t("action.back")}
         </wt-button>
@@ -3709,7 +3830,14 @@ export class TillTableOrderScreen extends LitElement {
   #requestServe(row: CurrentOrderRow, undo: boolean): void {
     const most = this.#mostToServe(row, undo);
     if (row.unitPrecision === 0 && compareDecimal(most, decimal("1")) > 0) {
+      this.#serveOpening++;
+      this.#serveScope?.dispose();
+      this.#serveScope = undefined;
+      this.#serveBaseline = most;
       this.servePending = { row, undo, count: most };
+      this.#watchServe();
+      const dialog = this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]");
+      if (dialog) dialog.open = true;
       return;
     }
     this.#sendServe(row, undo, most);
@@ -3722,18 +3850,22 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #stepServe(delta: -1 | 1): void {
-    const pending = this.servePending!;
+    const pending = this.servePending;
+    if (!this.isConnected || pending === null) return;
     const count =
       delta === -1
         ? subtractDecimal(pending.count, decimal("1"))
         : addDecimal(pending.count, decimal("1"));
     this.servePending = { ...pending, count };
+    this.#serveScope?.changed();
   }
 
   #confirmServe(): void {
     const pending = this.servePending;
-    if (pending === null) return;
+    if (!this.isConnected || pending === null) return;
     this.servePending = null;
+    this.#watchServe();
+    this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]")!.closeAfter("saved");
     this.#sendServe(pending.row, pending.undo, pending.count);
   }
 
@@ -3748,7 +3880,8 @@ export class TillTableOrderScreen extends LitElement {
       data-serve-dialog
       .open=${pending !== null}
       .heading=${t(pending?.undo === true ? "table.unserve" : "table.serve")}
-      @wt-close=${() => (this.servePending = null)}
+      .beforeClose=${this.#serveScope ? this.#beforeServeClose : undefined}
+      @wt-close=${(event: Event) => this.#closeServe(event)}
     >
       ${
         pending === null
@@ -3789,11 +3922,7 @@ export class TillTableOrderScreen extends LitElement {
               </div>`
       }
       <div slot="footer" class="cancel-actions">
-        <wt-button
-          variant="secondary"
-          data-serve-dismiss
-          @click=${() => (this.servePending = null)}
-        >
+        <wt-button variant="secondary" data-serve-dismiss @click=${() => this.#dismissServe()}>
           ${t("action.back")}
         </wt-button>
         <wt-button variant="primary" data-serve-confirm @click=${() => this.#confirmServe()}>

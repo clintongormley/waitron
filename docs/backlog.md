@@ -1216,8 +1216,14 @@ name dialogs now protect changed names and the Create form factor through native
 request-close. Keep retains values and returns focus; Discard closes once without writing.
 Create proceeds directly into the local editor. Duplicate retains entry during its write and after
 refusal, then releases the scope before refresh on success. Focused browser tests cover reverts,
-ancestor leave, child reports, reconnect, busy controls and stale answers. Remaining table-order
-review/serve inputs, the profile container close, and page/history/navigation work keep W69 incomplete.
+ancestor leave, child reports, reconnect, busy controls and stale answers. Table send-preview bill
+choices and serving counts now use the shared warning on Back/native Escape. Keep retains the
+choice; Discard resets only local entry, leaving the party draft intact. Confirm releases protection
+before dispatching the existing request. Focused browser cases cover child reports, reconnect,
+detached controls and delayed clean closes against replacement openings. Station choices and
+line removals already retained by the party draft remain exempt from a second warning. Remaining
+line-edit station choices, inline split/transfer selections, the profile container close and
+page/history/navigation work keep W69 incomplete.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
 redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue
