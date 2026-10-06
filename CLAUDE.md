@@ -1020,8 +1020,8 @@ browser test** — most of these rules exist because a test passed while proving
   `apps/server/src/stream-loop.e2e.test.ts` records its sales through `recordOneSale`, a second
   store with its own write queue; both are skipped locally without their binaries (§4); the
   bucket-copy cases in `apps/server/src/health.test.ts` hold `/health`.
-- **`registros_facturacion` is immutable**: it is the table declared `appendOnly()`
-  (`packages/fiscal-verifactu/src/classification.ts`), so `applyMigrations` puts a `RAISE(ABORT)`
+- **`registros_facturacion` is immutable**: it is declared `appendOnly()`
+  (`packages/fiscal-verifactu/src/classification.ts`, beside the two filing-case tables), so `applyMigrations` puts a `RAISE(ABORT)`
   trigger on its updates and its deletes. Do not work around them; a value written wrong there stays
   wrong. That trigger pair is the WHOLE of the enforcement — the engine has no permissions, and a
   `DROP TABLE` is refused by nothing at all.

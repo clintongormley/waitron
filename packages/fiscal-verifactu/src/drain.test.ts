@@ -59,6 +59,23 @@ const parseParams = <Row extends { params: string }>(result: {
   })),
 });
 
+/** AEAT already holds another fingerprint under this record's identity: a Route B conflict. */
+async function collideAtAeat(
+  aeat: ReturnType<typeof createFakeAeat>,
+  seeded: SeededDrain,
+  registroId: string,
+): Promise<void> {
+  const raw = await suite.db.execute<Record<string, unknown>>(sql`
+    select * from registros_facturacion where id = ${registroId}
+  `);
+  const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
+  await aeat
+    .client()
+    .submit({ ObligadoEmision: { NombreRazon: seeded.legalName, NIF: seeded.nif } }, [
+      { RegistroAlta: { ...ours, Huella: "D".repeat(64) } },
+    ]);
+}
+
 describe("drain — happy path", () => {
   let seeded: SeededDrain;
   let aeat: ReturnType<typeof createFakeAeat>;
@@ -560,12 +577,12 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
 });
 
 /**
- * Per-record resolution: a rejection halts the chain and raises a structured incident,
- * AceptadoConErrores is still an accept with a warning, and a record landing on an already-halted
- * chain is stopped without reaching AEAT.
+ * Per-record resolution: a rejection raises a structured incident and holds nothing behind it,
+ * AceptadoConErrores is still an accept with a warning, and a record landing on a chain held for a
+ * conflict is stopped without reaching AEAT.
  */
 describe("drain — per-record resolution: rejection, halting, incidents", () => {
-  it("halts a chain on a genuine rejection: the record is rechazado, its successors detenido, an error incident is raised", async () => {
+  it("keeps filing a chain after a genuine rejection: the record is rechazado, its successor keeps its own accept, an error incident is raised", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(suite.db, { count: 3 }); // secuencia 1,2,3 on one SIF
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
@@ -581,11 +598,11 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
       `),
       ),
     );
-    expect(rows.rows.map((r) => r.estado)).toEqual(["aceptado", "rechazado", "detenido"]);
+    expect(rows.rows.map((r) => r.estado)).toEqual(["aceptado", "rechazado", "aceptado"]);
     expect(rows.rows[1]?.incidencia).toBe(true);
-    expect(rows.rows[2]?.incidencia).toBe(true); // haltSuccessors marks the successor too
-    expect(result.recordsHalted).toBe(2); // rechazado (1) + detenido successor (1)
-    expect(result.recordsAccepted).toBe(1); // only secuencia 1
+    expect(rows.rows[2]?.incidencia).toBe(false);
+    expect(result.recordsHalted).toBe(1); // the rechazado record only
+    expect(result.recordsAccepted).toBe(2); // secuencia 1 and 3
     expect(result.incidentsRaised).toBeGreaterThanOrEqual(1);
 
     const inc = parseParams(
@@ -640,9 +657,11 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
       tiempoEsperaInicial: 5,
     });
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
-    aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
-    const deps = drainDeps(staticResolver(aeat.client()));
-    // First pass: secuencia 2 rechazado, secuencia 3 detenido — the chain is left with an OPEN halt.
+    await collideAtAeat(aeat, seeded, seeded.registroIds[1]!);
+    // A cap of 2 sends secuencia 1 and 2 only, so secuencia 3 is still unsent when 2 conflicts.
+    const deps = { ...drainDeps(staticResolver(aeat.client())), maxRegistrosPorEnvio: 2 };
+    // First pass: secuencia 2 detenido for its conflict, secuencia 3 held detenido — the chain is
+    // left with an OPEN halt.
     const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
     expect(first.recordsHalted).toBe(2);
 
@@ -670,8 +689,8 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
   });
 
   /**
-   * `haltOpenChainClaims` must halt ONLY the chain that has an open `rechazado`/`detenido` row; a
-   * second, healthy chain claimed in the same batch is still submitted.
+   * `haltOpenChainClaims` must halt ONLY the chain that has an open `detenido` row; a second,
+   * healthy chain claimed in the same batch is still submitted.
    */
   it("does not halt an unrelated healthy chain claimed in the same batch as a halted one", async () => {
     const aeat = createFakeAeat({
@@ -679,10 +698,11 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
       tiempoEsperaInicial: 5,
     });
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
-    aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
-    const deps = drainDeps(staticResolver(aeat.client()));
+    await collideAtAeat(aeat, seeded, seeded.registroIds[1]!);
+    // A cap of 2 sends secuencia 1 and 2 only, so secuencia 3 is still unsent when 2 conflicts.
+    const deps = { ...drainDeps(staticResolver(aeat.client())), maxRegistrosPorEnvio: 2 };
     const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
-    expect(first.recordsHalted).toBe(2); // chain A: secuencia 2 rechazado + secuencia 3 detenido
+    expect(first.recordsHalted).toBe(2); // chain A: secuencia 2 conflict + secuencia 3 held
 
     // Chain A (halted) and chain B (healthy) both fall due together, claimed in one batch.
     const chainA4 = await appendPendingAlta(suite.db, seeded, 4);
@@ -761,10 +781,9 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
 
   /**
    * Two records on one chain, resubmitted together: secuencia 1 comes back `Anulada`, secuencia 2
-   * `Correcta`. Without `haltSuccessors` in Route A, secuencia 2's chain-blind "Correcta" line
-   * would leave it `aceptado`.
+   * `Correcta`. Secuencia 2 was in the same envío, so it keeps its own line's outcome.
    */
-  it("Route A: duplicate_annulled halts detenido, and halts a same-batch successor too, raising a fiscal.duplicado_anulado incident", async () => {
+  it("Route A: duplicate_annulled halts detenido, a same-batch successor keeps its own accept, raising a fiscal.duplicado_anulado incident", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // stores both — AEAT now genuinely holds both "Correcta"
@@ -786,15 +805,15 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
       `),
       ),
     );
-    expect(rows.rows.map((r) => r.estado)).toEqual(["detenido", "detenido"]);
-    expect(rows.rows.every((r) => r.incidencia)).toBe(true);
-    expect(result.recordsHalted).toBe(2); // duplicate_annulled (1) + its halted successor (1)
-    expect(result.recordsAccepted).toBe(0); // secuencia 2's own "Correcta" line never wins the halt
+    expect(rows.rows.map((r) => r.estado)).toEqual(["detenido", "aceptado"]);
+    expect(rows.rows.map((r) => r.incidencia)).toEqual([true, false]);
+    expect(result.recordsHalted).toBe(1); // duplicate_annulled only
+    expect(result.recordsAccepted).toBe(1); // secuencia 2's own "Correcta" line
 
     const inc = await withTransaction(suite.db, (tx) =>
       tx.execute<{ code: string; severity: string }>(sql`select code, severity from incidents`),
     );
-    // Exactly ONE incident: the halted successor is flagged, never given one of its own.
+    // Exactly ONE incident: the accepted successor raises none.
     expect(inc.rows).toHaveLength(1);
     expect(inc.rows[0]?.code).toBe("fiscal.duplicado_anulado");
     expect(inc.rows[0]?.severity).toBe("error");
@@ -837,10 +856,10 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   /**
    * Our own stored huella cannot be changed (`registros_facturacion` is append-only), so AEAT's copy
    * is made to diverge: a separate submit under secuencia 1's identity, with a different `Huella`,
-   * lands in the fake's store FIRST. Secuencia 2 is fresh and accepted on its own merits, which
-   * proves Route B's mismatch also halts a same-batch successor.
+   * lands in the fake's store FIRST. Secuencia 2 is fresh and accepted on its own merits, and keeps
+   * that outcome: it was in the same envío.
    */
-  it("Route B: duplicate_unknown with a differing huella halts the chain (and a same-batch successor), raising a fiscal.huella_divergente incident", async () => {
+  it("Route B: duplicate_unknown with a differing huella halts the record while a same-batch successor keeps its own accept, raising a fiscal.huella_divergente incident", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [nif, numSerieFactura, fechaExpedicion] = seeded.facturaKeys[0]!.split("|");
 
@@ -902,10 +921,10 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
       `),
       ),
     );
-    expect(rows.rows.map((r) => r.estado)).toEqual(["detenido", "detenido"]);
-    expect(rows.rows.every((r) => r.incidencia)).toBe(true);
-    expect(result.recordsHalted).toBe(2); // huella_divergente (1) + its halted successor (1)
-    expect(result.recordsAccepted).toBe(0); // secuencia 2's own "Correcto" line never wins the halt
+    expect(rows.rows.map((r) => r.estado)).toEqual(["detenido", "aceptado"]);
+    expect(rows.rows.map((r) => r.incidencia)).toEqual([true, false]);
+    expect(result.recordsHalted).toBe(1); // huella_divergente only
+    expect(result.recordsAccepted).toBe(1); // secuencia 2's own "Correcto" line
 
     const inc = await withTransaction(suite.db, (tx) =>
       tx.execute<{ code: string; severity: string }>(sql`select code, severity from incidents`),
@@ -914,8 +933,8 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     expect(inc.rows[0]?.code).toBe("fiscal.huella_divergente");
     expect(inc.rows[0]?.severity).toBe("error");
 
-    // AEAT still holds the COLLIDING huella under secuencia 1's identity, and secuencia 2 WAS
-    // accepted there even though it is halted locally: the fake, like AEAT, is chain-blind.
+    // AEAT still holds the COLLIDING huella under secuencia 1's identity, and secuencia 2 was
+    // accepted there too: the fake, like AEAT, is chain-blind.
     const stored = aeat.stored();
     expect(stored.find((s) => s.key === seeded.facturaKeys[0])?.huella).toBe("D".repeat(64));
     expect(stored.find((s) => s.key === seeded.facturaKeys[1])?.estado).toBe("Correcto");
@@ -924,8 +943,8 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
 
 /**
  * Route B's lookup is an AEAT round trip, so it must not run while the drain holds the venue's one
- * writer: a sale recorded meanwhile would wait on AEAT (CLAUDE.md §5). A failed lookup still backs
- * the batch off, but only when the reply's walk reaches the line it was made for.
+ * writer: a sale recorded meanwhile would wait on AEAT (CLAUDE.md §5). A failed lookup leaves only
+ * the record it was made for unknown.
  */
 describe("drain — Route B's lookup and the write transaction", () => {
   const FIRST = new Date("2026-07-21T00:01:00Z");
@@ -1034,7 +1053,7 @@ describe("drain — Route B's lookup and the write transaction", () => {
     expect((await stateOf(seeded.registroIds)).map((r) => r.estado)).toEqual(["aceptado"]);
   });
 
-  it("files a rejection and halts its successor when the successor's lookup fails but is never reached", async () => {
+  it("files a rejection and leaves only its successor unknown when the successor's lookup fails", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente");
     // The fake is chain-blind, so it stores secuencia 2 though secuencia 1 was refused.
@@ -1049,12 +1068,12 @@ describe("drain — Route B's lookup and the write transaction", () => {
     const [first, second, fresh] = await stateOf([...seeded.registroIds, other.registroId]);
     expect(fresh).toMatchObject({ estado: "aceptado", csv: expect.any(String) });
     expect(first).toMatchObject({ estado: "rechazado", csv: fresh!.csv, incidencia: true });
-    expect(second).toMatchObject({ estado: "detenido", csv: null, incidencia: true });
+    expect(second).toMatchObject({ estado: "pendiente", csv: null, incidencia: true });
     expect(result.recordsAccepted).toBe(1);
-    expect(result.recordsHalted).toBe(2);
+    expect(result.recordsHalted).toBe(1);
   });
 
-  it("backs the whole batch off, saving nothing from the reply, when a lookup it reaches fails", async () => {
+  it("saves the rest of the reply and leaves only the duplicate unknown when a lookup it reaches fails", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     await drain(drainDeps(staticResolver(aeat.client())), FIRST);
     aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
@@ -1063,7 +1082,7 @@ describe("drain — Route B's lookup and the write transaction", () => {
 
     await drain(drainDeps(staticResolver(lookupFails())), SECOND);
 
-    // The duplicate's row is on its second attempt, the fresh one on its first.
+    // The duplicate's row is on its second attempt; the fresh one was accepted.
     expect(await stateOf([...seeded.registroIds, other.registroId])).toEqual([
       {
         estado: "pendiente",
@@ -1072,16 +1091,16 @@ describe("drain — Route B's lookup and the write transaction", () => {
         proximo_intento_en: new Date(SECOND.getTime() + backoffMs(2)).toISOString(),
       },
       {
-        estado: "pendiente",
-        csv: null,
-        incidencia: true,
-        proximo_intento_en: new Date(SECOND.getTime() + backoffMs(1)).toISOString(),
+        estado: "aceptado",
+        csv: expect.any(String),
+        incidencia: false,
+        proximo_intento_en: new Date("2026-07-21T00:00:00Z").toISOString(),
       },
     ]);
-    const acks = await suite.db.execute<{ registro_id: string }>(
-      sql`select registro_id from acks where registro_id = ${other.registroId}`,
+    const acks = await suite.db.execute<{ registro_id: string; state: string }>(
+      sql`select registro_id, state from acks where registro_id = ${other.registroId}`,
     );
-    expect(acks.rows).toEqual([]);
+    expect(acks.rows).toEqual([{ registro_id: other.registroId, state: "accepted" }]);
   });
 });
 
@@ -1272,10 +1291,10 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     expect(await chainRows()).toEqual([
       { tipo_registro: "alta", estado: "aceptado", incidencia: false },
       { tipo_registro: "anulacion", estado: "detenido", incidencia: true },
-      { tipo_registro: "alta", estado: "detenido", incidencia: true },
+      { tipo_registro: "alta", estado: "aceptado", incidencia: false },
     ]);
-    expect(result.recordsAccepted).toBe(0);
-    expect(result.recordsHalted).toBe(2);
+    expect(result.recordsAccepted).toBe(1);
+    expect(result.recordsHalted).toBe(1);
     expect(await incidentCodes()).toEqual(["fiscal.duplicado_anulado"]);
   });
 
@@ -1477,14 +1496,17 @@ describe("drain — a reply line with no recognisable status", () => {
  * chain-halt paths bypass `setEstado`'s `writeAck`, so they must write their own `halted` acks.
  */
 describe("drain — halted records get a halted ack (the bulk chain-halt paths)", () => {
-  it("writes a rejected ack for the rejection and a halted ack for its still-pending successor", async () => {
+  it("writes a rejected ack for a rejection and a halted ack for a successor still pending behind a conflict", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(suite.db, { count: 3 }); // secuencia 1,2,3 on one SIF
-    aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
-    const deps = drainDeps(staticResolver(aeat.client()));
+    aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente"); // reject the first record
+    await collideAtAeat(aeat, seeded, seeded.registroIds[1]!); // the second conflicts
+    // A cap of 2 sends secuencia 1 and 2 only, so secuencia 3 is still pending when 2 conflicts.
+    const deps = { ...drainDeps(staticResolver(aeat.client())), maxRegistrosPorEnvio: 2 };
     await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-    // secuencia 1 accepted, 2 rejected, 3 halted — the successor `haltSuccessors` swept to detenido.
+    // secuencia 1 rejected, 2 held for its conflict, 3 halted — the successor `haltSuccessors`
+    // swept to detenido.
     const envios = await withTransaction(suite.db, (tx) =>
       tx.execute<{ registro_id: string; secuencia: number; estado: string }>(sql`
         select e.registro_id, r.secuencia, e.estado from envios e
@@ -1493,7 +1515,7 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
         order by r.secuencia
       `),
     );
-    expect(envios.rows.map((r) => r.estado)).toEqual(["aceptado", "rechazado", "detenido"]);
+    expect(envios.rows.map((r) => r.estado)).toEqual(["rechazado", "detenido", "detenido"]);
 
     const acks = await withTransaction(suite.db, (tx) =>
       tx.execute<{ registro_id: string; state: string }>(
@@ -1502,7 +1524,7 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
     );
     const ackState = new Map(acks.rows.map((a) => [a.registro_id, a.state]));
 
-    const rejected = envios.rows.find((r) => r.secuencia === 2)!;
+    const rejected = envios.rows.find((r) => r.secuencia === 1)!;
     expect(ackState.get(rejected.registro_id)).toBe("rejected");
 
     const halted = envios.rows.find((r) => r.secuencia === 3)!;
@@ -1607,8 +1629,9 @@ describe("drain — the deployment-environment guard", () => {
 
   /**
    * A refused row's successors on the SAME chain must not submit either: they would reach AEAT
-   * pointing at a huella AEAT never received. `haltOpenChainClaims` only sees an OPEN
-   * `rechazado`/`detenido` envío, not a `pendiente` refusal.
+   * pointing at a huella AEAT never received. `haltOpenChainClaims` holds a claimed row only behind
+   * an earlier `detenido` row of its chain, or when it is a cancellation whose original is
+   * `rechazado`; a `pendiente` refusal is neither.
    */
   it("halts a chain behind a refused predecessor: no successor submits, and none of them are touched", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });

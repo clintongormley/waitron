@@ -1548,6 +1548,34 @@ now carry the test-system receipts and their limits. The legal questions remain 
 W41s-10c landed as [#1264](https://github.com/clintongormley/waitron/pull/1264). A231 #1256 has
 landed with public F1 disabled. **Next action:** continue the approved dependent W41s tasks in campaign order,
 keeping each task's fiscal and adviser gates.
+**Update, 2026-10-06 (W41s-3, built; not landed):** Task 3 is built on branch
+`feat/w41s-filing-cases`; the owner approved its nine changed filing checks and it awaits
+landing approval. Every line of AEAT's reply is kept. A
+rejection no longer holds the later records of its chain (D2, on
+[§7.1's receipts](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1));
+only rejection code 1161 was tested, and it was triggered artificially. A conflict with AEAT's
+copy, or a held cancellation, holds the later records of its chain that have not been sent. A
+record sent in the conflict's own envío is not held when the reply is applied; one whose outcome is
+still unknown is held at its next claim like any later record of that chain, and is not sent again.
+A cancellation whose original was rejected or is held is itself held and never sent. When the
+lookup that follows a duplicate answer fails, only that record's outcome becomes unknown. Each
+record that needs a person's decision gets a filing case, kept in tables whose rows cannot be
+changed or deleted; resolving a case releases nothing yet (Tasks 8–9 do that). A new ongoing
+alert, `fiscal.filing_cases_open`, counts the cases with no resolution. **Still open:** no probe
+has yet shown what AEAT does with a record sent after a 3000 conflict or after a held
+cancellation; the owner chose (2026-10-06) to keep holding there, and the live probe of those two
+cases is queued as W41s-1b. A refusal that would refuse every later record (one about the
+taxpayer's identity, say) now opens one case per record; the follow-up W41s-3b adds a brake that
+stops a chain after several refusals in a row with the same code.
+**Follow-up W41s-3c (a defect W41s-3's review found that predates W41s-3):**
+`resolveLines` in `packages/fiscal-verifactu/src/drain.ts` matches a reply line to a claimed record
+by `RefExterna` alone, without checking the line's invoice identity or a repeated reference. A
+review probe gave invoice B's accepted line invoice A's reference, and the drain marked A
+`aceptado` though AEAT had rejected it; the same probe failed the same way on base `429f18b0b`.
+This is defensive handling of a malformed reply, and its fix is its own fiscal item.
+**For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
+paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
+yet, so the screen should add an open-only filter or paging when it calls them.
 Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A231p
 and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs

@@ -104,9 +104,12 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * `./drain.ts`: AEAT's reply line for this record has a missing or unrecognised status, so
-     * whether AEAT stored it is unknown. A warning: the record waits for a later send. `estado` is
-     * the line's raw status text; `csv` is the envío's, kept because AEAT never returns it again.
+     * `./drain.ts`: whether AEAT stored this record is unknown — its reply line has a missing or
+     * unrecognised status, or the line is a duplicate (error 3000) whose lookup failed or did not
+     * settle whose record AEAT holds. A warning: the record waits for a later send. `estado` is the
+     * line's raw status text; `csv` is the envío's, kept because AEAT never returns it again.
+     * `lookupFailed` is present only when a duplicate lookup ran: `true` when it failed, `false`
+     * when it answered without settling it.
      */
     "fiscal.estado_desconocido": {
       registroId: string;
@@ -114,13 +117,14 @@ declare module "@waitron/shared" {
       codigo: number | null;
       mensaje: string | null;
       csv: string | null;
+      lookupFailed?: boolean;
     };
 
     /**
      * `./drain.ts`'s `handleDuplicate` (error 3000): AEAT's own copy of this identity is `Anulada`,
-     * and the record is a sale, or a cancellation whose fingerprint differs from the one AEAT
-     * holds or for which AEAT returns no record. Halts the record and its chain's successors. No
-     * `codigo`/`mensaje` params: they would only ever repeat 3000.
+     * and the record is a sale, or a cancellation the lookup did not match to the record AEAT
+     * holds. The record is held, with its chain's later records not yet sent behind it, and a filing
+     * case opened. No `codigo`/`mensaje` params: they would only ever repeat 3000.
      */
     "fiscal.duplicado_anulado": { registroId: string };
 
@@ -214,6 +218,24 @@ declare module "@waitron/shared" {
      */
     "fiscal.foreign_recipient_unsupported": { countryCode: string };
 
+    /** `recordCaseEvent` (./filing-cases.ts) was handed a case id no `filing_cases` row has. */
+    "filing_case.not_found": { caseId: string };
+
+    /**
+     * `recordCaseEvent`: an event already stored under this `actionKey` says something different, so
+     * the call is not a retry of it and cannot be recorded under that key.
+     */
+    "filing_case.action_mismatch": { caseId: string; actionKey: string };
+
+    /** `recordCaseEvent`: the case already has its one resolution, recorded under another key. */
+    "filing_case.already_resolved": { caseId: string };
+
+    /**
+     * `recordCaseEvent`: a note named a corrective record, or a resolution named the case's own
+     * record as its corrective one.
+     */
+    "filing_case.remedy_invalid": { caseId: string; remedyRegistroId: string };
+
     /**
      * An ongoing-alert code from ./submission-alerts.ts, never thrown: `count` records are still
      * waiting to reach AEAT and `hours` is the oldest one's age.
@@ -225,6 +247,12 @@ declare module "@waitron/shared" {
      * and need a human — a halted chain never drains itself. Never thrown.
      */
     "fiscal.submission_stopped": { count: number };
+
+    /**
+     * The same ongoing check: `count` filing cases (./filing-cases.ts) have no resolution yet. Never
+     * thrown.
+     */
+    "fiscal.filing_cases_open": { count: number };
 
     /**
      * An ongoing-alert code raised by `apps/server/src/alert-sources.ts`, not by this package; it

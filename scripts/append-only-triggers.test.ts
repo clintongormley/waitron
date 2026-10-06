@@ -35,6 +35,8 @@ const EXPECTED = [
   "adjustments",
   "bill_payment_lines",
   "daily_closes",
+  "filing_case_events",
+  "filing_cases",
   "membership_clearances",
   "membership_removals",
   "menu_version_images",

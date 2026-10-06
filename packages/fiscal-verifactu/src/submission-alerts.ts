@@ -1,6 +1,7 @@
 import { count, eq, inArray, min } from "drizzle-orm";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import { envios } from "./schema/envios.js";
+import { openFilingCasesSummary } from "./filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import "./errors.js";
 
@@ -12,8 +13,10 @@ export const SUBMISSION_DELAYED_ERROR_MS = 24 * 60 * 60 * 1000;
 /**
  * The fiscal-submission ongoing check. Warns when records have waited past
  * {@link SUBMISSION_DELAYED_WARN_MS} to reach AEAT (a stronger alert past
- * {@link SUBMISSION_DELAYED_ERROR_MS}), and reports when submission has stopped (`detenido`). The
- * module contributes it through its alerts seat so generic code never names the fiscal tables.
+ * {@link SUBMISSION_DELAYED_ERROR_MS}), reports when submission has stopped (`detenido`), and reports
+ * the filing cases no one has resolved yet. A rejected record is not `detenido`, so only the case
+ * alert counts it. The module contributes this check through its alerts seat so generic code never
+ * names the fiscal tables.
  */
 export const fiscalSubmissionSource: AlertSource = {
   area: "fiscal",
@@ -52,6 +55,17 @@ export const fiscalSubmissionSource: AlertSource = {
         params: { count: Number(stopped.n) },
         severity: "error",
         since: new Date(stopped.oldest!).toISOString(),
+      });
+    }
+
+    const open = await openFilingCasesSummary(tx);
+    if (open !== null) {
+      alerts.push({
+        key: "fiscal.filing_cases_open",
+        code: "fiscal.filing_cases_open",
+        params: { count: open.count },
+        severity: "error",
+        since: open.oldestOpenedAt.toISOString(),
       });
     }
     return alerts;
