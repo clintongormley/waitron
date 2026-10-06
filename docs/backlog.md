@@ -6558,17 +6558,22 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   read-only default-cell permissions, retained disabled targets, zone cleanup and pre-live routing
   reset. It replaces claims/ordered exceptions without conversion, with five stored coordinate
   classes and populated-upgrade/configuration-transfer checks.
-  [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) is written for owner
-  review; its editor is not implemented. Recommendations allow current display-name/street/city
-  corrections and same-province postcode edits, preserve recorded names and facts, keep taxpayer
-  identity read-only, and lock province/clock after sales. Clock edits also stop after order history
+  [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) was approved by the owner on
+  2026-10-05. Its build is in progress: the shared server writer,
+  authenticated API, live consumer controls, and core dashboard editor are implemented on the
+  feature branch. The editor validates changed fields, retains drafts across passive updates,
+  requires warning acknowledgement, and offers read-only supervisor access. Clock previews,
+  the final acceptance audit, branch review and CI remain open; the feature is not landed.
+  The approved policy allows current display-name/street/city
+  corrections and same-province postcode edits, preserves recorded names and facts, keeps taxpayer
+  identity read-only, and locks province/clock after sales. Clock edits also stop after order history
   or a daily close. Pre-sale province edits need equal fiscal/language/clock context and the same
   sourced holiday region; absent that holiday capability only real province edits stay locked.
-  Review choices also cover no-op and stale-draft behavior, legacy-null field validation, warning
+  The approval also covers no-op and stale-draft behavior, legacy-null field validation, warning
   acknowledgement, the default tab and clock-change previews using the existing reporting resolver.
   No schema migration or reset is proposed; changes needing another fiscal/geographic context or
-  history removal use a separately approved setup/reset instead. Build waits for plan approval,
-  with step 2 already landed; later Hours/holidays/menu builds retain their own compatibility tests.
+  history removal use a separately approved setup/reset instead. Step 2 is already landed; later
+  Hours/holidays/menu builds retain their own compatibility tests.
   [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
   was approved by the owner on 2026-10-05; its build remains open.
   It removes the redundant
