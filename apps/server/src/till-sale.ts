@@ -836,11 +836,6 @@ async function fileImmediateSale(
   return ticket;
 }
 
-/**
- * The already-issued sale for a working order, if any ({@link readIssuedSales}). An order placed
- * under `invoice_first` carries its sale from placing; one placed under any other mode files at pay.
- * The presence of the row, not the order's service mode, is the discriminator.
- */
 async function readOutstandingSaleForOrder(
   tx: Transaction,
   workingOrderId: string,

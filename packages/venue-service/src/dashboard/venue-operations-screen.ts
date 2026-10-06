@@ -33,7 +33,7 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
     t(key) as string,
   );
 
-const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
+const MODES: ServiceMode[] = ["table_tab", "prepay", "ticket_then_pay"];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 type View = "departments" | "zones";
 type Editor =

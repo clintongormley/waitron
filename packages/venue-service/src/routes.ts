@@ -87,7 +87,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "time_zone.unreadable": 409,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
-const MODES = new Set<ServiceMode>(["table_tab", "prepay", "invoice_first", "ticket_then_pay"]);
+const MODES = new Set<ServiceMode>(["table_tab", "prepay", "ticket_then_pay"]);
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
 const COLLECTION_NUMBER = new Set(["none", "numbered"]);

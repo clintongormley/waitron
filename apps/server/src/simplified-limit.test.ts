@@ -536,7 +536,7 @@ describe("a bill payment", () => {
 });
 
 describe("placing a counter order that is invoiced when placed", () => {
-  it("does not file a saved F1 choice while original delivery is unavailable", async () => {
+it("does not file a saved F1 choice while original delivery is unavailable", async () => {
     const id = await parked(venue.app, invoiceFirst, { Mitad: 1 });
     venue.db.run(sql`update working_orders set invoice_type = 'F1',
       recipient_tax_id = 'B12345674', recipient_legal_name = 'Cliente SL',
@@ -550,6 +550,16 @@ describe("placing a counter order that is invoiced when placed", () => {
     expect(answer.json).toEqual({ code: "sale.full_invoice_unavailable", params: {} });
     expect(written()).toEqual(before);
     expect(orderRow(id)!.status).toBe("open");
+  });
+
+  it("allows an order at the limit to be placed without filing or taking money", async () => {
+    const id = await parked(venue.app, invoiceFirst, { Lote: 1 });
+    const before = written();
+    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/place`, {});
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({ id, status: "placed" });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)!.status).toBe("placed");
   });
 
   it("is refused over the limit, filing no invoice and leaving the order open", async () => {

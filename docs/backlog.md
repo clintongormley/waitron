@@ -6694,8 +6694,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   placement no longer files a deferred invoice, and waiting-order collection no longer selects
   the retired mode. Issued-bill fixtures explicitly use the existing issuance primitives so
   correction, collection, permissions and cash-drawer checks retain their assertions. The exact
-  populated-upgrade reset fixture passes locally; API/type/selector retirement, remaining consumer
-  and prose audits, whole-branch review and CI are still pending.
+  populated-upgrade reset fixture passes locally. Management routes now refuse the retired style,
+  department/zone selectors offer current styles only, and public till boot and placement responses
+  omit retired metadata. Placement retains the simplified-invoice-limit refusal without filing.
+  Shared server/till type and fixture retirement, remaining consumer and prose audits,
+  whole-branch review and CI are still pending.
   The Numbered collection choice applies to `prepay` and `ticket_then_pay` quick sales.
   A261-2f explains the quick-sale-only scope in English and Spanish on the department and
   zone Order number cells and editors. Filled choices use the shared help button; table-tab

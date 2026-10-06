@@ -1197,7 +1197,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         onboardingIntent: deps.onboardingIntent,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
-        orderFlow: "prepay",
         bumpMode: boot.bumpMode,
         fireControl: boot.fireControl,
         courses: boot.courses,

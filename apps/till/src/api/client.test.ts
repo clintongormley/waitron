@@ -851,15 +851,7 @@ describe("TillApi", () => {
   });
 
   it("placeOrder POSTs to the addressed order's /place route with no body, returning the result", async () => {
-    const result = {
-      id: "wo1",
-      status: "placed",
-      invoiceNumber: "A/1",
-      issuedAt: "2026-08-06T10:00:00.000Z",
-      total: "1.50",
-      qr: "x",
-      vatBreakdown: [{ rate: "21", base: "1.24", tax: "0.26" }],
-    };
+    const result = { id: "wo1", status: "placed" };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(result));
 
     const r = await new TillApi("", fetchStub).placeOrder("wo1");

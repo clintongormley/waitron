@@ -1,3 +1,4 @@
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -513,11 +514,11 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
 });
 
 describe("receipt grouping after table changes", () => {
-  it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
+  it.each(["prepay", "ticket_then_pay", "issued"] as const)(
     "%s freezes the table label at issuance across renaming, collection and table turnover",
     async (orderFlow) => {
-      const base = await setupVenue(orderFlow);
-      const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow });
+      const base = await setupVenue(orderFlow === "issued" ? "ticket_then_pay" : orderFlow);
+      const cfg = base.cfg;
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode: "auto", printerId });
       // A tab opens only in a table_tab zone, so the order that carries the table here is a counter
@@ -547,7 +548,9 @@ describe("receipt grouping after table changes", () => {
           OPERATOR,
         );
       } else {
+        if (orderFlow === "issued") await issueOrderInvoice(deps(), cfg, orderId, OPERATOR);
         await placeOrder(deps(), cfg, orderId, OPERATOR);
+        if (orderFlow === "issued") await printSaleReceipt(deps(), cfg, orderId, false);
         if (orderFlow === "ticket_then_pay") {
           await collectOrder(
             deps(),
@@ -571,7 +574,7 @@ describe("receipt grouping after table changes", () => {
           .where(eq(diningTables.id, tableId));
       });
       await reprintSale({ db: suite.db, backend }, cfg, orderId);
-      if (orderFlow === "invoice_first") {
+      if (orderFlow === "issued") {
         const collected = await collectOrder(
           deps(),
           cfg,
@@ -1110,9 +1113,9 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it.each(["auto", "on_request", "never"] as const)(
-    "invoice-first placement routes the original to the issuing device's printer in %s mode",
+    "an explicit original print of an unpaid invoice routes to the issuing device's printer in %s mode",
     async (mode) => {
-      const base = await setupVenue("invoice_first");
+      const base = await setupVenue("ticket_then_pay");
       const { cfg } = base;
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode, printerId });
@@ -1123,6 +1126,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
       });
       await placeOrder(deps(), cfg, id, OPERATOR);
+      await issueOrderInvoice(deps(), cfg, id, OPERATOR);
+      await printSaleReceipt(deps(), cfg, id, false);
       const jobs = await printJobsFor(cfg);
       expect(jobs).toHaveLength(1);
       expect(jobs[0]!.printerId).toBe(printerId);
@@ -1131,10 +1136,9 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   );
 
   it.each(["auto", "on_request", "never"] as const)(
-    "invoice-first %s placement prints an unpaid original; collection only opens and audits the drawer",
+    "an explicitly printed unpaid original in %s mode is retained; collection only opens and audits the drawer",
     async (mode) => {
-      const base = await setupVenue("invoice_first");
-      // Placement issues the invoice before any payment; collection retains its separate drawer action.
+      const base = await setupVenue("ticket_then_pay");
       const { cfg } = base;
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode, printerId });
@@ -1146,6 +1150,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
       });
       await placeOrder(deps(), cfg, id, OPERATOR);
+      await issueOrderInvoice(deps(), cfg, id, OPERATOR);
+      await printSaleReceipt(deps(), cfg, id, false);
       const issuedJobs = await printJobsFor(cfg);
       expect(issuedJobs).toHaveLength(1);
       const original = new Uint8Array(issuedJobs[0]!.payload);
@@ -1295,11 +1301,11 @@ describe("every device whose profile allows the drawer opens its receipt printer
     },
   );
 
-  it.each(["ticket_then_pay", "invoice_first"] as const)(
+  it.each(["ticket_then_pay", "issued"] as const)(
     "collecting a placed %s order in cash opens the drawer only on the till allowed the drawer",
     async (orderFlow) => {
       const { cfg, other, printerId, zoneId, each } = await sharedDrawer(
-        orderFlow,
+        "ticket_then_pay",
         NO_DRAWER_CAPABILITY,
       );
 
@@ -1311,6 +1317,7 @@ describe("every device whose profile allows the drawer opens its receipt printer
           lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         });
         await placeOrder(deps(), till, id, OPERATOR);
+        if (orderFlow === "issued") await issueOrderInvoice(deps(), till, id, OPERATOR);
         await collectOrder(
           deps(),
           till,

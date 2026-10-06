@@ -1,6 +1,6 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 
-export type ServiceMode = "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+export type ServiceMode = "table_tab" | "prepay" | "ticket_then_pay";
 export interface Department {
   id: string;
   name: string;

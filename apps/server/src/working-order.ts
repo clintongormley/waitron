@@ -188,7 +188,6 @@ import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-confi
 import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket } from "./receipt-print.js";
 import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
-import type { TillSaleResult } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
@@ -5495,17 +5494,9 @@ export async function abandonHeldOrder(
   });
 }
 
-/** The fiscal fields are filled only when placing files an invoice. */
 export interface PlaceOrderResult {
   id: string;
-  status: "placed" | "settled";
-  invoiceType?: "F1" | "F2";
-  invoiceNumber?: string;
-  issuedAt?: string;
-  total?: string;
-  qr?: string;
-  qrText?: TillSaleResult["qrText"];
-  vatBreakdown?: { rate: string; base: string; tax: string }[];
+  status: "placed";
 }
 
 export async function placeOrder(
@@ -5524,6 +5515,7 @@ export async function placeOrder(
     }
     await refusePaymentInFlight(tx, [id]);
     await refuseBillWithPayments(tx, id);
+    await refuseOrderOverSimplifiedLimit(tx, cfg, id, null);
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? "prepay";
 

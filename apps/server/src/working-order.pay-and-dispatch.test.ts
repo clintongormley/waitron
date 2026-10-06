@@ -1567,7 +1567,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       select service_mode from order_service_contexts where working_order_id = ${collectId}`);
     expect(contexts).toEqual([{ service_mode: "ticket_then_pay" }]);
     const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, collectId, OPERATOR);
-    expect(placed.invoiceNumber).toBeUndefined();
+    expect(placed).not.toHaveProperty("invoiceNumber");
     expect(await orderState(collectId)).toEqual({ status: "placed", settledAtSet: false });
     expect(await saleCount(collectId)).toBe(0);
 
@@ -1871,7 +1871,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // PLACE → NO fiscal document (design §3). The order freezes at `placed` with nothing filed.
     const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     expect(placed.status).toBe("placed");
-    expect(placed.invoiceNumber).toBeUndefined(); // no invoice issued at placing
+    expect(placed).not.toHaveProperty("invoiceNumber"); // no invoice issued at placing
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await saleCount(id)).toBe(0); // nothing filed yet
     expect(await outstanding()).toEqual([]); // no issued invoice → nothing outstanding

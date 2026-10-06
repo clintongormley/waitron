@@ -1174,7 +1174,7 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
 });
 
 describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)", () => {
-  it("starts an unscoped till at prepay even when the retired venue mode differs", async () => {
+  it("omits the retired venue mode from public boot info", async () => {
     const app = new Hono();
     mountTillApi(
       app,
@@ -1184,7 +1184,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);
-    expect((await res.json()).orderFlow).toBe("prepay");
+    expect(await res.json()).not.toHaveProperty("orderFlow");
   });
 
   it("GET /api/staff lists ACTIVE staff sorted by name, no cookie required, no secrets", async () => {
@@ -1205,14 +1205,14 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(JSON.stringify(staff)).not.toMatch(/pin|secret|password|url|cert|role|status|hash/i);
   });
 
-  it("GET /api/till returns locale + issuer identity + orderFlow + card fields, and no secret", async () => {
+  it("GET /api/till returns locale + issuer identity + card fields, and no secret", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);
     const body = await res.json();
-    // The receipt-issuer identity (legal name + NIF), the UI locale, the pay-timing mode and the card
+    // The receipt-issuer identity (legal name + NIF), the UI locale and the card
     // fields. The tenant has authored no receipt or canvas, so `receipt` is the built-in default and
     // `canvas` is the `till` form-factor default, even for this cookieless request.
     expect(body).toEqual({
@@ -1226,7 +1226,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       onboardingIntent: "prepare",
       venueName: "Test SL",
       nif: venueTaxId,
-      orderFlow: "prepay",
       // The venue's KDS whole-ticket bump mode (KDS-1 §2e), read from the location — the seeded
       // location never set it, so the column default `line` reaches the wire (per-line bump only).
       bumpMode: "line",

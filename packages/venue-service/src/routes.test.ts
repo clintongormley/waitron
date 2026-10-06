@@ -175,6 +175,48 @@ async function send(
 }
 
 describe("venue service management routes", () => {
+  it("refuses the retired invoice-first style without changing departments or zones", async () => {
+    const fx = await fixture();
+    const department = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Dining", defaultServiceMode: "table_tab" }),
+    );
+    await withTransaction(db, (tx) =>
+      configureZone(tx, fx, { zoneId: fx.zoneId, departmentId: department.id }),
+    );
+    const before = await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json();
+    for (const [method, path, body, field] of [
+      [
+        "POST",
+        "/management-api/venue-service/departments",
+        { name: "Retired", defaultServiceMode: "invoice_first" },
+        "defaultServiceMode",
+      ],
+      [
+        "PATCH",
+        `/management-api/venue-service/departments/${department.id}`,
+        { name: "Retired", tradingName: "Retired", defaultServiceMode: "invoice_first" },
+        "defaultServiceMode",
+      ],
+      [
+        "PUT",
+        `/management-api/venue-service/zones/${fx.zoneId}`,
+        { departmentId: department.id, serviceMode: "invoice_first" },
+        "serviceMode",
+      ],
+    ] as const) {
+      const response = await send(fx.app, method, path, fx.managerCookie, body);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+      expect(
+        await (await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)).json(),
+      ).toEqual(before);
+    }
+  });
+
   it("creates a floor zone and assigns its department in one request", async () => {
     const fx = await fixture();
     const department = (await (
