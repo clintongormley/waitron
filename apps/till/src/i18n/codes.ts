@@ -420,6 +420,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A card payment on this device is still in progress. Switch once it finishes or is cancelled",
     es: "Hay un pago con tarjeta en curso en este dispositivo. Cambia cuando termine o se cancele",
   },
+  "device.profile_changed": {
+    en: "This device switched to another profile while the payment was starting. No card was charged. Try again.",
+    es: "Este dispositivo ha cambiado a otro perfil mientras se iniciaba el pago. No se ha cobrado ninguna tarjeta. Inténtalo de nuevo.",
+  },
   "device.cash_not_allowed": {
     en: "This device does not take cash. Take cash at a till.",
     es: "Este dispositivo no cobra en efectivo. Cobra en efectivo en una caja.",

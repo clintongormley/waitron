@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   UNIQUE_VIOLATION,
   billPayments,
   captureError,
+  deviceProfiles,
+  devices,
   engineErrorMessage,
   nodes,
   refusalOn,
@@ -650,6 +652,72 @@ describe("attempting lifecycle", () => {
       )
       .catch((e: unknown) => e);
     expect((err as AppError).code).toBe("payment.not_found");
+  });
+});
+
+describe("insertAttempting under the device profile the request was checked against", () => {
+  async function profileOf(deviceId: string): Promise<string> {
+    const [row] = await suite.db
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    return row!.profileId;
+  }
+
+  async function attempt(seeded: Seeded, paymentRef: string, deviceProfileId?: string) {
+    return suite.db.transaction((tx) =>
+      insertAttempting(tx, {
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef,
+        amount: decimal("12.10"),
+        ...(deviceProfileId === undefined ? {} : { deviceProfileId }),
+      }),
+    );
+  }
+
+  it("writes the attempting row while the device is still on that profile", async () => {
+    const seeded = await seedTenant();
+    await attempt(seeded, "same-profile", await profileOf(seeded.deviceId));
+    expect((await getRow({ provider: "fake", paymentRef: "same-profile" }))?.state).toBe(
+      "attempting",
+    );
+  });
+
+  it("refuses device.profile_changed and writes nothing once the device has moved to another profile", async () => {
+    const seeded = await seedTenant();
+    const checkedUnder = await profileOf(seeded.deviceId);
+    const [other] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Moved to", formFactor: "till", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    await suite.db
+      .update(devices)
+      .set({ deviceProfileId: other!.id })
+      .where(eq(devices.id, seeded.deviceId));
+
+    const err = await attempt(seeded, "moved", checkedUnder).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).code).toBe("device.profile_changed");
+    expect(await getRow({ provider: "fake", paymentRef: "moved" })).toBeUndefined();
+  });
+
+  it("checks nothing when no profile is given", async () => {
+    const seeded = await seedTenant();
+    const [other] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Moved to", formFactor: "till", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    await suite.db
+      .update(devices)
+      .set({ deviceProfileId: other!.id })
+      .where(eq(devices.id, seeded.deviceId));
+
+    await attempt(seeded, "unchecked");
+
+    expect((await getRow({ provider: "fake", paymentRef: "unchecked" }))?.state).toBe("attempting");
   });
 });
 

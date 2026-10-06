@@ -1117,6 +1117,8 @@ export type ReaderBillPaymentDeps = TillSaleDeps & {
   provider: PaymentProvider;
   /** The chosen reader's vendor reference, passed to `collect`; absent for the simulator. */
   readerRef?: string;
+  /** The device profile the route checked the request under, passed to `collect`. */
+  deviceProfileId?: string;
 };
 
 /** Who confirmed a payment's or a refund's outcome by hand, and their note. */
@@ -1245,6 +1247,7 @@ export async function takeReaderBillPayment(
       workingOrderId: brandWorkingOrderId(workingOrderId),
       amount: centsToDecimal(payment.applied + payment.tip),
       ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
+      ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
       simulationOutcome: req.simulationOutcome,
       billPaymentId: payment.id,
     });

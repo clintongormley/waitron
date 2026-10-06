@@ -3,8 +3,8 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import Stripe from "stripe";
 import { describe, expect, it, vi } from "vitest";
-import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import { CORE_MIGRATIONS, deviceProfiles, devices, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   AppError,
@@ -241,6 +241,38 @@ describe("StripeTerminalProvider.collect", () => {
     const result = await provider.collect(p);
     expect(result.state).toBe("captured");
     expect(polls).toBe(2);
+  });
+});
+
+describe("StripeTerminalProvider.collect under the device profile the request was checked against", () => {
+  it("refuses device.profile_changed before calling Stripe when the device has moved to another profile", async () => {
+    const fake = new FakeStripe();
+    const p = await collectParams();
+    const [{ profileId }] = await suite.db
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, p._seeded.deviceId));
+    const [other] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Moved to", formFactor: "till", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    await suite.db
+      .update(devices)
+      .set({ deviceProfileId: other!.id })
+      .where(eq(devices.id, p._seeded.deviceId));
+
+    const err = await providerFor(fake)
+      .collect({ ...p, deviceProfileId: profileId })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).code).toBe("device.profile_changed");
+    expect(fake.lastCreateIntent).toBeUndefined();
+    expect(fake.processedReaders).toEqual([]);
+    const rows = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from payments where working_order_id = ${p._seeded.workingOrderId}`,
+    );
+    expect(rows.rows[0]!.n).toBe(0);
   });
 });
 

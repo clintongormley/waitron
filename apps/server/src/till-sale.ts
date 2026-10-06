@@ -458,6 +458,8 @@ export type IntegratedPayDeps = TillSaleDeps & {
   /** The `card_readers.id` the pay routed to, stamped onto the payment when it is associated with
    * the sale; `undefined` leaves `payments.reader_id` NULL. */
   readerId?: string;
+  /** The device profile the route checked the request under, passed to `provider.collect`. */
+  deviceProfileId?: string;
 };
 
 /**
@@ -1080,6 +1082,7 @@ async function payIntegrated(
       workingOrderId: brandWorkingOrderId(req.id),
       amount: addDecimal(baseAmount, tip),
       ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
+      ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
       allowOffline: req.allowOffline,
       simulationOutcome: req.simulationOutcome,
       demoAttemptId: req.demoAttemptId,

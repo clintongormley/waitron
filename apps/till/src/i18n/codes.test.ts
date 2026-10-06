@@ -465,3 +465,12 @@ it("says a zone the device's profile does not work in, and a profile left with n
     "El perfil de este dispositivo no tiene ninguna zona en la que tomar pedidos. Pide a un responsable que configure una",
   );
 });
+
+it("tells staff a card payment refused by a profile switch charged nothing, in both languages", () => {
+  expect(codeMessage("device.profile_changed", "en")).toBe(
+    "This device switched to another profile while the payment was starting. No card was charged. Try again.",
+  );
+  expect(codeMessage("device.profile_changed", "es")).toBe(
+    "Este dispositivo ha cambiado a otro perfil mientras se iniciaba el pago. No se ha cobrado ninguna tarjeta. Inténtalo de nuevo.",
+  );
+});

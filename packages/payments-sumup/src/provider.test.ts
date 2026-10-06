@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import { CORE_MIGRATIONS, deviceProfiles, devices } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal } from "@waitron/shared";
+import { AppError, decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { billPaymentOfRow, seedBillPayment } from "@waitron/payments/test/seed.js";
 import { setup } from "./testing/setup.js";
@@ -206,6 +207,36 @@ describe("SumUpCloudProvider.collect for a bill payment", () => {
 
     expect(result.state).toBe("captured");
     expect(await billPaymentOfRow(suite.db, result.paymentRef)).toBe(billPaymentId);
+  });
+});
+
+describe("SumUpCloudProvider.collect under the device profile the request was checked against", () => {
+  it("refuses device.profile_changed before calling SumUp when the device has moved to another profile", async () => {
+    const { t, fake, provider, params } = await setup(suite);
+    const [{ profileId }] = await suite.db
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    const [other] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Moved to", formFactor: "till", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    await suite.db
+      .update(devices)
+      .set({ deviceProfileId: other!.id })
+      .where(eq(devices.id, t.deviceId));
+
+    const err = await provider
+      .collect({ ...params, deviceProfileId: profileId })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).code).toBe("device.profile_changed");
+    expect(fake.lastCreate).toBeUndefined();
+    const rows = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from payments where working_order_id = ${t.workingOrderId}`,
+    );
+    expect(rows.rows[0]!.n).toBe(0);
   });
 });
 
