@@ -1827,11 +1827,21 @@ the tab on the running dev stack — the product page opening from a Status link
 the re-read after it, and Undo against the real server (the look in Chromium used mounted widgets
 only).
 Left open, raised in #1239's review and not taken: the Preview tab still labels a clash "Menu
-price", the name of a column W89 removed (owner's wording choice); the Resolve menu still shows on
-a clashing row while a price is typed but not yet saved; and a size with its own price decides
+price", the name of a column W89 removed (owner's wording choice); and a size with its own price decides
 whether its clash comes from its product by matching the two clashes, which can be misread in a
 rare setup where they match exactly — telling them apart needs the prices read to say which level
 a clash came from.
+
+**Resolve follows an unsaved price — DONE (A280, 2026-10-06).** A valid draft hides the
+row's Resolve menu. Blank or invalid text and Escape leave the saved clash available. Product
+and size rows have regression checks; no existing test check changed. A valid draft still hides
+Resolve during a save and after a refusal; clear it or press Escape to restore the candidate list.
+
+**Price overrides reject a comma decimal separator (A280 visual follow-up, 2026-10-06).**
+Typing `2,80` through the native input in Spanish left Resolve visible in all four mounted-widget
+checks; `2.80` hid it. The field forwards its raw text, and the row uses `isProductPrice`.
+Confirm the desired input convention, then accept a localized decimal separator at the input
+boundary if required. No change to decimal parsing is included in A280.
 
 **A product has one colour everywhere, taken from its category unless it has its own — DONE (W92, #1250,
 2026-10-05).**
