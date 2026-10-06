@@ -33,6 +33,7 @@ import type {
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
 import { exceptionSentence } from "./exception-sentence.js";
+import { formatDate } from "./hours-view.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
   PrepStation,
@@ -530,6 +531,17 @@ export class PrepStationsScreen extends LitElement {
       this.busy = false;
     }
   }
+  /** A refused Make default: the outgoing default's saved hours could not resume. */
+  #defaultRefusal(error: unknown): string {
+    const params = (error as { params?: Record<string, unknown> } | undefined)?.params;
+    const name = this.view?.stations.find((station) => station.id === params?.subjectId)?.name;
+    if (codeOf(error) !== "hours.invalid" || name === undefined || typeof params?.date !== "string")
+      return t("prep.save_error");
+    return format(
+      params.field === "date" ? "prep.default_hours_clash" : "prep.default_hours_skipped",
+      { name, date: formatDate(params.date) },
+    );
+  }
   async #preview(
     change: RoutingChange,
     save: () => Promise<unknown>,
@@ -722,7 +734,11 @@ export class PrepStationsScreen extends LitElement {
                 align="start"
                 data-test=${`make-default-${station.id}`}
                 ?disabled=${this.busy}
-                @click=${() => void this.#act(() => this.api.setDefaultStation(station.id))}
+                @click=${() =>
+                  void this.#act(
+                    () => this.api.setDefaultStation(station.id),
+                    (error) => this.#defaultRefusal(error),
+                  )}
                 >${t("prep.make_default")}</wt-button
               >`
             : nothing

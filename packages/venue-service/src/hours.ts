@@ -286,14 +286,14 @@ export async function replaceWeekHours(
     );
 }
 
-/** The special dates, with their cells. */
-async function readDateStates(
+/** The special dates, each with its stored cells. */
+async function readSpecialDays(
   tx: Transaction,
   cfg: VenueScope,
   where: SQL | undefined,
   subject: HoursSubject | null,
   exceptId: string | null,
-): Promise<Map<LocalDate, DateState>> {
+): Promise<{ date: LocalDate; closeWholeVenue: boolean; cells: DateHoursCell[] }[]> {
   const dates = await tx
     .select({
       id: specialDates.id,
@@ -308,8 +308,7 @@ async function readDateStates(
         exceptId === null ? undefined : ne(specialDates.id, exceptId),
       ),
     );
-  const states = new Map<LocalDate, DateState>();
-  if (dates.length === 0) return states;
+  if (dates.length === 0) return [];
   const cells = await tx
     .select()
     .from(specialDateHours)
@@ -327,19 +326,28 @@ async function readDateStates(
     specialDateHoursPeriods,
     cells.map((cell) => cell.id),
   );
-  for (const date of dates)
-    states.set(date.date, {
-      closeWholeVenue: date.closeWholeVenue,
-      cells: new Map(
-        cells
-          .filter((cell) => cell.specialDateId === date.id)
-          .map((cell) => [
-            keyOf(subjectOfRow(cell)),
-            cellIntervals(cellOf(cell.mode, periods.get(cell.id) ?? [])),
-          ]),
-      ),
-    });
-  return states;
+  return dates.map((date) => ({
+    date: date.date,
+    closeWholeVenue: date.closeWholeVenue,
+    cells: cells
+      .filter((cell) => cell.specialDateId === date.id)
+      .map((cell) => ({
+        subject: subjectOfRow(cell),
+        cell: cellOf(cell.mode, periods.get(cell.id) ?? []),
+      })),
+  }));
+}
+
+/** The special dates as the clash check sees them. */
+async function readDateStates(
+  tx: Transaction,
+  cfg: VenueScope,
+  where: SQL | undefined,
+  subject: HoursSubject | null,
+  exceptId: string | null,
+): Promise<Map<LocalDate, DateState>> {
+  const days = await readSpecialDays(tx, cfg, where, subject, exceptId);
+  return new Map(days.map((day) => [day.date, dateState(day.closeWholeVenue, day.cells)]));
 }
 
 async function assertWeekBesideSpecialDates(
@@ -483,6 +491,37 @@ function dateState(closeWholeVenue: boolean, cells: readonly DateHoursCell[]): D
 }
 
 /**
+ * The first pair of neighbouring dates, one of them a `touched` date, whose hours clash for one of
+ * `subjects`: the touched date, the other date of the pair, and the subject. Pairs already past
+ * at `now` are left out.
+ */
+function firstClash(
+  subjects: readonly HoursSubject[],
+  dates: Map<LocalDate, DateState>,
+  weeks: Map<string, (Interval[] | null)[]>,
+  touched: readonly LocalDate[],
+  now: LocalDate | null,
+): { date: LocalDate; other: LocalDate; subject: HoursSubject } | null {
+  for (const subject of subjects) {
+    const key = keyOf(subject);
+    const week = (weekday: number) => weeks.get(key)?.[weekday] ?? null;
+    for (const date of touched)
+      for (const earlier of [addDays(date, -1), date]) {
+        if (!pairMatters(earlier, now)) continue;
+        const later = addDays(earlier, 1);
+        if (
+          tailOverlaps(
+            effective(earlier, key, dates, week).intervals,
+            effective(later, key, dates, week).intervals,
+          )
+        )
+          return { date, other: earlier === date ? later : earlier, subject };
+      }
+  }
+  return null;
+}
+
+/**
  * Refuses proposed special dates whose hours clash with the dates either side of each `touched`
  * date. `proposed` replaces whatever is stored on its dates; a touched date it leaves out reads as
  * an ordinary day. `clash` names the refusal from the touched date and the other date of the pair.
@@ -509,22 +548,8 @@ async function assertDatesBesideNeighbours(
   for (const [date, state] of proposed) dates.set(date, state);
   const subjects = await scheduledSubjects(tx, cfg);
   const weeks = await weekIntervalsBySubject(tx, subjects);
-  for (const subject of subjects) {
-    const key = keyOf(subject);
-    const week = (weekday: number) => weeks.get(key)?.[weekday] ?? null;
-    for (const date of touched)
-      for (const earlier of [addDays(date, -1), date]) {
-        if (!pairMatters(earlier, now)) continue;
-        const later = addDays(earlier, 1);
-        if (
-          tailOverlaps(
-            effective(earlier, key, dates, week).intervals,
-            effective(later, key, dates, week).intervals,
-          )
-        )
-          clash(date, earlier === date ? later : earlier, subject);
-      }
-  }
+  const found = firstClash(subjects, dates, weeks, touched, now);
+  if (found !== null) clash(found.date, found.other, found.subject);
 }
 
 /**
@@ -581,6 +606,45 @@ async function assertEndpointsOccur(
   const skipped = skippedEndpoint(input.date, input.cells, zone);
   if (skipped !== null)
     invalidHours(`cells.${skipped.index}.cell.periods.${skipped.position}.${skipped.end}`);
+}
+
+/**
+ * Refuses letting `stationId` stop being the default when the schedule it would resume breaks a
+ * rule a save holds: on a current or future special date, a cell it kept while it was the default
+ * opens or closes at a minute the clock skips (`field` `opensAt` or `closesAt`, `date` that special
+ * date), or its hours overlap across a midnight with the day before or after (`field` `date`,
+ * `date` the neighbouring date).
+ */
+export async function assertDemotedStationHours(
+  tx: Transaction,
+  cfg: VenueScope,
+  stationId: string,
+  at: Date,
+): Promise<void> {
+  const subject: HoursSubject = { kind: "station", id: stationId };
+  const now = await today(tx, cfg, at);
+  const days = await readSpecialDays(
+    tx,
+    cfg,
+    now === null ? undefined : gte(specialDates.date, addDays(now, -1)),
+    subject,
+    null,
+  );
+  const zone = await readableZone(tx, cfg);
+  if (zone !== null)
+    for (const day of days) {
+      const skipped = skippedEndpoint(day.date, day.cells, zone);
+      if (skipped !== null) invalidHours(skipped.end, { date: day.date, subjectId: stationId });
+    }
+  const dates = new Map(days.map((day) => [day.date, dateState(day.closeWholeVenue, day.cells)]));
+  const found = firstClash(
+    [subject],
+    dates,
+    await weekIntervalsBySubject(tx, [subject]),
+    [...dates.keys()].sort(),
+    now,
+  );
+  if (found !== null) invalidHours("date", { date: found.other, subjectId: stationId });
 }
 
 /**

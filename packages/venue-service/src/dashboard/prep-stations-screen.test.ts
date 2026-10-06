@@ -1460,6 +1460,72 @@ it("makes a nondefault station the default", async () => {
   await settle(el);
   expect(a.setDefaultStation).toHaveBeenCalledWith("terrace");
 });
+it.each([
+  [
+    "en",
+    "date",
+    "Bar would go back to its saved hours, which overlap the hours on Sun, 10 Jun 2096. Change them on the Hours page first.",
+  ],
+  [
+    "en",
+    "opensAt",
+    "Bar would go back to its saved hours, and its hours for Sun, 10 Jun 2096 use a time the clock skips. Change them on the Hours page first.",
+  ],
+  [
+    "es",
+    "date",
+    "Bar volvería a su horario guardado, que se solapa con el del dom, 10 jun 2096. Cámbialo primero en la página Horarios.",
+  ],
+  [
+    "es",
+    "closesAt",
+    "Bar volvería a su horario guardado, y su horario del dom, 10 jun 2096 usa una hora que el reloj se salta. Cámbialo primero en la página Horarios.",
+  ],
+] as const)(
+  "in %s, explains a Make default refused by the saved hours (%s) the default would resume",
+  async (locale, field, message) => {
+    setLocale(locale);
+    const changed = {
+      ...view,
+      stations: [
+        ...view.stations,
+        { ...view.stations[0]!, id: "terrace", name: "Terrace", isDefault: false, displayOrder: 2 },
+      ],
+    };
+    const a = api({
+      load: vi.fn().mockResolvedValue(changed),
+      setDefaultStation: vi.fn().mockRejectedValue({
+        code: "hours.invalid",
+        params: { field, date: "2096-06-10", subjectId: "bar" },
+      }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="make-default-terrace"]')!.click();
+    await vi.waitFor(() => expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe(message));
+  },
+);
+it.each([
+  ["a station it does not show", { field: "date", date: "2096-06-10", subjectId: "gone" }],
+  ["no date", { field: "date", subjectId: "bar" }],
+])("falls back to the generic message for an hours refusal naming %s", async (_, params) => {
+  setLocale("en");
+  const changed = {
+    ...view,
+    stations: [
+      ...view.stations,
+      { ...view.stations[0]!, id: "terrace", name: "Terrace", isDefault: false, displayOrder: 2 },
+    ],
+  };
+  const a = api({
+    load: vi.fn().mockResolvedValue(changed),
+    setDefaultStation: vi.fn().mockRejectedValue({ code: "hours.invalid", params }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="make-default-terrace"]')!.click();
+  await vi.waitFor(() =>
+    expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe("The change could not be saved."),
+  );
+});
 it("offers claimed folders by path and names their current station", async () => {
   const el = await mount(api());
   q(el, '[data-test="claim-bar"]')!.click();

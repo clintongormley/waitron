@@ -21,8 +21,10 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import {
   WEEK_DISPLAY_ORDER,
+  deleteSpecialDate,
   readWeekHours,
   replaceWeekHours,
+  saveSpecialDate,
   stationStates,
 } from "@waitron/venue-service";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -2071,6 +2073,83 @@ describe("/management-api/stations (KDS-1 config)", () => {
       204,
     );
     expect(await state()).toMatchObject({ open: false, isDefault: false, active: false });
+  });
+
+  it("refuses a new default with 400 hours.invalid, changing nothing, while the default it replaces would resume clashing hours", async () => {
+    const cfg = { locationId: brandLocationId(venue.locationId) };
+    const kitchen = await createStation(unique("Resume kitchen"), { isDefault: true });
+    const barName = unique("Resume bar");
+    const bar = await createStation(barName);
+    const subject = { kind: "station" as const, id: bar };
+    const at = new Date("2026-10-06T10:00:00Z");
+    // Dates far enough ahead to stay current whenever the suite runs.
+    const barDate = (date: string, opensAt: string, closesAt: string) => ({
+      date,
+      name: unique("Resume date"),
+      colour: "red" as const,
+      closeWholeVenue: false,
+      cells: [
+        {
+          subject,
+          cell: { mode: "periods" as const, periods: [{ id: randomUUID(), opensAt, closesAt }] },
+        },
+      ],
+    });
+    await withTransaction(suite.db, async (tx) => {
+      await replaceWeekHours(
+        tx,
+        cfg,
+        subject,
+        WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, cell: { mode: "closed", periods: [] } })),
+        at,
+      );
+      await saveSpecialDate(tx, cfg, null, barDate("2096-06-09", "22:00", "03:00"), at);
+    });
+    const later = await withTransaction(suite.db, (tx) =>
+      saveSpecialDate(tx, cfg, null, barDate("2096-06-12", "01:00", "05:00"), at),
+    );
+    expect((await req(`/stations/${bar}/default`, { method: "POST" }, managerCookie)).status).toBe(
+      204,
+    );
+    await withTransaction(suite.db, (tx) =>
+      saveSpecialDate(
+        tx,
+        cfg,
+        later.id,
+        { ...barDate("2096-06-10", "01:00", "05:00"), name: later.name, cells: [] },
+        at,
+      ),
+    );
+
+    const refusal = {
+      error: {
+        code: "hours.invalid",
+        params: { field: "date", date: "2096-06-10", subjectId: bar },
+      },
+    };
+    const swap = await req(`/stations/${kitchen}/default`, { method: "POST" }, managerCookie);
+    expect(swap.status).toBe(400);
+    expect(await swap.json()).toEqual(refusal);
+    const newName = unique("Resume new default");
+    const created = await req(
+      "/stations",
+      { method: "POST", body: JSON.stringify({ name: newName, isDefault: true }) },
+      managerCookie,
+    );
+    expect(created.status).toBe(400);
+    expect(await created.json()).toEqual(refusal);
+    let list = await listStations();
+    expect(list.find((s) => s.id === bar)!.isDefault).toBe(true);
+    expect(list.find((s) => s.id === kitchen)!.isDefault).toBe(false);
+    expect(list.some((s) => s.name === newName)).toBe(false);
+
+    await withTransaction(suite.db, (tx) => deleteSpecialDate(tx, cfg, later.id, at));
+    expect(
+      (await req(`/stations/${kitchen}/default`, { method: "POST" }, managerCookie)).status,
+    ).toBe(204);
+    list = await listStations();
+    expect(list.find((s) => s.id === kitchen)!.isDefault).toBe(true);
+    expect(list.find((s) => s.name === barName)!.isDefault).toBe(false);
   });
 
   it("POST /:id/default on an unknown or malformed id → 404 station.not_found", async () => {

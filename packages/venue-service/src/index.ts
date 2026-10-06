@@ -16,6 +16,7 @@ export * from "./routing.js";
 export * from "./routing-store.js";
 export * from "./station-times.js";
 export {
+  assertDemotedStationHours,
   cellIntervals,
   deleteSpecialDate,
   duplicateSpecialDate,

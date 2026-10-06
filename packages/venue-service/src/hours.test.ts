@@ -13,6 +13,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import {
+  assertDemotedStationHours,
   cellIntervals,
   deleteSpecialDate,
   duplicateSpecialDate,
@@ -1176,6 +1177,76 @@ async function addSubjects(f: Fixture) {
     };
   });
 }
+
+describe("a station that stops being the default", () => {
+  const check = (f: Fixture, station: HoursSubject, at = AT) =>
+    withTransaction(db, (tx) => assertDemotedStationHours(tx, f.cfg, station.id, at));
+  const barDate = (f: Fixture, date: string, opensAt: string, closesAt: string) =>
+    specialInput({
+      date,
+      name: date,
+      cells: [{ subject: f.bar, cell: { mode: "periods", periods: [period(opensAt, closesAt)] } }],
+    });
+
+  it("is refused when a kept date moved while it was the default now runs into another", async () => {
+    const f = await fixture();
+    await save(f, f.bar, week());
+    await saveDate(f, null, barDate(f, "2026-10-09", "22:00", "03:00"));
+    const later = await saveDate(f, null, barDate(f, "2026-10-12", "01:00", "05:00"));
+    await makeDefault(f, f.bar);
+    await check(f, f.bar);
+    // Allowed: the default's kept cells take no part in a save's check.
+    await saveDate(f, later.id, specialInput({ date: "2026-10-10", name: later.name }));
+    await expect(check(f, f.bar)).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "date", date: "2026-10-10", subjectId: f.bar.id },
+    });
+  });
+
+  it("is refused when a kept date moved beside its standard week now overlaps it", async () => {
+    const f = await fixture();
+    // Friday runs from 22:00 to 03:00 on Saturday.
+    await save(f, f.bar, week({ 5: periods(period("22:00", "03:00")) }));
+    const date = await saveDate(f, null, barDate(f, "2026-10-14", "01:00", "05:00"));
+    await makeDefault(f, f.bar);
+    await saveDate(f, date.id, specialInput({ date: "2026-10-10", name: date.name }));
+    await expect(check(f, f.bar)).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "date", date: "2026-10-09", subjectId: f.bar.id },
+    });
+  });
+
+  it("leaves out a clash already past, as a save does", async () => {
+    const f = await fixture();
+    await save(f, f.bar, week());
+    await saveDate(f, null, barDate(f, "2026-10-01", "22:00", "03:00"));
+    await saveDate(f, null, barDate(f, "2026-10-02", "01:00", "05:00"));
+    await check(f, f.bar);
+    await expect(check(f, f.bar, new Date("2026-09-30T10:00:00Z"))).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "date", subjectId: f.bar.id },
+    });
+  });
+
+  it("is refused when a kept period copied while it was the default opens at a minute the clock skips", async () => {
+    const f = await fixture();
+    const forward = clockChangeAfter("Europe/Madrid", "2027-01-01T00:00:00Z", "forward");
+    const skipped = minutesAfter(forward.before, 1);
+    const weekEarlier = new Date(Date.parse(`${forward.date}T00:00:00Z`) - 7 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const source = await saveDate(f, null, barDate(f, weekEarlier, skipped, "12:00"));
+    await makeDefault(f, f.bar);
+    // Allowed: duplicate skips the default's kept cells when looking for skipped minutes.
+    await duplicate(f, source.id, [forward.date]);
+    await expect(check(f, f.bar)).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "opensAt", date: forward.date, subjectId: f.bar.id },
+    });
+    // Once the date and the day after it are past, it is left out.
+    await check(f, f.bar, new Date(Date.parse(`${forward.date}T12:00:00Z`) + 2 * 86_400_000));
+  });
+});
 
 describe("one subject's hours on one opening date", () => {
   it("reads an inherited cell as the standard week, Closed as Closed, and periods for that subject only", async () => {
