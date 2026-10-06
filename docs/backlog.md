@@ -1399,6 +1399,14 @@ The 2026-10-06 follow-up reproduced it with Routing selected: the Today fixture 
 preceding test's URL, leaving the Stations handle hidden. The fixture now opens Stations explicitly;
 the original focus, order and routing assertions remain. The dated W69 audit records the commands.
 
+Seating-count input now uses the shared warning on the branch: Cancel and native Escape keep
+edited counts until Discard, blank/reverted counts close directly, and explicit Seat still hands
+the chosen count to the floor without a discard question. Disconnect/reconnect preserves the
+opening or accepted baseline; departed controls cannot submit or overwrite the retained draft.
+The actual Floor screen has Keep/Discard/reopen/seat coverage in
+`apps/till/src/screens/till-floor-screen.unsaved.test.ts`, alongside the widget's new
+`seat-dialog.unsaved.test.ts`. Other till modal families and page/history work remain open.
+
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
 **What a description reader shows — checked by running, 2026-10-02.** A throwaway catalogue test

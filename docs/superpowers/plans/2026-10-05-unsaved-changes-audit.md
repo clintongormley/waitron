@@ -857,3 +857,28 @@ The initial probe used an unavailable viewport command and failed before inspect
 probe uses `page.viewport` and asserts the document width. Synthetic unload events establish
 listener cancellation only. Other till/modal owners and Tasks 5–6 page/history/native reload work
 remain open. Public F1 issuance stays disabled.
+
+### Seating count modal checkpoint, 2026-10-06
+
+The till's seating-count form now uses the shared coordinator for Cancel and native Escape.
+Keep retains the typed count; Discard restores the opening count and reports cancellation without
+seating anyone. Blank counts compare as no count, valid count spellings compare by the number
+already submitted by this form, and invalid input remains distinguishable. Validation and
+`seat-confirm` request values are unchanged. Explicit Seat commits the chosen count at the local
+handoff: `TillFloorScreen.#onSeatConfirm` removes the dialog and emits `open-table` immediately;
+this form owns no pending server operation. That handoff does not ask to discard.
+
+Parent rerenders retain the baseline and pending question. Disconnect cancels a question and
+unregisters the scope; reconnect retains the opening or accepted baseline. Retained departed input,
+Save and Enter controls cannot submit or replace the draft. A submission invalidates a pending
+Discard. The actual Floor screen is exercised through Keep, Discard, reopening and direct seating.
+
+`pnpm --filter @waitron/till exec vitest run src/widgets/seat-dialog.unsaved.test.ts` first failed
+all ten new cases. The final run of both seating suites, both floor suites and
+`src/till-app-table-service.test.ts` passed 187 cases. Four deletions in an installed disposable
+checkout each failed one intended case while the blank/revert control passed: close gate,
+submitted commit, reconnect baseline and departed-input guard. Restoring the source passed 29
+cases. Eight temporary visual flows passed sixteen axe scans, and their sixteen EN/ES,
+light/dark, 390/1280 captures were inspected. Synthetic unload checks establish listener
+cancellation only. Types, changed-file lint, formatting and diff checks passed; existing test
+assertions were not edited. Other till modal owners and Tasks 5–6 remain pending.

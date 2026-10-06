@@ -1,7 +1,9 @@
 import { LitElement, css, html } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { isValidGuestCount } from "@waitron/shared";
@@ -20,10 +22,6 @@ function parseGuestCount(value: string): { guestCount: number | null } | undefin
   return isValidGuestCount(count) ? { guestCount: count } : undefined;
 }
 
-/**
- * Asks how many guests a party has before its table is seated. The count is optional. The dialog only
- * reports the choice: the floor decides what seating means.
- */
 @customElement("till-seat-dialog")
 export class TillSeatDialog extends LitElement {
   static override styles = [
@@ -42,6 +40,52 @@ export class TillSeatDialog extends LitElement {
   @state() private value = "";
   @state() private attempted = false;
 
+  @state() private active = true;
+  #scope?: DraftScope<string>;
+  #leave?: LeaveCoordinator;
+  #baseline?: string;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override willUpdate(): void {
+    if (!this.active || this.#scope) return;
+    this.#baseline ??= this.value;
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<string>({
+      id: this,
+      current: () => this.value,
+      snapshot: (value) => value,
+      equal: (a, b) => {
+        const canonical = (value: string) => {
+          const parsed = parseGuestCount(value);
+          return parsed === undefined ? `invalid:${value.trim()}` : String(parsed.guestCount);
+        };
+        return canonical(a) === canonical(b);
+      },
+      restore: (value) => (this.value = value),
+    });
+    this.#scope?.commit(this.#baseline);
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #change(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    if (!this.isConnected || !this.active) return;
+    this.value = event.detail.value;
+    this.#scope?.changed();
+  }
+
   #error(): string {
     return this.attempted && parseGuestCount(this.value) === undefined
       ? t("seat.guest_count_invalid")
@@ -49,6 +93,7 @@ export class TillSeatDialog extends LitElement {
   }
 
   async #confirm(): Promise<void> {
+    if (!this.isConnected || !this.active) return;
     this.attempted = true;
     const parsed = parseGuestCount(this.value);
     if (parsed === undefined) {
@@ -56,6 +101,8 @@ export class TillSeatDialog extends LitElement {
       await focusFirstInvalid(this.shadowRoot!);
       return;
     }
+    this.#baseline = this.value;
+    this.#scope?.commit(this.value);
     this.dispatchEvent(
       new CustomEvent<SeatConfirmDetail>("seat-confirm", {
         detail: parsed,
@@ -66,6 +113,24 @@ export class TillSeatDialog extends LitElement {
   }
 
   #cancel(): void {
+    if (!this.isConnected || !this.active) return;
+    if (this.#scope) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+      return;
+    }
+    this.#reportClose();
+  }
+
+  #closed(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#reportClose();
+  }
+
+  #reportClose(): void {
     this.dispatchEvent(new CustomEvent("seat-cancel", { bubbles: true, composed: true }));
   }
 
@@ -73,9 +138,10 @@ export class TillSeatDialog extends LitElement {
     const error = this.#error();
     return html`<wt-dialog
       ${trackDialog()}
-      .open=${true}
+      .open=${this.active}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       .heading=${t("seat.title").replace("{table}", () => this.tableLabel)}
-      @wt-close=${() => this.#cancel()}
+      @wt-close=${(event: Event) => this.#closed(event)}
     >
       <div class="fields">
         <wt-input
@@ -83,9 +149,9 @@ export class TillSeatDialog extends LitElement {
           autocomplete="off"
           .label=${t("seat.guest_count")}
           .hint=${t("seat.guest_count_hint")}
-          .value=${this.value}
+          .value=${live(this.value)}
           .error=${error}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => (this.value = event.detail.value)}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(event)}
           @keydown=${(event: KeyboardEvent) =>
             submitOnEnter(
               event,
