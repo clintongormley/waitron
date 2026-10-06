@@ -27,8 +27,8 @@ are not refused when a save leaves them as they are. A product's category is
 row you can rename or delete.
 
 A category is named in the tree itself: Add category and a row's Rename open a box in place, which
-Enter or leaving the box saves, and Esc or a blank name cancels. A colour square sits after each
-category's name and count, an empty outline when it has no colour, and another inside the open box,
+Enter or leaving the box saves, and Esc or a blank name cancels. A colour square sits before each
+category's name, an empty outline when it has no colour, and another inside the open box,
 at its end. Either square opens a small chooser (`apps/dashboard/src/widgets/category-color-form.ts`)
 holding the shared swatches, No colour and Custom. Choosing a swatch or No colour is the answer and
 closes it; Custom answers once the colour picker settles on a colour; Cancel and Esc change nothing.
@@ -271,7 +271,7 @@ reaches no device until the menu is published" in `apps/server/src/till-api.sell
 
 ## Moving and deleting
 
-Use **Select**, tick products and categories, and choose **Move to…**. Pick a destination category or
+Use **Select and move**, tick products and categories, and choose **Move to…**. Pick a destination category or
 **All products (top level)**. The destination list shows the categories as a tree after
 **All products (top level)**, each category's children indented under it and each level sorted by
 name the way the tables sort text (numbers by value, case ignored); a chosen destination, and each
@@ -279,8 +279,9 @@ match while searching, shows the full path ("Dinner › Mains"). A selected cate
 descendants are excluded as destinations, and the server also refuses such a move with `category.parent_cycle`. Anything
 selected inside a selected category moves with that category rather than being filed beside it.
 
-On a pointer device you can drag a product, a category, or in Select mode every selected row,
-onto a category, onto a product (to file beside it) or onto **All products** (to file in no
+On a pointer device you can also drag rows, but only in **Select and move**, which shows each row's
+grip; outside it nothing can be dragged. Drag a product or a category (dragging a selected row
+carries every selected row with it) onto a category, onto a product (to file beside it) or onto **All products** (to file in no
 category). The row stays in place, faded, while a copy follows the pointer; the target shows a bar
 on its left edge and a dashed gap where the row will land in the current sort; a closed category
 opens after `HOVER_OPEN_MS` (600 ms, `apps/dashboard/src/widgets/product-list.ts`) of hovering.
@@ -290,8 +291,9 @@ drag: keyboard users, and touch users who prefer it, use the same selection acti
 
 Searching or changing a filter clears the selection, so actions do not reach items you have hidden.
 Opening or closing a category keeps it, so a selection can span categories; a selected row inside a
-closed category is still selected. **Cancel** clears it and restores the ordinary toolbar, and so
-does pressing **Select** again. A Delete you already
+closed category is still selected. **Done** clears it, hides the grips and restores the ordinary
+toolbar, and so does pressing **Select and move** again. It reads Done rather than Cancel because a
+drag made in the mode is saved as soon as it is dropped. A Delete you already
 requested keeps its captured selection, including while the category summary is being read.
 
 With only products selected, the toolbar's action reads **Disable**: it switches them off (the

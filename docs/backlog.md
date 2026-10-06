@@ -811,9 +811,7 @@ both tables, as on the shared table.
 **The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
 (W75, owner 2026-10-04) — DONE (#1194; W75a #1205; W75b #1201; W75c #1204; W75d #1221; W75e #1226);
 left open:** The Price heading reads "Price per portion" also over a row sold by the unit.
-Still open from its review: the Products list's `units` property is no longer read, though the
-Catalogue screen still passes it down through `apps/dashboard/src/widgets/catalogue-browser.ts` and
-existing tests set and assert it, so removing it changes existing tests. And neither screen counts a
+Still open from its review: neither screen counts a
 stored unit seeded as `each` as Each, which `isEachUnit` (`packages/catalogue/src/units.ts`) does;
 no code outside tests seeds one.
 
@@ -895,6 +893,27 @@ refusal re-reads; a selection with no disabled products keeps the old sentence.
 
 **A category holding only routing rules gets the Delete confirmation (A279, owner 2026-10-06) —
 DONE (#1297).** It reverses the 2026-10-01 decision; a category with nothing at all is still deleted at once.
+
+**The Products and Structure trees show drag grips only in a mode, and a category's colour square
+comes before its name (A294, owner 2026-10-06) — DONE (#TBD); left open:** Products' selection
+button is now Select and move, the only state in which its grips show and a row can be dragged, and
+its bar leaves by Done, because a drag there is saved at once; the Structure tab gained a Reorder
+toggle with a Done button, off whenever a menu opens. No tree row draws a folder icon any more (a
+dragged category's or section's picture still does); a category's or section's colour square sits
+in that slot, before its name, and a wrapped category name keeps its grip and square beside its
+first line. At phone width a category's product count, and All products', is hidden. A row the
+table reveals is no longer left part of a pixel under the sticky headings. The Products list's
+unused `units` property is gone (it closes W75's leftover).
+
+- The count is hidden with `display: none`, so screen readers most likely do not read it at phone
+  width either (not measured); whether they should is for the owner.
+- The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
+  not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the bottom
+  (left alone; not measured).
+- Products' toggle is named Select and move, not Reorder as the brief said, because a drag there
+  files rows into a category rather than reordering them.
+- In the Structure tree a product's colour square stays after its name, because its photo holds the
+  leading slot.
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE (#1066).**
 
@@ -1899,7 +1918,9 @@ Left open:
   test, and the two should agree.
 - At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
   swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
-  on the W92 branch, not on `main`) _(2026-10-06: W85e gives it 12 px more; it still clips)_.
+  on the W92 branch, not on `main`) _(2026-10-06: W85e gives it 12 px more; it still clips)_
+  _(2026-10-06: since A294 a section's swatch comes before its name, and outside Reorder mode a row
+  draws no grip slot; whether a long name still clips at 390 px was not measured)_.
 - A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2135, added by #1087
   before W92) prints "[Unhandled rejection] Error: marker" in passing runs; the noise should go.
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
@@ -2090,15 +2111,19 @@ DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
 - Not covered by W85b: while a category is being renamed, its count and asterisk follow the name
   box and are not capped _(2026-10-05: since W72g only at desktop width; at phone width they sit on
   the line above the box and wrap in what the grip and folder icon leave of the room before the
-  pinned column)_.
+  pinned column; since A294 the count is hidden at phone width, and the folder icon's slot is
+  blank)_.
 - The owner answered W85b's open point (a name got about 46 px at 390 px) "maybe (b) and (c)" (b:
   drop the product photo at phone width; c: narrow the tree's leading slots), and **W85e** (#1275,
-  2026-10-06) did (b) and narrowed the arrow slot of (c). Categories keep their folder icon, so at
-  phone width a product's name starts one folder slot before a sibling category's. The grip and the
+  2026-10-06) did (b) and narrowed the arrow slot of (c). Categories kept their folder icon, so at
+  phone width a product's name started one folder slot before a sibling category's. _(2026-10-06:
+  A294 removed the folder icon, but its slot stays and holds the category's colour square, so at
+  phone width a product's name still starts one slot before a sibling category's.)_ The grip and the
   8 px indent step were left as they were. The Structure tree's long names still clip at 390 px
   (W92's open point above).
   Left for the owner (the owner's answer was a "maybe"): keep, or undo, either half; hide the
-  folder icon too at phone width so product and category names line up again; narrow the indent
+  folder icon too at phone width so product and category names line up again (since A294 that
+  slot holds the category's colour square, so this now means moving or hiding the square); narrow the indent
   step. Before/after screenshots: `~/waitron-campaign/w85e-shots/pair-*.png` (local).
 
 **Catalogue: no two categories with one parent, and no two Active products, share a name — DONE
