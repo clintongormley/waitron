@@ -898,7 +898,12 @@ only, leaving out zeros, naming **No category** at the top level and "each categ
 the parents differ; routing rules naming a subcategory join the "Also: deletes …" list. A category
 holding only disabled products is no longer asked what happens to them. Being compact, the dialog
 now fits its content, which closes W74's finding that it stretched to nearly the full screen
-height.
+height. The products-only "Disable N products?" dialog is compact too. **Left open (owner's
+call):** (1) the top level is "No category" here but "All products (top level)" elsewhere on the
+Products screen, and a product with no category reads "Uncategorised"; (2) if the SERVER refuses a
+delete with `category.contents_changed` because only disabled products changed, its message still
+says to check the new counts, which this dialog no longer shows — a narrow timing window, not
+reproduced.
 
 **The Products and Structure trees show drag grips only in a mode, and a category's colour square
 comes before its name (A294, owner 2026-10-06) — DONE (#1300); left open:** Products' selection
