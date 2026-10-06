@@ -10,6 +10,7 @@ import {
   type RouteTarget,
   type RoutingMoment,
   type RoutingRules,
+  type StationTiming,
 } from "./routing.js";
 
 const station = (stationId: string) => ({ kind: "station" as const, stationId });
@@ -628,6 +629,143 @@ describe("opening hours", () => {
       why: "time_not_applied",
     });
     expect(stationStatus(base, "retired", null)).toEqual({ open: false, why: "switched_off" });
+  });
+});
+
+describe("opening hours by calendar date", () => {
+  const MON = 1,
+    TUE = 2;
+  const schedule = (timing: Partial<StationTiming>): RoutingRules => ({
+    ...base,
+    activeStationIds: new Set([...base.activeStationIds, "late"]),
+    timing: new Map([["late", { fallbackId: null, hours: [], today: null, ...timing }]]),
+  });
+  const on = (civilDate: string, weekday: number, timeOfDay: string): RoutingMoment => ({
+    civilDate,
+    weekday,
+    timeOfDay,
+  });
+  const status = (rules: RoutingRules, moment: RoutingMoment | null) =>
+    stationStatus(rules, "late", moment);
+  const inHours = { open: true, why: "in_hours" };
+  const outOfHours = { open: false, why: "out_of_hours" };
+  const noHours = { open: true, why: "no_hours" };
+  // Monday 22:00 to Tuesday 02:00 in a configured week where every other day is Closed.
+  const mondayNight = {
+    weekSet: true,
+    hours: [{ weekday: MON, opensAt: "22:00", closesAt: "02:00" }],
+  };
+  // Tuesday 6 October 2026, the day after Monday 5 October.
+  const tuesday = (time: string) => on("2026-10-06", TUE, time);
+
+  it("keeps Monday's overnight tail on Tuesday, even when Tuesday is Closed", () => {
+    expect(status(schedule(mondayNight), tuesday("00:30"))).toEqual(inHours);
+    const closedTuesday = schedule({ ...mondayNight, dates: new Map([["2026-10-06", []]]) });
+    expect(status(closedTuesday, tuesday("00:30"))).toEqual(inHours);
+    expect(status(closedTuesday, tuesday("01:59"))).toEqual(inHours);
+    expect(status(closedTuesday, tuesday("02:00"))).toEqual(outOfHours);
+  });
+
+  it("drops Monday's tail when Monday itself is Closed or has other hours", () => {
+    expect(
+      status(schedule({ ...mondayNight, dates: new Map([["2026-10-05", []]]) }), tuesday("00:30")),
+    ).toEqual(outOfHours);
+    const earlyMonday = schedule({
+      ...mondayNight,
+      dates: new Map([["2026-10-05", [{ opensAt: "12:00", closesAt: "16:00" }]]]),
+    });
+    expect(status(earlyMonday, tuesday("00:30"))).toEqual(outOfHours);
+    expect(status(earlyMonday, on("2026-10-05", MON, "15:59"))).toEqual(inHours);
+    expect(status(earlyMonday, on("2026-10-05", MON, "22:00"))).toEqual(outOfHours);
+  });
+
+  it("reads each date's own hours across a month end, a year end and Sunday into Monday", () => {
+    const rules = schedule({
+      weekSet: true,
+      hours: [],
+      dates: new Map([
+        ["2026-10-31", [{ opensAt: "23:00", closesAt: "01:00" }]],
+        ["2026-11-01", [{ opensAt: "12:00", closesAt: "13:00" }]],
+        ["2026-12-31", [{ opensAt: "22:00", closesAt: "03:00" }]],
+        ["2027-01-01", []],
+        ["2026-10-11", [{ opensAt: "23:00", closesAt: "02:00" }]],
+      ]),
+    });
+    expect(status(rules, on("2026-11-01", 0, "00:30"))).toEqual(inHours);
+    expect(status(rules, on("2026-11-01", 0, "01:00"))).toEqual(outOfHours);
+    expect(status(rules, on("2026-11-01", 0, "12:30"))).toEqual(inHours);
+    expect(status(rules, on("2027-01-01", 5, "02:59"))).toEqual(inHours);
+    expect(status(rules, on("2027-01-01", 5, "03:00"))).toEqual(outOfHours);
+    expect(status(rules, on("2026-10-12", MON, "01:30"))).toEqual(inHours);
+    expect(status(rules, on("2026-10-13", TUE, "01:30"))).toEqual(outOfHours);
+  });
+
+  it("includes the opening minute and excludes the closing minute of a special date", () => {
+    const rules = schedule({
+      dates: new Map([["2026-10-09", [{ opensAt: "12:00", closesAt: "14:00" }]]]),
+    });
+    expect(status(rules, on("2026-10-09", 5, "11:59"))).toEqual(outOfHours);
+    expect(status(rules, on("2026-10-09", 5, "12:00"))).toEqual(inHours);
+    expect(status(rules, on("2026-10-09", 5, "13:59"))).toEqual(inHours);
+    expect(status(rules, on("2026-10-09", 5, "14:00"))).toEqual(outOfHours);
+  });
+
+  it("tells a week with no hours set from a week that is Closed every day", () => {
+    expect(status(schedule({ weekSet: false, hours: [] }), tuesday("12:00"))).toEqual(noHours);
+    expect(status(schedule({ weekSet: true, hours: [] }), tuesday("12:00"))).toEqual(outOfHours);
+  });
+
+  it("applies a special date to a station with no weekly hours on that date only", () => {
+    const rules = schedule({
+      weekSet: false,
+      dates: new Map([["2026-10-09", [{ opensAt: "22:00", closesAt: "01:00" }]]]),
+    });
+    expect(status(rules, on("2026-10-09", 5, "12:00"))).toEqual(outOfHours);
+    expect(status(rules, on("2026-10-10", 6, "00:30"))).toEqual(inHours);
+    expect(status(rules, on("2026-10-10", 6, "01:00"))).toEqual(noHours);
+    expect(status(rules, on("2026-10-08", 4, "12:00"))).toEqual(noHours);
+  });
+
+  it("opens all day from midnight up to the next midnight", () => {
+    const rules = schedule({
+      weekSet: true,
+      dates: new Map([["2026-10-09", [{ opensAt: "00:00", closesAt: "00:00" }]]]),
+    });
+    expect(status(rules, on("2026-10-09", 5, "00:00"))).toEqual(inHours);
+    expect(status(rules, on("2026-10-09", 5, "23:59"))).toEqual(inHours);
+    expect(status(rules, on("2026-10-10", 6, "00:00"))).toEqual(outOfHours);
+  });
+
+  it("previews the standard week alone for a moment that names no date", () => {
+    const rules = schedule({ ...mondayNight, dates: new Map([["2026-10-05", []]]) });
+    expect(status(rules, { weekday: TUE, timeOfDay: "00:30" })).toEqual(inHours);
+  });
+
+  it("keeps the switch, the default, an unreadable clock and today's by-hand change ahead of a special date", () => {
+    const closedDate = new Map([["2026-10-06", []]]);
+    expect(
+      status(schedule({ weekSet: true, dates: closedDate, today: "open" }), tuesday("12:00")),
+    ).toEqual({ open: true, why: "opened_by_hand" });
+    expect(
+      status(
+        schedule({
+          dates: new Map([["2026-10-06", [{ opensAt: "00:00", closesAt: "00:00" }]]]),
+          today: "closed",
+        }),
+        tuesday("12:00"),
+      ),
+    ).toEqual({ open: false, why: "closed_by_hand" });
+    expect(status(schedule({ weekSet: true, dates: closedDate }), null)).toEqual({
+      open: true,
+      why: "time_not_applied",
+    });
+    const asDefault = {
+      ...schedule({ weekSet: true, dates: closedDate }),
+      defaultStationId: "late",
+    };
+    expect(status(asDefault, tuesday("12:00"))).toEqual({ open: true, why: "default" });
+    const switchedOff = { ...asDefault, activeStationIds: new Set<string>() };
+    expect(status(switchedOff, tuesday("12:00"))).toEqual({ open: false, why: "switched_off" });
   });
 });
 

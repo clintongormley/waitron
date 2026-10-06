@@ -5341,6 +5341,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(items("service")).toEqual(["nav-bookings"]);
     expect(items("operations")).toEqual([
       "nav-venue-operations",
+      "nav-hours",
       "nav-floor",
       "nav-prep-stations",
       "nav-venue-settings",

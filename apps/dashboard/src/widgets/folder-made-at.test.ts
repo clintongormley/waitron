@@ -294,11 +294,35 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("drinks")?.someElsewhere).toBe(true);
   });
 
+  it("qualifies a station whose standard week is Closed every day", () => {
+    const result = madeAt(
+      routing({ ...barOnDrinks, stationTimes: [times("bar", { hours: [], weekSet: true })] }),
+    );
+    expect(result.get("drinks")?.someElsewhere).toBe(true);
+  });
+
   it("does not qualify a station opened by hand today that keeps no hours", () => {
     const result = madeAt(
       routing({ ...barOnDrinks, stationTimes: [times("bar", { today: "open" })] }),
     );
     expect(result.get("drinks")?.someElsewhere).toBe(false);
+  });
+
+  it("qualifies a station with no weekly hours that a current or future special date closes", () => {
+    const restricted = madeAt(
+      routing({
+        ...barOnDrinks,
+        stationTimes: [times("bar", { weekSet: false, specialDateRestricts: true })],
+      }),
+    );
+    expect(restricted.get("drinks")?.someElsewhere).toBe(true);
+    const unrestricted = madeAt(
+      routing({
+        ...barOnDrinks,
+        stationTimes: [times("bar", { weekSet: false, specialDateRestricts: false })],
+      }),
+    );
+    expect(unrestricted.get("drinks")?.someElsewhere).toBe(false);
   });
 
   it("qualifies a station closed by hand today", () => {

@@ -24,12 +24,10 @@ import {
   zoneRemovalImpact,
   listDepartments,
   listSalePolicies,
-  listDepartmentHours,
   listDeviceDefaultZones,
   listServiceZones,
   listVenueReadiness,
   listZoneMenuAssignments,
-  replaceDepartmentHours,
   setDepartmentSalePolicyField,
   setDeviceDefaultZone,
   setZoneSalePolicyOverride,
@@ -54,6 +52,7 @@ import {
   createException,
   deleteException,
   explainRoute,
+  type ExplainWhen,
   removeClaim,
   reorderExceptions,
   routingModel,
@@ -62,8 +61,18 @@ import {
   updateException,
 } from "./routing-store.js";
 import type { ExceptionInput, RouteTarget } from "./routing.js";
+import { isLocalDate, weekdayOf } from "./hours-rules.js";
+import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
+import {
+  deleteSpecialDate,
+  duplicateSpecialDate,
+  readHoursModel,
+  replaceWeekHours,
+  saveSpecialDate,
+} from "./hours.js";
+import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
 import type { RoutingChange } from "./routing-types.js";
-import { replaceStationHours, setStationFallback, setStationToday } from "./station-times.js";
+import { setStationFallback, setStationToday } from "./station-times.js";
 import "./errors.js";
 
 const [{ permission: MANAGE_VENUE_SERVICE }] = VENUE_SERVICE_PERMISSIONS;
@@ -86,6 +95,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "station.not_found": 404,
   "station.fallback_loop": 409,
   "time_zone.unreadable": 409,
+  "hours.invalid": 400,
+  "special_date.not_found": 404,
+  "special_date.date_taken": 409,
+  "station.always_open": 409,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const MODES = new Set<ServiceMode>(["table_tab", "prepay", "ticket_then_pay"]);
@@ -109,32 +122,6 @@ function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
     return value as "auto" | "on_request" | "never";
   if (!zone && field === "printTradingName" && typeof value === "boolean") return value;
   throw new AppError("management.request_invalid", { field });
-}
-
-function requireHours(
-  body: Record<string, unknown>,
-): { weekday: number; opensAt: string; closesAt: string }[] {
-  if (!Array.isArray(body.hours))
-    throw new AppError("management.request_invalid", { field: "hours" });
-  return body.hours.map((value, index) => {
-    if (typeof value !== "object" || value === null)
-      throw new AppError("management.request_invalid", { field: `hours.${index}` });
-    const interval = value as Record<string, unknown>;
-    const { weekday, opensAt, closesAt } = interval;
-    if (
-      typeof weekday !== "number" ||
-      !Number.isInteger(weekday) ||
-      weekday < 0 ||
-      weekday > 6 ||
-      typeof opensAt !== "string" ||
-      !CLOCK_TIME.test(opensAt) ||
-      typeof closesAt !== "string" ||
-      !CLOCK_TIME.test(closesAt) ||
-      opensAt === closesAt
-    )
-      throw new AppError("management.request_invalid", { field: `hours.${index}` });
-    return { weekday, opensAt, closesAt };
-  });
 }
 
 function requireMode(value: unknown, field: string): ServiceMode {
@@ -264,6 +251,98 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         return fn(tx);
       });
 
+    const viewed = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+      withTransaction(ctx.db, async (tx) => {
+        await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
+        return fn(tx);
+      });
+
+    app.get("/management-api/venue-service/hours", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const from = c.req.query("from") ?? "";
+        const to = c.req.query("to") ?? "";
+        return c.json(await viewed(sessionId, (tx) => readHoursModel(tx, ctx.cfg, from, to, at)));
+      }),
+    );
+
+    app.put("/management-api/venue-service/hours/week", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        await gated(sessionId, (tx) =>
+          replaceWeekHours(
+            tx,
+            ctx.cfg,
+            body.subject as HoursSubject,
+            body.days as readonly WeekDay[],
+            at,
+          ),
+        );
+        return c.body(null, 204);
+      }),
+    );
+
+    app.post("/management-api/venue-service/special-dates", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const body = await readJsonBody<SpecialDateInput>(c);
+        return c.json(
+          await gated(sessionId, (tx) => saveSpecialDate(tx, ctx.cfg, null, body, at)),
+          201,
+        );
+      }),
+    );
+
+    app.put("/management-api/venue-service/special-dates/:id", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
+        const body = await readJsonBody<SpecialDateInput>(c);
+        return c.json(await gated(sessionId, (tx) => saveSpecialDate(tx, ctx.cfg, id, body, at)));
+      }),
+    );
+
+    // A copy takes everything but its date from the source, so the request carries dates only.
+    app.post("/management-api/venue-service/special-dates/:id/duplicate", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const copies = await gated(sessionId, (tx) => {
+          const extra = Object.keys(body).find((key) => key !== "dates");
+          if (extra !== undefined)
+            throw new AppError("management.request_invalid", { field: extra });
+          return duplicateSpecialDate(
+            tx,
+            ctx.cfg,
+            id,
+            body.dates as readonly LocalDate[],
+            at,
+            VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+          );
+        });
+        return c.json(copies, 201);
+      }),
+    );
+
+    app.delete("/management-api/venue-service/special-dates/:id", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
+        await gated(sessionId, (tx) =>
+          deleteSpecialDate(tx, ctx.cfg, id, at, VENUE_SERVICE_CALENDAR_PARTICIPANTS),
+        );
+        return c.body(null, 204);
+      }),
+    );
+
     app.get("/management-api/venue-service/stations/overview", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
@@ -297,17 +376,27 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         );
         const zone = c.req.query("zoneId");
         const zoneId = zone ? requireUuidParam(zone, "ServiceZoneId") : null;
+        // A weekday previews the standard week; a date previews that date's own hours.
         const weekday = c.req.query("weekday");
+        const date = c.req.query("date");
         const time = c.req.query("time");
         if (
-          (weekday === undefined) !== (time === undefined) ||
-          (weekday !== undefined && (!/^[0-6]$/.test(weekday) || !CLOCK_TIME.test(time!)))
+          (weekday !== undefined && date !== undefined) ||
+          (weekday === undefined && date === undefined) !== (time === undefined) ||
+          (weekday !== undefined && !/^[0-6]$/.test(weekday)) ||
+          (date !== undefined && !isLocalDate(date)) ||
+          (time !== undefined && !CLOCK_TIME.test(time))
         )
           throw new AppError("management.request_invalid", { field: "when" });
-        const when =
-          weekday === undefined
-            ? { kind: "now" as const, at: new Date() }
-            : { kind: "at" as const, moment: { weekday: Number(weekday), timeOfDay: time! } };
+        const when: ExplainWhen =
+          time === undefined
+            ? { kind: "now", at: new Date() }
+            : date === undefined
+              ? { kind: "at", moment: { weekday: Number(weekday), timeOfDay: time } }
+              : {
+                  kind: "at",
+                  moment: { civilDate: date, weekday: weekdayOf(date), timeOfDay: time },
+                };
         return c.json(
           await gated(sessionId, (tx) =>
             explainRoute(tx, ctx.cfg, productId, zoneId, when, extraProductIds),
@@ -397,17 +486,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.put("/management-api/venue-service/stations/:stationId/hours", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const stationId = requireUuidParam(c.req.param("stationId"), "StationId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const hours = requireHours(body);
-        await gated(sessionId, (tx) => replaceStationHours(tx, ctx.cfg, stationId, hours));
-        return c.body(null, 204);
-      }),
-    );
-
     app.put("/management-api/venue-service/stations/:stationId/fallback", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
@@ -454,7 +532,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           zones: await listServiceZones(tx, ctx.cfg, { includeInactive: true }),
           salePolicies: await listSalePolicies(tx, ctx.cfg),
           deviceZones: await listDeviceDefaultZones(tx, ctx.cfg),
-          hours: await listDepartmentHours(tx, ctx.cfg),
           zoneMenus: await listZoneMenuAssignments(tx, ctx.cfg),
           readiness: await listVenueReadiness(tx, ctx.cfg),
           settings: { editSentLines: await readEditSentLines(tx) },
@@ -645,17 +722,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         await gated(sessionId, (tx) => deactivateDepartment(tx, ctx.cfg, departmentId));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/departments/:departmentId/hours", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const hours = requireHours(body);
-        await gated(sessionId, (tx) => replaceDepartmentHours(tx, ctx.cfg, departmentId, hours));
         return c.body(null, 204);
       }),
     );

@@ -27,12 +27,8 @@ import {
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import {
-  createDepartment,
-  createServiceZone,
-  departmentSalePolicies,
-  zoneSalePolicies,
-} from "@waitron/venue-service";
+import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { and, eq, sql } from "drizzle-orm";
 import { uploadImage, readImageBytes } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -86,6 +82,22 @@ import {
   saveAdjustmentSettings,
 } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
+import {
+  createDepartment,
+  createServiceZone,
+  departmentSalePolicies,
+  departments,
+  readSpecialDate,
+  readWeekHours,
+  replaceWeekHours,
+  resolveOpeningDateHours,
+  saveSpecialDate,
+  setStationToday,
+  stationStates,
+  type WeekCell,
+  type WeekDay,
+  zoneSalePolicies,
+} from "@waitron/venue-service";
 import { decimal, locationId, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
@@ -104,6 +116,7 @@ import {
 } from "./configuration-transfer.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { createStatus } from "./tables.js";
+import { setDefaultStation } from "./kitchen.js";
 import { selfEnrolNodeAgent } from "./join-requests.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -2953,4 +2966,448 @@ it("transfers department receipt choices and explicit or inherited zone choices 
     { name: "Explicit receipts", department_mode: "on_request", zone_mode: "never" },
     { name: "Inherited receipts", department_mode: "on_request", zone_mode: null },
   ]);
+});
+
+describe("opening hours in a configuration transfer", () => {
+  /** Tuesday 6 October 2026, 12:00 in Madrid. */
+  const AT = new Date("2026-10-06T10:00:00Z");
+  const p = (opensAt: string, closesAt: string) => ({ id: randomUUID(), opensAt, closesAt });
+  const CLOSED = { mode: "closed" as const, periods: [] as [] };
+  const ALL_DAY = { mode: "all_day" as const, periods: [] as [] };
+  const week = (cell: (weekday: number) => WeekCell): WeekDay[] =>
+    [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: cell(weekday) }));
+
+  interface Named {
+    cfg: { locationId: ReturnType<typeof locationId> };
+    departments: Map<string, string>;
+    stations: Map<string, string>;
+  }
+
+  async function named(db: typeof suite.db, located: { locationId: string }): Promise<Named> {
+    const departmentRows = await db.execute<{ id: string; name: string }>(sql`
+      select id, name from departments where location_id = ${located.locationId}`);
+    const stationRows = await db.execute<{ id: string; name: string }>(sql`
+      select id, name from kitchen_stations where location_id = ${located.locationId}`);
+    return {
+      cfg: { locationId: locationId(located.locationId) },
+      departments: new Map(departmentRows.rows.map((row) => [row.name, row.id])),
+      stations: new Map(stationRows.rows.map((row) => [row.name, row.id])),
+    };
+  }
+
+  /** A venue's hours with every id replaced by its subject's name or dropped, to compare venues. */
+  async function hoursByName(db: typeof suite.db, located: { locationId: string }) {
+    const venue = await named(db, located);
+    const nameOf = new Map([
+      ...[...venue.departments].map(([name, id]) => [id, `department:${name}`] as const),
+      ...[...venue.stations].map(([name, id]) => [id, `station:${name}`] as const),
+    ]);
+    const withoutIds = (cell: {
+      mode: string;
+      periods: { opensAt: string; closesAt: string }[];
+    }) => ({
+      mode: cell.mode,
+      periods: cell.periods.map(({ opensAt, closesAt }) => ({ opensAt, closesAt })),
+    });
+    return withTransaction(db, async (tx) => {
+      const weeks: Record<string, unknown> = {};
+      for (const [name, id] of venue.departments)
+        weeks[`department:${name}`] = (
+          await readWeekHours(tx, venue.cfg, { kind: "department", id })
+        ).map((day) => ({ weekday: day.weekday, cell: withoutIds(day.cell) }));
+      for (const [name, id] of venue.stations)
+        weeks[`station:${name}`] = (
+          await readWeekHours(tx, venue.cfg, { kind: "station", id })
+        ).map((day) => ({ weekday: day.weekday, cell: withoutIds(day.cell) }));
+      const dateRows = await tx.execute<{ id: string }>(sql`
+        select id from special_dates where location_id = ${located.locationId} order by date`);
+      const dates = [];
+      for (const { id } of dateRows.rows) {
+        const date = await readSpecialDate(tx, venue.cfg, id);
+        dates.push({
+          date: date.date,
+          name: date.name,
+          colour: date.colour,
+          closeWholeVenue: date.closeWholeVenue,
+          cells: date.cells
+            .map((entry) => ({
+              subject: nameOf.get(entry.subject.id),
+              cell: withoutIds(entry.cell),
+            }))
+            .sort((a, b) => String(a.subject).localeCompare(String(b.subject))),
+        });
+      }
+      return { weeks, dates };
+    });
+  }
+
+  /** A prepared venue with a second department, a bar and hours of every kind. */
+  async function preparedWithHours(taxId: string) {
+    const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      await tx.insert(departments).values({
+        locationId: source.locationId,
+        name: "Deli",
+        tradingName: "Deli",
+        defaultServiceMode: "prepay",
+      });
+      await tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Bar" });
+    });
+    const { cfg, departments: dept, stations } = await named(suite.db, source);
+    const restaurant = { kind: "department" as const, id: dept.get("Prepared")! };
+    const deli = { kind: "department" as const, id: dept.get("Deli")! };
+    const bar = { kind: "station" as const, id: stations.get("Bar")! };
+    await withTransaction(suite.db, async (tx) => {
+      // Closed on Monday; lunch and a dinner running past midnight on the other days.
+      await replaceWeekHours(
+        tx,
+        cfg,
+        restaurant,
+        week((weekday) =>
+          weekday === 1
+            ? CLOSED
+            : { mode: "periods", periods: [p("12:00", "16:00"), p("20:00", "01:00")] },
+        ),
+        AT,
+      );
+      // Closed on Sunday, open all day on Monday, 09:00–18:00 otherwise. The bar has no hours set.
+      await replaceWeekHours(
+        tx,
+        cfg,
+        deli,
+        week((weekday) =>
+          weekday === 0
+            ? CLOSED
+            : weekday === 1
+              ? ALL_DAY
+              : { mode: "periods", periods: [p("09:00", "18:00")] },
+        ),
+        AT,
+      );
+      await saveSpecialDate(
+        tx,
+        cfg,
+        null,
+        {
+          date: "2026-12-24",
+          name: "Christmas Eve",
+          colour: "amber",
+          closeWholeVenue: false,
+          cells: [
+            { subject: restaurant, cell: { mode: "periods", periods: [p("12:00", "18:00")] } },
+            { subject: bar, cell: CLOSED },
+          ],
+        },
+        AT,
+      );
+      await saveSpecialDate(
+        tx,
+        cfg,
+        null,
+        {
+          date: "2026-12-25",
+          name: "Christmas",
+          colour: "red",
+          closeWholeVenue: true,
+          cells: [{ subject: deli, cell: ALL_DAY }],
+        },
+        AT,
+      );
+      await saveSpecialDate(
+        tx,
+        cfg,
+        null,
+        {
+          date: "2027-01-01",
+          name: "New Year",
+          colour: "blue",
+          closeWholeVenue: false,
+          cells: [{ subject: bar, cell: ALL_DAY }],
+        },
+        AT,
+      );
+      await setStationToday(tx, cfg, bar.id, "closed", AT);
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
+    return { source, versions, transferred };
+  }
+
+  it("carries the standard weeks and special dates of every kind, with fresh ids that still link up", async () => {
+    const { source, versions, transferred } = await preparedWithHours("B44001122");
+    expect(transferred.tables).not.toHaveProperty("station_day_states");
+    expect(transferred.tables.hours_week_periods).toContainEqual(
+      expect.objectContaining({ opens_at: "20:00:00", closes_at: "01:00:00", position: 1 }),
+    );
+
+    const target = await applyVenue(planVenue(venue("B44001133"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+
+    const expected = await hoursByName(suite.db, source);
+    expect(expected.weeks["station:Bar"]).toEqual(
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: { mode: "not_set", periods: [] } })),
+    );
+    expect(expected.dates.map((date) => date.date)).toEqual([
+      "2026-12-24",
+      "2026-12-25",
+      "2027-01-01",
+    ]);
+    expect(await hoursByName(targetSuite.db, target)).toEqual(expected);
+
+    const sourceIds = new Set(
+      [
+        ...transferred.tables.hours_week_cells!,
+        ...transferred.tables.hours_week_periods!,
+        ...transferred.tables.special_dates!,
+        ...transferred.tables.special_date_hours!,
+        ...transferred.tables.special_date_hours_periods!,
+      ].map((row) => row.id),
+    );
+    const imported = await targetSuite.db.execute<{ id: string; times: string | null }>(sql`
+      select id, null as times from hours_week_cells
+      union all select id, opens_at || '-' || closes_at from hours_week_periods
+      union all select id, null from special_dates
+      union all select id, null from special_date_hours
+      union all select id, opens_at || '-' || closes_at from special_date_hours_periods`);
+    expect(imported.rows).toHaveLength(sourceIds.size);
+    for (const row of imported.rows) {
+      expect(sourceIds.has(row.id)).toBe(false);
+      expect(row.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    }
+    expect(imported.rows.flatMap((row) => (row.times === null ? [] : [row.times])).sort()).toEqual([
+      ...Array<string>(5).fill("09:00:00-18:00:00"),
+      ...Array<string>(6).fill("12:00:00-16:00:00"),
+      "12:00:00-18:00:00",
+      ...Array<string>(6).fill("20:00:00-01:00:00"),
+    ]);
+    const dayStates = await targetSuite.db.execute<{ n: number }>(sql`
+      select cast(count(*) as int) as n from station_day_states`);
+    expect(dayStates.rows[0]!.n).toBe(0);
+  });
+
+  it("carries a default station's retained hours, which leave it open", async () => {
+    const source = await applyVenue(planVenue(venue("B44002211"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Pase" }),
+    );
+    const { cfg, stations } = await named(suite.db, source);
+    const pase = { kind: "station" as const, id: stations.get("Pase")! };
+    // Pase is Closed every day and on New Year's Eve, then becomes the default, which keeps both.
+    await withTransaction(suite.db, async (tx) => {
+      await replaceWeekHours(
+        tx,
+        cfg,
+        pase,
+        week(() => CLOSED),
+        AT,
+      );
+      await saveSpecialDate(
+        tx,
+        cfg,
+        null,
+        {
+          date: "2026-12-31",
+          name: "New Year's Eve",
+          colour: "purple",
+          closeWholeVenue: false,
+          cells: [{ subject: pase, cell: CLOSED }],
+        },
+        AT,
+      );
+      await setDefaultStation(
+        tx,
+        {
+          nodeId: nodeId(source.nodeId),
+          seriesId: seriesId(source.seriesIds[0]!),
+          locationId: cfg.locationId,
+          locale: "es-ES",
+          invoiceLocales: ["es-ES"],
+          tipsEnabled: false,
+          simplifiedInvoiceLimit: null,
+        },
+        pase.id,
+      );
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
+    expect(transferred.tables.hours_week_cells).toHaveLength(7);
+    expect(transferred.tables.special_date_hours).toEqual([
+      expect.objectContaining({ station_id: pase.id, mode: "closed" }),
+    ]);
+
+    const target = await applyVenue(planVenue(venue("B44002222"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const imported = await named(targetSuite.db, target);
+    const importedPase = { kind: "station" as const, id: imported.stations.get("Pase")! };
+    const read = await withTransaction(targetSuite.db, async (tx) => ({
+      week: await readWeekHours(tx, imported.cfg, importedPase),
+      eve: await resolveOpeningDateHours(tx, imported.cfg, importedPase, "2026-12-31"),
+      tuesday: await resolveOpeningDateHours(tx, imported.cfg, importedPase, "2026-10-06"),
+      // 23:00 in Madrid on New Year's Eve, and noon on an ordinary Tuesday.
+      states: [
+        await stationStates(tx, imported.cfg, new Date("2026-12-31T22:00:00Z")),
+        await stationStates(tx, imported.cfg, AT),
+      ],
+    }));
+    expect(read.week.map((day) => day.cell)).toEqual(Array(7).fill(CLOSED));
+    for (const resolved of [read.eve, read.tuesday])
+      expect(resolved).toMatchObject({
+        source: "default_station",
+        cell: { mode: "always_open", periods: [] },
+      });
+    for (const states of read.states)
+      expect(states.get(importedPase.id)).toMatchObject({ isDefault: true, open: true });
+  });
+
+  it("carries a past special date that a later week edit made clash, as the saves allowed", async () => {
+    const source = await applyVenue(planVenue(venue("B44005511"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const { cfg, departments: dept } = await named(suite.db, source);
+    const restaurant = { kind: "department" as const, id: dept.get("Prepared")! };
+    await withTransaction(suite.db, async (tx) => {
+      await replaceWeekHours(
+        tx,
+        cfg,
+        restaurant,
+        week(() => CLOSED),
+        AT,
+      );
+      // Friday 25 September is past at AT; its night runs into Saturday's small hours.
+      await saveSpecialDate(
+        tx,
+        cfg,
+        null,
+        {
+          date: "2026-09-25",
+          name: "Late night",
+          colour: "purple",
+          closeWholeVenue: false,
+          cells: [
+            { subject: restaurant, cell: { mode: "periods", periods: [p("22:00", "03:00")] } },
+          ],
+        },
+        AT,
+      );
+      // Saturdays from 01:00 overlap that past night, which the save lets through.
+      await replaceWeekHours(
+        tx,
+        cfg,
+        restaurant,
+        week((weekday) =>
+          weekday === 6 ? { mode: "periods", periods: [p("01:00", "05:00")] } : CLOSED,
+        ),
+        AT,
+      );
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
+    // Saturday 26 September ends at 22:00 UTC in Madrid, the bundle's zone, and not in UTC.
+    expect(transferred.venue.location.timeZone).toBe("Europe/Madrid");
+    expect(() =>
+      validateConfigurationBundle(
+        { ...transferred, createdAt: "2026-09-26T21:59:59.999Z" },
+        ALL_MODULES,
+        versions,
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "special_date_hours" },
+      }),
+    );
+    expect(() =>
+      validateConfigurationBundle(
+        { ...transferred, createdAt: "2026-09-26T22:00:00.000Z" },
+        ALL_MODULES,
+        versions,
+      ),
+    ).not.toThrow();
+
+    expect(() => validateConfigurationBundle(transferred, ALL_MODULES, versions)).not.toThrow();
+    const target = await applyVenue(planVenue(venue("B44005522"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const expected = await hoursByName(suite.db, source);
+    expect(expected.dates.map((date) => date.date)).toEqual(["2026-09-25"]);
+    expect(await hoursByName(targetSuite.db, target)).toEqual(expected);
+  });
+
+  it("refuses an edited bundle whose hours a save would refuse, and writes no venue", async () => {
+    const { versions, transferred } = await preparedWithHours("B44003311");
+    const lunch = transferred.tables.hours_week_periods!.find(
+      (row) => row.opens_at === "12:00:00" && row.closes_at === "16:00:00",
+    )!;
+    // A second period inside the lunch of the same day.
+    const edited: ConfigurationBundle = {
+      ...transferred,
+      tables: {
+        ...transferred.tables,
+        hours_week_periods: [
+          ...transferred.tables.hours_week_periods!,
+          { ...lunch, id: randomUUID(), position: 2, opens_at: "13:00:00", closes_at: "14:00:00" },
+        ],
+      },
+    };
+    const refusal = { code: "setup.request_invalid", params: { field: "hours_week_cells" } };
+    expect(() => validateConfigurationBundle(edited, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining(refusal),
+    );
+    const target = venue("B44003322");
+    await expect(
+      applyVenue(planVenue(target, ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject(refusal);
+    const persisted = await targetSuite.db.execute<{ tenants: number; cells: number }>(sql`
+      select
+        (select cast(count(*) as int) from tenants where tax_id = ${target.taxId}) as tenants,
+        (select cast(count(*) as int) from hours_week_cells) as cells`);
+    expect(persisted.rows[0]).toEqual({ tenants: 0, cells: 0 });
+  });
+
+  it("refuses a bundle exported before the hours tables existed, as an older venue-service schema", async () => {
+    const { versions, transferred } = await preparedWithHours("B44004411");
+    const journal = JSON.parse(
+      await readFile(
+        new URL("../../../packages/venue-service/drizzle/meta/_journal.json", import.meta.url),
+        "utf8",
+      ),
+    ) as { entries: { tag: string }[] };
+    expect(journal.entries.map((entry) => entry.tag)).toContain("0021_hours_calendar");
+    expect(versions["venue-service"]).toBe(journal.entries.length);
+    const older: ConfigurationBundle = {
+      ...transferred,
+      modules: { ...transferred.modules, "venue-service": versions["venue-service"]! - 1 },
+    };
+    expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "module:venue-service" },
+      }),
+    );
+  });
 });

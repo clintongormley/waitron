@@ -427,6 +427,22 @@ it("explains the consequences beside the filled name and clock fields", async ()
   expect(nameHelp.getAttribute("aria-label")).toContain("Venue name");
 });
 
+it.each([
+  [
+    "en-GB",
+    "Department and station opening hours, special dates and booking times keep their wall-clock values.",
+  ],
+  [
+    "es",
+    "Los horarios de apertura de departamentos y estaciones, las fechas especiales y las horas de las reservas conservan sus horas locales.",
+  ],
+])("names opening hours and special dates in the clock warning (%s)", async (locale, sentence) => {
+  setLocale(locale);
+  const el = await editing(rig().api);
+  const clockHelp = field(el, "timeZone").parentElement!.querySelector("wt-help-tooltip")!;
+  expect(clockHelp.textContent).toContain(sentence);
+});
+
 it("shows captured old/new civil and business dates, transition boundaries and retained deadlines before clock acknowledgement", async () => {
   setLocale("en-GB");
   const r = rig();

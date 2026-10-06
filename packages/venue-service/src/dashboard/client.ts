@@ -20,12 +20,6 @@ export interface ServiceZone {
   serviceModeOverride: ServiceMode | null;
   active?: boolean;
 }
-export interface HoursInterval {
-  departmentId: string;
-  weekday: number;
-  opensAt: string;
-  closesAt: string;
-}
 export interface ZoneMenu {
   zoneId: string;
   menuId: string;
@@ -74,7 +68,6 @@ export interface VenueServiceModel {
   zones: ServiceZone[];
   salePolicies: { departments: DepartmentSalePolicy[]; zones: ZoneSalePolicy[] };
   deviceZones: { deviceId: string; zoneId: string }[];
-  hours: HoursInterval[];
   zoneMenus: ZoneMenu[];
   readiness: VenueReadinessIssue[];
   settings: VenueServiceSettings;
@@ -184,12 +177,6 @@ export class VenueServiceApi {
 
   zoneRemovalImpact(zoneId: string): Promise<DepartmentRemovalImpact> {
     return this.#read(`/management-api/venue-service/zones/${zoneId}/removal-impact`);
-  }
-
-  replaceHours(departmentId: string, hours: Omit<HoursInterval, "departmentId">[]): Promise<void> {
-    return this.request(`/management-api/venue-service/departments/${departmentId}/hours`, "PUT", {
-      hours,
-    });
   }
 
   configureZone(

@@ -1460,6 +1460,72 @@ it("makes a nondefault station the default", async () => {
   await settle(el);
   expect(a.setDefaultStation).toHaveBeenCalledWith("terrace");
 });
+it.each([
+  [
+    "en",
+    "date",
+    "Bar would go back to its saved hours, which overlap a day next to the special date on Sun, 10 Jun 2096. Move or delete that special date on the Hours page first.",
+  ],
+  [
+    "en",
+    "opensAt",
+    "Bar would go back to its saved hours, and its hours on the special date Sun, 10 Jun 2096 use a time the clock skips. Move or delete that special date on the Hours page first.",
+  ],
+  [
+    "es",
+    "date",
+    "Bar volvería a su horario guardado, que se solapa con un día junto a la fecha especial del dom, 10 jun 2096. Cambia de día o borra primero esa fecha especial en la página Horarios.",
+  ],
+  [
+    "es",
+    "closesAt",
+    "Bar volvería a su horario guardado, y su horario en la fecha especial del dom, 10 jun 2096 usa una hora que el reloj se salta. Cambia de día o borra primero esa fecha especial en la página Horarios.",
+  ],
+] as const)(
+  "in %s, explains a Make default refused by the saved hours (%s) the default would resume",
+  async (locale, field, message) => {
+    setLocale(locale);
+    const changed = {
+      ...view,
+      stations: [
+        ...view.stations,
+        { ...view.stations[0]!, id: "terrace", name: "Terrace", isDefault: false, displayOrder: 2 },
+      ],
+    };
+    const a = api({
+      load: vi.fn().mockResolvedValue(changed),
+      setDefaultStation: vi.fn().mockRejectedValue({
+        code: "hours.invalid",
+        params: { field, date: "2096-06-10", subjectId: "bar" },
+      }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="make-default-terrace"]')!.click();
+    await vi.waitFor(() => expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe(message));
+  },
+);
+it.each([
+  ["a station it does not show", { field: "date", date: "2096-06-10", subjectId: "gone" }],
+  ["no date", { field: "date", subjectId: "bar" }],
+])("falls back to the generic message for an hours refusal naming %s", async (_, params) => {
+  setLocale("en");
+  const changed = {
+    ...view,
+    stations: [
+      ...view.stations,
+      { ...view.stations[0]!, id: "terrace", name: "Terrace", isDefault: false, displayOrder: 2 },
+    ],
+  };
+  const a = api({
+    load: vi.fn().mockResolvedValue(changed),
+    setDefaultStation: vi.fn().mockRejectedValue({ code: "hours.invalid", params }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="make-default-terrace"]')!.click();
+  await vi.waitFor(() =>
+    expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe("The change could not be saved."),
+  );
+});
 it("offers claimed folders by path and names their current station", async () => {
   const el = await mount(api());
   q(el, '[data-test="claim-bar"]')!.click();
@@ -2779,35 +2845,6 @@ it("shows each output warning only on its station", async () => {
   expect(healthRow(el, "bar").textContent).not.toContain("got stuck");
   expect(healthRow(el, "bar").textContent).not.toContain("Dishes are waiting");
 });
-it("saves the whole hours list and places a server row refusal beside that row", async () => {
-  const a = api({
-    load: vi
-      .fn()
-      .mockResolvedValue(
-        withUpstairs(
-          { open: true, why: "in_hours" },
-          { hours: [{ weekday: 5, opensAt: "22:00", closesAt: "02:00" }] },
-        ),
-      ),
-    setStationHours: vi
-      .fn()
-      .mockRejectedValue({ code: "station.invalid", params: { field: "hours.0" } }),
-  });
-  const el = await mount(a);
-  expect(q(el, '[data-test="interim-station-hours"]')!.textContent).toContain(
-    "Friday 22:00–02:00 (next day)",
-  );
-  q(el, '[data-test="edit-hours-upstairs"]')!.click();
-  await settle(el);
-  const form = q(el, "station-hours-form")!;
-  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-hours"]')!.click();
-  await settle(el);
-  expect(a.setStationHours).toHaveBeenCalledWith("upstairs", [
-    { weekday: 5, opensAt: "22:00", closesAt: "02:00" },
-  ]);
-  expect(form.shadowRoot!.querySelectorAll('[data-field-error="hours.0"]')).toHaveLength(2);
-});
-
 it("refreshes output warnings every fifteen seconds and clears the timer when removed", async () => {
   const timers = new Map<ReturnType<typeof setInterval>, TimerHandler>();
   const original = window.setInterval.bind(window);
@@ -2919,95 +2956,6 @@ it("localizes the fallback search field in Spanish", async () => {
   );
 });
 
-it("keeps the edited hours through a live routing refresh and saves that draft", async () => {
-  const liveData = new LiveData();
-  const saved = withUpstairs(
-    { open: false, why: "out_of_hours" },
-    { hours: [{ weekday: 5, opensAt: "22:00", closesAt: "02:00" }] },
-  );
-  const a = api({
-    liveData,
-    load: vi.fn(async () => structuredClone(saved)),
-    setStationHours: vi.fn(),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="edit-hours-upstairs"]')!.click();
-  await settle(el);
-  const form = q(el, "station-hours-form")!;
-  const closes = form.shadowRoot!.querySelector<WtInput>('[data-test="closes-0"]')!;
-  closes.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "03:00" } }));
-  await settle(el);
-  liveData.invalidate([{ type: "products", id: "bread" }]);
-  await vi.waitFor(() => expect(a.load).toHaveBeenCalledTimes(2));
-  await settle(el);
-  expect(closes.value).toBe("03:00");
-  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-hours"]')!.click();
-  await settle(el);
-  expect(a.setStationHours).toHaveBeenCalledWith("upstairs", [
-    { weekday: 5, opensAt: "22:00", closesAt: "03:00" },
-  ]);
-  q(el, '[data-test="edit-hours-upstairs"]')!.click();
-  await settle(el);
-  expect(
-    q(el, "station-hours-form")!.shadowRoot!.querySelector<WtInput>('[data-test="closes-0"]')!
-      .value,
-  ).toBe("02:00");
-});
-
-it.each(["success", "refusal"] as const)(
-  "keeps the pending hours editor until its %s is visible",
-  async (outcome) => {
-    let resolve!: () => void;
-    let reject!: (reason: unknown) => void;
-    const pending = new Promise<void>((ok, no) => {
-      resolve = ok;
-      reject = no;
-    });
-    const a = api({
-      load: vi
-        .fn()
-        .mockResolvedValue(
-          withUpstairs(
-            { open: false, why: "out_of_hours" },
-            { hours: [{ weekday: 5, opensAt: "22:00", closesAt: "02:00" }] },
-          ),
-        ),
-      setStationHours: vi.fn(() => pending),
-    });
-    const el = await mount(a);
-    q(el, '[data-test="edit-hours-upstairs"]')!.click();
-    await settle(el);
-    const form = q(el, "station-hours-form")!;
-    form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-hours"]')!.click();
-    await settle(el);
-    const cancel = form.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-      'wt-button[slot="cancel"]',
-    )!;
-    expect(cancel.disabled).toBe(true);
-    cancel.click();
-    form.dispatchEvent(new CustomEvent("hours-cancel"));
-    q(el, '[data-test="close-today-upstairs"], [data-test="open-today-upstairs"]')!.click();
-    await settle(el);
-    expect(q(el, "station-hours-form")).toBe(form);
-    if (outcome === "refusal") reject({ code: "station.not_found" });
-    else resolve();
-    await settle(el);
-    if (outcome === "refusal") {
-      expect(q(el, "station-hours-form")).toBe(form);
-      expect(form.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
-        "could not be saved",
-      );
-      expect(cancel.disabled).toBe(false);
-      cancel.click();
-      await settle(el);
-    }
-    expect(q(el, "station-hours-form")).toBeNull();
-    q(el, '[data-test="edit-hours-upstairs"]')!.click();
-    await settle(el);
-    expect(q(el, "station-hours-form")).not.toBeNull();
-  },
-);
-
 it.each(["success", "refusal"] as const)(
   "guards the pending close dialog against cancellation until %s",
   async (outcome) => {
@@ -3033,7 +2981,7 @@ it.each(["success", "refusal"] as const)(
     expect(cancel.disabled).toBe(true);
     cancel.click();
     dialog.dispatchEvent(new CustomEvent("wt-close"));
-    q(el, '[data-test="edit-hours-upstairs"]')!.click();
+    q(el, '[data-test="disable-upstairs"]')!.click();
     await settle(el);
     expect(q(el, '[data-test="station-action-modal"]')).toBe(dialog);
     if (outcome === "refusal") reject({ code: "time_zone.unreadable" });
@@ -3047,9 +2995,9 @@ it.each(["success", "refusal"] as const)(
       await settle(el);
     }
     expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
-    q(el, '[data-test="edit-hours-upstairs"]')!.click();
+    q(el, '[data-test="disable-upstairs"]')!.click();
     await settle(el);
-    expect(q(el, "station-hours-form")).not.toBeNull();
+    expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe("Disable");
   },
 );
 
@@ -3162,6 +3110,59 @@ it("sends both the chosen weekday and time and returns to now", async () => {
   when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "now" } }));
   await settle(el);
   expect(a.explain).toHaveBeenLastCalledWith("bread", null);
+});
+
+it("previews a chosen date and time, and explains a time the clocks skip on that date", async () => {
+  setLocale("en");
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  const when = q(el, '[data-test="test-when"]') as WtCombobox;
+  expect(when.options.map((option) => option.label)).toEqual([
+    "Now",
+    "Weekday and time",
+    "Date and time",
+  ]);
+  when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "date" } }));
+  await settle(el);
+  expect(q(el, '[data-test="test-weekday"]')).toBeNull();
+  const date = q(el, '[data-test="test-date"]') as WtInput;
+  expect(date.getAttribute("name")).toBe("date");
+  expect(date.type).toBe("date");
+  const count = vi.mocked(a.explain).mock.calls.length;
+  expect(q(el, "#test-date-error")!.textContent).toContain("Choose a date.");
+  date.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "2026-10-09" } }));
+  const time = q(el, '[data-test="test-time"]') as WtInput;
+  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "22:00" } }));
+  await settle(el);
+  expect(vi.mocked(a.explain).mock.calls.length).toBeGreaterThan(count);
+  expect(a.explain).toHaveBeenLastCalledWith("bread", null, {
+    civilDate: "2026-10-09",
+    weekday: 5,
+    timeOfDay: "22:00",
+  });
+  expect(q(el, "#test-date-error")!.textContent!.trim()).toBe("");
+
+  vi.mocked(a.explain).mockRejectedValueOnce({
+    code: "management.request_invalid",
+    params: { field: "time" },
+  });
+  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "02:30" } }));
+  await settle(el);
+  expect(q(el, "#test-time-error")!.textContent).toContain(
+    "The clocks change that night, so this time does not happen on that date.",
+  );
+  expect(time.getAttribute("aria-invalid")).toBe("true");
+  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain(
+    "The route could not be checked.",
+  );
+  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "03:00" } }));
+  await settle(el);
+  expect(q(el, "#test-time-error")!.textContent!.trim()).toBe("");
+  expect(time.getAttribute("aria-invalid")).toBe("false");
 });
 
 it("clears the scheduled answer and shows the required-time problem when time is removed", async () => {
@@ -3416,16 +3417,58 @@ it("replaces invalid tabs with Stations and ignores nested tab changes", async (
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
 });
 
-it("keeps interim station hours outside every tab and opens the existing editor", async () => {
+it("has no station hours section or editor, and keeps Today's schedule actions", async () => {
+  setLocale("en");
   const el = await mount(
     api({ load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })) }),
   );
-  const action = q(el, '[data-test="edit-hours-upstairs"]')!;
-  expect(action.closest("wt-tabs")).toBeNull();
-  expect(action.closest('[data-test="interim-station-hours"]')).not.toBeNull();
-  action.click();
+  expect(q(el, '[data-test="interim-station-hours"]')).toBeNull();
+  for (const id of ["bar", "upstairs"]) expect(q(el, `[data-test="edit-hours-${id}"]`)).toBeNull();
+  expect(customElements.get("station-hours-form")).toBeUndefined();
+  expect(el.shadowRoot!.textContent).not.toContain("Edit hours");
+  const close = healthRow(el, "upstairs").querySelector<HTMLElement>(
+    '[data-test="close-today-upstairs"]',
+  )!;
+  expect(close.textContent!.trim()).toBe("Close for today");
+  close.click();
   await settle(el);
-  expect(el.shadowRoot!.querySelector("station-hours-form")).not.toBeNull();
+  expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe(
+    "Close for today",
+  );
+  expect(el.shadowRoot!.querySelector("station-hours-form")).toBeNull();
+});
+
+it("Today redraws the scheduled label when the next background read no longer carries the by-hand closure", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    setLocale("en");
+    const closed = withUpstairs(
+      { open: false, why: "closed_by_hand" },
+      { today: "closed", nextTransition: { weekday: 6, timeOfDay: "01:00", daysAhead: 1 } },
+    );
+    const nextDay = withUpstairs(
+      { open: true, why: "in_hours" },
+      { today: null, nextTransition: { weekday: 6, timeOfDay: "01:00", daysAhead: 1 } },
+    );
+    const { el } = await mountToday(closed, {
+      background: { load: vi.fn().mockResolvedValue(nextDay) } as unknown as PrepStationsApi,
+    });
+    const cell = () =>
+      healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+    expect(cell().textContent).toContain(
+      "Closed now, closed by hand until 06:00 tomorrow. Its work goes to Bar.",
+    );
+    expect(cell().querySelector('[data-test="schedule-upstairs"]')!.textContent!.trim()).toBe(
+      "Back to the schedule",
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    await settle(el);
+    expect(cell().textContent).toContain("Open until 01:00 tomorrow");
+    expect(cell().querySelector('[data-test="schedule-upstairs"]')).toBeNull();
+    expect(cell().querySelector('[data-test="close-today-upstairs"]')).not.toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it.each([

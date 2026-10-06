@@ -115,7 +115,9 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 `--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-field-fill`,
 `--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
-`--wt-color-google-button-text`, `--wt-color-stepper-button`
+`--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
+`--wt-color-palette-{red,amber,grey,blue,green,purple}`, `--wt-color-day-standard` and
+`--wt-color-day-closed`, each with an `--wt-color-on-…` text colour
 
 `--wt-color-stepper-button` is the hover tint of `wt-number-stepper`'s − and + buttons: `#e8f0ff`
 in the light theme and `#172946` in the dark.
@@ -124,7 +126,8 @@ The three `--wt-color-google-button-*` tokens are the colours Google's sign-in b
 give its button, for the dashboard's Google sign-in button only: fill `#ffffff`, line `#747775` and
 text `#1f1f1f` in the light theme, and `#131314`, `#8e918f` and `#e3e3e3` in the dark.
 
-Colours are semantic, not literal. There is no `--wt-color-blue`. `--wt-color-scrim` was added
+Colours are semantic, not literal. There is no `--wt-color-blue`. The one named set is the
+calendar palette below, because there the colour's name is what the operator picks. `--wt-color-scrim` was added
 after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need a similar
 overlay/veil colour elsewhere, reuse it rather than inventing a new one.
 
@@ -151,6 +154,36 @@ primary colour has to override this one as well, with a light and a dark value: 
 reaches 4.5:1 on both themes' `--wt-color-bg`. A tenant theme cannot set it: `THEMEABLE_TOKENS`
 (`packages/layouts/src/theme.ts`) does not list it, and no screen applies a stored tenant theme
 yet.
+
+The Hours calendar (`packages/venue-service/src/dashboard/hours-calendar.ts`) paints dates
+with eight fills. A special date picks one of six palette colours, `--wt-color-palette-red`,
+`-amber`, `-grey`, `-blue`, `-green` and `-purple`: the six keys of `CALENDAR_COLOURS`
+(`packages/venue-service/src/hours-types.ts`), the six names the owner approved with the Hours
+plan (`docs/superpowers/plans/2026-10-05-hours.md`, choice 6). The values below were picked for
+these contrast checks, not copied from the `hours-v3.html` mockup.
+Two more are reserved, so no special date can look like them: `--wt-color-day-standard` for a
+standard day and `--wt-color-day-closed` for a day every active department is Closed. Text on
+each fill uses its own `--wt-color-on-palette-…` or `--wt-color-on-day-…` colour. A coloured date
+always carries its name in words too, and a Closed one the word Closed, so colour is never the
+only signal.
+
+| Fill | Light | Text on it | Dark | Text on it |
+| --- | --- | --- | --- | --- |
+| `--wt-color-palette-red` | `#c62828` | `#ffffff` | `#ff7a70` | `#2a0705` |
+| `--wt-color-palette-amber` | `#f5a623` | `#241500` | `#f5b34a` | `#241500` |
+| `--wt-color-palette-grey` | `#6b6e78` | `#ffffff` | `#8b8d98` | `#101216` |
+| `--wt-color-palette-blue` | `#2f55d4` | `#ffffff` | `#7aa2ff` | `#06101f` |
+| `--wt-color-palette-green` | `#1e7a4f` | `#ffffff` | `#4ac08d` | `#06190f` |
+| `--wt-color-palette-purple` | `#7e3fb8` | `#ffffff` | `#c39bf0` | `#1d0b33` |
+| `--wt-color-day-standard` | `#dff3e8` | `#16181d` | `#183626` | `#eceef2` |
+| `--wt-color-day-closed` | `#3a3b42` | `#ffffff` | `#d5d7de` | `#101216` |
+
+The "calendar day colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both
+themes, that each text colour is 4.5:1 or more on its fill, that the six palette fills differ from
+each other and from both reserved fills, that the standard and Closed fills are 3:1 or more apart,
+and that the `prefers-color-scheme` blocks give the same values as the explicit themes. They do not
+hold that two palette colours are told apart by eye: the light standard fill, for one, is only
+about 1.2:1 against `--wt-color-surface`, which is why the words carry the meaning.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
@@ -2383,7 +2416,35 @@ Prep stations uses `stations`, `routing`, `tickets`, `watchers` and `settings` a
 Tickets and Watchers own their printer selections. Settings edits each station value in its own
 cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. Station Rename,
 Make default and Disable/Enable actions belong to the Stations row menu. A supervisor sees only
-Stations. The interim weekly station-hours editor stays below the panels until the Hours step.
+Stations.
+
+Hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week`, `dates` and `calendar`
+at `/manage/hours/view/<key>`; `/manage/hours/department/<id>` and `/manage/hours/station/<id>`
+open the week with focus on that subject's column heading once the hours are read, when that
+column is shown.
+
+- **Standard week.** Days are rows, Monday first, with today marked; departments, then prep
+  stations, are columns. The editable cells share one Tab stop and the arrow keys move between
+  days and columns. Each editable column's heading has its own menu, a separate Tab stop, holding
+  Clear schedule, or Configure hours for a subject with no hours.
+  The default station's column reads Always open and has nothing to open. A subject with no hours
+  reads "No hours set" (a department) or "No hours restriction" (a station); Prep stations says
+  "Always open" for that station state. A cell opens that day's editor; a subject with no hours
+  opens a seven-day draft that starts Closed and saves only after a confirmation.
+- **Special dates.** A `wt-data-table` of every current and future special date, with Departments
+  and Prep stations column groups; a value kept from the standard week is muted. Its row menu holds
+  Edit, Duplicate and Delete, above it sit Add a date and Close the whole venue on a date. With the
+  whole-venue closure on, the date editor shows the subjects' cells locked.
+- **Calendar** (`hours-calendar.ts`). A Monday-first month beside the chosen date's panel; on a
+  phone the panel sits under the month. Each date says in words what its colour means (its special
+  date's name, Closed, a holiday), coloured by the calendar tokens above. The panel lists each active
+  subject's hours on that date, muted where kept from the standard week, then Edit, Duplicate and
+  Delete for a special date or Make this a special date for an ordinary one; a viewer gets no
+  actions.
+
+In the week grid and the date panel a period stays on one line, so hours wrap only between
+periods. The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
+Delete and Clear schedule are `compact`.
 
 Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
 each panel leaves it out because its tab already names the panel through `aria-labelledby`.

@@ -633,7 +633,7 @@ export const en = {
   "venue_details.preview_loading": "Loading the clock preview…",
   "venue_details.retry_preview": "Retry clock preview",
   "venue_details.clock_warning":
-    "Recurring station and booking times keep their wall-clock values. Manual day overrides keep their dates. The next backup time already scheduled stays fixed; later cycles and account email times use the new clock. Stored working-time offsets and historical reporting days are not rewritten.",
+    "Department and station opening hours, special dates and booking times keep their wall-clock values. Manual day overrides keep their dates. The next backup time already scheduled stays fixed; later cycles and account email times use the new clock. Stored working-time offsets and historical reporting days are not rewritten.",
   "venue_details.geography_context":
     "This geography cannot be changed here. A different fiscal or language context requires separate setup or a venue reset.",
   "venue_details.sales": "The venue has recorded sales; this value is locked.",
@@ -2832,7 +2832,7 @@ export const es: Record<StringKey, string> = {
   "venue_details.preview_loading": "Cargando la vista previa del reloj…",
   "venue_details.retry_preview": "Reintentar la vista previa del reloj",
   "venue_details.clock_warning":
-    "Los horarios habituales de estaciones y reservas conservan sus horas locales. Las excepciones manuales por día conservan sus fechas. La próxima copia de seguridad ya programada no cambia; los ciclos posteriores y las horas de los correos de cuenta usan el nuevo reloj. No se reescriben los desfases de jornada guardados ni los días históricos de los informes.",
+    "Los horarios de apertura de departamentos y estaciones, las fechas especiales y las horas de las reservas conservan sus horas locales. Las excepciones manuales por día conservan sus fechas. La próxima copia de seguridad ya programada no cambia; los ciclos posteriores y las horas de los correos de cuenta usan el nuevo reloj. No se reescriben los desfases de jornada guardados ni los días históricos de los informes.",
   "venue_details.geography_context":
     "Esta ubicación no se puede cambiar aquí. Otro contexto fiscal o lingüístico requiere una configuración aparte o reiniciar el local.",
   "venue_details.sales": "El local tiene ventas registradas; este valor está bloqueado.",

@@ -30,6 +30,24 @@
   --wt-color-google-button-fill: #ffffff;
   --wt-color-google-button-line: #747775;
   --wt-color-google-button-text: #1f1f1f;
+  /* The Hours calendar: six colours a special date picks from, each with its text colour, and the
+     two reserved for a standard day and a day every department is Closed. */
+  --wt-color-palette-red: #c62828;
+  --wt-color-on-palette-red: #ffffff;
+  --wt-color-palette-amber: #f5a623;
+  --wt-color-on-palette-amber: #241500;
+  --wt-color-palette-grey: #6b6e78;
+  --wt-color-on-palette-grey: #ffffff;
+  --wt-color-palette-blue: #2f55d4;
+  --wt-color-on-palette-blue: #ffffff;
+  --wt-color-palette-green: #1e7a4f;
+  --wt-color-on-palette-green: #ffffff;
+  --wt-color-palette-purple: #7e3fb8;
+  --wt-color-on-palette-purple: #ffffff;
+  --wt-color-day-standard: #dff3e8;
+  --wt-color-on-day-standard: #16181d;
+  --wt-color-day-closed: #3a3b42;
+  --wt-color-on-day-closed: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -61,6 +79,22 @@
     --wt-color-google-button-fill: #131314;
     --wt-color-google-button-line: #8e918f;
     --wt-color-google-button-text: #e3e3e3;
+    --wt-color-palette-red: #ff7a70;
+    --wt-color-on-palette-red: #2a0705;
+    --wt-color-palette-amber: #f5b34a;
+    --wt-color-on-palette-amber: #241500;
+    --wt-color-palette-grey: #8b8d98;
+    --wt-color-on-palette-grey: #101216;
+    --wt-color-palette-blue: #7aa2ff;
+    --wt-color-on-palette-blue: #06101f;
+    --wt-color-palette-green: #4ac08d;
+    --wt-color-on-palette-green: #06190f;
+    --wt-color-palette-purple: #c39bf0;
+    --wt-color-on-palette-purple: #1d0b33;
+    --wt-color-day-standard: #183626;
+    --wt-color-on-day-standard: #eceef2;
+    --wt-color-day-closed: #d5d7de;
+    --wt-color-on-day-closed: #101216;
   }
 }
 
@@ -92,6 +126,22 @@
   --wt-color-google-button-fill: #ffffff;
   --wt-color-google-button-line: #747775;
   --wt-color-google-button-text: #1f1f1f;
+  --wt-color-palette-red: #c62828;
+  --wt-color-on-palette-red: #ffffff;
+  --wt-color-palette-amber: #f5a623;
+  --wt-color-on-palette-amber: #241500;
+  --wt-color-palette-grey: #6b6e78;
+  --wt-color-on-palette-grey: #ffffff;
+  --wt-color-palette-blue: #2f55d4;
+  --wt-color-on-palette-blue: #ffffff;
+  --wt-color-palette-green: #1e7a4f;
+  --wt-color-on-palette-green: #ffffff;
+  --wt-color-palette-purple: #7e3fb8;
+  --wt-color-on-palette-purple: #ffffff;
+  --wt-color-day-standard: #dff3e8;
+  --wt-color-on-day-standard: #16181d;
+  --wt-color-day-closed: #3a3b42;
+  --wt-color-on-day-closed: #ffffff;
 }
 
 :where([data-wt-theme-root][data-theme="dark"]) {
@@ -122,4 +172,20 @@
   --wt-color-google-button-fill: #131314;
   --wt-color-google-button-line: #8e918f;
   --wt-color-google-button-text: #e3e3e3;
+  --wt-color-palette-red: #ff7a70;
+  --wt-color-on-palette-red: #2a0705;
+  --wt-color-palette-amber: #f5b34a;
+  --wt-color-on-palette-amber: #241500;
+  --wt-color-palette-grey: #8b8d98;
+  --wt-color-on-palette-grey: #101216;
+  --wt-color-palette-blue: #7aa2ff;
+  --wt-color-on-palette-blue: #06101f;
+  --wt-color-palette-green: #4ac08d;
+  --wt-color-on-palette-green: #06190f;
+  --wt-color-palette-purple: #c39bf0;
+  --wt-color-on-palette-purple: #1d0b33;
+  --wt-color-day-standard: #183626;
+  --wt-color-on-day-standard: #eceef2;
+  --wt-color-day-closed: #d5d7de;
+  --wt-color-on-day-closed: #101216;
 }

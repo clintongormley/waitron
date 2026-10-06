@@ -446,6 +446,8 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   // A settlement's trigger wants the sale's tenders to sum to its total; a sale of nothing settles
   // with none, in whichever order the two tables are filled.
   "sales.total": [0n],
+  // The CHECK wants a bare `YYYY-MM-DD`, a shape none of the generic text values has.
+  "special_dates.date": ["2026-01-01", "2026-01-02"],
 };
 
 /** Tables filled with one row rather than two, each with its reason. */

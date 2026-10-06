@@ -353,6 +353,35 @@ fire. The case "resolves every fired product's venue-service route in ONE batche
 `apps/server/src/working-order.test.ts` checks both that call and the stations reached by its
 three fired lines. This checks batching at the service boundary, not a fixed database-read count.
 
+## Opening hours store "no claim" as no row
+
+Hours (A261 step 5) keeps opening hours in five venue-service tables, all classified `state`:
+`hours_week_cells` and `hours_week_periods` for each department's and non-default station's
+standard week, and `special_dates`, `special_date_hours` and `special_date_hours_periods` for dated
+exceptions (`packages/venue-service/src/schema/hours.ts`). They replace `station_hours` and
+`department_hours`, which venue-service `0022_retire_legacy_hours` drops; old rows are not carried
+over (the pre-production rule in "No backwards-compatibility or data-migration code until Waitron
+is in production" below).
+
+- A stored cell is `closed`, `all_day` or `periods` (the `*_mode_ck` CHECKs). "No hours set" for a
+  subject's week and "keep the standard week" for a subject on a special date are both stored as
+  no row at all; `not_set` and `inherit` exist only on the wire (`packages/venue-service/src/hours-types.ts`).
+  A week is seven cells or none: `replaceWeekHours` (`packages/venue-service/src/hours.ts`) writes
+  all seven or deletes them, and the configuration import's `validate` refuses anything else.
+- A cell names its owner as a department or a station, and the SQL cannot tie that owner to the
+  cell's venue; the writers in `hours.ts` resolve each owner within the venue before writing.
+- A default station's special-date cells are dormant, not deleted: a save never removes one because
+  the request left it out (no request can carry it), and duplicating a date copies it. It applies
+  again if the station stops being the default, so that change is refused with `hours.invalid`
+  when, on a special date from the venue's yesterday on, the hours it kept would clash with the day
+  before or after, or open or close at a minute the clock skips (`assertDemotedStationHours`,
+  `hours.ts`). When the venue's clock cannot be read, only the clash is checked, on every special
+  date. The refusal names the special date to move or delete.
+- A cell's periods are replaced by deleting and inserting the whole set, so a reordering cannot trip
+  the position index midway ("Editing rows one at a time can break a unique index the final state
+  satisfies" above).
+- One special date per venue and date (`special_dates_location_date_key`).
+
 **Tables the application code may read and never write**
 
 ## The tables `scripts/write-path-tables.json` lists are read-only to the application, and one guard is the whole of the enforcement
@@ -682,10 +711,14 @@ each column's name was searched across `packages/` and `apps/` for a text compar
   for the whole-second `.000Z` spelling. The paging cursors that are compared with `created_at` or
   `issued_at` are checked against the millisecond spelling before use (the `CURSOR` pattern in
   `apps/server/src/orders-api.ts` and in `packages/adjustments/src/routes.ts`).
-- **Times of day normalised by a helper.** `bookings.booking_time`, `station_hours` and
-  `department_hours` go through a `storedTime` helper (`packages/bookings/src/bookings.ts`,
-  `packages/venue-service/src/operations.ts`) that pads `HH:MM` to `HH:MM:SS`, behind a route
-  pattern that allows `HH:MM` (and, for a booking, `HH:MM:SS`).
+- **Times of day normalised by a helper.** `bookings.booking_time` and the opening periods'
+  `opens_at` and `closes_at` (`hours_week_periods`, `special_date_hours_periods`) go through a
+  `storedTime` helper (`packages/bookings/src/bookings.ts`,
+  `packages/venue-service/src/operations.ts`) that pads `HH:MM` to `HH:MM:SS`, behind a check that
+  allows `HH:MM` (for a booking, the route's pattern, which also allows `HH:MM:SS`; for an opening
+  period, `CLOCK_TIME` in `packages/venue-service/src/hours-rules.ts`). The interval tables
+  `station_hours` and `department_hours` this line named until 2026-10-06 are dropped by
+  venue-service `0022_retire_legacy_hours`.
 - **`locations.day_cutover`** is written during creation through `normalizeDayCutover`
   (`packages/provisioning/src/venue-plan.ts`), which pads `HH:MM` and stores any other string
   unchanged. Its one text comparison (`packages/venue-service/src/routing-store.ts`, `todayEnds`)
@@ -700,16 +733,12 @@ each column's name was searched across `packages/` and `apps/` for a text compar
   its preview reports the current clock as unavailable for that value.
 - **Writers that skip the helpers.** The configuration import
   (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`) copies the time values
-  in a bundle's rows as written, without the normalising helpers; `station_hours` and
-  `department_hours` travel in a bundle (`packages/venue-service/src/configuration-transfer.ts`),
-  as do several `created_at` columns that are ordered. A bundle a Waitron venue exported carries
-  that venue's spellings, so it takes a hand-edited bundle to store another.
-  `station_hours_distinct_ck` (`packages/venue-service/src/schema/station-times.ts`,
-  `opens_at <> closes_at`) compares text, so an imported station row opening at `12:00` and
-  closing at `12:00:00` passes it. The demo seed (`apps/server/scripts/demo-seed/seed-floor.ts`)
-  writes `department_hours` as `HH:MM` beside the route's `HH:MM:SS`; the only text comparison
-  there is an `order by`, which two-digit hours still sort correctly, but its unique index sees
-  `12:00` and `12:00:00` as different values.
+  in a bundle's rows as written, without the normalising helpers. Several `created_at` columns that
+  are ordered travel in a bundle this way. A bundle a Waitron venue exported carries that venue's
+  spellings, so it takes a hand-edited bundle to store another. The opening periods are the
+  exception: venue-service's transfer `validate` refuses a period whose `opens_at` or `closes_at`
+  is not spelled `HH:MM:00` (`STORED_TIME` in `packages/venue-service/src/configuration-transfer.ts`)
+  before the import writes anything.
 
 Nothing guards the one-spelling rule across these columns. A new text time column, or a new writer
 of an old one, is seen by nothing unless its table carries a CHECK like the ones above.
@@ -957,6 +986,18 @@ null in it names nothing. Among the tables it follows, the export refuses with
 any case, or exactly `__export_rowid` (`<table>.<column>`); and a key whose parent columns do not
 number the same as its own, as when it names none and the parent has no primary key
 (`table:<child>`). Both column checks count generated columns. Guard: the leave-behind cases in `apps/server/src/configuration-transfer.test.ts`.
+
+**A module's transfer `validate` may read when and where the bundle was made.**
+`ModuleConfigurationTransfer.validate` (`packages/module/src/module.ts`) takes an optional second
+argument, `{ createdAt, timeZone }`, which `validateConfigurationBundle`
+(`apps/server/src/configuration-transfer.ts`) fills from the bundle and passes to every module's
+`validate` before the import writes anything. Core, catalogue and media take only the tables.
+Venue-service uses it to leave out a clash between two days already past in the venue's zone when
+the bundle was made, as a save does, so a venue's own export imports again. It reads no day
+cutover: for a venue whose cutover or numeric-offset zone a save cannot read, the save checks every
+pair while the import still leaves past pairs out. It also refuses a special-date period that opens
+or closes at a minute the clocks skip in that zone, unless that date and the day after it were both
+past when the bundle was made; a default station's kept cells are not checked.
 
 **Transactions**
 

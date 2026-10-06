@@ -18,7 +18,7 @@ import {
   menuStatus,
 } from "@waitron/catalogue";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { resolveMakers, setClaim } from "@waitron/venue-service";
+import { readWeekHours, resolveMakers, setClaim } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
@@ -237,10 +237,11 @@ describe("seedDemoRestaurant", () => {
         opens_at: string;
         closes_at: string;
       }>(sql`
-        select h.weekday, h.opens_at, h.closes_at from station_hours h
-        join kitchen_stations s on s.id = h.station_id
+        select c.weekday, p.opens_at, p.closes_at from hours_week_periods p
+        join hours_week_cells c on c.id = p.cell_id
+        join kitchen_stations s on s.id = c.station_id
         where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'
-        order by h.weekday`);
+        order by c.weekday`);
       expect(hours).toEqual([
         { weekday: 5, opens_at: "19:00:00", closes_at: "21:00:00" },
         { weekday: 6, opens_at: "19:00:00", closes_at: "21:00:00" },
@@ -251,6 +252,32 @@ describe("seedDemoRestaurant", () => {
         join kitchen_stations fallback on fallback.id = f.fallback_station_id
         where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'`);
       expect(fallbacks).toEqual([{ name: "Downstairs bar" }]);
+
+      const { rows: subjects } = await tx.execute<{
+        kind: "department" | "station";
+        id: string;
+        name: string;
+      }>(sql`
+        select 'department' as kind, id, name from departments where location_id = ${venue.locationId}
+        union all
+        select 'station', id, name from kitchen_stations
+        where location_id = ${venue.locationId} and name = 'Upstairs bar'
+        order by name`);
+      const weeks: Record<string, string[]> = {};
+      for (const subject of subjects)
+        weeks[subject.name] = (
+          await readWeekHours(tx, cfg, { kind: subject.kind, id: subject.id })
+        ).map(({ cell }) =>
+          cell.mode === "periods"
+            ? cell.periods.map((period) => `${period.opensAt}-${period.closesAt}`).join(",")
+            : cell.mode,
+        );
+      // Sunday first.
+      expect(weeks).toEqual({
+        Deli: ["closed", ...Array<string>(6).fill("09:00-18:00")],
+        "Restaurant and bar": Array<string>(7).fill("12:00-01:00"),
+        "Upstairs bar": [...Array<string>(5).fill("closed"), "19:00-21:00", "19:00-21:00"],
+      });
 
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
         select id from floor_zones
@@ -331,8 +358,9 @@ describe("seedDemoRestaurant", () => {
       }));
       const { rows: hoursRows } = await tx.execute<{ department_name: string; days: number }>(sql`
         select d.name as department_name, cast(count(distinct h.weekday) as integer) as days
-        from department_hours h
+        from hours_week_cells h
         join departments d on d.id = h.department_id
+        where h.mode = 'periods'
         group by d.name
         order by d.name`);
       const { rows: stationRows } = await tx.execute<{ name: string }>(sql`

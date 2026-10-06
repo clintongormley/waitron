@@ -7,6 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./routing": "./src/routing.ts",
+    "./hours-types": "./src/hours-types.ts",
+    "./testing/station-week.js": "./src/testing/station-week.ts",
     "./dashboard": "./src/dashboard/index.ts"
   },
   "scripts": {

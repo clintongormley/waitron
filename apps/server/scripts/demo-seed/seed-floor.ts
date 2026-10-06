@@ -9,12 +9,12 @@ import {
   tableServiceStatuses,
   type Transaction,
 } from "@waitron/db";
+import type { WeekCell, WeekDay } from "@waitron/venue-service";
 import {
-  departmentHours,
   departmentSalePolicies,
   departments,
   createException,
-  replaceStationHours,
+  replaceWeekHours,
   setStationFallback,
   zoneMenus,
   zoneSalePolicies,
@@ -37,6 +37,15 @@ export interface SeedFloorInput {
   departmentTradingNames: CountryDemoIdentity["departmentTradingNames"];
   menuIds?: { restaurant: string; lunch: string; deli: string };
 }
+
+const CLOSED: WeekCell = { mode: "closed", periods: [] };
+const opening = (opensAt: string, closesAt: string): WeekCell => ({
+  mode: "periods",
+  periods: [{ id: randomUUID(), opensAt, closesAt }],
+});
+/** A whole standard week, Sunday (0) first. */
+const weekOf = (cell: (weekday: number) => WeekCell): WeekDay[] =>
+  [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: cell(weekday) }));
 
 /** `createZone`, `createTable` and `setTablePlacement` read only `locationId`; every other field is
  *  a placeholder that satisfies the type. */
@@ -179,10 +188,13 @@ export async function seedFloor(
       throw new Error("seedFloor: bar preparation stations were not created");
     }
     const stationCfg = { locationId: brandLocationId(locationId) };
-    await replaceStationHours(tx, stationCfg, upstairsStationId, [
-      { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      { weekday: 6, opensAt: "19:00", closesAt: "21:00" },
-    ]);
+    await replaceWeekHours(
+      tx,
+      stationCfg,
+      { kind: "station", id: upstairsStationId },
+      weekOf((weekday) => (weekday >= 5 ? opening("19:00", "21:00") : CLOSED)),
+      new Date(),
+    );
     await setStationFallback(tx, stationCfg, upstairsStationId, downstairsStationId);
     const barCategories = await tx
       .select({ id: categories.id })
@@ -237,22 +249,21 @@ export async function seedFloor(
       where zone_id = ${deliZoneId}`);
   }
 
-  for (let weekday = 0; weekday < 7; weekday += 1) {
-    await tx.insert(departmentHours).values({
-      departmentId: defaultPolicy.department_id,
-      weekday,
-      opensAt: "12:00",
-      closesAt: "01:00",
-    });
-  }
-  for (let weekday = 1; weekday <= 6; weekday += 1) {
-    await tx.insert(departmentHours).values({
-      departmentId: deliDepartmentId,
-      weekday,
-      opensAt: "09:00",
-      closesAt: "18:00",
-    });
-  }
+  const hoursCfg = { locationId: brandLocationId(locationId) };
+  await replaceWeekHours(
+    tx,
+    hoursCfg,
+    { kind: "department", id: defaultPolicy.department_id },
+    weekOf(() => opening("12:00", "01:00")),
+    new Date(),
+  );
+  await replaceWeekHours(
+    tx,
+    hoursCfg,
+    { kind: "department", id: deliDepartmentId },
+    weekOf((weekday) => (weekday === 0 ? CLOSED : opening("09:00", "18:00"))),
+    new Date(),
+  );
 
   for (const table of DEMO_TABLES) {
     const zoneId = zoneIds.get(table.zoneKey);

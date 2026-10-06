@@ -59,9 +59,9 @@ export function folderMadeAt(
     activeStationIds: new Set(routing.stations.filter(({ active }) => active).map(({ id }) => id)),
     defaultStationId: routing.defaultStationId,
     timing: new Map(
-      routing.stationTimes.map(({ stationId, fallbackStationId, hours, today }) => [
+      routing.stationTimes.map(({ stationId, fallbackStationId, hours, weekSet, today }) => [
         stationId,
-        { fallbackId: fallbackStationId, hours, today },
+        { fallbackId: fallbackStationId, hours, weekSet, today },
       ]),
     ),
   };
@@ -102,10 +102,20 @@ export function folderMadeAt(
   for (const { id } of categories)
     for (const zone of zones) compare(id, outcomeOf(chooseMaker(rules, asFolder(id), zone, null)));
 
+  const restrictedByDate = new Set(
+    routing.stationTimes
+      .filter(({ specialDateRestricts }) => specialDateRestricts === true)
+      .map(({ stationId }) => stationId),
+  );
   const timed = (stationId: string) => {
     if (stationId === routing.defaultStationId) return false;
     const timing = rules.timing.get(stationId);
-    return timing !== undefined && (timing.hours.length > 0 || timing.today === "closed");
+    return (
+      timing !== undefined &&
+      ((timing.weekSet ?? timing.hours.length > 0) ||
+        timing.today === "closed" ||
+        restrictedByDate.has(stationId))
+    );
   };
 
   const result = new Map<string, FolderMadeAt>();

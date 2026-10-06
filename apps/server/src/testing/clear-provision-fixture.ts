@@ -5,12 +5,16 @@ import type { Database } from "@waitron/db";
 export async function clearProvisionFixture(db: Database): Promise<void> {
   await db.transaction(async (tx) => {
     for (const table of [
-      "department_hours",
+      // The hours tables' keys to departments and stations have no delete rule, so they go first.
+      "special_date_hours_periods",
+      "special_date_hours",
+      "special_dates",
+      "hours_week_periods",
+      "hours_week_cells",
       "department_sale_policies",
       "zone_sale_policies",
       "station_day_states",
       "station_fallbacks",
-      "station_hours",
       "route_exceptions",
       "station_claims",
       "device_zone_defaults",

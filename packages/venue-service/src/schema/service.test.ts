@@ -3,7 +3,6 @@ import { getTableConfig } from "drizzle-orm/sqlite-core";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import {
   departmentSalePolicies,
-  departmentHours,
   departments,
   deviceZoneDefaults,
   orderServiceContexts,
@@ -16,7 +15,7 @@ import {
 import { serviceSettings } from "./settings.js";
 import { kitchenNotices } from "./kitchen-notices.js";
 import { routeExceptions, stationClaims } from "./routing.js";
-import { stationDayStates, stationFallbacks, stationHours } from "./station-times.js";
+import { stationDayStates, stationFallbacks } from "./station-times.js";
 
 /**
  * The Drizzle declarations, read without a database. A foreign key's name exists only here: the
@@ -116,14 +115,6 @@ const EXPECTED: Record<
     uniqueConstraints: [],
     primaryKeys: [],
   },
-  station_hours: {
-    table: stationHours,
-    foreignKeys: ["station_hours_station_fk"],
-    checks: ["station_hours_weekday_ck", "station_hours_distinct_ck"],
-    indexes: ["station_hours_interval_key"],
-    uniqueConstraints: [],
-    primaryKeys: [],
-  },
   station_fallbacks: {
     table: stationFallbacks,
     foreignKeys: ["station_fallbacks_station_fk", "station_fallbacks_fallback_fk"],
@@ -156,14 +147,6 @@ const EXPECTED: Record<
     ],
     indexes: ["route_exceptions_order_idx"],
     uniqueConstraints: [],
-    primaryKeys: [],
-  },
-  department_hours: {
-    table: departmentHours,
-    foreignKeys: ["department_hours_department_fk"],
-    checks: ["department_hours_weekday_ck"],
-    indexes: [],
-    uniqueConstraints: ["department_hours_interval_key"],
     primaryKeys: [],
   },
   order_service_contexts: {
@@ -222,8 +205,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers all seventeen of the package's tables", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(17);
+  it("covers the fifteen tables it lists", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(15);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

@@ -1,19 +1,10 @@
-import { businessDayStart, venueMomentAt } from "@waitron/reporting";
+import { businessDayStart, civilDateOf as civilDate, venueMomentAt } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import type { VenueClockPreview, VenueClockView } from "./venue-detail-types.js";
 import "./errors.js";
 
 type Clock = { timeZone: string; dayCutover: string };
 const DAY = 86400000;
-function civilDate(at: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(at);
-  return ["year", "month", "day"].map((key) => parts.find((p) => p.type === key)!.value).join("-");
-}
 function view(at: Date, clock: Clock): VenueClockView | null {
   if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(clock.dayCutover)) return null;
   const moment = venueMomentAt(at, clock);

@@ -176,6 +176,20 @@ export function businessDayOf(
   return new Date(shifted).toISOString().slice(0, 10);
 }
 
+/**
+ * The venue-local calendar date of an instant, as `"YYYY-MM-DD"`: it turns at local midnight, where
+ * a business day turns at the cutover. The caller validates `timeZone` first.
+ */
+export function civilDateOf(instant: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  return ["year", "month", "day"].map((key) => parts.find((p) => p.type === key)!.value).join("-");
+}
+
 export interface VenueMoment {
   readonly businessDay: string;
   readonly weekday: number;

@@ -22,7 +22,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { chooseMaker, type RouteTarget } from "./routing.js";
+import { chooseMaker, type RouteTarget, type RoutingMoment } from "./routing.js";
 import {
   describeMakers,
   createException,
@@ -44,7 +44,10 @@ import {
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { routeExceptions } from "./schema/routing.js";
-import { replaceStationHours, setStationFallback, setStationToday } from "./station-times.js";
+import { setStationFallback, setStationToday } from "./station-times.js";
+import { seedStationWeek } from "./testing/station-week.js";
+import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
+import { saveSpecialDate } from "./hours.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -659,7 +662,7 @@ describe("resolveMakers", () => {
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+      await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
       await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
@@ -726,7 +729,7 @@ describe("resolveMakers", () => {
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+      await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
       expect(
@@ -745,7 +748,7 @@ describe("resolveMakers", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+      await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
       const states = await stationStates(tx, f.cfg, new Date("2026-10-02T20:00:00Z"));
@@ -1337,7 +1340,7 @@ describe("timed routing explanation", () => {
       const f = await fixture(tx);
       await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
       await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+      await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);
       await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
@@ -1378,7 +1381,7 @@ describe("timed routing explanation", () => {
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
       await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+      await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);
       expect(
@@ -1638,7 +1641,7 @@ describe("routingAt", () => {
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
       await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
+      await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);
       const resolver = await routingAt(tx, f.cfg, new Date("2026-10-02T22:00:00Z"));
@@ -1696,5 +1699,133 @@ describe("routingAt", () => {
       expect(await fresh.makers(null, [f.chips])).toEqual(
         new Map([[f.chips, { kind: "made", route: { kind: "station", stationId: f.grill } }]]),
       );
+    }));
+});
+
+describe("hours from special dates", () => {
+  const SAVED_AT = new Date("2026-09-01T10:00:00Z");
+  const closedOn = (
+    tx: Transaction,
+    cfg: { locationId: string },
+    date: string,
+    stationId: string,
+  ) =>
+    saveSpecialDate(
+      tx,
+      cfg as never,
+      null,
+      {
+        date,
+        name: `Closed ${date}`,
+        colour: "red",
+        closeWholeVenue: false,
+        cells: [
+          { subject: { kind: "station", id: stationId }, cell: { mode: "closed", periods: [] } },
+        ],
+      },
+      SAVED_AT,
+    );
+
+  it("previews a date and local time with its special hours, and a weekday with the standard week alone", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+      await seedStationWeek(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "18:00", closesAt: "23:00" },
+      ]);
+      await closedOn(tx, f.cfg, "2026-10-09", f.terraceBar);
+      const preview = (moment: RoutingMoment) =>
+        explainRoute(tx, f.cfg, f.mojito, null, { kind: "at", moment });
+      expect(await preview({ weekday: 5, timeOfDay: "20:00" })).toMatchObject({
+        route: { kind: "station", stationId: f.terraceBar },
+        fallbacks: [],
+      });
+      expect(
+        await preview({ civilDate: "2026-10-09", weekday: 5, timeOfDay: "20:00" }),
+      ).toMatchObject({
+        route: { kind: "station", stationId: f.bar },
+        fallbacks: [{ stationId: f.terraceBar, why: "out_of_hours" }],
+      });
+      expect(
+        await preview({ civilDate: "2026-10-16", weekday: 5, timeOfDay: "20:00" }),
+      ).toMatchObject({ route: { kind: "station", stationId: f.terraceBar }, fallbacks: [] });
+    }));
+
+  it("refuses to preview a local time the clock skips on that date", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      const forward = clockChangeAfter("Europe/Madrid", "2027-01-01T00:00:00Z", "forward");
+      const preview = (timeOfDay: string) =>
+        explainRoute(tx, f.cfg, f.mojito, null, {
+          kind: "at",
+          moment: { civilDate: forward.date, weekday: 0, timeOfDay },
+        });
+      await expect(preview(minutesAfter(forward.before, 1))).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "time" },
+      });
+      await expect(preview(forward.after)).resolves.toMatchObject({ clockReadable: true });
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await expect(preview(minutesAfter(forward.before, 1))).resolves.toMatchObject({
+        route: { kind: "station", stationId: f.bar },
+      });
+    }));
+
+  it("reads the same number of times however many stations and special dates there are", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      const at = new Date("2026-10-09T18:00:00Z");
+      await seedStationWeek(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "18:00", closesAt: "23:00" },
+      ]);
+      await closedOn(tx, f.cfg, "2026-10-09", f.terraceBar);
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const reads = async () => {
+        const prepared = vi.spyOn(session, "prepareQuery");
+        try {
+          await (await routingAt(tx, f.cfg, at)).stations();
+          await stationStates(tx, f.cfg, at);
+          await routingModel(tx, f.cfg, at);
+          return prepared.mock.calls.length;
+        } finally {
+          prepared.mockRestore();
+        }
+      };
+      const few = await reads();
+      const more = await tx
+        .insert(kitchenStations)
+        .values([
+          { ...f.cfg, name: "Grill" },
+          { ...f.cfg, name: "Fryer" },
+          { ...f.cfg, name: "Pass" },
+        ])
+        .returning();
+      for (const row of more)
+        await seedStationWeek(tx, f.cfg, row.id, [
+          { weekday: 5, opensAt: "12:00", closesAt: "16:00" },
+          { weekday: 6, opensAt: "12:00", closesAt: "16:00" },
+        ]);
+      await closedOn(tx, f.cfg, "2026-10-08", more[0]!.id);
+      await closedOn(tx, f.cfg, "2026-10-10", more[1]!.id);
+      expect(await reads()).toBe(few);
+      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({ open: false });
     }));
 });

@@ -148,6 +148,20 @@
       "when": 1791270050199,
       "tag": "0020_retire_invoice_first",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1791284015422,
+      "tag": "0021_hours_calendar",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1791287086883,
+      "tag": "0022_retire_legacy_hours",
+      "breakpoints": true
     }
   ]
 }

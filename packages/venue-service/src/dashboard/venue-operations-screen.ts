@@ -17,7 +17,6 @@ import type {
   Department,
   DepartmentRemovalImpact,
   FloorZone,
-  HoursInterval,
   ServiceMode,
   VenueReadinessIssue,
   VenueServiceApi,
@@ -33,17 +32,25 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
     t(key) as string,
   );
 
+/** The dashboard shell changes page on `popstate`, not on a pushed address alone. */
+function openHoursPage(departmentId: string): void {
+  history.pushState(
+    history.state,
+    "",
+    `/manage/hours/department/${encodeURIComponent(departmentId)}`,
+  );
+  dispatchEvent(new PopStateEvent("popstate"));
+}
+
 const MODES: ServiceMode[] = ["table_tab", "prepay", "ticket_then_pay"];
-const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 type View = "departments" | "zones";
 type Editor =
   | { kind: "department"; row?: Department }
   | { kind: "new-zone" }
-  | { kind: "hours"; row?: HoursInterval; index?: number; departmentId?: string }
   | { kind: "zone"; row: FloorZone }
   | { kind: "assignment"; zoneId: string; menuId?: string }
   | {
-      kind: "delete" | "disable";
+      kind: "disable";
       name: string;
       action: () => Promise<unknown>;
       impact?: DepartmentRemovalImpact;
@@ -262,11 +269,9 @@ export class VenueOperationsScreen extends LitElement {
       const twin =
         opener?.slot === "empty-action"
           ? this.renderRoot.querySelector<HTMLElement>(
-              opener.dataset.test === "new-hours"
-                ? '[data-test="hours-actions"] [data-test="new-hours"]'
-                : opener.dataset.test?.startsWith("new-assignment-")
-                  ? `[data-test="zone-menu-actions"] [data-test="${opener.dataset.test}"]`
-                  : `[data-test="policy-tree-actions"] [data-test="${opener.dataset.test}"]`,
+              opener.dataset.test?.startsWith("new-assignment-")
+                ? `[data-test="zone-menu-actions"] [data-test="${opener.dataset.test}"]`
+                : `[data-test="policy-tree-actions"] [data-test="${opener.dataset.test}"]`,
             )
           : null;
       (opener?.isConnected &&
@@ -501,14 +506,6 @@ export class VenueOperationsScreen extends LitElement {
       run: () => this.#open({ kind: "new-zone" }),
     };
   }
-  #addHours(): Action {
-    return {
-      key: "new-hours",
-      label: t("venue.add_hours"),
-      disabled: this.model!.departments.length === 0,
-      run: () => this.#open({ kind: "hours" }),
-    };
-  }
   #addAssignment(zoneId: string): Action {
     return {
       key: `new-assignment-${zoneId}`,
@@ -516,9 +513,6 @@ export class VenueOperationsScreen extends LitElement {
       disabled: !this.model!.zones.some((row) => row.id === zoneId),
       run: () => this.#open({ kind: "assignment", zoneId }),
     };
-  }
-  #confirm(name: string, action: () => Promise<unknown>): void {
-    this.#open({ kind: "delete", name, action });
   }
   #enableDepartment(key: string, row: Department): Action {
     return {
@@ -1146,7 +1140,7 @@ export class VenueOperationsScreen extends LitElement {
                 {
                   key: `hours-tree-department-${row.department.id}`,
                   label: t("venue.hours"),
-                  run: () => this.#open({ kind: "hours", departmentId: row.department.id }),
+                  run: () => openHoursPage(row.department.id),
                 },
                 row.department.active
                   ? {
@@ -1299,73 +1293,6 @@ export class VenueOperationsScreen extends LitElement {
         ],
         (row) => row.id,
         this.#addDepartment(),
-      )}
-    </section>`;
-  }
-  #hoursSection() {
-    const model = this.model!;
-    return html`<section>
-      <div class="toolbar" data-test="hours-actions">
-        <h2>${t("venue.hours")}</h2>
-        ${this.#tabAction(this.#addHours())}
-      </div>
-      ${this.#table(
-        "hours",
-        "waitron.venue.hours.table",
-        t("venue.hours"),
-        t("venue.no_hours"),
-        model.hours,
-        [
-          {
-            key: "department",
-            label: t("venue.department"),
-            cell: (row) => model.departments.find((d) => d.id === row.departmentId)?.name,
-          },
-          {
-            key: "day",
-            label: t("venue.weekday"),
-            choosable: "shown",
-            cell: (row) => t(`venue.day.${row.weekday as (typeof DAYS)[number]}`),
-          },
-          {
-            key: "opens",
-            label: t("venue.opens"),
-            choosable: "shown",
-            cell: (row) => row.opensAt.slice(0, 5),
-          },
-          {
-            key: "closes",
-            label: t("venue.closes"),
-            choosable: "shown",
-            cell: (row) => row.closesAt.slice(0, 5),
-          },
-          {
-            key: "actions",
-            label: t("venue.actions"),
-            pinned: "end",
-            cell: (row) =>
-              this.#actions(t("venue.hours"), [
-                {
-                  key: `edit-hours-${model.hours.indexOf(row)}`,
-                  label: t("venue.edit"),
-                  run: () => this.#open({ kind: "hours", row, index: model.hours.indexOf(row) }),
-                },
-                {
-                  key: `delete-hours-${model.hours.indexOf(row)}`,
-                  label: t("venue.delete"),
-                  run: () =>
-                    this.#confirm(t("venue.hours"), () =>
-                      this.api.replaceHours(
-                        row.departmentId,
-                        this.#hours(row.departmentId, model.hours.indexOf(row)),
-                      ),
-                    ),
-                },
-              ]),
-          },
-        ],
-        (row) => String(model.hours.indexOf(row)),
-        this.#addHours(),
       )}
     </section>`;
   }
@@ -1570,15 +1497,6 @@ export class VenueOperationsScreen extends LitElement {
       }
     </section>`;
   }
-  #hours(departmentId: string, omit?: number) {
-    return this.model!.hours.filter(
-      (row, index) => row.departmentId === departmentId && index !== omit,
-    ).map((row) => ({
-      weekday: row.weekday,
-      opensAt: row.opensAt.slice(0, 5),
-      closesAt: row.closesAt.slice(0, 5),
-    }));
-  }
   #editorContent(editor: Editor): EditorContent {
     const model = this.model!;
     switch (editor.kind) {
@@ -1634,40 +1552,6 @@ export class VenueOperationsScreen extends LitElement {
                 },
               },
             );
-          },
-        };
-      case "hours":
-        return {
-          heading: t(editor.row ? "venue.edit_hours" : "venue.add_hours"),
-          body: html`${this.#select("hours-department", t("venue.department"), model.departments, editor.row?.departmentId ?? editor.departmentId, true, !!editor.row || !!editor.departmentId)}${this.#select(
-            "hours-weekday",
-            t("venue.weekday"),
-            DAYS.map((day) => ({ id: String(day), name: t(`venue.day.${day}`) })),
-            String(editor.row?.weekday ?? 0),
-          )}${this.#input("hours-opens", t("venue.opens"), editor.row?.opensAt.slice(0, 5), "time")}${this.#input("hours-closes", t("venue.closes"), editor.row?.closesAt.slice(0, 5), "time")}`,
-          check: () => {
-            const missing = this.#required(["hours-department", "hours-opens", "hours-closes"]);
-            if (Object.keys(missing).length > 0) return missing;
-            return this.#value("hours-opens") === this.#value("hours-closes")
-              ? {
-                  "hours-opens": t("venue.time_distinct"),
-                  "hours-closes": t("venue.time_distinct"),
-                }
-              : {};
-          },
-          save: () => {
-            const departmentId = this.#value("hours-department");
-            const opensAt = this.#value("hours-opens");
-            const closesAt = this.#value("hours-closes");
-            const hours = [
-              ...this.#hours(departmentId, editor.index),
-              { weekday: Number(this.#value("hours-weekday")), opensAt, closesAt },
-            ];
-            // A `request_invalid` names the list sent (`hours`) or an interval of it (`hours.N`),
-            // never one of these controls.
-            void this.#save(() => this.api.replaceHours(departmentId, hours), {
-              codes: { "department.not_found": "hours-department" },
-            });
           },
         };
       case "zone": {
@@ -1742,13 +1626,9 @@ export class VenueOperationsScreen extends LitElement {
           },
         };
       }
-      case "delete":
       case "disable":
         return {
-          heading:
-            editor.kind === "disable"
-              ? format("venue.disable_confirm", { name: editor.name })
-              : t("venue.confirm_remove"),
+          heading: format("venue.disable_confirm", { name: editor.name }),
           body: html`<p>${editor.name}</p>
             ${editor.impact?.zones.map(
               (zone) =>
@@ -1801,7 +1681,7 @@ export class VenueOperationsScreen extends LitElement {
       }
       if (this.attempted) this.fieldErrors = content.check();
     };
-    const confirming = editor.kind === "delete" || editor.kind === "disable";
+    const confirming = editor.kind === "disable";
     return keyed(
       editor,
       html`<wt-modal
@@ -1846,8 +1726,8 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#pageAlert()}
       ${
         this.model
-          ? html`${this.#policyTree()} ${this.#readiness()} ${this.#hoursSection()}
-              ${this.#deviceStartingZones()} ${this.#zoneMenus()}
+          ? html`${this.#policyTree()} ${this.#readiness()} ${this.#deviceStartingZones()}
+              ${this.#zoneMenus()}
               <wt-tabs
                 label=${t("venue.title")}
                 .value=${this.view}

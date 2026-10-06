@@ -13,7 +13,6 @@ const model: VenueServiceView = {
   zones: [],
   salePolicies: { departments: [], zones: [] },
   deviceZones: [],
-  hours: [],
   zoneMenus: [],
   menus: [],
   floorZones: [],

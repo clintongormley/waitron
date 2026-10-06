@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { seedStationWeek } from "@waitron/venue-service/testing/station-week.js";
 import { WorkforceBackend, employments } from "@waitron/workforce";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -27,7 +28,7 @@ import {
   diningTables,
 } from "@waitron/db";
 import { BOOKINGS_FLOOR_ANNOTATIONS, bookings } from "@waitron/bookings";
-import { replaceStationHours, stationStates, stationDayStates } from "@waitron/venue-service";
+import { stationStates, stationDayStates } from "@waitron/venue-service";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import type { ResourceChange } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -879,10 +880,11 @@ describe("venue detail consumer reads", () => {
           { locationId: venue.cfg.locationId, name: "New-day override" },
         ])
         .returning({ id: kitchenStations.id });
-      for (const row of rows.slice(0, 3))
-        await replaceStationHours(tx, venue.cfg, row.id, [
+      for (const row of rows.slice(0, 3)) {
+        await seedStationWeek(tx, venue.cfg, row.id, [
           { weekday: 5, opensAt: "23:00", closesAt: "23:59" },
         ]);
+      }
       await tx.insert(stationDayStates).values([
         { stationId: rows[1]!.id, businessDay: "2026-10-02", open: false },
         { stationId: rows[2]!.id, businessDay: "2026-10-01", open: false },
@@ -921,11 +923,13 @@ describe("venue detail consumer reads", () => {
       },
     ]);
     const retained = () => ({
-      hours: suite.db.all(sql`select * from station_hours order by id`),
+      weekCells: suite.db.all(sql`select * from hours_week_cells order by id`),
+      weekPeriods: suite.db.all(sql`select * from hours_week_periods order by id`),
       overrides: suite.db.all(sql`select * from station_day_states order by id`),
       bookings: suite.db.all(sql`select * from bookings order by id`),
     });
     const before = retained();
+    expect([before.weekCells.length, before.weekPeriods.length]).toEqual([21, 3]);
     const readCurrent = () =>
       withTransaction(suite.db, async (tx) => {
         const states = await stationStates(tx, venue.cfg, at);
