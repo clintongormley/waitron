@@ -200,9 +200,9 @@ async function drainDue(
     // to `detenido` (`haltOpenChainClaims`), and the next SELECT sees neither.
     let claimed: { sendable: DueRow[]; rawCount: number };
     for (;;) {
-      claimed = await withTransaction(db, async (tx) => {
-        const c = await claimBatch(tx, now, environment, result, blockedSifIds, maxPorEnvio);
-        const kept = await haltOpenChainClaims(tx, c.sendable, now, result);
+      claimed = await countOnCommit(db, result, async (tx, counts) => {
+        const c = await claimBatch(tx, now, environment, counts, blockedSifIds, maxPorEnvio);
+        const kept = await haltOpenChainClaims(tx, c.sendable, now, counts);
         return { sendable: kept, rawCount: c.rawCount };
       });
       if (claimed.sendable.length > 0 || claimed.rawCount === 0) break;
@@ -220,10 +220,13 @@ async function drainDue(
     const registros: EnvioRegistro[] = batch.map(toEnvioRegistro);
     try {
       const respuesta = await client.submit(cabecera, registros);
+      // Counted as soon as AEAT has answered: the envío was sent whether or not its reply is kept.
+      result.batchesSent += 1;
+      result.recordsSubmitted += batch.length;
       const lines = await resolveLines(client, batch, respuesta);
 
-      dueCount = await withTransaction(db, async (tx) => {
-        await persistResponse(tx, batch, lines, respuesta.CSV ?? null, now, result);
+      dueCount = await countOnCommit(db, result, async (tx, counts) => {
+        await persistResponse(tx, batch, lines, respuesta.CSV ?? null, now, counts);
         return countDue(tx, now);
       });
       // `@waitron/verifactu` leaves the wait undefined when AEAT's reply has no usable one. The
@@ -236,7 +239,7 @@ async function drainDue(
     } catch {
       // The claim is committed, so back the batch off rather than leave it stuck `enviando`, and
       // stop: each row's own `proximo_intento_en` schedules the retry.
-      await withTransaction(db, (tx) => backoffBatch(tx, batch, now, result));
+      await countOnCommit(db, result, (tx, counts) => backoffBatch(tx, batch, now, counts));
       break;
     }
   }
@@ -244,6 +247,25 @@ async function drainDue(
   const proximoEnvioEn = new Date(now.getTime() + t * 1000);
   await withTransaction(db, (tx) => upsertFlujo(tx, proximoEnvioEn, t));
   if (dueCount > 0) bumpNextDue(result, proximoEnvioEn);
+}
+
+/**
+ * Runs `body` in its own transaction against a scratch result, and adds the scratch's outcome
+ * counts and next-due instant to `result` only once that transaction has committed, so a pass
+ * whose transaction rolled back does not report as kept an outcome, hold or incident it wrote.
+ */
+async function countOnCommit<T>(
+  db: Database,
+  result: DrainResult,
+  body: (tx: Transaction, counts: DrainResult) => Promise<T>,
+): Promise<T> {
+  const counts = emptyDrainResult();
+  const value = await withTransaction(db, (tx) => body(tx, counts));
+  result.recordsAccepted += counts.recordsAccepted;
+  result.recordsHalted += counts.recordsHalted;
+  result.incidentsRaised += counts.incidentsRaised;
+  bumpNextDue(result, counts.nextDueAt);
+  return value;
 }
 
 /** Current flow-control state. No row yet means nothing was ever sent, so the gate reads open. */
@@ -648,8 +670,6 @@ async function persistResponse(
   now: Date,
   result: DrainResult,
 ): Promise<void> {
-  result.batchesSent += 1;
-  result.recordsSubmitted += batch.length;
   const sentIds = batch.map((row) => row.id);
 
   for (const line of lines) {

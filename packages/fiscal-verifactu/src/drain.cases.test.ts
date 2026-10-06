@@ -7,6 +7,7 @@ import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
   appendPendingAlta,
+  seedIndependentChain,
   seedPendingEnvios,
   seedSecondChain,
   type SeededDrain,
@@ -602,8 +603,9 @@ describe("drain — a case commits with the outcome that opened it", () => {
       when new.estado = 'aceptado'
       begin select raise(abort, 'refused by test'); end
     `);
+    let result: Awaited<ReturnType<typeof drain>> | undefined;
     try {
-      await drain(deps(aeat.client()), FIRST);
+      result = await drain(deps(aeat.client()), FIRST);
     } finally {
       await suite.db.execute(sql`drop trigger test_refuse_accept`);
     }
@@ -613,6 +615,48 @@ describe("drain — a case commits with the outcome that opened it", () => {
     expect((await envioOf(rejected!)).estado).toBe("pendiente");
     expect((await envioOf(accepted!)).estado).toBe("pendiente");
     expect(await ackOf(rejected!)).toBeUndefined();
+    // The envío did reach AEAT, so it is counted as sent; the outcomes the failed transaction
+    // wrote were never kept, so nothing is counted as accepted, held or raised.
+    expect(result).toMatchObject({
+      batchesSent: 1,
+      recordsSubmitted: 2,
+      recordsAccepted: 0,
+      recordsHalted: 0,
+      incidentsRaised: 0,
+      nextDueAt: new Date(FIRST.getTime() + backoffMs(1)),
+    });
+  });
+});
+
+describe("drain — a claim that rolls back reports nothing it wrote", () => {
+  it("counts no incident when the claim's transaction fails after raising one", async () => {
+    const aeat = fakeAeat();
+    // Refused for its environment, which raises an incident inside the claim's transaction.
+    await seedPendingEnvios(suite.db, { count: 1, entorno: "preproduction" });
+    // Sorts after the refused chain, so its claim stamp is written after that incident.
+    await seedIndependentChain(suite.db, {
+      sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      secuencia: 1,
+    });
+    await suite.db.execute(sql`
+      create trigger test_refuse_claim before update of estado on envios
+      when new.estado = 'enviando'
+      begin select raise(abort, 'refused by test'); end
+    `);
+    let result: Awaited<ReturnType<typeof drain>> | undefined;
+    try {
+      result = await drain(deps(aeat.client()), FIRST);
+    } finally {
+      await suite.db.execute(sql`drop trigger test_refuse_claim`);
+    }
+
+    expect(await incidentCodes()).toEqual([]);
+    expect(result).toMatchObject({
+      skipped: [{ errorCode: "unknown" }],
+      batchesSent: 0,
+      incidentsRaised: 0,
+      recordsHalted: 0,
+    });
   });
 });
 
