@@ -2125,6 +2125,27 @@ it.each(["product", "size"])(
   },
 );
 
+it("keeps Resolve for an untouched stored-price clash, hides it for native typing, and restores it on Escape", async () => {
+  const el = await mount({ rows: [clashRow(lemonade)] });
+  const key = "mi-lemonade";
+  const actions = () => row(el, key)!.querySelector("wt-row-actions");
+  expect(override(el, key).value).toBe("2.50");
+  expect(actions()).not.toBeNull();
+  const field = override(el, key);
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  input.value = "2.80";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(field.value).toBe("2.80");
+  expect(actions()).toBeNull();
+  await press(el, key, "Escape");
+  await table(el).updateComplete;
+  expect(field.value).toBe("2.50");
+  expect(actions()).not.toBeNull();
+});
+
 it.each(["", "-1", "abc"])(
   "keeps Resolve available when a clashing row's draft is %j",
   async (value) => {

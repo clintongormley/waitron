@@ -384,9 +384,6 @@ export class MenuPricesTable extends LitElement {
     }
   }
 
-  /** Whether the drafts changed from `before` in a way the table draws: a drawn field not showing
-   * its row's text, whether a row's field holds a price, or the price a product's sizes follow. A
-   * keystroke usually changes none of them, since its field already shows what was typed. */
   #draftsRedraw(before: MenuPricesTable["drafts"]): boolean {
     for (const key of new Set([...before.keys(), ...this.drafts.keys()])) {
       const was = before.get(key);

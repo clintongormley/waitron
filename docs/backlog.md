@@ -1834,7 +1834,8 @@ a clash came from.
 
 **Resolve follows an unsaved price — DONE (A280, 2026-10-06).** A valid draft hides the
 row's Resolve menu. Blank or invalid text and Escape leave the saved clash available. Product
-and size rows have regression checks; no existing test check changed.
+and size rows have regression checks; no existing test check changed. A valid draft still hides
+Resolve during a save and after a refusal; clear it or press Escape to restore the candidate list.
 
 **Price overrides reject a comma decimal separator (A280 visual follow-up, 2026-10-06).**
 Typing `2,80` through the native input in Spanish left Resolve visible in all four mounted-widget
