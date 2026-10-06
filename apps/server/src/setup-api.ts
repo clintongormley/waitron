@@ -406,7 +406,9 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
     taxId: taxId?.valid === true ? taxId.normalized : taxIdInput,
     legalName: asString(v.legalName, "legalName"),
     taxpayerDomicile:
-      v.taxpayerDomicile === undefined ? null : asString(v.taxpayerDomicile, "taxpayerDomicile"),
+      v.taxpayerDomicile === undefined
+        ? null
+        : asNullableString(v.taxpayerDomicile, "taxpayerDomicile"),
     location: {
       name: asString(loc.name, "location.name"),
       fiscalTerritory: jurisdiction.id,
