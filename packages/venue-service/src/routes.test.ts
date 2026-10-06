@@ -1,6 +1,9 @@
 import { eq, sql } from "drizzle-orm";
 import { setClaim } from "./routing-store.js";
 import { replaceStationHours, setStationToday } from "./station-times.js";
+import { seedStationWeek } from "./testing/interim-week.js";
+import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
+import { saveSpecialDate } from "./hours.js";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -2328,6 +2331,10 @@ it.each([
   "weekday=&time=22:00",
   "weekday=1.5&time=22:00",
   "weekday=5&time=2:00",
+  "date=2026-10-09",
+  "date=2026-02-30&time=20:00",
+  "date=09-10-2026&time=20:00",
+  "date=2026-10-09&weekday=5&time=20:00",
 ])("refuses invalid explanation time: %s", async (query) => {
   const fx = await fixture();
   const response = await send(
@@ -2353,6 +2360,9 @@ it("applies scheduled hours through the explain route and honors manual open onl
       .returning();
     await setClaim(tx, cfg, fx.categoryId, { kind: "station", stationId: station!.id });
     await replaceStationHours(tx, cfg, station!.id, [
+      { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
+    ]);
+    await seedStationWeek(tx, cfg, station!.id, [
       { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
     ]);
     await setStationToday(tx, cfg, station!.id, "open", new Date());
@@ -2385,6 +2395,70 @@ it("applies scheduled hours through the explain route and honors manual open onl
     noReplacement: true,
     clockReadable: true,
     fallbacks: [{ stationId: product.stationId, why: "out_of_hours" }],
+  });
+});
+
+it("previews a date and local time with that date's special hours through the explain route", async () => {
+  const fx = await fixture();
+  const product = await withTransaction(db, async (tx) => {
+    await tx
+      .update(locations)
+      .set({ timeZone: "Europe/Madrid" })
+      .where(eq(locations.id, fx.locationId));
+    const cfg = { locationId: fx.locationId };
+    const [station] = await tx
+      .insert(kitchenStations)
+      .values({ ...cfg, name: "Upstairs" })
+      .returning();
+    await setClaim(tx, cfg, fx.categoryId, { kind: "station", stationId: station!.id });
+    await saveSpecialDate(
+      tx,
+      cfg,
+      null,
+      {
+        date: "2026-10-09",
+        name: "Staff party",
+        colour: "purple",
+        closeWholeVenue: true,
+        cells: [],
+      },
+      new Date("2026-09-01T10:00:00Z"),
+    );
+    return {
+      id: (
+        await createProduct(tx, {
+          catalogueId: fx.menuId,
+          name: "Shandy",
+          categoryId: fx.categoryId,
+          pricingUnit: "each",
+          unitPrice: "3.00",
+          vatClass: "general",
+        })
+      ).id,
+      stationId: station!.id,
+    };
+  });
+  const path = `/management-api/venue-service/routing/explain?productId=${product.id}`;
+  const special = await send(fx.app, "GET", `${path}&date=2026-10-09&time=20:00`, fx.managerCookie);
+  expect(special.status).toBe(200);
+  expect(await special.json()).toMatchObject({
+    fallbacks: [{ stationId: product.stationId, why: "out_of_hours" }],
+  });
+  const weekday = await send(fx.app, "GET", `${path}&weekday=5&time=20:00`, fx.managerCookie);
+  expect(await weekday.json()).toMatchObject({
+    route: { kind: "station", stationId: product.stationId },
+    fallbacks: [],
+  });
+  const forward = clockChangeAfter("Europe/Madrid", "2027-01-01T00:00:00Z", "forward");
+  const skipped = await send(
+    fx.app,
+    "GET",
+    `${path}&date=${forward.date}&time=${minutesAfter(forward.before, 1)}`,
+    fx.managerCookie,
+  );
+  expect(skipped.status).toBe(400);
+  expect(await skipped.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "time" } },
   });
 });
 

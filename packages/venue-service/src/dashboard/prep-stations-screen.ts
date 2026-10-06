@@ -309,6 +309,9 @@ export class PrepStationsScreen extends LitElement {
   @state() private testWhen = "now";
   @state() private testWeekday = 0;
   @state() private testTime = "12:00";
+  @state() private testDate = "";
+  /** The server refused the chosen time because the clocks skip it on the chosen date. */
+  @state() private testTimeSkipped = false;
   @state() private explanation?: RouteExplanation;
   @state() private testError = "";
   @state() private stationAction?: StationAction;
@@ -876,35 +879,36 @@ export class PrepStationsScreen extends LitElement {
     const request = ++this.#testRequest;
     this.explanation = undefined;
     this.testError = "";
-    if (!this.testProduct || (this.testWhen === "at" && !this.testTime)) return;
+    this.testTimeSkipped = false;
+    if (
+      !this.testProduct ||
+      (this.testWhen !== "now" && !this.testTime) ||
+      (this.testWhen === "date" && !this.testDate)
+    )
+      return;
+    const moment =
+      this.testWhen === "now"
+        ? undefined
+        : this.testWhen === "date"
+          ? {
+              civilDate: this.testDate,
+              weekday: new Date(`${this.testDate}T00:00:00Z`).getUTCDay(),
+              timeOfDay: this.testTime,
+            }
+          : { weekday: this.testWeekday, timeOfDay: this.testTime };
     try {
-      const explanation =
-        this.testWhen === "now"
-          ? this.testExtras.length
-            ? await this.api.explain(
-                this.testProduct,
-                this.testZone || null,
-                undefined,
-                this.testExtras,
-              )
-            : await this.api.explain(this.testProduct, this.testZone || null)
-          : this.testExtras.length
-            ? await this.api.explain(
-                this.testProduct,
-                this.testZone || null,
-                {
-                  weekday: this.testWeekday,
-                  timeOfDay: this.testTime,
-                },
-                this.testExtras,
-              )
-            : await this.api.explain(this.testProduct, this.testZone || null, {
-                weekday: this.testWeekday,
-                timeOfDay: this.testTime,
-              });
+      const explanation = this.testExtras.length
+        ? await this.api.explain(this.testProduct, this.testZone || null, moment, this.testExtras)
+        : moment
+          ? await this.api.explain(this.testProduct, this.testZone || null, moment)
+          : await this.api.explain(this.testProduct, this.testZone || null);
       if (request === this.#testRequest) this.explanation = explanation;
-    } catch {
-      if (request === this.#testRequest) this.testError = t("prep.test_error");
+    } catch (error) {
+      if (request !== this.#testRequest) return;
+      const field = (error as { params?: { field?: string } } | undefined)?.params?.field;
+      if (codeOf(error) === "management.request_invalid" && field === "time")
+        this.testTimeSkipped = true;
+      else this.testError = t("prep.test_error");
     }
   }
   #testStationName(id: string): string {
@@ -1065,6 +1069,7 @@ export class PrepStationsScreen extends LitElement {
           .options=${[
             { value: "now", label: t("prep.test_now") },
             { value: "at", label: t("prep.test_at") },
+            { value: "date", label: t("prep.test_on_date") },
           ]}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             this.testWhen = event.detail.value;
@@ -1087,6 +1092,38 @@ export class PrepStationsScreen extends LitElement {
                   }}
                 >
                 </wt-combobox>
+              `
+            : nothing
+        }
+        ${
+          this.testWhen === "date"
+            ? html`
+                <div>
+                  <wt-input
+                    name="date"
+                    data-test="test-date"
+                    type="date"
+                    label=${t("prep.test_date")}
+                    required
+                    .value=${live(this.testDate)}
+                    aria-invalid=${!this.testDate}
+                    .invalid=${!this.testDate}
+                    aria-describedby="test-date-error"
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      this.testDate = event.detail.value;
+                      void this.#explain();
+                    }}
+                  ></wt-input>
+                  <span id="test-date-error" class="error"
+                    >${!this.testDate ? t("prep.test_date_required") : nothing}</span
+                  >
+                </div>
+              `
+            : nothing
+        }
+        ${
+          this.testWhen !== "now"
+            ? html`
                 <div>
                   <wt-input
                     name="time"
@@ -1095,8 +1132,8 @@ export class PrepStationsScreen extends LitElement {
                     label=${t("prep.test_time")}
                     required
                     .value=${live(this.testTime)}
-                    aria-invalid=${!this.testTime}
-                    .invalid=${!this.testTime}
+                    aria-invalid=${!this.testTime || this.testTimeSkipped}
+                    .invalid=${!this.testTime || this.testTimeSkipped}
                     aria-describedby="test-time-error"
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       this.testTime = event.detail.value;
@@ -1104,7 +1141,13 @@ export class PrepStationsScreen extends LitElement {
                     }}
                   ></wt-input>
                   <span id="test-time-error" class="error"
-                    >${!this.testTime ? t("prep.test_time_required") : nothing}</span
+                    >${
+                      !this.testTime
+                        ? t("prep.test_time_required")
+                        : this.testTimeSkipped
+                          ? t("prep.test_time_skipped")
+                          : nothing
+                    }</span
                   >
                 </div>
               `

@@ -201,7 +201,8 @@ export class PrepStationsApi {
     const query = new URLSearchParams({ productId, zoneId: zoneId ?? "" });
     for (const id of extraProductIds) query.append("extraId", id);
     if (moment) {
-      query.set("weekday", String(moment.weekday));
+      if (moment.civilDate === undefined) query.set("weekday", String(moment.weekday));
+      else query.set("date", moment.civilDate);
       query.set("time", moment.timeOfDay);
     }
     return this.#read<RouteExplanation>(`/management-api/venue-service/routing/explain?${query}`);

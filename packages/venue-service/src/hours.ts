@@ -1,8 +1,8 @@
-import { and, asc, eq, gte, inArray, isNotNull, ne, or, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte, ne, or, type SQL } from "drizzle-orm";
 import { kitchenStations, newId, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { venueLocalMoment } from "./hours-clock.js";
+import { isReadableClock, localTimeOccurrences, venueLocalMoment } from "./hours-clock.js";
 import {
   addDays,
   cellIntervals,
@@ -26,6 +26,7 @@ import type {
   WeekDay,
 } from "./hours-types.js";
 import { storedTime, type VenueScope } from "./operations.js";
+import type { DayPeriod, WeeklyInterval } from "./routing.js";
 import {
   hoursWeekCells,
   hoursWeekPeriods,
@@ -527,6 +528,29 @@ async function assertSpecialDateBesideNeighbours(
 }
 
 /**
+ * Refuses a period that opens or closes at a minute the venue's clock skips on that date. A clock
+ * that cannot be read checks nothing.
+ */
+async function assertEndpointsOccur(
+  tx: Transaction,
+  cfg: VenueScope,
+  input: SpecialDateInput,
+): Promise<void> {
+  const clock = await readLocationClock(tx, cfg.locationId);
+  if (!isReadableClock(clock)) return;
+  input.cells.forEach(({ cell }, index) =>
+    cell.periods.forEach((period, position) => {
+      const field = `cells.${index}.cell.periods.${position}`;
+      const closingDate = period.closesAt > period.opensAt ? input.date : addDays(input.date, 1);
+      if (localTimeOccurrences(input.date, period.opensAt, clock.timeZone).length === 0)
+        invalidHours(`${field}.opensAt`);
+      if (localTimeOccurrences(closingDate, period.closesAt, clock.timeZone).length === 0)
+        invalidHours(`${field}.closesAt`);
+    }),
+  );
+}
+
+/**
  * Creates a special date (`id` null) or edits one in place, keeping its id. Its cells replace the
  * stored ones; an `inherit` cell stores nothing.
  */
@@ -575,6 +599,7 @@ export async function saveSpecialDate(
       week: false,
     })),
   );
+  await assertEndpointsOccur(tx, cfg, parsed);
   await assertSpecialDateBesideNeighbours(tx, cfg, parsed, current?.date ?? null, id, at);
 
   const values = {
@@ -616,4 +641,97 @@ export async function saveSpecialDate(
   if (dropped.length > 0)
     await tx.delete(specialDateHours).where(inArray(specialDateHours.id, dropped));
   return { id: specialDateId, ...values };
+}
+
+/** A station's opening schedule as routing reads it. */
+export interface StationSchedule {
+  /** Whether the standard week has hours set; with none, the week makes no claim. */
+  weekSet: boolean;
+  hours: WeeklyInterval[];
+  /** Special-date hours by date, `[]` for Closed; dates where the station inherits are absent. */
+  dates: Map<LocalDate, DayPeriod[]>;
+}
+
+const ALL_DAY: DayPeriod = { opensAt: "00:00", closesAt: "00:00" };
+
+function dayPeriods(mode: StoredMode, periods: HourPeriod[]): DayPeriod[] {
+  if (mode === "closed") return [];
+  if (mode === "all_day") return [ALL_DAY];
+  return periods.map(({ opensAt, closesAt }) => ({ opensAt, closesAt }));
+}
+
+/**
+ * Every listed station's standard week, and its special-date hours from `from` to `to` (none when
+ * `dates` is null), in a fixed number of reads however many stations and dates there are.
+ */
+export async function readStationSchedules(
+  tx: Transaction,
+  cfg: VenueScope,
+  stationIds: readonly string[],
+  dates: { from: LocalDate; to: LocalDate } | null,
+): Promise<Map<string, StationSchedule>> {
+  const schedules = new Map<string, StationSchedule>(
+    stationIds.map((id) => [id, { weekSet: false, hours: [], dates: new Map() }]),
+  );
+  if (stationIds.length === 0) return schedules;
+  const weekCells = await tx
+    .select()
+    .from(hoursWeekCells)
+    .where(inArray(hoursWeekCells.stationId, [...stationIds]))
+    .orderBy(asc(hoursWeekCells.weekday));
+  const weekPeriods = await periodsByCell(
+    tx,
+    hoursWeekPeriods,
+    weekCells.map((cell) => cell.id),
+  );
+  for (const cell of weekCells) {
+    const schedule = schedules.get(cell.stationId!)!;
+    schedule.weekSet = true;
+    for (const period of dayPeriods(cell.mode, weekPeriods.get(cell.id) ?? []))
+      schedule.hours.push({ weekday: cell.weekday, ...period });
+  }
+  if (dates === null) return schedules;
+  const specials = await tx
+    .select({
+      id: specialDates.id,
+      date: specialDates.date,
+      closeWholeVenue: specialDates.closeWholeVenue,
+    })
+    .from(specialDates)
+    .where(
+      and(
+        eq(specialDates.locationId, cfg.locationId),
+        gte(specialDates.date, dates.from),
+        lte(specialDates.date, dates.to),
+      ),
+    );
+  if (specials.length === 0) return schedules;
+  const dateCells = await tx
+    .select()
+    .from(specialDateHours)
+    .where(
+      and(
+        inArray(
+          specialDateHours.specialDateId,
+          specials.map((special) => special.id),
+        ),
+        inArray(specialDateHours.stationId, [...stationIds]),
+      ),
+    );
+  const datePeriods = await periodsByCell(
+    tx,
+    specialDateHoursPeriods,
+    dateCells.map((cell) => cell.id),
+  );
+  const specialById = new Map(specials.map((special) => [special.id, special]));
+  for (const cell of dateCells) {
+    const special = specialById.get(cell.specialDateId)!;
+    schedules
+      .get(cell.stationId!)!
+      .dates.set(special.date, dayPeriods(cell.mode, datePeriods.get(cell.id) ?? []));
+  }
+  for (const special of specials)
+    if (special.closeWholeVenue)
+      for (const schedule of schedules.values()) schedule.dates.set(special.date, []);
+  return schedules;
 }

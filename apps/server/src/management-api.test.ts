@@ -19,6 +19,12 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
+import {
+  WEEK_DISPLAY_ORDER,
+  readWeekHours,
+  replaceWeekHours,
+  stationStates,
+} from "@waitron/venue-service";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { configureZone, createDepartment, deactivateDepartment } from "@waitron/venue-service";
@@ -2026,6 +2032,45 @@ describe("/management-api/stations (KDS-1 config)", () => {
     list = await listStations();
     expect(list.find((s) => s.id === first)!.isDefault).toBe(true);
     expect(list.find((s) => s.id === second)!.isDefault).toBe(false);
+  });
+
+  it("ignores a saved Closed week while its station is the default, refuses a stale editor's save, and resumes the week on demotion", async () => {
+    const cfg = { locationId: brandLocationId(venue.locationId) };
+    const first = await createStation(unique("Swap default"), { isDefault: true });
+    const second = await createStation(unique("Swap closed"));
+    const subject = { kind: "station" as const, id: second };
+    // Tuesday 6 October 2026, 12:00 in Madrid.
+    const at = new Date("2026-10-06T10:00:00Z");
+    const weekOf = (mode: "closed" | "all_day") =>
+      WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, cell: { mode, periods: [] as [] } }));
+    await withTransaction(suite.db, (tx) =>
+      replaceWeekHours(tx, cfg, subject, weekOf("closed"), at),
+    );
+    const state = async () =>
+      (await withTransaction(suite.db, (tx) => stationStates(tx, cfg, at))).get(second);
+    const storedWeek = () => withTransaction(suite.db, (tx) => readWeekHours(tx, cfg, subject));
+    expect(await state()).toMatchObject({ open: false, isDefault: false, active: true });
+
+    expect(
+      (await req(`/stations/${second}/default`, { method: "POST" }, managerCookie)).status,
+    ).toBe(204);
+    expect(await state()).toMatchObject({ open: true, isDefault: true, active: true });
+    const kept = await storedWeek();
+    expect(kept.map((day) => day.cell.mode)).toEqual(Array(7).fill("closed"));
+    // An editor opened before the switch still holds the week; its save is refused and writes nothing.
+    await expect(
+      withTransaction(suite.db, (tx) => replaceWeekHours(tx, cfg, subject, weekOf("all_day"), at)),
+    ).rejects.toMatchObject({ code: "station.always_open", params: { stationId: second } });
+    expect(await storedWeek()).toEqual(kept);
+
+    expect(
+      (await req(`/stations/${first}/default`, { method: "POST" }, managerCookie)).status,
+    ).toBe(204);
+    expect(await state()).toMatchObject({ open: false, isDefault: false, active: true });
+    expect((await req(`/stations/${second}`, { method: "DELETE" }, managerCookie)).status).toBe(
+      204,
+    );
+    expect(await state()).toMatchObject({ open: false, isDefault: false, active: false });
   });
 
   it("POST /:id/default on an unknown or malformed id → 404 station.not_found", async () => {

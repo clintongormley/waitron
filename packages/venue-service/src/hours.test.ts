@@ -37,6 +37,7 @@ import {
   specialDates,
 } from "./schema/hours.js";
 import { departments } from "./schema/service.js";
+import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -918,4 +919,94 @@ describe("hours either side of a special date", () => {
       cells: input.cells,
     });
   });
+});
+
+describe("special dates on a clock-change day", () => {
+  const zone = "Europe/Madrid";
+  const forward = clockChangeAfter(zone, "2027-01-01T00:00:00Z", "forward");
+  const backward = clockChangeAfter(zone, "2027-07-01T00:00:00Z", "backward");
+  const skipped = minutesAfter(forward.before, 1);
+  const dateWith = (date: string, f: Fixture, opensAt: string, closesAt: string) =>
+    specialInput({
+      date,
+      cells: [{ subject: f.bar, cell: { mode: "periods", periods: [period(opensAt, closesAt)] } }],
+    });
+
+  it("refuses an opening or a closing at a minute the clock skips that day, writing nothing", async () => {
+    const f = await fixture();
+    await expect(
+      saveDate(f, null, dateWith(forward.date, f, skipped, "12:00")),
+    ).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "cells.0.cell.periods.0.opensAt" },
+    });
+    await expect(
+      saveDate(f, null, dateWith(forward.date, f, "00:30", skipped)),
+    ).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "cells.0.cell.periods.0.closesAt" },
+    });
+    // Closing after midnight falls on the next date, the clock-change day.
+    const dayBefore = new Date(Date.parse(`${forward.date}T00:00:00Z`) - 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    await expect(saveDate(f, null, dateWith(dayBefore, f, "22:00", skipped))).rejects.toMatchObject(
+      {
+        code: "hours.invalid",
+        params: { field: "cells.0.cell.periods.0.closesAt" },
+      },
+    );
+    expect(
+      await withTransaction(db, (tx) =>
+        tx.select().from(specialDates).where(eq(specialDates.locationId, f.cfg.locationId)),
+      ),
+    ).toEqual([]);
+  });
+
+  it("saves the same times on an ordinary day, and a minute the clock repeats", async () => {
+    const f = await fixture();
+    await saveDate(f, null, dateWith("2027-02-10", f, skipped, "12:00"));
+    await saveDate(f, null, dateWith(backward.date, f, minutesAfter(backward.after, 1), "12:00"));
+  });
+
+  it("checks no endpoint while the venue's clock cannot be read", async () => {
+    const f = await fixture();
+    await withTransaction(db, (tx) =>
+      tx.update(locations).set({ timeZone: "Mars/Base" }).where(eq(locations.id, f.cfg.locationId)),
+    );
+    await saveDate(f, null, dateWith(forward.date, f, skipped, "12:00"));
+  });
+
+  it("keeps the standard week, which repeats every week, free to name a skipped minute", async () => {
+    const f = await fixture();
+    await save(f, f.bar, week({ 0: periods(period(skipped, "12:00")) }));
+  });
+});
+
+it("refuses a week clashing with yesterday's special tail and leaves every row as it was", async () => {
+  const f = await fixture();
+  // Monday 5 October is yesterday at AT; its special hours run to 03:00 on Tuesday.
+  const monday = await saveDate(
+    f,
+    null,
+    specialInput({
+      date: "2026-10-05",
+      cells: [
+        { subject: f.restaurant, cell: { mode: "periods", periods: [period("22:00", "03:00")] } },
+      ],
+    }),
+  );
+  await save(f, f.restaurant, week({ 2: periods(period("12:00", "16:00")) }));
+  const weekBefore = await storedWeek(f.restaurant);
+  const dateBefore = await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, monday.id));
+  await expect(
+    save(f, f.restaurant, week({ 2: periods(period("01:00", "05:00")) })),
+  ).rejects.toMatchObject({
+    code: "hours.invalid",
+    params: { field: "days.1.cell", date: "2026-10-05", subjectId: f.restaurant.id },
+  });
+  expect(await storedWeek(f.restaurant)).toEqual(weekBefore);
+  expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, monday.id))).toEqual(
+    dateBefore,
+  );
 });

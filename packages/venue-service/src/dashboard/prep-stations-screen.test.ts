@@ -3164,6 +3164,59 @@ it("sends both the chosen weekday and time and returns to now", async () => {
   expect(a.explain).toHaveBeenLastCalledWith("bread", null);
 });
 
+it("previews a chosen date and time, and explains a time the clocks skip on that date", async () => {
+  setLocale("en");
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  const when = q(el, '[data-test="test-when"]') as WtCombobox;
+  expect(when.options.map((option) => option.label)).toEqual([
+    "Now",
+    "Weekday and time",
+    "Date and time",
+  ]);
+  when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "date" } }));
+  await settle(el);
+  expect(q(el, '[data-test="test-weekday"]')).toBeNull();
+  const date = q(el, '[data-test="test-date"]') as WtInput;
+  expect(date.getAttribute("name")).toBe("date");
+  expect(date.type).toBe("date");
+  const count = vi.mocked(a.explain).mock.calls.length;
+  expect(q(el, "#test-date-error")!.textContent).toContain("Choose a date.");
+  date.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "2026-10-09" } }));
+  const time = q(el, '[data-test="test-time"]') as WtInput;
+  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "22:00" } }));
+  await settle(el);
+  expect(vi.mocked(a.explain).mock.calls.length).toBeGreaterThan(count);
+  expect(a.explain).toHaveBeenLastCalledWith("bread", null, {
+    civilDate: "2026-10-09",
+    weekday: 5,
+    timeOfDay: "22:00",
+  });
+  expect(q(el, "#test-date-error")!.textContent!.trim()).toBe("");
+
+  vi.mocked(a.explain).mockRejectedValueOnce({
+    code: "management.request_invalid",
+    params: { field: "time" },
+  });
+  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "02:30" } }));
+  await settle(el);
+  expect(q(el, "#test-time-error")!.textContent).toContain(
+    "The clocks change that night, so this time does not happen on that date.",
+  );
+  expect(time.getAttribute("aria-invalid")).toBe("true");
+  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain(
+    "The route could not be checked.",
+  );
+  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "03:00" } }));
+  await settle(el);
+  expect(q(el, "#test-time-error")!.textContent!.trim()).toBe("");
+  expect(time.getAttribute("aria-invalid")).toBe("false");
+});
+
 it("clears the scheduled answer and shows the required-time problem when time is removed", async () => {
   setLocale("en");
   const a = api({

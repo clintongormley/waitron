@@ -451,6 +451,18 @@ it("serializes the scheduled weekday and time together", async () => {
   );
 });
 
+it("sends a date instead of a weekday to preview that date's own hours", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  await api.explain("lager", null, { civilDate: "2026-10-09", weekday: 5, timeOfDay: "22:00" });
+  expect(request).toHaveBeenCalledWith(
+    "/management-api/venue-service/routing/explain?productId=lager&zoneId=&date=2026-10-09&time=22%3A00",
+    "GET",
+    undefined,
+    { passive: false },
+  );
+});
+
 it("reads station health passively and preserves summary and drilldown data", async () => {
   const snapshot = {
     capturedAt: "2026-10-05T18:00:00.000Z",

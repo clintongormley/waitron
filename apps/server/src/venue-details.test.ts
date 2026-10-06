@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { seedStationWeek } from "@waitron/venue-service/testing/interim-week.js";
 import { WorkforceBackend, employments } from "@waitron/workforce";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -879,10 +880,14 @@ describe("venue detail consumer reads", () => {
           { locationId: venue.cfg.locationId, name: "New-day override" },
         ])
         .returning({ id: kitchenStations.id });
-      for (const row of rows.slice(0, 3))
+      for (const row of rows.slice(0, 3)) {
         await replaceStationHours(tx, venue.cfg, row.id, [
           { weekday: 5, opensAt: "23:00", closesAt: "23:59" },
         ]);
+        await seedStationWeek(tx, venue.cfg, row.id, [
+          { weekday: 5, opensAt: "23:00", closesAt: "23:59" },
+        ]);
+      }
       await tx.insert(stationDayStates).values([
         { stationId: rows[1]!.id, businessDay: "2026-10-02", open: false },
         { stationId: rows[2]!.id, businessDay: "2026-10-01", open: false },

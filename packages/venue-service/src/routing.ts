@@ -1,4 +1,5 @@
 import type { ExtraMakerOutcome, PreparationRoute } from "@waitron/module";
+import { addDays } from "./hours-rules.js";
 export type { ExceptionInput, RoutingModel, RouteExplanation } from "./routing-types.js";
 
 /** What a claim or an exception sends work to. */
@@ -34,15 +35,27 @@ export interface WeeklyInterval {
   readonly closesAt: string;
 }
 
+/** One opening on its own date; a close at or before the open ends the next day. */
+export interface DayPeriod {
+  readonly opensAt: string;
+  readonly closesAt: string;
+}
+
 export interface StationTiming {
   readonly fallbackId: string | null;
   readonly hours: readonly WeeklyInterval[];
   readonly today: "open" | "closed" | null;
+  /** The standard week has hours set; when absent, any `hours` at all mean it has. */
+  readonly weekSet?: boolean;
+  /** Special-date hours by calendar date, `[]` for Closed; a date not listed uses the week. */
+  readonly dates?: ReadonlyMap<string, readonly DayPeriod[]>;
 }
 
 export interface RoutingMoment {
   readonly weekday: number;
   readonly timeOfDay: string;
+  /** The calendar date that owns `timeOfDay`; without one only the standard week applies. */
+  readonly civilDate?: string;
 }
 
 export type StationStatus =
@@ -105,65 +118,44 @@ export function stationStatus(
   const timing = rules.timing.get(stationId);
   if (timing?.today === "closed") return { open: false, why: "closed_by_hand" };
   if (timing?.today === "open") return { open: true, why: "opened_by_hand" };
-  if (!timing?.hours.length) return { open: true, why: "no_hours" };
-  const inside = timing.hours.some(({ weekday, opensAt, closesAt }) => {
+  if (timing === undefined) return { open: true, why: "no_hours" };
+  const time = moment.timeOfDay;
+  const previousDate = moment.civilDate === undefined ? undefined : addDays(moment.civilDate, -1);
+  const own = stationDayHours(timing, moment.civilDate, moment.weekday);
+  const previous = stationDayHours(timing, previousDate, (moment.weekday + 6) % 7);
+  const inTail = (previous ?? []).some(
+    ({ opensAt, closesAt }) =>
+      opensAt.slice(0, 5) >= closesAt.slice(0, 5) && time < closesAt.slice(0, 5),
+  );
+  if (own === null) return { open: true, why: inTail ? "in_hours" : "no_hours" };
+  const inOwn = own.some(({ opensAt, closesAt }) => {
     const opening = opensAt.slice(0, 5);
     const closing = closesAt.slice(0, 5);
-    const time = moment.timeOfDay;
-    if (opening < closing) return weekday === moment.weekday && opening <= time && time < closing;
-    return (
-      (weekday === moment.weekday && time >= opening) ||
-      ((weekday + 1) % 7 === moment.weekday && time < closing)
-    );
+    return opening <= time && (opening >= closing || time < closing);
   });
-  return inside ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" };
+  return inOwn || inTail ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" };
 }
 
-export interface StationTransition extends RoutingMoment {
+/**
+ * A station's hours on one date: its special-date hours, else that weekday of a set standard week.
+ * `null` makes no claim at all: no hours are set for that date.
+ */
+export function stationDayHours(
+  timing: StationTiming,
+  civilDate: string | undefined,
+  weekday: number,
+): readonly DayPeriod[] | null {
+  const special = civilDate === undefined ? undefined : timing.dates?.get(civilDate);
+  if (special !== undefined) return special;
+  if (!(timing.weekSet ?? timing.hours.length > 0)) return null;
+  return timing.hours.filter((interval) => interval.weekday === weekday);
+}
+
+/** The next change of a station's scheduled state, on the venue's clock. */
+export interface StationTransition {
+  readonly weekday: number;
+  readonly timeOfDay: string;
   readonly daysAhead: number;
-}
-
-export function nextStationTransition(
-  rules: RoutingRules,
-  stationId: string,
-  moment: RoutingMoment | null,
-): StationTransition | null {
-  if (moment === null) return null;
-  const status = stationStatus(rules, stationId, moment);
-  if (status.why !== "in_hours" && status.why !== "out_of_hours") return null;
-  const dayMinutes = 1440;
-  const weekMinutes = 7 * dayMinutes;
-  const minute = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-  const now = moment.weekday * dayMinutes + minute(moment.timeOfDay);
-  const boundaries = new Set<number>();
-  for (const interval of rules.timing.get(stationId)!.hours) {
-    const opening = minute(interval.opensAt);
-    const closing = minute(interval.closesAt);
-    boundaries.add(interval.weekday * dayMinutes + opening);
-    boundaries.add(
-      ((interval.weekday + (opening >= closing ? 1 : 0)) * dayMinutes + closing) % weekMinutes,
-    );
-  }
-  const upcoming = [...boundaries]
-    .map((boundary) => ({
-      boundary,
-      offset: (boundary - now + weekMinutes) % weekMinutes || weekMinutes,
-    }))
-    .sort((a, b) => a.offset - b.offset);
-  for (const { boundary, offset } of upcoming) {
-    const time = boundary % dayMinutes;
-    const candidate = {
-      weekday: Math.floor(boundary / dayMinutes),
-      timeOfDay: `${String(Math.floor(time / 60)).padStart(2, "0")}:${String(time % 60).padStart(2, "0")}`,
-    };
-    if (stationStatus(rules, stationId, candidate).open !== status.open) {
-      return {
-        ...candidate,
-        daysAhead: Math.floor((minute(moment.timeOfDay) + offset) / dayMinutes),
-      };
-    }
-  }
-  return null;
 }
 
 function walkFallbacks(

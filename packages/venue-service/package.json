@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./routing": "./src/routing.ts",
     "./hours-types": "./src/hours-types.ts",
+    "./testing/interim-week.js": "./src/testing/interim-week.ts",
     "./dashboard": "./src/dashboard/index.ts"
   },
   "scripts": {

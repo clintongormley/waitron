@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
@@ -10,7 +11,11 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
+import { replaceWeekHours, saveSpecialDate } from "./hours.js";
+import { weekdayOf } from "./hours-rules.js";
+import { WEEK_DISPLAY_ORDER, type DateCell, type WeekCell, type WeekDay } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import type { VenueScope } from "./operations.js";
 import { routingModel } from "./routing-store.js";
 import { stationDayStates } from "./schema/station-times.js";
 import {
@@ -19,6 +24,8 @@ import {
   setStationToday,
   venueMoment,
 } from "./station-times.js";
+import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
+import { seedStationWeek } from "./testing/interim-week.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -282,6 +289,7 @@ describe("next scheduled station transition", () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       await replaceStationHours(tx, f.cfg, f.upstairs, hours);
+      await seedStationWeek(tx, f.cfg, f.upstairs, hours);
       const model = await routingModel(tx, f.cfg, new Date(instant));
       expect(
         model.stationTimes.find((row) => row.stationId === f.upstairs)?.nextTransition,
@@ -298,6 +306,17 @@ describe("next scheduled station transition", () => {
           { weekday: 5, opensAt: "12:00", closesAt: "16:00" },
         ]);
       }
+      // The default keeps a week saved before it became the default.
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, f.kitchen));
+      for (const id of [f.upstairs, f.kitchen, f.retired])
+        await seedStationWeek(tx, f.cfg, id, [{ weekday: 5, opensAt: "12:00", closesAt: "16:00" }]);
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, f.kitchen));
       for (const state of ["closed", "open"] as const) {
         await setStationToday(tx, f.cfg, f.upstairs, state, now);
         const model = await routingModel(tx, f.cfg, now);
@@ -320,6 +339,350 @@ describe("next scheduled station transition", () => {
         null,
         null,
       ]);
+    });
+  });
+});
+
+/** When the hours below are saved: before every date they are read at. */
+const SAVED_AT = new Date("2026-10-01T10:00:00Z");
+const hourPeriod = (opensAt: string, closesAt: string) => ({ id: randomUUID(), opensAt, closesAt });
+const closedCell: WeekCell = { mode: "closed", periods: [] };
+/** A configured week: Closed every day except the weekdays `cells` names. */
+const configuredWeek = (cells: Partial<Record<number, WeekCell>> = {}): WeekDay[] =>
+  WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, cell: cells[weekday] ?? closedCell }));
+const periodsCell = (...periods: [string, string][]): WeekCell => ({
+  mode: "periods",
+  periods: periods.map(([opensAt, closesAt]) => hourPeriod(opensAt, closesAt)),
+});
+const station = (id: string) => ({ kind: "station" as const, id });
+
+async function saveWeek(tx: Transaction, cfg: VenueScope, id: string, days: WeekDay[]) {
+  await replaceWeekHours(tx, cfg, station(id), days, SAVED_AT);
+}
+
+async function saveDate(
+  tx: Transaction,
+  cfg: VenueScope,
+  date: string,
+  cells: [string, DateCell][],
+  closeWholeVenue = false,
+) {
+  return saveSpecialDate(
+    tx,
+    cfg,
+    null,
+    {
+      date,
+      name: `Special ${date}`,
+      colour: "amber",
+      closeWholeVenue,
+      cells: cells.map(([id, cell]) => ({ subject: station(id), cell })),
+    },
+    SAVED_AT,
+  );
+}
+
+async function statusAt(tx: Transaction, cfg: VenueScope, id: string, instant: Date | string) {
+  return (await routingModel(tx, cfg, new Date(instant))).stationTimes.find(
+    (row) => row.stationId === id,
+  )?.status;
+}
+
+const inHours = { open: true, why: "in_hours" };
+const outOfHours = { open: false, why: "out_of_hours" };
+const closedDate: DateCell = { mode: "closed", periods: [] };
+
+describe("station status by calendar date", () => {
+  // Madrid is two hours ahead of UTC until 25 October 2026, one hour after it.
+  it("keeps Monday's overnight hours on Tuesday through Tuesday's Closed, but not once Monday is Closed", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveWeek(tx, f.cfg, f.upstairs, configuredWeek({ 1: periodsCell(["22:00", "02:00"]) }));
+      const tuesdayHalfPastMidnight = "2026-10-05T22:30:00Z";
+      expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(inHours);
+      await saveDate(tx, f.cfg, "2026-10-06", [[f.upstairs, closedDate]]);
+      expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(inHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T00:00:00Z")).toEqual(outOfHours);
+      await saveDate(tx, f.cfg, "2026-10-05", [[f.upstairs, closedDate]]);
+      expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(outOfHours);
+    });
+  });
+
+  it("reads each special date's own hours across a month end, a year end and Sunday into Monday", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      const late = (opensAt: string, closesAt: string): DateCell => ({
+        mode: "periods",
+        periods: [hourPeriod(opensAt, closesAt)],
+      });
+      await saveDate(tx, f.cfg, "2026-12-31", [[f.upstairs, late("22:00", "03:00")]]);
+      await saveDate(tx, f.cfg, "2027-01-01", [[f.upstairs, closedDate]]);
+      await saveDate(tx, f.cfg, "2026-10-31", [[f.downstairs, late("23:00", "01:00")]]);
+      await saveWeek(tx, f.cfg, f.retired, configuredWeek({ 1: periodsCell(["12:00", "14:00"]) }));
+      await tx
+        .update(kitchenStations)
+        .set({ active: true })
+        .where(eq(kitchenStations.id, f.retired));
+      await saveDate(tx, f.cfg, "2026-10-11", [[f.retired, late("23:00", "02:00")]]);
+
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2027-01-01T01:30:00Z")).toEqual(inHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2027-01-01T02:00:00Z")).toEqual(outOfHours);
+      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-31T23:30:00Z")).toEqual(inHours);
+      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-11-01T00:00:00Z")).toEqual({
+        open: true,
+        why: "no_hours",
+      });
+      // Monday 12 October at 01:00 and 02:00 in Madrid.
+      expect(await statusAt(tx, f.cfg, f.retired, "2026-10-11T23:00:00Z")).toEqual(inHours);
+      expect(await statusAt(tx, f.cfg, f.retired, "2026-10-12T00:00:00Z")).toEqual(outOfHours);
+    });
+  });
+
+  it("opens a station all day from midnight until the next midnight", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveWeek(
+        tx,
+        f.cfg,
+        f.upstairs,
+        configuredWeek({ 2: { mode: "all_day", periods: [] } }),
+      );
+      await saveDate(tx, f.cfg, "2026-10-08", [[f.upstairs, { mode: "all_day", periods: [] }]]);
+      // Tuesday 6 October from 00:00 to 23:59 in Madrid, then Wednesday's Closed.
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-05T22:00:00Z")).toEqual(inHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T21:59:00Z")).toEqual(inHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T22:00:00Z")).toEqual(outOfHours);
+      // Thursday 8 October is a special date open all day.
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-08T12:00:00Z")).toEqual(inHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-08T22:00:00Z")).toEqual(outOfHours);
+    });
+  });
+
+  it("tells a station with no hours set from one Closed every day", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveWeek(tx, f.cfg, f.upstairs, configuredWeek());
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T10:00:00Z")).toEqual(outOfHours);
+      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
+        open: true,
+        why: "no_hours",
+      });
+    });
+  });
+
+  it("keeps a by-hand change until the cutover, and Back to the schedule restores the special date", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveDate(tx, f.cfg, "2026-10-06", [
+        [f.upstairs, { mode: "periods", periods: [hourPeriod("12:00", "23:00")] }],
+        [f.downstairs, closedDate],
+      ]);
+      const afternoon = new Date("2026-10-06T13:00:00Z");
+      expect(await statusAt(tx, f.cfg, f.upstairs, afternoon)).toEqual(inHours);
+      await setStationToday(tx, f.cfg, f.upstairs, "closed", afternoon);
+      expect(await statusAt(tx, f.cfg, f.upstairs, afternoon)).toEqual({
+        open: false,
+        why: "closed_by_hand",
+      });
+      // Wednesday 05:59 is still Tuesday's business day; 06:00 is the cutover.
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-07T03:59:00Z")).toEqual({
+        open: false,
+        why: "closed_by_hand",
+      });
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-07T04:00:00Z")).toEqual({
+        open: true,
+        why: "no_hours",
+      });
+
+      await setStationToday(tx, f.cfg, f.downstairs, "open", afternoon);
+      expect(await statusAt(tx, f.cfg, f.downstairs, afternoon)).toEqual({
+        open: true,
+        why: "opened_by_hand",
+      });
+      await setStationToday(tx, f.cfg, f.downstairs, null, afternoon);
+      expect(await statusAt(tx, f.cfg, f.downstairs, afternoon)).toEqual(outOfHours);
+    });
+  });
+
+  it("keeps the default station open through a closed day, and an inactive default unavailable", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveWeek(tx, f.cfg, f.downstairs, configuredWeek());
+      await saveDate(tx, f.cfg, "2026-10-06", [], true);
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, f.kitchen));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, f.downstairs));
+      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
+        open: true,
+        why: "default",
+      });
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T10:00:00Z")).toEqual(outOfHours);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, f.downstairs));
+      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
+        open: false,
+        why: "switched_off",
+      });
+    });
+  });
+
+  it("applies no hours at all while the venue's clock cannot be read", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveDate(tx, f.cfg, "2026-10-06", [], true);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, f.cfg.locationId));
+      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T10:00:00Z")).toEqual({
+        open: true,
+        why: "time_not_applied",
+      });
+    });
+  });
+
+  it.each(["00:00:00", "06:00:00"])(
+    "picks the calendar date, not the business day, with a %s cutover",
+    async (dayCutover) => {
+      await db.transaction(async (tx) => {
+        const f = await fixture(tx);
+        await tx.update(locations).set({ dayCutover }).where(eq(locations.id, f.cfg.locationId));
+        await saveWeek(
+          tx,
+          f.cfg,
+          f.upstairs,
+          configuredWeek({ 1: periodsCell(["22:00", "02:00"]) }),
+        );
+        await saveWeek(
+          tx,
+          f.cfg,
+          f.downstairs,
+          configuredWeek({ 2: periodsCell(["00:00", "01:00"]) }),
+        );
+        const tuesdayHalfPastMidnight = "2026-10-05T22:30:00Z";
+        expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(inHours);
+        expect(await statusAt(tx, f.cfg, f.downstairs, tuesdayHalfPastMidnight)).toEqual(inHours);
+        await saveDate(tx, f.cfg, "2026-10-05", [[f.upstairs, closedDate]]);
+        expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(outOfHours);
+      });
+    },
+  );
+
+  it("reports the next change from a special date's hours", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveWeek(tx, f.cfg, f.upstairs, configuredWeek({ 5: periodsCell(["12:00", "01:00"]) }));
+      await saveDate(tx, f.cfg, "2026-10-02", [
+        [f.upstairs, { mode: "periods", periods: [hourPeriod("14:00", "16:00")] }],
+      ]);
+      const next = async (instant: string) =>
+        (await routingModel(tx, f.cfg, new Date(instant))).stationTimes.find(
+          (row) => row.stationId === f.upstairs,
+        )?.nextTransition;
+      expect(await next("2026-10-02T09:00:00Z")).toEqual({
+        weekday: 5,
+        timeOfDay: "14:00",
+        daysAhead: 0,
+      });
+      // Saturday 01:00: the next Friday's opening is six days ahead, until that Friday is Closed.
+      expect(await next("2026-10-02T23:00:00Z")).toEqual({
+        weekday: 5,
+        timeOfDay: "12:00",
+        daysAhead: 6,
+      });
+      await saveDate(tx, f.cfg, "2026-10-09", [[f.upstairs, closedDate]]);
+      expect(await next("2026-10-02T23:00:00Z")).toBeNull();
+    });
+  });
+});
+
+describe("station status across a clock change", () => {
+  const zone = "Europe/Madrid";
+  const forward = clockChangeAfter(zone, "2027-01-01T00:00:00Z", "forward");
+  const backward = clockChangeAfter(zone, "2027-07-01T00:00:00Z", "backward");
+  const minute = 60_000;
+
+  it("reports a closing the clock skips at the first minute that exists", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveWeek(
+        tx,
+        f.cfg,
+        f.upstairs,
+        configuredWeek({
+          [weekdayOf(forward.date)]: periodsCell([
+            minutesAfter(forward.before, -59),
+            minutesAfter(forward.before, 31),
+          ]),
+        }),
+      );
+      const before = new Date(forward.instant.getTime() - 30 * minute);
+      expect(await statusAt(tx, f.cfg, f.upstairs, before)).toEqual(inHours);
+      expect(
+        (await routingModel(tx, f.cfg, before)).stationTimes.find(
+          (row) => row.stationId === f.upstairs,
+        )?.nextTransition,
+      ).toEqual({ weekday: weekdayOf(forward.date), timeOfDay: forward.after, daysAhead: 0 });
+      expect(await statusAt(tx, f.cfg, f.upstairs, forward.instant)).toEqual(outOfHours);
+    });
+  });
+
+  it("opens a period that starts inside the skipped minutes at the first minute that exists", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveWeek(
+        tx,
+        f.cfg,
+        f.upstairs,
+        configuredWeek({
+          [weekdayOf(forward.date)]: periodsCell([
+            minutesAfter(forward.before, 16),
+            minutesAfter(forward.after, 60),
+          ]),
+        }),
+      );
+      expect(
+        await statusAt(tx, f.cfg, f.upstairs, new Date(forward.instant.getTime() - minute)),
+      ).toEqual(outOfHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, forward.instant)).toEqual(inHours);
+      expect(
+        (
+          await routingModel(tx, f.cfg, new Date(forward.instant.getTime() - 30 * minute))
+        ).stationTimes.find((row) => row.stationId === f.upstairs)?.nextTransition,
+      ).toEqual({ weekday: weekdayOf(forward.date), timeOfDay: forward.after, daysAhead: 0 });
+    });
+  });
+
+  it("gives both occurrences of a repeated minute the same answer", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveWeek(
+        tx,
+        f.cfg,
+        f.upstairs,
+        configuredWeek({
+          [weekdayOf(backward.date)]: periodsCell([
+            backward.after,
+            minutesAfter(backward.after, 30),
+          ]),
+        }),
+      );
+      const repeat = backward.deltaMinutes * minute;
+      // The first pass through the repeated hour, then the second.
+      const first = (minutes: number) =>
+        new Date(backward.instant.getTime() - repeat + minutes * minute);
+      const second = (minutes: number) => new Date(backward.instant.getTime() + minutes * minute);
+      expect(await statusAt(tx, f.cfg, f.upstairs, first(15))).toEqual(inHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, second(15))).toEqual(inHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, first(45))).toEqual(outOfHours);
+      expect(await statusAt(tx, f.cfg, f.upstairs, second(45))).toEqual(outOfHours);
     });
   });
 });

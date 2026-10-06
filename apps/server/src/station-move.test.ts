@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { seedStationWeek } from "@waitron/venue-service/testing/interim-week.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { markIncidentHandled } from "@waitron/core";
@@ -1109,6 +1110,9 @@ describe("release", () => {
           .where(eq(kitchenStations.id, grill));
         await setStationToday(tx, venue.cfg, bar, null, at);
         await replaceStationHours(tx, venue.cfg, bar, [
+          { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+        ]);
+        await seedStationWeek(tx, venue.cfg, bar, [
           { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
         ]);
         await setStationFallback(tx, venue.cfg, bar, grill);

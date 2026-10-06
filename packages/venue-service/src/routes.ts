@@ -54,6 +54,7 @@ import {
   createException,
   deleteException,
   explainRoute,
+  type ExplainWhen,
   removeClaim,
   reorderExceptions,
   routingModel,
@@ -62,6 +63,7 @@ import {
   updateException,
 } from "./routing-store.js";
 import type { ExceptionInput, RouteTarget } from "./routing.js";
+import { isLocalDate, weekdayOf } from "./hours-rules.js";
 import type { RoutingChange } from "./routing-types.js";
 import { replaceStationHours, setStationFallback, setStationToday } from "./station-times.js";
 import "./errors.js";
@@ -301,17 +303,27 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         );
         const zone = c.req.query("zoneId");
         const zoneId = zone ? requireUuidParam(zone, "ServiceZoneId") : null;
+        // A weekday previews the standard week; a date previews that date's own hours.
         const weekday = c.req.query("weekday");
+        const date = c.req.query("date");
         const time = c.req.query("time");
         if (
-          (weekday === undefined) !== (time === undefined) ||
-          (weekday !== undefined && (!/^[0-6]$/.test(weekday) || !CLOCK_TIME.test(time!)))
+          (weekday !== undefined && date !== undefined) ||
+          (weekday === undefined && date === undefined) !== (time === undefined) ||
+          (weekday !== undefined && !/^[0-6]$/.test(weekday)) ||
+          (date !== undefined && !isLocalDate(date)) ||
+          (time !== undefined && !CLOCK_TIME.test(time))
         )
           throw new AppError("management.request_invalid", { field: "when" });
-        const when =
-          weekday === undefined
-            ? { kind: "now" as const, at: new Date() }
-            : { kind: "at" as const, moment: { weekday: Number(weekday), timeOfDay: time! } };
+        const when: ExplainWhen =
+          time === undefined
+            ? { kind: "now", at: new Date() }
+            : date === undefined
+              ? { kind: "at", moment: { weekday: Number(weekday), timeOfDay: time } }
+              : {
+                  kind: "at",
+                  moment: { civilDate: date, weekday: weekdayOf(date), timeOfDay: time },
+                };
         return c.json(
           await gated(sessionId, (tx) =>
             explainRoute(tx, ctx.cfg, productId, zoneId, when, extraProductIds),

@@ -14,15 +14,25 @@ import {
   chooseExtraMaker,
   closedSendsTo,
   folderAncestors,
+  stationDayHours,
   stationStatus,
-  nextStationTransition,
   unreachableExceptions,
   type RouteTarget,
   type RoutingRules,
   type RoutingMoment,
+  type StationTransition,
 } from "./routing.js";
 import { readLocationClock } from "@waitron/reporting";
-import { venueMoment } from "./station-times.js";
+import {
+  clockChangesBetween,
+  isReadableClock,
+  localTimeOccurrences,
+  venueLocalMoment,
+  type VenueLocalMoment,
+} from "./hours-clock.js";
+import { readStationSchedules } from "./hours.js";
+import { addDays, weekdayOf } from "./hours-rules.js";
+import type { LocalDate } from "./hours-types.js";
 import { stationDayStates, stationFallbacks, stationHours } from "./schema/station-times.js";
 import type {
   ExceptionInput,
@@ -257,7 +267,39 @@ export async function reorderExceptions(
       .where(and(eq(routeExceptions.locationId, cfg.locationId), eq(routeExceptions.id, id)));
 }
 
-async function snapshot(tx: Transaction, cfg: VenueScope, businessDay: string | null = null) {
+type VenueClock = { timeZone: string; dayCutover: string };
+
+/** The venue's clock, read once, and its wall-clock moment at `at`, or null when unreadable. */
+async function clockAt(tx: Transaction, cfg: VenueScope, at: Date) {
+  const clock: VenueClock = await readLocationClock(tx, cfg.locationId);
+  return { clock, moment: venueLocalMoment(at, clock) };
+}
+
+/**
+ * What a snapshot reads beyond the rules themselves: the business day whose by-hand changes apply,
+ * and the dates whose special hours apply.
+ */
+interface SnapshotScope {
+  businessDay: string | null;
+  dates: { from: LocalDate; to: LocalDate } | null;
+}
+
+const UNTIMED: SnapshotScope = { businessDay: null, dates: null };
+
+/**
+ * The scope for a status at `moment`, which reads its own date and the day before, whose hours can
+ * run past midnight; `daysAhead` reads further dates for the next change.
+ */
+function scopeAt(moment: VenueLocalMoment | null, daysAhead = 0): SnapshotScope {
+  if (moment === null) return UNTIMED;
+  return {
+    businessDay: moment.businessDay,
+    dates: { from: addDays(moment.civilDate, -1), to: addDays(moment.civilDate, daysAhead) },
+  };
+}
+
+async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope = UNTIMED) {
+  const businessDay = scope.businessDay;
   const claims = await tx
     .select()
     .from(stationClaims)
@@ -284,14 +326,7 @@ async function snapshot(tx: Transaction, cfg: VenueScope, businessDay: string | 
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   const stationIds = stations.map((row) => row.id);
-  const hours =
-    stationIds.length === 0
-      ? []
-      : await tx
-          .select()
-          .from(stationHours)
-          .where(inArray(stationHours.stationId, stationIds))
-          .orderBy(asc(stationHours.weekday), asc(stationHours.opensAt), asc(stationHours.id));
+  const schedules = await readStationSchedules(tx, cfg, stationIds, scope.dates);
   const fallbacks =
     stationIds.length === 0
       ? []
@@ -319,13 +354,7 @@ async function snapshot(tx: Transaction, cfg: VenueScope, businessDay: string | 
     stations.map((station) => [
       station.id,
       {
-        hours: hours
-          .filter((row) => row.stationId === station.id)
-          .map((row) => ({
-            weekday: row.weekday,
-            opensAt: row.opensAt.slice(0, 5),
-            closesAt: row.closesAt.slice(0, 5),
-          })),
+        ...schedules.get(station.id)!,
         fallbackId: fallbackByStation.get(station.id) ?? null,
         today: todayByStation.get(station.id) ?? null,
       },
@@ -354,7 +383,7 @@ export async function loadRoutingRules(
   cfg: VenueScope,
   businessDay: string | null,
 ): Promise<RoutingRules> {
-  return (await snapshot(tx, cfg, businessDay)).rules;
+  return (await snapshot(tx, cfg, { businessDay, dates: null })).rules;
 }
 
 export type ExplainWhen = { kind: "now"; at: Date } | { kind: "at"; moment: RoutingMoment };
@@ -369,9 +398,25 @@ export async function explainRoute(
 ): Promise<RouteExplanation> {
   const uuid = storedUuid(productId);
   if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
-  const now = when.kind === "now" ? await venueMoment(tx, cfg, when.at) : null;
-  const moment = when.kind === "at" ? when.moment : now;
-  const { rules, stations } = await snapshot(tx, cfg, now?.businessDay ?? null);
+  let moment: RoutingMoment | null;
+  let scope = UNTIMED;
+  if (when.kind === "now") {
+    const now = (await clockAt(tx, cfg, when.at)).moment;
+    moment = now;
+    scope = scopeAt(now);
+  } else if (when.moment.civilDate !== undefined) {
+    const { civilDate, timeOfDay } = when.moment;
+    const clock = await readLocationClock(tx, cfg.locationId);
+    // A minute the clock skips on that date never happens, so there is nothing to preview.
+    if (
+      isReadableClock(clock) &&
+      localTimeOccurrences(civilDate, timeOfDay, clock.timeZone).length === 0
+    )
+      throw new AppError("management.request_invalid", { field: "time" });
+    moment = { civilDate, weekday: weekdayOf(civilDate), timeOfDay };
+    scope = { businessDay: null, dates: { from: addDays(civilDate, -1), to: civilDate } };
+  } else moment = when.moment;
+  const { rules, stations } = await snapshot(tx, cfg, scope);
   const [product] = await tx
     .select({
       id: products.id,
@@ -580,8 +625,8 @@ export async function routingAt(
   cfg: VenueScope,
   at: Date,
 ): Promise<MakerResolver> {
-  const moment = await venueMoment(tx, cfg, at);
-  const { rules, stations } = await snapshot(tx, cfg, moment?.businessDay ?? null);
+  const { moment } = await clockAt(tx, cfg, at);
+  const { rules, stations } = await snapshot(tx, cfg, scopeAt(moment));
   let stationNames:
     | ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
     | undefined;
@@ -699,8 +744,8 @@ export async function stationStates(
 ): Promise<
   ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
 > {
-  const moment = await venueMoment(tx, cfg, at);
-  const { rules, stations } = await snapshot(tx, cfg, moment?.businessDay ?? null);
+  const { moment } = await clockAt(tx, cfg, at);
+  const { rules, stations } = await snapshot(tx, cfg, scopeAt(moment));
   return new Map(
     stations.map((station) => [
       station.id,
@@ -777,10 +822,24 @@ export async function routingModel(
   cfg: VenueScope,
   at: Date,
 ): Promise<RoutingModel> {
-  const moment = await venueMoment(tx, cfg, at);
-  const { rules, folders, stations } = await snapshot(tx, cfg, moment?.businessDay ?? null);
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const { clock, moment } = await clockAt(tx, cfg, at);
+  const { rules, folders, stations } = await snapshot(tx, cfg, scopeAt(moment, NEXT_CHANGE_DAYS));
   const cutover = clock.dayCutover.slice(0, 5);
+  const nextChange = nextChangeFinder(rules, at, clock, moment);
+  // The interim station-hours form still edits the weekly store routing no longer reads.
+  const interimHours =
+    stations.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(stationHours)
+          .where(
+            inArray(
+              stationHours.stationId,
+              stations.map((station) => station.id),
+            ),
+          )
+          .orderBy(asc(stationHours.weekday), asc(stationHours.opensAt), asc(stationHours.id));
   const neverMatches = unreachableExceptions(rules);
   const productFolders = await tx
     .select({
@@ -839,8 +898,14 @@ export async function routingModel(
     stationTimes: stations.map(({ id }) => ({
       stationId: id,
       status: stationStatus(rules, id, moment),
-      nextTransition: nextStationTransition(rules, id, moment),
-      hours: [...(rules.timing.get(id)?.hours ?? [])],
+      nextTransition: nextChange(id),
+      hours: interimHours
+        .filter((row) => row.stationId === id)
+        .map((row) => ({
+          weekday: row.weekday,
+          opensAt: row.opensAt.slice(0, 5),
+          closesAt: row.closesAt.slice(0, 5),
+        })),
       fallbackStationId: rules.timing.get(id)?.fallbackId ?? null,
       today: rules.timing.get(id)?.today ?? null,
       closedSendsTo: closedSendsTo(rules, id, moment),
@@ -848,5 +913,65 @@ export async function routingModel(
     todayEnds:
       moment === null ? null : { timeOfDay: cutover, tomorrow: moment.timeOfDay >= cutover },
     clockReadable: moment !== null,
+  };
+}
+
+/** How far ahead the next scheduled change is looked for, in calendar dates. */
+const NEXT_CHANGE_DAYS = 7;
+const DAY_MS = 86_400_000;
+
+/**
+ * Finds each station's next scheduled change after `at` within {@link NEXT_CHANGE_DAYS}: the first
+ * real instant, at an opening, a closing or a clock change, where its scheduled state differs from
+ * now's. A closing the clock skips takes effect at the first minute that exists. Stations whose
+ * state is not set by hours have none.
+ */
+function nextChangeFinder(
+  rules: RoutingRules,
+  at: Date,
+  clock: VenueClock,
+  now: VenueLocalMoment | null,
+): (stationId: string) => StationTransition | null {
+  if (now === null) return () => null;
+  const last = addDays(now.civilDate, NEXT_CHANGE_DAYS);
+  const clockChanges = clockChangesBetween(
+    at,
+    new Date(at.getTime() + (NEXT_CHANGE_DAYS + 2) * DAY_MS),
+    clock.timeZone,
+  ).map((instant) => instant.getTime());
+  const occurrences = new Map<string, number[]>();
+  const instantsOf = (date: LocalDate, time: string) => {
+    const key = `${date} ${time}`;
+    if (!occurrences.has(key))
+      occurrences.set(
+        key,
+        localTimeOccurrences(date, time, clock.timeZone).map((instant) => instant.getTime()),
+      );
+    return occurrences.get(key)!;
+  };
+  return (stationId) => {
+    const current = stationStatus(rules, stationId, now);
+    if (current.why !== "in_hours" && current.why !== "out_of_hours") return null;
+    const timing = rules.timing.get(stationId)!;
+    const candidates = new Set(clockChanges);
+    for (let date = addDays(now.civilDate, -1); date <= last; date = addDays(date, 1))
+      for (const { opensAt, closesAt } of stationDayHours(timing, date, weekdayOf(date)) ?? []) {
+        const opening = opensAt.slice(0, 5);
+        const closing = closesAt.slice(0, 5);
+        for (const instant of instantsOf(date, opening)) candidates.add(instant);
+        const closingDate = opening >= closing ? addDays(date, 1) : date;
+        for (const instant of instantsOf(closingDate, closing)) candidates.add(instant);
+      }
+    for (const instant of [...candidates].filter((i) => i > at.getTime()).sort((a, b) => a - b)) {
+      const moment = venueLocalMoment(new Date(instant), clock)!;
+      if (moment.civilDate > last) break;
+      if (stationStatus(rules, stationId, moment).open !== current.open)
+        return {
+          weekday: moment.weekday,
+          timeOfDay: moment.timeOfDay,
+          daysAhead: (Date.parse(moment.civilDate) - Date.parse(now.civilDate)) / DAY_MS,
+        };
+    }
+    return null;
   };
 }
