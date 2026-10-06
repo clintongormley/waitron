@@ -17,7 +17,7 @@ import type {
 import type { ModifierListChoice } from "./product-editor-model.js";
 import { categoryPath, categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -368,8 +368,9 @@ export class CatalogueBrowser extends LitElement {
     this.operationError = t("folders.summary_changed");
     return false;
   }
+  /** Disabled products move up whichever answer is chosen, so they alone ask nothing. */
   #asksContents(): boolean {
-    return this.summaries.some((summary) => summary.folders > 0 || summary.products > 0);
+    return this.summaries.some((summary) => summary.folders > 0 || summary.activeProducts > 0);
   }
   #contentsChoice(): FolderContents {
     return this.#asksContents() ? this.contents : "move_up";
@@ -380,17 +381,21 @@ export class CatalogueBrowser extends LitElement {
       String(count),
     );
   }
-  #productCount(count: number, disabled: number): string {
-    if (disabled === 0) return this.#plural("folders.product_count", count);
-    const key =
-      disabled === count
-        ? count === 1
-          ? "folders.product_count_all_disabled_one"
-          : "folders.product_count_all_disabled"
-        : disabled === 1
-          ? "folders.product_count_one_disabled"
-          : "folders.product_count_some_disabled";
-    return this.#fill(key, { count: String(count), disabled: String(disabled) });
+  #conjoin(items: readonly string[]): string {
+    return new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(items);
+  }
+  /** Where the contents of the outermost selected categories go: their parent when they share one. */
+  #contentsParent(roots: readonly FolderSummary[]): string {
+    const byId = new Map(this.categories.map((category) => [category.id, category]));
+    const parents = new Set(
+      roots.map(({ id }) => {
+        const parentId = byId.get(id)?.parentId ?? null;
+        return parentId !== null && byId.has(parentId) ? parentId : null;
+      }),
+    );
+    if (parents.size > 1) return t("folders.each_parent");
+    const [parentId] = parents;
+    return parentId ? categoryPath(byId.get(parentId)!, this.categories) : t("folders.no_parent");
   }
   // One pass with a function replacement: a `$&` or a `{name}` inside a value stays literal.
   #fill(key: Parameters<typeof t>[0], values: Record<string, string>): string {
@@ -449,20 +454,45 @@ export class CatalogueBrowser extends LitElement {
     const totals = rootSummaries.reduce(
       (sum, summary) => ({
         folders: sum.folders + summary.folders,
-        products: sum.products + summary.products,
-        disabled: sum.disabled + summary.products - summary.activeProducts,
+        active: sum.active + summary.activeProducts,
         routes: sum.routes + summary.routes,
       }),
-      { folders: 0, products: 0, disabled: 0, routes: 0 },
+      { folders: 0, active: 0, routes: 0 },
     );
-    const contents = this.#contentsChoice();
-    // Moving contents up removes only the selected categories themselves, each with its own rules.
-    const routesRemoved =
-      contents === "move_up"
-        ? this.summaries.reduce((sum, summary) => sum + summary.ownRoutes, 0)
-        : totals.routes;
-    const routesWarning =
-      contents === "move_up" ? "folders.routes_warning" : "folders.routes_warning_subtree";
+    const ownRoutes = this.summaries.reduce((sum, summary) => sum + summary.ownRoutes, 0);
+    const innerRoutes = Math.max(0, totals.routes - ownRoutes);
+    const parent = this.#contentsParent(rootSummaries);
+    const folderCount = this.#plural("folders.count", totals.folders);
+    const productCount = this.#plural("folders.product_count", totals.active);
+    const moving = [
+      ...(totals.folders ? [folderCount] : []),
+      ...(totals.active ? [productCount] : []),
+    ];
+    const keepLabel = this.#fill(
+      totals.folders + totals.active === 1 ? "folders.contents_keep_one" : "folders.contents_keep",
+      { items: this.#conjoin(moving), parent },
+    );
+    const deleted = [
+      ...(totals.folders ? [folderCount] : []),
+      ...(innerRoutes ? [this.#plural("folders.route_count", innerRoutes)] : []),
+    ];
+    const actions = [
+      ...(deleted.length
+        ? [this.#fill("folders.also_deletes", { items: this.#conjoin(deleted) })]
+        : []),
+      ...(totals.active ? [this.#fill("folders.also_disables", { products: productCount })] : []),
+    ];
+    const deleteLabel = [
+      this.#fill("folders.contents_also", { actions: this.#conjoin(actions) }),
+      ...(totals.active
+        ? [
+            this.#fill(
+              totals.active === 1 ? "folders.products_move_one" : "folders.products_move",
+              { parent },
+            ),
+          ]
+        : []),
+    ].join(" ");
     const heading = this.#plural(
       this.operation === "move"
         ? "folders.move_heading"
@@ -472,7 +502,7 @@ export class CatalogueBrowser extends LitElement {
       count,
     );
     return html`<wt-modal
-      size=${this.operation === "move" ? "compact" : "standard"}
+      size="compact"
       .open=${true}
       .heading=${heading}
       .dismissible=${!this.operationBusy && !this.summaryLoading}
@@ -528,7 +558,7 @@ export class CatalogueBrowser extends LitElement {
                                   value="move_up"
                                   .checked=${this.contents === "move_up"}
                                   @change=${() => (this.contents = "move_up")}
-                                />${t("folders.contents_move_up")}</label
+                                />${keepLabel}</label
                               >
                               <label class="radio"
                                 ><input
@@ -538,12 +568,12 @@ export class CatalogueBrowser extends LitElement {
                                   value="delete"
                                   .checked=${this.contents === "delete"}
                                   @change=${() => (this.contents = "delete")}
-                                />${t("folders.contents_delete").replace("{categories}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#productCount(totals.products, totals.disabled))}</label
+                                />${deleteLabel}</label
                               >
                             </fieldset>`
                           : nothing
                       }
-                      ${routesRemoved ? html`<p>${this.#plural(routesWarning, routesRemoved)}</p>` : nothing}`
+                      ${ownRoutes ? html`<p>${this.#plural("folders.routes_warning", ownRoutes)}</p>` : nothing}`
                     : nothing
                 }
               `
