@@ -1093,7 +1093,8 @@ describe("venue operations screen", () => {
     const visits: string[] = [];
     const record = () => visits.push(location.pathname);
     window.addEventListener("popstate", record);
-    const before = history.length;
+    const pushed = vi.spyOn(history, "pushState");
+    let pushedUrls: string[];
     try {
       hours
         .closest("wt-row-actions")!
@@ -1103,9 +1104,12 @@ describe("venue operations screen", () => {
       await settle(el);
     } finally {
       window.removeEventListener("popstate", record);
+      pushedUrls = pushed.mock.calls.map((call) => String(call[2]));
+      pushed.mockRestore();
     }
     expect(location.pathname).toBe("/manage/hours/department/d2");
-    expect(history.length).toBe(before + 1);
+    // Chromium stops counting history.length at 50, so the entry is counted at pushState.
+    expect(pushedUrls).toEqual(["/manage/hours/department/d2"]);
     expect(visits).toEqual(["/manage/hours/department/d2"]);
     expect(modal(el)).toBeNull();
   });
