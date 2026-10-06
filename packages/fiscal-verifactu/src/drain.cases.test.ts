@@ -1086,14 +1086,13 @@ describe("drain — reply lines are paired with the records sent by position", (
     };
   }
 
-  /** A line naming no record of any envío: neither its reference nor its invoice is ours. */
+  /** A line naming no record of any envío, and no operation. */
   const strayLine: RespuestaLinea = {
     IDFactura: {
       IDEmisorFactura: "B99999999",
       NumSerieFactura: "STRAY/1",
       FechaExpedicionFactura: "01-07-2026",
     },
-    Operacion: { TipoOperacion: "Alta" },
     RefExterna: "not-ours",
     EstadoRegistro: "Incorrecto",
     CodigoErrorRegistro: 1100,
