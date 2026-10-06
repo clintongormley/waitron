@@ -129,6 +129,7 @@ export const products = table(
   (t) => [
     index("products_catalogue_id_idx").on(t.catalogueId),
     index("products_name_key_idx").on(t.nameKey),
+    index("products_course_idx").on(t.courseId),
     unique("products_id_catalogue_key").on(t.id, t.catalogueId),
     // Target of catalogue's `menu_item_variant_overrides` key `(product_id, variant_id)`.
     unique("products_parent_id_key").on(t.parentId, t.id),

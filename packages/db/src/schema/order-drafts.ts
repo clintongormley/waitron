@@ -95,6 +95,7 @@ export const orderDraftLines = table(
       name: "order_draft_lines_make_at_station_fk",
     }),
     index("order_draft_lines_draft_idx").on(t.draftId),
+    index("order_draft_lines_course_idx").on(t.courseId),
     check("order_draft_lines_quantity_ck", sql`${t.quantity} > 0`),
   ],
 );

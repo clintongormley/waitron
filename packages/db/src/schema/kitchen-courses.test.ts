@@ -150,4 +150,19 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       expect(course[0]!.to).toBe("id");
     }
   });
+
+  it("finds a course's references through an index on each course_id column", async () => {
+    for (const table of ["products", "order_draft_lines", "working_order_lines", "ticket_items"]) {
+      const plan = suite.db.all<{ detail: string }>(
+        sql.raw(
+          `explain query plan select distinct "course_id" from "${table}" where "course_id" in ('a', 'b')`,
+        ),
+      );
+      expect(plan.map((step) => step.detail).join("\n"), table).toMatch(
+        new RegExp(
+          `SEARCH ${table} USING (COVERING )?INDEX ${table}_course_idx \\(course_id=\\?\\)`,
+        ),
+      );
+    }
+  });
 });

@@ -240,6 +240,7 @@ export const workingOrderLines = table(
       sql`${t.unitPrecision} is null or ${t.unitPrecision} between 0 and 3`,
     ),
     index("working_order_lines_order_idx").on(t.workingOrderId),
+    index("working_order_lines_course_idx").on(t.courseId),
     check("working_order_lines_quantity_ck", sql`${t.quantity} <> 0`),
     check("working_order_lines_price_quantity_ck", sql`${t.priceQuantity} > 0`),
     check(
