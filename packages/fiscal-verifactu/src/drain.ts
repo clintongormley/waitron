@@ -260,8 +260,10 @@ async function drainDue(
       if (dueCount < maxPorEnvio) break;
     } catch {
       // The claim is committed, so back the batch off rather than leave it stuck `enviando`, and
-      // stop: each row's own `proximo_intento_en` schedules the retry.
+      // stop: an ordinary row's retry is its `proximo_intento_en`, a probe's an hour after its
+      // stamped `enviado_en`, so a probe no longer counts as due.
       await countOnCommit(db, result, (tx, counts) => backoffBatch(tx, batch, now, counts));
+      dueCount = Math.max(0, dueCount - batch.filter((row) => row.probe !== undefined).length);
       break;
     }
   }

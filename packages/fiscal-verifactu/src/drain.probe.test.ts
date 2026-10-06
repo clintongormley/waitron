@@ -376,6 +376,15 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     expect(wire.sent).toEqual([[first]]);
   });
 
+  it("reports the next hourly probe, and nothing earlier, as the next due time after a probe's send fails in transport", async () => {
+    const aeat = fakeAeat();
+    await brakeHold(aeat, 1);
+
+    const failed = await drain(deps(failingSubmit(aeat.client())), at(HOUR));
+
+    expect(failed.nextDueAt).toEqual(at(2 * HOUR));
+  });
+
   it("a crash after the probe's claim does not resend it on restart, while an ordinary claim from the same envío is resent at once", async () => {
     const aeat = fakeAeat();
     const { seeded, held } = await brakeHold(aeat, 1);
