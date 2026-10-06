@@ -33,7 +33,7 @@ import {
 import { readStationSchedules } from "./hours.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
-import { stationDayStates, stationFallbacks, stationHours } from "./schema/station-times.js";
+import { stationDayStates, stationFallbacks } from "./schema/station-times.js";
 import type {
   ExceptionInput,
   RouteExplanation,
@@ -826,20 +826,6 @@ export async function routingModel(
   const { rules, folders, stations } = await snapshot(tx, cfg, scopeAt(moment, NEXT_CHANGE_DAYS));
   const cutover = clock.dayCutover.slice(0, 5);
   const nextChange = nextChangeFinder(rules, at, clock, moment);
-  // The interim station-hours form still edits the weekly store routing no longer reads.
-  const interimHours =
-    stations.length === 0
-      ? []
-      : await tx
-          .select()
-          .from(stationHours)
-          .where(
-            inArray(
-              stationHours.stationId,
-              stations.map((station) => station.id),
-            ),
-          )
-          .orderBy(asc(stationHours.weekday), asc(stationHours.opensAt), asc(stationHours.id));
   const neverMatches = unreachableExceptions(rules);
   const productFolders = await tx
     .select({
@@ -899,13 +885,8 @@ export async function routingModel(
       stationId: id,
       status: stationStatus(rules, id, moment),
       nextTransition: nextChange(id),
-      hours: interimHours
-        .filter((row) => row.stationId === id)
-        .map((row) => ({
-          weekday: row.weekday,
-          opensAt: row.opensAt.slice(0, 5),
-          closesAt: row.closesAt.slice(0, 5),
-        })),
+      hours: [...(rules.timing.get(id)?.hours ?? [])],
+      weekSet: rules.timing.get(id)?.weekSet ?? false,
       fallbackStationId: rules.timing.get(id)?.fallbackId ?? null,
       today: rules.timing.get(id)?.today ?? null,
       closedSendsTo: closedSendsTo(rules, id, moment),

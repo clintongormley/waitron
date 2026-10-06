@@ -100,7 +100,6 @@ import { createException, setClaim, writePrintHeldWork } from "@waitron/venue-se
 import {
   WEEK_DISPLAY_ORDER,
   departments,
-  replaceStationHours,
   replaceWeekHours,
   setStationFallback,
   setStationToday,
@@ -3323,9 +3322,6 @@ describe("opening hours", () => {
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
-      await replaceStationHours(tx, cfg, upstairs.id, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       await seedStationWeek(tx, cfg, upstairs.id, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
@@ -3438,9 +3434,6 @@ describe("opening hours", () => {
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
-      await replaceStationHours(tx, cfg, upstairs.id, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       await seedStationWeek(tx, cfg, upstairs.id, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
@@ -3591,9 +3584,6 @@ describe("opening hours", () => {
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
-      await replaceStationHours(tx, cfg, upstairs.id, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       await seedStationWeek(tx, cfg, upstairs.id, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);

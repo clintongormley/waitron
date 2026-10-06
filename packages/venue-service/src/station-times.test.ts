@@ -17,13 +17,9 @@ import { WEEK_DISPLAY_ORDER, type DateCell, type WeekCell, type WeekDay } from "
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { routingModel } from "./routing-store.js";
+import { hoursWeekCells } from "./schema/hours.js";
 import { stationDayStates } from "./schema/station-times.js";
-import {
-  replaceStationHours,
-  setStationFallback,
-  setStationToday,
-  venueMoment,
-} from "./station-times.js";
+import { setStationFallback, setStationToday, venueMoment } from "./station-times.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 import { seedStationWeek } from "./testing/interim-week.js";
 
@@ -98,18 +94,22 @@ describe("station times", () => {
   it("replaces a station's whole week and refuses another venue's station", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await replaceStationHours(tx, f.cfg, f.upstairs, [
+      await seedStationWeek(tx, f.cfg, f.upstairs, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
-      await replaceStationHours(tx, f.cfg, f.upstairs, [
+      await seedStationWeek(tx, f.cfg, f.upstairs, [
         { weekday: 6, opensAt: "19:00", closesAt: "21:00" },
       ]);
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
-      expect(model.stationTimes.find((s) => s.stationId === f.upstairs)?.hours).toEqual([
-        { weekday: 6, opensAt: "19:00", closesAt: "21:00" },
-      ]);
-      await expect(replaceStationHours(tx, f.cfg, f.otherStation, [])).rejects.toMatchObject({
-        code: "station.not_found",
+      const row = (
+        await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))
+      ).stationTimes.find((s) => s.stationId === f.upstairs);
+      expect(row?.hours).toEqual([{ weekday: 6, opensAt: "19:00", closesAt: "21:00" }]);
+      expect(row?.weekSet).toBe(true);
+      // Friday 20:00 in Madrid: only the replaced Saturday is open.
+      expect(row?.status).toEqual({ open: false, why: "out_of_hours" });
+      await expect(seedStationWeek(tx, f.cfg, f.otherStation, [])).rejects.toMatchObject({
+        code: "hours.invalid",
+        params: { field: "subject" },
       });
     });
   });
@@ -117,15 +117,19 @@ describe("station times", () => {
   it("clears the weekly schedule when its last interval is removed", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await replaceStationHours(tx, f.cfg, f.upstairs, [
+      await seedStationWeek(tx, f.cfg, f.upstairs, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
-      await replaceStationHours(tx, f.cfg, f.upstairs, []);
+      await seedStationWeek(tx, f.cfg, f.upstairs, []);
       const row = (
         await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))
       ).stationTimes.find((station) => station.stationId === f.upstairs);
       expect(row?.hours).toEqual([]);
+      expect(row?.weekSet).toBe(false);
       expect(row?.status).toEqual({ open: true, why: "no_hours" });
+      expect(
+        await tx.select().from(hoursWeekCells).where(eq(hoursWeekCells.stationId, f.upstairs)),
+      ).toEqual([]);
     });
   });
 
@@ -288,7 +292,6 @@ describe("next scheduled station transition", () => {
   ])("reports the actual state change %s", async (_name, instant, hours, expected) => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await replaceStationHours(tx, f.cfg, f.upstairs, hours);
       await seedStationWeek(tx, f.cfg, f.upstairs, hours);
       const model = await routingModel(tx, f.cfg, new Date(instant));
       expect(
@@ -301,11 +304,6 @@ describe("next scheduled station transition", () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       const now = new Date("2026-10-02T11:00:00Z");
-      for (const id of [f.upstairs, f.kitchen, f.retired]) {
-        await replaceStationHours(tx, f.cfg, id, [
-          { weekday: 5, opensAt: "12:00", closesAt: "16:00" },
-        ]);
-      }
       // The default keeps a week saved before it became the default.
       await tx
         .update(kitchenStations)

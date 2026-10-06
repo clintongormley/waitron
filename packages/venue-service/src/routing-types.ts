@@ -13,7 +13,10 @@ export interface StationTimes {
   stationId: string;
   status: StationStatus;
   nextTransition: StationTransition | null;
+  /** The standard week's opening periods. */
   hours: WeeklyInterval[];
+  /** The standard week has hours set; when absent, any `hours` at all mean it has. */
+  weekSet?: boolean;
   fallbackStationId: string | null;
   today: "open" | "closed" | null;
   closedSendsTo: string | null;

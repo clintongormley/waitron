@@ -44,7 +44,7 @@ import {
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { routeExceptions } from "./schema/routing.js";
-import { replaceStationHours, setStationFallback, setStationToday } from "./station-times.js";
+import { setStationFallback, setStationToday } from "./station-times.js";
 import { seedStationWeek } from "./testing/interim-week.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 import { saveSpecialDate } from "./hours.js";
@@ -662,9 +662,6 @@ describe("resolveMakers", () => {
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
@@ -732,9 +729,6 @@ describe("resolveMakers", () => {
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
       await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
@@ -754,9 +748,6 @@ describe("resolveMakers", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
@@ -1349,9 +1340,6 @@ describe("timed routing explanation", () => {
       const f = await fixture(tx);
       await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
       await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
-      ]);
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);
@@ -1393,9 +1381,6 @@ describe("timed routing explanation", () => {
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
       await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
-      ]);
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);
@@ -1656,9 +1641,6 @@ describe("routingAt", () => {
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
       await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await replaceStationHours(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
-      ]);
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);

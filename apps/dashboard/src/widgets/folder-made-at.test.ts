@@ -294,6 +294,13 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("drinks")?.someElsewhere).toBe(true);
   });
 
+  it("qualifies a station whose standard week is Closed every day", () => {
+    const result = madeAt(
+      routing({ ...barOnDrinks, stationTimes: [times("bar", { hours: [], weekSet: true })] }),
+    );
+    expect(result.get("drinks")?.someElsewhere).toBe(true);
+  });
+
   it("does not qualify a station opened by hand today that keeps no hours", () => {
     const result = madeAt(
       routing({ ...barOnDrinks, stationTimes: [times("bar", { today: "open" })] }),

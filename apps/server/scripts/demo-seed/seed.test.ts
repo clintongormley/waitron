@@ -237,10 +237,11 @@ describe("seedDemoRestaurant", () => {
         opens_at: string;
         closes_at: string;
       }>(sql`
-        select h.weekday, h.opens_at, h.closes_at from station_hours h
-        join kitchen_stations s on s.id = h.station_id
+        select c.weekday, p.opens_at, p.closes_at from hours_week_periods p
+        join hours_week_cells c on c.id = p.cell_id
+        join kitchen_stations s on s.id = c.station_id
         where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'
-        order by h.weekday`);
+        order by c.weekday`);
       expect(hours).toEqual([
         { weekday: 5, opens_at: "19:00:00", closes_at: "21:00:00" },
         { weekday: 6, opens_at: "19:00:00", closes_at: "21:00:00" },
@@ -357,8 +358,9 @@ describe("seedDemoRestaurant", () => {
       }));
       const { rows: hoursRows } = await tx.execute<{ department_name: string; days: number }>(sql`
         select d.name as department_name, cast(count(distinct h.weekday) as integer) as days
-        from department_hours h
+        from hours_week_cells h
         join departments d on d.id = h.department_id
+        where h.mode = 'periods'
         group by d.name
         order by d.name`);
       const { rows: stationRows } = await tx.execute<{ name: string }>(sql`

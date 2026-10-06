@@ -59,9 +59,9 @@ export function folderMadeAt(
     activeStationIds: new Set(routing.stations.filter(({ active }) => active).map(({ id }) => id)),
     defaultStationId: routing.defaultStationId,
     timing: new Map(
-      routing.stationTimes.map(({ stationId, fallbackStationId, hours, today }) => [
+      routing.stationTimes.map(({ stationId, fallbackStationId, hours, weekSet, today }) => [
         stationId,
-        { fallbackId: fallbackStationId, hours, today },
+        { fallbackId: fallbackStationId, hours, weekSet, today },
       ]),
     ),
   };
@@ -105,7 +105,10 @@ export function folderMadeAt(
   const timed = (stationId: string) => {
     if (stationId === routing.defaultStationId) return false;
     const timing = rules.timing.get(stationId);
-    return timing !== undefined && (timing.hours.length > 0 || timing.today === "closed");
+    return (
+      timing !== undefined &&
+      ((timing.weekSet ?? timing.hours.length > 0) || timing.today === "closed")
+    );
   };
 
   const result = new Map<string, FolderMadeAt>();

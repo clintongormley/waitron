@@ -29,7 +29,6 @@ import {
   listStationNotices,
   setStationToday,
   setStationFallback,
-  replaceStationHours,
   writeEditSentLines,
   writePrintHeldWork,
 } from "@waitron/venue-service";
@@ -1109,9 +1108,6 @@ describe("release", () => {
           .set({ isDefault: true })
           .where(eq(kitchenStations.id, grill));
         await setStationToday(tx, venue.cfg, bar, null, at);
-        await replaceStationHours(tx, venue.cfg, bar, [
-          { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-        ]);
         await seedStationWeek(tx, venue.cfg, bar, [
           { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
         ]);

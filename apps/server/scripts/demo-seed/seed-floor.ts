@@ -11,11 +11,9 @@ import {
 } from "@waitron/db";
 import type { WeekCell, WeekDay } from "@waitron/venue-service";
 import {
-  departmentHours,
   departmentSalePolicies,
   departments,
   createException,
-  replaceStationHours,
   replaceWeekHours,
   setStationFallback,
   zoneMenus,
@@ -190,10 +188,6 @@ export async function seedFloor(
       throw new Error("seedFloor: bar preparation stations were not created");
     }
     const stationCfg = { locationId: brandLocationId(locationId) };
-    await replaceStationHours(tx, stationCfg, upstairsStationId, [
-      { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      { weekday: 6, opensAt: "19:00", closesAt: "21:00" },
-    ]);
     await replaceWeekHours(
       tx,
       stationCfg,
@@ -253,23 +247,6 @@ export async function seedFloor(
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${menuIds.deli}
       where zone_id = ${deliZoneId}`);
-  }
-
-  for (let weekday = 0; weekday < 7; weekday += 1) {
-    await tx.insert(departmentHours).values({
-      departmentId: defaultPolicy.department_id,
-      weekday,
-      opensAt: "12:00",
-      closesAt: "01:00",
-    });
-  }
-  for (let weekday = 1; weekday <= 6; weekday += 1) {
-    await tx.insert(departmentHours).values({
-      departmentId: deliDepartmentId,
-      weekday,
-      opensAt: "09:00",
-      closesAt: "18:00",
-    });
   }
 
   const hoursCfg = { locationId: brandLocationId(locationId) };
