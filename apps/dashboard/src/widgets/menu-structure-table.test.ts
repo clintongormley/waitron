@@ -653,6 +653,43 @@ it.each([true, false])(
   },
 );
 
+it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))))(
+  "lines a section's swatch and name up with its arrow and its Type on one middle ($width px, reordering: $reordering)",
+  async ({ width, reordering }) => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 844);
+      const el = await mountDeep({ reordering });
+      const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+      const textMiddle = (node: Element) => {
+        const text = document.createRange();
+        text.selectNodeContents(node);
+        return middle(text.getBoundingClientRect());
+      };
+      for (const key of ["m-drinks", "m-drinks/m-beer", "m-fav", "included-wine/wine-red"]) {
+        const tr = row(el, key)!;
+        const arrow = middle(
+          tr.querySelector(".tree-arrow, .tree-toggle")!.getBoundingClientRect(),
+        );
+        const kind = textMiddle(tr.querySelector('[data-test="kind"]')!);
+        const swatch = middle(tr.querySelector('[part~="color-swatch"]')!.getBoundingClientRect());
+        const name = textMiddle(tr.querySelector('[data-test="name"]')!);
+        for (const [what, at] of [
+          ["swatch", swatch],
+          ["name", name],
+        ] as const) {
+          // The table lines its larger arrow glyph up by baseline, which put the arrow's middle
+          // 2.5 px above the Type text's in every row measured, before this case's fix and after.
+          expect(Math.abs(at - arrow), `${key} ${what} to arrow`).toBeLessThanOrEqual(3);
+          expect(Math.abs(at - kind), `${key} ${what} to Type`).toBeLessThanOrEqual(2);
+        }
+      }
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
+
 it.each([1280, 390])(
   "puts the Name heading over the menu's name, also at phone width, where the tree's arrow slot narrows (%ipx)",
   async (width) => {

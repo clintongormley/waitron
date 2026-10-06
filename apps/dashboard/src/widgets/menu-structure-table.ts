@@ -195,6 +195,14 @@ export class MenuStructureTable extends LitElement {
         display: inline-flex;
         flex-direction: column;
       }
+      /* A flex row takes its first item's baseline unless an item aligns by baseline, so without
+         this the row lines up by the grip's or the swatch slot's baseline, not the name's. As tall as
+         the slot and centred in it, the stack still sits level with the slot. */
+      wt-data-table::part(folder-stack) {
+        align-self: baseline;
+        justify-content: center;
+        min-height: var(--wt-tap-min);
+      }
       wt-data-table::part(current) {
         font-weight: var(--wt-font-weight-bold);
         text-decoration: underline;
@@ -692,7 +700,7 @@ export class MenuStructureTable extends LitElement {
   /** The Device Home Page's and the menu's rows: no grip, a blank slot, and a note when empty. */
   #topCell(row: HomeRow | RootRow, empty: string | null, emptyTest: string) {
     return html`<span part="folder-cell"
-      >${this.reordering ? gripSpace : nothing}${folderFrame()}<span part="name-stack"
+      >${this.reordering ? gripSpace : nothing}${folderFrame()}<span part="name-stack folder-stack"
         >${this.#nameSpan(row)}${
           empty === null ? nothing : html`<span part="note" data-test=${emptyTest}>${empty}</span>`
         }</span
@@ -719,7 +727,8 @@ export class MenuStructureTable extends LitElement {
       >`;
     const { node, key } = row;
     const grip = this.#grip(row);
-    const stack = html`<span part="name-stack"
+    const stack = html`<span
+      part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
       >${this.#nameSpan(row)}${
         node.includedMenuId && !row.readOnly
           ? html`<span part="note" data-test=${`read-only-${key}`}
