@@ -454,7 +454,7 @@ export async function updateCourse(
   }
 }
 
-/** What keeps a course from being deleted. `in-use-references.test.ts` checks it against the schema. */
+/** What keeps a course from being deleted. `in-use-references.test.ts` checks it against declared foreign keys only. */
 export const COURSE_REFERENCES: readonly Reference[] = [
   { table: products, column: products.courseId },
   { table: orderDraftLines, column: orderDraftLines.courseId },

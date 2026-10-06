@@ -160,7 +160,7 @@ export async function updateWatcher(
   await setFollows(tx, watcherId, checked.stationIds, checked.zoneIds);
 }
 
-/** What keeps a watcher from being deleted. `in-use-references.test.ts` checks it against the schema. */
+/** What keeps a watcher from being deleted. `in-use-references.test.ts` checks it against declared foreign keys only. */
 export const WATCHER_REFERENCES: readonly Reference[] = [
   { table: devices, column: devices.watcherId },
   { table: watcherItemMarks, column: watcherItemMarks.watcherId },

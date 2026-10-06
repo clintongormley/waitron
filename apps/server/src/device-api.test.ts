@@ -11,6 +11,7 @@ import {
   printJobs,
   printers,
   stationPrinters,
+  watchers,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -1508,7 +1509,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     });
   });
 
-  it("renames a kitchen screen whose watcher has since been removed, keeping the watcher", async () => {
+  it("renames a kitchen screen whose watcher has since been disabled, keeping the watcher", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId, watcherId } = await enrolWatching(venue);
@@ -1560,7 +1561,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     });
   });
 
-  it("refuses switching a kitchen screen to a removed watcher that is not its own", async () => {
+  it("refuses switching a kitchen screen to a disabled watcher that is not its own", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId, watcherId } = await enrolWatching(venue);
@@ -1573,9 +1574,14 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         zoneIds: [],
         runsPass: false,
       });
-      await removeWatcher(tx, venue.cfg, made.id);
+      await removeWatcher(tx, venue.cfg, made.id, true);
       return made;
     });
+    const [stored] = await suite.db
+      .select({ active: watchers.active })
+      .from(watchers)
+      .where(eq(watchers.id, other.id));
+    expect(stored).toEqual({ active: false });
 
     const res = await edit(app, venue.managerCookie, deviceId, {
       name: "Renamed",

@@ -2160,18 +2160,18 @@ Closing the window selects a course just added, and the product's unsaved edits 
 Built: one widget, `dashboard-course-list` (`apps/dashboard/src/widgets/course-list.ts`), on
 Venue settings' Kitchen tab and in the window the product editor's "Edit courses…" opens (from
 `catalogue-screen.ts`). Each change saves as it is made, so the window has one button, Done, where
-the mockup drew Cancel and Done; Done waits for saves still being answered, including changes made
-while it waits (a second Done during the wait does nothing), and stays open with the reason under
+the mockup drew Cancel and Done; Done waits for saves still being answered and for an open Delete confirmation to be answered,
+including changes made while it waits (a second Done during the wait does nothing), and stays open with the reason under
 the field when a typed name is refused. A drag is saved in one request,
 `PUT /management-api/courses/:id/position` (`moveCourse`, `apps/server/src/kitchen.ts`), which
 renumbers the active courses. A new course is created after the last one shown, where the old form
 created it at order 0. Closing the window selects the last course added in it if it is still there;
 otherwise a chosen course removed in the window is cleared (on a variant: the parent's course);
 otherwise the choice stays.
-**Left open:** a removed course keeps its name, because `kitchen_courses_name_key` covers inactive
-rows too, so adding a course with a removed course's name is refused as taken (measured
+**Left open:** a disabled course keeps its name, because `kitchen_courses_name_key` covers disabled
+rows too, so adding a course with a disabled course's name is refused as taken (measured
 2026-10-03 with a throwaway case in `apps/server/src/kitchen.test.ts`: create "Mains", deactivate
-it, create "Mains" again → `course.name_taken`). Raised in #1087's review and not changed there:
+it, create "Mains" again → `course.name_taken`); a deleted course frees its name (read, not run). Raised in #1087's review and not changed there:
 `wt-combobox`'s `stable-width` attribute (`packages/ui/src/components/wt-combobox.ts`) is not in
 `docs/developers/design-system.md`; and the catalogue-screen test "ignores the closed window's late
 close…" catches its guard's removal only through an unhandled error, because the late close throws
@@ -5491,9 +5491,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   sentence (`docs/developers/design-system.md`); whether they should take a 44px hit area instead
   is the owner's call.
   Left OPEN by W105, not acted on: (5) done by W105d (#1263; owner's choice (a), 2026-10-05): a kitchen
-  screen's Edit dialog keeps the station or watcher it holds after it was switched off or removed,
-  offered in its group and marked "(Disabled)" / "(Deshabilitada)" for a station and "(Removed)" /
-  "(Eliminado)" for a watcher (since W110b "(Disabled)" / "(Deshabilitado)"), so a rename saves it unchanged; only switched-on ones are offered as
+  screen's Edit dialog keeps the station or watcher it holds after it was switched off, offered in
+  its group and marked "(Disabled)" / "(Deshabilitada)" for a station and "(Disabled)" /
+  "(Deshabilitado)" for a watcher (`devices.watcher_disabled_mark`; W105d shipped "(Removed)", W110b
+  changed it), so a rename saves it unchanged; only switched-on ones are offered as
   new choices. The save route accepts the device's own station or watcher unchanged
   (`resolveDeviceBinding`'s `kept`, `apps/server/src/device.ts`) and still refuses a switch to a
   switched-off one; Enable does not pass `kept`, so a returning device must choose a switched-on one.
@@ -8591,7 +8592,7 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
 **Dashboard, till and setup:**
 
 - **One word for "switched off, kept for the record" across the dashboard — done by W110
-  (#1255), three points left open.** The owner's rule (2026-10-05): a record switched off but kept
+  (#1255); what each point leaves open is said under it.** The owner's rule (2026-10-05): a record switched off but kept
   says **Disable / Deshabilitar**, comes back with **Enable / Habilitar**, and reads **Active** or
   **Disabled** (Deshabilitado or Deshabilitada, agreeing with the noun); **Delete / Eliminar** only
   for a real delete. W110 moved products, variants, options and extras lists, departments, zones,
@@ -8605,8 +8606,8 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   products that are all disabled already offers no Disable (no bulk Enable exists). Two owner
   questions from W110c, in its PR: whether a bulk Enable is wanted, and whether that all-disabled
   selection's Disable should be greyed out like the toolbar's other buttons rather than hidden.
-  W110c's review read #1269 as having changed (b)'s watcher wording and added a test for (e); not
-  re-checked, so (b) and (e) below may be stale. (b) is done by W110b: a watcher's and a kitchen course's row offers **Delete** when nothing refers to it and **Disable** when something does, and the server decides by the same rule in the one transaction (a watcher is referred to by a device or a watcher's Done mark; a course by a product, a draft line, an order line or a kitchen item — the `WATCHER_REFERENCES` and `COURSE_REFERENCES` lists, held to the database's foreign keys by `apps/server/src/in-use-references.test.ts`, which sees declared keys only). A real delete asks first. Disabled ones are listed after the active ones, on the Prep stations page's Watchers tab and in the course list, with **Enable** (a new `POST /management-api/watchers/:id/reactivate`, refused `watcher.name_taken` when an active watcher has the name; a course through `PATCH /management-api/courses/:id`). A re-enabled watcher keeps its follows but not its printers, which Disable drops. The kitchen screen and the Devices screen say a watcher was disabled, not removed, and the Devices Edit dialog marks a held disabled watcher "(Disabled)"/"(Deshabilitado)" (`devices.watcher_disabled_mark`, which W105d had as "(Removed)"). Left open from (b): `updateCourse` (the course PATCH) does not check the venue (one location today; read, not run). Found along the way: `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) writes `look/venue-defaults-*.png` screenshots into `apps/dashboard/src/screens/` on every run, which git shows as untracked. (d) Zones and adjustment reasons now offer Enable (W110d,
+  W110c's review read #1269 as having added a test for (e); not re-checked, so (e) below may be
+  stale. (b) is done by W110b: a watcher's and a kitchen course's row offers **Delete** when nothing refers to it and **Disable** when something does, and on a Delete the server applies the same rule in the one transaction (a watcher is referred to by a device or a watcher's Done mark; a course by a product, a draft line, an order line or a kitchen item — the `WATCHER_REFERENCES` and `COURSE_REFERENCES` lists, held to the database's foreign keys by `apps/server/src/in-use-references.test.ts`, which sees declared keys only). A real delete asks first. The Disable action sends `?disable=true` on the DELETE route, and the server then only switches the row off, never deletes it. Disabled ones are listed after the active ones, on the Prep stations page's Watchers tab and in the course list, with **Enable** (a new `POST /management-api/watchers/:id/reactivate`, refused `watcher.name_taken` when an active watcher has the name; a course through `PATCH /management-api/courses/:id`). A re-enabled watcher keeps its follows but not its printers, which Disable drops. The kitchen screen and the Devices screen say a watcher was disabled, not removed, and the Devices Edit dialog marks a held disabled watcher "(Disabled)"/"(Deshabilitado)" (`devices.watcher_disabled_mark`, which W105d had as "(Removed)"). Left open from (b): `GET /management-api/watchers` needs `venue.configure` where the stations and courses lists need only `venue.view` (it did before W110b; the owner's call); and a Delete label can be stale, because the watcher list does not re-read on a watcher's Done marks nor the course list on draft lines, order lines or kitchen items, in which case a confirmed Delete switches the row off instead. Found along the way: `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) writes `look/venue-defaults-*.png` screenshots into `apps/dashboard/src/screens/` on every run, which git shows as untracked. (d) Zones and adjustment reasons now offer Enable (W110d,
   #1273): a disabled zone's row in the venue screen's policy tree, and a
   disabled reason's row menu on the reasons screen (through a new
   `POST /management-api/adjustments/reasons/:reasonId/reactivate`). Departments and floor tables
