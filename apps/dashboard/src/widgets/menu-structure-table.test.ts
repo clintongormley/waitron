@@ -1384,15 +1384,59 @@ describe("colour swatches", () => {
     }
   });
 
-  it("draws a swatch after the row's name", async () => {
+  it("draws a product's swatch after its name and a section's before it", async () => {
     const el = await mountColoured();
-    for (const key of ["m-burger", "m-drinks"]) {
-      const name = row(el, key)!.querySelector('[part~="name-stack"]')!.getBoundingClientRect();
-      expect(swatchOf(el, key).getBoundingClientRect().left, key).toBeGreaterThanOrEqual(
-        name.right,
-      );
-    }
+    const nameOf = (key: string) =>
+      row(el, key)!.querySelector('[part~="name-stack"]')!.getBoundingClientRect();
+    expect(swatchOf(el, "m-burger").getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      nameOf("m-burger").right,
+    );
+    expect(swatchOf(el, "m-drinks").getBoundingClientRect().right).toBeLessThanOrEqual(
+      nameOf("m-drinks").left,
+    );
   });
+
+  it.each(
+    [1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))),
+  )(
+    "draws no folder icon and puts each section's swatch in its leading slot, before its name ($width px, reordering: $reordering)",
+    async ({ width, reordering }) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        const red = { ...wines() };
+        red.children = red.children!.map((child) =>
+          child.memberId === "wine-red" ? { ...child, color: "#7a1f3d" } : child,
+        );
+        const el = await mountColoured({ reordering, nodes: [...paintedLunch(), red] });
+        await toggle(el, "included-wine");
+        expect(
+          table(el).shadowRoot!.querySelectorAll('tbody tr wt-icon[name="folder"]'),
+        ).toHaveLength(0);
+        for (const [key, part] of [
+          ["m-drinks", "swatch-button"],
+          ["included-wine", "swatch-box"],
+          ["included-wine/wine-red", "swatch-box"],
+        ] as const) {
+          const swatch = swatchOf(el, key);
+          expect(swatch.getAttribute("part"), key).toBe(part);
+          expect(swatch.closest('[part~="folder-frame"]'), key).not.toBeNull();
+          const name = row(el, key)!.querySelector('[part~="name-stack"]')!.getBoundingClientRect();
+          expect(swatch.getBoundingClientRect().right, key).toBeLessThanOrEqual(name.left);
+        }
+        if (width === 1280) {
+          const nameLeft = (key: string) => {
+            const text = document.createRange();
+            text.selectNodeContents(row(el, key)!.querySelector('[data-test="name"]')!);
+            return text.getBoundingClientRect().left;
+          };
+          expect(nameLeft("m-drinks")).toBeCloseTo(nameLeft("m-burger"), 0);
+        }
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
 
   it("sends a product's colour request from its swatch, toggling no row and starting no drag", async () => {
     const el = await mountColoured();

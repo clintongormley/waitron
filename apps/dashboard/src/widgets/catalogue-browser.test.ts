@@ -1076,7 +1076,7 @@ it("opens and closes a category from its row, and says which it will do", async 
   expect(await rowKeys(el)).not.toContain("cola");
   expect(
     table.shadowRoot!.querySelector('tr[data-row-key="folder:d"] wt-icon[name="folder"]'),
-  ).not.toBeNull();
+  ).toBeNull();
 });
 it("Add category makes the typed category inside the category whose menu asked, and the box goes", async () => {
   const el = await mountBrowser();

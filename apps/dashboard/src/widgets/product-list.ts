@@ -51,9 +51,9 @@ import {
 
 export const ROOT_KEY = "root";
 
-const folderIcon = html`<span part="folder-frame"
-  ><wt-icon name="folder" size="lg"></wt-icon
-></span>`;
+/** A category's swatch slot, at a product photo's width; blank where the row has no swatch. */
+const folderFrame = (content: unknown = nothing) =>
+  html`<span part="folder-frame">${content}</span>`;
 /** How long a drag must rest on a closed category before it opens. */
 export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
@@ -139,7 +139,7 @@ export class ProductList extends LitElement {
           var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
         );
       }
-      /* On a phone a product's photo gives its slot to the name; a category keeps its folder. */
+      /* On a phone a product's photo gives its slot to the name; a category keeps its swatch slot. */
       wt-data-table[narrow]::part(thumb-frame),
       wt-data-table[narrow]::part(thumb-placeholder) {
         display: none;
@@ -1190,13 +1190,13 @@ export class ProductList extends LitElement {
         if (row.kind === "draft")
           return column.key === "name"
             ? html`<span part="folder-cell naming"
-                >${this.#gripSpace()}${folderIcon}${this.#nameBox()}</span
+                >${this.#gripSpace()}${folderFrame()}${this.#nameBox()}</span
               >`
             : nothing;
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
-              >${this.#gripSpace()}${folderIcon}<span part="folder-name"
+              >${this.#gripSpace()}${folderFrame()}<span part="folder-name"
                 ><strong>${t("folders.all_products")}</strong
                 ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
               ></span
@@ -1227,23 +1227,23 @@ export class ProductList extends LitElement {
                 : nothing
             }`;
           return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
-            >${this.#grip(folder.name)}${folderIcon}${
+            >${this.#grip(folder.name)}${
               this.#renaming(folder.id)
-                ? html`${this.#nameBox()}<span part="name-after">${after}</span>`
-                : html`<span part="folder-name"
-                    ><strong>${folder.name}</strong>${after}<button
-                      part="swatch-button"
-                      type="button"
-                      data-test=${`color-${folder.id}`}
-                      aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
-                      @click=${(event: Event) => {
-                        event.stopPropagation();
-                        this.#send("folder-color", { folderId: folder.id });
-                      }}
-                    >
-                      ${swatchChip(folder.color)}
-                    </button></span
-                  >`
+                ? html`${folderFrame()}${this.#nameBox()}<span part="name-after">${after}</span>`
+                : html`${folderFrame(
+                      html`<button
+                        part="swatch-button"
+                        type="button"
+                        data-test=${`color-${folder.id}`}
+                        aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
+                        @click=${(event: Event) => {
+                          event.stopPropagation();
+                          this.#send("folder-color", { folderId: folder.id });
+                        }}
+                      >
+                        ${swatchChip(folder.color)}
+                      </button>`,
+                    )}<span part="folder-name"><strong>${folder.name}</strong>${after}</span>`
             }</span
           >`;
         }

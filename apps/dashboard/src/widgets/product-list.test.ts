@@ -1927,7 +1927,7 @@ describe("the product list at phone width", () => {
       ].flatMap((draft) => [true, false].map((reordering) => ({ locale, draft, reordering }))),
     ),
   )(
-    "keeps the name box beside the grip and folder icon at 1280 px ($locale, $draft.kind, reordering: $reordering)",
+    "keeps the name box beside the grip and folder slot at 1280 px ($locale, $draft.kind, reordering: $reordering)",
     ({ locale, draft, reordering }) =>
       onPhone(locale, 1280, async () => {
         const { el, root } = await mountTree({ reordering });
@@ -2088,7 +2088,7 @@ describe("the product list at phone width", () => {
   );
 
   it.each(["en-GB", "es-ES"])(
-    "keeps a long category's swatch, after its wrapped name, before the pinned actions at 390 px (%s)",
+    "keeps a long category's swatch, before its wrapped name, before the pinned actions at 390 px (%s)",
     (locale) =>
       onPhone(locale, 390, async () => {
         const { root } = await mountLong();
@@ -2106,7 +2106,11 @@ describe("the product list at phone width", () => {
         )!;
         expect(name.lines).toBeGreaterThan(1);
         expect(name.right).toBeLessThanOrEqual(pinned);
-        expect(swatch.top).toBeGreaterThanOrEqual(name.top);
+        // Measured again: the names are fitted, and the row laid out anew, after the first frame.
+        const fitted = row
+          .querySelector<HTMLElement>('[data-test="color-long"]')!
+          .getBoundingClientRect();
+        expect(fitted.right).toBeLessThanOrEqual(name.left);
       }),
   );
 
@@ -2606,33 +2610,30 @@ describe("the product list as a tree", () => {
     expect(box.getAttribute("label")).toBe(t("folders.name"));
   });
 
-  it("lines a new category's folder icon up with its sibling categories' icons", async () => {
+  it("lines a new category's folder slot up with its sibling categories' slots", async () => {
     const { el, root } = await mountTree();
     el.nameDraft = { kind: "create", parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     const iconLeft = (key: string) =>
       root
-        .querySelector(`tr[data-row-key="${key}"] wt-icon[name="folder"]`)!
+        .querySelector(`tr[data-row-key="${key}"] [part~="folder-frame"]`)!
         .getBoundingClientRect().left;
     expect(iconLeft("draft:new")).toBe(iconLeft("folder:d"));
     expect(iconLeft("draft:new")).toBe(iconLeft("folder:f"));
   });
 
-  it("draws large folder icons on root, nested and new category rows and on a category drag", async () => {
+  it("draws no folder icon on root, nested and new category rows, and a large one on a category drag", async () => {
     const { el, root } = await mountTree();
     await openRow(el, "folder:d");
     el.nameDraft = { kind: "create", parentId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-    for (const key of [ROOT_KEY, "folder:d", "folder:b", "draft:new"]) {
-      const icon = root.querySelector<HTMLElement>(
-        `tr[data-row-key="${key}"] wt-icon[name="folder"]`,
-      )!;
-      expect(icon.shadowRoot!.querySelector("svg")).not.toBeNull();
-      expect(icon.getBoundingClientRect().width).toBe(18);
-      expect(icon.getBoundingClientRect().height).toBe(18);
-    }
+    for (const key of [ROOT_KEY, "folder:d", "folder:b", "draft:new"])
+      expect(
+        root.querySelector(`tr[data-row-key="${key}"] wt-icon[name="folder"]`),
+        key,
+      ).toBeNull();
 
     const grip = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .drag-grip')!;
     grip.dispatchEvent(
@@ -2798,10 +2799,10 @@ describe("the product list as a tree", () => {
     expect(chip("f").getAttribute("part")).toBe("color-swatch empty");
     expect(getComputedStyle(chip("f")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(getComputedStyle(chip("f")).borderTopWidth).toBe("1px");
-    // Drawn after the name and its count, so names at one depth still line up.
+    // Drawn before the name, in the slot a product's photo takes.
     const row = root.querySelector('tr[data-row-key="folder:d"]')!;
-    expect(button("d").getBoundingClientRect().left).toBeGreaterThanOrEqual(
-      row.querySelector('[data-test="count-d"]')!.getBoundingClientRect().right,
+    expect(button("d").getBoundingClientRect().right).toBeLessThanOrEqual(
+      row.querySelector("strong")!.getBoundingClientRect().left,
     );
 
     const expanded = () => row.getAttribute("aria-expanded");
@@ -3621,7 +3622,7 @@ describe("the Products tree's Name column", () => {
 
     const PRODUCTS = new Set(["cola", "salad", "chop", "loin", "ribs", "bread"]);
 
-    it("draws no photo or placeholder, so a product's name starts right after its grip, and keeps each category's folder", async () => {
+    it("draws no photo or placeholder, so a product's name starts right after its grip, and keeps each category's leading slot", async () => {
       const { root } = await mountPhone();
       const photos = [
         ...root.querySelectorAll<HTMLElement>('[part~="thumb-frame"], [part~="thumb-placeholder"]'),
@@ -4285,4 +4286,75 @@ describe("a refresh during a drag", () => {
     press(after.querySelector(`${allProducts} [part~="folder-cell"]`)!, "pointerup");
     expect(drops).toEqual([{ keys: ["cola"], folderId: null }]);
   });
+});
+
+describe("a category row's leading slot", () => {
+  async function atWidth(width: number, body: () => Promise<void>) {
+    const restore = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 844);
+      await body();
+    } finally {
+      await page.viewport(restore.width, restore.height);
+    }
+  }
+
+  const rectOf = (root: ShadowRoot, selector: string) =>
+    root.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+
+  it.each(
+    [1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))),
+  )(
+    "draws no folder icon and puts each category's swatch in its leading slot, before its name ($width px, reordering: $reordering)",
+    ({ width, reordering }) =>
+      atWidth(width, async () => {
+        const { el, root } = await mountTree({
+          reordering,
+          categories: [{ ...drinks, color: "#b12525" }, beer, food],
+        });
+        await openRow(el, "folder:d");
+        el.nameDraft = { kind: "create", parentId: "d" };
+        await el.updateComplete;
+        await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+        expect(root.querySelectorAll('tbody tr wt-icon[name="folder"]')).toHaveLength(0);
+        for (const id of ["d", "b", "f"]) {
+          const row = `tr[data-row-key="folder:${id}"]`;
+          const swatch = root.querySelector(`${row} [data-test="color-${id}"]`)!;
+          expect(swatch.closest('[part~="folder-frame"]'), id).not.toBeNull();
+          expect(swatch.getBoundingClientRect().right, id).toBeLessThanOrEqual(
+            rectOf(root, `${row} strong`).left,
+          );
+        }
+        if (width === 1280) {
+          // Bread and Food both sit in All products; Cola and Beer both in Drinks.
+          expect(rectOf(root, 'tr[data-row-key="folder:f"] strong').left).toBeCloseTo(
+            rectOf(root, 'tr[data-row-key="bread"] strong').left,
+            0,
+          );
+          expect(rectOf(root, 'tr[data-row-key="folder:b"] strong').left).toBeCloseTo(
+            rectOf(root, 'tr[data-row-key="cola"] strong').left,
+            0,
+          );
+        }
+      }),
+  );
+
+  it.each([true, false])(
+    "draws one colour square on a category being renamed, the name box's own (reordering: %s)",
+    async (reordering) => {
+      const { el, root } = await mountTree({
+        reordering,
+        categories: [{ ...drinks, color: "#b12525" }, beer, food],
+      });
+      el.nameDraft = { kind: "rename", categoryId: "d" };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+      const squares = row.querySelectorAll('[part~="color-swatch"]');
+      expect(squares).toHaveLength(1);
+      expect(squares[0]!.closest('[data-test="name-box-color"]')).not.toBeNull();
+      const frame = row.querySelector('[part~="folder-frame"]')!;
+      expect(frame.childElementCount).toBe(0);
+    },
+  );
 });

@@ -40,9 +40,9 @@ export const ROOT_KEY = "root";
 /** The Device Home Page row's key, and the list key its shortcuts' order is kept under. */
 export const HOME_KEY = "home";
 
-const folderIcon = html`<span part="folder-frame"
-  ><wt-icon name="folder" size="lg"></wt-icon
-></span>`;
+/** A section's swatch slot, at a product photo's width; blank on the menu's and home's rows. */
+const folderFrame = (content: unknown = nothing) =>
+  html`<span part="folder-frame">${content}</span>`;
 const gripSpace = html`<span part="grip-space" aria-hidden="true"
   ><wt-icon name="grip"></wt-icon
 ></span>`;
@@ -126,7 +126,7 @@ export class MenuStructureTable extends LitElement {
         width: var(--wt-tap-min);
         margin-inline-end: var(--wt-space-3);
       }
-      /* The table's arrow, the grip while reordering, and the folder come before the menu's name. */
+      /* The table's arrow, the grip while reordering, and the swatch slot come before the menu's name. */
       wt-data-table::part(tree-heading) {
         margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
       }
@@ -689,10 +689,10 @@ export class MenuStructureTable extends LitElement {
     </button>`;
   }
 
-  /** The Device Home Page's and the menu's rows: no grip, the folder, and a note when empty. */
+  /** The Device Home Page's and the menu's rows: no grip, a blank slot, and a note when empty. */
   #topCell(row: HomeRow | RootRow, empty: string | null, emptyTest: string) {
     return html`<span part="folder-cell"
-      >${this.reordering ? gripSpace : nothing}${folderIcon}<span part="name-stack"
+      >${this.reordering ? gripSpace : nothing}${folderFrame()}<span part="name-stack"
         >${this.#nameSpan(row)}${
           empty === null ? nothing : html`<span part="note" data-test=${emptyTest}>${empty}</span>`
         }</span
@@ -729,7 +729,7 @@ export class MenuStructureTable extends LitElement {
       }</span
     >`;
     if (node.ref.kind === "section")
-      return html`<span part="folder-cell">${grip}${folderIcon}${stack}${this.#swatch(row)}</span>`;
+      return html`<span part="folder-cell">${grip}${folderFrame(this.#swatch(row))}${stack}</span>`;
     const image = this.#productById.get(node.ref.productId)?.image ?? null;
     return html`<span part="product-cell"
       >${grip}${
@@ -746,7 +746,7 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
-  /** After the name, so names at one depth still start on one line. */
+  /** A section's goes in its leading slot; a product's after its name, as its photo has that slot. */
   #swatch(row: MemberRow) {
     const { node, key, name } = row;
     let color: string | null;
