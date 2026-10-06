@@ -275,7 +275,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       th.select,
       td.select {
         width: var(--wt-tap-min);
-        white-space: nowrap;
+        text-wrap: nowrap;
         text-align: center;
       }
       table[data-center-controls] td {
