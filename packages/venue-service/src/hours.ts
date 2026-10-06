@@ -13,6 +13,7 @@ import {
   parseDuplicateDates,
   parseSpecialDateInput,
   parseSubject,
+  pairMatters,
   parseWeek,
   tailOverlaps,
   weekdayOf,
@@ -212,14 +213,6 @@ async function assertPeriodOwnership(
 async function today(tx: Transaction, cfg: VenueScope, at: Date): Promise<LocalDate | null> {
   return venueLocalMoment(at, await readLocationClock(tx, cfg.locationId))?.civilDate ?? null;
 }
-
-/**
- * Whether a clash between `earlier` and the day after it still matters at `today`: a pair ending
- * before today is history and does not block a current or future schedule. An unreadable clock
- * checks every pair.
- */
-const pairMatters = (earlier: LocalDate, today: LocalDate | null) =>
-  today === null || addDays(earlier, 1) >= today;
 
 export async function readWeekHours(
   tx: Transaction,

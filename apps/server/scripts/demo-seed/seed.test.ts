@@ -252,7 +252,11 @@ describe("seedDemoRestaurant", () => {
         where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'`);
       expect(fallbacks).toEqual([{ name: "Downstairs bar" }]);
 
-      const { rows: subjects } = await tx.execute<{ kind: string; id: string; name: string }>(sql`
+      const { rows: subjects } = await tx.execute<{
+        kind: "department" | "station";
+        id: string;
+        name: string;
+      }>(sql`
         select 'department' as kind, id, name from departments where location_id = ${venue.locationId}
         union all
         select 'station', id, name from kitchen_stations
@@ -261,7 +265,7 @@ describe("seedDemoRestaurant", () => {
       const weeks: Record<string, string[]> = {};
       for (const subject of subjects)
         weeks[subject.name] = (
-          await readWeekHours(tx, cfg, { kind: subject.kind as "department", id: subject.id })
+          await readWeekHours(tx, cfg, { kind: subject.kind, id: subject.id })
         ).map(({ cell }) =>
           cell.mode === "periods"
             ? cell.periods.map((period) => `${period.opensAt}-${period.closesAt}`).join(",")

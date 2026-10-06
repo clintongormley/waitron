@@ -3183,9 +3183,12 @@ describe("opening hours in a configuration transfer", () => {
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       );
     }
-    expect(imported.rows.flatMap((row) => (row.times === null ? [] : [row.times])).sort()).toEqual(
-      expect.arrayContaining(["12:00:00-16:00:00", "20:00:00-01:00:00", "12:00:00-18:00:00"]),
-    );
+    expect(imported.rows.flatMap((row) => (row.times === null ? [] : [row.times])).sort()).toEqual([
+      ...Array<string>(5).fill("09:00:00-18:00:00"),
+      ...Array<string>(6).fill("12:00:00-16:00:00"),
+      "12:00:00-18:00:00",
+      ...Array<string>(6).fill("20:00:00-01:00:00"),
+    ]);
     const dayStates = await targetSuite.db.execute<{ n: number }>(sql`
       select cast(count(*) as int) as n from station_day_states`);
     expect(dayStates.rows[0]!.n).toBe(0);
@@ -3270,6 +3273,76 @@ describe("opening hours in a configuration transfer", () => {
       });
     for (const states of read.states)
       expect(states.get(importedPase.id)).toMatchObject({ isDefault: true, open: true });
+  });
+
+  it("carries a past special date that a later week edit made clash, as the saves allowed", async () => {
+    const source = await applyVenue(planVenue(venue("B44005511"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const { cfg, departments: dept } = await named(suite.db, source);
+    const restaurant = { kind: "department" as const, id: dept.get("Prepared")! };
+    await withTransaction(suite.db, async (tx) => {
+      await replaceWeekHours(
+        tx,
+        cfg,
+        restaurant,
+        week(() => CLOSED),
+        AT,
+      );
+      // Friday 25 September is past at AT; its night runs into Saturday's small hours.
+      await saveSpecialDate(
+        tx,
+        cfg,
+        null,
+        {
+          date: "2026-09-25",
+          name: "Late night",
+          colour: "purple",
+          closeWholeVenue: false,
+          cells: [
+            { subject: restaurant, cell: { mode: "periods", periods: [p("22:00", "03:00")] } },
+          ],
+        },
+        AT,
+      );
+      // Saturdays from 01:00 overlap that past night, which the save lets through.
+      await replaceWeekHours(
+        tx,
+        cfg,
+        restaurant,
+        week((weekday) =>
+          weekday === 6 ? { mode: "periods", periods: [p("01:00", "05:00")] } : CLOSED,
+        ),
+        AT,
+      );
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
+    // Control: the same rows exported on the Saturday itself are refused.
+    expect(() =>
+      validateConfigurationBundle(
+        { ...transferred, createdAt: "2026-09-26T12:00:00.000Z" },
+        ALL_MODULES,
+        versions,
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "special_date_hours" },
+      }),
+    );
+
+    expect(() => validateConfigurationBundle(transferred, ALL_MODULES, versions)).not.toThrow();
+    const target = await applyVenue(planVenue(venue("B44005522"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const expected = await hoursByName(suite.db, source);
+    expect(expected.dates.map((date) => date.date)).toEqual(["2026-09-25"]);
+    expect(await hoursByName(targetSuite.db, target)).toEqual(expected);
   });
 
   it("refuses an edited bundle whose hours a save would refuse, and writes no venue", async () => {

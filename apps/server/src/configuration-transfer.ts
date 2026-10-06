@@ -576,9 +576,10 @@ export function validateConfigurationBundle(
     }
   }
   checkedRows(bundle, modules);
+  const exported = { createdAt: new Date(bundle.createdAt) };
   for (const module of modules) {
     const contribution = module.configurationTransfer;
-    if (contribution?.kind === "tables") contribution.validate?.(bundle.tables);
+    if (contribution?.kind === "tables") contribution.validate?.(bundle.tables, exported);
   }
 }
 

@@ -4,6 +4,7 @@ import {
   cellIntervals,
   effective,
   isLocalDate,
+  pairMatters,
   parseSpecialDateInput,
   parseWeek,
   tailOverlaps,
@@ -96,11 +97,15 @@ function storedMode(row: Row, table: string): string {
  * Refuses (`setup.request_invalid`, `field` naming the table or `<table>.<column>`) hours rows a
  * save could not have written. An import inserts rows as they come, so this holds what the writers
  * hold: canonical times, one cell per subject and day, periods only in a periods cell, a whole week
- * or none, no overlap within a day or across a midnight, and owners the bundle carries. It has no
- * clock, so unlike a save it checks past special dates against their neighbours too. A default
- * station's cells may travel, as the default keeps them, and take no part in the clash check.
+ * or none, no overlap within a day or across a midnight, and owners the bundle carries. Like a save,
+ * it leaves out a clash between two days already past when the bundle was made, and with no
+ * readable `createdAt` it checks every pair. A default station's cells may travel, as the default
+ * keeps them, and take no part in the clash check.
  */
-export function validateHoursConfiguration(tables: Tables): void {
+export function validateHoursConfiguration(
+  tables: Tables,
+  bundle?: { readonly createdAt: Date },
+): void {
   const departments = ids(tables.departments);
   const stations = ids(tables.kitchen_stations);
 
@@ -196,10 +201,16 @@ export function validateHoursConfiguration(tables: Tables): void {
     ...[...departments].map((id) => `department:${id as string}`),
     ...[...stations].filter((id) => !defaults.has(id)).map((id) => `station:${id as string}`),
   ];
+  const exportedAt = bundle?.createdAt.getTime() ?? Number.NaN;
+  // The venue's zone is not known here, and a zone behind UTC can still read the day before.
+  const today = Number.isNaN(exportedAt)
+    ? null
+    : addDays(new Date(exportedAt).toISOString().slice(0, 10) as LocalDate, -1);
   for (const key of subjects) {
     const week = (weekday: number) => weekIntervals.get(key)?.[weekday] ?? null;
     for (const date of states.keys())
       for (const earlier of [addDays(date, -1), date]) {
+        if (!pairMatters(earlier, today)) continue;
         const later = addDays(earlier, 1);
         if (
           tailOverlaps(

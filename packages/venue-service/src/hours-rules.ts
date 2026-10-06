@@ -76,6 +76,14 @@ export function tailOverlaps(earlier: Interval[] | null, later: Interval[] | nul
   );
 }
 
+/**
+ * Whether a clash between `earlier` and the day after it still matters at `today`: a pair ending
+ * before today is history and does not block a current or future schedule. An unreadable clock
+ * checks every pair.
+ */
+export const pairMatters = (earlier: LocalDate, today: LocalDate | null) =>
+  today === null || addDays(earlier, 1) >= today;
+
 /** One special date as the clash check sees it: its closure flag and its stored cells. */
 export interface DateState {
   closeWholeVenue: boolean;

@@ -321,12 +321,66 @@ describe("validateHoursConfiguration", () => {
     expect(() => validateHoursConfiguration(tables)).toThrowError(refusal("special_date_hours"));
   });
 
-  it("checks past special dates too, as it has no clock to tell which are past", () => {
-    const tables = validTables();
-    tables.special_dates![0]!.date = "2020-12-25";
-    tables.special_date_hours![0]!.mode = "periods";
-    tables.special_date_hours_periods!.push(periodRow("sdh-restaurant", 0, "00:00:00", "06:00:00"));
-    expect(() => validateHoursConfiguration(tables)).toThrowError(refusal("special_date_hours"));
+  describe("a special date that clashes with the day before it", () => {
+    /** Friday 25 December 2020 opens 00:00–06:00, under Thursday's restaurant hours to 01:00. */
+    function pastClash(): Tables {
+      const tables = validTables();
+      tables.special_dates![0]!.date = "2020-12-25";
+      tables.special_date_hours![0]!.mode = "periods";
+      tables.special_date_hours_periods!.push(
+        periodRow("sdh-restaurant", 0, "00:00:00", "06:00:00"),
+      );
+      return tables;
+    }
+    const exported = (createdAt: string) => ({ createdAt: new Date(createdAt) });
+
+    it("is accepted when the pair was already past at export, as the saves skip such pairs", () => {
+      expect(() =>
+        validateHoursConfiguration(pastClash(), exported("2026-10-06T10:00:00Z")),
+      ).not.toThrow();
+    });
+
+    it("is refused when the export was taken on the clashing day", () => {
+      expect(() =>
+        validateHoursConfiguration(pastClash(), exported("2020-12-25T12:00:00Z")),
+      ).toThrowError(refusal("special_date_hours"));
+    });
+
+    it("is refused when the export was taken before the clashing day", () => {
+      expect(() =>
+        validateHoursConfiguration(pastClash(), exported("2020-12-01T12:00:00Z")),
+      ).toThrowError(refusal("special_date_hours"));
+    });
+
+    // The pair ends on 25 December. A venue twelve hours behind UTC still reads 25 December
+    // until 26 December 12:00 UTC, so the check keeps the pair through all of 26 December UTC.
+    it("is refused up to the end of the next UTC day, the margin for a zone behind UTC", () => {
+      expect(() =>
+        validateHoursConfiguration(pastClash(), exported("2020-12-26T23:59:59.999Z")),
+      ).toThrowError(refusal("special_date_hours"));
+      expect(() =>
+        validateHoursConfiguration(pastClash(), exported("2020-12-27T00:00:00Z")),
+      ).not.toThrow();
+    });
+
+    it("is refused when the export time is not known or cannot be read", () => {
+      expect(() => validateHoursConfiguration(pastClash())).toThrowError(
+        refusal("special_date_hours"),
+      );
+      expect(() => validateHoursConfiguration(pastClash(), exported("not a time"))).toThrowError(
+        refusal("special_date_hours"),
+      );
+    });
+
+    it("still has its own periods checked when it is past", () => {
+      const tables = pastClash();
+      tables.special_date_hours_periods!.push(
+        periodRow("sdh-restaurant", 1, "05:00:00", "08:00:00"),
+      );
+      expect(() =>
+        validateHoursConfiguration(tables, exported("2026-10-06T10:00:00Z")),
+      ).toThrowError(refusal("special_date_hours"));
+    });
   });
 
   it("ignores a default station's retained cells when checking clashes", () => {
