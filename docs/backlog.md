@@ -882,18 +882,19 @@ Still open from W74:
 - **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
   #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
   so a lookup by name finds the first row drawn for that device.
-- **When an empty category's delete is refused because only a disabled product was added, the
-  dialog reads "0 products"** (left open by A278, #1292, which made the delete request carry the count of
-  all products, disabled ones included, so the server refuses with `category.contents_changed` when
-  it differs): the dialog then opened counts active products only, so it shows "0 products" beside
-  the refusal's "check the new counts" message.
 - **A category holding only routing rules is deleted without the dialog** (raised in #1217's
   review): the no-dialog path checks subcategories and products only, so its rules go unannounced.
-  The check dates from commit `5ffa5c633c` (2026-10-01).
+  The check dates from commit `5ffa5c633c` (2026-10-01), whose message records the owner's
+  decision that day to keep this shortcut; queued as A279 and held for the owner to say whether
+  that decision stands.
 - **The delete dialog stretches to nearly the full screen height**, with empty space below its
   text, at 1280 and 390 wide (seen on the demo stack while checking #1220; not caused by it, and
   not traced further). _2026-10-05: W70a (#1265) changes compact height only; this standard
   dialog retains its height._
+
+**The category Delete dialog counts disabled products and says how many are disabled (A288, owner
+2026-10-06) — DONE (#1295).** Both when it opens and after A278's `category.contents_changed`
+refusal re-reads; a selection with no disabled products keeps the old sentence.
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE (#1066).**
 

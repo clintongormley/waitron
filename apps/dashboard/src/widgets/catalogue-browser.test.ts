@@ -1885,7 +1885,7 @@ it("shows a shared category name literally beside its number, even when it reads
     `${name} (2 of 3)`,
   );
 });
-it("asks before deleting a category holding only inactive products, and counts none of them as deleted", async () => {
+it("asks before deleting a category holding only a disabled product, and says it is disabled already", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
     { id: "f", folders: 0, products: 1, activeProducts: 0, routes: 0, ownRoutes: 0 },
@@ -1894,9 +1894,88 @@ it("asks before deleting a category holding only inactive products, and counts n
   await press(el, "delete");
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   expect(el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent).toContain(
-    "0 categories and 0 products",
+    "0 categories and 1 product, already disabled",
   );
   expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+});
+it.each([
+  [
+    "en-GB",
+    { folders: 1, products: 3, activeProducts: 2 },
+    "1 category and 3 products, 1 of them already disabled",
+  ],
+  [
+    "en-GB",
+    { folders: 0, products: 4, activeProducts: 2 },
+    "0 categories and 4 products, 2 of them already disabled",
+  ],
+  [
+    "en-GB",
+    { folders: 0, products: 2, activeProducts: 0 },
+    "0 categories and 2 products, all already disabled",
+  ],
+  [
+    "es",
+    { folders: 1, products: 3, activeProducts: 1 },
+    "1 categoría y 3 productos, 2 de ellos ya deshabilitados",
+  ],
+  ["es", { folders: 0, products: 1, activeProducts: 0 }, "1 producto, ya deshabilitado"],
+  ["es", { folders: 0, products: 2, activeProducts: 0 }, "2 productos, todos ya deshabilitados"],
+] as const)(
+  "the delete choice counts disabled products too and says how many are disabled (%s, %o)",
+  async (locale, counts, sentence) => {
+    setLocale(locale);
+    const el = await mountBrowser();
+    vi.mocked(el.api.summariseFolders).mockResolvedValue([
+      { id: "f", ...counts, routes: 0, ownRoutes: 0 },
+    ]);
+    await selectKeys(el, ["folder:f"]);
+    await press(el, "delete");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    expect(
+      el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent,
+    ).toContain(sentence);
+  },
+);
+it("says nothing about disabled products when none of the products to delete is disabled", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "f", folders: 1, products: 2, activeProducts: 2, routes: 0, ownRoutes: 0 },
+  ]);
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  expect(
+    el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent!.trim(),
+  ).toBe("Delete it too: 1 category and 2 products (products are disabled)");
+});
+it("words the whole Spanish delete choice when one of the products to delete is disabled", async () => {
+  setLocale("es");
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "f", folders: 0, products: 3, activeProducts: 2, routes: 0, ownRoutes: 0 },
+  ]);
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  expect(
+    el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent!.trim(),
+  ).toBe(
+    "Eliminarlo también: 0 categorías y 3 productos, 1 de ellos ya deshabilitado (los productos se deshabilitan)",
+  );
+});
+it("sums every selected category's products, disabled ones included, when only one of them holds disabled products", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 0, ownRoutes: 0 },
+    { id: "f", folders: 0, products: 3, activeProducts: 1, routes: 0, ownRoutes: 0 },
+  ]);
+  await selectKeys(el, ["folder:d", "folder:f"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  expect(el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent).toContain(
+    "1 category and 5 products, 2 of them already disabled",
+  );
 });
 it("reads the contents again at Delete and, when they changed, shows the new counts instead of deleting", async () => {
   const el = await mountBrowser();
@@ -2179,6 +2258,32 @@ it("when the server refuses an empty category's delete because it is no longer e
     { productIds: [], categoryIds: ["f"] },
     "move_up",
     [{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+  );
+});
+it("when the server refuses an empty category's delete because a disabled product joined it, counts that product and says it is disabled", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders)
+    .mockResolvedValueOnce([
+      { id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
+    ])
+    .mockResolvedValue([
+      { id: "f", folders: 0, products: 1, activeProducts: 0, routes: 0, ownRoutes: 0 },
+    ]);
+  vi.mocked(el.api.deleteCatalogueItems).mockRejectedValueOnce({
+    code: "category.contents_changed",
+    params: { categoryId: "f" },
+    status: 409,
+  });
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "delete");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      codeMessage("category.contents_changed"),
+    ),
+  );
+  expect(dialog(el)).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent).toContain(
+    "0 categories and 1 product, already disabled",
   );
 });
 it("deletes a folder through its own row action", async () => {
