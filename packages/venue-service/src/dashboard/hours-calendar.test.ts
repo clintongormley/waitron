@@ -674,6 +674,24 @@ describe("Hours calendar: a date's panel", () => {
     expect(panel(el).querySelectorAll("wt-button")).toHaveLength(0);
   });
 
+  it("never breaks a time range across lines beside a long name", async () => {
+    const long = "Restaurante principal de la planta baja con terraza cubierta";
+    const request = async (path: string) => {
+      const query = new URL(path, location.origin).searchParams;
+      const model = rangeModel(query.get("from")!, query.get("to")!);
+      model.subjects[0] = { ...model.subjects[0]!, name: long };
+      return model;
+    };
+    const el = await mount(new HoursApi(request as unknown as DashboardRequest));
+    await open(el, "2026-10-12");
+    const cell = panel(el).querySelector("tbody tr td")!;
+    expect(text(cell)).toBe("12:00–23:00");
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const lines = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+    expect(lines.size).toBe(1);
+  });
+
   it("keeps the panel and its actions on screen at phone width, and names dates in words", async () => {
     await page.viewport(390, 800);
     const { api } = server();

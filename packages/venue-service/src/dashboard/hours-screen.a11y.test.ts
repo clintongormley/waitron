@@ -83,12 +83,14 @@ async function mount(
     clockReadable?: boolean;
     refuse?: unknown;
     failRead?: boolean;
+    pendingRead?: boolean;
   } = {},
 ): Promise<HoursScreen> {
   history.replaceState(null, "", "/manage/hours");
   await mountThemed("<div></div>", theme);
   const request = async (_path: string, method: string) => {
     if (method === "GET") {
+      if (options.pendingRead) return new Promise(() => {});
       if (options.failRead) throw { code: "connection.failed" };
       return model(options.clockReadable);
     }
@@ -150,6 +152,11 @@ async function showTab(el: HoursScreen, key: string) {
 }
 
 const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> = {
+  "the first read still in flight": async (theme) => {
+    const el = await mount(theme, { pendingRead: true });
+    expect(el.shadowRoot!.querySelector("wt-tabs")).toBeNull();
+    return el;
+  },
   "a failed first read": async (theme) => {
     const el = await mount(theme, { failRead: true });
     expect(deep(el, '[data-test="page-alert"]')).not.toBeNull();

@@ -60,6 +60,13 @@ const formatUtc = (date: LocalDate, options: Intl.DateTimeFormatOptions) =>
   );
 
 /** A Monday-first month of Hours dates, read a month at a time, with the chosen date's panel. */
+/** Lets a list of periods wrap between periods, never inside one ("12:00–" / "23:00"). */
+function unbrokenRanges(text: string) {
+  return text
+    .split(", ")
+    .map((part, index) => html`${index === 0 ? "" : ", "}<span class="range">${part}</span>`);
+}
+
 @customElement("hours-calendar")
 export class HoursCalendar extends LitElement {
   static override styles = [
@@ -261,6 +268,9 @@ export class HoursCalendar extends LitElement {
       }
       .inherited {
         color: var(--wt-color-text-muted);
+      }
+      .range {
+        white-space: nowrap;
       }
       .visually-hidden {
         ${visuallyHiddenStyles}
@@ -566,9 +576,9 @@ export class HoursCalendar extends LitElement {
                   value.inherited
                     ? html`<span class="inherited"
                         ><span class="visually-hidden">${t("hours.inherited_prefix")}</span
-                        >${value.text}</span
+                        >${unbrokenRanges(value.text)}</span
                       >`
-                    : value.text
+                    : unbrokenRanges(value.text)
                 }
               </td>
             </tr>`;

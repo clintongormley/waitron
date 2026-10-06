@@ -616,6 +616,17 @@ describe("Hours: the standard week", () => {
     );
   });
 
+  it("asks the seven-day draft's confirmation in a compact dialog, and goes back to the full editor", async () => {
+    const { api } = server();
+    const el = await mount(api);
+    await click(el, cellButton(el, deli, 5));
+    expect(modal(el)!.getAttribute("size")).toBe("standard");
+    await click(el, saveButton(el));
+    expect(modal(el)!.getAttribute("size")).toBe("compact");
+    await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
+    expect(modal(el)!.getAttribute("size")).toBe("standard");
+  });
+
   it("configures a subject with no hours through a seven-day draft that starts Closed and saves after confirming", async () => {
     const { api, calls } = server();
     const el = await mount(api);

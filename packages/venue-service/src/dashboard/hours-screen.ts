@@ -963,7 +963,13 @@ export class HoursScreen extends LitElement {
       this.#generation,
       html`<wt-modal
         open
-        size=${editor.kind === "clear" || editor.kind === "delete" ? "compact" : "standard"}
+        size=${
+          editor.kind === "clear" ||
+          editor.kind === "delete" ||
+          (editor.kind === "configure" && editor.confirming)
+            ? "compact"
+            : "standard"
+        }
         heading=${content.heading}
         @wt-close=${() => this.#close()}
         @keydown=${(event: KeyboardEvent) =>
