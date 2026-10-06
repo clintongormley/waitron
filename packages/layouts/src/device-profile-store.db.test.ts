@@ -126,6 +126,7 @@ describe("device-profile store against a real migrated database", () => {
         canvasId: null,
         capabilities: ["open-cash-drawer", "integrated-card-payment"],
         inactivityTimeoutSeconds: null, // omitted on create ⇒ NULL (never)
+        startingScreen: null,
         receiptPrinterIds: [],
         paymentSlipPrinterIds: [],
       });
@@ -155,6 +156,7 @@ describe("device-profile store against a real migrated database", () => {
       capabilities: ["act-as-kds"],
       formFactor: "kds",
       inactivityTimeoutSeconds: null,
+      startingScreen: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
     });
@@ -212,6 +214,7 @@ describe("device-profile store against a real migrated database", () => {
       canvasId,
       capabilities: [],
       inactivityTimeoutSeconds: null,
+      startingScreen: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
     });
@@ -300,6 +303,7 @@ describe("device-profile store against a real migrated database", () => {
       canvasId,
       capabilities: ["integrated-card-payment"],
       inactivityTimeoutSeconds: null,
+      startingScreen: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
     });
@@ -623,6 +627,7 @@ describe("device-profile store against a real migrated database", () => {
       canvasId: null,
       capabilities: [],
       inactivityTimeoutSeconds: null,
+      startingScreen: null,
     });
 
     const renamed = await inTx((tx) =>

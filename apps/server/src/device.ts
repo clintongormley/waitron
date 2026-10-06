@@ -199,7 +199,8 @@ export async function approveDeviceProfiles(
   const alternatives = [...new Set(ids)].filter((id) => id !== device.profileId);
   for (const id of alternatives) {
     const profile = await getDeviceProfile(tx, id);
-    if (profile === undefined) throw new AppError("device_profile.not_found", {});
+    if (profile === undefined)
+      throw new AppError("device_profile.not_found", { field: "approvedProfileIds" });
     if (profile.formFactor !== device.formFactor)
       throw new AppError("device_profile.incompatible", { field: "approvedProfileIds" });
   }

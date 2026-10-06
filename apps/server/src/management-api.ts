@@ -55,7 +55,11 @@ import {
   readOwnProfile,
   updatePersonDetails,
   verifyOwnCredentials,
+  personRole,
+  readProfileAdmissions,
+  setProfileAdmission,
   type PersonRoleValue,
+  type ProfileAdmission,
   type TotpKeyRing,
 } from "@waitron/identity";
 import type { IssuedAccountAction } from "@waitron/identity";
@@ -70,6 +74,7 @@ import {
   getDeviceProfileWithPrinters,
   getStoredLogoRasters,
   getTenantTheme,
+  isSharedDisplay,
   listCanvases,
   listDeviceProfiles,
   putReceipt,
@@ -78,6 +83,8 @@ import {
   updateCanvas,
   updateDeviceProfile,
   validateReceiptConfig,
+  type DeviceProfileRow,
+  type FormFactor,
   type ProfilePrinterLists,
 } from "@waitron/layouts";
 import { imageExists, readImageBytes } from "@waitron/media";
@@ -503,6 +510,146 @@ async function saveKitchenLists(
 ): Promise<void> {
   if (lists.stationIds === undefined && lists.watcherIds === undefined) return;
   await VENUE_SERVICE.setProfileKitchenLists(tx, requireVenueCfg(deps), profileId, lists);
+}
+
+/** The settings every profile POST and PUT must carry, checked for shape. */
+function parseProfileSettings(body: ProfileBody) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new AppError("management.request_invalid", { field: "body" });
+  }
+  if (typeof body.name !== "string") {
+    throw new AppError("management.request_invalid", { field: "name" });
+  }
+  if (!("capabilities" in body)) {
+    throw new AppError("management.request_invalid", { field: "capabilities" });
+  }
+  return {
+    name: body.name,
+    capabilities: body.capabilities,
+    canvasId:
+      body.canvasId === undefined || body.canvasId === null
+        ? null
+        : requireBodyUuid(body.canvasId, "canvasId"),
+    inactivityTimeoutSeconds: parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds),
+    formFactor: requireEnum(body.formFactor, "formFactor", FORM_FACTORS),
+  };
+}
+
+/** The fields a device profile's POST and PUT read. */
+type ProfileBody = {
+  name?: unknown;
+  formFactor?: unknown;
+  canvasId?: unknown;
+  capabilities?: unknown;
+  inactivityTimeoutSeconds?: unknown;
+  startingScreen?: unknown;
+  receiptPrinterIds?: unknown;
+  paymentSlipPrinterIds?: unknown;
+  stationIds?: unknown;
+  watcherIds?: unknown;
+  departmentId?: unknown;
+  allowedZoneIds?: unknown;
+  startingZoneId?: unknown;
+  admittedRoles?: unknown;
+  personExceptions?: unknown;
+};
+
+type ProfileScope = {
+  departmentId: string | null;
+  allowedZoneIds: string[] | null;
+  startingZoneId: string | null;
+};
+
+const NO_SCOPE: ProfileScope = { departmentId: null, allowedZoneIds: null, startingZoneId: null };
+
+/**
+ * The department, zones and starting zone travel together: `undefined` when the body names none of
+ * them, otherwise each one it omits or sends as null is null (`allowedZoneIds` null is every zone).
+ */
+function parseProfileScope(body: ProfileBody): ProfileScope | undefined {
+  const { departmentId, allowedZoneIds, startingZoneId } = body;
+  if (departmentId === undefined && allowedZoneIds === undefined && startingZoneId === undefined)
+    return undefined;
+  return {
+    departmentId: departmentId == null ? null : requireBodyUuid(departmentId, "departmentId"),
+    allowedZoneIds:
+      allowedZoneIds == null ? null : parseIdLists(body, ["allowedZoneIds"]).allowedZoneIds!,
+    startingZoneId:
+      startingZoneId == null ? null : requireBodyUuid(startingZoneId, "startingZoneId"),
+  };
+}
+
+/** Shape only, each part only when present; `setProfileAdmission` refuses an empty role set. */
+function parseProfileAdmission(body: ProfileBody): Partial<ProfileAdmission> {
+  const admission: Partial<ProfileAdmission> = {};
+  if (body.admittedRoles !== undefined) {
+    const field = "admittedRoles";
+    if (!Array.isArray(body.admittedRoles))
+      throw new AppError("management.request_invalid", { field });
+    const roles = body.admittedRoles.map((role) => requireEnum(role, field, personRole.enumValues));
+    if (new Set(roles).size !== roles.length)
+      throw new AppError("management.request_invalid", { field });
+    admission.admittedRoles = roles;
+  }
+  if (body.personExceptions !== undefined) {
+    const field = "personExceptions";
+    if (!Array.isArray(body.personExceptions))
+      throw new AppError("management.request_invalid", { field });
+    const exceptions = body.personExceptions.map((entry: unknown) => {
+      const { personId, admitted } = (entry ?? {}) as { personId?: unknown; admitted?: unknown };
+      if (typeof admitted !== "boolean")
+        throw new AppError("management.request_invalid", { field });
+      return { personId: requireBodyUuid(personId, field), admitted };
+    });
+    if (new Set(exceptions.map((entry) => entry.personId)).size !== exceptions.length)
+      throw new AppError("management.request_invalid", { field });
+    admission.personExceptions = exceptions;
+  }
+  return admission;
+}
+
+/**
+ * A kitchen display keeps no scope, so one a body omits is cleared. Any other profile keeps the
+ * department it has stored when the body names no scope, and is refused without one.
+ */
+async function saveProfileScope(
+  tx: Transaction,
+  deps: ManagementApiDeps,
+  profile: { id: string; formFactor: FormFactor },
+  scope: ProfileScope | undefined,
+): Promise<void> {
+  if (scope === undefined && !isSharedDisplay(profile.formFactor)) {
+    const [stored] = await VENUE_SERVICE.readProfileServiceScopes(tx, [profile.id]);
+    if (stored!.departmentId !== null) return;
+  }
+  await VENUE_SERVICE.setProfileServiceScope(
+    tx,
+    requireVenueCfg(deps),
+    profile.id,
+    scope ?? NO_SCOPE,
+  );
+}
+
+/** Each profile row with where it serves and who may sign in on it, as last saved. */
+async function withProfileAccess(
+  tx: Transaction,
+  rows: readonly DeviceProfileRow[],
+): Promise<(DeviceProfileRow & ProfileScope & ProfileAdmission)[]> {
+  const ids = rows.map((row) => row.id);
+  const scopes = await VENUE_SERVICE.readProfileServiceScopes(tx, ids);
+  const admissions = await readProfileAdmissions(tx, ids);
+  return rows.map((row, index) => {
+    const scope = scopes[index]!;
+    const admission = admissions[index]!;
+    return {
+      ...row,
+      departmentId: scope.departmentId,
+      allowedZoneIds: scope.allowedZoneIds,
+      startingZoneId: scope.startingZoneId,
+      admittedRoles: admission.admittedRoles,
+      personExceptions: admission.personExceptions,
+    };
+  });
 }
 
 /**
@@ -1277,7 +1424,7 @@ export function mountManagementApi(
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return listDeviceProfiles(tx);
+        return withProfileAccess(tx, await listDeviceProfiles(tx));
       });
       return c.json({ deviceProfiles });
     }),
@@ -1306,7 +1453,8 @@ export function mountManagementApi(
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getDeviceProfileWithPrinters(tx, id);
+        const row = await getDeviceProfileWithPrinters(tx, id);
+        return row === undefined ? undefined : (await withProfileAccess(tx, [row]))[0];
       });
       if (profile === undefined) throw new AppError("device_profile.not_found", {});
       return c.json(profile);
@@ -1316,35 +1464,13 @@ export function mountManagementApi(
   app.post("/management-api/device-profiles", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{
-        name?: unknown;
-        formFactor?: unknown;
-        canvasId?: unknown;
-        capabilities?: unknown;
-        inactivityTimeoutSeconds?: unknown;
-        receiptPrinterIds?: unknown;
-        paymentSlipPrinterIds?: unknown;
-        stationIds?: unknown;
-        watcherIds?: unknown;
-      }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      if (typeof body.name !== "string") {
-        throw new AppError("management.request_invalid", { field: "name" });
-      }
-      if (!("capabilities" in body)) {
-        throw new AppError("management.request_invalid", { field: "capabilities" });
-      }
-      const { name, capabilities } = body;
-      const canvasId =
-        body.canvasId === undefined || body.canvasId === null
-          ? null
-          : requireBodyUuid(body.canvasId, "canvasId");
-      const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
-      const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
+      const body = await readJsonBody<ProfileBody>(c);
+      const { name, capabilities, formFactor, canvasId, inactivityTimeoutSeconds } =
+        parseProfileSettings(body);
       const lists = parsePrinterLists(body);
       const kitchenLists = parseIdLists(body, ["stationIds", "watcherIds"]);
+      const scope = parseProfileScope(body);
+      const admission = parseProfileAdmission(body);
       const result = await withTransaction(deps.db, async (tx) => {
         await requireListedPrinters(tx, sessionId, lists);
         const created = await createDeviceProfile(tx, {
@@ -1354,53 +1480,35 @@ export function mountManagementApi(
           canvasId,
           capabilities,
           inactivityTimeoutSeconds,
+          startingScreen: body.startingScreen,
           printerLists: {
             receiptPrinterIds: lists.receiptPrinterIds ?? [],
             paymentSlipPrinterIds: lists.paymentSlipPrinterIds ?? [],
           },
         });
+        await saveProfileScope(tx, deps, created, scope);
         await saveKitchenLists(tx, deps, created.id, kitchenLists);
-        return created;
+        await setProfileAdmission(tx, created.id, admission);
+        return (await withProfileAccess(tx, [created]))[0];
       });
       return c.json(result, 201);
     }),
   );
 
-  // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null. An omitted
-  // printer, station or watcher list is the exception: it stays as it was.
+  // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null. These stay as
+  // they were when omitted: the starting screen, a printer, station or watcher list, the role set,
+  // the person exceptions, and the department with its zones and starting zone.
   app.put("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireDeviceProfileId(c.req.param("id"));
-      const body = await readJsonBody<{
-        name?: unknown;
-        formFactor?: unknown;
-        canvasId?: unknown;
-        capabilities?: unknown;
-        inactivityTimeoutSeconds?: unknown;
-        receiptPrinterIds?: unknown;
-        paymentSlipPrinterIds?: unknown;
-        stationIds?: unknown;
-        watcherIds?: unknown;
-      }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      if (typeof body.name !== "string") {
-        throw new AppError("management.request_invalid", { field: "name" });
-      }
-      if (!("capabilities" in body)) {
-        throw new AppError("management.request_invalid", { field: "capabilities" });
-      }
-      const { name, capabilities } = body;
-      const canvasId =
-        body.canvasId === undefined || body.canvasId === null
-          ? null
-          : requireBodyUuid(body.canvasId, "canvasId");
-      const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
-      const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
+      const body = await readJsonBody<ProfileBody>(c);
+      const { name, capabilities, formFactor, canvasId, inactivityTimeoutSeconds } =
+        parseProfileSettings(body);
       const lists = parsePrinterLists(body);
       const kitchenLists = parseIdLists(body, ["stationIds", "watcherIds"]);
+      const scope = parseProfileScope(body);
+      const admission = parseProfileAdmission(body);
       const result = await withTransaction(deps.db, async (tx) => {
         await requireListedPrinters(tx, sessionId, lists);
         const printerLists =
@@ -1415,10 +1523,13 @@ export function mountManagementApi(
           canvasId,
           capabilities,
           inactivityTimeoutSeconds,
+          startingScreen: body.startingScreen,
           printerLists,
         });
+        await saveProfileScope(tx, deps, updated, scope);
         await saveKitchenLists(tx, deps, id, kitchenLists);
-        return updated;
+        await setProfileAdmission(tx, id, admission);
+        return (await withProfileAccess(tx, [updated]))[0];
       });
       return c.json(result);
     }),

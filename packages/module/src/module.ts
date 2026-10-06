@@ -448,6 +448,33 @@ export interface VenueServiceContribution {
     profileId: string,
     lists: { stationIds?: readonly string[]; watcherIds?: readonly string[] },
   ): Promise<void>;
+  /** Each named profile's scope as last saved: `allowedZoneIds` null means every zone of the
+   *  department, and a zone switched off since is still named. No saved scope reads all null. */
+  readProfileServiceScopes(
+    tx: Transaction,
+    profileIds: readonly string[],
+  ): Promise<
+    {
+      profileId: string;
+      departmentId: string | null;
+      allowedZoneIds: string[] | null;
+      startingZoneId: string | null;
+    }[]
+  >;
+  /** Replaces a profile's department, zones and starting zone; its station and watcher lists stay.
+   *  Refused `device_profile.access_invalid`, naming the field, for no department on a profile
+   *  that is not a kitchen display, any of the three on one that is, a zone outside the
+   *  department or a starting zone outside the allowed ones. */
+  setProfileServiceScope(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    profileId: string,
+    scope: {
+      departmentId: string | null;
+      allowedZoneIds: readonly string[] | null;
+      startingZoneId: string | null;
+    },
+  ): Promise<void>;
   /** Refused `station.not_allowed` or `watcher.not_allowed` unless the profile's list names the
    *  device's station or watcher; an empty list permits none. */
   assertProfileBinding(

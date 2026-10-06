@@ -71,4 +71,6 @@ export const IDENTITY_CHANGE_SOURCES: readonly ChangeSource[] = [
     type: "webauthn_credentials",
     related: [{ type: "persons", column: "person_id" }],
   },
+  { table: "device_profile_admission_roles", type: "device_profile_admission_roles" },
+  { table: "device_profile_admission_persons", type: "device_profile_admission_persons" },
 ];

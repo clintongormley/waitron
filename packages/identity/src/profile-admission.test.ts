@@ -4,7 +4,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { canUseDeviceProfile, listStaffAdmittedTo } from "./profile-admission.js";
+import { AppError } from "@waitron/shared";
+import {
+  canUseDeviceProfile,
+  listStaffAdmittedTo,
+  readProfileAdmissions,
+  setProfileAdmission,
+  type ProfileAdmission,
+} from "./profile-admission.js";
 import {
   deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,
@@ -262,5 +269,118 @@ describe("listStaffAdmittedTo", () => {
   it("lists nobody for a profile that does not exist", async () => {
     await seedPerson(suite.db, "admin");
     expect(await run((tx) => listStaffAdmittedTo(tx, crypto.randomUUID()))).toEqual([]);
+  });
+});
+
+describe("a profile's sign-in rule as a manager edits it", () => {
+  const read = (ids: string[]) => run((tx) => readProfileAdmissions(tx, ids));
+  const save = (profileId: string, input: Partial<ProfileAdmission>) =>
+    run((tx) => setProfileAdmission(tx, profileId, input));
+
+  async function refusal(promise: Promise<unknown>): Promise<unknown> {
+    try {
+      await promise;
+    } catch (error) {
+      if (error instanceof AppError) return { code: error.code, params: { ...error.params } };
+      throw error;
+    }
+    return "saved";
+  }
+
+  async function roleRows(profileId: string): Promise<string[]> {
+    const rows = await suite.db
+      .select({ role: deviceProfileAdmissionRoles.role })
+      .from(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
+    return rows.map((row) => row.role).sort();
+  }
+
+  it("reads a profile with no rows as every role and no exceptions, in the order asked", async () => {
+    const open = await seedProfile();
+    const narrow = await seedProfile();
+    await admitRoles(narrow, ["manager", "staff"]);
+    const person = await seedPerson(suite.db, "staff");
+    await setException(narrow, person, false);
+    expect(await read([narrow, open])).toEqual([
+      {
+        profileId: narrow,
+        admittedRoles: ["staff", "manager"],
+        personExceptions: [{ personId: person, admitted: false }],
+      },
+      { profileId: open, admittedRoles: [...ROLES], personExceptions: [] },
+    ]);
+    expect(await read([])).toEqual([]);
+  });
+
+  it("stores a narrowed role set, and every role as no rows", async () => {
+    const profileId = await seedProfile();
+    await save(profileId, { admittedRoles: ["supervisor", "staff", "staff"] });
+    expect(await roleRows(profileId)).toEqual(["staff", "supervisor"]);
+    await save(profileId, { admittedRoles: [...ROLES] });
+    expect(await roleRows(profileId)).toEqual([]);
+    expect((await read([profileId]))[0]!.admittedRoles).toEqual([...ROLES]);
+  });
+
+  it("refuses an empty role set, which would admit every role, and keeps the stored one", async () => {
+    const profileId = await seedProfile();
+    await save(profileId, { admittedRoles: ["manager"] });
+    expect(await refusal(save(profileId, { admittedRoles: [] }))).toEqual({
+      code: "device_profile.admission_invalid",
+      params: { field: "admittedRoles", reason: "empty" },
+    });
+    expect(await roleRows(profileId)).toEqual(["manager"]);
+  });
+
+  it("replaces the exceptions, clears them on an empty list, and keeps the part a save omits", async () => {
+    const profileId = await seedProfile();
+    const [a, b] = [await seedPerson(suite.db, "staff"), await seedPerson(suite.db, "manager")];
+    await save(profileId, {
+      admittedRoles: ["manager"],
+      personExceptions: [
+        { personId: a, admitted: true },
+        { personId: b, admitted: false },
+      ],
+    });
+    await save(profileId, { personExceptions: [{ personId: b, admitted: true }] });
+    expect(await read([profileId])).toEqual([
+      {
+        profileId,
+        admittedRoles: ["manager"],
+        personExceptions: [{ personId: b, admitted: true }],
+      },
+    ]);
+    await save(profileId, { admittedRoles: ["staff"] });
+    expect((await read([profileId]))[0]!.personExceptions).toEqual([
+      { personId: b, admitted: true },
+    ]);
+    await save(profileId, { personExceptions: [] });
+    expect((await read([profileId]))[0]).toEqual({
+      profileId,
+      admittedRoles: ["staff"],
+      personExceptions: [],
+    });
+  });
+
+  it("refuses an exception for a person that does not exist, naming them, and keeps the stored ones", async () => {
+    const profileId = await seedProfile();
+    const known = await seedPerson(suite.db, "staff");
+    await save(profileId, { personExceptions: [{ personId: known, admitted: true }] });
+    const ghost = crypto.randomUUID();
+    expect(
+      await refusal(
+        save(profileId, {
+          personExceptions: [
+            { personId: known, admitted: false },
+            { personId: ghost, admitted: true },
+          ],
+        }),
+      ),
+    ).toEqual({
+      code: "device_profile.admission_invalid",
+      params: { field: "personExceptions", reason: "not_found", personId: ghost },
+    });
+    expect((await read([profileId]))[0]!.personExceptions).toEqual([
+      { personId: known, admitted: true },
+    ]);
   });
 });

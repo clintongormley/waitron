@@ -43,8 +43,10 @@ import {
   assertProfileZone,
   readProfileKitchenLists,
   readProfileServiceAccess,
+  readProfileServiceScopes,
   readProfileZones,
   setProfileKitchenLists,
+  setProfileServiceScope,
 } from "./profile-access.js";
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
@@ -74,6 +76,8 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   assertProfileZone,
   readProfileKitchenLists,
   setProfileKitchenLists,
+  readProfileServiceScopes,
+  setProfileServiceScope,
   assertProfileBinding,
   orderInZones,
   recordOrderContext: recordOrderServiceContext,

@@ -170,6 +170,19 @@ export async function readProfileZones(
   };
 }
 
+/** The department and zone half of {@link ProfileServiceAccessInput}. */
+export type ProfileServiceScope = Pick<
+  ProfileServiceAccessInput,
+  "departmentId" | "allowedZoneIds" | "startingZoneId"
+>;
+
+export interface StoredProfileServiceScope {
+  profileId: string;
+  departmentId: string | null;
+  allowedZoneIds: string[] | null;
+  startingZoneId: string | null;
+}
+
 /** Replaces the profile's whole service scope, after checking every id against the venue's rows. */
 export async function setProfileServiceAccess(
   tx: Transaction,
@@ -177,38 +190,99 @@ export async function setProfileServiceAccess(
   profileId: string,
   input: ProfileServiceAccessInput,
 ): Promise<void> {
+  const scope = await checkedScope(tx, cfg, await liveFormFactor(tx, profileId), input);
+  await checkLists(tx, cfg, profileId, input, await storedLists(tx, profileId));
+  await writeScope(tx, profileId, scope);
+  await writeLists(tx, profileId, input);
+}
+
+/**
+ * Replaces the profile's department, zones and starting zone, checked as
+ * {@link setProfileServiceAccess} checks them, except that a profile other than a shared display
+ * must name a department; its station and watcher lists stay as stored.
+ */
+export async function setProfileServiceScope(
+  tx: Transaction,
+  cfg: VenueScope,
+  profileId: string,
+  input: ProfileServiceScope,
+): Promise<void> {
+  const formFactor = await liveFormFactor(tx, profileId);
+  if (formFactor !== SHARED_DISPLAY && input.departmentId === null)
+    refuse("departmentId", "required");
+  await writeScope(tx, profileId, await checkedScope(tx, cfg, formFactor, input));
+}
+
+/**
+ * Each profile's scope as a manager last saved it, for the profiles `profileIds` names: unlike
+ * {@link readProfileZones}, `allowedZoneIds` null means every zone of the department, and a zone
+ * or department switched off since is still named. A profile with no saved scope reads all null.
+ */
+export async function readProfileServiceScopes(
+  tx: Transaction,
+  profileIds: readonly string[],
+): Promise<StoredProfileServiceScope[]> {
+  if (profileIds.length === 0) return [];
+  const scopes = await tx
+    .select({
+      profileId: deviceProfileServiceAccess.deviceProfileId,
+      departmentId: deviceProfileServiceAccess.departmentId,
+      everyZone: deviceProfileServiceAccess.everyZone,
+      startingZoneId: deviceProfileServiceAccess.startingZoneId,
+    })
+    .from(deviceProfileServiceAccess)
+    .where(inArray(deviceProfileServiceAccess.deviceProfileId, [...profileIds]));
+  const zones = await tx
+    .select({ profileId: deviceProfileZones.deviceProfileId, zoneId: deviceProfileZones.zoneId })
+    .from(deviceProfileZones)
+    .innerJoin(floorZones, eq(floorZones.id, deviceProfileZones.zoneId))
+    .where(inArray(deviceProfileZones.deviceProfileId, [...profileIds]))
+    .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
+  return profileIds.map((profileId) => {
+    const scope = scopes.find((row) => row.profileId === profileId);
+    if (scope === undefined)
+      return { profileId, departmentId: null, allowedZoneIds: null, startingZoneId: null };
+    return {
+      profileId,
+      departmentId: scope.departmentId,
+      allowedZoneIds: scope.everyZone
+        ? null
+        : zones.filter((row) => row.profileId === profileId).map((row) => row.zoneId),
+      startingZoneId: scope.startingZoneId,
+    };
+  });
+}
+
+async function liveFormFactor(tx: Transaction, profileId: string): Promise<string> {
   const [profile] = await tx
     .select({ formFactor: deviceProfiles.formFactor })
     .from(deviceProfiles)
     .where(and(eq(deviceProfiles.id, profileId), isNull(deviceProfiles.retiredAt)));
   if (profile === undefined) refuse("profileId", "not_found");
-  if (profile.formFactor === SHARED_DISPLAY) {
-    if (input.departmentId !== null) refuse("departmentId", "shared_display");
-    if (input.allowedZoneIds !== null) refuse("allowedZoneIds", "shared_display");
-    if (input.startingZoneId !== null) refuse("startingZoneId", "shared_display");
-  }
+  return profile.formFactor;
+}
 
-  const scope = await checkedScope(tx, cfg, input);
-  await checkLists(tx, cfg, profileId, input, await storedLists(tx, profileId));
-
+async function writeScope(
+  tx: Transaction,
+  profileId: string,
+  scope: { departmentId: string; zoneIds: string[] | null; startingZoneId: string } | null,
+): Promise<void> {
   // Deleting the scope row also deletes its `device_profile_zones` rows, through their key.
   await tx
     .delete(deviceProfileServiceAccess)
     .where(eq(deviceProfileServiceAccess.deviceProfileId, profileId));
-  if (scope !== null) {
-    await tx.insert(deviceProfileServiceAccess).values({
-      deviceProfileId: profileId,
-      departmentId: scope.departmentId,
-      everyZone: scope.zoneIds === null,
-      startingZoneId: scope.startingZoneId,
-    });
-    if (scope.zoneIds !== null) {
-      await tx
-        .insert(deviceProfileZones)
-        .values(scope.zoneIds.map((zoneId) => ({ deviceProfileId: profileId, zoneId })));
-    }
+  if (scope === null) return;
+  await tx.insert(deviceProfileServiceAccess).values({
+    deviceProfileId: profileId,
+    departmentId: scope.departmentId,
+    everyZone: scope.zoneIds === null,
+    startingZoneId: scope.startingZoneId,
+  });
+  if (scope.zoneIds !== null) {
+    await tx
+      .insert(deviceProfileZones)
+      .values(scope.zoneIds.map((zoneId) => ({ deviceProfileId: profileId, zoneId })));
   }
-  await writeLists(tx, profileId, input);
 }
 
 /** The stations and watchers a device using the profile may show. */
@@ -434,8 +508,14 @@ async function writeLists(
 async function checkedScope(
   tx: Transaction,
   cfg: VenueScope,
-  input: ProfileServiceAccessInput,
+  formFactor: string,
+  input: ProfileServiceScope,
 ): Promise<{ departmentId: string; zoneIds: string[] | null; startingZoneId: string } | null> {
+  if (formFactor === SHARED_DISPLAY) {
+    if (input.departmentId !== null) refuse("departmentId", "shared_display");
+    if (input.allowedZoneIds !== null) refuse("allowedZoneIds", "shared_display");
+    if (input.startingZoneId !== null) refuse("startingZoneId", "shared_display");
+  }
   if (input.departmentId === null) {
     if (input.allowedZoneIds !== null) refuse("allowedZoneIds", "department_required");
     if (input.startingZoneId !== null) refuse("startingZoneId", "department_required");

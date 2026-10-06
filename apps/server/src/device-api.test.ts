@@ -2542,6 +2542,19 @@ describe("a device's approved profiles and switching its active one", () => {
       expect(row!.label).toBe("Caja");
     });
 
+    it("names the approvals field when an approved profile is unknown", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const res = await manage(app, venue, t.deviceId, { approvedProfileIds: [randomUUID()] });
+      expect({ status: res.status, body: await res.json() }).toEqual({
+        status: 404,
+        body: {
+          error: { code: "device_profile.not_found", params: { field: "approvedProfileIds" } },
+        },
+      });
+    });
+
     it("refuses a profile of another form factor as device_profile.incompatible, changing nothing", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);

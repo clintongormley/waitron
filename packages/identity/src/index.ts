@@ -7,7 +7,13 @@ export type { SecretCheck } from "./secret-check.js";
 export { foldForUniqueness } from "./fold.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";
 export { endDeviceSessions, endSession, loginWithPin } from "./login.js";
-export { canUseDeviceProfile, listStaffAdmittedTo } from "./profile-admission.js";
+export {
+  canUseDeviceProfile,
+  listStaffAdmittedTo,
+  readProfileAdmissions,
+  setProfileAdmission,
+} from "./profile-admission.js";
+export type { ProfileAdmission } from "./profile-admission.js";
 export {
   deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,

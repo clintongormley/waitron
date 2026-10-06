@@ -10,6 +10,12 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { DEFAULT_CANVASES } from "@waitron/layouts";
 import type { CanvasDef } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import {
+  createDepartment,
+  createServiceZone,
+  deactivateServiceZone,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -59,6 +65,10 @@ function phoneCanvas(title: string): CanvasDef {
 /** The venue the station and watcher list routes are scoped to, as boot threads it. */
 let venueCfg: TillConfig;
 
+/** The provisioned counter's department and zone: a profile that is not a kitchen display must
+ * name a department to be saved. */
+let ordering: { departmentId: string; startingZoneId: string };
+
 async function setupTenant(): Promise<void> {
   const venue = await applyVenue(
     planVenue(
@@ -101,6 +111,10 @@ async function setupTenant(): Promise<void> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
+  const [counter] = await suite.db
+    .select({ departmentId: zoneServicePolicies.departmentId, zoneId: zoneServicePolicies.zoneId })
+    .from(zoneServicePolicies);
+  ordering = { departmentId: counter!.departmentId, startingZoneId: counter!.zoneId };
 
   // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
   // generators, which a raw SQL insert never reaches.
@@ -118,6 +132,13 @@ async function setupTenant(): Promise<void> {
       });
     }
   });
+}
+
+let tenant: Promise<void> | undefined;
+
+/** Each describe that needs the venue waits for the one setup, so it also runs on its own. */
+function setupTenantOnce(): Promise<void> {
+  return (tenant ??= setupTenant());
 }
 
 function mountApp(): Hono {
@@ -175,7 +196,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   let managerCookie: string;
 
   beforeAll(async () => {
-    await setupTenant();
+    await setupTenantOnce();
     managerCookie = await login(mountApp(), MANAGER_EMAIL);
   });
 
@@ -190,6 +211,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name,
         formFactor: "till",
+        ...ordering,
         canvasId: null,
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
       }),
@@ -206,6 +228,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       inactivityTimeoutSeconds: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
+      startingScreen: null,
+      departmentId: ordering.departmentId,
+      allowedZoneIds: null,
+      startingZoneId: ordering.startingZoneId,
+      admittedRoles: ["staff", "supervisor", "manager", "admin"],
+      personExceptions: [],
     });
     const { id } = row;
 
@@ -223,6 +251,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       inactivityTimeoutSeconds: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
+      startingScreen: null,
+      departmentId: ordering.departmentId,
+      allowedZoneIds: null,
+      startingZoneId: ordering.startingZoneId,
+      admittedRoles: ["staff", "supervisor", "manager", "admin"],
+      personExceptions: [],
     });
 
     // LIST includes it.
@@ -256,6 +290,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       inactivityTimeoutSeconds: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
+      startingScreen: null,
+      departmentId: null,
+      allowedZoneIds: null,
+      startingZoneId: null,
+      admittedRoles: ["staff", "supervisor", "manager", "admin"],
+      personExceptions: [],
     });
 
     // DELETE → 204, then GET → 404 device_profile.not_found.
@@ -283,6 +323,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Bound"),
         formFactor: "till",
+        ...ordering,
         canvasId,
         capabilities: [],
       }),
@@ -303,6 +344,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Screens"),
         formFactor: "phone-portrait",
+        ...ordering,
         canvasId: null,
         capabilities: ["show-station", "show-expo", "show-schedule"],
       }),
@@ -328,6 +370,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Handheld"),
         formFactor: "phone-portrait",
+        ...ordering,
         canvasId: null,
         capabilities: [],
         inactivityTimeoutSeconds: 300,
@@ -543,6 +586,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Referenced"),
         formFactor: "till",
+        ...ordering,
         canvasId: null,
         capabilities: [],
       }),
@@ -579,13 +623,25 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const first = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name, formFactor: "till", canvasId: null, capabilities: [] }),
+      body: JSON.stringify({
+        name,
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+        ...ordering,
+      }),
     });
     expect(first.status).toBe(201);
     const second = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name, formFactor: "till", canvasId: null, capabilities: [] }),
+      body: JSON.stringify({
+        name,
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+        ...ordering,
+      }),
     });
     expect(second.status).toBe(409);
     expect((await second.json()) as { error: { code: string } }).toMatchObject({
@@ -691,6 +747,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Editable"),
         formFactor: "till",
+        ...ordering,
         canvasId: null,
         capabilities: [],
       }),
@@ -755,6 +812,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Target"),
         formFactor: "till",
+        ...ordering,
         canvasId: null,
         capabilities: [],
       }),
@@ -820,6 +878,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Listed"),
         formFactor: "till",
+        ...ordering,
         canvasId: null,
         capabilities: [],
         receiptPrinterIds: [p1],
@@ -852,6 +911,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name,
         formFactor: "till",
+        ...ordering,
         canvasId: null,
         capabilities: [],
         receiptPrinterIds: [p1],
@@ -909,7 +969,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("refuses a printer list that is not an array of ids, and a printer that does not exist", async () => {
     const app = mountApp();
-    const base = { formFactor: "till", canvasId: null, capabilities: [] };
+    const base = { formFactor: "till", canvasId: null, capabilities: [], ...ordering };
     const DUPLICATE = randomUUID();
     for (const [field, value] of [
       ["receiptPrinterIds", "x"],
@@ -1157,6 +1217,7 @@ describe("Management API — a device profile's home layouts", () => {
       body: JSON.stringify({
         name: uniqueName("Handheld"),
         formFactor: "phone-portrait",
+        ...ordering,
         canvasId: null,
         capabilities: [],
       }),
@@ -1176,5 +1237,427 @@ describe("Management API — a device profile's home layouts", () => {
       body: JSON.stringify({ layoutId: null }),
     });
     expect(saved.status).toBe(404);
+  });
+});
+
+describe("Management API — who and where a device profile serves (W97)", () => {
+  type Detail = ProfileRow & {
+    startingScreen: string | null;
+    departmentId: string | null;
+    allowedZoneIds: string[] | null;
+    startingZoneId: string | null;
+    admittedRoles: string[];
+    personExceptions: { personId: string; admitted: boolean }[];
+  };
+  const EVERY_ROLE = ["staff", "supervisor", "manager", "admin"];
+
+  let cookie: string;
+  /** A second zone of the counter's department, and a department of its own with one zone. */
+  let place: { terrace: string; deli: string; deliCounter: string };
+  let clerk: string;
+
+  beforeAll(async () => {
+    await setupTenantOnce();
+    cookie = await login(mountApp(), MANAGER_EMAIL);
+    place = await withTransaction(suite.db, async (tx) => {
+      const terrace = await createServiceZone(tx, venueCfg, {
+        name: uniqueName("Terrace"),
+        departmentId: ordering.departmentId,
+      });
+      const deli = await createDepartment(tx, venueCfg, {
+        name: uniqueName("Deli"),
+        defaultServiceMode: "prepay",
+      });
+      const deliCounter = await createServiceZone(tx, venueCfg, {
+        name: uniqueName("Deli counter"),
+        departmentId: deli.id,
+      });
+      return { terrace: terrace.id, deli: deli.id, deliCounter: deliCounter.id };
+    });
+    const [person] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, STAFF_EMAIL));
+    clerk = person!.id;
+  });
+
+  async function send(
+    method: "POST" | "PUT",
+    body: Record<string, unknown>,
+    id?: string,
+  ): Promise<{ status: number; body: unknown }> {
+    const res = await mountApp().request(
+      id === undefined
+        ? "/management-api/device-profiles"
+        : `/management-api/device-profiles/${id}`,
+      { method, headers: { ...JSON_HEADERS, cookie }, body: JSON.stringify(body) },
+    );
+    return { status: res.status, body: await res.json() };
+  }
+
+  async function read(id: string): Promise<Detail> {
+    const res = await mountApp().request(`/management-api/device-profiles/${id}`, {
+      headers: { cookie },
+    });
+    expect(res.status).toBe(200);
+    return (await res.json()) as Detail;
+  }
+
+  async function listed(id: string): Promise<Detail | undefined> {
+    const res = await mountApp().request("/management-api/device-profiles", {
+      headers: { cookie },
+    });
+    expect(res.status).toBe(200);
+    const { deviceProfiles } = (await res.json()) as { deviceProfiles: Detail[] };
+    return deviceProfiles.find((profile) => profile.id === id);
+  }
+
+  const handheld = (name: string, extra: Record<string, unknown> = {}) => ({
+    name,
+    formFactor: "phone-portrait",
+    canvasId: null,
+    capabilities: ["take-orders", "take-cash", "show-schedule"],
+    ...extra,
+  });
+
+  it("stores and reads back where an ordering profile serves, who signs in, its actions, screens and starting screen", async () => {
+    const name = uniqueName("Terrace handheld");
+    const created = await send(
+      "POST",
+      handheld(name, {
+        departmentId: ordering.departmentId,
+        allowedZoneIds: [place.terrace],
+        startingZoneId: place.terrace,
+        admittedRoles: ["staff", "supervisor"],
+        personExceptions: [{ personId: clerk, admitted: false }],
+        startingScreen: "show-schedule",
+      }),
+    );
+    expect(created.status).toBe(201);
+    const id = (created.body as Detail).id;
+    const expected: Detail = {
+      id,
+      name,
+      formFactor: "phone-portrait",
+      canvasId: null,
+      capabilities: ["take-orders", "take-cash", "show-schedule"],
+      inactivityTimeoutSeconds: null,
+      startingScreen: "show-schedule",
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
+      departmentId: ordering.departmentId,
+      allowedZoneIds: [place.terrace],
+      startingZoneId: place.terrace,
+      admittedRoles: ["staff", "supervisor"],
+      personExceptions: [{ personId: clerk, admitted: false }],
+    };
+    expect(created.body).toEqual(expected);
+    expect(await read(id)).toEqual(expected);
+    expect(await listed(id)).toEqual(expected);
+  });
+
+  it("replaces them with a PUT, and a PUT that names none of them keeps them", async () => {
+    const name = uniqueName("Replaced");
+    const created = await send(
+      "POST",
+      handheld(name, {
+        ...ordering,
+        admittedRoles: ["staff"],
+        personExceptions: [{ personId: clerk, admitted: true }],
+        startingScreen: "show-schedule",
+      }),
+    );
+    const id = (created.body as Detail).id;
+    const replaced = await send(
+      "PUT",
+      handheld(name, {
+        capabilities: ["take-orders", "show-expo"],
+        departmentId: place.deli,
+        startingZoneId: place.deliCounter,
+        admittedRoles: ["manager", "admin"],
+        personExceptions: [],
+        startingScreen: "show-expo",
+      }),
+      id,
+    );
+    expect(replaced.status).toBe(200);
+    const after = {
+      capabilities: ["take-orders", "show-expo"],
+      startingScreen: "show-expo",
+      departmentId: place.deli,
+      allowedZoneIds: null,
+      startingZoneId: place.deliCounter,
+      admittedRoles: ["manager", "admin"],
+      personExceptions: [],
+    };
+    expect(await read(id)).toMatchObject(after);
+
+    const kept = await send(
+      "PUT",
+      handheld(name, { capabilities: ["take-orders", "show-expo"] }),
+      id,
+    );
+    expect(kept.status).toBe(200);
+    expect(await read(id)).toMatchObject(after);
+  });
+
+  it("takes an omitted zone list, role set, exception list and starting screen as every zone, every role, none and none, and an explicit null the same", async () => {
+    for (const extra of [{}, { allowedZoneIds: null, startingScreen: null }]) {
+      const created = await send(
+        "POST",
+        handheld(uniqueName("Defaults"), { ...ordering, ...extra }),
+      );
+      expect(created.status).toBe(201);
+      expect(created.body).toMatchObject({
+        departmentId: ordering.departmentId,
+        allowedZoneIds: null,
+        startingZoneId: ordering.startingZoneId,
+        admittedRoles: EVERY_ROLE,
+        personExceptions: [],
+        startingScreen: null,
+      });
+    }
+  });
+
+  it("keeps a starting screen a PUT omits, and clears it on an explicit null", async () => {
+    const name = uniqueName("Start screen");
+    const created = await send(
+      "POST",
+      handheld(name, { ...ordering, startingScreen: "show-schedule" }),
+    );
+    const id = (created.body as Detail).id;
+    await send("PUT", handheld(name), id);
+    expect((await read(id)).startingScreen).toBe("show-schedule");
+    await send("PUT", handheld(name, { startingScreen: null }), id);
+    expect((await read(id)).startingScreen).toBeNull();
+  });
+
+  it("refuses a profile that takes orders without a department, omitted or null, naming the field", async () => {
+    for (const extra of [
+      {},
+      { departmentId: null },
+      { departmentId: null, startingZoneId: null },
+    ]) {
+      const name = uniqueName("No department");
+      expect(await send("POST", handheld(name, extra))).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: "device_profile.access_invalid",
+            params: { field: "departmentId", reason: "required" },
+          },
+        },
+      });
+      const res = await mountApp().request("/management-api/device-profiles", {
+        headers: { cookie },
+      });
+      const { deviceProfiles } = (await res.json()) as { deviceProfiles: Detail[] };
+      expect(deviceProfiles.some((profile) => profile.name === name)).toBe(false);
+    }
+    const created = await send("POST", handheld(uniqueName("Had one"), ordering));
+    const id = (created.body as Detail).id;
+    expect(await send("PUT", handheld(uniqueName("Lost it"), { departmentId: null }), id)).toEqual({
+      status: 400,
+      body: {
+        error: {
+          code: "device_profile.access_invalid",
+          params: { field: "departmentId", reason: "required" },
+        },
+      },
+    });
+    expect((await read(id)).departmentId).toBe(ordering.departmentId);
+  });
+
+  it("refuses an unknown department, a zone of another department and an unknown person, naming the field, and leaves the stored profile as it was", async () => {
+    const name = uniqueName("Kept policy");
+    const created = await send(
+      "POST",
+      handheld(name, {
+        ...ordering,
+        admittedRoles: ["staff"],
+        personExceptions: [{ personId: clerk, admitted: true }],
+      }),
+    );
+    const id = (created.body as Detail).id;
+    const before = await read(id);
+    const refusals = [
+      [
+        { departmentId: randomUUID(), startingZoneId: place.terrace },
+        "device_profile.access_invalid",
+        { field: "departmentId", reason: "not_found" },
+      ],
+      [
+        { ...ordering, allowedZoneIds: [ordering.startingZoneId, place.deliCounter] },
+        "device_profile.access_invalid",
+        { field: "allowedZoneIds", reason: "outside_department" },
+      ],
+      [
+        { departmentId: ordering.departmentId, startingZoneId: place.deliCounter },
+        "device_profile.access_invalid",
+        { field: "startingZoneId", reason: "outside_department" },
+      ],
+      [
+        {
+          departmentId: place.deli,
+          startingZoneId: place.deliCounter,
+          personExceptions: [{ personId: randomUUID(), admitted: true }],
+        },
+        "device_profile.admission_invalid",
+        { field: "personExceptions", reason: "not_found" },
+      ],
+      [
+        { departmentId: place.deli, startingZoneId: place.deliCounter, admittedRoles: [] },
+        "device_profile.admission_invalid",
+        { field: "admittedRoles", reason: "empty" },
+      ],
+    ] as const;
+    for (const [extra, code, params] of refusals) {
+      const res = await send(
+        "PUT",
+        handheld(uniqueName("Refused"), { capabilities: ["take-orders"], ...extra }),
+        id,
+      );
+      expect({ extra, ...res }).toEqual({
+        extra,
+        status: 400,
+        body: { error: { code, params: expect.objectContaining(params) } },
+      });
+      expect(await read(id)).toEqual(before);
+    }
+  });
+
+  it("refuses a malformed scope, role set, exception list or starting screen, naming the field", async () => {
+    const twice = randomUUID();
+    const cases = [
+      ["departmentId", { departmentId: "not-a-uuid", startingZoneId: ordering.startingZoneId }],
+      ["departmentId", { departmentId: 7, startingZoneId: ordering.startingZoneId }],
+      ["allowedZoneIds", { ...ordering, allowedZoneIds: "every" }],
+      ["allowedZoneIds", { ...ordering, allowedZoneIds: [twice, twice] }],
+      ["startingZoneId", { departmentId: ordering.departmentId, startingZoneId: ["x"] }],
+      ["admittedRoles", { ...ordering, admittedRoles: "staff" }],
+      ["admittedRoles", { ...ordering, admittedRoles: ["chef"] }],
+      ["admittedRoles", { ...ordering, admittedRoles: ["staff", "staff"] }],
+      ["admittedRoles", { ...ordering, admittedRoles: null }],
+      ["personExceptions", { ...ordering, personExceptions: null }],
+      ["personExceptions", { ...ordering, personExceptions: [{ personId: "x", admitted: true }] }],
+      [
+        "personExceptions",
+        { ...ordering, personExceptions: [{ personId: clerk, admitted: "yes" }] },
+      ],
+      [
+        "personExceptions",
+        {
+          ...ordering,
+          personExceptions: [
+            { personId: clerk, admitted: true },
+            { personId: clerk, admitted: false },
+          ],
+        },
+      ],
+    ] as const;
+    for (const [field, extra] of cases) {
+      expect({ field, ...(await send("POST", handheld(uniqueName("Bad"), extra))) }).toEqual({
+        field,
+        status: 400,
+        body: { error: { code: "management.request_invalid", params: { field } } },
+      });
+    }
+    expect(
+      await send(
+        "POST",
+        handheld(uniqueName("Bad start"), { ...ordering, startingScreen: "show-expo" }),
+      ),
+    ).toEqual({
+      status: 400,
+      body: {
+        error: { code: "device_profile.invalid", params: { reason: "bad_starting_screen" } },
+      },
+    });
+  });
+
+  it("refuses a kitchen display ordering, payment and drawer actions and a department, and stores none", async () => {
+    for (const action of [
+      "take-orders",
+      "take-cash",
+      "integrated-card-payment",
+      "hand-keyed-card-payment",
+      "open-cash-drawer",
+    ]) {
+      expect({
+        action,
+        ...(await send("POST", {
+          name: uniqueName("Kitchen"),
+          formFactor: "kds",
+          canvasId: null,
+          capabilities: ["act-as-kds", action],
+        })),
+      }).toEqual({
+        action,
+        status: 400,
+        body: {
+          error: { code: "device_profile.invalid", params: { reason: "shared_display_action" } },
+        },
+      });
+    }
+    const kitchen = {
+      formFactor: "kds",
+      canvasId: null,
+      capabilities: ["act-as-kds", "prepare-orders"],
+    };
+    expect(await send("POST", { ...kitchen, name: uniqueName("Kitchen"), ...ordering })).toEqual({
+      status: 400,
+      body: {
+        error: {
+          code: "device_profile.access_invalid",
+          params: { field: "departmentId", reason: "shared_display" },
+        },
+      },
+    });
+    const created = await send("POST", { ...kitchen, name: uniqueName("Kitchen") });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      departmentId: null,
+      allowedZoneIds: null,
+      startingZoneId: null,
+    });
+  });
+
+  it("drops a profile's department when a PUT makes it a kitchen display", async () => {
+    const name = uniqueName("Becomes kitchen");
+    const created = await send("POST", handheld(name, ordering));
+    const id = (created.body as Detail).id;
+    const res = await send(
+      "PUT",
+      { name, formFactor: "kds", canvasId: null, capabilities: ["act-as-kds"] },
+      id,
+    );
+    expect(res.status).toBe(200);
+    expect(await read(id)).toMatchObject({
+      formFactor: "kds",
+      departmentId: null,
+      allowedZoneIds: null,
+      startingZoneId: null,
+    });
+  });
+
+  it("reads back a zone switched off since it was chosen, so the manager sees what is stored", async () => {
+    const spare = await withTransaction(suite.db, (tx) =>
+      createServiceZone(tx, venueCfg, {
+        name: uniqueName("Spare"),
+        departmentId: ordering.departmentId,
+      }),
+    );
+    const created = await send(
+      "POST",
+      handheld(uniqueName("Spare zone"), {
+        ...ordering,
+        allowedZoneIds: [ordering.startingZoneId, spare.id],
+      }),
+    );
+    const id = (created.body as Detail).id;
+    await withTransaction(suite.db, (tx) => deactivateServiceZone(tx, venueCfg, spare.id));
+    expect((await read(id)).allowedZoneIds).toEqual(
+      expect.arrayContaining([ordering.startingZoneId, spare.id]),
+    );
   });
 });

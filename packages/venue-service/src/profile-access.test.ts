@@ -30,8 +30,10 @@ import {
   assertProfileZone,
   readProfileKitchenLists,
   readProfileServiceAccess,
+  readProfileServiceScopes,
   setProfileKitchenLists,
   setProfileServiceAccess,
+  setProfileServiceScope,
   type ProfileServiceAccessInput,
 } from "./profile-access.js";
 import {
@@ -540,6 +542,119 @@ describe("a profile's service access", () => {
         .from(deviceProfileStations)
         .where(eq(deviceProfileStations.deviceProfileId, venue.profile)),
     ).toEqual([]);
+  });
+});
+
+describe("a profile's stored scope", () => {
+  const scopes = (ids: string[]) => scoped((tx) => readProfileServiceScopes(tx, ids));
+  const setScope = (venue: Venue, scope: Parameters<typeof setProfileServiceScope>[3]) =>
+    scoped((tx) => setProfileServiceScope(tx, venue.cfg, venue.profile, scope));
+
+  it("reads every zone as null, a subset by position, and a profile with none as all null", async () => {
+    const venue = await seedVenue();
+    const other = await seedProfile();
+    await setScope(venue, {
+      departmentId: venue.restaurant,
+      allowedZoneIds: [venue.dining, venue.terrace],
+      startingZoneId: venue.dining,
+    });
+    await expect(scopes([venue.profile, other])).resolves.toEqual([
+      {
+        profileId: venue.profile,
+        departmentId: venue.restaurant,
+        allowedZoneIds: [venue.terrace, venue.dining],
+        startingZoneId: venue.dining,
+      },
+      { profileId: other, departmentId: null, allowedZoneIds: null, startingZoneId: null },
+    ]);
+    await setScope(venue, {
+      departmentId: venue.restaurant,
+      allowedZoneIds: null,
+      startingZoneId: venue.terrace,
+    });
+    await expect(scopes([venue.profile])).resolves.toEqual([
+      {
+        profileId: venue.profile,
+        departmentId: venue.restaurant,
+        allowedZoneIds: null,
+        startingZoneId: venue.terrace,
+      },
+    ]);
+    await expect(scopes([])).resolves.toEqual([]);
+  });
+
+  it("still names a zone switched off since it was saved", async () => {
+    const venue = await seedVenue();
+    await setScope(venue, {
+      departmentId: venue.restaurant,
+      allowedZoneIds: [venue.dining, venue.terrace],
+      startingZoneId: venue.dining,
+    });
+    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.terrace));
+    await expect(scopes([venue.profile])).resolves.toMatchObject([
+      { allowedZoneIds: [venue.terrace, venue.dining], startingZoneId: venue.dining },
+    ]);
+  });
+
+  it("keeps the station and watcher lists a scope save does not touch", async () => {
+    const venue = await seedVenue();
+    const [station] = await db
+      .insert(kitchenStations)
+      .values({ locationId: venue.cfg.locationId, name: `Grill ${randomUUID()}` })
+      .returning({ id: kitchenStations.id });
+    await save(venue, restaurantScope(venue, { stationIds: [station!.id] }));
+    await setScope(venue, {
+      departmentId: venue.deli,
+      allowedZoneIds: null,
+      startingZoneId: venue.counter,
+    });
+    await expect(read(venue)).resolves.toEqual({
+      departmentId: venue.deli,
+      allowedZoneIds: [venue.counter],
+      startingZoneId: venue.counter,
+      stationIds: [station!.id],
+      watcherIds: [],
+    });
+  });
+
+  it("refuses a profile that is not a shared display without a department, and stores a shared display's none", async () => {
+    const venue = await seedVenue();
+    const none = { departmentId: null, allowedZoneIds: null, startingZoneId: null };
+    await expect(outcome(setScope(venue, none))).resolves.toEqual({
+      code: "device_profile.access_invalid",
+      params: { field: "departmentId", reason: "required" },
+    });
+    await makeSharedDisplay(venue);
+    await expect(outcome(setScope(venue, none))).resolves.toEqual({ resolved: undefined });
+  });
+
+  it("checks a scope as a whole save does, refusing it on a shared display", async () => {
+    const venue = await seedVenue();
+    await expect(
+      outcome(
+        setScope(venue, {
+          departmentId: venue.restaurant,
+          allowedZoneIds: null,
+          startingZoneId: venue.counter,
+        }),
+      ),
+    ).resolves.toEqual({
+      code: "device_profile.access_invalid",
+      params: { field: "startingZoneId", reason: "outside_department" },
+    });
+    await makeSharedDisplay(venue);
+    await expect(
+      outcome(
+        setScope(venue, {
+          departmentId: null,
+          allowedZoneIds: null,
+          startingZoneId: venue.counter,
+        }),
+      ),
+    ).resolves.toEqual({
+      code: "device_profile.access_invalid",
+      params: { field: "startingZoneId", reason: "shared_display" },
+    });
   });
 });
 

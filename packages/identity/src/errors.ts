@@ -40,6 +40,13 @@ declare module "@waitron/shared" {
     "google.already_linked": Record<string, never>;
     "google.second_factor_required": Record<string, never>;
     "person.not_found": { personId: string };
+    /** A device profile's sign-in rule named no role, which would admit every role, or a person
+     * that does not exist. */
+    "device_profile.admission_invalid": {
+      field: "admittedRoles" | "personExceptions";
+      reason: "empty" | "not_found";
+      personId?: string;
+    };
     /** A live management session's person has been suspended, or an account action was asked for a
      * suspended person. */
     "person.suspended": { personId: string };

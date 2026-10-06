@@ -28,6 +28,7 @@ describe("VENUE_SERVICE", () => {
       "readPrintHeldWork",
       "readProfileKitchenLists",
       "readProfileServiceAccess",
+      "readProfileServiceScopes",
       "readProfileZones",
       "readReleaseReminderMinutes",
       "readSaleReceiptHeader",
@@ -43,6 +44,7 @@ describe("VENUE_SERVICE", () => {
       "retargetOrderContext",
       "routingAt",
       "setProfileKitchenLists",
+      "setProfileServiceScope",
       "stationStates",
     ]);
   });

@@ -39,6 +39,8 @@ export type DeviceProfileSettings = {
   capabilities: CapabilityFlag[];
   /** The auto-logout idle timeout in seconds; `null` means never. */
   inactivityTimeoutSeconds: number | null;
+  /** `null` leaves the till on its canvas's first view. */
+  startingScreen: NavigationScreen | null;
 };
 
 export type DeviceProfileRow = DeviceProfileSettings & ProfilePrinterLists;
@@ -50,6 +52,7 @@ const PROFILE_COLUMNS = {
   canvasId: deviceProfiles.canvasId,
   capabilities: deviceProfiles.capabilities,
   inactivityTimeoutSeconds: deviceProfiles.inactivityTimeoutSeconds,
+  startingScreen: deviceProfiles.startingScreen,
 } as const;
 
 type StoredProfile = {
@@ -59,6 +62,7 @@ type StoredProfile = {
   canvasId: string | null;
   capabilities: unknown;
   inactivityTimeoutSeconds: number | null;
+  startingScreen: string | null;
 };
 
 /**
@@ -73,7 +77,15 @@ function toSettings(row: StoredProfile): DeviceProfileSettings {
     canvasId: row.canvasId,
     capabilities: row.capabilities as CapabilityFlag[],
     inactivityTimeoutSeconds: row.inactivityTimeoutSeconds,
+    startingScreen: knownScreen(row.startingScreen),
   };
+}
+
+/** The column has no CHECK, so a value not written through this store is read as none. */
+function knownScreen(stored: string | null): NavigationScreen | null {
+  return (NAVIGATION_SCREENS as readonly (string | null)[]).includes(stored)
+    ? (stored as NavigationScreen)
+    : null;
 }
 
 function toRow(row: StoredProfile, lists: ProfilePrinterLists): DeviceProfileRow {
@@ -176,8 +188,7 @@ export async function getDeviceProfileWithPrinters(
   return { ...settings, ...(await readProfilePrinterLists(tx, id)) };
 }
 
-/** `null` when the profile has none, or is retired or absent. Kept off {@link DeviceProfileSettings}
- * so the profile rows the routes answer keep their shape. */
+/** `null` when the profile has none, or is retired or absent. */
 export async function readProfileStartingScreen(
   tx: Transaction,
   id: string,
@@ -186,11 +197,7 @@ export async function readProfileStartingScreen(
     .select({ startingScreen: deviceProfiles.startingScreen })
     .from(deviceProfiles)
     .where(and(eq(deviceProfiles.id, id), live));
-  // The column has no CHECK, so a value not written through this store is not validated.
-  const stored = row?.startingScreen ?? null;
-  return (NAVIGATION_SCREENS as readonly (string | null)[]).includes(stored)
-    ? (stored as NavigationScreen)
-    : null;
+  return knownScreen(row?.startingScreen ?? null);
 }
 
 export async function createDeviceProfile(
