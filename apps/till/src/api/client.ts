@@ -255,6 +255,8 @@ export interface TillProduct {
   /** The offer's effective colour; absent on a retrieved held line and from a version published
    * before it existed. */
   color?: string | null;
+  /** The offer's photo; absent on a retrieved held line. */
+  image?: string | null;
   variantId?: string;
   /** The selected variant's staff-facing name; a line naming a variant is shown under it alone. */
   variantName?: string;
@@ -419,6 +421,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     available: offer.available,
     ...(offer.ordering === undefined ? {} : { ordering: offer.ordering }),
     ...(offer.color === undefined ? {} : { color: offer.color }),
+    image: offer.image,
     name: offer.name,
     customerName: offer.customerName,
     kitchenName: offer.kitchenName,

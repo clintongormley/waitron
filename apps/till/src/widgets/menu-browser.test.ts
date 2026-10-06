@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
-import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
+import type {
+  DocumentMember,
+  DocumentTile,
+  HomeDevice,
+  HomeDisplay,
+} from "@waitron/catalogue/src/menu-document-types.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
@@ -78,8 +83,9 @@ function section(
   names: Record<string, string>,
   members: DocumentMember[],
   color: string | null = null,
+  image: string | null = null,
 ): DocumentMember {
-  return { kind: "section", sectionId: id, internalName, names, image: null, color, members };
+  return { kind: "section", sectionId: id, internalName, names, image, color, members };
 }
 
 // Every section's internal name and each of its customer names are different texts, so a reader of
@@ -151,6 +157,15 @@ function lunch(overrides: Partial<TillZoneMenu> = {}): TillZoneMenu {
     ...withShortcuts(HOME_TILES),
     ...overrides,
   };
+}
+
+/** `menu` with `device`'s display settings changed to `values`. */
+function display(
+  device: HomeDevice,
+  values: Partial<HomeDisplay>,
+  menu: TillZoneMenu = lunch(),
+): TillZoneMenu {
+  return { ...menu, home: { ...menu.home, [device]: { ...menu.home[device], ...values } } };
 }
 
 const tarta = product("tarta", "Tarta", { available: false });
@@ -354,7 +369,7 @@ describe("till-menu-browser", () => {
     it("sizes blank cells from the tile's tap target token", async () => {
       const { el, host } = await mount({
         menu: lunch({
-          ...withShortcuts([{ kind: "empty" }]),
+          ...withShortcuts([productTile("cafe"), { kind: "empty" }]),
         }),
       });
       host.style.setProperty("--wt-tap-min", "60px");
@@ -362,9 +377,10 @@ describe("till-menu-browser", () => {
       expect(getComputedStyle(blank).minHeight).toBe("90px");
     });
 
-    it("shows no shortcuts, and still the structure, for a menu with no shortcuts", async () => {
+    it("shows no shortcut block, no divider, and still the structure, for a menu with no shortcuts", async () => {
       const { el } = await mount({ menu: lunch(withShortcuts([])) });
-      expect(entries(el, "shortcuts")).toEqual([]);
+      expect(regions(el)).toEqual(["search", "structure"]);
+      expect(root(el).querySelector(".divider")).toBeNull();
       expect(names(entries(el, "structure"))).toContain("Agua");
     });
 
@@ -486,12 +502,12 @@ describe("till-menu-browser", () => {
       expect(icon("Platos principales").height).toBe(icon("Bar").height);
     });
 
-    it("shows a till's six columns when no column count is given", async () => {
-      const { el, host } = await mount();
+    it("shows the till's column setting when no column count is given", async () => {
+      const { el, host } = await mount({ menu: display("till", { columns: 8 }) });
       await widen(host, 1280);
       const grids = [...root(el).querySelectorAll<HTMLElement>(".grid")];
       expect(grids).toHaveLength(2);
-      for (const grid of grids) expect(tracks(grid)).toBe(6);
+      for (const grid of grids) expect(tracks(grid)).toBe(8);
     });
 
     it("shows a product's staff name, never its customer or kitchen name, on a tile and a search result", async () => {
@@ -503,6 +519,249 @@ describe("till-menu-browser", () => {
       expect(root(el).querySelector('[data-region="results"]')!.textContent).not.toMatch(
         /carta|KDS/,
       );
+    });
+  });
+
+  describe("the Device Home Page's display", () => {
+    /** The region's accessible name: its own label, or the text of the element labelling it. */
+    function regionName(el: TillMenuBrowser, region: string): string | null {
+      const node = root(el).querySelector<HTMLElement>(`[data-region="${region}"]`)!;
+      const labelledBy = node.getAttribute("aria-labelledby");
+      if (labelledBy === null) return node.getAttribute("aria-label");
+      return root(el).getElementById(labelledBy)?.textContent?.trim() ?? null;
+    }
+
+    const divider = (el: TillMenuBrowser) =>
+      root(el).querySelector<HTMLElement>("h2.divider")?.textContent?.trim() ?? null;
+
+    function grids(el: TillMenuBrowser): HTMLElement[] {
+      return [...root(el).querySelectorAll<HTMLElement>(".grid")];
+    }
+
+    it("draws the blocks in the till's order: Device Home Page first, with the divider naming the full menu", async () => {
+      const { el } = await mount();
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+      const shortcuts = root(el).querySelector('[data-region="shortcuts"]')!;
+      expect(shortcuts.querySelector("h2")).toBeNull();
+      expect(shortcuts.getAttribute("aria-label")).toBe("Shortcuts");
+      const structure = root(el).querySelector('[data-region="structure"]')!;
+      expect(structure.querySelector("h2.divider")!.textContent!.trim()).toBe("Full menu");
+      expect(regionName(el, "structure")).toBe("Full menu");
+    });
+
+    it("swaps the whole blocks for Menu first, keeping each block's own order", async () => {
+      const homeFirst = await mount();
+      const shortcutNames = names(entries(homeFirst.el, "shortcuts"));
+      const structureNames = names(entries(homeFirst.el, "structure"));
+      const { el } = await mount({ menu: display("till", { order: "menu_first" }) });
+      expect(regions(el)).toEqual(["search", "structure", "shortcuts"]);
+      expect(divider(el)).toBe("Shortcuts");
+      expect(regionName(el, "shortcuts")).toBe("Shortcuts");
+      expect(regionName(el, "structure")).toBe("Full menu");
+      expect(root(el).querySelector('[data-region="structure"] h2')).toBeNull();
+      expect(names(entries(el, "shortcuts"))).toEqual(shortcutNames);
+      expect(names(entries(el, "structure"))).toEqual(structureNames);
+    });
+
+    it("uses the handheld's display on a handheld and the till's on a till, from one shortcut list", async () => {
+      const menu = display(
+        "till",
+        { columns: 8 },
+        display("handheld", { columns: 4, order: "menu_first" }),
+      );
+      const handheld = await mount({ menu, handheld: true });
+      const till = await mount({ menu, handheld: false });
+      expect(regions(handheld.el)).toEqual(["search", "structure", "shortcuts"]);
+      expect(regions(till.el)).toEqual(["search", "shortcuts", "structure"]);
+      for (const [{ el, host }, columns] of [
+        [handheld, 4],
+        [till, 8],
+      ] as const) {
+        await widen(host, 1280);
+        expect(grids(el)).toHaveLength(2);
+        for (const grid of grids(el)) expect(tracks(grid)).toBe(columns);
+      }
+      expect(names(entries(handheld.el, "shortcuts"))).toEqual(
+        names(entries(till.el, "shortcuts")),
+      );
+    });
+
+    it("returns from a section opened under Menu first to the arranged home", async () => {
+      const { el } = await mount({
+        menu: display("handheld", { order: "menu_first" }),
+        handheld: true,
+      });
+      await tap(el, entry(el, "structure", "Drinks (EN)"));
+      expect(regions(el)).toEqual(["search", "section"]);
+      await tap(el, root(el).querySelector<HTMLElement>("nav.breadcrumb wt-button")!);
+      expect(regions(el)).toEqual(["search", "structure", "shortcuts"]);
+      expect(divider(el)).toBe("Shortcuts");
+    });
+
+    it("draws no shortcut block and no divider when every shortcut is missing", async () => {
+      const { el } = await mount({
+        menu: lunch(
+          withShortcuts([{ kind: "empty" }, productTile("ghost"), sectionTile("sec-gone")]),
+        ),
+      });
+      expect(regions(el)).toEqual(["search", "structure"]);
+      expect(root(el).querySelector(".divider")).toBeNull();
+      expect(regionName(el, "structure")).toBe("Full menu");
+      expect(names(entries(el, "structure"))).toContain("Agua");
+    });
+
+    it("clamps the columns on a narrow screen, keeping the reading order", async () => {
+      const handheld = await mount({
+        menu: display("handheld", { columns: 6 }),
+        handheld: true,
+      });
+      await widen(handheld.host, 1280);
+      const structureGrid = (el: TillMenuBrowser) =>
+        root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
+      expect(tracks(structureGrid(handheld.el))).toBe(6);
+      const wide = readingOrder(handheld.el, "structure");
+      const wideShortcuts = readingOrder(handheld.el, "shortcuts");
+      await widen(handheld.host, 300);
+      // 300 px holds two 104 px minimums and the 12 px gap between them, not three.
+      expect(tracks(structureGrid(handheld.el))).toBe(2);
+      expect(readingOrder(handheld.el, "structure")).toEqual(wide);
+      expect(readingOrder(handheld.el, "shortcuts")).toEqual(wideShortcuts);
+      expect(wide).toEqual(names(entries(handheld.el, "structure")));
+
+      const till = await mount({ menu: display("till", { columns: 10 }) });
+      await widen(till.host, 1280);
+      expect(tracks(structureGrid(till.el))).toBe(10);
+      const tillWide = readingOrder(till.el, "structure");
+      await widen(till.host, 900);
+      expect(tracks(structureGrid(till.el))).toBeLessThan(10);
+      for (const tile of entries(till.el, "structure"))
+        expect(tile.getBoundingClientRect().width).toBeGreaterThanOrEqual(104);
+      expect(readingOrder(till.el, "structure")).toEqual(tillWide);
+    });
+
+    it("lets a canvas card's own column count win over the display's", async () => {
+      const { el, host } = await mount({ menu: display("till", { columns: 8 }), columns: 4 });
+      await widen(host, 1280);
+      for (const grid of grids(el)) expect(tracks(grid)).toBe(4);
+    });
+
+    describe("tile modes", () => {
+      const photo = product("photo", "Photo", { image: "cafe.webp", color: "#b12525" });
+      const blue = product("blue", "Blue", { image: null, color: "#256bb1" });
+      const bare = product("bare", "Bare");
+      const pictured = section(
+        "sec-pictured",
+        "pictured-internal",
+        { en: "Pictured (EN)" },
+        [member("photo")],
+        null,
+        "drinks.webp",
+      );
+      const tiled = (values: Partial<HomeDisplay>, device: HomeDevice = "till") =>
+        display(
+          device,
+          values,
+          lunch({
+            structure: { members: [member("photo"), member("blue"), member("bare"), pictured] },
+            ...withShortcuts([]),
+          }),
+        );
+      const image = (tile: Button) => tile.querySelector<HTMLImageElement>("img");
+
+      it("paints Colours mode from the product's and the section's colour, and Thumbnails mode from the image, else the colour, else neutral", async () => {
+        const thumbnails = await mount({
+          menu: tiled({ tiles: "thumbnails" }),
+          products: [photo, blue, bare],
+        });
+        const photoTile = entry(thumbnails.el, "structure", "Photo");
+        const img = image(photoTile)!;
+        expect(img.getAttribute("src")).toBe("/media/cafe.webp");
+        expect(img.getAttribute("alt")).toBe("");
+        expect(img.parentElement!.firstElementChild).toBe(img);
+        expect(img.compareDocumentPosition(photoTile.querySelector(".name")!)).toBe(
+          Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+        expect(photoTile.hasAttribute("data-painted")).toBe(false);
+        expect(photoTile.hasAttribute("style")).toBe(false);
+
+        const blueTile = entry(thumbnails.el, "structure", "Blue");
+        expect(image(blueTile)).toBeNull();
+        expect(blueTile.hasAttribute("data-painted")).toBe(true);
+        expect(
+          getComputedStyle(blueTile.shadowRoot!.querySelector("button")!).backgroundColor,
+        ).toBe("rgb(37, 107, 177)");
+
+        const sectionTile = entry(thumbnails.el, "structure", "Pictured (EN)");
+        expect(image(sectionTile)!.getAttribute("src")).toBe("/media/drinks.webp");
+        expect(sectionTile.querySelector("wt-icon")).toBeNull();
+        expect(sectionTile.querySelector(".kind")!.textContent!.trim()).toBe("Section");
+
+        const colours = await mount({
+          menu: tiled({ tiles: "colours" }),
+          products: [photo, blue, bare],
+        });
+        const colourPhoto = entry(colours.el, "structure", "Photo");
+        expect(image(colourPhoto)).toBeNull();
+        expect(colourPhoto.hasAttribute("data-painted")).toBe(true);
+        const colourSection = entry(colours.el, "structure", "Pictured (EN)");
+        expect(image(colourSection)).toBeNull();
+        expect(colourSection.querySelector("wt-icon")).not.toBeNull();
+      });
+
+      it("draws a product with neither image nor colour neutral in Thumbnails mode, name and price shown", async () => {
+        const { el } = await mount({
+          menu: tiled({ tiles: "thumbnails" }),
+          products: [photo, blue, bare],
+        });
+        const tile = entry(el, "structure", "Bare");
+        expect(image(tile)).toBeNull();
+        expect(tile.hasAttribute("data-painted")).toBe(false);
+        expect(tile.hasAttribute("style")).toBe(false);
+        expect(tile.querySelector(".name")!.textContent!.trim()).toBe("Bare");
+        expect(tile.querySelector(".price")!.textContent).toBe(
+          `${formatMoney("1.50", currentLocale())}/ea`,
+        );
+      });
+
+      it("draws search results and an open section in the device's tile mode", async () => {
+        const menu = tiled({ tiles: "thumbnails" }, "handheld");
+        const handheld = await mount({ menu, products: [photo, blue, bare], handheld: true });
+        const till = await mount({ menu, products: [photo, blue, bare], handheld: false });
+        for (const [{ el }, drawn] of [
+          [handheld, true],
+          [till, false],
+        ] as const) {
+          await search(el, "photo");
+          expect(image(entry(el, "results", "Photo")) !== null).toBe(drawn);
+          await search(el, "");
+          await tap(el, entry(el, "structure", "Pictured (EN)"));
+          expect(image(entry(el, "section", "Photo")) !== null).toBe(drawn);
+        }
+      });
+    });
+
+    it("opens a shortcut to an included menu's section behind the breadcrumb", async () => {
+      const included: DocumentMember = {
+        kind: "section",
+        sectionId: "sec-bar-root",
+        includedMenu: { id: "menu-bar", name: "Bar" },
+        internalName: "bar-internal",
+        names: { en: "Bar (EN)" },
+        image: null,
+        color: null,
+        members: [member("cana"), member("cola")],
+      };
+      const { el } = await mount({
+        menu: lunch({
+          structure: { members: [favourites, included] },
+          ...withShortcuts([sectionTile("sec-bar-root")]),
+        }),
+      });
+      await tap(el, entry(el, "shortcuts", "Bar (EN)"));
+      expect(breadcrumb(el)).toBe("Home › Bar (EN)");
+      expect(names(entries(el, "section"))).toEqual(["Caña", "Cola"]);
+      await tap(el, root(el).querySelector<HTMLElement>("nav.breadcrumb wt-button")!);
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
     });
   });
 

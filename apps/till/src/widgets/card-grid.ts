@@ -1,7 +1,6 @@
 import { type DietPredicate, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 // Side-effect imports: registering each widget element so the switch below can render its tag.
@@ -157,7 +156,7 @@ export class TillCardGrid extends LitElement {
   @property({ type: Boolean }) finishRefused = false;
   @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
   @property({ type: Boolean }) groupCommandBusy = false;
-  /** A handheld form factor, whose menu browser shows fewer columns unless its card sets them. */
+  /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
   /** The app opens a station's view from the floor: false on a device without one. */
   @property({ type: Boolean }) canOpenStation = false;
@@ -238,13 +237,8 @@ export class TillCardGrid extends LitElement {
           .menu=${menu}
           .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
           .store=${this.store}
-          .columns=${
-            typeof configured === "number"
-              ? configured
-              : this.handheld
-                ? HOME_DISPLAY_DEFAULTS.handheld.columns
-                : HOME_DISPLAY_DEFAULTS.till.columns
-          }
+          .columns=${typeof configured === "number" ? configured : undefined}
+          .handheld=${this.handheld}
         ></till-menu-browser>`;
       }
       case "basket":

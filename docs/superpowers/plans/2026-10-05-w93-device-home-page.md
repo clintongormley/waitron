@@ -1768,6 +1768,15 @@ file.
 | `apps/till/src/widgets/card-grid.test.ts:669` | six columns on a till and three on a handheld when the card sets none | the menu's display for the device when the card sets none; the card's 4 either way | D7 (a card with no count follows the menu's setting) |
 | `apps/till/src/screens/till-table-order-screen.test.ts:4192` | the browser gets 6 columns on a till and 3 on a handheld | the browser gets no column count and the device kind | D7 |
 
+At a900fc1b8 (after W92a) the five rows above sit at `menu-browser.test.ts:354`, `:365` and `:489`,
+`card-grid.test.ts:667` and `till-table-order-screen.test.ts:4188`. **[implementer]** The card-grid
+row changed only its first case ("uses the menu's display for the device when the card sets no
+columns", which also checks the browser's `handheld` follows the grid's); the next case, "lets the
+card's own column count win on either form factor", already held the card's 4 either way and is
+unchanged. Fixture-only edits in Task 5: `menu-browser.test.ts` (`section()` takes an optional
+`image`, default null), `menu-browser.a11y.test.ts` (`mount()` takes the browser's properties,
+defaulting to the `columns: 3` it always passed).
+
 ### Task 8
 
 | file:line | Before | After | Why |

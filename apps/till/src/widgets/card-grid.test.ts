@@ -664,12 +664,14 @@ describe("till-card-grid's product-grid card: the menu browser", () => {
     expect(browser().products).toEqual([salad, steak]);
   });
 
-  it("uses six columns on a till and three on a handheld when the card sets none", async () => {
+  it("uses the menu's display for the device when the card sets no columns", async () => {
     const { el, browser } = await mountBrowser();
-    expect(browser().columns).toBe(6);
+    expect(browser().columns).toBeUndefined();
+    expect(browser().handheld).toBe(false);
     el.handheld = true;
     await el.updateComplete;
-    expect(browser().columns).toBe(3);
+    expect(browser().columns).toBeUndefined();
+    expect(browser().handheld).toBe(true);
   });
 
   it("lets the card's own column count win on either form factor", async () => {

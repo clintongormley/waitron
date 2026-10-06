@@ -1145,7 +1145,7 @@ export class TillApp extends LitElement {
   @state() private drill?: Drill;
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
-  /** An enrolled handheld: narrower menu columns. */
+  /** An enrolled handheld: its menu browser shows the menu's handheld display. */
   @state() private handheldMode = false;
   /**
    * The device front door {@link #boot} chose, shown ahead of the lock screen and shell: `"chooser"` in

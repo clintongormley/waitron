@@ -4060,6 +4060,43 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("color");
   });
 
+  it("carries the offer's photo, null included", () => {
+    const offer: TillMenuOffer = {
+      id: "offer-cafe",
+      menuId: "menu-1",
+      productId: "cafe",
+      grossPrice: null,
+      unitPrice: "1.50",
+      available: true,
+      image: "cafe.webp",
+      description: null,
+      menuName: "Carta",
+      placements: [[]],
+      name: "Café",
+      customerName: null,
+      kitchenName: null,
+      unit: {
+        id: "unit-each",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      vatClass: "general",
+      category: null,
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [],
+      variants: [],
+    };
+    expect(menuOfferToTillProduct(offer)).toHaveProperty("image", "cafe.webp");
+    expect(menuOfferToTillProduct({ ...offer, image: null })).toHaveProperty("image", null);
+  });
+
   it("offers the picker only the extras items and option labels that can be sold now", () => {
     const item = (productId: string, available: boolean) => ({
       portion: "1",

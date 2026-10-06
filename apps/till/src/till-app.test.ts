@@ -1897,6 +1897,67 @@ describe("till-app", () => {
       return el;
     }
 
+    /** The default menu with one shortcut, its Handheld display at 4 columns Menu first and its Till
+     * display at 8. */
+    const displayedMenus = (): Record<string, unknown> => {
+      const served = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+      const offers = {
+        ...served,
+        menus: served.menus.map((menu) => ({
+          ...menu,
+          home: {
+            shortcuts: [{ kind: "product" as const, productId: "cafe" }],
+            handheld: {
+              ...HOME_DISPLAY_DEFAULTS.handheld,
+              columns: 4,
+              order: "menu_first" as const,
+            },
+            till: { ...HOME_DISPLAY_DEFAULTS.till, columns: 8 },
+          },
+        })),
+      };
+      return {
+        listZoneOffers: vi.fn().mockResolvedValue(offers),
+        listDefaultZoneOffers: vi.fn().mockResolvedValue(offers),
+      };
+    };
+
+    async function counterHome(el: TillApp): Promise<{ regions: string[]; columns: string[] }> {
+      const browser =
+        counterGrid(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+      await browser.updateComplete;
+      const shadow = browser.shadowRoot!;
+      return {
+        regions: [...shadow.querySelectorAll<HTMLElement>("[data-region]")].map(
+          (region) => region.dataset.region!,
+        ),
+        columns: [...shadow.querySelectorAll<HTMLElement>(".grid")].map((grid) =>
+          getComputedStyle(grid).getPropertyValue("--columns").trim(),
+        ),
+      };
+    }
+
+    it("shows the menu's handheld display, not the till's", async () => {
+      const el = await toHandheld(withCounterTab, {}, displayedMenus());
+      selectTab(el, "counter");
+      await flush(el);
+      expect(await counterHome(el)).toEqual({
+        regions: ["search", "structure", "shortcuts"],
+        columns: ["4", "4"],
+      });
+    });
+
+    it("on a till, shows the menu's till display", async () => {
+      const { el } = await mountApp(displayedMenus());
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      expect(await counterHome(el)).toEqual({
+        regions: ["search", "shortcuts", "structure"],
+        columns: ["8", "8"],
+      });
+    });
+
     it("loads the counter's lists at login when its canvas has a counter tab, and shows its held orders there", async () => {
       const el = await toHandheld(
         withCounterTab,

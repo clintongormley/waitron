@@ -153,7 +153,7 @@ export class TillCounterScreen extends LitElement {
    * exercised only by this screen's tests.
    */
   @property({ type: Boolean }) embedded = false;
-  /** A handheld form factor, whose menu browser shows fewer columns. */
+  /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
 
   #logout(): void {
