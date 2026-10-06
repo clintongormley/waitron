@@ -26,6 +26,12 @@ const request: JoinRequestRow = {
   },
 };
 const profile: DeviceProfile = {
+  startingScreen: null,
+  departmentId: null,
+  allowedZoneIds: null,
+  startingZoneId: null,
+  admittedRoles: ["staff", "supervisor", "manager", "admin"],
+  personExceptions: [],
   id: "p1",
   name: "Counter",
   canvasId: "c1",
@@ -122,6 +128,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     listStations: async () => [station],
     listWatchers: async () => [],
     listPrinters: async () => [],
+    listProfileKitchenLists: async () => [],
     listDeviceProfiles: async () => [
       profile,
       { ...profile, id: "p2", name: "Kitchen", canvasId: null, formFactor: "kds" },

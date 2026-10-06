@@ -455,14 +455,22 @@ export class DevicesScreen extends LitElement {
     };
   }
 
+  #editSnapshot() {
+    return {
+      ...this.#editPayload(),
+      approvedProfileIds: this.#approvedOf(this.editForm.approved),
+    };
+  }
+
   #registerEditDraft(): void {
     this.#editLeave = leaveCoordinatorFor(this);
     this.#editScope = this.#editLeave?.register({
       id: {},
-      current: () => this.#editPayload(),
+      current: () => this.#editSnapshot(),
       snapshot: (value) => ({
         ...value,
         ...(value.madeHereStationIds ? { madeHereStationIds: [...value.madeHereStationIds] } : {}),
+        approvedProfileIds: [...(value.approvedProfileIds ?? [])],
       }),
       equal: (a, b) =>
         a.name === b.name &&
@@ -471,6 +479,8 @@ export class DevicesScreen extends LitElement {
         a.watcherId === b.watcherId &&
         a.receiptPrinterId === b.receiptPrinterId &&
         a.paymentSlipPrinterId === b.paymentSlipPrinterId &&
+        (a.approvedProfileIds ?? []).length === (b.approvedProfileIds ?? []).length &&
+        (a.approvedProfileIds ?? []).every((id) => b.approvedProfileIds?.includes(id)) &&
         (a.madeHereStationIds === undefined
           ? b.madeHereStationIds === undefined
           : b.madeHereStationIds !== undefined &&
@@ -1153,6 +1163,7 @@ export class DevicesScreen extends LitElement {
       (option) => option.value === savedBinding,
     );
     const sent = this.#editPayload();
+    const submittedDevice = this.#editSnapshot();
     const editScope = this.#editScope;
     const readerScope = this.#readerScope;
     const submittedReader = this.chosenReaderId;
@@ -1173,7 +1184,7 @@ export class DevicesScreen extends LitElement {
       else this.editRefusal = { field, code: codeOf(error) };
       return;
     }
-    if (epoch === this.#editEpoch) editScope?.commit(sent);
+    if (epoch === this.#editEpoch) editScope?.commit(submittedDevice);
     this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
     if (epoch !== this.#editEpoch) return;
     if (savedBinding !== this.editHeld?.value)

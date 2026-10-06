@@ -3148,3 +3148,52 @@ This reconciles the colour route called out by the preceding checkpoint. Configu
 device-profile integration after W97, other actual dashboard/till/context/history routes and the
 complete advancing-owner inventory remain open. Tasks 2/3 remain complete; Tasks 1/4/5/6 remain
 partial. W69 remains in progress, without a PR, push, finish-branch or landing at this checkpoint.
+
+
+## 2026-10-07: W97 rebase and device approval comparison checkpoint
+
+W97 landed as #1311, merge `7873b97e2`. W69 rebased onto its backlog follow-up
+`d45119d2d`. The till test conflict kept both appended test groups. The Device Edit save conflict
+kept W97's profile-specific binding choices and approval request/storage behavior, plus W69's
+captured device and reader submissions and independent commits. No migration file changed on W69.
+
+The first rebased dashboard command reported 24 failures, 452 passes and 73 errors. The errors
+trace to the W69 Device Edit fixture's missing `approvedProfileIds`; dashboard typecheck also
+identified the six new DeviceProfile fields missing in Edit and Pair fixtures. Adding those fields
+restored their 43 existing cases without changing assertions. The visual fixture also lacked
+`listProfileKitchenLists`, which the new Devices loader calls; its initial captures showed a read
+failure behind the modal. Both fixtures now return that empty list. Initial artifacts are retained;
+final captures no longer show that load failure.
+
+Three new approval cases failed before comparison changed. The Device Edit scope now compares the
+shown compatible approvals as a set and commits that captured set after the device write. The
+actual request still omits unchanged approvals, as W97 does. A reader refusal commits no reader
+selection; reverting that reader leaves the accepted device values clean. Later approval edits
+remain dirty against the captured write. Four new cases preserve exact submitted request bodies,
+including the omission, and exercise the warning and revert without changing existing checks.
+
+Receipts share Lane E `receipts/w69-catalogue-colour-20261007/`:
+
+- The rebased six-suite dashboard run reports 497 passes. The final Edit/Pair command after the
+  omission case and missing-query fixture addition reports 47 passes. The focused till shell
+  run reports 18 passes, including W97 profile switching and W69 shell confirmation cases.
+- Deleting approval equality reports one failure beside a passing name/revert control. The first
+  commit deletion passed because its changed approval request still carried the set. The added
+  unchanged-set case omits that wire field; deleting the captured comparison commit now fails
+  its clean-after-reader-revert assertion beside the passing control. This corrects the earlier
+  probe rather than treating its green result as evidence. The restored final candidate reports
+  29 passes, with all three source/test files matching the feature files.
+- Eight final native checkbox/Escape/Keep/Discard flows cover EN/ES, light/dark and measured
+  390/1280 widths. Sixteen scoped axe scans pass; sixteen final captures were inspected in four
+  contact sheets. These use the real Devices screen and shared confirmation with a synthetic API,
+  not DashboardApp or server persistence. One wrongly located visual run selected zero tests;
+  it is excluded from these counts, and the final candidate run reports eight passing cases.
+- Dashboard/till typechecks, focused source lint/format and root guards are retained locally.
+
+Device Edit's approval field is reconciled; W97's expanded Device profiles editor itself still
+needs shared protection. Its name/canvas/capability/printer/inactivity fields and new service scope,
+sign-in choices, starting screen and kitchen lists are staged inputs; `#cancel` currently calls
+`#clearDraft` and returns to the list. Re-read its accepted-write boundary before implementing
+its scope. Configuration exemptions, remaining dashboard/till/context/history routes and the
+complete advancing-owner inventory also remain open. Tasks 1/4/5/6 remain partial; W69 is not
+ready for finish-branch or landing. The dependency on W97 is now released.

@@ -17,6 +17,7 @@ const device: DeviceRow = {
   watcherId: null,
   binding: null,
   deviceProfileId: "p1",
+  approvedProfileIds: ["p1"],
   profileRetired: false,
   receiptPrinterId: null,
   paymentSlipPrinterId: null,
@@ -28,6 +29,12 @@ const device: DeviceRow = {
   batteryReportedAt: null,
 };
 const profile: DeviceProfile = {
+  startingScreen: null,
+  departmentId: null,
+  allowedZoneIds: null,
+  startingZoneId: null,
+  admittedRoles: ["staff", "supervisor", "manager", "admin"],
+  personExceptions: [],
   id: "p1",
   name: "Counter",
   canvasId: "c1",
@@ -85,6 +92,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listStations: async () => [station, { ...station, id: "s2", name: "Bar" }],
       listWatchers: async () => [],
       listPrinters: async () => [],
+      listProfileKitchenLists: async () => [],
       listDeviceProfiles: async () => [profile, { ...profile, id: "p2", name: "Phone" }],
       pairingMode: async () => ({
         open: false,
@@ -529,4 +537,123 @@ it("device save captures the reader selection before its first write awaits", as
   expect(unload()).toBe(true);
   change(screen, "reader", "r2");
   expect(unload()).toBe(false);
+});
+
+function approve(screen: DevicesScreen, checked: boolean) {
+  const box = q(screen, 'input[name="approvedProfileIds"][value="p2"]') as HTMLInputElement;
+  box.checked = checked;
+  box.dispatchEvent(new Event("change"));
+}
+it("W69 device approvals ask before closing and a reverted approval is clean", async () => {
+  const { app, screen } = await mount();
+  expect(unload()).toBe(false);
+  approve(screen, true);
+  expect(unload()).toBe(true);
+  q(screen, "[data-test=edit-cancel]")!.click();
+  await choose(app, "keep");
+  expect(
+    (q(screen, 'input[name="approvedProfileIds"][value="p2"]') as HTMLInputElement).checked,
+  ).toBe(true);
+  approve(screen, false);
+  expect(unload()).toBe(false);
+  q(screen, "[data-test=edit-cancel]")!.click();
+  await expect.poll(() => modal(screen)).toBeNull();
+});
+it("W69 accepted approvals stay clean when the separate reader write fails", async () => {
+  const writes: unknown[] = [];
+  const { screen } = await mount({
+    updateDevice: async (_id, body) => {
+      writes.push(body);
+    },
+    setDeviceReader: async () => {
+      throw { code: "connection.failed" };
+    },
+  });
+  approve(screen, true);
+  change(screen, "reader", "r2");
+  q(screen, "[data-test=edit-save]")!.click();
+  await expect
+    .poll(
+      () => (q(screen, "[data-test=edit-reader]") as HTMLElementTagNameMap["wt-combobox"]).invalid,
+    )
+    .toBe(true);
+  expect(writes).toEqual([
+    {
+      name: "Counter",
+      profileId: "p1",
+      stationId: null,
+      watcherId: null,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      madeHereStationIds: ["s1"],
+      approvedProfileIds: ["p2"],
+    },
+  ]);
+  expect(unload()).toBe(true);
+  change(screen, "reader", "r1");
+  expect(unload()).toBe(false);
+  approve(screen, false);
+  expect(unload()).toBe(true);
+  approve(screen, true);
+  expect(unload()).toBe(false);
+});
+it("W69 newer approval input stays dirty against the submitted approval set", async () => {
+  let finish!: () => void;
+  const writes: unknown[] = [];
+  const { screen } = await mount({
+    updateDevice: async (_id, body) => {
+      writes.push(body);
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    },
+  });
+  approve(screen, true);
+  q(screen, "[data-test=edit-save]")!.click();
+  await expect.poll(() => writes.length).toBe(1);
+  approve(screen, false);
+  finish();
+  await expect
+    .poll(() => (q(screen, "[data-test=edit-cancel]") as HTMLButtonElement | null)?.disabled)
+    .toBe(false);
+  expect(modal(screen)).not.toBeNull();
+  expect(unload()).toBe(true);
+  approve(screen, true);
+  expect(unload()).toBe(false);
+});
+
+it("W69 an unchanged approved set stays committed when the wire omits it", async () => {
+  const writes: unknown[] = [];
+  const { screen } = await mount({
+    listDevices: async () => [{ ...device, approvedProfileIds: ["p1", "p2"] }],
+    updateDevice: async (_id, body) => {
+      writes.push(body);
+    },
+    setDeviceReader: async () => {
+      throw { code: "connection.failed" };
+    },
+  });
+  change(screen, "name", "New counter");
+  change(screen, "reader", "r2");
+  q(screen, "[data-test=edit-save]")!.click();
+  await expect
+    .poll(
+      () => (q(screen, "[data-test=edit-reader]") as HTMLElementTagNameMap["wt-combobox"]).invalid,
+    )
+    .toBe(true);
+  expect(writes).toEqual([
+    {
+      name: "New counter",
+      profileId: "p1",
+      stationId: null,
+      watcherId: null,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      madeHereStationIds: ["s1"],
+    },
+  ]);
+  change(screen, "reader", "r1");
+  expect(unload()).toBe(false);
+  approve(screen, false);
+  expect(unload()).toBe(true);
 });

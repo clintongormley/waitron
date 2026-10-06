@@ -1173,6 +1173,13 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+W97 (#1311) is integrated on the branch. Device Edit now protects its approved-profile choices,
+including a revert and edits made while a write is pending. Accepted device values stay clean if
+the separate reader write fails, while an unsaved reader selection remains protected. Requests
+still omit unchanged approvals. Existing checks are unchanged; the dated audit records the rebase,
+fixture additions, failing-first cases, deletion controls and inspected native confirmation flows.
+The expanded Device profiles editor remains next, now that W97 has landed.
+
 The new catalogue colour entry now identifies its product and commits an accepted colour before
 refreshing on the branch. Replacement and reconnect release the old opening; departed write
 results leave the replacement draft and its busy gate alone. Native Cancel/Escape retain a refused
