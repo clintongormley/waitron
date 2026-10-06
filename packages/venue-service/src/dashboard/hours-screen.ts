@@ -93,7 +93,13 @@ type Editor =
       /** Cells of subjects the editor does not show, sent back as they were. */
       hidden: DateHoursCell[];
     }
-  | { kind: "duplicate"; source: SpecialDate; dates: string[] }
+  | {
+      kind: "duplicate";
+      source: SpecialDate;
+      dates: string[];
+      /** The source's stored cells when the caller read them itself, as the calendar does. */
+      cells?: DateHoursCell[];
+    }
   | { kind: "delete"; source: SpecialDate };
 
 const dayName = (weekday: number) => t(`hours.day.${weekday}` as Key);
@@ -909,10 +915,11 @@ export class HoursScreen extends LitElement {
   }
 
   /** As {@link #repeatNotes}, for the source date's shown cells copied onto one target date. */
-  #duplicateRepeatNotes(source: SpecialDate, date: string) {
+  #duplicateRepeatNotes(editor: Extract<Editor, { kind: "duplicate" }>, date: string) {
     const model = this.model!;
+    const { source } = editor;
     if (source.closeWholeVenue || !model.clockReadable || !isLocalDate(date)) return nothing;
-    const cells = storedCells(model, source.id);
+    const cells = editor.cells ?? storedCells(model, source.id);
     return model.subjects
       .filter((subject) => subject.active && !isDefaultStation(subject))
       .flatMap((subject) => {
@@ -971,7 +978,7 @@ export class HoursScreen extends LitElement {
                     : nothing
                 }
               </div>
-              ${this.#duplicateRepeatNotes(editor.source, date)}`,
+              ${this.#duplicateRepeatNotes(editor, date)}`,
         )}
         <div>
           <wt-button
@@ -1212,7 +1219,7 @@ export class HoursScreen extends LitElement {
     if (kind === "make_special") this.#openDate(null, "hours.add_heading", returnTo, { date });
     else if (kind === "edit") this.#openDate(special!, "hours.edit_heading", returnTo, { cells });
     else if (kind === "duplicate")
-      this.#open({ kind: "duplicate", source: special!, dates: [""] }, returnTo);
+      this.#open({ kind: "duplicate", source: special!, dates: [""], cells }, returnTo);
     else this.#open({ kind: "delete", source: special! }, returnTo);
   }
 

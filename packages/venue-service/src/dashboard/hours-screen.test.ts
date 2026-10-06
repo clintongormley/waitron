@@ -1931,6 +1931,44 @@ describe("Hours: the calendar", () => {
     ]);
   });
 
+  it("explains a repeated time when duplicating a date outside the page's own window, from the cells the calendar read for it", async () => {
+    const back = clockChangeAfter("Europe/Madrid", "2026-10-08T00:00:00Z", "backward");
+    const twice = minutesAfter(back.after, 30);
+    const { api, state } = server();
+    const past = {
+      id: "past",
+      date: "2026-10-01",
+      name: "Past party",
+      colour: "amber" as const,
+      closeWholeVenue: false,
+    };
+    // The page's first read starts at yesterday; the calendar's month read holds the past date.
+    state.reads.push(model());
+    state.model.days.push({ date: past.date, specialDate: past, holidays: [], tone: "amber" });
+    state.model.specialCells.push({
+      specialDateId: "past",
+      cells: [
+        {
+          subject: { kind: "station", id: "bar" },
+          cell: { mode: "periods", periods: [P("p1", twice, minutesAfter(twice, 60))] },
+        },
+      ],
+    });
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await openDay(el, "2026-10-01");
+    await panelAction(el, "duplicate");
+    expect(modal(el)!.getAttribute("heading")).toBe("Duplicate Past party");
+    await setField(el, "dates.0", back.date);
+    expect(
+      [...el.shadowRoot!.querySelectorAll('[data-test="duplicate-repeat-note"]')].map((note) =>
+        text(note),
+      ),
+    ).toEqual([
+      `Bar on ${formatDate(back.date)}: the clock goes back, so ${twice} happens twice. These hours apply both times.`,
+    ]);
+  });
+
   it("duplicates and deletes the date the calendar shows, returning focus to the panel", async () => {
     const { api, calls } = server();
     const el = await mount(api);
