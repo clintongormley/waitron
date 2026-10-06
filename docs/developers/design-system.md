@@ -167,16 +167,16 @@ each fill uses its own `--wt-color-on-palette-…` or `--wt-color-on-day-…` co
 always carries its name in words too, and a Closed one the word Closed, so colour is never the
 only signal.
 
-| Fill | Light | Text on it | Dark | Text on it |
-| --- | --- | --- | --- | --- |
-| `--wt-color-palette-red` | `#c62828` | `#ffffff` | `#ff7a70` | `#2a0705` |
-| `--wt-color-palette-amber` | `#f5a623` | `#241500` | `#f5b34a` | `#241500` |
-| `--wt-color-palette-grey` | `#6b6e78` | `#ffffff` | `#8b8d98` | `#101216` |
-| `--wt-color-palette-blue` | `#2f55d4` | `#ffffff` | `#7aa2ff` | `#06101f` |
-| `--wt-color-palette-green` | `#1e7a4f` | `#ffffff` | `#4ac08d` | `#06190f` |
-| `--wt-color-palette-purple` | `#7e3fb8` | `#ffffff` | `#c39bf0` | `#1d0b33` |
-| `--wt-color-day-standard` | `#dff3e8` | `#16181d` | `#183626` | `#eceef2` |
-| `--wt-color-day-closed` | `#3a3b42` | `#ffffff` | `#d5d7de` | `#101216` |
+| Fill                        | Light     | Text on it | Dark      | Text on it |
+| --------------------------- | --------- | ---------- | --------- | ---------- |
+| `--wt-color-palette-red`    | `#c62828` | `#ffffff`  | `#ff7a70` | `#2a0705`  |
+| `--wt-color-palette-amber`  | `#f5a623` | `#241500`  | `#f5b34a` | `#241500`  |
+| `--wt-color-palette-grey`   | `#6b6e78` | `#ffffff`  | `#8b8d98` | `#101216`  |
+| `--wt-color-palette-blue`   | `#2f55d4` | `#ffffff`  | `#7aa2ff` | `#06101f`  |
+| `--wt-color-palette-green`  | `#1e7a4f` | `#ffffff`  | `#4ac08d` | `#06190f`  |
+| `--wt-color-palette-purple` | `#7e3fb8` | `#ffffff`  | `#c39bf0` | `#1d0b33`  |
+| `--wt-color-day-standard`   | `#dff3e8` | `#16181d`  | `#183626` | `#eceef2`  |
+| `--wt-color-day-closed`     | `#3a3b42` | `#ffffff`  | `#d5d7de` | `#101216`  |
 
 The "calendar day colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both
 themes, that each text colour is 4.5:1 or more on its fill, that the six palette fills differ from
