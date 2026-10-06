@@ -1,6 +1,6 @@
 import { leaveCoordinatorFor } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
-import { type WtCombobox, applyTokens, currentContentLanguages } from "@waitron/ui";
+import { type WtInput, type WtCombobox, applyTokens, currentContentLanguages } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import indexHtml from "../index.html?raw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15202,3 +15202,48 @@ describe("dead-end unsaved choices in the till shell", () => {
     },
   );
 });
+
+it.each(["cash", "reference"] as const)(
+  "W69 counter %s Cancel keeps tender and basket until local Discard without a sale",
+  async (kind) => {
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ recordSale });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await flush(el);
+    const form = tenderPay(el);
+    form.shadowRoot!.querySelector<HTMLElement>(kind === "cash" ? ".pay" : ".pay-card")!.click();
+    await flush(el);
+    if (kind === "cash") {
+      const pad = form.shadowRoot!.querySelector("till-numeric-pad")!;
+      await pad.updateComplete;
+      pad.shadowRoot!.querySelector<HTMLElement>('[data-key="5"]')!.click();
+    } else {
+      const field = form.shadowRoot!.querySelector<WtInput>(".ref-input")!;
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+      await userEvent.fill(page.elementLocator(input), "  TX-007  ");
+    }
+    await flush(el);
+    form.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+    await flush(el);
+    const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await flush(el);
+    expect(q.open).toBe(false);
+    if (kind === "cash")
+      expect(form.shadowRoot!.querySelector("till-numeric-pad")!.value).toBe("5");
+    else expect(form.shadowRoot!.querySelector<WtInput>(".ref-input")!.value).toBe("  TX-007  ");
+    form.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+    await flush(el);
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await flush(el);
+    expect(form.shadowRoot!.querySelector(".pay")).not.toBeNull();
+    expect(
+      c.store.lines.map((line) => ({ product: line.product.id, quantity: line.quantity })),
+    ).toEqual([{ product: "cafe", quantity: "1" }]);
+    expect(recordSale).not.toHaveBeenCalled();
+  },
+);

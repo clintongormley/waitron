@@ -1,6 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles } from "@waitron/ui";
+import {
+  submitOnEnter,
+  baseStyles,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+} from "@waitron/ui";
+import { live } from "lit/directives/live.js";
 import {
   compareDecimal,
   decimal,
@@ -50,6 +57,9 @@ export type CardProvider =
 export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
 
 const ZERO = decimal("0");
+
+type EntryDraft = { entry: string; label: string; ref: string };
+type CardDraft = { tip: string; offline: boolean; simulation: "captured" | "declined" };
 
 type View = "idle" | "paying" | "weighing" | "holding" | "card" | "collecting" | "card_outcome";
 
@@ -203,6 +213,137 @@ export class TillTenderPay extends LitElement {
   @state() private chosenReaderId?: string;
   @state() private pickingReader = false;
   #checkingTender = false;
+  readonly #entryOwner = {};
+  readonly #extrasOwner = {};
+  #entryScope?: DraftScope<EntryDraft>;
+  #extrasScope?: DraftScope<CardDraft>;
+  #entryBaseline?: EntryDraft;
+  #extrasBaseline?: CardDraft;
+  #entryView?: View;
+  #leave?: LeaveCoordinator;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#entryScope?.dispose();
+    this.#extrasScope?.dispose();
+    this.#entryScope = undefined;
+    this.#extrasScope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #entryDraft(): EntryDraft {
+    return { entry: this.entry, label: this.labelEntry, ref: this.refEntry };
+  }
+
+  #cardDraft(): CardDraft {
+    return { tip: this.tipEntry, offline: this.allowOffline, simulation: this.simulationOutcome };
+  }
+
+  #sameNumber(a: string, b: string): boolean {
+    const amount = (value: string) => {
+      const trimmed = value.trim().replace(/\.$/, "");
+      return decimal(trimmed === "" ? "0" : trimmed);
+    };
+    try {
+      return compareDecimal(amount(a), amount(b)) === 0;
+    } catch {
+      return a === b;
+    }
+  }
+
+  #syncScopes(): void {
+    if (!this.isConnected) return;
+    this.#leave ??= leaveCoordinatorFor(this);
+    const editable = ["paying", "weighing", "holding", "card"].includes(this.view);
+    if (this.#entryView !== this.view || !editable) {
+      this.#entryScope?.dispose();
+      this.#entryScope = undefined;
+      this.#entryBaseline = undefined;
+      this.#entryView = this.view;
+    }
+    if (editable && !this.#entryScope) {
+      const view = this.view;
+      this.#entryBaseline ??= this.#entryDraft();
+      this.#entryScope = this.#leave?.register<EntryDraft>({
+        id: this.#entryOwner,
+        parent: this,
+        current: () => this.#entryDraft(),
+        snapshot: (value) => ({ ...value }),
+        equal: (a, b) =>
+          view === "holding"
+            ? a.label.trim() === b.label.trim()
+            : view === "card"
+              ? a.ref.trim() === b.ref.trim()
+              : this.#sameNumber(a.entry, b.entry),
+        restore: (value) => {
+          this.entry = value.entry;
+          this.labelEntry = value.label;
+          this.refEntry = value.ref;
+        },
+      });
+      this.#entryScope?.commit(this.#entryBaseline);
+    }
+    if (
+      this.cardProvider !== "none" &&
+      this.view !== "collecting" &&
+      this.view !== "card_outcome"
+    ) {
+      if (!this.#extrasScope) {
+        this.#extrasBaseline ??= this.#cardDraft();
+        this.#extrasScope = this.#leave?.register<CardDraft>({
+          id: this.#extrasOwner,
+          parent: this,
+          current: () => this.#cardDraft(),
+          snapshot: (value) => ({ ...value }),
+          equal: (a, b) =>
+            (!this.tipsEnabled || this.#sameNumber(a.tip, b.tip)) &&
+            (this.cardProvider !== "stripe_on_device" || a.offline === b.offline) &&
+            (this.cardProvider !== "simulator" ||
+              this.chosenReaderId !== undefined ||
+              a.simulation === b.simulation),
+          restore: (value) => {
+            this.tipEntry = value.tip;
+            this.allowOffline = value.offline;
+            this.simulationOutcome = value.simulation;
+          },
+        });
+        this.#extrasScope?.commit(this.#extrasBaseline);
+      }
+    } else {
+      this.#extrasScope?.dispose();
+      this.#extrasScope = undefined;
+      this.#extrasBaseline = undefined;
+    }
+  }
+
+  #finishEntry(): void {
+    this.#entryScope?.dispose();
+    this.#entryScope = undefined;
+    this.#entryBaseline = undefined;
+  }
+
+  #requestCancel(): void {
+    if (!this.isConnected) return;
+    if (this.view === "collecting" || this.view === "card_outcome") {
+      this.#cancel();
+      return;
+    }
+    if (this.busy) return;
+    if (this.#entryScope && this.#leave) {
+      void this.#leave.request({
+        scopes: [this.#entryOwner],
+        reason: "cancel",
+        proceed: () => {
+          if (this.isConnected && !this.busy) this.#cancel();
+        },
+      });
+    } else this.#cancel();
+  }
 
   constructor() {
     super();
@@ -216,10 +357,21 @@ export class TillTenderPay extends LitElement {
   }
 
   #onProductSelected(product: TillProduct): void {
-    if (soldByTheUnit(product)) return;
-    this.selected = product;
-    this.entry = "";
-    this.view = "weighing";
+    if (!this.isConnected || this.busy || soldByTheUnit(product)) return;
+    const select = () => {
+      if (!this.isConnected || this.busy) return;
+      this.#finishEntry();
+      this.selected = product;
+      this.entry = "";
+      this.view = "weighing";
+    };
+    if (this.#entryScope && this.#leave)
+      void this.#leave.request({
+        scopes: [this.#entryOwner],
+        reason: "navigation",
+        proceed: select,
+      });
+    else select();
   }
 
   /**
@@ -235,6 +387,7 @@ export class TillTenderPay extends LitElement {
     if (changed.has("cardAttemptsOver") && this.view === "collecting") {
       this.view = "idle";
     }
+    this.#syncScopes();
   }
 
   /** A trailing dot (`"0."`, mid-entry) and an empty pad are the two shapes `decimal()` would
@@ -246,15 +399,17 @@ export class TillTenderPay extends LitElement {
 
   #onPadChange(event: Event): void {
     event.stopPropagation();
+    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
     this.entry = (event as CustomEvent<{ value: string }>).detail.value;
+    this.#entryScope?.changed();
   }
 
   #checkBeforeTender(onProceed: () => void): void {
-    if (this.#checkingTender) return;
+    if (!this.isConnected || this.busy || this.#checkingTender) return;
     this.#checkingTender = true;
     const resolve = (proceed: boolean) => {
       this.#checkingTender = false;
-      if (proceed) onProceed();
+      if (proceed && this.isConnected && !this.busy) onProceed();
     };
     const event = new CustomEvent("check-before-tender", {
       detail: { resolve },
@@ -304,6 +459,10 @@ export class TillTenderPay extends LitElement {
   }
 
   #collectCard(detail: CollectCardDetail): void {
+    if (!this.isConnected) return;
+    this.#extrasScope?.dispose();
+    this.#extrasScope = undefined;
+    this.#extrasBaseline = undefined;
     this.#lastCollectDetail = detail;
     this.view = "collecting";
     this.dispatchEvent(
@@ -323,12 +482,16 @@ export class TillTenderPay extends LitElement {
 
   #onTipChange(event: Event): void {
     event.stopPropagation();
+    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
     this.tipEntry = (event as CustomEvent<{ value: string }>).detail.value;
+    this.#extrasScope?.changed();
   }
 
   #onOfflineChange(event: Event): void {
     event.stopPropagation();
+    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
     this.allowOffline = (event as CustomEvent<{ checked: boolean }>).detail.checked;
+    this.#extrasScope?.changed();
   }
 
   /** The manual path has no connected reader to pick. */
@@ -355,6 +518,7 @@ export class TillTenderPay extends LitElement {
     this.chosenReaderId =
       (event as CustomEvent<{ readerId: string | null }>).detail.readerId ?? undefined;
     this.pickingReader = false;
+    this.#extrasScope?.changed();
   }
 
   #onReaderPickerCancel(): void {
@@ -367,17 +531,23 @@ export class TillTenderPay extends LitElement {
 
   #onLabelChange(event: Event): void {
     event.stopPropagation();
+    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
     this.labelEntry = (event as CustomEvent<{ value: string }>).detail.value;
+    this.#entryScope?.changed();
   }
 
   #onRefChange(event: Event): void {
     event.stopPropagation();
+    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
     this.refEntry = (event as CustomEvent<{ value: string }>).detail.value;
+    this.#entryScope?.changed();
   }
 
   /** Reset BEFORE the dispatch, so even a synchronous listener that throws leaves the widget
    * idle. */
   #park(): void {
+    if (!this.isConnected || this.busy || this.view !== "holding") return;
+    this.#finishEntry();
     const label = this.labelEntry.trim();
     this.view = "idle";
     this.labelEntry = "";
@@ -401,6 +571,7 @@ export class TillTenderPay extends LitElement {
     ) {
       this.dispatchEvent(new CustomEvent("cancel-demo-reader", { bubbles: true, composed: true }));
     }
+    this.#finishEntry();
     this.selected = undefined;
     this.entry = "";
     this.labelEntry = "";
@@ -416,7 +587,9 @@ export class TillTenderPay extends LitElement {
   /** Guarded so a short tender can never be emitted, even if Confirm is force-clicked past its
    * disabled state. */
   #confirm(): void {
+    if (!this.isConnected || this.busy || this.view !== "paying") return;
     if (compareDecimal(this.#enteredDecimal(), this.store.total) < 0) return;
+    this.#finishEntry();
     this.dispatchEvent(
       new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
         detail: { method: "cash", amount: this.#enteredDecimal() },
@@ -430,6 +603,8 @@ export class TillTenderPay extends LitElement {
 
   /** Reset BEFORE the dispatch, like `#park`. */
   #confirmCard(): void {
+    if (!this.isConnected || this.busy || this.view !== "card") return;
+    this.#finishEntry();
     const ref = this.refEntry.trim();
     const detail: ConfirmPaymentDetail = {
       method: "card",
@@ -455,9 +630,10 @@ export class TillTenderPay extends LitElement {
    * returns.
    */
   #addWeight(product: TillProduct): void {
-    if (this.view !== "weighing") return;
+    if (!this.isConnected || this.busy || this.view !== "weighing") return;
     const quantity = this.#enteredDecimal();
     if (compareDecimal(quantity, ZERO) <= 0 || !this.#quantityFitsUnit(product)) return;
+    this.#finishEntry();
     this.selected = undefined;
     this.entry = "";
     this.view = "idle";
@@ -669,14 +845,20 @@ export class TillTenderPay extends LitElement {
                   variant=${this.simulationOutcome === "captured" ? "primary" : "secondary"}
                   data-test="simulation-captured"
                   aria-pressed=${this.simulationOutcome === "captured"}
-                  @click=${() => (this.simulationOutcome = "captured")}
+                  @click=${() => {
+                    this.simulationOutcome = "captured";
+                    this.#extrasScope?.changed();
+                  }}
                   >${t("card.simulation_captured")}</wt-button
                 >
                 <wt-button
                   variant=${this.simulationOutcome === "declined" ? "primary" : "secondary"}
                   data-test="simulation-declined"
                   aria-pressed=${this.simulationOutcome === "declined"}
-                  @click=${() => (this.simulationOutcome = "declined")}
+                  @click=${() => {
+                    this.simulationOutcome = "declined";
+                    this.#extrasScope?.changed();
+                  }}
                   >${t("card.simulation_declined")}</wt-button
                 >
               </div>`
@@ -687,9 +869,10 @@ export class TillTenderPay extends LitElement {
             ? html`
                 <wt-input
                   @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".pay-card"))}
+                  name="tip"
                   class="tip-input"
                   type="number"
-                  .value=${this.tipEntry}
+                  .value=${live(this.tipEntry)}
                   .label=${t("card.tip")}
                   @wt-change=${(event: Event) => this.#onTipChange(event)}
                 ></wt-input>
@@ -718,7 +901,7 @@ export class TillTenderPay extends LitElement {
         <p class="prompt">${t("card.collecting")}</p>
       </div>
       <div class="actions">
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#requestCancel()}>
           ${t("card.cancel")}
         </wt-button>
       </div>
@@ -736,7 +919,7 @@ export class TillTenderPay extends LitElement {
         <wt-button class="retry" variant="primary" size="lg" @click=${() => this.#retryCard()}>
           ${t("card.retry")}
         </wt-button>
-        <wt-button class="switch-tender" variant="secondary" @click=${() => this.#cancel()}>
+        <wt-button class="switch-tender" variant="secondary" @click=${() => this.#requestCancel()}>
           ${t("card.switch_tender")}
         </wt-button>
         <wt-button class="wait" variant="secondary" @click=${() => this.#wait()}>
@@ -750,8 +933,9 @@ export class TillTenderPay extends LitElement {
     return html`
       <wt-input
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".park"))}
+        name="label"
         class="label-input"
-        .value=${this.labelEntry}
+        .value=${live(this.labelEntry)}
         .label=${t("held.label_prompt")}
         @wt-change=${(event: Event) => this.#onLabelChange(event)}
       ></wt-input>
@@ -759,7 +943,7 @@ export class TillTenderPay extends LitElement {
         <wt-button class="park" variant="primary" size="lg" @click=${() => this.#park()}>
           ${t("action.hold")}
         </wt-button>
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#requestCancel()}>
           ${t("action.cancel")}
         </wt-button>
       </div>
@@ -777,8 +961,9 @@ export class TillTenderPay extends LitElement {
       </div>
       <wt-input
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".confirm"))}
+        name="externalRef"
         class="ref-input"
-        .value=${this.refEntry}
+        .value=${live(this.refEntry)}
         .label=${t("tender.card_ref")}
         @wt-change=${(event: Event) => this.#onRefChange(event)}
       ></wt-input>
@@ -792,7 +977,7 @@ export class TillTenderPay extends LitElement {
         >
           ${t("action.confirm_payment")}
         </wt-button>
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#requestCancel()}>
           ${t("action.cancel")}
         </wt-button>
       </div>
@@ -841,7 +1026,7 @@ export class TillTenderPay extends LitElement {
         >
           ${t("action.confirm_payment")}
         </wt-button>
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#requestCancel()}>
           ${t("action.cancel")}
         </wt-button>
       </div>
@@ -875,7 +1060,7 @@ export class TillTenderPay extends LitElement {
         >
           ${t("action.add")}
         </wt-button>
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#requestCancel()}>
           ${t("action.cancel")}
         </wt-button>
       </div>

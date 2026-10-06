@@ -1220,3 +1220,53 @@ All original no-write and confirm-step assertions remain. No fiscal or payment a
 
 Task 4 remains partial. Tender, bill payment, collection and remaining modal owners still need
 coverage before PR 1; page/history/native reload work remains Tasks 5–6.
+
+
+## Tender entry checkpoint — 2026-10-06
+
+On the W69 branch, Cancel protects local cash and weight entry, park labels and manual card
+references. Keep preserves raw spelling and focus; Discard resets the entry without a sale,
+collection or park command, and leaves the existing basket intact. Zero cash and trimmed-empty
+labels/references revert to the clean baseline. Replacing a staged weighed product asks before
+changing its product or quantity. Disconnect aborts a question and unregisters unload protection;
+reconnect retains the opening baseline. Departed controls cannot alter a later attempt.
+
+Card tip, offline consent and simulator outcome use an independent child scope. Cancelling cash
+entry preserves these retained card inputs. A coordinator navigation request can Keep or locally
+Discard them, but application navigation interception is still Task 5 work. Reader preferences
+retain their existing lifetime; choosing a demo reader hides the instant simulator choice and
+refreshes its dirty state. Cash/card/hold/weight submission emits the existing normalized details
+without a question. Submission releases that input scope before dispatch; provider collection,
+waiting, outcomes and cancellation remain exempt.
+
+The first corrected new widget run failed eight assertions on missing warning/unload protection
+and busy control behavior. A subsequent two-case run failed staged weight replacement and a
+retained departed input; both then passed. A separate reader-preference test failed stale unload
+registration before the preference handler notified its scope. No existing assertion changed.
+The first fixture used a nonexistent OrderLine.productId; correcting it to product.id separated
+that fixture mistake from the expected failures.
+
+The seven-suite final focused command ran 886 browser cases:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/tender-pay.unsaved.test.ts src/widgets/tender-pay.test.ts src/widgets/tender-pay-enter-key.test.ts src/widgets/tender-pay-weighed-dish.test.ts src/widgets/tender-pay.a11y.test.ts src/screens/till-counter-screen.test.ts src/till-app.test.ts --reporter=dot
+```
+
+Its earlier run caught the new collection busy guard refusing an existing retry's spinner while
+an earlier kitchen-station attempt finished. The guard was narrowed to preserve that provider
+path; the unchanged retry case passed, followed by the final family run. The unedited fiscal
+write-path and immutability suites ran 20 cases. Till types, changed-file lint, formatting and
+diff checks passed.
+
+In an independently installed disposable checkout, nine separate removals failed their intended
+assertions alongside a passing clean/reverted control: Cancel gating, entry notification, card
+notification, card local restore, disconnect disposal, retained reconnect baseline, departed input,
+submission retirement and weight replacement. The restored widget ran 14 passing cases. Deleting
+the Cancel gate failed both real counter leave cases; restoring it passed both. The first control
+selector also matched a second test, so the retained final controls use an anchored selector.
+
+Eight temporary EN/ES, light/dark, 390/1280 visual flows ran 16 axe checks, and all 16 editor/warning
+captures were inspected. Logs, visual probe and captures stay outside product source in Lane E's
+`receipts/w69-tender-20261006`. Synthetic unload events establish registration/cancellation, not
+that a browser-native reload prompt appeared. Bill payment, collection, remaining modal owners
+and Tasks 5–6 remain open; neither W69 PR is ready for finishing.

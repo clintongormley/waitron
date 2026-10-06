@@ -1183,8 +1183,14 @@ inputs through Cancel/native Escape. Keep retains the form; Discard restores onl
 Accepted adjustments retire that scope before the basket refresh, and nested approval Discard
 retains the adjustment. Preview, refusal and busy phases keep their existing requests. Focused
 adjustment widget and actual counter/table suites cover these routes and direct submission.
-Tender, bill payment, collection and remaining modal owners, followed by page/history/navigation
-work, still keep W69 incomplete.
+Tender entry now protects cash, weight, park labels and manual card references through Cancel.
+Keep retains the raw entry; local Discard leaves the basket intact. Tip/offline/simulator inputs
+have a separate scope, so cancelling cash entry preserves those retained card choices. Explicit
+cash/card/hold/weight actions still submit directly; provider waiting, cancellation and retry
+remain exempt. Focused widget and real counter suites cover these boundaries, reconnect,
+departed controls and replacement of a staged weight. Shell navigation is still pending.
+Bill payment, collection and remaining modal owners, followed by page/history/navigation work,
+still keep W69 incomplete.
 
 A separate finding remains: entering `05,50` for an amount discount and pressing Continue raises
 `shared.invalid_decimal` from the existing amount check. The W69 adjustment checkpoint reproduced
