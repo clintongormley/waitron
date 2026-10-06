@@ -1448,8 +1448,13 @@ and native Escape. Discard closes the local editor while retaining the table and
 submission retains the trimmed reason and existing request path. A refusal keeps the reason
 protected, and dismissing the nested approval leaves that parent reason intact. Focused cases
 are in `unpaid-departure-dialog.unsaved.test.ts` and `apps/till/src/till-app-parties.test.ts`.
-Tender, bill, adjustment, refund, cancellation, collection and other modal owners, plus
-page/navigation work, remain open.
+Cancel-and-credit reasons also use the shared warning on the branch. Keep the bill and native
+Escape retain the typed reason until Discard; that local discard preserves counter baskets,
+waiting orders and table bills without sending a cancellation request. Refused submissions remain
+protected, while an accepted credit clears the scope before the existing refresh. Focused cases
+are in `cancel-credit-dialog.unsaved.test.ts` and the counter/table cancel-credit consumer suites.
+Tender, bill, adjustment, refund, collection and other modal owners, plus page/navigation work,
+remain open.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

@@ -107,7 +107,7 @@ import "./widgets/cancel-credit-dialog.js";
 import "./widgets/dead-ends-section.js";
 import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
-import type { CancelCreditDone } from "./widgets/cancel-credit-dialog.js";
+import type { CancelCreditDone, TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import {
   confirmationOf,
   isTakePaymentRefusal,
@@ -6760,11 +6760,15 @@ export class TillApp extends LitElement {
     const now = this.#cancelCreditingNow(id);
     if (now === null) return;
     const bill = bills?.find((row) => row.workingOrderId === now.workingOrderId);
+    const done = { creditNote: bill?.creditNotes?.at(-1) ?? null };
+    this.shadowRoot
+      ?.querySelector<TillCancelCreditDialog>("till-cancel-credit-dialog")
+      ?.showResult(done);
     this.cancelCrediting = {
       ...now,
       refusal: null,
       busy: false,
-      done: { creditNote: bill?.creditNotes?.at(-1) ?? null },
+      done,
     };
   }
 

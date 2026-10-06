@@ -6610,8 +6610,7 @@ describe("till-app: recording an unpaid departure", () => {
       form.shadowRoot!.querySelector<HTMLElement>("[data-departure-close]")!.click();
       await flush(el);
       question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-      await flush(el);
-      expect(dialog(el)).toBeNull();
+      await expect.poll(() => dialog(el)).toBeNull();
       expect(tableOrder(el)).toBe(order);
       expect(tableOrder(el)!.bills).toEqual(bills);
       expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
@@ -6660,9 +6659,7 @@ describe("till-app: recording an unpaid departure", () => {
     const { el } = await openDeparture();
 
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-departure-close]")!.click();
-    await flush(el);
-
-    expect(dialog(el)).toBeNull();
+    await expect.poll(() => dialog(el)).toBeNull();
     expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
     expect(tableOrder(el)!.finishRefused).toBe(true);
   });
@@ -7118,13 +7115,63 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     });
   });
 
+  it("an accepted table credit clears unload protection before its bill refresh starts", async () => {
+    const { el } = await openCancel();
+    await typeReason(el, "  Wrong table  ");
+    let protectedAtRefresh: boolean | undefined;
+    vi.mocked(api.getPartyBills).mockImplementation(() => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      protectedAtRefresh = event.defaultPrevented;
+      return new Promise(() => {});
+    });
+    await confirmCancel(el);
+    expect(protectedAtRefresh).toBe(false);
+    expect(vi.mocked(api.cancelOrder).mock.calls).toEqual([
+      ["wo-check", "Wrong table", undefined, { signal: expect.any(AbortSignal) }],
+    ]);
+    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-finished]")!.click();
+    await expect.poll(() => dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  });
+
+  for (const action of ["Keep the bill", "Escape"]) {
+    it(`table cancel-credit ${action} discards only the local reason and keeps both bills`, async () => {
+      const { el } = await openCancel();
+      await typeReason(el, "  Wrong table  ");
+      if (action === "Escape") {
+        dialog(el)!
+          .shadowRoot!.querySelector("wt-input")!
+          .shadowRoot!.querySelector("input")!
+          .focus();
+        await userEvent.keyboard("{Escape}");
+      } else
+        dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
+      await flush(el);
+      const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      await q.updateComplete;
+      expect(q.open).toBe(true);
+      expect(api.cancelOrder).not.toHaveBeenCalled();
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+      await expect.poll(() => q.open).toBe(false);
+      expect(dialog(el)!.shadowRoot!.querySelector("wt-input")!.value).toBe("  Wrong table  ");
+      dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
+      await flush(el);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await expect.poll(() => dialog(el)).toBeNull();
+      expect(tableOrder(el)).not.toBeNull();
+      expect(tableOrder(el)!.bills).toEqual([tabBill, invoiced]);
+      expect(api.cancelOrder).not.toHaveBeenCalled();
+      expect(api.listCancelCreditAuthorizers).not.toHaveBeenCalled();
+    });
+  }
+
   it("Cancel closes the dialog and sends nothing", async () => {
     const { el } = await openCancel();
 
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
-    await flush(el);
-
-    expect(dialog(el)).toBeNull();
+    await expect.poll(() => dialog(el)).toBeNull();
     expect(api.cancelOrder).not.toHaveBeenCalled();
   });
 });

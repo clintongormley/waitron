@@ -1083,3 +1083,61 @@ light/dark and 390/1280 widths with axe and captured the editor and warning at e
 The campaign's `receipts/w69-departure-20261006` holds logs, probe and inspected images.
 
 This advances Task 4 only. Other modal owners and the page/history/navigation rollout remain open.
+
+
+## Cancel-and-credit reason checkpoint — 2026-10-06
+
+On the W69 branch, Keep the bill and native Escape protect the staged reason. Keep retains its
+raw spelling and focus; Discard restores the local input and reports close once. Comparisons use
+the trimmed reason already submitted by this form. Empty and reverted input close directly.
+Validation, refused submissions and bill-summary rerenders retain the reason. Busy operations
+remain nondismissible. Submission sends the existing reason without a discard question; the
+accepted result unregisters its scope before the shell's following queue/bill refresh.
+
+Disconnect aborts the question and unregisters unload protection; reconnect retains the reason
+against the empty starting baseline. Departed controls cannot submit, close or replace the input.
+Result views remain exempt after reconnect. The real counter and table cases exercise both leave
+routes, preserving the waiting order, separate basket and both table bills without a cancel request.
+The widget suite is `apps/till/src/widgets/cancel-credit-dialog.unsaved.test.ts`.
+
+The first new widget run failed ten cases before implementation. Six independent deletions in an
+installed disposable candidate failed the intended close, change-notification, local-restore,
+result-scope-retirement, disconnect or departed-input assertion while the untouched-form control
+passed. Restoring the source passed eleven cases. Replacing the widget with its previous committed
+version failed all four new counter/table leave cases; restoring the candidate passed them.
+
+A consumer run also failed an unpaid-departure modal-absence assertion, then another run failed
+the clean counter cancel-credit modal-absence assertion. A third run failed the clean departure
+modal-absence assertion. Their expected values are unchanged;
+they now await the native close report. A filtered previous-version departure run passed once,
+so no reproducible baseline failure is claimed. Delaying that report by 100 ms in the disposable
+fixture failed the old departure assertion and passed the awaited assertion. The table's clean
+cancel-credit close assertion also awaits that native report. Carry these wait-only changes into
+the eventual PR's Changed test checks section.
+
+Eight temporary visual flows passed sixteen axe scans. The sixteen editor/warning captures were
+inspected in EN/ES, both themes and measured 390/1280 widths. The probe, captures and control logs
+stay in the lane's `receipts/w69-cancel-credit-20261006` directory. Synthetic unload events check
+listener cancellation only. Other modal owners and the page/history/navigation rollout remain
+open; neither proposed W69 PR is ready for finishing.
+
+
+The acceptance-to-refresh boundary was then measured directly. The new counter case passed at
+first run; the table case failed because unload remained protected at the start of getPartyBills.
+The shell now calls the form's showResult immediately on accepted cancellation, before that read.
+Both boundary cases then passed, preserving their exact existing cancel request bodies. In the
+final installed candidate, the six widget controls were repeated after this restructure, and a
+seventh deletion of the shell's completion handoff failed the table boundary assertion. The
+counter control still passed without that handoff, so it is not claimed as proof of the handoff.
+
+
+The final five-suite browser command passed 393 cases on this completed family candidate:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/cancel-credit-dialog.unsaved.test.ts src/widgets/cancel-credit-dialog.test.ts src/widgets/cancel-credit-dialog.a11y.test.ts src/till-app-counter-cancel-credit.test.ts src/till-app-parties.test.ts --reporter=dot
+```
+
+The unedited golden write-path and immutability suites passed 20 cases. Till types, changed-file
+lint, formatting and diff checks passed. The final candidate was restored byte for byte before
+its owned checkout and parent were removed. The normal push hook, whole-branch review and
+current-head CI remain for the complete W69 modal rollout.

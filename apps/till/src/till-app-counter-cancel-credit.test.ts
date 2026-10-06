@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
@@ -267,9 +268,7 @@ describe("till-app: cancelling and crediting an invoiced counter order", () => {
     const keep = dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!;
     expect(keep.textContent!.trim()).toBe(t("cancel_credit.keep"));
     keep.click();
-    await flush(el);
-
-    expect(dialog(el)).toBeNull();
+    await expect.poll(() => dialog(el)).toBeNull();
     expect(api.cancelOrder).not.toHaveBeenCalled();
   });
 
@@ -614,4 +613,74 @@ describe("till-app: cancelling and crediting an invoiced counter order", () => {
 
     expect(dialog(el)).toBeNull();
   });
+});
+
+for (const action of ["Keep the bill", "Escape"]) {
+  it(`counter cancel-credit ${action} preserves the waiting order and basket through local Discard`, async () => {
+    const el = await openCancel();
+    const store = counter(el).store;
+    store.loadFrom("wo-other", [
+      {
+        product: {
+          id: "coffee",
+          name: "Coffee",
+          customerName: { en: "Coffee" },
+          pricingUnit: "each",
+          unitPrice: "7.50",
+          vatClass: "general",
+          category: null,
+          allergens: null,
+        },
+        quantity: "1",
+      },
+    ]);
+    await typeReason(el, "  Wrong table  ");
+    if (action === "Escape") {
+      dialog(el)!
+        .shadowRoot!.querySelector("wt-input")!
+        .shadowRoot!.querySelector("input")!
+        .focus();
+      await userEvent.keyboard("{Escape}");
+    } else
+      dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
+    await flush(el);
+    const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await q.updateComplete;
+    expect(q.open).toBe(true);
+    expect(api.cancelOrder).not.toHaveBeenCalled();
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => q.open).toBe(false);
+    expect(dialog(el)!.shadowRoot!.querySelector("wt-input")!.value).toBe("  Wrong table  ");
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
+    await flush(el);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => dialog(el)).toBeNull();
+    expect(rowOf(el, "wo-sent")).not.toBeNull();
+    expect(store.id).toBe("wo-other");
+    expect(store.lineCount).toBe(1);
+    expect(store.total).toBe("7.50");
+    expect(api.cancelOrder).not.toHaveBeenCalled();
+    expect(api.listCancelCreditAuthorizers).not.toHaveBeenCalled();
+  });
+}
+
+it("an accepted counter credit clears unload protection before its queue refresh starts", async () => {
+  const el = await openCancel();
+  await typeReason(el, "  Wrong table  ");
+  let protectedAtRefresh: boolean | undefined;
+  vi.mocked(api.getStationQueue).mockImplementation(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    protectedAtRefresh = event.defaultPrevented;
+    return new Promise(() => {});
+  });
+  await confirmCancel(el);
+  expect(protectedAtRefresh).toBe(false);
+  expect(vi.mocked(api.cancelOrder).mock.calls).toEqual([
+    ["wo-sent", "Wrong table", undefined, { signal: expect.any(AbortSignal) }],
+  ]);
+  expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+  dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-finished]")!.click();
+  await expect.poll(() => dialog(el)).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
 });
