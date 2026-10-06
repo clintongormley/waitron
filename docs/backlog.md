@@ -1665,8 +1665,18 @@ no operation is not refused for that. Any
 other record of the envío, including one AEAT's reply gave no line for, becomes unknown at once:
 it waits for a later send, its chain's records not yet sent wait behind it, and it raises
 `fiscal.estado_desconocido` with the invoice sent and every line that named it. Before, a record
-with no line sat `enviando` until the five-minute recovery or a restart. **Still open:** a line
-naming no record of the envío by either is ignored and recorded nowhere; and no run against real
+with no line sat `enviando` until the five-minute recovery or a restart. A line naming no record
+of the envío by either is not applied, and is kept (owner, 2026-10-06: "we need to know what we're
+comparing our unmatched record to"): every `fiscal.estado_desconocido` stored for a record of that
+envío carries it in `lineasSinRegistro`, and when the reply stores no such incident, a warning
+`fiscal.linea_sin_registro` on the sale of the envío's first record carries the envío's record ids,
+its CSV and those lines. The dashboard's sentence does not show those lines; `readOpenAlerts`
+(`apps/server/src/alerts.ts`), behind `GET /management-api/alerts`, returns them in the alert's
+params. **Still open:** an incident is not
+stored while one with the same code for the same sale is open, so the lines are kept nowhere when
+each unknown record's sale (if any record is unknown) already has an open
+`fiscal.estado_desconocido` and the first record's sale already has an open
+`fiscal.linea_sin_registro`; and no run against real
 AEAT has shown that a cancellation's reply line names the cancelled invoice (the schema types the
 line's `IDFactura` with the plain field names, and the library's fake echoes the cancelled invoice
 there). If AEAT named a different invoice on that line, the cancellation would come back unknown
