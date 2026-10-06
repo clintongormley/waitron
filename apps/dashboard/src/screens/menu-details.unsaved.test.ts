@@ -131,3 +131,73 @@ for (const kind of ["menu", "section"] as const) {
     });
   }
 }
+
+for (const succeeds of [true, false]) {
+  it(`Device Home Page display writes remain exempt after ${succeeds ? "success" : "refusal"}`, async () => {
+    history.replaceState(null, "", "/manage/menus/menu/menu/view/home");
+    const writes: unknown[] = [];
+    const client = {
+      listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+      listLibraryProducts: async () => [],
+      listCategories: async () => [],
+      getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
+      getMenuStatuses: async () => ({ menu: { state: "unpublished", clashes: 0 } }),
+      getMenuStatus: async () => ({ state: "unpublished", clashes: 0 }),
+      getMenuStructure: async () => ({
+        rootSectionId: "root",
+        root: {
+          id: "root",
+          internalName: "Menu",
+          names: {},
+          image: null,
+          color: null,
+          members: [],
+        },
+        includable: [],
+        includedBy: [],
+        nodes: [],
+      }),
+      getMenuHome: async () => ({
+        id: "home",
+        shortcuts: [],
+        handheld: { columns: 3, tiles: "colours", order: "home_first" },
+        till: { columns: 5, tiles: "colours", order: "home_first" },
+      }),
+      getMenuPreview: async () => {
+        throw { code: "connection.failed" };
+      },
+      setHomeDisplay: async (...args: unknown[]) => {
+        writes.push(args);
+        if (!succeeds)
+          throw {
+            code: "menu.home_display_invalid",
+            params: { device: "handheld", field: "tiles" },
+          };
+      },
+    } as unknown as DashboardApi;
+    Object.defineProperty(client, "background", { get: () => client });
+    const { el: app } = await mountWidget<MenuDetailsLeaveApp>("menu-details-leave-test-app", {
+      api: client,
+    });
+    const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!;
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector('input[name="home-tiles"][value="thumbnails"]'))
+      .not.toBeNull();
+    screen
+      .shadowRoot!.querySelector<HTMLInputElement>('input[name="home-tiles"][value="thumbnails"]')!
+      .click();
+    await expect.poll(() => writes).toEqual([["menu", "handheld", { tiles: "thumbnails" }]]);
+    await screen.updateComplete;
+    expect(app.leave.coordinator.isDirty()).toBe(false);
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    if (!succeeds)
+      await expect
+        .poll(() =>
+          screen.shadowRoot!.querySelector('input[value="colours"]')!.getAttribute("aria-invalid"),
+        )
+        .toBe("true");
+  });
+}

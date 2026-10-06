@@ -1,7 +1,17 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { MONEY_SCALE, compareDecimal, decimal, formatMoney, toScale } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+  type WtDialog,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
@@ -18,6 +28,7 @@ import {
 } from "../state/bill-payment.js";
 
 type Field = "amount" | "reason";
+type RefundDraft = { howMuch: "whole" | "part"; amount: string; reason: string };
 
 /**
  * Gives back one payment of a bill: the whole of what is left of it, its tip included, or part of
@@ -122,12 +133,101 @@ export class TillBillRefundDialog extends LitElement {
   /** The refusal still shown: it goes when the field it names changes, or at the next request. */
   @state() private shownRefusal: DialogRefusal | null = null;
 
+  @state() private active = true;
+  #scope?: DraftScope<RefundDraft>;
+  #leave?: LeaveCoordinator;
+  #baseline?: RefundDraft;
+  #paymentId?: string;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #draft(): RefundDraft {
+    return { howMuch: this.howMuch, amount: this.typedAmountValue, reason: this.reason };
+  }
+
+  #comparable(value: RefundDraft): string {
+    const part = !this.#wholeOnly() && value.howMuch === "part";
+    const amount = part ? typedAmount(value.amount) : null;
+    return JSON.stringify({
+      part,
+      amount: part
+        ? amount === null
+          ? { invalid: value.amount }
+          : toScale(decimal(amount), MONEY_SCALE)
+        : null,
+      reason: value.reason.trim(),
+    });
+  }
+
+  #cancel(): void {
+    if (!this.isConnected || !this.active || this.busy) return;
+    if (this.#scope)
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+    else this.#closed();
+  }
+
+  #closed(event?: Event): void {
+    event?.stopPropagation();
+    if (event && event.target !== event.currentTarget) return;
+    if (!this.isConnected || !this.active) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#emit("bill-refund-close");
+  }
+
+  closeSaved(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.active = false;
+    this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.closeAfter("saved");
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
+    if (this.#paymentId !== this.payment.id) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#baseline = undefined;
+      this.#paymentId = this.payment.id;
+      this.howMuch = "whole";
+      this.typedAmountValue = "";
+      this.reason = "";
+      this.active = true;
+    }
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
     if (changed.has("suggested") && this.suggested !== null && this.#canGivePart(this.suggested)) {
       this.howMuch = "part";
       this.typedAmountValue = this.suggested;
+      this.#scope?.changed();
     }
+    if (!this.isConnected || !this.active || this.#scope) return;
+    this.#baseline ??= this.#draft();
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<RefundDraft>({
+      id: this,
+      current: () => this.#draft(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => this.#comparable(a) === this.#comparable(b),
+      restore: (value) => {
+        this.howMuch = value.howMuch;
+        this.typedAmountValue = value.amount;
+        this.reason = value.reason;
+      },
+    });
+    this.#scope?.commit(this.#baseline);
   }
 
   /** Whether `amount` is a part this payment can give: above zero, and below what is left of it. */
@@ -229,6 +329,7 @@ export class TillBillRefundDialog extends LitElement {
   }
 
   #changed(field: Field): void {
+    this.#scope?.changed();
     if (this.#refusalField() === field) this.shownRefusal = null;
   }
 
@@ -237,6 +338,7 @@ export class TillBillRefundDialog extends LitElement {
   }
 
   async #continue(): Promise<void> {
+    if (!this.isConnected || !this.active || this.busy) return;
     this.attempted = true;
     this.shownRefusal = null;
     if (this.#ownErrors().size > 0) {
@@ -248,6 +350,7 @@ export class TillBillRefundDialog extends LitElement {
   }
 
   #confirmTerminal(): void {
+    if (!this.isConnected || !this.active || this.busy) return;
     this.shownRefusal = null;
     this.#emit("bill-refund-continue", {
       ...this.#ask(),
@@ -258,10 +361,11 @@ export class TillBillRefundDialog extends LitElement {
   override render() {
     return html`<wt-dialog
       ${trackDialog()}
-      .open=${true}
+      .open=${this.active}
       .heading=${t("bill_refund.title")}
       .dismissible=${!this.busy}
-      @wt-close=${() => this.#emit("bill-refund-close")}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      @wt-close=${(event: Event) => this.#closed(event)}
     >
       <div class="body">
         ${this.#summary(this.payment)} ${this.terminal ? this.#terminalStep() : this.#form()}
@@ -293,7 +397,7 @@ export class TillBillRefundDialog extends LitElement {
       variant="secondary"
       data-refund-close
       .disabled=${this.busy}
-      @click=${() => this.#emit("bill-refund-close")}
+      @click=${() => this.#cancel()}
     >
       ${t("action.cancel")}
     </wt-button>`;
@@ -310,11 +414,12 @@ export class TillBillRefundDialog extends LitElement {
         autocomplete="off"
         .disabled=${this.busy}
         .label=${t("bill_refund.reason")}
-        .value=${this.reason}
+        .value=${live(this.reason)}
         .required=${true}
         .error=${errors.get("reason") ?? ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
+          if (!this.isConnected || !this.active || this.busy) return;
           this.reason = event.detail.value;
           this.#changed("reason");
         }}
@@ -368,7 +473,9 @@ export class TillBillRefundDialog extends LitElement {
           .checked=${this.howMuch === value}
           @change=${(event: Event) => {
             event.stopPropagation();
+            if (!this.isConnected || !this.active || this.busy) return;
             this.howMuch = value;
+            this.#scope?.changed();
           }}
         />
         <span>${label}</span>
@@ -386,11 +493,12 @@ export class TillBillRefundDialog extends LitElement {
               autocomplete="off"
               .disabled=${this.busy}
               .label=${t("bill_refund.amount")}
-              .value=${this.typedAmountValue}
+              .value=${live(this.typedAmountValue)}
               .required=${true}
               .error=${error ?? ""}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
+                if (!this.isConnected || !this.active || this.busy) return;
                 this.typedAmountValue = event.detail.value;
                 this.#changed("amount");
               }}

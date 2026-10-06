@@ -1172,6 +1172,15 @@ read opens the confirmation. Follow-up: complete that accessibility fixture and 
 dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
+
+Refund amount/reason entry now uses the same registry on the branch. Cancel and native Escape
+retain the raw fields until Discard; reverts and untouched suggested amounts remain clean.
+Discard resets only local inputs, and a successful refund releases its draft before the first
+following table read. Terminal confirmation still submits directly; refusal retains protection.
+The focused refund widget and real bill-payment owner suites cover those boundaries, reconnect,
+busy input and stale answers. Tender, bill payment, adjustment, collection and remaining modal
+owners, followed by page/history/navigation work, still keep W69 incomplete.
+
 The [design](superpowers/specs/2026-10-05-unsaved-changes-warning-design.md),
 [owner audit](superpowers/plans/2026-10-05-unsaved-changes-audit.md) and
 [implementation plan](superpowers/plans/2026-10-05-unsaved-changes-warning.md) cover editable
@@ -1207,13 +1216,13 @@ are in `section-details-form.unsaved.test.ts` and `menu-details.unsaved.test.ts`
 Search and category filters remain exempt; hidden selections stay in the submitted choice.
 Accepted placements clear only their successful destinations, leaving refused ones unsaved.
 Section additions commit before closing and refreshing. Focused cases are in
-`menu-selections.unsaved.test.ts` and the Catalogue/Menu screen suites. Member replacement choices
-and layout create/duplicate/rename names now use the same registry. Cancel retains a replacement
-choice until Discard; layout names also use native Escape. Successful writes commit their submitted
-values, including a late input event retained after a layout write. Include menu remains an
-immediate-write exemption, checked through the real warning controller for success and refusal.
-Focused cases are in `member-replacement.unsaved.test.ts` and `menu-layout.unsaved.test.ts` under
-`apps/dashboard/src/`. Add staff now protects its normalized details and role with the same
+`menu-selections.unsaved.test.ts` and the Catalogue/Menu screen suites. W93 retired the layout
+name dialogs and the screen that drew member replacements.
+The retained member-list editor has focused protection in its own widget suite; it is not a live
+screen owner. Device Home Page display choices write immediately and remain exempt, including
+refusals, checked through the shared warning controller in `menu-details.unsaved.test.ts`.
+Include menu remains an immediate-write exemption. Add staff now protects its normalized details
+and role with the same
 registry. Cancel/Escape retains those values until Discard; refused writes retain their draft,
 and successful creation commits before list refresh. A delivered newer field event remains dirty
 against that submitted snapshot. The focused staff widget/screen suites include the standalone

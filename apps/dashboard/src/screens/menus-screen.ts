@@ -10,7 +10,6 @@ import {
   trackIconTooltip,
   leaveCoordinatorFor,
   type LeaveReason,
-  type DraftScope,
   focusFirstInvalid,
   setContentLanguages,
   currentContentLanguages,

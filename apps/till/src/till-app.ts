@@ -7553,6 +7553,7 @@ export class TillApp extends LitElement {
    * changes nothing. */
   async #onRefunded(open: BillRefunding, result: BillRefundResult): Promise<void> {
     if (this.#billRefundingNow(open.id) === null) return;
+    this.shadowRoot!.querySelector("till-bill-refund-dialog")!.closeSaved();
     this.#closeBillRefunding();
     if (this.activeTabId === open.billId) this.billBalance = result.balance;
     // Whatever closes the payment dialog closes the refund dialog over it (#closeBillPaying).

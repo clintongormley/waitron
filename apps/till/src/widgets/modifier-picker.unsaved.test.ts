@@ -499,10 +499,11 @@ class ModifierStoreApp extends ModifierLeaveApp {
     isDefault: true,
     versionId: "v1",
     structure: { members: [{ kind: "product", menuItemId: "offer-dish", productId: "dish" }] },
-    homeLayouts: [{ id: "home", name: "Home", tiles: [] }],
-    defaultHomeLayoutId: "home",
-    homeLayoutId: "home",
-    layoutFallback: null,
+    home: {
+      shortcuts: [],
+      handheld: { columns: 3, tiles: "colours", order: "home_first" },
+      till: { columns: 5, tiles: "colours", order: "home_first" },
+    },
   };
   override render() {
     return html`<till-menu-browser

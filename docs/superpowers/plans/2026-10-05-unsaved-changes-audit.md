@@ -71,7 +71,7 @@ Every named owner has the `.ts` extension. In the Test column, a named sibling h
 | DW `add-content-language`; DS `content-languages-screen`                                                                                                           | **E**, choosing Add/default/remove writes immediately; language choice is navigation/automatic action, not a pending Save payload.                                                                                                                                                                                                                                | Modal/page, existing immediate action                                                    | DW `add-content-language`; DS `content-languages-screen`                                   |
 | DW `add-to-menus`, `section-add-products`                                                                                                                          | **P**, selected IDs until Confirm/Add. Seed empty set; compare membership, not offered order. Successful add commits this choice without saving unrelated menu/product metadata.                                                                                                                                                                                  | Selection modal, parent/page                                                             | DW `add-to-menus`; DW `section-add-products`                                               |
 | DW `section-details-form`; DS `menus-screen`                                                                                                                       | **P**, menu create/rename and section create/edit. Seed current SectionInput/defaults; compare names/internalName/image/color as emitted. Commit corresponding API write.                                                                                                                                                                                         | Modal, ancestor menu/tree navigation, page                                               | DW `section-details-form`; DS `menus-screen`                                               |
-| DS `menus-screen` layout form; DW `home-layout-editor`                                                                                                             | **P** create/duplicate/rename layout name, seed existing/copy/default name and trim exactly as Save. **E** tile add/reorder/replace/default assignment already writes through host events; do not create a new staged layout transaction.                                                                                                                         | Name modal, layout/tab/menu/page                                                         | DS `menus-screen`; DW `home-layout-editor`                                                 |
+| DS `menus-screen` Device Home Page | **E** W93 (#1287, 2026-10-06) retired named layouts and their name dialogs. Display choices and shortcut selection write immediately. | Home tab, shortcut picker | DS `menus-screen` |
 | DW `member-list-editor`                                                                                                                                            | **P** replacement choice until explicit confirmation, seeded no replacement choice and existing member ID. **E** add selection, reorder and remove events that already write immediately. Successful replacement clears only replacement scope.                                                                                                                   | Replacement dialog, list/menu/page                                                       | DW `member-list-editor`; DS `menus-screen`                                                 |
 | DW `menu-prices-table`, `menu-structure-table`, `menu-structure-tree`; DS `menus-screen`                                                                           | **E** price typing commits on Enter/focusout, Escape restores existing stored/sent value. Structure tree expansion/drag is view state or immediate host write; metadata forms are owned by section-details above. Keep refused-save and Undo assertions.                                                                                                          | Existing price blur/Enter and tree/tab routes                                            | DW `menu-prices-table`; DS `menus-screen`                                                  |
 | DW `ingredient-form`; DS `recipe-screen`                                                                                                                           | **P** ingredient create/edit, seeded ingredient/defaults; compare name/active and allergen/dietary sets. Commit ingredient only.                                                                                                                                                                                                                                  | Modal and containing recipe/page                                                         | DW `ingredient-form`; DS `recipe-screen`                                                   |
@@ -192,6 +192,8 @@ member replacement and the remaining modal/page inventory are still pending; thi
 not establish page navigation protection.
 
 ## Replacement/layout rollout checkpoint (2026-10-06)
+
+_2026-10-06 reconciliation: W93 #1287 retired the named layout editor. Its W69 hooks and layout-only suite were removed on rebase; the receipt below records the earlier tree. Member replacement remains covered in its retained widget, which no production screen draws after W93. Current Device Home Page display success/refusal exemptions are checked through `menu-details.unsaved.test.ts`._
 
 The subsequent W69 branch checkpoint wires the inline `member-list-editor` replacement choice and
 the menu screen's layout create/duplicate/rename name dialog. Replacement Cancel asks through the
@@ -1141,3 +1143,40 @@ The unedited golden write-path and immutability suites passed 20 cases. Till typ
 lint, formatting and diff checks passed. The final candidate was restored byte for byte before
 its owned checkout and parent were removed. The normal push hook, whole-branch review and
 current-head CI remain for the complete W69 modal rollout.
+
+## 2026-10-06 W93 reconciliation and refund entry checkpoint
+
+Rebased W69 over W93 #1287 onto `53c8f1e6d07bec7c9548c1c704507c81457df962`.
+W93 retired the named Home layout editor. Removed its W69 hooks and layout-only suite;
+kept member replacement protection in its retained widget. The ServedMenu fixture in
+`apps/till/src/widgets/modifier-picker.unsaved.test.ts` now uses `home.shortcuts` and the two
+Device Home display settings, without changing its basket or modifier assertions.
+The `menu-details.unsaved.test.ts` Device Home display success/refusal cases run the real
+screen beneath a LeaveController and assert the immediate write stays exempt.
+
+Refund entry scopes compare whole/part choice, existing amount normalization with invalid
+raw input retained, and the trimmed reason; snapshots preserve raw inputs for Keep/restore.
+Cancel and native Escape ask before dismissing. The initial suggested amount belongs to the
+baseline; disconnect disposes its scope and reconnect retains that baseline. Refusal and
+terminal confirmation do not commit a refund. Busy or departed controls cannot submit or edit.
+`TillBillRefundDialog.closeSaved()` releases the scope and closes through the saved bypass;
+the real app calls it after refund acceptance, before its first following table read.
+
+The new widget tests initially failed seven assertions on missing confirmation/unload and
+busy submission protection. The first host probe at `getTabLines` passed: that read follows
+an earlier await, so it did not measure the first read. The corrected probe at
+`getTablesState` failed with `[true]` before the synchronous success cleanup and passed with
+`[false]` after it. A reconnect case then failed with the departed input value still visible;
+`live` bindings restored the retained fields on reconnect. Seven independent installed-candidate
+deletions each failed the selected assertion while the untouched refund control passed;
+the restored selected run passed six tests. The focused final till command ran 1,223 tests:
+refund widget/axe/real-owner, modifier widget/real basket, menu browser, counter cancel-credit,
+till app and table-order screen suites. The unedited golden huella and inmutabilidad suites
+ran 20 tests. Eight EN/ES light/dark 390/1280 visual cases ran 16 axe scans; all 16 captures
+were inspected. These checks cover this checkpoint, not the remaining W69 owners or CI coverage.
+
+Changed existing check: `apps/till/src/till-app-bill-payments.test.ts`, the PIN-cancel/refund-close
+case, now retains the edited refund on Cancel, checks Keep preserves its reason, and checks
+explicit Discard removes only the refund dialog. Its original parent-dialog and no-approved-refund
+assertions remain. W69's approved design, “Closing a dialog,” requires that change.
+This remains a Task 4 milestone; all-modal PR 1 and page/navigation PR 2 are not complete.

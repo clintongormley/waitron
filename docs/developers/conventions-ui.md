@@ -728,6 +728,11 @@ available to its screen's focus return; nested close events cannot dismiss that 
 screen suites. Other audited owners remain pending.
 
 
+_2026-10-06: W93 #1287 retired named layout dialogs and their screen-level W69 hooks.
+The following receipt describes the earlier tree. The retained member-list widget has no production
+screen consumer after W93; Device Home Page display writes remain exempt, with success/refusal
+cases in `apps/dashboard/src/screens/menu-details.unsaved.test.ts`._
+
 Member replacement and layout names also use the registry on the W69 branch. A replacement's
 Cancel requests leave for its pending choice; a layout name's Cancel/native Escape requests leave
 for its trimmed name. Successful acceptance commits the submitted value; newer input remains

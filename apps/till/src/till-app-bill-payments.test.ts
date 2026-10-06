@@ -3079,6 +3079,45 @@ describe("till-app: giving back a bill payment", () => {
     await flush(el);
   }
 
+  it("an accepted refund clears dirty input before the following bill read starts", async () => {
+    const refunded = givenBack(cashPaid, refundOf());
+    let accepted = false;
+    const dirtyAtRead: boolean[] = [];
+    const getTablesState = vi.fn(async () => {
+      if (accepted) {
+        const event = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(event);
+        dirtyAtRead.push(event.defaultPrevented);
+      }
+      return [mesa()];
+    });
+    const el = await askRefund(
+      {
+        getTablesState,
+        refundBillPayment: vi.fn(async () => {
+          accepted = true;
+          return refunded;
+        }),
+      },
+      cashPaid,
+    );
+    await expect.poll(() => dirtyAtRead.length).toBeGreaterThan(0);
+    expect(dirtyAtRead).toEqual([false]);
+    expect(refundDialog(el)).toBeNull();
+    expect(refunds()).toEqual([
+      {
+        billId: "wo-4",
+        paymentId: "pay-1",
+        request: {
+          submissionId: expect.any(String),
+          appliedAmount: "50.00",
+          tipAmount: "0.00",
+          reason: "Charged twice",
+        },
+      },
+    ]);
+  });
+
   it("gives back the cash payment of an operator who can give refunds with no PIN, and asks for none", async () => {
     const refundBillPayment = vi.fn().mockResolvedValue(givenBack(cashPaid, refundOf()));
     const el = await askRefund({ refundBillPayment }, cashPaid);
@@ -3569,7 +3608,7 @@ describe("till-app: giving back a bill payment", () => {
     expect(refundDialog(el)).toBeNull();
   });
 
-  it("goes back to the refund when the PIN prompt is cancelled, and closes it on Cancel", async () => {
+  it("goes back to the refund when the PIN prompt is cancelled, and retains it until Discard", async () => {
     const withPin = vi.fn();
     const el = await askRefund({ refundBillPayment: needsApproval(withPin) }, cashPaid);
     approval(el)!.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
@@ -3579,7 +3618,22 @@ describe("till-app: giving back a bill payment", () => {
     expect(refundDialog(el)).not.toBeNull();
     inRefund(el, "[data-refund-close]")!.click();
     await flush(el);
-    expect(refundDialog(el)).toBeNull();
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    expect(question.open).toBe(true);
+    expect(refundDialog(el)).not.toBeNull();
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question.open).toBe(false);
+    expect(
+      refundDialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        '[name="reason"]',
+      )!.value,
+    ).toBe("Charged twice");
+    inRefund(el, "[data-refund-close]")!.click();
+    await flush(el);
+    expect(question.open).toBe(true);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => refundDialog(el)).toBeNull();
     expect(dialog(el)).not.toBeNull();
     expect(withPin).not.toHaveBeenCalled();
   });
