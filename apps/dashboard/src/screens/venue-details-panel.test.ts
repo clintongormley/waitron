@@ -32,6 +32,32 @@ function rig(model = venueDetailsFixture()) {
   const api = {
     liveData,
     getVenueDetails: vi.fn(async () => structuredClone(current)),
+    getVenueClockPreview: vi.fn(async (clock: { timeZone: string; dayCutover: string }) => ({
+      at: "2026-10-06T02:00:00.000Z",
+      current: {
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        civilDate: "2026-10-06",
+        timeOfDay: "04:00",
+        businessDay: "2026-10-05",
+        transitions: [],
+      },
+      proposed: {
+        ...clock,
+        civilDate: "2026-10-06",
+        timeOfDay: "02:00",
+        businessDay: "2026-10-06",
+        transitions: [
+          {
+            at: "2026-10-25T01:00:00.000Z",
+            civilDate: "2026-10-25",
+            boundaryAt: "2026-10-25T01:30:00.000Z",
+            boundaryTime: "02:30",
+          },
+        ],
+      },
+      backupDeadlines: { archive: "2026-10-06T03:36:00.000Z", cloud: null },
+    })),
     patchVenueDetails: vi.fn(async (body: VenueDetailWrite) => {
       current = { ...current, details: { ...current.details, ...body.changes } };
       return { changed: true, model: structuredClone(current) };
@@ -406,4 +432,82 @@ it("explains the consequences beside the filled name and clock fields", async ()
   expect(nameHelp.textContent?.toLowerCase()).toContain("departments");
   expect(clockHelp.textContent).toContain("Manual day overrides");
   expect(nameHelp.getAttribute("aria-label")).toContain("Venue name");
+});
+
+it("shows captured old/new civil and business dates, transition boundaries and retained deadlines before clock acknowledgement", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const el = await editing(r.api);
+  change(el, "timeZone", "UTC");
+  await flush(el);
+  expect(r.api.getVenueClockPreview).toHaveBeenCalledWith({ timeZone: "UTC", dayCutover: "06:00" });
+  const preview = q(el, "[data-test=clock-preview]")!;
+  expect(preview.textContent).toContain("2026-10-06T02:00:00.000Z");
+  expect(preview.textContent).toContain("2026-10-05");
+  expect(preview.textContent).toContain("04:00");
+  expect(preview.textContent).toContain("02:00");
+  expect(preview.textContent).toContain("2026-10-25T01:30:00.000Z");
+  expect(preview.textContent).toContain("02:30");
+  expect(preview.textContent).toContain("2026-10-06T03:36:00.000Z");
+  expect(preview.textContent).toContain("No deadline is scheduled");
+  expect(save(el).disabled).toBe(true);
+  await click(el, "[data-test=acknowledge]");
+  expect(save(el).disabled).toBe(false);
+});
+it("blocks acknowledgement and Enter while the matching clock preview is pending, and ignores an obsolete reply", async () => {
+  const r = rig();
+  let oldReply!: (value: Awaited<ReturnType<DashboardApi["getVenueClockPreview"]>>) => void;
+  const answer = await r.api.getVenueClockPreview({ timeZone: "UTC", dayCutover: "06:00" });
+  vi.mocked(r.api.getVenueClockPreview)
+    .mockClear()
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          oldReply = resolve;
+        }),
+    );
+  const el = await editing(r.api);
+  change(el, "timeZone", "UTC");
+  await flush(el);
+  expect(q<WtButton>(el, "[data-test=acknowledge]")!.disabled).toBe(true);
+  await click(el, "[data-test=acknowledge]");
+  el.shadowRoot!.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+  expect(r.api.patchVenueDetails).not.toHaveBeenCalled();
+  change(el, "timeZone", "Europe/London");
+  await flush(el);
+  expect(q(el, "[data-test=clock-proposed]")!.textContent).toContain("Europe/London");
+  oldReply(answer);
+  await flush(el);
+  expect(q(el, "[data-test=clock-proposed]")!.textContent).toContain("Europe/London");
+});
+it("allows a failed clock preview to retry without losing the draft", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  vi.mocked(r.api.getVenueClockPreview).mockRejectedValueOnce({ code: "connection.failed" });
+  const el = await editing(r.api);
+  change(el, "timeZone", "UTC");
+  await flush(el);
+  expect(field(el, "timeZone").value).toBe("UTC");
+  expect(q(el, "[data-test=clock-error]")).not.toBeNull();
+  expect(save(el).disabled).toBe(true);
+  await click(el, "[data-test=preview-retry]");
+  expect(q(el, "[data-test=clock-error]")).toBeNull();
+  expect(q(el, "[data-test=clock-preview]")).not.toBeNull();
+  await click(el, "[data-test=acknowledge]");
+  expect(save(el).disabled).toBe(false);
+});
+
+it("previews the latest saved zone when only the cutover is changed, preserving the opening draft", async () => {
+  const r = rig();
+  const el = await editing(r.api);
+  change(el, "dayCutover", "02:30");
+  await flush(el);
+  r.set(venueDetailsFixture({ timeZone: "Europe/London" }));
+  await r.notify(el);
+  expect(field(el, "timeZone").value).toBe("Europe/Madrid");
+  expect(r.api.getVenueClockPreview).toHaveBeenLastCalledWith({
+    timeZone: "Europe/London",
+    dayCutover: "02:30",
+  });
+  expect(save(el).disabled).toBe(true);
 });

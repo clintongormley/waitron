@@ -9,7 +9,8 @@ import { createErrorBoundary, readJsonBody, requireManagementSession } from "@wa
 import type { Logger } from "./logger.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
-import type { VenueDetailWrite } from "./venue-detail-types.js";
+import { venueClockPreview } from "./venue-clock-preview.js";
+import type { VenueClockPreview, VenueDetailWrite } from "./venue-detail-types.js";
 import "./errors.js";
 
 const run = createErrorBoundary(
@@ -62,7 +63,13 @@ function requestedLanguage(body: unknown): string {
 
 export function mountLocationSettingsApi(
   app: Hono,
-  deps: { db: Database; cfg: { locationId: string }; fiscal: FiscalContribution },
+  deps: {
+    db: Database;
+    cfg: { locationId: string };
+    fiscal: FiscalContribution;
+    now?: () => Date;
+    readBackupDeadlines?: () => VenueClockPreview["backupDeadlines"];
+  },
   log: Logger,
 ): void {
   const scope = eq(locations.id, deps.cfg.locationId);
@@ -86,6 +93,22 @@ export function mountLocationSettingsApi(
         "venue.view",
       );
       return c.json(model);
+    }),
+  );
+  app.get("/management-api/venue-details/clock-preview", (c) =>
+    run(c, log, async () => {
+      const model = await gated(
+        requireManagementSession(c),
+        (tx) => readVenueDetails(tx, deps.cfg),
+        "venue.view",
+      );
+      const preview = venueClockPreview(
+        (deps.now ?? (() => new Date()))(),
+        model.details,
+        { timeZone: c.req.query("timeZone") ?? "", dayCutover: c.req.query("dayCutover") ?? "" },
+        deps.readBackupDeadlines?.() ?? { archive: null, cloud: null },
+      );
+      return c.json(preview);
     }),
   );
   app.patch("/management-api/venue-details", (c) =>

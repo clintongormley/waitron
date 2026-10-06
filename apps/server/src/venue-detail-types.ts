@@ -34,3 +34,18 @@ export interface VenueDetailWrite {
   changes: VenueDetailPatch;
   expected: VenueDetailValues;
 }
+
+export interface VenueClockView {
+  timeZone: string;
+  dayCutover: string;
+  civilDate: string;
+  timeOfDay: string;
+  businessDay: string;
+  transitions: { at: string; civilDate: string; boundaryAt: string; boundaryTime: string }[];
+}
+export interface VenueClockPreview {
+  at: string;
+  current: VenueClockView | null;
+  proposed: VenueClockView;
+  backupDeadlines: { archive: string | null; cloud: string | null };
+}

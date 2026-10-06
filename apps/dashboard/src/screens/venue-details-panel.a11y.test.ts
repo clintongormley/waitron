@@ -3,7 +3,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, expect, it, vi } from "vitest";
 import type { WtInput } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
+import { venueDetailsFixture, venueClockPreviewFixture } from "../testing/venue-details-fixture.js";
 import type { DashboardApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { VenueDetailsPanel } from "./venue-details-panel.js";
@@ -35,11 +35,17 @@ it.each(cases)(
       "loading",
       "read-error",
       "refresh-error",
+      "clock-preview",
+      "clock-loading",
+      "clock-error",
+      "clock-unavailable",
     ]) {
       const model = venueDetailsFixture(
         state === "legacy-null"
           ? { addressLine1: null, postalCode: null, city: null, province: null }
-          : {},
+          : state.startsWith("clock-")
+            ? { dayCutover: "02:30" }
+            : {},
       );
       if (state === "locked") {
         model.hasSales = true;
@@ -49,6 +55,7 @@ it.each(cases)(
       const api = {
         liveData: new LiveData(),
         getVenueDetails: vi.fn().mockResolvedValue(model),
+        getVenueClockPreview: vi.fn().mockResolvedValue(venueClockPreviewFixture()),
         patchVenueDetails: vi.fn().mockResolvedValue({
           changed: true,
           model: venueDetailsFixture({ addressLine1: "New street" }),
@@ -67,6 +74,15 @@ it.each(cases)(
           code: "venue.detail_changed",
           params: { field: "addressLine1" },
         });
+      if (state === "clock-loading")
+        vi.mocked(api.getVenueClockPreview).mockImplementation(() => new Promise(() => undefined));
+      if (state === "clock-error")
+        vi.mocked(api.getVenueClockPreview).mockRejectedValue({ code: "connection.failed" });
+      if (state === "clock-unavailable")
+        vi.mocked(api.getVenueClockPreview).mockResolvedValue({
+          ...venueClockPreviewFixture(),
+          current: null,
+        });
       const { el, host } = await mountWidget<VenueDetailsPanel>(
         "dashboard-venue-details-panel",
         { api, readOnly: state === "read-only" },
@@ -80,6 +96,20 @@ it.each(cases)(
       if (!["read-only", "loading", "read-error"].includes(state)) {
         el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
         await flush();
+        if (state.startsWith("clock-")) {
+          el.shadowRoot!.querySelector<WtInput>("[name=timeZone]")!.dispatchEvent(
+            new CustomEvent("wt-change", {
+              detail: { value: "UTC" },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+          await flush();
+          if (state === "clock-preview")
+            expect(
+              el.shadowRoot!.querySelector("[data-test=clock-preview]")?.textContent,
+            ).toContain("2027-03-28T01:30:00.000Z");
+        }
         if (["invalid", "warnings", "stale", "refresh-error"].includes(state)) {
           const name = state === "warnings" ? "venueName" : "addressLine1";
           const field = el.shadowRoot!.querySelector<WtInput>(`[name=${name}]`)!;
@@ -103,6 +133,13 @@ it.each(cases)(
         element: host,
         path: `look/venue-details-panel-${locale}-${theme}-${width}-${state}.png`,
       });
+      const preview = el.shadowRoot!.querySelector("[data-test=clock-preview]");
+      if (preview) {
+        preview.scrollIntoView({ block: "start" });
+        await page.screenshot({
+          path: `look/venue-details-panel-${locale}-${theme}-${width}-${state}-preview.png`,
+        });
+      }
       const actions = el.shadowRoot!.querySelector("wt-form-actions");
       if (actions) {
         actions.scrollIntoView({ block: "end" });

@@ -92,6 +92,11 @@ Pages that go:
 
 ## 3. Venue settings
 
+> **Implementation pointer, 2026-10-06:** the approved
+> [step 7 plan](../plans/2026-10-05-venue-details.md) defines the single-venue detail editor,
+> post-history restrictions and clock previews. The setup-only observation below describes
+> this spec's original base; implementation and validation are tracked in `docs/backlog.md`.
+
 One page, one tab per group. Each tab's settings are set once and left.
 
 - **Venue details** (new): the venue's name, address, time zone and business-day start. Today these

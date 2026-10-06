@@ -65,6 +65,21 @@ export interface VenueDetailWrite {
   expected: VenueDetailValues;
 }
 
+export interface VenueClockView {
+  timeZone: string;
+  dayCutover: string;
+  civilDate: string;
+  timeOfDay: string;
+  businessDay: string;
+  transitions: { at: string; civilDate: string; boundaryAt: string; boundaryTime: string }[];
+}
+export interface VenueClockPreview {
+  at: string;
+  current: VenueClockView | null;
+  proposed: VenueClockView;
+  backupDeadlines: { archive: string | null; cloud: string | null };
+}
+
 export interface MadeAt {
   stationId: string | null;
   stationName: string | null;
@@ -2275,6 +2290,14 @@ export class DashboardApi {
 
   getVenueDetails(): Promise<VenueDetailsModel> {
     return this.#request("/management-api/venue-details", "GET");
+  }
+
+  getVenueClockPreview(clock: {
+    timeZone: string;
+    dayCutover: string;
+  }): Promise<VenueClockPreview> {
+    const query = new URLSearchParams(clock);
+    return this.background.#request(`/management-api/venue-details/clock-preview?${query}`, "GET");
   }
 
   patchVenueDetails(

@@ -2998,17 +2998,21 @@ package, eg Spain has two time zones, one for mainland and one for las canarias"
 not let anyone choose it: it takes the zone from the province of the venue's address (Spain's pack,
 `packages/country-es/src/spain.ts:180`, gives Las Palmas and Santa Cruz de Tenerife
 `Atlantic/Canary` and every other province `Europe/Madrid`; the UK pack gives `Europe/London`). But
-the column, `locations.time_zone`, is plain text, and configuration import checks only that the
-value is a string (`apps/server/src/configuration-transfer.ts:297-309`), so an imported file can set
-a zone no pack offers; provisioning copies whatever it is given (`packages/provisioning/src/venue-apply.ts`).
+the column, `locations.time_zone`, is plain text, and provisioning copies whatever it is given
+(`packages/provisioning/src/venue-apply.ts`).
 Readers then disagree about a bad zone: reporting throws, bookings falls back to Madrid, account
 emails to UTC. **Wanted:** each country pack lists the zones it allows (Spain: Madrid and Canary),
-and every writer of a venue's time zone — setup, configuration import, provisioning — refuses one
-not on its country's list. A dropdown is needed only if a venue could ever need a zone other than
+and creation/provisioning writers refuse a zone not on its country's list. A dropdown is needed
+only if a venue could ever need a zone other than
 its province's; for Spain the province decides. (Aside: a Canary venue cannot be set up yet — the
 pack marks the Canary tax territory unsupported.) Slice 3b's station opening hours ignore hours
 when the zone cannot be read, as a last defence
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), S8).
+A261 step 7's approved plan separately permits a named-zone override before dated history;
+its editor validates named zones and refuses numeric offsets. Importing configuration into an
+existing venue retains its saved zone (`applyPreparedLocation`,
+`apps/server/src/configuration-transfer.ts`); importing venue details is a creation concern,
+not an edit through that applicator.
 
 **A configuration import does not check a table status's colour (A273, review of W92, 2026-10-05) —
 DONE (#1257).** A save and an import now share one rule, `isStatusColor`
@@ -5500,7 +5504,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`packages/ui/src/components/wt-relative-time.ts`, through `apps/dashboard/src/widgets/relative-time.ts`),
   which redraws itself when its words would change; hovering or tapping them shows the full date
   and time ("5 de octubre de 2026 a las 11:49"), which is also their screen-reader description. The
-  exact time is in the BROWSER's time zone: the dashboard reads no venue time zone. Other dashboard
+  exact time is in the BROWSER's time zone: the relative-time widget receives no venue time zone. Other dashboard
   places still showing a bare `YYYY-MM-DD HH:MM` (`formatIsoMinute`), not changed: the Devices "Last
   seen" column; on Printers, a print agent's join request, an agent's Last seen (its table and Edit), a
   printer's Last print and Last seen (its status view) and Last print (the printers table), "Seen on {agent} · {time}" (`printers.seen_at`), and the print
@@ -6427,8 +6431,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   history restrictions; its patch/validation helper keeps untouched legacy-null fields out.
   Direct CLI creation controls retain the deployed venue and series on changed details.
   Numeric-offset clock edits are refused consistently with the reporting validator; named
-  zones such as `Etc/GMT+2` remain accepted. The dashboard panel, warning previews and final
-  whole-branch review are still pending.
+  zones such as `Etc/GMT+2` remain accepted. The Venue details panel is the initial tab,
+  with live draft/error separation, changed-field confirmation, clock-change boundaries and
+  each worker's retained backup deadline. The current server report route and the rendered
+  roster's stored wall times have before/after receipts. EN/ES, light/dark and phone/desktop
+  states have accessibility scans and retained screenshots. Whole-branch review and
+  current-head CI remain before landing.
   This build changes no schema.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
   its build landed as [PR #1269](https://github.com/clintongormley/waitron/pull/1269) on
@@ -7095,7 +7103,7 @@ characters. Left open:
   claim that the database always reads a time value back in the long form was wrong: `timeOfDay` is
   a text column (`packages/db/src/schema/columns.ts`), and a repeated short-form plan succeeded
   before this change. The venue-plan test also checks the normalized action directly.
-- **`dayCutover` still needs input validation.** The W6 review passed `"24:00"` and `"99:99"`
+- **Creation/provisioning `dayCutover` still needs input validation.** The W6 review passed `"24:00"` and `"99:99"`
   through `planVenue`; both emerged with seconds appended. **Next action:** choose the validation
   boundary and a domain refusal, then test invalid values before they reach storage.
 
@@ -9313,7 +9321,7 @@ partial scope; the detail for a live thread is in its track.
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; AEAT certificate install and renewal after setup (A9); cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329) | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6) |
 | 5 | Identity | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in and for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
-| 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple locations, edit/deactivate; then location-scope the by-id verb family |
+| 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple-location creation/editing/deactivation; then location-scope the by-id verb family |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file and its download route and its dashboard screen, purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home | fiscal filing remainder parked (*Detail → Reporting*) |
 | 9 | Deployment | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); CA-trust onboarding + per-OS certificate walkthrough (#330); till reroute S1–S6; promotion endpoint (#272) | USB installer (B3); cloud standby live link + the Waitron Cloud boundary |

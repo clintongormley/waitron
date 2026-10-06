@@ -28,7 +28,7 @@ import {
 } from "@waitron/db";
 import { BOOKINGS_FLOOR_ANNOTATIONS, bookings } from "@waitron/bookings";
 import { replaceStationHours, stationStates, stationDayStates } from "@waitron/venue-service";
-import { resolveVenueClock } from "./report-api.js";
+import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import type { ResourceChange } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -985,6 +985,18 @@ describe("venue detail consumer reads", () => {
       lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
+    const app = new Hono();
+    mountReportApi(app, { db: suite.db, cfg: venue.cfg, venueLocale: "en-GB" }, () => {});
+    const httpReport = async (businessDay: string) => {
+      const response = await app.request(
+        `/management-api/reports/daily-close?businessDay=${businessDay}`,
+        {
+          headers: { cookie: venue.managerCookie },
+        },
+      );
+      expect(response.status).toBe(200);
+      return response.json();
+    };
     const reports = () =>
       withTransaction(suite.db, async (tx) => {
         const current = await resolveVenueClock(tx, venue.cfg.nodeId);
@@ -1000,6 +1012,12 @@ describe("venue detail consumer reads", () => {
         });
         return { previous, day };
       });
+    const httpBefore = {
+      previous: await httpReport("2026-10-05"),
+      day: await httpReport("2026-10-06"),
+    };
+    expect(httpBefore.previous.counts.sales).toBe(0);
+    expect(httpBefore.day.counts.sales).toBe(1);
     const before = await reports();
     expect(before.previous.counts.sales).toBe(0);
     expect(before.day.counts.sales).toBe(1);
@@ -1063,6 +1081,10 @@ describe("venue detail consumer reads", () => {
     });
     expect((await read()).details).toEqual(saved.model.details);
     expect(await reports()).toEqual(before);
+    expect({
+      previous: await httpReport("2026-10-05"),
+      day: await httpReport("2026-10-06"),
+    }).toEqual(httpBefore);
     expect(retained()).toEqual(history);
   });
 });

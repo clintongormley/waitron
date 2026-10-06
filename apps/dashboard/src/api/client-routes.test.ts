@@ -1105,3 +1105,25 @@ it("reads current venue details and submits only the changed fields with the ori
     ],
   ]);
 });
+
+it("reads a venue clock preview passively with encoded clock values", async () => {
+  const response = {
+    at: "2026-10-06T02:00:00.000Z",
+    current: null,
+    proposed: {},
+    backupDeadlines: { archive: null, cloud: null },
+  };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(response));
+  const api = new DashboardApi("", fetchImpl);
+  await expect(
+    api.getVenueClockPreview({ timeZone: "Etc/GMT+2", dayCutover: "02:30" }),
+  ).resolves.toEqual(response);
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/venue-details/clock-preview?timeZone=Etc%2FGMT%2B2&dayCutover=02%3A30",
+      "GET",
+      undefined,
+    ],
+  ]);
+  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
+});

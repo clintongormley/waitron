@@ -467,3 +467,24 @@ describe("cloud snapshot venue clock edits", () => {
     expect(f.points.size).toBe(3);
   });
 });
+
+it("exposes the persisted next capture deadline, including after worker restart and disable", async () => {
+  const f = await fixture();
+  const observed: Array<number | null> = [];
+  const worker = createCloudSnapshotWorker({ ...f.deps, onScheduled: (at) => observed.push(at) });
+  await worker.tick(signal());
+  const saved = JSON.parse(await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8")) as {
+    nextAt: number;
+  };
+  expect(observed.at(-1)).toBe(saved.nextAt);
+  const restarted = createCloudSnapshotWorker({
+    ...f.deps,
+    onScheduled: (at) => observed.push(at),
+  });
+  await restarted.tick(signal());
+  expect(observed.at(-1)).toBe(saved.nextAt);
+  expect(f.captures()).toBe(1);
+  f.status.installation!.state = "revoked";
+  await restarted.tick(signal());
+  expect(observed.at(-1)).toBeNull();
+});

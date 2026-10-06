@@ -12,6 +12,8 @@ import type {
   VenueDetailsModel,
   VenueDetailValues,
   VenueDetailField,
+  VenueClockPreview,
+  VenueClockView,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -109,6 +111,10 @@ export class VenueDetailsPanel extends LitElement {
   @state() private actionError = "";
   @state() private readError = "";
   @state() private acknowledged = "";
+  @state() private clockPreview?: VenueClockPreview;
+  @state() private clockError = "";
+  #clockKey = "";
+  #previewSequence = 0;
   #expected?: VenueDetailValues;
   #generation = 0;
   readonly #queries = new DashboardQueries(
@@ -130,6 +136,9 @@ export class VenueDetailsPanel extends LitElement {
   override disconnectedCallback(): void {
     this.#generation += 1;
     this.submitting = false;
+    this.#previewSequence += 1;
+    this.#clockKey = "";
+    this.clockPreview = undefined;
     super.disconnectedCallback();
   }
   async #load(): Promise<void> {
@@ -139,6 +148,7 @@ export class VenueDetailsPanel extends LitElement {
         if (generation !== this.#generation) return;
         this.model = model;
         this.readError = "";
+        this.#refreshPreview();
       });
     } catch (error) {
       if (generation === this.#generation) this.readError = codeMessage(codeOf(error));
@@ -160,6 +170,10 @@ export class VenueDetailsPanel extends LitElement {
     this.actionError = "";
     this.attempted = false;
     this.acknowledged = "";
+    this.#previewSequence += 1;
+    this.#clockKey = "";
+    this.clockPreview = undefined;
+    this.clockError = "";
   }
   #patch() {
     return this.#expected && this.draft ? venueDetailPatch(this.#expected, this.draft) : {};
@@ -175,11 +189,114 @@ export class VenueDetailsPanel extends LitElement {
       warnings.push("venue_details.clock_warning");
     return warnings;
   }
+  #previewKey(): string {
+    const patch = this.#patch();
+    if (
+      !this.model ||
+      !this.draft ||
+      (patch.timeZone === undefined && patch.dayCutover === undefined) ||
+      Object.keys(venueDetailProblems(patch)).length > 0
+    )
+      return "";
+    return JSON.stringify([
+      this.model.details.timeZone,
+      this.model.details.dayCutover,
+      patch.timeZone ?? this.model.details.timeZone,
+      patch.dayCutover ?? this.model.details.dayCutover.slice(0, 5),
+    ]);
+  }
+  #previewReady(): boolean {
+    return !this.#previewKey() || (!!this.clockPreview && this.#clockKey === this.#previewKey());
+  }
+  #refreshPreview(force = false): void {
+    const key = this.#previewKey();
+    if (!force && key === this.#clockKey) return;
+    this.#clockKey = key;
+    this.clockPreview = undefined;
+    this.clockError = "";
+    this.acknowledged = "";
+    const sequence = ++this.#previewSequence;
+    if (!key) return;
+    const patch = this.#patch();
+    void this.api
+      .getVenueClockPreview({
+        timeZone: patch.timeZone ?? this.model!.details.timeZone,
+        dayCutover: patch.dayCutover ?? this.model!.details.dayCutover.slice(0, 5),
+      })
+      .then((preview) => {
+        if (sequence !== this.#previewSequence) return;
+        this.clockPreview = preview;
+      })
+      .catch((error: unknown) => {
+        if (sequence === this.#previewSequence) this.clockError = codeMessage(codeOf(error));
+      });
+  }
+  #clockView(clock: VenueClockView | null, proposed: boolean): TemplateResult {
+    return html`<div data-test=${proposed ? "clock-proposed" : "clock-current"}>
+      <strong
+        >${t(proposed ? "venue_details.proposed_clock" : "venue_details.current_clock")}</strong
+      >
+      ${
+        clock
+          ? html`<dl>
+                <dt>${t("venue_details.timeZone")}</dt>
+                <dd>${clock.timeZone}</dd>
+                <dt>${t("venue_details.dayCutover")}</dt>
+                <dd>${clock.dayCutover}</dd>
+                <dt>${t("venue_details.local_time")}</dt>
+                <dd>${clock.civilDate} ${clock.timeOfDay}</dd>
+                <dt>${t("venue_details.business_day")}</dt>
+                <dd>${clock.businessDay}</dd>
+              </dl>
+              <p>${t("venue_details.transitions")}</p>
+              ${
+                clock.transitions.length
+                  ? clock.transitions.map(
+                      (change) =>
+                        html`<dl>
+                          <dt>${t("venue_details.clock_change")}</dt>
+                          <dd>${change.at}</dd>
+                          <dt>${t("venue_details.resolved_cutover")}</dt>
+                          <dd>${change.civilDate} ${change.boundaryTime} (${change.boundaryAt})</dd>
+                        </dl>`,
+                    )
+                  : html`<p>${t("venue_details.no_transitions")}</p>`
+              }`
+          : html`<p>${t("venue_details.clock_unavailable")}</p>`
+      }
+    </div>`;
+  }
+  #renderClockPreview(): TemplateResult | typeof nothing {
+    if (!this.#previewKey()) return nothing;
+    const preview = this.clockPreview;
+    if (!preview)
+      return html`<div>
+        ${
+          this.clockError
+            ? html`<p role="alert" class="error" data-test="clock-error">${this.clockError}</p>
+                <wt-button data-test="preview-retry" @click=${() => this.#refreshPreview(true)}
+                  >${t("venue_details.retry_preview")}</wt-button
+                >`
+            : html`<p role="status">${t("venue_details.preview_loading")}</p>`
+        }
+      </div>`;
+    return html`<div data-test="clock-preview">
+      <p>${t("venue_details.preview_at")} ${preview.at}</p>
+      ${this.#clockView(preview.current, false)}${this.#clockView(preview.proposed, true)}
+      <p>${t("venue_details.cutover_mapping")}</p>
+      <dl>
+        <dt>${t("venue_details.archive_deadline")}</dt>
+        <dd>${preview.backupDeadlines.archive ?? t("venue_details.no_deadline")}</dd>
+        <dt>${t("venue_details.cloud_deadline")}</dt>
+        <dd>${preview.backupDeadlines.cloud ?? t("venue_details.no_deadline")}</dd>
+      </dl>
+    </div>`;
+  }
   #needsAcknowledgement(): boolean {
     return (
       Object.keys(venueDetailProblems(this.#patch())).length === 0 &&
       this.#warnings().length > 0 &&
-      this.acknowledged !== JSON.stringify(this.#patch())
+      (!this.#previewReady() || this.acknowledged !== JSON.stringify(this.#patch()))
     );
   }
   #change(field: VenueDetailField, event: CustomEvent<{ value: string }>): void {
@@ -197,6 +314,7 @@ export class VenueDetailsPanel extends LitElement {
       }
     }
     this.errors = errors;
+    this.#refreshPreview();
     if (this.actionError === t("form.fix_fields") && Object.keys(errors).length === 0)
       this.actionError = "";
   }
@@ -352,12 +470,14 @@ export class VenueDetailsPanel extends LitElement {
                           ? html`<div class="warnings" data-test="warnings">
                               <strong>${t("venue_details.review")}</strong
                               >${this.#warnings().map((key) => html`<p>${t(key)}</p>`)}
+                              ${this.#renderClockPreview()}
                               ${
                                 this.acknowledged !== JSON.stringify(this.#patch())
                                   ? html`<wt-button
                                       data-test="acknowledge"
-                                      ?disabled=${this.submitting}
+                                      ?disabled=${this.submitting || !this.#previewReady()}
                                       @click=${() => {
+                                        if (!this.#previewReady()) return;
                                         this.acknowledged = JSON.stringify(this.#patch());
                                       }}
                                       >${t("venue_details.acknowledge")}</wt-button

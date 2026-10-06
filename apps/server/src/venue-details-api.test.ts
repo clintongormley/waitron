@@ -28,6 +28,8 @@ beforeEach(async () => {
     {
       db: suite.db,
       cfg: venue.cfg,
+      now: () => new Date("2026-10-06T02:00:00Z"),
+      readBackupDeadlines: () => ({ archive: "2026-10-06T03:36:00.000Z", cloud: null }),
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     () => {},
@@ -275,4 +277,126 @@ it("rechecks a real sale after GET before accepting any clock patch", async () =
   expect(await repeat.json()).toEqual({ changed: false, model: await initial() });
   expect(suite.db.all(sql`select * from locations`)).toEqual(before);
   expect(suite.db.all(sql`select id from sales`)).toHaveLength(1);
+});
+
+describe("venue clock preview", () => {
+  const path = "/management-api/venue-details/clock-preview?timeZone=UTC&dayCutover=00%3A00";
+  it("uses one instant for saved and proposed clocks and exposes the retained backup deadline without writing", async () => {
+    const before = await initial();
+    const response = await app.request(path, { headers: { cookie: venue.managerCookie } });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      at: "2026-10-06T02:00:00.000Z",
+      current: {
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
+        civilDate: "2026-10-06",
+        timeOfDay: "04:00",
+        businessDay: "2026-10-05",
+      },
+      proposed: {
+        timeZone: "UTC",
+        dayCutover: "00:00",
+        civilDate: "2026-10-06",
+        timeOfDay: "02:00",
+        businessDay: "2026-10-06",
+        transitions: [],
+      },
+      backupDeadlines: { archive: "2026-10-06T03:36:00.000Z", cloud: null },
+    });
+    expect(await initial()).toEqual(before);
+  });
+  it("shows the actual reporting cutover on the next fold and gap days", async () => {
+    await suite.db.execute(
+      sql`update locations set day_cutover = '02:30:00' where id = ${venue.cfg.locationId}`,
+    );
+    const response = await app.request(path, { headers: { cookie: venue.managerCookie } });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.current.transitions).toEqual([
+      {
+        at: "2026-10-25T01:00:00.000Z",
+        civilDate: "2026-10-25",
+        boundaryAt: "2026-10-25T01:30:00.000Z",
+        boundaryTime: "02:30",
+      },
+      {
+        at: "2027-03-28T01:00:00.000Z",
+        civilDate: "2027-03-28",
+        boundaryAt: "2027-03-28T01:30:00.000Z",
+        boundaryTime: "03:30",
+      },
+    ]);
+  });
+  it.each([
+    [undefined, 401],
+    ["staff", 403],
+    ["supervisor", 200],
+  ])("enforces preview read authorization for %s", async (role, status) => {
+    if (role === "supervisor")
+      await suite.db.execute(sql`update persons set role = 'supervisor' where role = 'manager'`);
+    const cookie =
+      role === undefined ? undefined : role === "staff" ? venue.staffCookie : venue.managerCookie;
+    const response = await app.request(path, { headers: cookie ? { cookie } : {} });
+    expect(response.status).toBe(status);
+  });
+  it.each([
+    ["timeZone=Nowhere&dayCutover=05%3A00", "timeZone", "time_zone"],
+    ["timeZone=%2B02%3A00&dayCutover=05%3A00", "timeZone", "time_zone"],
+    ["timeZone=UTC&dayCutover=25%3A00", "dayCutover", "cutover"],
+    ["timeZone=UTC&dayCutover=02%3A30%3A01", "dayCutover", "cutover"],
+  ])("refuses invalid preview query %s", async (query, field, reason) => {
+    const response = await app.request(`/management-api/venue-details/clock-preview?${query}`, {
+      headers: { cookie: venue.managerCookie },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "venue.detail_invalid", params: { field, reason } },
+    });
+  });
+});
+
+it("previews a late cutover on both transition days without moving it to the previous date", async () => {
+  const response = await app.request(
+    "/management-api/venue-details/clock-preview?timeZone=Europe%2FMadrid&dayCutover=23%3A59%3A00",
+    { headers: { cookie: venue.managerCookie } },
+  );
+  expect(response.status).toBe(200);
+  const preview = await response.json();
+  expect(preview.proposed.dayCutover).toBe("23:59");
+  expect(preview.proposed.transitions).toEqual([
+    {
+      at: "2026-10-25T01:00:00.000Z",
+      civilDate: "2026-10-25",
+      boundaryAt: "2026-10-25T22:59:00.000Z",
+      boundaryTime: "23:59",
+    },
+    {
+      at: "2027-03-28T01:00:00.000Z",
+      civilDate: "2027-03-28",
+      boundaryAt: "2027-03-28T21:59:00.000Z",
+      boundaryTime: "23:59",
+    },
+  ]);
+});
+it("can preview a valid replacement for an unreadable saved zone, including a named fixed-offset zone", async () => {
+  await suite.db.execute(
+    sql`update locations set time_zone = 'legacy-invalid-zone' where id = ${venue.cfg.locationId}`,
+  );
+  const response = await app.request(
+    "/management-api/venue-details/clock-preview?timeZone=Etc%2FGMT%2B2&dayCutover=00%3A00",
+    { headers: { cookie: venue.managerCookie } },
+  );
+  expect(response.status).toBe(200);
+  const preview = await response.json();
+  expect(preview.current).toBeNull();
+  expect(preview.proposed).toEqual({
+    timeZone: "Etc/GMT+2",
+    dayCutover: "00:00",
+    civilDate: "2026-10-06",
+    timeOfDay: "00:00",
+    businessDay: "2026-10-06",
+    transitions: [],
+  });
 });

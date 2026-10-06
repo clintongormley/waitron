@@ -1496,7 +1496,15 @@ async function bootServer(
   }
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true);
-  mountLocationSettingsApi(app, { db, cfg: till, fiscal: enabledFiscal }, log);
+  const backupDeadlines: { archive: string | null; cloud: string | null } = {
+    archive: null,
+    cloud: null,
+  };
+  mountLocationSettingsApi(
+    app,
+    { db, cfg: till, fiscal: enabledFiscal, readBackupDeadlines: () => ({ ...backupDeadlines }) },
+    log,
+  );
   mountReceiptPreviewApi(app, { db, cfg: till, receiptQrText: tillBackend.receiptQrText }, log);
   const managementApi = mountManagementApi(
     app,
@@ -1646,6 +1654,9 @@ async function bootServer(
         return resolveVenueClock(tx, till.nodeId);
       }),
     outcomes: backupOutcomes,
+    onScheduled: (at) => {
+      backupDeadlines.archive = at === null ? null : new Date(at).toISOString();
+    },
     log,
   });
   undoOnFailure.push(() => backupSupervisor.stop());
@@ -2084,6 +2095,9 @@ async function bootServer(
           stateDir: config.stateDir,
           connection: cloudConnection,
           sourceNodeId: till.nodeId,
+          onScheduled: (at) => {
+            backupDeadlines.cloud = at === null ? null : new Date(at).toISOString();
+          },
           isPrimary: cloudPrimary,
           readClock: () => withTransaction(db, (tx) => resolveVenueClock(tx, till.nodeId)),
           createArchive: (grant, at, signal) =>

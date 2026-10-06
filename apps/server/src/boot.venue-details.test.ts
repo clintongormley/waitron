@@ -92,6 +92,9 @@ describe("a running venue's account email clock", () => {
           WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_ENV: "preproduction",
+          WAITRON_BACKUP_DIR: join(scratch, "backup-destination"),
+          WAITRON_BACKUP_RECOVERY_KEY: "venue-preview-recovery-key",
+          WAITRON_BACKUP_INTERVAL_MS: "86400000",
         };
         const [admin] = await suite.db
           .insert(persons)
@@ -115,7 +118,7 @@ describe("a running venue's account email clock", () => {
           }),
         );
         const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-        server = await startServer({ ...env, WAITRON_VENUE_DIR: dirname(database) });
+        server = await startServer({ ...env, WAITRON_VENUE_DIR: dirname(database) }, env);
         await vi.waitFor(async () => {
           expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
         });
@@ -173,6 +176,17 @@ describe("a running venue's account email clock", () => {
           await request("/management-api/venue-details")
         ).json()) as VenueDetailsModel;
         expect(model.hasSales || model.hasOrderHistory || model.hasDailyClose).toBe(false);
+        const previewPath =
+          "/management-api/venue-details/clock-preview?timeZone=UTC&dayCutover=05%3A00";
+        let retainedDeadline: string | null = null;
+        await vi.waitFor(async () => {
+          const response = await request(previewPath);
+          expect(response.status).toBe(200);
+          const preview = await response.json();
+          retainedDeadline = preview.backupDeadlines.archive;
+          expect(retainedDeadline).toBe("2026-10-07T12:00:00.000Z");
+          expect(preview.backupDeadlines.cloud).toBeNull();
+        });
         const oldTime = path === "invitation" ? "14:00 CEST" : "14:30 CEST";
         const newTime = path === "invitation" ? "12:00 UTC" : "12:30 UTC";
         const before = await send(0);
@@ -187,6 +201,9 @@ describe("a running venue's account email clock", () => {
           changed: true,
           model: { ...model, details: { ...model.details, timeZone: "UTC" } },
         });
+        const clockPreview = await request(previewPath);
+        expect(clockPreview.status).toBe(200);
+        expect((await clockPreview.json()).backupDeadlines.archive).toBe(retainedDeadline);
         const after = await send(1);
         expect(after).toContain(newTime);
         expect(after).not.toContain(oldTime);

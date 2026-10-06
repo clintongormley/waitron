@@ -686,13 +686,16 @@ each column's name was searched across `packages/` and `apps/` for a text compar
   `department_hours` go through a `storedTime` helper (`packages/bookings/src/bookings.ts`,
   `packages/venue-service/src/operations.ts`) that pads `HH:MM` to `HH:MM:SS`, behind a route
   pattern that allows `HH:MM` (and, for a booking, `HH:MM:SS`).
-- **`locations.day_cutover`** is written through `normalizeDayCutover`
+- **`locations.day_cutover`** is written during creation through `normalizeDayCutover`
   (`packages/provisioning/src/venue-plan.ts`), which pads `HH:MM` and stores any other string
   unchanged. Its one text comparison (`packages/venue-service/src/routing-store.ts`, `todayEnds`)
   reads only the stored value's first five characters, which `readLocationClock`
   (`packages/reporting/src/business-day.ts`) keeps. It runs only when those five pass the `HH:MM`
   check there, so a value whose first five characters are not a time switches it off, while
-  anything after them is dropped unread (`06:00garbage` reads as `06:00`) — traced by reading.
+  anything after them is dropped unread (`06:00garbage` reads as `06:00`) — traced by reading. The
+  detail editor (`apps/server/src/venue-details.ts`) separately validates a changed cutover as
+  `HH:MM` or `HH:MM:00` and stores its whole-second spelling. Its real-database validation cases
+  are in `apps/server/src/venue-details.test.ts`; an unrelated edit preserves the saved spelling.
 - **Writers that skip the helpers.** The configuration import
   (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`) copies the time values
   in a bundle's rows as written, without the normalising helpers; `station_hours` and

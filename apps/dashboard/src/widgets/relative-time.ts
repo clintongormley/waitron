@@ -6,8 +6,7 @@ const browserNow = (): Date => new Date();
 
 /**
  * `sentence` with how long ago `at` was (or, for a deadline, how soon it comes) in place of its
- * `{time}`, in the session's language; the exact time shows on hover or tap. The dashboard does not
- * know the venue's time zone, so the exact time is in the browser's.
+ * `{time}`, in the session's language; the exact time shows on hover or tap.
  */
 export function relativeTime(
   sentence: string,

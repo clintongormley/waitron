@@ -61,6 +61,7 @@ export interface BackupSweepDeps {
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   /** Fires only on a tick where at least one destination stored the archive. */
   onStored?: () => void;
+  onScheduled?: (at: number | null) => void;
   /** Read by the backups alert source, so a failed store shows before the freshness threshold. */
   outcomes?: BackupOutcomeHolder;
   log: Logger;
@@ -167,31 +168,38 @@ export async function pruneBackend(
 export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
   const now = deps.now ?? (() => new Date());
   if (deps.signal.aborted) return;
-  await tick(deps);
-  while (!deps.signal.aborted) {
-    // Inside the try: a `readClock` rejection must not end the backup loop.
-    let fireAt: number;
-    try {
-      const clock =
-        deps.schedule.kind === "wall-clock"
-          ? await deps.readClock()
-          : { timeZone: "UTC", dayCutover: "00:00" };
-      fireAt = nextFireMs(deps.schedule, clock, now(), deps.jitterSeed);
-    } catch (err) {
-      if (deps.signal.aborted) break;
-      deps.log("warn", "backup.schedule_failed", { errorCode: codeOf(err) });
-      await deps.sleep(MAX_SLEEP_MS, deps.signal);
-      continue;
-    }
-    // `fireAt` is fixed for the cycle, so a time zone or cutover change lands at the next fire.
-    // Never recompute it mid-wait: an interval schedule's next fire is `now + ms`, so each wake
-    // would push it out again.
-    while (!deps.signal.aborted && now().getTime() < fireAt) {
-      const chunk = Math.min(MAX_SLEEP_MS, fireAt - now().getTime());
-      await deps.sleep(chunk, deps.signal);
-    }
-    if (deps.signal.aborted) break;
+  deps.onScheduled?.(null);
+  try {
     await tick(deps);
+    while (!deps.signal.aborted) {
+      // Inside the try: a `readClock` rejection must not end the backup loop.
+      let fireAt: number;
+      try {
+        const clock =
+          deps.schedule.kind === "wall-clock"
+            ? await deps.readClock()
+            : { timeZone: "UTC", dayCutover: "00:00" };
+        fireAt = nextFireMs(deps.schedule, clock, now(), deps.jitterSeed);
+      } catch (err) {
+        if (deps.signal.aborted) break;
+        deps.log("warn", "backup.schedule_failed", { errorCode: codeOf(err) });
+        await deps.sleep(MAX_SLEEP_MS, deps.signal);
+        continue;
+      }
+      deps.onScheduled?.(fireAt);
+      // `fireAt` is fixed for the cycle, so a time zone or cutover change lands at the next fire.
+      // Never recompute it mid-wait: an interval schedule's next fire is `now + ms`, so each wake
+      // would push it out again.
+      while (!deps.signal.aborted && now().getTime() < fireAt) {
+        const chunk = Math.min(MAX_SLEEP_MS, fireAt - now().getTime());
+        await deps.sleep(chunk, deps.signal);
+      }
+      if (deps.signal.aborted) break;
+      deps.onScheduled?.(null);
+      await tick(deps);
+    }
+  } finally {
+    deps.onScheduled?.(null);
   }
 }
 

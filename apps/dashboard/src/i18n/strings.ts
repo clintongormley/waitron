@@ -613,6 +613,23 @@ export const en = {
     "The postcode must belong to the saved province. A different fiscal or language context requires separate setup.",
   "venue_details.city_warning":
     "A city correction does not rename saved dates or department names. In Public holidays, when available, entries for another city stay recorded and hidden until you select that city again.",
+  "venue_details.current_clock": "Saved clock",
+  "venue_details.proposed_clock": "Proposed clock",
+  "venue_details.local_time": "Local civil date and time",
+  "venue_details.business_day": "Business day",
+  "venue_details.transitions": "Next clock changes within 400 days",
+  "venue_details.clock_change": "Clock change instant (UTC)",
+  "venue_details.resolved_cutover": "Resolved business-day start (local time and UTC instant)",
+  "venue_details.no_transitions": "No clock change found within 400 days.",
+  "venue_details.clock_unavailable": "The saved clock cannot be previewed.",
+  "venue_details.preview_at": "Preview instant (UTC):",
+  "venue_details.cutover_mapping":
+    "The preview uses the reporting clock resolver. A business-day start during a clock change can resolve to a different local time or the later repeated time; review the resolved boundaries above.",
+  "venue_details.archive_deadline": "Scheduled archive backup (UTC)",
+  "venue_details.cloud_deadline": "Scheduled cloud snapshot (UTC)",
+  "venue_details.no_deadline": "No deadline is scheduled.",
+  "venue_details.preview_loading": "Loading the clock preview…",
+  "venue_details.retry_preview": "Retry clock preview",
   "venue_details.clock_warning":
     "Recurring station and booking times keep their wall-clock values. Manual day overrides keep their dates. The next backup time already scheduled stays fixed; later cycles and account email times use the new clock. Stored working-time offsets and historical reporting days are not rewritten.",
   "venue_details.geography_context":
@@ -2816,6 +2833,24 @@ export const es: Record<StringKey, string> = {
     "El código postal debe pertenecer a la provincia guardada. Otro contexto fiscal o lingüístico requiere una configuración aparte.",
   "venue_details.city_warning":
     "Corregir la ciudad no cambia las fechas guardadas ni los nombres de departamentos. En Festivos, cuando esté disponible, las entradas de otra ciudad se conservan y se ocultan hasta volver a seleccionar esa ciudad.",
+  "venue_details.current_clock": "Reloj guardado",
+  "venue_details.proposed_clock": "Reloj propuesto",
+  "venue_details.local_time": "Fecha civil y hora local",
+  "venue_details.business_day": "Día de negocio",
+  "venue_details.transitions": "Próximos cambios de hora en 400 días",
+  "venue_details.clock_change": "Instante del cambio de hora (UTC)",
+  "venue_details.resolved_cutover":
+    "Inicio del día de negocio resuelto (hora local e instante UTC)",
+  "venue_details.no_transitions": "No se ha encontrado un cambio de hora en 400 días.",
+  "venue_details.clock_unavailable": "No se puede mostrar la vista previa del reloj guardado.",
+  "venue_details.preview_at": "Instante de la vista previa (UTC):",
+  "venue_details.cutover_mapping":
+    "La vista previa usa el cálculo horario de los informes. Un inicio del día de negocio durante un cambio de hora puede resultar en una hora local distinta o en la segunda hora repetida; revisa los límites calculados arriba.",
+  "venue_details.archive_deadline": "Copia de archivo programada (UTC)",
+  "venue_details.cloud_deadline": "Copia en la nube programada (UTC)",
+  "venue_details.no_deadline": "No hay un instante programado.",
+  "venue_details.preview_loading": "Cargando la vista previa del reloj…",
+  "venue_details.retry_preview": "Reintentar la vista previa del reloj",
   "venue_details.clock_warning":
     "Los horarios habituales de estaciones y reservas conservan sus horas locales. Las excepciones manuales por día conservan sus fechas. La próxima copia de seguridad ya programada no cambia; los ciclos posteriores y las horas de los correos de cuenta usan el nuevo reloj. No se reescriben los desfases de jornada guardados ni los días históricos de los informes.",
   "venue_details.geography_context":

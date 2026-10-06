@@ -650,6 +650,25 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     expect(backend.objects.size).toBe(3);
   });
 
+  it("exposes its retained interval deadline until abort clears it", async () => {
+    const controller = new AbortController();
+    const observed: Array<number | null> = [];
+    const instant = Date.parse("2026-10-06T00:00:00Z");
+    await runBackupSweep(
+      loopDeps(new FakeBackend("preview"), {
+        signal: controller.signal,
+        log: vi.fn(),
+        now: () => new Date(instant),
+        onScheduled: (at) => observed.push(at),
+        sleep: async () => {
+          expect(observed.at(-1)).toBe(instant + 10);
+          controller.abort();
+        },
+      }),
+    );
+    expect(observed).toEqual([null, instant + 10, null]);
+  });
+
   it("waits to a wall-clock schedule's nextFireMs, reading the clock each cycle", async () => {
     const controller = new AbortController();
     const backend = new FakeBackend("only");
