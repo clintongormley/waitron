@@ -401,6 +401,8 @@ export class PrepStationsScreen extends LitElement {
   #renameScope?: DraftScope<{ name: string }>;
   #stationIdentity?: object;
   #renameIdentity?: object;
+  #watcherRenameScope?: DraftScope<{ name: string }>;
+  #watcherRenameIdentity?: object;
   #leave?: LeaveCoordinator;
 
   #syncStationDrafts(): void {
@@ -469,6 +471,23 @@ export class PrepStationsScreen extends LitElement {
         },
       });
     }
+    if (!this.watcherRename) {
+      this.#watcherRenameScope?.dispose();
+      this.#watcherRenameScope = undefined;
+      this.#watcherRenameIdentity = undefined;
+    } else if (!this.#watcherRenameIdentity) {
+      const id = (this.#watcherRenameIdentity = {});
+      this.#leave ??= leaveCoordinatorFor(this);
+      this.#watcherRenameScope = this.#leave?.register({
+        id,
+        current: () => ({ name: this.watcherRename!.name }),
+        snapshot: (value) => ({ ...value }),
+        equal: (a, b) => a.name.trim() === b.name.trim(),
+        restore: (value) => {
+          if (this.watcherRename) this.watcherRename = { ...this.watcherRename, name: value.name };
+        },
+      });
+    }
   }
 
   async #beforeStationClose(
@@ -530,9 +549,19 @@ export class PrepStationsScreen extends LitElement {
   override disconnectedCallback() {
     this.#exceptionRun++;
     if (this.pending?.change.kind === "exception") this.pending = undefined;
-    if (this.#stationIdentity || this.#renameIdentity || this.#exceptionIdentity || this.watcherEditor)
+    if (
+      this.#stationIdentity ||
+      this.#renameIdentity ||
+      this.#exceptionIdentity ||
+      this.watcherEditor ||
+      this.#watcherRenameIdentity
+    )
       this.busy = false;
     this.watcherEditor = undefined;
+    this.watcherRename = undefined;
+    this.#watcherRenameScope?.dispose();
+    this.#watcherRenameScope = undefined;
+    this.#watcherRenameIdentity = undefined;
     this.#stationScope?.dispose();
     this.#renameScope?.dispose();
     this.#exceptionScope?.dispose();
@@ -2614,6 +2643,9 @@ export class PrepStationsScreen extends LitElement {
                     variant="secondary"
                     data-test=${`rename-watcher-${watcher.id}`}
                     @click=${() => {
+                      this.#watcherRenameScope?.dispose();
+                      this.#watcherRenameScope = undefined;
+                      this.#watcherRenameIdentity = undefined;
                       this.watcherRename = {
                         id: watcher.id,
                         name: watcher.name,
@@ -2680,9 +2712,19 @@ export class PrepStationsScreen extends LitElement {
       ?.querySelector<HTMLElement>(`[data-test="watcher-actions-${watcher.id}"]`)
       ?.focus();
   }
-  async #saveWatcherName() {
+  readonly #beforeWatcherRenameClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.busy || !this.isConnected || !this.watcherRename) return false;
+    const identity = this.#watcherRenameIdentity;
+    const scope = this.#watcherRenameScope;
+    if (!scope) return true;
+    const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed() {} });
+    return this.isConnected && identity === this.#watcherRenameIdentity && outcome === "proceeded";
+  };
+  async #saveWatcherName(identity: object | undefined) {
     const draft = this.watcherRename;
-    if (!draft || this.busy) return;
+    if (!draft || this.busy || !this.isConnected || identity !== this.#watcherRenameIdentity)
+      return;
+    const scope = this.#watcherRenameScope;
     const watcher = this.view!.watchers.find((row) => row.id === draft.id);
     if (!watcher) return;
     const name = draft.name.trim();
@@ -2699,6 +2741,7 @@ export class PrepStationsScreen extends LitElement {
     try {
       await this.api.updateWatcher(watcher.id, input);
     } catch (error) {
+      if (!this.isConnected || identity !== this.#watcherRenameIdentity) return;
       const code = codeOf(error);
       const field = (error as { params?: { field?: string } })?.params?.field;
       const fieldError =
@@ -2708,7 +2751,7 @@ export class PrepStationsScreen extends LitElement {
             ? t("venue.field_required")
             : "";
       this.watcherRename = {
-        ...draft,
+        ...this.watcherRename!,
         attempted: true,
         fieldError,
         error: fieldError
@@ -2718,62 +2761,83 @@ export class PrepStationsScreen extends LitElement {
       this.busy = false;
       return;
     }
-    this.watcherRename = undefined;
+    if (!this.isConnected || identity !== this.#watcherRenameIdentity) return;
+    scope?.commit({ name });
     this.busy = false;
+    if (!scope?.isDirty()) {
+      this.renderRoot
+        .querySelector<HTMLElementTagNameMap["wt-modal"]>("[data-test=watcher-rename-modal]")
+        ?.closeAfter("saved");
+      this.watcherRename = undefined;
+    }
     await this.#load();
   }
   #watcherRenameDialog() {
     const draft = this.watcherRename;
     if (!draft) return nothing;
     const invalid = draft.attempted && !draft.name.trim();
-    return html`<wt-modal
-      open
-      size="compact"
-      data-test="watcher-rename-modal"
-      heading=${t("venue.rename")}
-      .dismissible=${!this.busy}
-      @wt-close=${() => {
-        this.watcherRename = undefined;
-      }}
-    >
-      <wt-input
-        name="name"
-        required
-        data-test="watcher-rename-name"
-        label=${t("prep.name")}
-        .value=${draft.name}
-        .error=${draft.fieldError}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          const name = event.detail.value;
-          this.watcherRename = {
-            ...draft,
-            name,
-            fieldError: draft.attempted && !name.trim() ? t("venue.field_required") : "",
-            error: "",
-          };
-        }}
-        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-watcher-name"]'))}
-      ></wt-input>
-      <wt-form-actions
-        .error=${[draft.fieldError ? t("watchers.fix_fields") : "", draft.error].filter(Boolean).join(" ")}
-      >
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          ?disabled=${this.busy}
-          @click=${() => {
+    const identity = this.#watcherRenameIdentity;
+    return keyed(
+      identity,
+      html`<wt-modal
+        open
+        size="compact"
+        data-test="watcher-rename-modal"
+        heading=${t("venue.rename")}
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#beforeWatcherRenameClose}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (this.isConnected && identity === this.#watcherRenameIdentity)
             this.watcherRename = undefined;
+        }}
+      >
+        <wt-input
+          name="name"
+          required
+          data-test="watcher-rename-name"
+          label=${t("prep.name")}
+          .value=${draft.name}
+          .error=${draft.fieldError}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            if (!this.isConnected || identity !== this.#watcherRenameIdentity) return;
+            const name = event.detail.value;
+            this.watcherRename = {
+              ...draft,
+              name,
+              fieldError: draft.attempted && !name.trim() ? t("venue.field_required") : "",
+              error: "",
+            };
+            this.#watcherRenameScope?.changed();
           }}
-          >${t("venue.cancel")}</wt-button
+          @keydown=${(event: KeyboardEvent) => {
+            if (this.isConnected && identity === this.#watcherRenameIdentity)
+              submitOnEnter(
+                event,
+                this.renderRoot.querySelector('[data-test="save-watcher-name"]'),
+              );
+          }}
+        ></wt-input>
+        <wt-form-actions
+          .error=${[draft.fieldError ? t("watchers.fix_fields") : "", draft.error].filter(Boolean).join(" ")}
         >
-        <wt-button
-          data-test="save-watcher-name"
-          ?disabled=${this.busy || invalid}
-          @click=${() => void this.#saveWatcherName()}
-          >${t("venue.save")}</wt-button
-        >
-      </wt-form-actions>
-    </wt-modal>`;
+          <wt-button
+            slot="cancel"
+            variant="secondary"
+            ?disabled=${this.busy}
+            @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.requestClose("cancel")}
+            >${t("venue.cancel")}</wt-button
+          >
+          <wt-button
+            data-test="save-watcher-name"
+            ?disabled=${this.busy || invalid}
+            @click=${() => void this.#saveWatcherName(identity)}
+            >${t("venue.save")}</wt-button
+          >
+        </wt-form-actions>
+      </wt-modal>`,
+    );
   }
   readonly #beforeWatcherClose = async (reason: LeaveReason): Promise<boolean> => {
     const editor = this.watcherEditor;

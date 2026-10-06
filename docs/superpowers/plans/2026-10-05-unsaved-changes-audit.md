@@ -640,3 +640,48 @@ removed. This supersedes the earlier control receipt for the final gate's shape.
 ```sh
 pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.test.ts src/dashboard/watcher-form.unsaved.test.ts -t 'watcher|Watcher'
 ```
+
+
+## 2026-10-06 follow-up: Watcher Rename and current-main reconciliation
+
+The separate Watcher Rename modal now registers its trimmed submitted name. Cancel and native
+Escape keep it mounted while you choose Keep editing or Discard changes. Clean and normalized
+reverted names close directly. Successful writes commit before refresh, and edits delivered during
+that write stay dirty against the submitted name. Refusals retain newer input. Disconnect aborts
+the question and unregisters the scope; late replies cannot release a replacement write. Retained
+input, Enter, Save and native close controls from a departed opening cannot submit its replacement.
+
+The initial rename selection failed all eight new cases. After implementation it passed all
+25 watcher cases. Four additional lifetime cases exposed one failure: Enter from the removed
+input found the replacement Save button. The opening check fixed that failure. The final command
+below passed 121 tests; 238 cases outside its name selection were skipped.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/watcher-form.unsaved.test.ts src/dashboard/prep-stations-screen.test.ts -t 'watcher|Watcher'
+```
+
+The existing standalone Rename Cancel check now waits for the native dialog's delayed close;
+its modal-absence, no-write and reopened stored-name assertions are retained. No historical
+expected value changed. In an independently installed disposable checkout, removing the close
+gate failed the edited Cancel case, removing the submitted commit failed the newer-input revert,
+and removing the Enter opening check failed the departed-control no-write assertion. Each failed
+one selected test. Restoring the candidate passed all 29 watcher unsaved cases.
+
+A temporary Chromium probe passed eight EN/ES, light/dark, 390/1280 flows, including 16 axe scans,
+visible name retention and focus after Keep. Its shell supplied localized warning copy. Sixteen
+screenshots and the probe are retained in Lane E's local receipts. The probe's first screenshot
+attempt was refused because its absolute output path was outside Vite's allowed paths; the final
+run used a package-local path and copied the evidence out afterwards. Synthetic unload assertions
+check cancellation only; native reload remains Task 5.
+
+Rebasing onto main retained both the authority-clock cleanup and the shell's forced dirty-registry
+reset, and kept both test groups. The focused till shell selection passed nine cases, its types
+passed, and the existing dialog/modal suites passed 160 cases, including compact sizing. This is
+reconciliation evidence, not completion of the full W69 rollout.
+
+Current-main source inspection adds `apps/till/src/widgets/invoice-recipient-dialog.ts` to the
+remaining protected modal inventory: its staged tax ID, name and address fields currently cancel
+through `invoice-recipient-cancel`. Cover that form and its till host before PR 1; retain explicit
+submission and fiscal behavior. This entry is a source inventory, not a runtime test of that owner.
+The venue-details page added on main also needs Task 6 reconciliation. Watcher inline selections,
+other modal owners and page/history/navigation coverage remain open.

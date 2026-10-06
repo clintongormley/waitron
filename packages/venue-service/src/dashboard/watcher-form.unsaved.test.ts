@@ -406,3 +406,217 @@ it("Watcher background host render leaves the pending discard close valid", asyn
   await expect.poll(() => form.isConnected).toBe(false);
   expect(unload()).toBe(false);
 });
+
+async function openRename(screen: PrepStationsScreen) {
+  const table = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    "[data-test=watchers-table]",
+  )!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>("[data-test=rename-watcher-pass]")!.click();
+  await screen.updateComplete;
+  const modal = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    "[data-test=watcher-rename-modal]",
+  )!;
+  await modal.updateComplete;
+  return modal;
+}
+async function renameName(screen: PrepStationsScreen, modal: HTMLElement, name: string) {
+  modal
+    .querySelector("[data-test=watcher-rename-name]")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: name } }));
+  await screen.updateComplete;
+}
+function renameValue(modal: HTMLElement) {
+  return modal.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=watcher-rename-name]")!
+    .value;
+}
+function renameCancel(modal: HTMLElement) {
+  modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+}
+function renameSave(modal: HTMLElement) {
+  modal.querySelector<HTMLElement>("[data-test=save-watcher-name]")!.click();
+}
+for (const route of ["cancel", "escape"] as const) {
+  it(`Watcher Rename ${route} keeps edits until explicit Discard without writing`, async () => {
+    const { screen, writes } = await mount();
+    const modal = await openRename(screen);
+    await renameName(screen, modal, "  Expo  ");
+    if (route === "cancel") renameCancel(modal);
+    else await userEvent.keyboard("{Escape}");
+    expect((await question()).open).toBe(true);
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    await choose("keep");
+    expect(renameValue(modal)).toBe("  Expo  ");
+    expect(unload()).toBe(true);
+    renameCancel(modal);
+    await choose("discard");
+    await expect.poll(() => modal.isConnected).toBe(false);
+    expect(writes).toEqual([]);
+    expect(unload()).toBe(false);
+  });
+}
+it("Watcher Rename clean and normalized reverted names close directly", async () => {
+  const { screen } = await mount();
+  let modal = await openRename(screen);
+  renameCancel(modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+  modal = await openRename(screen);
+  await renameName(screen, modal, "Expo");
+  expect(unload()).toBe(true);
+  await renameName(screen, modal, "  Pass  ");
+  expect(unload()).toBe(false);
+  renameCancel(modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+  expect((await question()).open).toBe(false);
+});
+it("Watcher Rename accepted body commits before a failed refresh and invalidates a pending question", async () => {
+  const { screen, writes } = await mount(undefined, true);
+  const modal = await openRename(screen);
+  await renameName(screen, modal, "  Expo  ");
+  const leaving = modal.requestClose("cancel");
+  expect((await question()).open).toBe(true);
+  renameSave(modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+  expect(await leaving).toBe(false);
+  expect((await question()).open).toBe(false);
+  expect(unload()).toBe(false);
+  expect(writes).toEqual([
+    {
+      id: "pass",
+      body: {
+        name: "Expo",
+        everyStation: false,
+        stationIds: ["bar"],
+        everyZone: false,
+        zoneIds: ["terrace"],
+        runsPass: false,
+        displayOrder: 7,
+      },
+    },
+  ]);
+});
+it("Watcher Rename refuses a write without losing its draft or discard protection", async () => {
+  const write = deferred();
+  const { screen } = await mount(write.promise);
+  const modal = await openRename(screen);
+  await renameName(screen, modal, "Expo");
+  renameSave(modal);
+  write.reject({ code: "watcher.name_taken" });
+  await expect
+    .poll(() => modal.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error)
+    .not.toBe("");
+  renameCancel(modal);
+  await choose("keep");
+  expect(renameValue(modal)).toBe("Expo");
+  expect(unload()).toBe(true);
+});
+it("Watcher Rename retains newer input against its submitted baseline", async () => {
+  const write = deferred();
+  const { screen, writes } = await mount(write.promise);
+  const modal = await openRename(screen);
+  await renameName(screen, modal, "Expo");
+  renameSave(modal);
+  await screen.updateComplete;
+  expect(await modal.requestClose("cancel")).toBe(false);
+  await renameName(screen, modal, "Later expo");
+  write.resolve();
+  await expect.poll(() => modal.dismissible).toBe(true);
+  expect(modal.isConnected).toBe(true);
+  expect(renameValue(modal)).toBe("Later expo");
+  expect(writes).toHaveLength(1);
+  expect(unload()).toBe(true);
+  await renameName(screen, modal, "  Expo  ");
+  expect(unload()).toBe(false);
+  renameCancel(modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+});
+it("Watcher Rename background render does not invalidate a pending discard", async () => {
+  const { screen } = await mount();
+  const modal = await openRename(screen);
+  await renameName(screen, modal, "Expo");
+  renameCancel(modal);
+  expect((await question()).open).toBe(true);
+  screen.requestUpdate();
+  await screen.updateComplete;
+  await choose("discard");
+  await expect.poll(() => modal.isConnected).toBe(false);
+});
+it("Watcher Rename disconnect aborts its decision and removes unload protection", async () => {
+  const { screen } = await mount();
+  const modal = await openRename(screen);
+  await renameName(screen, modal, "Expo");
+  renameCancel(modal);
+  expect((await question()).open).toBe(true);
+  screen.remove();
+  await expect.poll(async () => (await question()).open).toBe(false);
+  expect(unload()).toBe(false);
+});
+
+for (const refused of [false, true]) {
+  it(`Watcher Rename departed ${refused ? "refusal" : "acceptance"} cannot alter a replacement write`, async () => {
+    const oldWrite = deferred();
+    const nextWrite = deferred();
+    const { screen, writes } = await mount(oldWrite.promise);
+    const old = await openRename(screen);
+    await renameName(screen, old, "Old expo");
+    renameSave(old);
+    await screen.updateComplete;
+    screen.remove();
+    screen.api = {
+      ...screen.api,
+      updateWatcher: async () => nextWrite.promise,
+    } as unknown as PrepStationsApi;
+    app.shadowRoot!.append(screen);
+    await screen.updateComplete;
+    const next = await openRename(screen);
+    await renameName(screen, next, "Next expo");
+    renameSave(next);
+    await screen.updateComplete;
+    if (refused) oldWrite.reject({ code: "watcher.name_taken" });
+    else oldWrite.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await screen.updateComplete;
+    expect(next.isConnected).toBe(true);
+    expect(renameValue(next)).toBe("Next expo");
+    expect(next.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error).toBe("");
+    expect(await next.requestClose("cancel")).toBe(false);
+    expect((await question()).open).toBe(false);
+    expect(writes).toHaveLength(1);
+    nextWrite.resolve();
+    await expect.poll(() => next.isConnected).toBe(false);
+  });
+}
+it("Watcher Rename departed controls and native close cannot edit or submit a new opening", async () => {
+  const { screen, writes } = await mount();
+  const old = await openRename(screen);
+  renameCancel(old);
+  await expect.poll(() => old.isConnected).toBe(false);
+  const next = await openRename(screen);
+  await renameName(screen, next, "Next expo");
+  await renameName(screen, old, "Old expo");
+  renameSave(old);
+  old.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  old
+    .querySelector("wt-input")!
+    .shadowRoot!.querySelector("input")!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+  await screen.updateComplete;
+  expect(writes).toEqual([]);
+  expect(next.isConnected).toBe(true);
+  expect(renameValue(next)).toBe("Next expo");
+});
+it("Watcher Rename keeps newer input when its in-flight write is refused", async () => {
+  const write = deferred();
+  const { screen } = await mount(write.promise);
+  const modal = await openRename(screen);
+  await renameName(screen, modal, "Expo");
+  renameSave(modal);
+  await screen.updateComplete;
+  await renameName(screen, modal, "Newer expo");
+  write.reject({ code: "connection.failed" });
+  await expect.poll(() => modal.dismissible).toBe(true);
+  expect(renameValue(modal)).toBe("Newer expo");
+  expect(unload()).toBe(true);
+  renameCancel(modal);
+  await choose("keep");
+});
