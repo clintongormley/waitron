@@ -434,7 +434,7 @@ it("explains that unsupported published menus require a venue reset in both lang
   expect(codeMessage("menu.reset_required", "en")).toBe(
     "This venue has a menu in an unsupported format. Reset the venue before using menus.",
   );
-  expect(codeMessage("menu.reset_required", "es")).toBe(
+  expect(codeMessage("menu.reset_required", "es-ES")).toBe(
     "Este local tiene una carta en un formato no compatible. Restablece el local antes de usar las cartas.",
   );
 });

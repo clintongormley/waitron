@@ -7573,3 +7573,61 @@ it.each(["en", "es-ES"])(
     );
   },
 );
+
+it.each(["en", "es-ES"])(
+  "shows the venue-reset instruction on the menu list in %s",
+  async (locale) => {
+    setLocale(locale);
+    onTestFinished(() => setLocale("en"));
+    const el = await mount(
+      api({
+        getMenuStatuses: vi
+          .fn()
+          .mockRejectedValue({ code: "menu.reset_required", params: { menuId: "menu-lunch" } }),
+      }),
+    );
+    const expected =
+      locale === "en"
+        ? "This venue has a menu in an unsupported format. Reset the venue before using menus."
+        : "Este local tiene una carta en un formato no compatible. Restablece el local antes de usar las cartas.";
+    await vi.waitFor(() => expect(text(q(el, '[data-test="status-reset-error"]'))).toBe(expected));
+    cleanupWidgets();
+    const selected = await mount(
+      api({
+        getMenuStatus: vi
+          .fn()
+          .mockRejectedValue({ code: "menu.reset_required", params: { menuId: "menu-lunch" } }),
+      }),
+      LUNCH_PATH,
+    );
+    await vi.waitFor(() => expect(text(q(selected, '[data-test="menu-status"]'))).toBe(expected));
+  },
+);
+
+it("replaces a later preview reset refusal with the next successful document", async () => {
+  setLocale("en");
+  onTestFinished(() => setLocale("en"));
+  const live = new LiveData();
+  const client = api({ liveData: live });
+  const normalRead = client.getMenuPreview.getMockImplementation()!;
+  const el = await mount(client, PREVIEW_PATH);
+  const panel = q<HTMLElementTagNameMap["dashboard-menu-preview"]>(el, "dashboard-menu-preview")!;
+  await vi.waitFor(() => expect(panel.preview).not.toBeNull());
+  client.getMenuPreview.mockRejectedValue({
+    code: "menu.reset_required",
+    params: { menuId: "menu-lunch" },
+  });
+  live.refresh();
+  await vi.waitFor(() =>
+    expect(text(panel.shadowRoot!.querySelector('[data-test="preview-error"]'))).toContain(
+      "Reset the venue before using menus.",
+    ),
+  );
+  client.getMenuPreview.mockImplementation(normalRead);
+  live.refresh();
+  await vi.waitFor(() =>
+    expect(panel.shadowRoot!.querySelector('[data-test="preview-error"]')).toBeNull(),
+  );
+  expect(panel.failed).toBe(false);
+  expect(panel.preview!.document.menuId).toBe("menu-lunch");
+});

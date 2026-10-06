@@ -518,10 +518,12 @@ export class MenusScreen extends LitElement {
   /** Every menu's publication state, followed while the list is shown; null until read. */
   @state() private statuses: Record<string, MenuStatus> | null = null;
   @state() private statusesError = false;
+  @state() private statusesResetRequired = false;
   /** The open menu's publication state, followed while its editor is shown: on the Preview tab
    * through the preview, which carries it. Null until read. */
   @state() private status: MenuStatus | null = null;
   @state() private statusError = false;
+  @state() private statusResetRequired = false;
   /** Null until the open menu's preview is read, which happens only on the Preview tab. */
   @state() private preview: MenuPreview | null = null;
   @state() private previewError = false;
@@ -614,9 +616,14 @@ export class MenusScreen extends LitElement {
   readonly #statusQueries = new DashboardQueries(
     this,
     () => this.api,
-    () => {
-      if (this.menuId === null) this.statusesError = true;
-      else this.statusError = true;
+    (error) => {
+      if (this.menuId === null) {
+        this.statusesError = true;
+        this.statusesResetRequired = codeOf(error) === "menu.reset_required";
+      } else {
+        this.statusError = true;
+        this.statusResetRequired = codeOf(error) === "menu.reset_required";
+      }
     },
   );
   /** The menu whose state is followed, null for every menu's, undefined before the first. */
@@ -943,10 +950,12 @@ export class MenusScreen extends LitElement {
       this.#statusQueries.release("getMenuStatus");
       this.statuses = null;
       this.statusesError = false;
+      this.statusesResetRequired = false;
       void this.#statusQueries
         .watch("getMenuStatuses", [], (value) => {
           this.statuses = value;
           this.statusesError = false;
+          this.statusesResetRequired = false;
         })
         .catch(() => undefined);
       return;
@@ -963,6 +972,7 @@ export class MenusScreen extends LitElement {
       .watch("getMenuStatus", [menuId], (value) => {
         this.status = value;
         this.statusError = false;
+        this.statusResetRequired = false;
       })
       .catch(() => undefined);
   }
@@ -980,6 +990,7 @@ export class MenusScreen extends LitElement {
         this.previewResetRequired = false;
         this.status = value.status;
         this.statusError = false;
+        this.statusResetRequired = false;
       });
     } catch {
       this.previewError = true;
@@ -1927,6 +1938,7 @@ export class MenusScreen extends LitElement {
         ${loaded ? this.#renderAddMenu() : nothing}
       </div>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
+      ${this.statusesError && this.statusesResetRequired ? html`<p class="error" role="alert" data-test="status-reset-error">${codeMessage("menu.reset_required")}</p>` : nothing}
       ${
         loaded
           ? html`<div class="list">
@@ -2360,7 +2372,9 @@ export class MenusScreen extends LitElement {
   /** On the Preview tab the changes are already shown, so the label stays plain words there. */
   #renderStatusLine(menuId: string) {
     const words = this.statusError
-      ? t("menus.status_error")
+      ? this.statusResetRequired
+        ? codeMessage("menu.reset_required")
+        : t("menus.status_error")
       : this.status === null
         ? t("menus.status_loading")
         : this.status.state === "changed" && this.view !== "preview"
@@ -2613,6 +2627,7 @@ export class MenusScreen extends LitElement {
         <h1>${name || t("menus.title")}</h1>
       </div>
       ${this.#renderStatusLine(menuId)} ${this.#renderLoadState()} ${this.#renderMemberError()}
+      ${this.statusesError && this.statusesResetRequired ? html`<p class="error" role="alert" data-test="status-reset-error">${codeMessage("menu.reset_required")}</p>` : nothing}
       <wt-tabs
         data-test="menu-tabs"
         label=${name || t("menus.title")}

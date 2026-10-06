@@ -190,8 +190,10 @@ without writing another. Missing or non-string `expectedHash` answers `managemen
 (400). A malformed menu id answers `shared.invalid_id` (400), an unknown menu
 `catalogue.not_found` (404).
 
-Tills sell from live versions of active menus. A live version outside document format 3 refuses
-status, preview, publish and serving with `menu.reset_required`. Reset the venue before using its
+Tills sell from live versions of active menus. Reading a live version outside document format 3 refuses
+with `menu.reset_required`. Status reads check their requested menus; preview checks its own menu
+and other menus when comparing shared changes; publishing checks its own menu; serving checks
+the zone's assigned active menus. Reset the venue before using its
 menus; republishing an old document is not an upgrade path (owner, 2026-10-06, A291).
 Availability, course and reporting category are
 applied from current rows when serving that version; its VAT class is frozen, and it holds no VAT

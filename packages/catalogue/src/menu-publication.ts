@@ -144,6 +144,7 @@ export async function readLiveDocuments(
   for (const { versionId, contentHash } of versions.values()) {
     const kept = cache.get(versionId);
     if (kept?.contentHash === contentHash) {
+      // A cache hit reuses the frozen document validated on its first read.
       cache.delete(versionId);
       cache.set(versionId, kept);
       found.set(versionId, kept.document);

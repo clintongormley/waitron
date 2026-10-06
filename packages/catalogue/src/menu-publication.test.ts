@@ -570,6 +570,17 @@ describe("a live version published before the Device Home Page", () => {
       params: { menuId: f.dinner },
     });
   });
+  it("keeps an unrelated format-3 menu usable when another menu has an unsupported live format", async () => {
+    const f = await menusFixture(fx.db);
+    const first = await publish(f.lunch);
+    await liveInFormat2(f.dinner);
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.changes).toEqual([]);
+    expect(preview.status.state).toBe("current");
+    expect(await app((tx) => publishMenu(tx, f.lunch, preview.hash, "person-1"))).toEqual(first);
+    expect([...(await app((tx) => readLiveDocuments(tx, [f.lunch]))).keys()]).toEqual([f.lunch]);
+    expect((await app((tx) => menuStatus(tx, [f.lunch]))).get(f.lunch)!.state).toBe("current");
+  });
 });
 
 describe("a live version published while its document froze a VAT rate", () => {
