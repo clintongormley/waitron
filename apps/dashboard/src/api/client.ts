@@ -529,8 +529,9 @@ export interface Course {
   name: string;
   displayOrder: number;
   active: boolean;
-  /** Something names it, so removing it disables it rather than deleting it. */
-  inUse: boolean;
+  /** Something names it, so removing it disables it rather than deleting it. Only the read with the
+   *  disabled courses and a move's answer carry it. */
+  inUse?: boolean;
 }
 
 export interface DeviceRow {
@@ -2443,9 +2444,13 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/courses/${id}`, "PATCH", patch);
   }
 
-  /** The server deletes the course when nothing names it, and disables it otherwise. */
-  removeCourse(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/courses/${id}`, "DELETE");
+  /** The server deletes the course when nothing names it, and disables it otherwise; with
+   *  `disable`, it only ever disables it. */
+  removeCourse(id: string, { disable }: { disable: boolean }): Promise<void> {
+    return this.#request<void>(
+      `/management-api/courses/${id}${disable ? "?disable=true" : ""}`,
+      "DELETE",
+    );
   }
 
   enableCourse(id: string): Promise<void> {

@@ -27,6 +27,12 @@ interface Edit {
   done: boolean;
 }
 
+interface Deleting {
+  course: Course;
+  errorKey: string | null;
+  busy: boolean;
+}
+
 function namesTheName(error: unknown): boolean {
   const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
   return codeOf(error) === "course.name_taken" || field === "name";
@@ -115,8 +121,9 @@ export class CourseList extends LitElement {
   @state() private edit: Edit | null = null;
   @state() private errorKey: string | null = null;
   /** A Delete waiting for its confirmation; a refused one stays open with its refusal. */
-  @state() private deleting: { course: Course; errorKey: string | null; busy: boolean } | null =
-    null;
+  @state() private deleting: Deleting | null = null;
+  /** Woken whenever `deleting` changes. */
+  #deletingWaiters: (() => void)[] = [];
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
   readonly #writes = new ListWriteQueue();
@@ -157,7 +164,13 @@ export class CourseList extends LitElement {
     void this.#load();
   }
 
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#setDeleting(null);
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("readOnly") && this.readOnly) this.#setDeleting(null);
     if (changed.has("readOnly") && this.#watching !== null && this.#watching !== this.#read()) {
       this.#queries.release(this.#watching);
       void this.#load();
@@ -169,14 +182,20 @@ export class CourseList extends LitElement {
     return this.readOnly ? "listCourses" : "listCoursesWithDisabled";
   }
 
-  /** Settles once no change is left unanswered, counting those made while it waits. */
+  /** Settles once no change is left unanswered and no Delete confirmation waits for an answer,
+   *  counting those made while it waits. */
   async settled(): Promise<void> {
-    await this.#writes.idle;
+    for (;;) {
+      await this.#writes.idle;
+      const open = this.deleting;
+      if (open === null || open.errorKey !== null) return;
+      await new Promise<void>((resolve) => this.#deletingWaiters.push(resolve));
+    }
   }
 
-  /** Whether a name field is open: not yet left, or refused. */
+  /** Whether a name field or a Delete confirmation is open: not yet answered, or refused. */
   get unsaved(): boolean {
-    return this.edit !== null;
+    return this.edit !== null || this.deleting !== null;
   }
 
   async #load(): Promise<void> {
@@ -247,8 +266,9 @@ export class CourseList extends LitElement {
       () => this.api.moveCourse(id, to),
       async (courses, last) => {
         this.#movesOut -= 1;
-        // An earlier answer would pull rows back under a keyboard that has moved on.
-        if (last) this.#show(courses, false);
+        // An earlier answer would pull rows back under a keyboard that has moved on, and a read
+        // dropped meanwhile carried disabled courses a move's answer does not.
+        if (last && !this.#readDropped) this.#show(courses, false);
         else if (this.#movesOut === 0 && this.#readDropped) await this.#load();
       },
       async (error) => {
@@ -356,27 +376,45 @@ export class CourseList extends LitElement {
 
   // ── Removal and Enable ─────────────────────────────────────────────────────────────────────────
 
-  /** The server deletes a course nothing names and disables one something does; a Delete asks first. */
-  #remove(course: Course): void {
-    if (!course.inUse) {
-      this.deleting = { course, errorKey: null, busy: false };
-      return;
-    }
-    this.#change(() => this.api.removeCourse(course.id), this.#neighbour(course));
+  #setDeleting(next: Deleting | null): void {
+    this.deleting = next;
+    const waiters = this.#deletingWaiters;
+    this.#deletingWaiters = [];
+    for (const wake of waiters) wake();
   }
 
+  /** A Delete asks first. A Disable only ever disables, even if nothing names the course by now. */
+  #remove(course: Course): void {
+    if (!course.inUse) {
+      this.#setDeleting({ course, errorKey: null, busy: false });
+      return;
+    }
+    this.#change(
+      () => this.api.removeCourse(course.id, { disable: true }),
+      this.#neighbour(course),
+    );
+  }
+
+  /** The server disables rather than deletes a course something has come to name since the read. */
   #confirmDelete(): void {
     const target = this.deleting;
-    if (target === null || target.busy) return;
-    this.deleting = { ...target, errorKey: null, busy: true };
-    this.#change(() => this.api.removeCourse(target.course.id), this.#neighbour(target.course), {
-      refused: (error) => {
-        this.deleting = { ...target, errorKey: codeOf(error), busy: false };
+    if (target === null || target.busy || this.readOnly) return;
+    const sending = { ...target, errorKey: null, busy: true };
+    this.#setDeleting(sending);
+    this.#change(
+      () => this.api.removeCourse(target.course.id, { disable: false }),
+      this.#neighbour(target.course),
+      {
+        refused: (error) => {
+          if (this.deleting === sending)
+            this.#setDeleting({ ...target, errorKey: codeOf(error), busy: false });
+          else this.#showError(codeOf(error));
+        },
+        sent: () => {
+          if (this.deleting === sending) this.#setDeleting(null);
+        },
       },
-      sent: () => {
-        this.deleting = null;
-      },
-    });
+    );
   }
 
   #neighbour(course: Course): string | undefined {
@@ -487,8 +525,10 @@ export class CourseList extends LitElement {
       data-test="delete-course-modal"
       heading=${t("kitchen.delete_course")}
       .dismissible=${!target.busy}
-      @wt-close=${() => {
-        this.deleting = null;
+      @wt-close=${(event: Event) => {
+        // Kept from the window this list may sit in, which would close too.
+        event.stopPropagation();
+        this.#setDeleting(null);
       }}
     >
       <p>${t("kitchen.delete_course_confirm").replace("{name}", target.course.name)}</p>
@@ -499,9 +539,7 @@ export class CourseList extends LitElement {
           slot="cancel"
           variant="secondary"
           ?disabled=${target.busy}
-          @click=${() => {
-            this.deleting = null;
-          }}
+          @click=${() => this.#setDeleting(null)}
           >${t("action.cancel")}</wt-button
         ><wt-button
           data-test="confirm-delete-course"

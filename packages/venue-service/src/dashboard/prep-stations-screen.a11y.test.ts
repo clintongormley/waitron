@@ -236,9 +236,9 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
         .shadowRoot!.querySelector<HTMLElement>('[data-test="enable-watcher-old"]')!
         .click();
       await vi.waitFor(() =>
-        expect(
-          el.shadowRoot!.querySelector('[data-test="watcher-enable-error"]')?.textContent,
-        ).toContain("Rename that watcher first"),
+        expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+          "Rename that watcher first",
+        ),
       );
     }
     expect(el.shadowRoot!.querySelector("h1")).not.toBeNull();

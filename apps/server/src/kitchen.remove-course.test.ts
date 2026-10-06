@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
   locations,
@@ -12,6 +12,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  COURSE_REFERENCES,
   coursesInUse,
   createCourse,
   listCourses,
@@ -136,6 +137,55 @@ describe("removing a course", () => {
     ).toEqual([{ courseId: id }]);
     await inTx(v, (tx) => removeCourse(tx, v.cfg, id));
     expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
+  });
+
+  it("only disables a course nothing refers to when the request asks to disable it", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const id = await course(v);
+    expect(await inTx(v, (tx) => coursesInUse(tx, [id]))).toEqual(new Set());
+    await inTx(v, (tx) => removeCourse(tx, v.cfg, id, true));
+    expect(await courseRow(v, id)).toMatchObject([{ id, name: "Postres", active: false }]);
+    await inTx(v, (tx) => removeCourse(tx, v.cfg, id, true));
+    expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
+  });
+
+  it("refuses to edit another venue's course with course.not_found, changing nothing", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const id = await course(v);
+    await inTx(v, (tx) => updateCourse(tx, v.cfg, id, { active: false }));
+    const otherLocation = await inTx(v, async (tx) => {
+      const [location] = await tx
+        .insert(locations)
+        .values({ name: "Elsewhere", invoiceLocales: ["es-ES"], operationDescription: "Bar" })
+        .returning({ id: locations.id });
+      return location!.id;
+    });
+    const foreignCfg = { ...v.cfg, locationId: otherLocation as typeof v.cfg.locationId };
+    await expect(
+      inTx(v, (tx) => updateCourse(tx, foreignCfg, id, { active: true, name: "Taken over" })),
+    ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: id } });
+    expect(await courseRow(v, id)).toMatchObject([{ id, name: "Postres", active: false }]);
+  });
+
+  it("stops reading references once every course asked about is found, counting a repeated id once", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const used = await course(v, "Used");
+    const free = await course(v, "Free");
+    await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), used));
+    const queries = (ids: string[]) =>
+      inTx(v, async (tx) => {
+        const spy = vi.spyOn(tx, "selectDistinct");
+        try {
+          return { found: await coursesInUse(tx, ids), queries: spy.mock.calls.length };
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    expect(await queries([used, used])).toEqual({ found: new Set([used]), queries: 1 });
+    expect(await queries([used, free])).toEqual({
+      found: new Set([used]),
+      queries: COURSE_REFERENCES.length,
+    });
   });
 
   it("deletes a disabled course once nothing refers to it any more", async () => {

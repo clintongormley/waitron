@@ -218,9 +218,13 @@ export class PrepStationsApi {
   setWatcherPrinters(id: string, printerIds: readonly string[]): Promise<void> {
     return this.request(`/management-api/watchers/${id}/printers`, "PUT", { printerIds });
   }
-  /** The server deletes a watcher nothing refers to and disables one something does. */
-  removeWatcher(id: string): Promise<void> {
-    return this.request(`/management-api/watchers/${id}`, "DELETE");
+  /** The server deletes a watcher nothing refers to and disables one something does; with
+   *  `disable`, it only ever disables it. */
+  removeWatcher(id: string, { disable }: { disable: boolean }): Promise<void> {
+    return this.request(
+      `/management-api/watchers/${id}${disable ? "?disable=true" : ""}`,
+      "DELETE",
+    );
   }
   enableWatcher(id: string): Promise<void> {
     return this.request(`/management-api/watchers/${id}/reactivate`, "POST");

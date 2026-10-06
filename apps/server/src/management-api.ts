@@ -101,8 +101,8 @@ import {
   updateZone,
 } from "./tables.js";
 import {
+  COURSE_REFERENCES,
   createCourse,
-  coursesInUse,
   createStation,
   deactivateStation,
   getBumpMode,
@@ -119,7 +119,6 @@ import {
   updateCourse,
   updateStation,
   type BumpMode,
-  type Course,
   type FireControl,
 } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
@@ -129,9 +128,11 @@ import {
   reactivateWatcher,
   removeWatcher,
   updateWatcher,
-  watchersInUse,
+  WATCHER_REFERENCES,
   type WatcherInput,
 } from "./watchers.js";
+import { withInUse } from "./in-use.js";
+import { queryFlag } from "./report-api.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { requireBodyUuid, requireEnum, requireNullableBodyUuid } from "@waitron/server-kit";
@@ -366,17 +367,6 @@ function parseWatcherBody(body: unknown): WatcherInput {
     runsPass: value.runsPass as boolean,
     displayOrder: parseDisplayOrder(value.displayOrder),
   };
-}
-
-async function withCoursesInUse(
-  tx: Transaction,
-  courses: Course[],
-): Promise<(Course & { inUse: boolean })[]> {
-  const inUse = await coursesInUse(
-    tx,
-    courses.map((course) => course.id),
-  );
-  return courses.map((course) => ({ ...course, inUse: inUse.has(course.id) }));
 }
 
 function requireCourseId(id: string): string {
@@ -1792,11 +1782,7 @@ export function mountManagementApi(
       const includeDisabled = c.req.query("includeDisabled") === "true";
       const watchers = await withVenueAuth(deps, sessionId, async (tx) => {
         const rows = await listWatchers(tx, cfg, includeDisabled);
-        const inUse = await watchersInUse(
-          tx,
-          rows.map((row) => row.id),
-        );
-        return rows.map((row) => ({ ...row, inUse: inUse.has(row.id) }));
+        return includeDisabled ? withInUse(tx, WATCHER_REFERENCES, rows) : rows;
       });
       return c.json(watchers);
     }),
@@ -1830,7 +1816,8 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
       const id = requireWatcherId(c.req.param("id"));
-      await withVenueAuth(deps, sessionId, (tx) => removeWatcher(tx, cfg, id));
+      const disable = queryFlag(c.req.query("disable"), "disable");
+      await withVenueAuth(deps, sessionId, (tx) => removeWatcher(tx, cfg, id, disable));
       return c.body(null, 204);
     }),
   );
@@ -2057,9 +2044,10 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
       const includeDisabled = c.req.query("includeDisabled") === "true";
-      const courses = await withVenueReadAuth(deps, sessionId, async (tx) =>
-        withCoursesInUse(tx, await listCourses(tx, cfg, includeDisabled)),
-      );
+      const courses = await withVenueReadAuth(deps, sessionId, async (tx) => {
+        const rows = await listCourses(tx, cfg, includeDisabled);
+        return includeDisabled ? withInUse(tx, COURSE_REFERENCES, rows) : rows;
+      });
       return c.json(courses);
     }),
   );
@@ -2106,7 +2094,8 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const id = requireCourseId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, sessionId, (tx) => removeCourse(tx, cfg, id));
+      const disable = queryFlag(c.req.query("disable"), "disable");
+      await withVenueAuth(deps, sessionId, (tx) => removeCourse(tx, cfg, id, disable));
       return c.body(null, 204);
     }),
   );
@@ -2126,7 +2115,7 @@ export function mountManagementApi(
       }
       return c.json(
         await withVenueAuth(deps, sessionId, async (tx) =>
-          withCoursesInUse(tx, await moveCourse(tx, cfg, id, to)),
+          withInUse(tx, COURSE_REFERENCES, await moveCourse(tx, cfg, id, to)),
         ),
       );
     }),

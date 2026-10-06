@@ -403,6 +403,20 @@ describe("removing a watcher, and enabling it again", () => {
     expect((await settingsRows(v, id)).watcher).toMatchObject([{ id, active: false }]);
   });
 
+  it("only disables a watcher nothing refers to when the request asks to disable it, dropping its printers", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const { id, stationId } = await followingWatcher(v);
+    expect(await inTx(v, (tx) => watchersInUse(tx, [id]))).toEqual(new Set());
+    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id, true));
+    const rows = await settingsRows(v, id);
+    expect(rows.watcher).toMatchObject([{ id, name: "Pass", active: false }]);
+    expect(rows.stations).toEqual([{ watcherId: id, stationId }]);
+    expect(rows.zones).toEqual([{ watcherId: id, zoneId: v.tables.zoneId }]);
+    expect(rows.printers).toEqual([]);
+    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id, true));
+    expect((await settingsRows(v, id)).watcher).toMatchObject([{ id, active: false }]);
+  });
+
   it("disables a watcher whose only reference is its own Done mark on a dish", async () => {
     const v = await setupPartyVenue(suite.db);
     const { id } = await followingWatcher(v);

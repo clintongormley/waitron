@@ -92,11 +92,13 @@ it("creates, updates and removes watchers through management routes", async () =
   };
   await api.createWatcher(input);
   await api.updateWatcher("pass", input);
-  await api.removeWatcher("pass");
+  await api.removeWatcher("pass", { disable: false });
+  await api.removeWatcher("pass", { disable: true });
   expect(request.mock.calls).toEqual([
     ["/management-api/watchers", "POST", input],
     ["/management-api/watchers/pass", "PUT", input],
     ["/management-api/watchers/pass", "DELETE"],
+    ["/management-api/watchers/pass?disable=true", "DELETE"],
   ]);
 });
 

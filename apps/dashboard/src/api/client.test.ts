@@ -1817,7 +1817,7 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
   // ── Kitchen courses + fire control ─────────────────────────────────────────────────────────────
 
   it("listCourses GETs /management-api/courses with credentials", async () => {
-    const rows = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true, inUse: false }];
+    const rows = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listCourses()).toEqual(rows);
@@ -1883,8 +1883,18 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
   it("removeCourse DELETEs the course and resolves undefined on an empty 204", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.removeCourse("k1")).resolves.toBeUndefined();
+    await expect(api.removeCourse("k1", { disable: false })).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/courses/k1", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
+
+  it("removeCourse asks the server only to disable the course when the screen offered Disable", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.removeCourse("k1", { disable: true })).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/courses/k1?disable=true", {
       method: "DELETE",
       credentials: "include",
     });

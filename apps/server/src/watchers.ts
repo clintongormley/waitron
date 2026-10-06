@@ -177,17 +177,20 @@ export function watchersInUse(tx: Transaction, ids: readonly string[]): Promise<
   return idsInUse(tx, WATCHER_REFERENCES, ids);
 }
 
+/** Delete a watcher nothing refers to and disable one something still names; with `disable`, only
+ *  ever disable it. Disabling drops its printers. */
 export async function removeWatcher(
   tx: Transaction,
   cfg: TillConfig,
   watcherId: string,
+  disable = false,
 ): Promise<void> {
   const [found] = await tx
     .select({ active: watchers.active })
     .from(watchers)
     .where(and(eq(watchers.id, watcherId), eq(watchers.locationId, cfg.locationId)));
   if (!found) throw new AppError("watcher.not_found", { watcherId });
-  if ((await watchersInUse(tx, [watcherId])).size === 0) {
+  if (!disable && (await watchersInUse(tx, [watcherId])).size === 0) {
     for (const { table, column } of WATCHER_SETTINGS) {
       await tx.delete(table).where(eq(column, watcherId));
     }

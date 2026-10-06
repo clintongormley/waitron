@@ -2058,11 +2058,56 @@ describe("catalogue-screen", () => {
       await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
       await new Promise((resolve) => setTimeout(resolve, 300));
       await flush(el);
-      expect(vi.mocked(api.removeCourse).mock.calls).toEqual([["k2"]]);
+      expect(vi.mocked(api.removeCourse).mock.calls).toEqual([["k2", { disable: false }]]);
       expect([coursesWindow(el).open, editor(el).currentValue.courseId]).toEqual([true, "k1"]);
       answerRemoval();
       await vi.waitFor(() => expect(coursesWindow(el).open).toBe(false));
       await vi.waitFor(() => expect(editor(el).currentValue.courseId).toBe("k-new"));
+    });
+
+    it("keeps a Delete confirmation opened while Done waits, closing only once it is answered", async () => {
+      let answerCreate!: () => void;
+      let created = false;
+      const api = courseApi();
+      const create = vi.mocked(api.createCourse).getMockImplementation()!;
+      vi.mocked(api.createCourse).mockImplementation(async (input) => {
+        await new Promise<void>((resolve) => (answerCreate = resolve));
+        created = true;
+        return create(input);
+      });
+      const el = await openCourses(api, "k1");
+      await typeNewCourse(el, "Postres");
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
+      await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
+      inList(el, '[data-test="remove-k2"]').click();
+      const confirmation = () =>
+        courseList(el)!.shadowRoot!.querySelector('[data-test="confirm-delete-course"]');
+      await vi.waitFor(() => expect(confirmation()).not.toBeNull());
+      answerCreate();
+      await vi.waitFor(() => expect(created).toBe(true));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await flush(el);
+      expect([coursesWindow(el).open, confirmation() !== null]).toEqual([true, true]);
+      expect(api.removeCourse).not.toHaveBeenCalled();
+      inList(el, '[data-test="confirm-delete-course"]').click();
+      await vi.waitFor(() => expect(coursesWindow(el).open).toBe(false));
+      expect(vi.mocked(api.removeCourse).mock.calls).toEqual([["k2", { disable: false }]]);
+      await vi.waitFor(() => expect(editor(el).currentValue.courseId).toBe("k-new"));
+    });
+
+    it("keeps the window open when a Delete confirmation in it is dismissed", async () => {
+      const api = courseApi();
+      const el = await openCourses(api, "k1");
+      inList(el, '[data-test="remove-k2"]').click();
+      const confirmation = () =>
+        courseList(el)!.shadowRoot!.querySelector('[data-test="delete-course-modal"]');
+      await vi.waitFor(() => expect(confirmation()).not.toBeNull());
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() => expect(confirmation()).toBeNull());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await flush(el);
+      expect(coursesWindow(el).open).toBe(true);
+      expect(api.removeCourse).not.toHaveBeenCalled();
     });
 
     it("stays open when a course left by pressing Done is refused, showing why beside its name", async () => {

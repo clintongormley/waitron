@@ -261,7 +261,7 @@ it("creates, edits and confirms removal of a watcher", async () => {
   expect(q(el, '[data-test="remove-watcher-modal"]')?.textContent).toContain("Disable Pass?");
   q(el, '[data-test="confirm-remove-watcher"]')!.click();
   await settle(el);
-  expect(a.removeWatcher).toHaveBeenCalledWith("pass");
+  expect(a.removeWatcher).toHaveBeenCalledWith("pass", { disable: true });
 });
 
 it("names no watcher for a routed dish and says nothing for no preparation", async () => {
@@ -5732,7 +5732,7 @@ it("failed watcher removal explains itself and retains confirmation for retry", 
   expect(q(el, '[data-test="confirm-remove-watcher"]')!.hasAttribute("disabled")).toBe(false);
   q(el, '[data-test="confirm-remove-watcher"]')!.click();
   await settle(el);
-  expect(remove).toHaveBeenNthCalledWith(2, "pass");
+  expect(remove).toHaveBeenNthCalledWith(2, "pass", { disable: true });
   expect(q(el, '[data-test="remove-watcher-modal"]')).toBeNull();
 });
 
@@ -6027,7 +6027,7 @@ it.each([
     const reads = load.mock.calls.length;
     confirm.click();
     await settle(el);
-    expect(remove.mock.calls).toEqual([["runner"]]);
+    expect(remove.mock.calls).toEqual([["runner", { disable: false }]]);
     expect(load).toHaveBeenCalledTimes(reads + 1);
     expect(q(el, '[data-test="remove-watcher-modal"]')).toBeNull();
   },
@@ -6067,7 +6067,7 @@ it.each([
     const reads = load.mock.calls.length;
     confirm.click();
     await settle(el);
-    expect(remove.mock.calls).toEqual([["pass"]]);
+    expect(remove.mock.calls).toEqual([["pass", { disable: true }]]);
     expect(load).toHaveBeenCalledTimes(reads + 1);
   },
 );
@@ -6085,7 +6085,7 @@ it("Watchers confirms Delete of a disabled watcher nothing refers to", async () 
   );
   q(el, '[data-test="confirm-remove-watcher"]')!.click();
   await settle(el);
-  expect(remove.mock.calls).toEqual([["spare"]]);
+  expect(remove.mock.calls).toEqual([["spare", { disable: false }]]);
 });
 
 it("Watchers enables a disabled watcher, reads again, and puts focus on its menu", async () => {
@@ -6138,11 +6138,37 @@ it.each([
     await settle(el);
     q(el, '[data-test="enable-watcher-old"]')!.click();
     await settle(el);
-    const alert = q(el, '[data-test="watcher-enable-error"]')!;
-    expect(alert.getAttribute("role")).toBe("alert");
-    expect(alert.textContent!.trim()).toBe(message);
+    expect(q(el, '[role="alert"]')!.textContent!.trim()).toBe(message);
     expect(load).toHaveBeenCalledTimes(1);
     expect(q(el, '[data-test="watcher-status-old"]')).not.toBeNull();
+  },
+);
+
+it.each(["rename", "remove"] as const)(
+  "Watchers clears a refused Enable's message once the next action starts (%s)",
+  async (next) => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountWatcherPrinters({
+      load: vi.fn().mockResolvedValue(retainedWatchersView()),
+      enableWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
+      updateWatcher: update,
+      removeWatcher: remove,
+    });
+    q(el, '[data-test="enable-watcher-old"]')!.click();
+    await settle(el);
+    expect(q(el, '[role="alert"]')!.textContent).toContain("Rename that watcher first");
+    q(el, `[data-test="${next}-watcher-runner"]`)!.click();
+    await settle(el);
+    q(
+      el,
+      next === "rename"
+        ? '[data-test="save-watcher-name"]'
+        : '[data-test="confirm-remove-watcher"]',
+    )!.click();
+    await settle(el);
+    expect((next === "rename" ? update : remove).mock.calls.length).toBe(1);
+    expect(q(el, '[role="alert"]')).toBeNull();
   },
 );
 

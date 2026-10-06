@@ -421,12 +421,12 @@ export async function moveCourse(
 }
 
 /**
- * Edit any subset of a course's `name`/`displayOrder`/`active`. An absent id throws
- * `course.not_found`; a name collision throws `course.name_taken`.
+ * Edit any subset of a course's `name`/`displayOrder`/`active`. An absent or another venue's id
+ * throws `course.not_found`; a name collision throws `course.name_taken`.
  */
 export async function updateCourse(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   id: string,
   patch: { name?: string; displayOrder?: number; active?: boolean },
 ): Promise<void> {
@@ -440,7 +440,7 @@ export async function updateCourse(
     updated = await tx
       .update(kitchenCourses)
       .set(set)
-      .where(eq(kitchenCourses.id, id))
+      .where(and(eq(kitchenCourses.id, id), eq(kitchenCourses.locationId, cfg.locationId)))
       .returning({ id: kitchenCourses.id });
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -466,14 +466,20 @@ export function coursesInUse(tx: Transaction, ids: readonly string[]): Promise<S
   return idsInUse(tx, COURSE_REFERENCES, ids);
 }
 
-/** Delete a course nothing refers to; disable one something still names. */
-export async function removeCourse(tx: Transaction, cfg: TillConfig, id: string): Promise<void> {
+/** Delete a course nothing refers to and disable one something still names; with `disable`, only
+ *  ever disable it. */
+export async function removeCourse(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  disable = false,
+): Promise<void> {
   const [found] = await tx
     .select({ active: kitchenCourses.active })
     .from(kitchenCourses)
     .where(and(eq(kitchenCourses.id, id), eq(kitchenCourses.locationId, cfg.locationId)));
   if (!found) throw new AppError("course.not_found", { courseId: id });
-  if ((await coursesInUse(tx, [id])).size === 0) {
+  if (!disable && (await coursesInUse(tx, [id])).size === 0) {
     await tx.delete(kitchenCourses).where(eq(kitchenCourses.id, id));
   } else if (found.active) {
     await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id));

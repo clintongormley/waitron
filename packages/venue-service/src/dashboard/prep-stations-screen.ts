@@ -279,7 +279,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private watcherRemoval?: WatcherView;
   @state() private watcherRefusal?: { code: string; params?: { field?: string } };
   @state() private watcherRemoveError = "";
-  @state() private watcherEnableError = "";
   @state() private draft: StationInput = {
     name: "",
     displayOrder: 0,
@@ -514,15 +513,21 @@ export class PrepStationsScreen extends LitElement {
       { value: NO_PREPARATION, label: t("prep.no_preparation") },
     ];
   }
-  async #act(run: () => Promise<unknown>) {
-    if (this.busy) return;
+  /** Whether `run` succeeded. */
+  async #act(
+    run: () => Promise<unknown>,
+    message: (error: unknown) => string = () => t("prep.save_error"),
+  ): Promise<boolean> {
+    if (this.busy) return false;
     this.busy = true;
     this.#showError("");
     try {
       await run();
       await this.#load();
-    } catch {
-      this.#showError(t("prep.save_error"));
+      return true;
+    } catch (error) {
+      this.#showError(message(error));
+      return false;
     } finally {
       this.busy = false;
     }
@@ -1635,10 +1640,7 @@ export class PrepStationsScreen extends LitElement {
         cell: (station) =>
           html`<span data-test=${`watchers-${station.id}`}>
             ${
-              watchersOfStation(
-                view.watchers.filter((watcher) => watcher.active),
-                station.id,
-              )
+              watchersOfStation(view.watchers, station.id)
                 .map((watcher) => watcher.name)
                 .join(", ") || t("prep.none")
             }
@@ -1660,6 +1662,7 @@ export class PrepStationsScreen extends LitElement {
     if (!editor || this.watcherPrinterBusy) return;
     this.watcherPrinterBusy = true;
     this.watcherPrinterEditor = { ...editor, fieldError: "", error: "" };
+    this.#showError("");
     try {
       await this.api.setWatcherPrinters(editor.watcherId, editor.ids);
     } catch (error) {
@@ -1835,6 +1838,7 @@ export class PrepStationsScreen extends LitElement {
       return;
     }
     this.watcherCellBusy = true;
+    this.#showError("");
     try {
       await this.api.updateWatcher(watcher.id, this.#watcherInput(watcher));
     } catch (error) {
@@ -2438,27 +2442,20 @@ export class PrepStationsScreen extends LitElement {
         rowKey="id"
         .emptyLabel=${t("venue.combobox_no_results")}
       ></wt-data-table>
-      ${this.watcherEnableError ? html`<p class="error" role="alert" data-test="watcher-enable-error">${this.watcherEnableError}</p>` : nothing}
     </section>`;
   }
   /** Comes back with its name, follows and order; the printers it lost when disabled stay lost. */
   async #enableWatcher(watcher: WatcherView) {
-    if (this.busy) return;
-    this.busy = true;
-    this.watcherEnableError = "";
-    try {
-      await this.api.enableWatcher(watcher.id);
-    } catch (error) {
-      const code = codeOf(error);
-      this.watcherEnableError =
-        code === "watcher.name_taken"
+    const enabled = await this.#act(
+      () => this.api.enableWatcher(watcher.id),
+      (error) => {
+        const code = codeOf(error);
+        return code === "watcher.name_taken"
           ? format("watchers.enable_name_taken", { name: watcher.name })
           : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error");
-      this.busy = false;
-      return;
-    }
-    await this.#load();
-    this.busy = false;
+      },
+    );
+    if (!enabled) return;
     await this.updateComplete;
     const table = this.shadowRoot!.querySelector<
       HTMLElement & { updateComplete: Promise<unknown> }
@@ -2483,6 +2480,7 @@ export class PrepStationsScreen extends LitElement {
       return;
     }
     this.busy = true;
+    this.#showError("");
     try {
       await this.api.updateWatcher(watcher.id, input);
     } catch (error) {
@@ -2565,6 +2563,7 @@ export class PrepStationsScreen extends LitElement {
   async #saveWatcher(input: WatcherInput) {
     if (this.busy || !this.watcherEditor) return;
     this.busy = true;
+    this.#showError("");
     try {
       if (this.watcherEditor.id) await this.api.updateWatcher(this.watcherEditor.id, input);
       else await this.api.createWatcher(input);
@@ -2576,11 +2575,15 @@ export class PrepStationsScreen extends LitElement {
       this.busy = false;
     }
   }
+  /** A Disable only ever disables; a Delete disables instead a watcher something has come to name. */
   async #removeWatcher() {
     if (this.busy || !this.watcherRemoval) return;
     this.busy = true;
+    this.#showError("");
     try {
-      await this.api.removeWatcher(this.watcherRemoval.id);
+      await this.api.removeWatcher(this.watcherRemoval.id, {
+        disable: this.watcherRemoval.inUse,
+      });
       this.watcherRemoval = undefined;
       await this.#load();
     } catch (error) {

@@ -8,8 +8,11 @@ import {
   kitchenCourses,
   kitchenStations,
   kitchenStationTiming,
+  locations,
   parties,
   partyTables,
+  printers,
+  watcherPrinters,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -339,7 +342,8 @@ describe("/management-api/watchers", () => {
     const unused = await createWatcher(unique("Unused"));
     const used = await createWatcher(unique("Used"));
     await bindDevice(used);
-    expect(await listWatchers()).toEqual(
+    expect((await listWatchers()).every((w) => !("inUse" in w))).toBe(true);
+    expect(await listWatchers("?includeDisabled=true")).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: unused, active: true, inUse: false }),
         expect.objectContaining({ id: used, active: true, inUse: true }),
@@ -379,7 +383,7 @@ describe("/management-api/watchers", () => {
     expect((await req(`/watchers/${id}/reactivate`, { method: "POST" })).status).toBe(401);
     const enabled = await req(`/watchers/${id}/reactivate`, { method: "POST" }, managerCookie);
     expect(enabled.status).toBe(204);
-    expect((await listWatchers()).find((w) => w.id === id)).toMatchObject({
+    expect((await listWatchers("?includeDisabled=true")).find((w) => w.id === id)).toMatchObject({
       name,
       active: true,
       inUse: true,
@@ -396,6 +400,39 @@ describe("/management-api/watchers", () => {
         error: { code: "watcher.not_found", params: { watcherId: missing } },
       });
     }
+  });
+
+  it("DELETE ?disable=true keeps a watcher nothing refers to, disabled and without its printers", async () => {
+    const id = await createWatcher(unique("Kept"));
+    await withTransaction(suite.db, async (tx) => {
+      const [printer] = await tx
+        .insert(printers)
+        .values({
+          locationId: venue.locationId,
+          name: unique("Copy"),
+          transport: "network_tcp",
+          host: "10.0.0.9",
+        })
+        .returning({ id: printers.id });
+      await tx.insert(watcherPrinters).values({ printerId: printer!.id, watcherId: id });
+    });
+    const refused = await req(`/watchers/${id}?disable=yes`, { method: "DELETE" }, managerCookie);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "disable" } },
+    });
+    expect((await listWatchers("?includeDisabled=true")).find((w) => w.id === id)).toMatchObject({
+      active: true,
+      inUse: false,
+      printerIds: [expect.any(String)],
+    });
+    const res = await req(`/watchers/${id}?disable=true`, { method: "DELETE" }, managerCookie);
+    expect(res.status).toBe(204);
+    expect((await listWatchers("?includeDisabled=true")).find((w) => w.id === id)).toMatchObject({
+      active: false,
+      inUse: false,
+      printerIds: [],
+    });
   });
 });
 
@@ -2247,7 +2284,10 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       managerCookie,
     );
     expect(put.status).toBe(204);
-    const listed = (await (await req("/courses", { method: "GET" }, managerCookie)).json()) as {
+    expect((await listCourses()).every((c) => !("inUse" in c))).toBe(true);
+    const listed = (await (
+      await req("/courses?includeDisabled=true", { method: "GET" }, managerCookie)
+    ).json()) as {
       id: string;
       inUse: boolean;
     }[];
@@ -2273,6 +2313,57 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     expect((await listCourses()).find((c) => c.id === used)).toMatchObject({ active: true });
   });
 
+  it("DELETE ?disable=true keeps a course nothing refers to, disabled; a malformed flag → 400, changing nothing", async () => {
+    const id = await createCourse(unique("Kept"));
+    const row = () =>
+      suite.db
+        .select({ active: kitchenCourses.active })
+        .from(kitchenCourses)
+        .where(eq(kitchenCourses.id, id));
+    const refused = await req(`/courses/${id}?disable=1`, { method: "DELETE" }, managerCookie);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "disable" } },
+    });
+    expect(await row()).toEqual([{ active: true }]);
+    const res = await req(`/courses/${id}?disable=true`, { method: "DELETE" }, managerCookie);
+    expect(res.status).toBe(204);
+    expect(await row()).toEqual([{ active: false }]);
+  });
+
+  it("PATCH refuses another venue's course with 404 course.not_found, changing nothing", async () => {
+    const foreign = await withTransaction(suite.db, async (tx) => {
+      const [location] = await tx
+        .insert(locations)
+        .values({
+          name: unique("Elsewhere"),
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Bar",
+        })
+        .returning({ id: locations.id });
+      const [course] = await tx
+        .insert(kitchenCourses)
+        .values({ locationId: location!.id, name: "Brunch", active: false })
+        .returning({ id: kitchenCourses.id });
+      return course!.id;
+    });
+    const res = await req(
+      `/courses/${foreign}`,
+      { method: "PATCH", body: JSON.stringify({ active: true, name: unique("Taken") }) },
+      managerCookie,
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId: foreign } },
+    });
+    expect(
+      await suite.db
+        .select({ name: kitchenCourses.name, active: kitchenCourses.active })
+        .from(kitchenCourses)
+        .where(eq(kitchenCourses.id, foreign)),
+    ).toEqual([{ name: "Brunch", active: false }]);
+  });
+
   it("PUT /courses/:id/position moves a course and answers the venue's active courses renumbered", async () => {
     const id = await createCourse(unique("Moved"), { displayOrder: 1_000_000 });
     const res = await req(
@@ -2284,7 +2375,11 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const moved = (await res.json()) as { id: string; displayOrder: number }[];
     expect(moved[0]!.id).toBe(id);
     expect(moved.map((c) => c.displayOrder)).toEqual(moved.map((_, index) => index));
-    expect(moved).toEqual(await listCourses());
+    const withDisabled = (await (
+      await req("/courses?includeDisabled=true", { method: "GET" }, managerCookie)
+    ).json()) as { active: boolean; inUse: boolean }[];
+    expect(moved).toEqual(withDisabled.filter((c) => c.active));
+    expect(moved.every((c) => typeof (c as { inUse?: unknown }).inUse === "boolean")).toBe(true);
   });
 
   it("PUT /courses/:id/position refuses a `to` that is not a non-negative integer, or a non-object body, leaving the order as it was", async () => {
