@@ -2073,7 +2073,11 @@ Precio propio, and included-menu changes name their source menu. The panes now u
 customer renderer with a separate content-language selector. Change controls reveal exact
 fields and repeated occurrences, label live before views, show frozen Home settings, and return
 focus to the selected row. Product moves prefer a new path; relocated sections cross-link their
-old and new places. Screen snapshot freshness, the remaining navigation acceptance cases and
+old and new places. Browser checks now exercise every change kind, removed empty sections and
+nested subjects, disabled translations, separate extra-list occurrences and the native view selector.
+Home targets link to the same menu’s Home settings; unresolved targets receive one focused explanation.
+A replacement preview retains a resolvable selected change without taking focus, resets local
+inspection choices and explains when a selection disappears. Screen/API freshness integration and
 final validation remain pending. The phone overflow entry below remains open until final Preview
 validation.
 

@@ -2508,7 +2508,10 @@ Make a change row a native button. Its separate field and place controls use fro
 and stable document IDs as destinations. Focus and highlight the actual value after opening its
 ancestors. Show removed values in the live before document, keeping a return to the proposal.
 Keep Return to selected change visible while the menu pane scrolls, so you can return from a detail
-without searching for its row. Widget checks: `apps/dashboard/src/widgets/menu-preview-navigation.test.ts`;
+without searching for its row. Home targets link to that menu’s Home settings. Give an unresolved
+target one focused explanation with a return to its change. When the preview refreshes, retain a
+resolvable selected change without moving keyboard focus, reset local inspection choices and
+announce when that selection disappears. Widget checks: `apps/dashboard/src/widgets/menu-preview-navigation.test.ts`;
 publication and accessibility checks remain beside it.
 
 If a tab has an Add or Create action, put it in the `actions` slot for the selected tab. This

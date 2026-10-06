@@ -23,6 +23,8 @@ function dishKey(target: ProductTarget): string {
 export class CustomerMenu extends LitElement {
   static override styles = [baseStyles, customerMenuStyles];
   @property({ attribute: false }) document: MenuDocument | null = null;
+  @property({ attribute: false }) inspectionKey: unknown = null;
+  @property({ type: Boolean }) showUnavailable = true;
   @property({ attribute: false }) view: MenuView = { kind: "customer", language: "en" };
   @property({ attribute: false }) languages: ContentLanguages = {
     defaultLanguage: "en",
@@ -43,7 +45,7 @@ export class CustomerMenu extends LitElement {
   private opener: string | null = null;
 
   protected override willUpdate(changed: PropertyValues<this>) {
-    if (changed.has("document")) {
+    if (changed.has("document") || changed.has("inspectionKey")) {
       this.expanded = new Set();
       this.detail = null;
       this.selectedVariantId = null;
@@ -139,8 +141,11 @@ export class CustomerMenu extends LitElement {
       return false;
     return true;
   }
-  async reveal(target: MenuTarget): Promise<boolean> {
+  async reveal(target: MenuTarget, focus = true): Promise<boolean> {
+    const snapshot = this.document;
+    const inspectionKey = this.inspectionKey;
     await this.updateComplete;
+    if (this.document !== snapshot || this.inspectionKey !== inspectionKey) return false;
     if (!this.resolved(target)) {
       this.unavailable = true;
       await this.updateComplete;
@@ -161,6 +166,7 @@ export class CustomerMenu extends LitElement {
       else this.detail = target;
     }
     await this.updateComplete;
+    if (this.document !== snapshot || this.inspectionKey !== inspectionKey) return false;
     const nodes = [...this.shadowRoot!.querySelectorAll<HTMLElement>("[data-change-target]")];
     const destination = nodes
       .filter((n) => n.dataset.changeTarget === menuTargetKey(target))
@@ -170,8 +176,10 @@ export class CustomerMenu extends LitElement {
       await this.updateComplete;
       return false;
     }
-    destination.focus({ preventScroll: true });
-    destination.scrollIntoView({ block: "nearest", behavior: "instant" });
+    if (focus) {
+      destination.focus({ preventScroll: true });
+      destination.scrollIntoView({ block: "nearest", behavior: "instant" });
+    }
     return true;
   }
   private async closeDetail() {
@@ -185,13 +193,19 @@ export class CustomerMenu extends LitElement {
   override render() {
     if (this.document === null) return nothing;
     const snapshot = this.document,
-      inspection = this.detail;
+      inspection = this.detail,
+      inspectionKey = this.inspectionKey;
     const own =
       <Args extends unknown[]>(action: (...args: Args) => void) =>
       (...args: Args): void => {
-        if (this.document === snapshot && this.detail === inspection) action(...args);
+        if (
+          this.document === snapshot &&
+          this.detail === inspection &&
+          this.inspectionKey === inspectionKey
+        )
+          action(...args);
       };
-    return html`${this.unavailable ? html`<p role="status">${this.label("unavailable_target")}</p>` : nothing}${renderCustomerMenu(
+    return html`${this.unavailable && this.showUnavailable ? html`<p role="status">${this.label("unavailable_target")}</p>` : nothing}${renderCustomerMenu(
       {
         document: this.document,
         view: this.view,

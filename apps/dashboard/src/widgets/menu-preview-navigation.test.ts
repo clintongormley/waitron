@@ -339,6 +339,79 @@ it("ignores an old row's click after its snapshot has been replaced", async () =
   expect(view.shadowRoot!.textContent).not.toContain("Target unavailable");
 });
 
+it("focuses an announced fallback when the change's saved target cannot be resolved", async () => {
+  const missing: MenuTarget = { ...target, sectionIds: ["missing"] };
+  const el = await mount([change([missing], [])]);
+  q<HTMLButtonElement>(el, 'button[data-change-id="stable-row"]')!.click();
+  await expect
+    .poll(() => el.shadowRoot!.activeElement?.textContent)
+    .toContain("This change target is unavailable.");
+  const message = el.shadowRoot!.activeElement!;
+  expect(message.getAttribute("role")).toBe("status");
+  expect(message.getAttribute("tabindex")).toBe("-1");
+  expect((await renderer(el)).shadowRoot!.querySelector('[role="status"]')).toBeNull();
+  q<HTMLButtonElement>(el, '[data-test="return-change"]')!.click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement?.getAttribute("data-change-id")).toBe("stable-row");
+});
+
+it("labels staff and kitchen name targets in the interface language", async () => {
+  setLocale("es-ES");
+  const staff: MenuTarget = { ...target, field: { kind: "name", audience: "staff" } };
+  const kitchen: MenuTarget = { ...target, field: { kind: "name", audience: "kitchen" } };
+  const el = await mount([change([staff, kitchen], [])]);
+  const controls = [
+    ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>("button[data-target-key]"),
+  ];
+  expect(controls[0]!.textContent).toContain("Nombre interno");
+  expect(controls[1]!.textContent).toContain("Nombre de cocina");
+  expect(controls.map((b) => b.textContent).join(" ")).not.toMatch(/staff|kitchen/);
+});
+
+it.each([
+  ["columns", "Columnas"],
+  ["tiles", "Los botones muestran"],
+  ["order", "Después de la búsqueda"],
+  ["shortcuts", "Accesos directos"],
+] as const)(
+  "labels the Home %s target and links to the same menu's Home settings",
+  async (field, words) => {
+    setLocale("es-ES");
+    const home: MenuTarget = { kind: "home", device: "till", field };
+    const row: MenuChange =
+      field === "shortcuts"
+        ? {
+            id: "home",
+            kind: "home_shortcuts_changed",
+            source: "this_menu",
+            targets: { before: [], after: [home] },
+          }
+        : {
+            id: "home",
+            kind: "home_display_changed",
+            device: "till",
+            source: "this_menu",
+            targets: { before: [], after: [home] },
+          };
+    const doc = fixture();
+    doc.menuId = "carta / lunch";
+    const el = await mount([row], doc);
+    el.style.setProperty("--wt-color-primary-text", "rgb(123, 45, 67)");
+    expect(q(el, "button[data-target-key]")!.textContent).toContain(words);
+    q<HTMLButtonElement>(el, 'button[data-change-id="home"]')!.click();
+    await expect
+      .poll(() => el.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+      .toBe(menuTargetKey(home));
+    const link = q<HTMLAnchorElement>(el, '[data-test="home-settings"]');
+    expect(link).not.toBeNull();
+    expect(link!.getAttribute("href")).toBe("/manage/menus/menu/carta%20%2F%20lunch/view/home");
+    expect(link!.textContent).toContain("Página de inicio");
+    expect(getComputedStyle(link!).color).toBe("rgb(123, 45, 67)");
+    expect(el.preview!.document).toBe(doc);
+    expect(el.preview!.hash).toBe("proposed-hash");
+  },
+);
+
 it("cross-links a relocated section's exact old and new places", async () => {
   const oldSection: MenuTarget = {
     kind: "section",
@@ -458,4 +531,491 @@ it("labels a deleted variant as removed when another changed field remains in pr
   expect(destination(view, deleted).textContent).toContain("Counter small");
   expect(destination(view, deleted).textContent).toContain("Missing translation: es");
   expect(view.shadowRoot!.textContent).toContain("1.25");
+});
+
+function modifiers(doc: MenuDocument) {
+  const offer = doc.offers.mi!;
+  offer.offeredModifiers = [
+    {
+      kind: "options",
+      id: "cook",
+      name: "Counter cooking",
+      customerName: { en: "Cooking", es: "Cocción" },
+      kitchenName: "COOK",
+      defaultLabelId: "rare",
+      labels: [
+        {
+          id: "rare",
+          name: "Counter rare",
+          customerName: { en: "Rare", es: "Poco hecho" },
+          kitchenName: "RARE",
+        },
+      ],
+    },
+    {
+      kind: "extras",
+      id: "garnish",
+      name: "Counter garnish",
+      customerName: { en: "Garnish", es: "Guarnición" },
+      kitchenName: "GARNISH",
+      minPicks: 0,
+      maxPicks: 2,
+      items: [
+        {
+          productId: "lemon",
+          name: "Counter lemon",
+          customerName: { en: "Lemon", es: "Limón" },
+          kitchenName: "LEMON",
+          image: "old lemon.jpg",
+          price: "1.75",
+          vatClass: offer.vatClass,
+          unit: offer.unit,
+          portion: "0.250",
+          maxQuantity: null,
+          preselected: false,
+          addAllergens: null,
+          suitableFor: [],
+        },
+      ],
+    },
+  ];
+  return doc;
+}
+
+it("opens a removed empty section in live and keeps the proposed hierarchy available", async () => {
+  const before = fixture();
+  before.root.members.push(documentSection("gone-empty", "Empty before", []));
+  const empty: MenuTarget = {
+    kind: "section",
+    sectionIds: ["gone-empty"],
+    field: { kind: "summary" },
+  };
+  const el = await mount(
+    [
+      {
+        id: "empty",
+        kind: "section_removed",
+        sectionId: "gone-empty",
+        parentSectionIds: [],
+        name: "Empty before",
+        under: [],
+        source: "this_menu",
+        targets: { before: [empty], after: [] },
+      },
+    ],
+    fixture(),
+    before,
+  );
+  await userEvent.click(q<HTMLButtonElement>(el, 'button[data-change-id="empty"]')!);
+  const view = await renderer(el);
+  await expect
+    .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+    .toBe(menuTargetKey(empty));
+  expect(view.document).toBe(before);
+  expect(view.shadowRoot!.textContent).toContain("Empty section");
+  expect(q(el, '[data-test="before"]')!.textContent).toContain("Removed");
+  await userEvent.click(q<HTMLButtonElement>(el, '[data-test="return-proposed"]')!);
+  await el.updateComplete;
+  await view.updateComplete;
+  expect(view.shadowRoot!.textContent).not.toContain("Empty before");
+});
+
+it.each(["extra", "label", "list"] as const)(
+  "reveals a removed %s from its actual live parent without fabricating a dish",
+  async (subject) => {
+    const before = modifiers(fixture());
+    const nested: MenuTarget = {
+      ...target,
+      field: { kind: "summary" },
+      listId: subject === "extra" ? "garnish" : "cook",
+      ...(subject === "extra"
+        ? { extraProductId: "lemon" }
+        : subject === "label"
+          ? { optionLabelId: "rare" }
+          : {}),
+    };
+    const row: MenuChange =
+      subject === "extra"
+        ? {
+            id: "deleted",
+            kind: "product_deleted",
+            productId: "lemon",
+            name: "Counter lemon",
+            source: "shared_product",
+            targets: { before: [nested], after: [] },
+          }
+        : {
+            id: "deleted",
+            kind: "product_changed",
+            productId: "dish",
+            name: "Counter lemonade",
+            fields: ["options"],
+            source: "shared_product",
+            targets: { before: [nested], after: [] },
+          };
+    const el = await mount([row], fixture(), before);
+    await userEvent.click(q<HTMLButtonElement>(el, 'button[data-change-id="deleted"]')!);
+    const view = await renderer(el);
+    await expect
+      .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+      .toBe(menuTargetKey(nested));
+    expect(view.document).toBe(before);
+    expect(destination(view, nested).textContent).toContain(
+      subject === "extra" ? "Limón" : subject === "label" ? "Poco hecho" : "Cocción",
+    );
+    expect(q(el, '[data-test="before"]')!.textContent).toContain("Removed");
+    if (subject === "extra") {
+      expect(view.shadowRoot!.textContent).toContain("1.75");
+      expect(
+        view.shadowRoot!.querySelector<HTMLImageElement>('img[src="/media/old%20lemon.jpg"]'),
+      ).not.toBeNull();
+      expect(Object.values(before.offers).map((offer) => offer.productId)).toEqual(["dish"]);
+    }
+  },
+);
+
+it("reveals a removed description translation as a named empty value and inspects disabled languages explicitly", async () => {
+  const doc = fixture();
+  doc.offers.mi!.description = { es: "Limón fresco" };
+  const el = await mount([change()], doc);
+  await userEvent.click(q<HTMLButtonElement>(el, 'button[data-change-id="stable-row"]')!);
+  const view = await renderer(el);
+  await expect
+    .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+    .toBe(menuTargetKey(target));
+  expect(destination(view, target).textContent).toContain("Description");
+  expect(destination(view, target).textContent).toContain("No saved value");
+  const stored: MenuTarget = {
+    ...target,
+    field: { kind: "name", audience: "customer", language: "de" },
+  };
+  doc.offers.mi!.customerName = { es: "Limonada", de: "Zitronenwasser" };
+  el.preview = { ...el.preview!, document: structuredClone(doc), changes: [change([stored], [])] };
+  await el.updateComplete;
+  await userEvent.click(q<HTMLButtonElement>(el, 'button[data-change-id="stable-row"]')!);
+  await expect
+    .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+    .toBe(menuTargetKey(stored));
+  expect(view.view).toEqual({ kind: "internal" });
+  expect(destination(view, stored).textContent).toContain("Saved translation");
+  expect(destination(view, stored).textContent).toContain("Zitronenwasser");
+  expect(destination(view, stored).querySelector('[lang="de"]')!.textContent).toContain(
+    "Zitronenwasser",
+  );
+});
+
+it("chooses content language with the real pointer-operated selector without changing the snapshot", async () => {
+  const el = await mount([change()]);
+  const snapshot = structuredClone(el.preview);
+  const view = await renderer(el);
+  const combo = q<WtCombobox>(el, "wt-combobox")!;
+  await combo.updateComplete;
+  await userEvent.click(combo.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  await expect
+    .poll(() => combo.shadowRoot!.querySelector("#panel")!.matches(":popover-open"))
+    .toBe(true);
+  const english = [...combo.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (n) => n.textContent!.trim() === "English",
+  )!;
+  await userEvent.click(english);
+  await el.updateComplete;
+  await view.updateComplete;
+  expect(view.view).toEqual({ kind: "customer", language: "en" });
+  expect(view.shadowRoot!.textContent).not.toContain("Counter lemonade");
+  expect(el.preview).toEqual(snapshot);
+});
+
+it.each([
+  "product_added",
+  "product_removed",
+  "product_deleted",
+  "product_moved",
+  "price_changed",
+  "product_changed",
+  "extra_unit_changed",
+  "extra_portion_changed",
+  "extra_max_quantity_changed",
+  "section_added",
+  "section_removed",
+  "section_changed",
+  "order_changed",
+  "home_shortcuts_changed",
+  "home_display_changed",
+  "menu_renamed",
+] as const)("activates the actual default destination for %s", async (kind) => {
+  const doc = modifiers(fixture());
+  const summary: MenuTarget = { ...target, field: { kind: "summary" } };
+  const section: MenuTarget = {
+    kind: "section",
+    sectionIds: ["outer", "inner"],
+    field: { kind: "summary" },
+  };
+  const extra = { ...summary, listId: "garnish", extraProductId: "lemon" };
+  const home: MenuTarget = {
+    kind: "home",
+    device: "handheld",
+    field: kind === "home_shortcuts_changed" ? "shortcuts" : "columns",
+  };
+  const expected: MenuTarget =
+    kind === "price_changed"
+      ? { ...summary, field: { kind: "price" } }
+      : kind === "product_changed"
+        ? target
+        : kind === "extra_unit_changed"
+          ? { ...extra, field: { kind: "unit" } }
+          : kind === "extra_portion_changed"
+            ? { ...extra, field: { kind: "portion" } }
+            : kind === "extra_max_quantity_changed"
+              ? { ...extra, field: { kind: "maxQuantity" } }
+              : kind.startsWith("section_")
+                ? section
+                : kind === "order_changed"
+                  ? { kind: "list", sectionIds: ["outer", "inner"] }
+                  : kind.startsWith("home_")
+                    ? home
+                    : kind === "menu_renamed"
+                      ? { kind: "title", menuId: "menu-lunch" }
+                      : summary;
+  const source = "this_menu" as const;
+  const body = (() => {
+    switch (kind) {
+      case "product_added":
+      case "product_removed":
+        return {
+          kind,
+          productId: "dish",
+          name: "Counter lemonade",
+          under: ["Counter drinks", "Counter cold"],
+          source,
+        };
+      case "product_deleted":
+        return { kind, productId: "dish", name: "Counter lemonade", source };
+      case "product_moved":
+        return {
+          kind,
+          productId: "dish",
+          name: "Counter lemonade",
+          from: [["Old"]],
+          to: [["New"]],
+          source,
+        };
+      case "price_changed":
+        return {
+          kind,
+          productId: "dish",
+          name: "Counter lemonade",
+          from: "2.00",
+          to: "3.50",
+          source,
+        };
+      case "product_changed":
+        return {
+          kind,
+          productId: "dish",
+          name: "Counter lemonade",
+          fields: ["description" as const],
+          source,
+        };
+      case "extra_unit_changed":
+        return {
+          kind,
+          productId: "lemon",
+          name: "Counter lemon",
+          listId: "garnish",
+          listName: "Counter garnish",
+          from: { abbreviation: { en: "g" }, precision: 0 },
+          to: { abbreviation: { en: "ea" }, precision: 0 },
+          source,
+        };
+      case "extra_portion_changed":
+        return {
+          kind,
+          productId: "lemon",
+          name: "Counter lemon",
+          listId: "garnish",
+          listName: "Counter garnish",
+          from: { portion: "0.100", abbreviation: { en: "ea" } },
+          to: { portion: "0.250", abbreviation: { en: "ea" } },
+          source,
+        };
+      case "extra_max_quantity_changed":
+        return {
+          kind,
+          productId: "lemon",
+          name: "Counter lemon",
+          listId: "garnish",
+          listName: "Counter garnish",
+          from: 1,
+          to: null,
+          source,
+        };
+      case "section_added":
+      case "section_removed":
+        return {
+          kind,
+          sectionId: "inner",
+          parentSectionIds: ["outer"],
+          name: "Counter cold",
+          under: ["Counter drinks"],
+          source,
+        };
+      case "section_changed":
+        return {
+          kind,
+          sectionId: "inner",
+          name: "Counter cold",
+          fields: ["names" as const],
+          source,
+        };
+      case "order_changed":
+        return { kind, listSectionId: "inner", list: ["Counter drinks", "Counter cold"], source };
+      case "home_shortcuts_changed":
+        return { kind, source };
+      case "home_display_changed":
+        return { kind, device: "handheld" as const, source };
+      case "menu_renamed":
+        return { kind, from: "Old", to: "Frozen title", source };
+    }
+  })();
+  const removed = ["product_removed", "product_deleted", "section_removed"].includes(kind);
+  const row: MenuChange = {
+    ...body,
+    id: `actual-${kind}`,
+    targets: { before: [expected], after: removed ? [] : [expected] },
+  };
+  const el = await mount([row], doc, structuredClone(doc));
+  await userEvent.click(q<HTMLButtonElement>(el, `button[data-change-id="actual-${kind}"]`)!);
+  const view = await renderer(el);
+  await expect
+    .poll(() =>
+      (expected.kind === "home" ? el : view).shadowRoot!.activeElement?.getAttribute(
+        "data-change-target",
+      ),
+    )
+    .toBe(menuTargetKey(expected));
+  expect(el.preview!.hash).toBe("proposed-hash");
+  if (removed) expect(q(el, '[data-test="before"]')!.textContent).toContain("Removed");
+});
+
+it("keeps a resolvable selected change through a whole-envelope refresh without taking focus", async () => {
+  const el = await mount([change()]);
+  await userEvent.click(q<HTMLButtonElement>(el, 'button[data-change-id="stable-row"]')!);
+  const view = await renderer(el);
+  await expect
+    .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+    .toBe(menuTargetKey(target));
+  const publish = q<HTMLElement>(el, '[data-test="publish"]')!;
+  publish.focus();
+  const doc = fixture();
+  doc.offers.mi!.description = { en: "Refreshed frozen description", es: "Nueva" };
+  el.preview = { ...el.preview!, document: doc, changes: [change()], hash: "replacement-hash" };
+  await el.updateComplete;
+  await view.updateComplete;
+  await expect.poll(() => view.shadowRoot!.textContent).toContain("Refreshed frozen description");
+  expect(q(el, 'button[data-change-id="stable-row"]')!.getAttribute("aria-pressed")).toBe("true");
+  expect(destination(view, target).textContent).toContain("Changed");
+  expect(el.shadowRoot!.activeElement).toBe(publish);
+  expect(el.preview!.hash).toBe("replacement-hash");
+});
+
+it("announces that a selected change disappeared when a refreshed snapshot no longer contains it", async () => {
+  const el = await mount([change()]);
+  await userEvent.click(q<HTMLButtonElement>(el, 'button[data-change-id="stable-row"]')!);
+  const view = await renderer(el);
+  await expect
+    .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+    .toBe(menuTargetKey(target));
+  el.preview = { ...el.preview!, document: fixture(), changes: [], hash: "replacement-hash" };
+  await el.updateComplete;
+  expect(q(el, '[data-test="selection-cleared"]')?.textContent).toContain(
+    "The selected change is no longer in this preview.",
+  );
+  expect(q(el, '[data-test="selection-cleared"]')?.getAttribute("role")).toBe("status");
+  expect(q(el, '[data-test="return-change"]')).toBeNull();
+  expect(view.shadowRoot!.querySelector("[data-highlighted]")).toBeNull();
+});
+
+it("clears language and navigation choices when a different menu replaces the envelope", async () => {
+  const el = await mount([change()]);
+  await select(el, "internal");
+  const other = fixture();
+  other.menuId = "other-menu";
+  other.menuName = "Other frozen menu";
+  el.preview = { ...el.preview!, document: other, changes: [], hash: "other-hash" };
+  await el.updateComplete;
+  const view = await renderer(el);
+  expect(view.view).toEqual({ kind: "customer", language: "es" });
+  expect(q(el, '[data-test="selection-cleared"]')).toBeNull();
+  expect(q(el, '[data-test="return-change"]')).toBeNull();
+});
+
+it("resets local choices and rejects retired controls even when a refreshed envelope reuses its document object", async () => {
+  const doc = modifiers(fixture());
+  const extraTarget: MenuTarget = {
+    ...target,
+    listId: "garnish",
+    extraProductId: "lemon",
+    field: { kind: "summary" },
+  };
+  const el = await mount([change([extraTarget], [])], doc);
+  await userEvent.click(q<HTMLButtonElement>(el, 'button[data-change-id="stable-row"]')!);
+  const view = await renderer(el);
+  await expect
+    .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+    .toBe(menuTargetKey(extraTarget));
+  const oldStepper = view.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>(
+    'wt-number-stepper[data-list="garnish"]',
+  )!;
+  oldStepper.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "2" } }));
+  await view.updateComplete;
+  const input = async () => {
+    const stepper = view.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>(
+      'wt-number-stepper[data-list="garnish"]',
+    )!;
+    await stepper.updateComplete;
+    return stepper.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  };
+  expect((await input()).value).toBe("2");
+  el.preview = {
+    ...el.preview!,
+    document: doc,
+    hash: "refreshed-hash",
+    changes: [change([extraTarget], [])],
+  };
+  await el.updateComplete;
+  await expect.poll(async () => (await input()).value).toBe("0");
+  oldStepper.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "1" } }));
+  await view.updateComplete;
+  expect((await input()).value).toBe("0");
+  expect(el.preview!.document).toBe(doc);
+});
+
+it("reveals the chosen extras list's occurrence and price when two lists contain the same product", async () => {
+  const doc = modifiers(fixture());
+  const garnish = doc.offers.mi!.offeredModifiers[1]!;
+  if (garnish.kind !== "extras") throw new Error("expected extras fixture");
+  const second = structuredClone(garnish);
+  second.id = "second-list";
+  second.items[0]!.price = "2.50";
+  doc.offers.mi!.offeredModifiers.push(second);
+  const firstTarget: MenuTarget = {
+    ...target,
+    listId: "garnish",
+    extraProductId: "lemon",
+    field: { kind: "price" },
+  };
+  const secondTarget: MenuTarget = { ...firstTarget, listId: "second-list" };
+  const el = await mount([change([firstTarget, secondTarget], [])], doc);
+  const button = [
+    ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('button[data-side="after"]'),
+  ].find((b) => b.dataset.targetKey === menuTargetKey(secondTarget))!;
+  await userEvent.click(button);
+  const view = await renderer(el);
+  await expect
+    .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+    .toBe(menuTargetKey(secondTarget));
+  expect(destination(view, secondTarget).textContent).toContain("2.50");
+  expect(destination(view, firstTarget).textContent).toContain("1.75");
+  expect(destination(view, firstTarget).hasAttribute("data-highlighted")).toBe(false);
+  expect(destination(view, secondTarget).hasAttribute("data-highlighted")).toBe(true);
 });

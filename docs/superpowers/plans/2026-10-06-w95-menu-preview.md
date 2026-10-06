@@ -308,7 +308,7 @@ is `menu-preview.ts`; keep `statusWords`, `publishFailure`, warning/hash confirm
 publish events. Do not delete `documentTree`, old structure widget/editing paths or their
 own checks in W95; A299 owns that cleanup.
 
-- [ ] Add red tests to `menu-preview.test.ts` for desktop grid/mobile stacking and all spec
+- [x] Add red tests to `menu-preview.test.ts` for desktop grid/mobile stacking and all spec
       target-table kinds. Arrange before and after documents where subjects genuinely exist.
       Test pointer, native Enter and Space activation, collapsed ancestor expansion, exact
       deep active element, destination rectangle inside its scroll region, changed-value
@@ -326,33 +326,33 @@ own checks in W95; A299 owns that cleanup.
   For nested shadow roots use their actual `ShadowRoot.activeElement`; headings carry
   `tabindex=-1`. Also check expansion/native details state, not merely a spy on scroll.
 
-- [ ] Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-preview.test.ts`.
+- [x] Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-preview.test.ts`.
       Expected red: rows are plain `li`s, no target focus, before snapshot or panes. Extend
       fixtures with identity/live data before adapting existing presentation assertions.
-- [ ] Implement publication strip and panes. Use a native button per change plus separately
+- [x] Implement publication strip and panes. Use a native button per change plus separately
       named field/occurrence controls; no nested buttons. Source/included menu/affected menu
       copy stays visible. Resolve by target keys and IDs, await render, reveal/focus/scroll.
       Initial target selects changed customer language or explicitly staff inspection as
       specified. Highlights include text/outline. Preserve default customer view; choosing
       staff-only targets switches to Internal names, visibly.
-- [ ] Add red before-view tests: removed product, removed empty section, deleted extra-only
+- [x] Add red before-view tests: removed product, removed empty section, deleted extra-only
       product, removed variant/label/list. Assert old text/image/price comes from `live.document`,
       removal label/version/date is present, proposed stays retrievable, and Publish still
       emits proposed hash. Moved product exposes all old/new paths; section removal/addition
       cross-links same ID's other side. Repeated included subtrees and two-list extras focus
       the chosen occurrence, not the first name match. Grouped multi-field changes provide
       each actual field target. Targeted absent values have a named empty-state node.
-- [ ] Home/title tests start red for dead targets. Render frozen title as title target and
+- [x] Home/title tests start red for dead targets. Render frozen title as title target and
       `dashboard-device-home-preview` from the chosen side for Home. Focus labelled device/
       changed-setting summary. Provide existing Home-tab address link, without switching the
       hashed document to `menuHome` drafts. Home display targets expose only changed subfields.
       Retain default Home device behaviour elsewhere.
-- [ ] Add EN/ES strings. Check the current Price overrides strings using
+- [x] Add EN/ES strings. Check the current Price overrides strings using
       `rg -n 'menu_prices.*(override|price)|menus.tab_prices' apps/dashboard/src/i18n/strings.ts`;
       reuse the current override field wording in clashes. Assert `Price override` /
       `Precio propio` and absence of the retired `Menu price` label. Use `wt-combobox`
       (or existing single-choice primitive) for the view selector, with semantic name.
-- [ ] Run red/green focused widget tests and all existing a11y states with
+- [x] Run red/green focused widget tests and all existing a11y states with
       `pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-preview.test.ts src/widgets/menu-preview.a11y.test.ts`.
       Translate old staff-tree checks into customer/default/Internal assertions retaining
       whole-menu order, frozen-source and no-edit guarantees. Log old/new checks. Commit signed off.

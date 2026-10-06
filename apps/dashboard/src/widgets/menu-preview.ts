@@ -247,6 +247,9 @@ export class MenuPreviewPanel extends LitElement {
       button[aria-pressed="true"] {
         border-color: var(--wt-color-primary);
       }
+      a {
+        color: var(--wt-color-primary-text);
+      }
       [data-test="return-change"] {
         position: sticky;
         inset-block-start: 0;
@@ -280,6 +283,9 @@ export class MenuPreviewPanel extends LitElement {
   @state() private selectedChangeId: string | null = null;
   @state() private selectedTarget: MenuTarget | null = null;
   #navigation = 0;
+  @state() private navigationUnavailable = false;
+  @state() private selectionCleared = false;
+  #restoreSelection = false;
 
   #view(): MenuView {
     const config = currentContentLanguages();
@@ -341,7 +347,7 @@ export class MenuPreviewPanel extends LitElement {
   #targetWords(target: MenuTarget, side: "before" | "after"): string {
     if (target.kind === "title") return t("customer_menu.title");
     if (target.kind === "home")
-      return `${t(target.device === "handheld" ? "home.device_handheld" : "home.device_till")} · ${target.field}`;
+      return `${t(target.device === "handheld" ? "home.device_handheld" : "home.device_till")} · ${t(target.field === "shortcuts" ? "home.block_shortcuts" : target.field === "columns" ? "home.columns" : target.field === "tiles" ? "home.tiles" : "home.order")}`;
     const document = side === "before" ? this.preview?.live?.document : this.preview?.document;
     let members = document?.root.members ?? [];
     const names: string[] = [];
@@ -363,7 +369,7 @@ export class MenuPreviewPanel extends LitElement {
     const field = target.field;
     const name =
       field.kind === "name"
-        ? `${this.#label("name")} · ${field.audience}${field.language ? ` · ${field.language}` : ""}`
+        ? `${t(field.audience === "staff" ? "sections.internal_name" : field.audience === "kitchen" ? "editor.kitchen_name" : "editor.customer_name")}${field.language ? ` · ${field.language}` : ""}`
         : field.kind === "description"
           ? `${this.#label("description")} · ${field.language}`
           : this.#label(field.kind);
@@ -410,6 +416,8 @@ export class MenuPreviewPanel extends LitElement {
       return;
     const turn = ++this.#navigation;
     this.selectedChangeId = change.id;
+    this.navigationUnavailable = false;
+    this.selectionCleared = false;
     this.side = side;
     this.selectedTarget = target;
     if (target.kind === "product" || target.kind === "section") {
@@ -435,7 +443,18 @@ export class MenuPreviewPanel extends LitElement {
       destination?.scrollIntoView({ block: "nearest", behavior: "instant" });
     } else {
       const renderer = this.shadowRoot!.querySelector<CustomerMenu>("dashboard-customer-menu");
-      await renderer?.reveal(target);
+      const resolved = await renderer?.reveal(target);
+      if (turn !== this.#navigation || this.preview !== preview) return;
+      if (!resolved) {
+        this.navigationUnavailable = true;
+        await this.updateComplete;
+        if (turn !== this.#navigation || this.preview !== preview) return;
+        const message = this.shadowRoot!.querySelector<HTMLElement>(
+          '[data-test="navigation-unavailable"]',
+        );
+        message?.focus({ preventScroll: true });
+        message?.scrollIntoView({ block: "nearest", behavior: "instant" });
+      }
     }
   }
 
@@ -449,13 +468,51 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
-    if (changed.has("preview") || changed.has("menuName")) {
+    if (changed.has("preview")) {
       this.confirmingHash = null;
-      this.side = "after";
-      this.selectedChangeId = null;
-      this.selectedTarget = null;
+      this.navigationUnavailable = false;
       this.#navigation++;
+      const old = changed.get("preview") as MenuPreview | null | undefined;
+      const sameMenu = old?.document.menuId === this.preview?.document.menuId;
+      if (!sameMenu) this.selectedView = null;
+      const selection = sameMenu
+        ? this.preview?.changes.find((row) => row.id === this.selectedChangeId)
+        : undefined;
+      const targets = selection === undefined ? [] : this.#targets(selection)[this.side];
+      const target = targets.find(
+        (target) =>
+          this.selectedTarget !== null &&
+          menuTargetKey(target) === menuTargetKey(this.selectedTarget),
+      );
+      this.selectionCleared = sameMenu && this.selectedChangeId !== null && target === undefined;
+      if (target !== undefined) {
+        this.selectedTarget = target;
+        this.#restoreSelection = true;
+      } else {
+        this.side = "after";
+        this.selectedChangeId = null;
+        this.selectedTarget = null;
+        this.#restoreSelection = false;
+      }
     }
+  }
+
+  protected override updated(): void {
+    if (!this.#restoreSelection) return;
+    this.#restoreSelection = false;
+    const target = this.selectedTarget;
+    if (target !== null && target.kind !== "home") void this.#restoreTarget(target);
+  }
+
+  async #restoreTarget(target: MenuTarget): Promise<void> {
+    const turn = this.#navigation;
+    const renderer = this.shadowRoot!.querySelector<CustomerMenu>("dashboard-customer-menu");
+    const resolved = await renderer?.reveal(target, false);
+    if (turn !== this.#navigation || resolved) return;
+    this.selectionCleared = true;
+    this.selectedChangeId = null;
+    this.selectedTarget = null;
+    this.side = "after";
   }
 
   #warningWords(warnings = this.preview?.warnings ?? []): string[] {
@@ -806,6 +863,7 @@ export class MenuPreviewPanel extends LitElement {
                 @click=${() => {
                   this.side = "after";
                   this.selectedTarget = null;
+                  this.navigationUnavailable = false;
                   this.#navigation++;
                 }}
               >
@@ -814,6 +872,8 @@ export class MenuPreviewPanel extends LitElement {
             </p>`
       }
       ${this.selectedChangeId === null ? nothing : html`<button type="button" data-test="return-change" @click=${() => void this.#returnChange()}>${t("customer_menu.return_change")}</button>`}
+      ${this.navigationUnavailable ? html`<p role="status" tabindex="-1" data-test="navigation-unavailable">${t("customer_menu.unavailable_target")}</p>` : nothing}
+      ${this.selectionCleared ? html`<p role="status" data-test="selection-cleared">${t("customer_menu.selection_cleared")}</p>` : nothing}
       ${
         this.selectedTarget?.kind !== "home"
           ? nothing
@@ -833,10 +893,17 @@ export class MenuPreviewPanel extends LitElement {
                 .document=${before?.document ?? preview.document}
                 .device=${this.selectedTarget.device}
               ></dashboard-device-home-preview>
+              <a
+                data-test="home-settings"
+                href=${`/manage/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/home`}
+                >${t("menus.tab_home")}</a
+              >
             </section>`
       }
       <dashboard-customer-menu
         .document=${before?.document ?? preview.document}
+        .inspectionKey=${preview}
+        .showUnavailable=${false}
         .view=${view}
         .languages=${config}
         .label=${this.#label}
