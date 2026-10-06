@@ -4636,9 +4636,11 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       after the switch committed. Now the provider's write of the `attempting` row refuses
       `device.profile_changed`, charging nothing, when the device is no longer on the profile the
       request was checked under (`insertAttempting`, `packages/payments/src/store.ts`; SumUp and
-      Stripe terminal only). Still open: the practice-mode simulator writes no `attempting` row, so
-      a switch during a practice card payment is never refused; and a refused bill reader payment
-      stays `pending` until the bill-payment loop fails it (both read, not run).
+      Stripe terminal only). A refused bill reader payment is marked failed at once
+      (`takeReaderBillPayment`, `apps/server/src/bill-payments.ts`), so its amount is not held and
+      one "try again" starts a new card payment. Still open: the practice-mode simulator writes no
+      `attempting` row, so a switch during a practice card payment is never refused (read, not
+      run).
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,

@@ -53,9 +53,9 @@ export interface CollectParams {
    * writes it on the first `payments` row it writes for the charge, which is how a pending bill
    * payment is found again from the provider's row after a crash. */
   billPaymentId?: string;
-  /** The device profile the route checked this request under. A provider that writes an
-   * `attempting` row passes it to `insertAttempting`, which refuses `device.profile_changed` if the
-   * device has moved to another profile since. */
+  /** The device profile the route checked this request under. The SumUp and Stripe terminal
+   * providers pass it to `insertAttempting`, which refuses `device.profile_changed` if the device
+   * has moved to another profile since. */
   deviceProfileId?: string;
 }
 
