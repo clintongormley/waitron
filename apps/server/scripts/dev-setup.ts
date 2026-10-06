@@ -237,8 +237,6 @@ async function provisionVenue(
     { db, modules: ALL_MODULES },
   );
 
-  // planVenue emits the standard series first, then the rectificative one — seriesIds[0] is the
-  // ordinary sale's series.
   const ids = {
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,

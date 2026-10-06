@@ -156,6 +156,23 @@ describe("till-tender-pay", () => {
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(false);
   });
 
+  it("offers Full invoice before payment and requests the choice without starting a tender", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const chosen = vi.fn();
+    const payment = vi.fn();
+    el.addEventListener("choose-invoice", chosen);
+    el.addEventListener("confirm-payment", payment);
+
+    const button = query(el, "[data-full-invoice]") as HTMLElement;
+    expect(button.textContent?.trim()).toBe("Full invoice");
+    button.click();
+
+    expect(chosen).toHaveBeenCalledOnce();
+    expect(payment).not.toHaveBeenCalled();
+  });
+
   it("opens the cash screen showing the total when Cash is tapped", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2"); // total 3.00

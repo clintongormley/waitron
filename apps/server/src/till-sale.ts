@@ -1,3 +1,5 @@
+import { selectOrderInvoice } from "./invoice-selection.js";
+import { withReceiptListPrices } from "./receipt-lines.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { randomUUID } from "node:crypto";
@@ -39,18 +41,14 @@ import {
   recordManualCardPayment,
 } from "@waitron/payments";
 import type { CapturedPaymentForOrder, PaymentProvider, PaymentResult } from "@waitron/payments";
-import {
-  formatInvoiceNumber,
-  recordSale,
-  refuseOverSimplifiedLimit,
-  settleSale,
-} from "@waitron/core";
+import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import type { FiscalBackend, ReceiptQrText } from "@waitron/fiscal";
 import {
   createOpenOrder,
   fireLines,
   paysAfterSending,
   priceStoredOrderForIssuance,
+  refuseUnavailableFullInvoice,
   readInvoiceNumber,
   readStoredOrder,
   refusePaymentInFlight,
@@ -112,6 +110,8 @@ export interface TillSaleRequest {
    * tender. Any other method is refused `sale.unsupported_tender`.
    */
   tender: TillTender;
+  invoiceType?: unknown;
+  recipient?: unknown;
   workingOrderId?: string;
   /** The selected service zone for a new counter order. Existing orders use their stored context. */
   zoneId?: string;
@@ -129,6 +129,8 @@ export interface TillSaleRequest {
  * list cannot diverge from the invoice.
  */
 export interface TillSaleLine {
+  /** F1 figures read from the filed sale line; unitPrice is per priceQuantity, base is the line total. */
+  net?: { unitPrice: string; priceQuantity: string; base: string; rate: string; tax?: string };
   /** locale → text: the line's goods descriptions, snapshotted at add-time and filed verbatim. */
   descriptions: Record<string, string>;
   /** Unit label frozen with the filed line, including a weighted extra child. */
@@ -142,7 +144,7 @@ export interface TillSaleLine {
   gross: string;
   /**
    * The line's total at its price before a comp or a discount lowered it, present only when that
-   * differs from `gross`. The receipt shows it; nothing is filed from it.
+   * differs from `gross`. F1 replay reads it from the saved sale line.
    */
   listGross?: string;
   /** The comps and discounts printed beneath this row's dish; absent when there are none. */
@@ -192,7 +194,11 @@ export interface BillTenderRefund {
 }
 
 export interface TillSaleResult {
-  issuer?: { venueName: string; nif: string };
+  issuedOffsetMinutes?: number;
+  operationDate?: string;
+  invoiceType?: "F1" | "F2";
+  issuer?: { venueName: string; nif: string; domicile?: string };
+  recipient?: { taxId: string; legalName: string; countryCode: string; address: string };
   receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The language the sale was filed in (`sales.locale`). */
   locale: string;
@@ -377,11 +383,23 @@ export interface PayWorkingOrderRequest {
   } & LineExtras)[];
   /** Same shape and rules as `TillSaleRequest.tender`. */
   tender: TillTender;
+  invoiceType?: unknown;
+  recipient?: unknown;
   /** Deliver a WALK-UP sale to a dining table; ignored for a retrieved order. An unknown id is
    *  refused `table.not_found`. */
   deliveryTableId?: string;
   /** The selected service zone for a new counter order. Existing orders use their stored context. */
   zoneId?: string;
+}
+
+function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknown): void {
+  if (invoiceType !== undefined && invoiceType !== "F1" && invoiceType !== "F2") {
+    throw new AppError("management.request_invalid", { field: "invoiceType" });
+  }
+  if (invoiceType === "F1") throw new AppError("sale.full_invoice_unavailable", {});
+  if (recipient !== undefined && recipient !== null) {
+    throw new AppError("management.request_invalid", { field: "recipient" });
+  }
 }
 
 /**
@@ -393,6 +411,8 @@ export interface PayWorkingOrderRequest {
  */
 export interface IntegratedPayRequest {
   id: string;
+  invoiceType?: unknown;
+  recipient?: unknown;
   /** The walk-up basket; IGNORED for a retrieved/placed order. Carries the same per-line fields as
    *  `TillSaleRequest.lines`. */
   lines: ({
@@ -484,6 +504,8 @@ export async function payWorkingOrder(
         return readSettledTicket(deps.backend, tx, cfg, req.id);
       }
 
+      refuseUnavailableInvoiceRequest(req.invoiceType, req.recipient);
+
       // The domain code, rather than the raw `working_orders_enforce_transition` trigger error the
       // settle UPDATE would otherwise raise.
       if (locked !== undefined && locked.status !== "open") {
@@ -494,6 +516,7 @@ export async function payWorkingOrder(
         await refuseBillWithPayments(tx, req.id);
         // A card payment of this order would file its own sale after this one (plan D22).
         await refusePaymentInFlight(tx, [req.id]);
+        await refuseUnavailableFullInvoice(tx, req.id);
       }
 
       // The till is a network boundary. AFTER the replay check, so a retry of an already-settled
@@ -513,6 +536,11 @@ export async function payWorkingOrder(
           zoneId: req.zoneId,
           creditedTo: operatorId,
           invalidMakeAt: "ignore",
+          invoiceChoice: {
+            invoiceType: req.invoiceType,
+            recipient: req.recipient,
+            recipientNameMaxLength: deps.backend.recipientNameMaxLength,
+          },
         });
       } else {
         order = await priceStoredOrderForIssuance(tx, req.id);
@@ -619,7 +647,13 @@ export async function readSettledTicket(
   /* v8 ignore stop */
 
   const stored = await readStoredOrder(tx, workingOrderId);
-  const ticketLines = await receiptLines(tx, workingOrderId, stored.gross, stored.identities);
+  const ticketLines = await receiptLines(
+    tx,
+    workingOrderId,
+    stored.gross,
+    stored.identities,
+    issued.saleId,
+  );
 
   // Reads the already-filed record; never re-files.
   const filed = await backend.filedReceiptFor(tx, brandSaleId(issued.saleId));
@@ -648,9 +682,7 @@ export async function readSettledTicket(
     tender,
     ...(billTenders.length === 0 ? {} : { payments: billTenders }),
     ...receiptQr(backend, filed.verificationUrl),
-    ...(filed.issuer
-      ? { issuer: { venueName: filed.issuer.legalName, nif: filed.issuer.taxId } }
-      : {}),
+    ...(await readReceiptIssuer(backend, tx, brandSaleId(issued.saleId))),
   };
 }
 
@@ -725,16 +757,17 @@ async function fileImmediateSale(
   // The issue reading, shared by the invoice, the tender and the order's `settled_at`.
   const settledAt = clock.now().instant;
 
+  const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
   const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,
-    seriesId: cfg.seriesId,
+    ...selected.sale,
     // The sale-idempotency key (`sales_working_order_id_key`).
     workingOrderId: brandWorkingOrderId(workingOrderId),
     ...language,
     total: priced.total,
-    lines: priced.lines,
+    lines: withReceiptListPrices(priced.lines, order.identities),
     vatBreakdown: priced.vatBreakdown,
     clock,
     operatorId,
@@ -793,7 +826,7 @@ async function fileImmediateSale(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    ...(await receiptLines(tx, workingOrderId, priced, order.identities)),
+    ...(await receiptLines(tx, workingOrderId, priced, order.identities, saleId)),
     tender: tenderBlock,
     ...receiptQr(deps.backend, fiscal.verificationUrl),
   };
@@ -908,6 +941,11 @@ async function payIntegrated(
       throw new AppError("working_order.not_open", { workingOrderId: req.id });
     }
 
+    if (locked !== undefined) {
+      await refuseUnavailableFullInvoice(tx, req.id);
+    }
+    refuseUnavailableInvoiceRequest(req.invoiceType, req.recipient);
+
     // Walk-up only, because a retrieved or placed order ignores `req.lines`.
     if (req.lines.length === 0 && locked === undefined) {
       throw new AppError("sale.empty_basket", {});
@@ -964,10 +1002,15 @@ async function payIntegrated(
             zoneId: req.zoneId,
             creditedTo: operatorId,
             invalidMakeAt: "ignore",
+            invoiceChoice: {
+              invoiceType: req.invoiceType,
+              recipient: req.recipient,
+              recipientNameMaxLength: deps.backend.recipientNameMaxLength,
+            },
           })
         : await priceStoredOrderForIssuance(tx, req.id);
     // Before the reader is asked: P3 could never file this sale.
-    refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, order.gross.total);
+    await selectOrderInvoice(tx, deps.backend, cfg, req.id, order.gross.total);
     const wasPlaced = locked?.status === "placed";
     if (compareDecimal(order.gross.total, ZERO) === 0) {
       // Nothing to charge, so the reader is not asked and no tip is taken; called only to refuse a
@@ -1248,16 +1291,17 @@ async function finalizeCapture(
   try {
     return await withTransaction(deps.db, async (tx) => {
       const { priced, clock } = issueMoment(deps.clock, grossInP1);
+      const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
       const language = await readReceiptLanguage(tx, cfg.locationId);
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
         origin: cfg.origin,
         nodeId: cfg.nodeId,
-        seriesId: cfg.seriesId,
+        ...selected.sale,
         // The sale-idempotency key (`sales_working_order_id_key`) the backstop below relies on.
         workingOrderId: brandWorkingOrderId(req.id),
         ...language,
         total: priced.total,
-        lines: priced.lines,
+        lines: withReceiptListPrices(priced.lines, identities),
         vatBreakdown: priced.vatBreakdown,
         clock,
         operatorId,
@@ -1316,7 +1360,7 @@ async function finalizeCapture(
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        ...(await receiptLines(tx, req.id, priced, identities)),
+        ...(await receiptLines(tx, req.id, priced, identities, saleId)),
         tender: tenderBlock,
         ...receiptQr(deps.backend, fiscal.verificationUrl),
       };
@@ -1398,15 +1442,16 @@ async function finalizeRecovery(
       .from(payments)
       .where(eq(payments.id, captured.id));
     const origin = storedDeviceOrigin(startedOn!);
+    const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
     const language = await readReceiptLanguage(tx, cfg.locationId);
     const { saleId, fiscal } = await recordSale(tx, deps.backend, {
       origin,
       nodeId: cfg.nodeId,
-      seriesId: cfg.seriesId,
+      ...selected.sale,
       workingOrderId: brandWorkingOrderId(req.id),
       ...language,
       total: priced.total,
-      lines: priced.lines,
+      lines: withReceiptListPrices(priced.lines, order.identities),
       vatBreakdown: priced.vatBreakdown,
       clock,
       operatorId,
@@ -1464,7 +1509,7 @@ async function finalizeRecovery(
       issuedAt: fiscal.issuedAt.toISOString(),
       total: priced.total,
       vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-      ...(await receiptLines(tx, req.id, priced, order.identities)),
+      ...(await receiptLines(tx, req.id, priced, order.identities, saleId)),
       tender: tenderBlock,
       ...receiptQr(deps.backend, fiscal.verificationUrl),
     };
@@ -1835,6 +1880,8 @@ export async function recordTillSale(
       id: req.workingOrderId ?? randomUUID(),
       lines: req.lines,
       tender: req.tender,
+      invoiceType: req.invoiceType,
+      recipient: req.recipient,
       deliveryTableId: req.deliveryTableId,
       zoneId: req.zoneId,
     },

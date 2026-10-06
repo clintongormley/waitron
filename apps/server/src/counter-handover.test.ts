@@ -112,6 +112,71 @@ function saleCount(id: string): number {
 }
 
 describe("handing over a counter order sent without payment", () => {
+  it("saves an F1 recipient on a placed ticket before any invoice exists", async () => {
+    const id = await placed("ticket_then_pay", "Tarta");
+    const before = await orderRow(id);
+    expect(before.status).toBe("placed");
+    expect(saleCount(id)).toBe(0);
+
+    const saved = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${id}/invoice-choice`,
+      {
+        revision: before.revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+    );
+
+    expect(saved).toEqual({ status: 200, json: { revision: before.revision + 1 } });
+    const after = await orderRow(id);
+    expect(after.status).toBe("placed");
+    expect(after.invoiceType).toBe("F1");
+    expect(after.recipientTaxId).toBe("B12345674");
+    expect(after.recipientLegalName).toBe("Cliente SL");
+    expect(after.recipientAddress).toBe("Calle Mayor 2, 28013 Madrid, Madrid, España");
+    expect(after.recipientCountryCode).toBe("ES");
+    expect(saleCount(id)).toBe(0);
+  });
+
+  it("refuses to change a placed order after its simplified invoice was issued", async () => {
+    const id = await placed("invoice_first", "Tarta");
+    const before = await orderRow(id);
+    expect(before.status).toBe("placed");
+    expect(saleCount(id)).toBe(1);
+
+    const refused = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${id}/invoice-choice`,
+      {
+        revision: before.revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+    );
+
+    expect(refused).toEqual({
+      status: 409,
+      json: { code: "working_order.not_open", params: { workingOrderId: id } },
+    });
+    expect(await orderRow(id)).toEqual(before);
+    expect(saleCount(id)).toBe(1);
+  });
+
   it.each(["ticket_then_pay", "invoice_first"] as const)(
     "hands over a placed, fired %s order: only collected_at changes and it stays placed",
     async (mode) => {

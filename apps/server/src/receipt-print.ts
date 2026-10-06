@@ -2,14 +2,24 @@
 // connection. Printer resolution reads an active row, and the caller's write transaction is the only
 // one running on the venue file, so a deactivation cannot land between that read and the enqueue.
 // Originals and duplicates are separate actions; a queue resend preserves the original job bytes.
-import { and, eq } from "drizzle-orm";
-import { deviceProfiles, devices, drawerOpens, printers, readTenant, sales } from "@waitron/db";
+import { and, desc, eq, sql } from "drizzle-orm";
+import {
+  deviceProfiles,
+  devices,
+  drawerOpens,
+  printers,
+  printJobs,
+  readTenant,
+  sales,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { enqueuePrintJob, esc } from "@waitron/printing";
+import { canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
 import { getPrintedReceipt } from "@waitron/layouts";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import type { Origin } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptAddress } from "./venue-address.js";
@@ -140,7 +150,7 @@ async function resolvePrinterAndReceipt(
   return { printer, receiptBytes };
 }
 
-/** Unscoped sales default to automatic printing; a scoped sale follows its effective zone policy. */
+/** The optional receipt policy does not suppress an F1 original. */
 export async function enqueueSaleReceipt(
   tx: Transaction,
   cfg: OriginConfig,
@@ -160,7 +170,7 @@ export async function enqueueSaleReceipt(
   const mode = context
     ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
     : "auto";
-  if (mode !== "auto") return;
+  if (ticket.invoiceType !== "F1" && mode !== "auto") return;
   await enqueueOriginalReceipt(tx, cfg, ticket, saleId);
 }
 
@@ -216,7 +226,10 @@ export async function enqueueReceiptCopy(
 ): Promise<{ jobId: string } | undefined> {
   const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, true, printer, language);
   if (bytes === undefined) return undefined;
-  return enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", { saleId });
+  return enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", {
+    saleId,
+    receiptCopy: true,
+  });
 }
 
 /**
@@ -247,6 +260,66 @@ export async function enqueueManualDrawerOpen(
   await enqueuePrintJob(tx, printConfig(cfg), printerId, DRAWER_KICK, "drawer");
 }
 
+export type OriginalReceiptPrint =
+  | { status: "not_queued" }
+  | {
+      status: "queued" | "printing" | "failed" | "done";
+      jobId: string;
+      canRetry: boolean;
+      handover?: { personId: string; confirmedAt: string };
+    };
+
+/** Transport completion is not confirmation that the customer received the original. */
+export async function readOriginalReceiptPrint(
+  tx: Transaction,
+  saleId: string,
+): Promise<OriginalReceiptPrint> {
+  const jobs = await tx
+    .select({
+      id: printJobs.id,
+      status: printJobs.status,
+      attempts: printJobs.attempts,
+      kind: printJobs.kind,
+      handover: printJobs.receiptHandover,
+    })
+    .from(printJobs)
+    .where(
+      and(
+        eq(printJobs.saleId, saleId),
+        eq(printJobs.receiptCopy, false),
+        eq(printJobs.kind, "document"),
+      ),
+    )
+    .orderBy(desc(sql`${printJobs}.rowid`));
+  // A completed original attempt remains complete even if a later resend fails.
+  const job = jobs.find((candidate) => candidate.status === "done") ?? jobs[0];
+  if (job === undefined) return { status: "not_queued" };
+  const handover = jobs.find((candidate) => candidate.handover !== null)?.handover;
+  return {
+    status: job.status,
+    jobId: job.id,
+    canRetry: job.status === "failed" && canResendPrintJob(job),
+    ...(handover == null ? {} : { handover }),
+  };
+}
+
+export async function confirmReceiptHandover(
+  tx: Transaction,
+  saleId: string,
+  personId: string,
+): Promise<OriginalReceiptPrint> {
+  const original = await readOriginalReceiptPrint(tx, saleId);
+  if (original.status !== "done") throw new AppError("receipt.not_printed", {});
+  if (original.handover !== undefined) return original;
+  await tx
+    .update(printJobs)
+    .set({
+      receiptHandover: { personId, confirmedAt: new Date().toISOString() },
+    })
+    .where(eq(printJobs.id, original.jobId));
+  return readOriginalReceiptPrint(tx, saleId);
+}
+
 /** The issuance action emits an unmarked original without opening the drawer. */
 export async function enqueueOriginalReceipt(
   tx: Transaction,
@@ -254,6 +327,15 @@ export async function enqueueOriginalReceipt(
   ticket: TillSaleResult,
   saleId: string,
 ): Promise<void> {
+  if (ticket.invoiceType === "F1") {
+    const [original] = await tx
+      .select({ id: printJobs.id })
+      .from(printJobs)
+      .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)))
+      .limit(1);
+    // A failed original is retried through its existing job, preserving its bytes and history.
+    if (original !== undefined) return;
+  }
   const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, false);
   if (resolved === undefined) return;
   await enqueuePrintJob(
@@ -262,7 +344,7 @@ export async function enqueueOriginalReceipt(
     resolved.printer.id,
     resolved.receiptBytes,
     "document",
-    { saleId },
+    { saleId, receiptCopy: false },
   );
 }
 

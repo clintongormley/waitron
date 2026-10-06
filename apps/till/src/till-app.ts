@@ -84,6 +84,8 @@ import {
   type AdjustTarget,
 } from "./widgets/adjustment-dialog.js";
 import "./widgets/bill-pay-dialog.js";
+import "./widgets/invoice-recipient-dialog.js";
+import type { InvoiceRecipientDetail } from "./widgets/invoice-recipient-dialog.js";
 import "./widgets/make-now.js";
 import "./widgets/dead-ends-dialog.js";
 import type { DeadEndsDecision } from "./widgets/dead-ends-dialog.js";
@@ -183,6 +185,7 @@ import type {
   TillMenuOffer,
   TillProduct,
   TillSaleResult,
+  OriginalReceiptPrint,
   PartyBill,
   TableActionResult,
   TableActionRevisions,
@@ -1356,6 +1359,7 @@ export class TillApp extends LitElement {
   @state() private counterWaiting: CounterWaitingOrder[] = [];
   @state() private findingBill = false;
   @state() private findBillBusy = false;
+  #invoiceRecoveryVisit = 0;
   @state() private findBillError?: StringKey;
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
@@ -1402,6 +1406,7 @@ export class TillApp extends LitElement {
   #reprinting = false;
   /** Every bill of the party at {@link activeTableId}, read when the table opens and after it changes. */
   @state() private partyBills: PartyBill[] = [];
+  @state() private differentPeopleConfirmation: { proceed: () => Promise<void> } | null = null;
   /** The party of the order on screen as it was read just before that order's lines and bills: what
    * the screen shows of it, and the revision every command on it sends (D19). A floor read on its own
    * does not move it, so a glance at the floor cannot lend the order view a revision it never showed. */
@@ -1477,8 +1482,12 @@ export class TillApp extends LitElement {
   @state() private receiptPrintMode: "auto" | "on_request" | "never" = "auto";
   /** Whether the issuance-time original action is still available for the ticket currently shown. */
   @state() private originalReceiptAvailable = false;
+  @state() private originalReceiptPrint?: OriginalReceiptPrint;
+  @state() private originalReceiptBusy = false;
+  @state() private originalReceiptReadFailed = false;
   /** The working order that produced the ticket currently shown, a bill split off another included. */
   private ticketWorkingOrderId?: string;
+  #receiptPrintVisit = 0;
   /** The location's receipt language, never the operator-UI `currentLocale()`. */
   @state() private invoiceLocale = "es-ES";
   /** The receipt languages a copy may be reprinted in; with more than one, a reprint asks which. */
@@ -1600,6 +1609,18 @@ export class TillApp extends LitElement {
    * feedback.
    */
   @state() private submitting = false;
+  @state() private invoiceRecipientOpen = false;
+  @state() private invoiceRecipientRefusal = "";
+  @state() private invoiceRecipientRefusalField = "";
+  private invoiceRecipientOrderId?: string;
+  private invoiceRecipientBill?: {
+    orderId: string;
+    revision: number;
+    partyId: string;
+    session: number;
+  };
+  private invoiceRecipientSaving = false;
+  private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail };
   /** Re-entry guard for {@link TillApp.#onParkOrder}, set before its first await. */
   @state() private parking = false;
   /** Re-entry guard for {@link TillApp.#onPlaceOrder}; also disables Place while in flight. */
@@ -2522,6 +2543,17 @@ export class TillApp extends LitElement {
     this.errorKey = { code: "menu.version_changed" };
   }
 
+  #askInvoiceRecipientForLargeBill(): boolean {
+    if (
+      compareDecimal(this.#store.total, decimal("3000")) <= 0 ||
+      this.invoiceChoice?.orderId === this.#store.id
+    )
+      return false;
+    this.invoiceRecipientOrderId = this.#store.id;
+    this.invoiceRecipientOpen = true;
+    return true;
+  }
+
   /**
    * Pays the basket: a prepay basket, or an open order at the order stage of a zone that sends to the
    * kitchen without payment. The ticket's lines come from the server result, so a rejection leaves
@@ -2530,6 +2562,7 @@ export class TillApp extends LitElement {
   async #onConfirmPayment(event: Event, retried = false): Promise<void> {
     // Single-flight (see `submitting`): set before the first await.
     if (this.submitting || this.#refusePaidInPart()) return;
+    if (this.#askInvoiceRecipientForLargeBill()) return;
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -2552,7 +2585,10 @@ export class TillApp extends LitElement {
       if (!(await this.#syncIfDirty(id, lines, label))) return;
       if (session !== this.#operatorSession) return;
       reachedFiscal = true;
-      const result = await this.api.recordSale(lines, tender, id);
+      const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
+      const result = invoice
+        ? await this.api.recordSale(lines, tender, id, undefined, invoice)
+        : await this.api.recordSale(lines, tender, id);
       if (session !== this.#operatorSession) return;
       this.result = result;
       this.#showTicket(id);
@@ -2627,6 +2663,7 @@ export class TillApp extends LitElement {
    */
   async #collectCard(event: Event, retried: boolean): Promise<void> {
     if (this.submitting || this.#refusePaidInPart()) return;
+    if (this.#askInvoiceRecipientForLargeBill()) return;
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -2659,6 +2696,7 @@ export class TillApp extends LitElement {
       const out: PayOutcome = await this.api.pay({
         id,
         lines,
+        ...(this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : {}),
         ...(detail.tip ? { tip: detail.tip } : {}),
         ...(detail.allowOffline ? { allowOffline: true } : {}),
         ...(detail.simulationOutcome === undefined
@@ -2927,6 +2965,7 @@ export class TillApp extends LitElement {
     clearInactiveChoices = false,
   ): Promise<void> {
     if (this.placing) return;
+    if (this.#basketFlow() === "invoice_first" && this.#askInvoiceRecipientForLargeBill()) return;
     this.placing = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -2948,6 +2987,14 @@ export class TillApp extends LitElement {
         await this.api.parkOrder({ id, lines, label });
         if (session !== this.#operatorSession) return;
         this.#store.markPersisted();
+      }
+      if (this.invoiceChoice?.orderId === id) {
+        const saved = await this.api.setOrderInvoiceChoice(id, {
+          revision: this.#store.revision,
+          ...this.invoiceChoice.invoice,
+        });
+        if (session !== this.#operatorSession) return;
+        this.#store.markSaved(saved.revision);
       }
       reachedFiscal = true;
       await this.api.placeOrder(id);
@@ -3024,6 +3071,37 @@ export class TillApp extends LitElement {
             : (overLimitOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
+    }
+  }
+
+  async #onFindInvoiceOpen(event: Event): Promise<void> {
+    if (this.findBillBusy) return;
+    const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
+    const session = this.#operatorSession;
+    const visit = this.#invoiceRecoveryVisit;
+    this.findBillBusy = true;
+    this.findBillError = undefined;
+    try {
+      const result = await this.api.getFiledTicket(workingOrderId);
+      if (
+        session !== this.#operatorSession ||
+        visit !== this.#invoiceRecoveryVisit ||
+        !this.findingBill
+      )
+        return;
+      this.result = result;
+      this.findingBill = false;
+      this.#showTicket(workingOrderId, false);
+    } catch {
+      if (
+        session === this.#operatorSession &&
+        visit === this.#invoiceRecoveryVisit &&
+        this.findingBill
+      )
+        this.findBillError = "find_bill.invoice_load_failed";
+    } finally {
+      if (session === this.#operatorSession && visit === this.#invoiceRecoveryVisit)
+        this.findBillBusy = false;
     }
   }
 
@@ -3510,7 +3588,18 @@ export class TillApp extends LitElement {
       this.errorKey = discardError(error);
     }
     if (session !== this.#operatorSession) return;
-    await this.#refreshHeldOrders();
+    const refresh = this.#refreshGeneration.held + 1;
+    try {
+      await this.#refreshHeldOrders();
+    } catch {
+      if (
+        session === this.#operatorSession &&
+        refresh === this.#refreshGeneration.held &&
+        this.errorKey === undefined
+      )
+        this.errorKey = "refresh.held";
+      return;
+    }
     if (session !== this.#operatorSession) return;
     if (refused && !this.heldOrders.some((order) => order.id === id)) this.errorKey = "held.stale";
   }
@@ -3549,16 +3638,94 @@ export class TillApp extends LitElement {
     if (asking !== null) await this.#sendReprint(asking.workingOrderId, event.detail.language);
   }
 
-  /** Enqueue the issuance-time ORIGINAL. Only a successful enqueue retires the original action; a
-   * failed request stays retryable and never silently turns the next attempt into a duplicate. */
-  async #onPrintReceipt(): Promise<void> {
-    if (this.ticketWorkingOrderId === undefined) return;
+  #ticketIsCurrent(id: string, session: number, visit: number): boolean {
+    return (
+      this.#receiptPrintVisit === visit &&
+      this.ticketWorkingOrderId === id &&
+      this.#operatorSession === session &&
+      this.drill?.kind === "ticket"
+    );
+  }
+
+  async #refreshReceiptPrint(): Promise<void> {
+    const id = this.ticketWorkingOrderId;
+    if (id === undefined || this.result?.invoiceType !== "F1" || this.originalReceiptBusy) return;
+    const session = this.#operatorSession;
+    const visit = this.#receiptPrintVisit;
+    this.originalReceiptBusy = true;
+    try {
+      await this.#readReceiptPrint(id, session, visit);
+    } finally {
+      if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptBusy = false;
+    }
+  }
+
+  async #readReceiptPrint(id: string, session: number, visit: number): Promise<void> {
+    try {
+      const status = await this.api.getReceiptPrintStatus(id);
+      if (!this.#ticketIsCurrent(id, session, visit)) return;
+      this.originalReceiptPrint = status;
+      this.originalReceiptReadFailed = false;
+    } catch {
+      if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptReadFailed = true;
+    }
+  }
+
+  async #confirmReceiptHandover(): Promise<void> {
+    const id = this.ticketWorkingOrderId;
+    const print = this.originalReceiptPrint;
+    if (
+      id === undefined ||
+      this.result?.invoiceType !== "F1" ||
+      print?.status !== "done" ||
+      print.handover !== undefined ||
+      this.originalReceiptBusy
+    )
+      return;
+    const session = this.#operatorSession;
+    const visit = this.#receiptPrintVisit;
+    this.originalReceiptBusy = true;
     this.errorKey = undefined;
     try {
-      await this.api.printReceipt(this.ticketWorkingOrderId);
-      this.originalReceiptAvailable = false;
+      const confirmed = await this.api.confirmReceiptHandover(id);
+      if (!this.#ticketIsCurrent(id, session, visit)) return;
+      this.originalReceiptPrint = confirmed;
     } catch {
-      this.errorKey = "receipt.error";
+      if (this.#ticketIsCurrent(id, session, visit)) this.errorKey = "invoice.handover_failed";
+    } finally {
+      if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptBusy = false;
+    }
+  }
+
+  async #onPrintReceipt(retry = false): Promise<void> {
+    const id = this.ticketWorkingOrderId;
+    if (id === undefined || this.originalReceiptBusy) return;
+    const session = this.#operatorSession;
+    const visit = this.#receiptPrintVisit;
+    const full = this.result?.invoiceType === "F1";
+    if (
+      retry &&
+      (!full ||
+        this.originalReceiptPrint?.status !== "failed" ||
+        !this.originalReceiptPrint.canRetry)
+    )
+      return;
+    if (full && !retry && this.originalReceiptPrint?.status !== "not_queued") return;
+    this.originalReceiptBusy = true;
+    this.errorKey = undefined;
+    try {
+      if (retry) await this.api.retryReceipt(id);
+      else await this.api.printReceipt(id);
+      if (!this.#ticketIsCurrent(id, session, visit)) return;
+      this.originalReceiptAvailable = false;
+      if (full) {
+        this.originalReceiptPrint = undefined;
+        await this.#readReceiptPrint(id, session, visit);
+      }
+    } catch {
+      if (this.#ticketIsCurrent(id, session, visit)) this.errorKey = "receipt.error";
+    } finally {
+      if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptBusy = false;
     }
   }
 
@@ -3828,6 +3995,9 @@ export class TillApp extends LitElement {
     if (!this.#inShell()) return;
     this.#dismissStationChoices();
     this.#store.clear();
+    this.invoiceChoice = undefined;
+    this.invoiceRecipientOpen = false;
+    this.invoiceRecipientOrderId = undefined;
     this.ticketWorkingOrderId = undefined;
     this.originalReceiptAvailable = false;
     this.stage = "order";
@@ -5612,6 +5782,33 @@ export class TillApp extends LitElement {
     </wt-dialog>`;
   }
 
+  #renderDifferentPeopleConfirmation(): TemplateResult | typeof nothing {
+    if (this.differentPeopleConfirmation === null) return nothing;
+    return html`<wt-dialog
+      ${trackDialog()}
+      data-confirm-different-people
+      .open=${true}
+      .heading=${t("table.confirm_different_people_title")}
+      @wt-close=${() => (this.differentPeopleConfirmation = null)}
+    >
+      <p>${t("table.confirm_different_people")}</p>
+      <div slot="footer">
+        <wt-button
+          variant="secondary"
+          data-cancel
+          @click=${() => (this.differentPeopleConfirmation = null)}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          data-confirm
+          @click=${() => void this.#confirmDifferentPeople()}
+          >${t("table.confirm_different_people_action")}</wt-button
+        >
+      </div>
+    </wt-dialog>`;
+  }
+
   #clearErrorKeepingLateChange(): void {
     const late = this.#lateChangeShown();
     this.errorKey = late === undefined ? undefined : { lateChange: late };
@@ -5923,11 +6120,52 @@ export class TillApp extends LitElement {
     await this.#reloadOrder();
   }
 
-  async #onTransferLines(event: Event): Promise<void> {
+  async #askDifferentPeople(proceed: () => Promise<void>): Promise<boolean> {
+    if (this.differentPeopleConfirmation !== null) return true;
+    const billId = this.activeTabId;
+    if (billId === undefined) return true;
+    const bill = this.partyBills.find((row) => row.workingOrderId === billId);
+    let total = bill?.total;
+    if (total === undefined) {
+      try {
+        const balance = await this.api.getBillBalance(billId);
+        if (this.activeTabId !== billId) return true;
+        total = balance.total;
+      } catch {
+        this.errorKey = "table.reread_failed";
+        return true;
+      }
+    }
+    if (compareDecimal(decimal(total), decimal("3000")) <= 0) return false;
+    const partyId = this.orderParty?.id;
+    const visit = this.#orderVisit;
+    this.differentPeopleConfirmation = {
+      proceed: async () => {
+        if (
+          this.activeTabId === billId &&
+          this.orderParty?.id === partyId &&
+          this.#orderVisit === visit
+        )
+          await proceed();
+      },
+    };
+    return true;
+  }
+
+  async #confirmDifferentPeople(): Promise<void> {
+    const pending = this.differentPeopleConfirmation;
+    if (pending === null) return;
+    this.differentPeopleConfirmation = null;
+    await pending.proceed();
+  }
+
+  async #onTransferLines(event: Event, confirmed = false): Promise<void> {
     const { toBillId, transfers } = (
       event as CustomEvent<{ toBillId: string; transfers: TabTransfer[] }>
     ).detail;
     if (this.activeTabId === undefined || transfers.length === 0) return;
+    if (!confirmed && (await this.#askDifferentPeople(() => this.#onTransferLines(event, true))))
+      return;
     this.errorKey = undefined;
     try {
       await this.api.transferItems(this.activeTabId, toBillId, transfers, this.#billRevisions());
@@ -5940,11 +6178,13 @@ export class TillApp extends LitElement {
 
   /** Put the chosen items on a new bill of the party, and show that bill unless the waiter has left
    * the party since ({@link #hasLeftParty}). */
-  async #onSplitLines(event: Event): Promise<void> {
+  async #onSplitLines(event: Event, confirmed = false): Promise<void> {
     const { transfers } = (event as CustomEvent<{ transfers: TabTransfer[] }>).detail;
     const billId = this.activeTabId;
     const partyId = this.orderParty?.id;
     if (billId === undefined) return;
+    if (!confirmed && (await this.#askDifferentPeople(() => this.#onSplitLines(event, true))))
+      return;
     const sent = this.#sentNow();
     this.errorKey = undefined;
     try {
@@ -6455,6 +6695,7 @@ export class TillApp extends LitElement {
 
   /** Clears the open order's bill, table and party without moving the screen. */
   #forgetParty(): void {
+    this.differentPeopleConfirmation = null;
     this.activeTabId = undefined;
     this.activeTableId = undefined;
     this.orderParty = null;
@@ -6487,6 +6728,67 @@ export class TillApp extends LitElement {
     this.finishRefused = false;
     this.activeTabId = workingOrderId;
     await this.#loadTabLines();
+  }
+
+  #onChooseBillInvoice(event: Event): void {
+    const { workingOrderId, revision } = (
+      event as CustomEvent<{
+        workingOrderId: string;
+        revision: number;
+      }>
+    ).detail;
+    const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
+    const partyId = this.orderParty?.id;
+    if (bill?.revision !== revision || partyId === undefined) return;
+    this.invoiceRecipientBill = {
+      orderId: workingOrderId,
+      revision,
+      partyId,
+      session: this.#operatorSession,
+    };
+    this.invoiceRecipientRefusal = "";
+    this.invoiceRecipientRefusalField = "";
+    this.invoiceRecipientOpen = true;
+  }
+
+  async #saveBillInvoiceChoice(choice: InvoiceRecipientDetail): Promise<void> {
+    const bill = this.invoiceRecipientBill;
+    if (bill === undefined || this.invoiceRecipientSaving) return;
+    this.invoiceRecipientSaving = true;
+    try {
+      await this.api.setOrderInvoiceChoice(bill.orderId, { revision: bill.revision, ...choice });
+      if (this.invoiceRecipientBill !== bill || this.#operatorSession !== bill.session) return;
+      this.invoiceRecipientOpen = false;
+      this.invoiceRecipientRefusal = "";
+      this.invoiceRecipientRefusalField = "";
+      this.invoiceRecipientBill = undefined;
+      if (this.orderParty?.id === bill.partyId) {
+        const refreshed = await this.#loadPartyBills();
+        if (
+          refreshed.bills === null &&
+          refreshed.read === this.#partyBillsRead &&
+          this.orderParty?.id === bill.partyId &&
+          this.#operatorSession === bill.session &&
+          this.errorKey === undefined
+        )
+          this.errorKey = "table.reread_failed";
+      }
+    } catch (error) {
+      if (this.invoiceRecipientBill === bill && this.#operatorSession === bill.session) {
+        const code = (error as { code?: unknown } | undefined)?.code;
+        this.invoiceRecipientRefusal = codeMessage(
+          typeof code === "string" ? code : "server.internal",
+        );
+        const field = (error as { field?: unknown } | undefined)?.field;
+        this.invoiceRecipientRefusalField =
+          code === "invoice.recipient_invalid" &&
+          (field === "taxId" || field === "legalName" || field === "address")
+            ? field
+            : "";
+      }
+    } finally {
+      this.invoiceRecipientSaving = false;
+    }
   }
 
   async #onReprintBill(event: Event): Promise<void> {
@@ -6557,6 +6859,10 @@ export class TillApp extends LitElement {
     this.#closeCancelCrediting();
     this.findingBill = false;
     this.printersOpen = false;
+    this.invoiceRecipientBill = undefined;
+    this.invoiceRecipientOpen = false;
+    this.invoiceRecipientRefusal = "";
+    this.invoiceRecipientRefusalField = "";
     this.#operatorSession++;
   }
 
@@ -7112,8 +7418,13 @@ export class TillApp extends LitElement {
 
   #showTicket(workingOrderId: string, invoiceIssuedNow = true): void {
     this.ticketWorkingOrderId = workingOrderId;
+    this.#receiptPrintVisit++;
+    this.originalReceiptPrint = undefined;
+    this.originalReceiptReadFailed = false;
+    this.originalReceiptBusy = false;
     this.originalReceiptAvailable = invoiceIssuedNow && this.receiptPrintMode !== "auto";
     this.#pushDrill({ kind: "ticket" });
+    void this.#refreshReceiptPrint();
   }
 
   /** A canvas with no counter tab shows its first tab instead. */
@@ -7399,6 +7710,9 @@ export class TillApp extends LitElement {
           .receipt=${this.receipt}
           .venueAddress=${this.venueAddress}
           .originalReceiptAvailable=${this.originalReceiptAvailable}
+          .originalReceiptPrint=${this.originalReceiptPrint}
+          .originalReceiptBusy=${this.originalReceiptBusy}
+          .originalReceiptReadFailed=${this.originalReceiptReadFailed}
           .canPrintReceipt=${
             this.deviceId === undefined || this.capabilities.includes("print-receipt")
           }
@@ -7481,6 +7795,10 @@ export class TillApp extends LitElement {
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
         @confirm-payment=${(event: Event) => void this.#onConfirmPayment(event)}
+        @choose-invoice=${() => {
+          this.invoiceRecipientOrderId = this.#store.id;
+          this.invoiceRecipientOpen = true;
+        }}
         @collect-card=${(event: Event) => void this.#onCollectCard(event)}
         @cancel-demo-reader=${() => void this.#onCancelDemoReader()}
         @check-before-tender=${(event: Event) => this.#onCheckBeforeTender(event)}
@@ -7502,14 +7820,22 @@ export class TillApp extends LitElement {
         @new-sale=${() => this.#onNewSale()}
         @reprint=${() => void this.#onReprint()}
         @print-receipt=${() => void this.#onPrintReceipt()}
+        @retry-receipt=${() => void this.#onPrintReceipt(true)}
+        @refresh-receipt=${() => void this.#refreshReceiptPrint()}
+        @confirm-handover=${() => void this.#confirmReceiptHandover()}
         @payment-slip=${() => void this.#onPaymentSlip()}
         @open-drawer=${() => void this.#onOpenDrawer()}
         @find-bill=${() => {
+          this.#invoiceRecoveryVisit++;
+          this.findBillBusy = false;
           this.findBillError = undefined;
           this.findingBill = true;
         }}
+        @find-invoice-open=${(event: Event) => void this.#onFindInvoiceOpen(event)}
         @find-bill-pay=${(event: Event) => void this.#onFindBillPay(event)}
         @find-bill-close=${() => {
+          this.#invoiceRecoveryVisit++;
+          this.findBillBusy = false;
           this.findingBill = false;
         }}
         @override-confirm=${(event: Event) => void this.#onOverrideConfirm(event)}
@@ -7558,6 +7884,7 @@ export class TillApp extends LitElement {
         @mark-cleared=${(event: Event) => void this.#onMarkCleared(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
         @bill-pay=${(event: Event) => void this.#onBillPay(event)}
+        @choose-bill-invoice=${(event: Event) => this.#onChooseBillInvoice(event)}
         @refund-excess=${(event: Event) => void this.#onRefundExcess(event)}
         @counter-bill-pay=${(event: Event) => void this.#onCounterBillPay(event)}
         @back-to-floor=${() => this.#onBackToFloor()}
@@ -7665,7 +7992,40 @@ export class TillApp extends LitElement {
         ${this.#renderCancelCrediting()}
         ${this.movingStation === null ? nothing : this.#renderMoveStationDialog(this.movingStation)}
         ${this.makingAt === null ? nothing : this.#renderMakeAtDialog(this.makingAt)}
-        ${this.#renderEditDeadEnds()}
+        ${this.#renderEditDeadEnds()} ${this.#renderDifferentPeopleConfirmation()}
+        ${
+          this.invoiceRecipientOpen
+            ? html`<till-invoice-recipient-dialog
+                .refusal=${this.invoiceRecipientRefusal}
+                .refusalField=${this.invoiceRecipientRefusalField}
+                @invoice-recipient-edit=${(event: CustomEvent<{ field: string }>) => {
+                  if (event.detail.field === this.invoiceRecipientRefusalField) {
+                    this.invoiceRecipientRefusal = "";
+                    this.invoiceRecipientRefusalField = "";
+                  }
+                }}
+                @invoice-recipient-confirm=${(event: CustomEvent<InvoiceRecipientDetail>) => {
+                  if (this.invoiceRecipientBill !== undefined) {
+                    void this.#saveBillInvoiceChoice(event.detail);
+                    return;
+                  }
+                  if (this.invoiceRecipientOrderId === this.#store.id) {
+                    this.invoiceChoice = { orderId: this.#store.id, invoice: event.detail };
+                    this.#store.allowFullInvoiceFor(this.#store.id);
+                  }
+                  this.invoiceRecipientOpen = false;
+                  this.invoiceRecipientOrderId = undefined;
+                }}
+                @invoice-recipient-cancel=${() => {
+                  this.invoiceRecipientOpen = false;
+                  this.invoiceRecipientOrderId = undefined;
+                  this.invoiceRecipientBill = undefined;
+                  this.invoiceRecipientRefusal = "";
+                  this.invoiceRecipientRefusalField = "";
+                }}
+              ></till-invoice-recipient-dialog>`
+            : nothing
+        }
         ${
           this.deadEndsQuestion === null
             ? nothing

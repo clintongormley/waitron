@@ -1,12 +1,17 @@
 import { readBillAdjustments } from "@waitron/adjustments";
 import type { Transaction } from "@waitron/db";
+import { sales, saleLines } from "@waitron/db";
+import { and, eq, isNotNull } from "drizzle-orm";
 import {
   addDecimal,
+  basisPointsToDecimal,
+  centsToDecimal,
   compareDecimal,
   decimal,
   isZeroDecimal,
   subtractDecimal,
   sumDecimals,
+  thousandthsToDecimal,
 } from "@waitron/shared";
 import { groupByParent, ticketLinesFrom, type ReceiptSource } from "./receipt-lines.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -25,6 +30,7 @@ export async function receiptLines(
   workingOrderId: string,
   priced: { lines: readonly ReceiptSource[] },
   identities: readonly Pick<OrderLineIdentity, "id" | "listUnitGross">[],
+  saleId?: string,
 ): Promise<Pick<TillSaleResult, "lines" | "billAdjustments">> {
   const each = await VENUE_SERVICE.readLinesSoldInEach(
     tx,
@@ -34,9 +40,45 @@ export async function receiptLines(
         : [],
     ),
   );
-  const lines = ticketLinesFrom(priced, identities).map((line, i) =>
+  let lines = ticketLinesFrom(priced, identities).map((line, i) =>
     each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line,
   );
+  if (saleId !== undefined) {
+    const filed = await tx
+      .select({
+        lineNo: saleLines.lineNo,
+        unitPrice: saleLines.unitPrice,
+        priceQuantity: saleLines.priceQuantity,
+        base: saleLines.lineTotal,
+        rate: saleLines.vatRate,
+        gross: saleLines.lineGross,
+        listGross: saleLines.listGross,
+      })
+      .from(saleLines)
+      .innerJoin(sales, eq(sales.id, saleLines.saleId))
+      .where(and(eq(sales.id, saleId), isNotNull(sales.counterpartyTaxId)));
+    if (filed.length > 0) {
+      const byLineNo = new Map(filed.map((line) => [line.lineNo, line]));
+      lines = lines.map((line, i) => {
+        const row = byLineNo.get(priced.lines[i]!.lineNo)!;
+        const display = { ...line };
+        delete display.listGross;
+        return {
+          ...display,
+          ...(row.listGross === null ? {} : { listGross: centsToDecimal(row.listGross) }),
+          net: {
+            unitPrice: centsToDecimal(row.unitPrice),
+            priceQuantity: thousandthsToDecimal(row.priceQuantity),
+            base: centsToDecimal(row.base),
+            rate: basisPointsToDecimal(row.rate),
+            ...(row.gross === null
+              ? {}
+              : { tax: subtractDecimal(centsToDecimal(row.gross), centsToDecimal(row.base)) }),
+          },
+        };
+      });
+    }
+  }
   if (!lines.some((line) => line.listGross !== undefined)) return { lines };
   const records = await readBillAdjustments(tx, workingOrderId);
 
@@ -73,8 +115,12 @@ export async function receiptLines(
     else entries.push(entry);
   }
 
-  const listed = sumDecimals(lines.map((line) => decimal(line.listGross ?? line.gross)));
-  const charged = sumDecimals(lines.map((line) => decimal(line.gross)));
+  const listed = sumDecimals(
+    lines.map((line) =>
+      line.listGross === undefined ? chargedAmount(line) : decimal(line.listGross),
+    ),
+  );
+  const charged = sumDecimals(lines.map(chargedAmount));
   if (placed && compareDecimal(subtractDecimal(listed, takenOff), charged) === 0) {
     return {
       lines: lines.map((line, i) => withEntries(line, byLine.get(i))),
@@ -82,6 +128,12 @@ export async function receiptLines(
     };
   }
   return { lines: perDish(lines) };
+}
+
+function chargedAmount(line: TillSaleLine) {
+  return line.net?.tax === undefined
+    ? decimal(line.gross)
+    : addDecimal(decimal(line.net.base), decimal(line.net.tax));
 }
 
 function withEntries(line: TillSaleLine, entries: ReceiptAdjustment[] | undefined): TillSaleLine {
@@ -98,9 +150,9 @@ function perDish(lines: TillSaleLine[]): TillSaleLine[] {
     const changed = [dish, ...options].filter((line) => line.listGross !== undefined);
     if (changed.length === 0) continue;
     const lost = sumDecimals(
-      changed.map((line) => subtractDecimal(decimal(line.listGross!), decimal(line.gross))),
+      changed.map((line) => subtractDecimal(decimal(line.listGross!), chargedAmount(line))),
     );
-    const comp = changed.every((line) => isZeroDecimal(decimal(line.gross)));
+    const comp = changed.every((line) => isZeroDecimal(chargedAmount(line)));
     entries.set(dish, [{ kind: comp ? "comp" : "discount", amount: lost }]);
   }
   return lines.map((line) => withEntries(line, entries.get(line)));

@@ -34,6 +34,9 @@ const party: TableParty = {
 
 const untouched: PartyBill = {
   workingOrderId: "wo-4",
+  revision: 0,
+  invoiceType: "F2",
+  recipient: null,
   partyId: "v1",
   label: null,
   status: "open",
@@ -123,6 +126,35 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("till-table-order-screen: the ways to pay part of a bill", () => {
+  it("offers a full invoice for a partly paid bill and identifies the bill to change", async () => {
+    const el = await mountScreen({ bills: [partlyPaid], billBalance: balance() });
+    const asked = capture<{ workingOrderId: string; revision: number }>(el, "choose-bill-invoice");
+
+    const button = el.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]");
+    expect(text(button)).toBe(t("invoice.full"));
+    await press(el, "[data-choose-bill-invoice]");
+
+    expect(asked).toEqual([{ workingOrderId: "wo-4", revision: 0 }]);
+  });
+
+  it("shows a saved full-invoice choice and customer on an unissued bill", async () => {
+    const chosen: PartyBill = {
+      ...partlyPaid,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    };
+    const el = await mountScreen({ bills: [chosen], billBalance: balance() });
+
+    expect(text(el.shadowRoot!.querySelector('[data-bill="wo-4"] [data-invoice-choice]'))).toBe(
+      `${t("invoice.full")} · Cliente SL · B12345674`,
+    );
+  });
+
   it.each([
     ["items", "bill_pay.way_items"],
     ["contribution", "bill_pay.way_contribution"],

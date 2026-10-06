@@ -17,6 +17,7 @@ import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
 import type {
   BillTenderLine,
+  OriginalReceiptPrint,
   ReceiptAdjustment,
   TillSaleLine,
   TillSaleResult,
@@ -73,6 +74,33 @@ function lineGross(line: TillSaleLine, locale: string) {
   return html`<span class="line-gross">${formatMoney(line.listGross ?? line.gross, locale)}</span>`;
 }
 
+function netFacts(line: TillSaleLine, language: string, format: string, labels: ReceiptLabels) {
+  if (line.net === undefined) return nothing;
+  const unit =
+    line.unitName == null ? "" : ` ${resolveSnapshotText(line.unitName, language, language)}`;
+  return html`<li class="invoice-facts">
+    <div class="vat-row">
+      <span>${labels.netUnitPrice}</span
+      ><span
+        >${formatMoney(line.net.unitPrice, format)} /
+        ${line.net.priceQuantity.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}${unit}</span
+      >
+    </div>
+    <div class="vat-row">
+      <span>${labels.base} ${line.net.rate}%</span
+      ><span>${formatMoney(line.net.base, format)}</span>
+    </div>
+    ${
+      line.net.tax === undefined
+        ? nothing
+        : html`<div class="vat-row">
+            <span>${labels.vat} ${line.net.rate}%</span
+            ><span>${formatMoney(line.net.tax, format)}</span>
+          </div>`
+    }
+  </li>`;
+}
+
 const percentFormatters = new Map<string, Intl.NumberFormat>();
 
 /** `Descuento 12,5%` for 1250 basis points, as `apps/server/src/receipt-ticket.ts` prints it. */
@@ -96,19 +124,26 @@ function adjustmentRow(
   locale: string,
   labels: ReceiptLabels,
   kind: "adjustment" | "bill-adjustment",
+  invoiceType: TillSaleResult["invoiceType"],
 ) {
   return html`<li class="line ${kind}">
-    <span class="line-name">${adjustmentLabel(adjustment, locale, labels)}</span>
+    <span class="line-name"
+      >${adjustmentLabel(adjustment, locale, labels)}${invoiceType === "F1" ? ` (${labels.vatIncluded})` : ""}</span
+    >
     <span class="line-gross">-${formatMoney(adjustment.amount, locale)}</span>
   </li>`;
 }
 
 /** The fecha de expedición (art. 7.1.b). */
-function issueDate(iso: string, locale: string): string {
+function issueDate(iso: string, locale: string, offsetMinutes?: number): string {
+  const instant = new Date(iso);
+  const date =
+    offsetMinutes === undefined ? instant : new Date(instant.getTime() + offsetMinutes * 60_000);
   return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(iso));
+    ...(offsetMinutes === undefined ? {} : { timeZone: "UTC" }),
+  }).format(date);
 }
 
 function tenderRow(label: string, amount: string, locale: string) {
@@ -198,26 +233,7 @@ function renderTender(result: TillSaleResult, locale: string, labels: ReceiptLab
   `;
 }
 
-/**
- * The filed ticket the customer receives after payment — a factura simplificada carrying the QR.
- *
- * This is a LEGAL document. It renders the non-removable core required by RD 1619/2012 art. 7.1,
- * settled on primary source in `docs/compliance/verifactu-findings.md` §14:
- *
- *  - issuer venue name + NIF (7.1.d);
- *  - número + serie (7.1.a) and fecha de expedición (7.1.b);
- *  - identification of the goods (7.1.e): name (receipt language), quantity, per-line gross;
- *  - the tipo(s) impositivo(s) and the base imponible per rate (7.1.f) — per-item VAT is NOT required;
- *    the cuota per rate is shown as an allowed extra;
- *  - contraprestación total (7.1.g);
- *  - when the sale carries a verification link, its QR first, after any practice warning, with the
- *    fiscal backend's caption above it and legend under it (`result.qrText`).
- *
- * It renders in the language the sale was filed in (`result.locale`, else {@link invoiceLocale}),
- * INDEPENDENT of the operator's UI language: an English-speaking operator in Barcelona still hands the
- * customer a Catalan ticket. So nothing here goes through the operator-UI `t()` / `currentLocale()`
- * except the operator's own action buttons.
- */
+/** Invoice facts use the filed locale; only operator actions use the UI locale. */
 @customElement("till-ticket-view")
 export class TillTicketView extends LitElement {
   static override styles = [
@@ -242,6 +258,17 @@ export class TillTicketView extends LitElement {
       .issuer {
         margin: 0 0 var(--wt-space-3);
         text-align: center;
+        overflow-wrap: anywhere;
+      }
+
+      .domicile,
+      .recipient p {
+        margin: var(--wt-space-1) 0 0;
+      }
+
+      .recipient {
+        margin: 0 0 var(--wt-space-3);
+        overflow-wrap: anywhere;
       }
 
       .simulation-notice {
@@ -313,6 +340,16 @@ export class TillTicketView extends LitElement {
       .line-qty,
       .tender-row {
         color: var(--wt-color-text-muted);
+      }
+
+      .invoice-facts {
+        padding-left: var(--wt-space-4);
+        font-size: var(--wt-font-size-sm);
+        overflow-wrap: anywhere;
+      }
+
+      .invoice-facts .vat-row span:last-child {
+        text-align: end;
       }
 
       .line-name {
@@ -388,6 +425,21 @@ export class TillTicketView extends LitElement {
         margin: 0 auto var(--wt-space-3);
       }
 
+      .original-delivery {
+        max-width: var(--wt-modal-compact-width);
+        box-sizing: border-box;
+        margin: 0 auto var(--wt-space-3);
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-warning);
+        border-radius: var(--wt-radius-md);
+        color: var(--wt-color-text);
+        overflow-wrap: anywhere;
+      }
+
+      .original-delivery p {
+        margin: 0 0 var(--wt-space-2);
+      }
+
       .receipt-actions wt-button {
         flex: 1;
       }
@@ -411,6 +463,9 @@ export class TillTicketView extends LitElement {
   @property({ attribute: false }) venueAddress: readonly string[] = [];
   /** True only while the issuance-time original action remains available on this completion screen. */
   @property({ type: Boolean }) originalReceiptAvailable = false;
+  @property({ attribute: false }) originalReceiptPrint?: OriginalReceiptPrint;
+  @property({ type: Boolean }) originalReceiptBusy = false;
+  @property({ type: Boolean }) originalReceiptReadFailed = false;
   /** Whether this caller may request receipt and payment-slip print jobs. */
   @property({ type: Boolean }) canPrintReceipt = true;
   /** Whether this device may expose the manual no-sale cash-drawer action. */
@@ -470,6 +525,7 @@ export class TillTicketView extends LitElement {
             : nothing
         }
         <header class="issuer">
+          ${r.invoiceType === "F1" ? html`<p class="venue">${labels.fullInvoice}</p>` : nothing}
           ${
             this.receipt?.logo
               ? html`<img
@@ -492,7 +548,11 @@ export class TillTicketView extends LitElement {
               ? html`<p class="header-subtitle">${this.receipt.headerSubtitle}</p>`
               : nothing
           }
-          ${this.venueAddress.map((line) => html`<p class="contact">${line}</p>`)}
+          ${
+            r.invoiceType === "F1" && r.issuer?.domicile
+              ? nothing
+              : this.venueAddress.map((line) => html`<p class="contact">${line}</p>`)
+          }
           ${
             this.receipt?.phone
               ? html`<p class="contact">${labels.phone} ${this.receipt.phone}</p>`
@@ -500,6 +560,11 @@ export class TillTicketView extends LitElement {
           }
           ${this.receipt?.email ? html`<p class="contact">${this.receipt.email}</p>` : nothing}
           <p class="nif">${labels.nif}: ${issuer.nif}</p>
+          ${
+            r.invoiceType === "F1" && r.issuer?.domicile
+              ? html`<p class="domicile">${r.issuer.domicile}</p>`
+              : nothing
+          }
         </header>
 
         <div class="meta">
@@ -509,12 +574,37 @@ export class TillTicketView extends LitElement {
           </div>
           <div class="meta-row">
             <span class="meta-label">${labels.date}</span>
-            <span>${issueDate(r.issuedAt, format)}</span>
+            <span
+              >${issueDate(r.issuedAt, format, r.invoiceType === "F1" ? r.issuedOffsetMinutes : undefined)}</span
+            >
           </div>
+          ${
+            r.invoiceType === "F1" && r.operationDate !== undefined
+              ? html`<div class="meta-row" data-test="operation-date">
+                  <span class="meta-label">${labels.operationDate}</span>
+                  <span
+                    >${new Intl.DateTimeFormat(format, {
+                      dateStyle: "medium",
+                      timeZone: "UTC",
+                    }).format(new Date(`${r.operationDate}T00:00:00Z`))}</span
+                  >
+                </div>`
+              : nothing
+          }
           <div class="meta-row order-group">
             <span>${orderGroup}</span>
           </div>
         </div>
+
+        ${
+          r.invoiceType === "F1" && r.recipient
+            ? html`<section class="recipient">
+                <p>${r.recipient.legalName}</p>
+                <p>${labels.nif}: ${r.recipient.taxId}</p>
+                <p>${r.recipient.address}</p>
+              </section>`
+            : nothing
+        }
 
         <ul class="lines">
           ${groupByParent(r.lines).map(
@@ -530,38 +620,43 @@ export class TillTicketView extends LitElement {
                       : ` ${resolveSnapshotText(group.dish.unitName, language, language)}`
                   }</span
                 >
-                ${lineGross(group.dish, format)}
+                ${r.invoiceType === "F1" && group.dish.net !== undefined ? nothing : lineGross(group.dish, format)}
               </li>
+              ${r.invoiceType === "F1" ? netFacts(group.dish, language, format, labels) : nothing}
               ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale: language }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
-              ${group.options.map(
-                // The per-dish count is recovered from the filed COMBINED child quantity.
-                (option) => {
-                  let amount: string;
-                  if (option.unitName == null || option.soldInEach === true) {
-                    const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
-                    amount = perDish > 1 ? ` x${perDish}` : "";
-                  } else {
-                    amount = ` ${option.quantity} ${resolveSnapshotText(option.unitName, language, language)}`;
-                  }
-                  return html`
-                    <li class="line option">
-                      <span class="line-name"
-                        >${lineName(option.descriptions, language)}${amount}</span
-                      >
-                      ${lineGross(option, format)}
-                    </li>
-                  `;
-                },
-              )}
+              ${group.options.map((option) => {
+                let amount: string;
+                if (r.invoiceType === "F1") {
+                  const unit =
+                    option.unitName == null
+                      ? ""
+                      : ` ${resolveSnapshotText(option.unitName, language, language)}`;
+                  amount = ` ${option.quantity}${unit}`;
+                } else if (option.unitName == null || option.soldInEach === true) {
+                  const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
+                  amount = perDish > 1 ? ` x${perDish}` : "";
+                } else {
+                  amount = ` ${option.quantity} ${resolveSnapshotText(option.unitName, language, language)}`;
+                }
+                return html`
+                  <li class="line option">
+                    <span class="line-name"
+                      >${lineName(option.descriptions, language)}${amount}</span
+                    >
+                    ${r.invoiceType === "F1" && option.net !== undefined ? nothing : lineGross(option, format)}
+                  </li>
+                  ${r.invoiceType === "F1" ? netFacts(option, language, format, labels) : nothing}
+                `;
+              })}
               ${[group.dish, ...group.options].flatMap((line) =>
                 (line.adjustments ?? []).map((adjustment) =>
-                  adjustmentRow(adjustment, format, labels, "adjustment"),
+                  adjustmentRow(adjustment, format, labels, "adjustment", r.invoiceType),
                 ),
               )}
             `,
           )}
           ${(r.billAdjustments ?? []).map((adjustment) =>
-            adjustmentRow(adjustment, format, labels, "bill-adjustment"),
+            adjustmentRow(adjustment, format, labels, "bill-adjustment", r.invoiceType),
           )}
         </ul>
 
@@ -594,28 +689,79 @@ export class TillTicketView extends LitElement {
         }
       </article>
 
+      ${
+        r.invoiceType === "F1"
+          ? html`<section class="original-delivery" data-test="original-delivery" role="status">
+              <p>
+                <strong
+                  >${t(this.originalReceiptPrint?.status !== "not_queued" && this.originalReceiptPrint?.handover ? "invoice.handover_confirmed" : "invoice.not_delivered")}</strong
+                >
+              </p>
+              <p>
+                ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : t(this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
+              </p>
+              ${
+                this.originalReceiptPrint?.status === "done" && !this.originalReceiptPrint.handover
+                  ? html`<wt-button
+                      variant="primary"
+                      data-test="confirm-handover"
+                      ?disabled=${this.originalReceiptBusy}
+                      @click=${() => this.dispatchEvent(new CustomEvent("confirm-handover", { bubbles: true, composed: true }))}
+                      >${t("invoice.confirm_handover")}</wt-button
+                    >`
+                  : nothing
+              }
+              <wt-button
+                variant="secondary"
+                data-test="refresh-receipt"
+                ?disabled=${this.originalReceiptBusy}
+                @click=${() => this.dispatchEvent(new CustomEvent("refresh-receipt", { bubbles: true, composed: true }))}
+                >${t("invoice.check_print")}</wt-button
+              >
+            </section>`
+          : nothing
+      }
+
       <div class="receipt-actions">
         ${
           this.canPrintReceipt
-            ? this.originalReceiptAvailable
+            ? (
+                r.invoiceType === "F1"
+                  ? this.originalReceiptPrint?.status === "not_queued"
+                  : this.originalReceiptAvailable
+              )
               ? html`<wt-button
                   class="print-receipt"
                   variant="secondary"
                   size="lg"
                   data-test="print-receipt"
+                  ?disabled=${this.originalReceiptBusy}
                   @click=${() => this.#printReceipt()}
                 >
-                  ${t("action.print_receipt")}
+                  ${t(r.invoiceType === "F1" ? "invoice.print_original" : "action.print_receipt")}
                 </wt-button>`
-              : html`<wt-button
-                  class="reprint"
-                  variant="secondary"
-                  size="lg"
-                  data-test="reprint"
-                  @click=${() => this.#reprint()}
-                >
-                  ${t("action.reprint")}
-                </wt-button>`
+              : r.invoiceType === "F1" &&
+                  this.originalReceiptPrint?.status === "failed" &&
+                  this.originalReceiptPrint.canRetry
+                ? html`<wt-button
+                    variant="secondary"
+                    size="lg"
+                    data-test="retry-receipt"
+                    ?disabled=${this.originalReceiptBusy}
+                    @click=${() => this.dispatchEvent(new CustomEvent("retry-receipt", { bubbles: true, composed: true }))}
+                    >${t("invoice.retry_original")}</wt-button
+                  >`
+                : r.invoiceType !== "F1" || this.originalReceiptPrint?.status === "done"
+                  ? html`<wt-button
+                      class="reprint"
+                      variant="secondary"
+                      size="lg"
+                      data-test="reprint"
+                      @click=${() => this.#reprint()}
+                    >
+                      ${t("action.reprint")}
+                    </wt-button>`
+                  : nothing
             : nothing
         }
         ${

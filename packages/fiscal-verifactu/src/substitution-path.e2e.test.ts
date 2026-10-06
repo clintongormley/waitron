@@ -28,11 +28,8 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
 let till: SeededTill;
-// A SECOND series for the F3 canje invoices. The F3 draws its own number, and `sales` is unique on
-// (series_id, invoice_number), so an F3 cannot reuse a ticket's series+number. `purpose` is
-// 'standard' rather than a bespoke 'substitution' value: the invoice_series CHECK admits only
-// 'standard'/'rectificative', and giving F3 its own purpose is a core decision the BACKEND does not
-// enforce — it derives NumSerieFactura from `seriesCode`/`invoiceNumber`, never from this row.
+// A separate series lets the backend test file an F3 without reusing the ticket's invoice number.
+// Core enforces the full-series purpose; the backend receives the already chosen series code.
 let substitutionSeriesId: string;
 
 const RECIPIENT: Counterparty = {
@@ -47,7 +44,7 @@ beforeEach(async () => {
   // BUILDER runs.
   const [series] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: till.nodeId, code: "F3", purpose: "standard", nextNumber: 1 })
+    .values({ nodeId: till.nodeId, code: "F3", purpose: "full", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
   substitutionSeriesId = series!.id;
   backend = new VerifactuBackend({

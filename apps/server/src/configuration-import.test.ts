@@ -31,6 +31,7 @@ const bundle: ConfigurationBundle = {
     country: "ES",
     taxId: "B12345678",
     legalName: "Prepared SL",
+    taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
     location: {
       id: "location",
       name: "Prepared",
@@ -51,6 +52,7 @@ const bundle: ConfigurationBundle = {
       catalogueId: null,
     },
     seriesCode: "F",
+    fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
   modules: { core: 1 },

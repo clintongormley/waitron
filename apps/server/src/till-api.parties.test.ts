@@ -685,6 +685,9 @@ describe("GET /api/parties/:id/bills", () => {
     expect(await res.json()).toEqual([
       {
         workingOrderId: tabId,
+        revision: 0,
+        invoiceType: "F2",
+        recipient: null,
         partyId,
         label: null,
         status: "open",

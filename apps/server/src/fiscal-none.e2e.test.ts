@@ -82,6 +82,7 @@ interface GbVenue {
   deviceId: string;
   nodeId: NodeId;
   standardSeriesId: SeriesId;
+  fullSeriesId: SeriesId;
   rectificativeSeriesId: SeriesId;
   adminSessionId: string;
 }
@@ -127,15 +128,16 @@ async function setupGbVenue(): Promise<GbVenue> {
 
   const nodeId = brandNodeId(venue.nodeId);
 
-  // The two series the venue plan seeds — read by purpose rather than by array position.
+  // Read the provisioned series by purpose rather than by array position.
   const seriesRows = await suite.db
     .select({ id: invoiceSeries.id, purpose: invoiceSeries.purpose })
     .from(invoiceSeries)
     .where(eq(invoiceSeries.nodeId, nodeId));
   const standard = seriesRows.find((r) => r.purpose === "standard");
+  const full = seriesRows.find((r) => r.purpose === "full");
   const rectificative = seriesRows.find((r) => r.purpose === "rectificative");
-  if (standard === undefined || rectificative === undefined) {
-    throw new Error("fiscal-none.e2e: venue plan did not seed both series");
+  if (standard === undefined || full === undefined || rectificative === undefined) {
+    throw new Error("fiscal-none.e2e: venue plan did not seed all series");
   }
 
   // The seeded admin person (role='admin', holds sale.void + sale.rectify) and an open shift session
@@ -158,6 +160,7 @@ async function setupGbVenue(): Promise<GbVenue> {
     deviceId: sessionDeviceId,
     nodeId,
     standardSeriesId: brandSeriesId(standard.id),
+    fullSeriesId: brandSeriesId(full.id),
     rectificativeSeriesId: brandSeriesId(rectificative.id),
     adminSessionId,
   };
@@ -268,12 +271,12 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
       }),
     );
 
-    // 5. A factura de canje (F3) substituting the third sale, drawn from the standard series.
+    // 5. A factura de canje (F3) substituting the third sale, drawn from the full series.
     await asApp((tx) =>
       recordSubstitution(tx, backend, {
         origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
-        seriesId: venue.standardSeriesId,
+        seriesId: venue.fullSeriesId,
         substitutedSaleIds: [toSubstitute.saleId],
         counterparty: {
           taxId: "GB999999973",

@@ -519,6 +519,7 @@ function provisionVenueBody(taxId: string) {
     country: "ES",
     taxId,
     legalName: "Deli Test SL",
+    taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
     location: {
       name: "Sala principal",
       fiscalTerritory: "ES-common",
@@ -533,6 +534,7 @@ function provisionVenueBody(taxId: string) {
       dayCutover: "05:00",
     },
     seriesCode: "A",
+    fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
     admin: {
       displayName: "Administradora",

@@ -22,6 +22,7 @@ export interface VenueRequest {
   country: string;
   taxId: string;
   legalName: string;
+  taxpayerDomicile?: string | null;
   location: {
     name: string;
     fiscalTerritory: string;
@@ -36,6 +37,7 @@ export interface VenueRequest {
     dayCutover: string; // "HH:MM" or "HH:MM:SS"
   };
   seriesCode: string;
+  fullSeriesCode?: string;
   rectificativeSeriesCode: string;
   /** The initial admin. Both secrets arrive already hashed (`hashPin` / `hashPassword`), so no
    * plaintext secret enters the plan. */
@@ -53,7 +55,13 @@ export interface VenueRequest {
 }
 
 export type VenueAction =
-  | { kind: "ensure-tenant"; country: string; taxId: string; legalName: string }
+  | {
+      kind: "ensure-tenant";
+      country: string;
+      taxId: string;
+      legalName: string;
+      taxpayerDomicile?: string | null;
+    }
   | {
       kind: "seed-admin";
       displayName: string;
@@ -91,7 +99,7 @@ export type VenueAction =
       }[];
     }
   | { kind: "create-node"; name: string; filingModule: string; taxModule: string }
-  | { kind: "create-series"; code: string; purpose: "standard" | "rectificative" }
+  | { kind: "create-series"; code: string; purpose: "standard" | "full" | "rectificative" }
   /** Runs `modules[module].provisioning.seed` inside the venue transaction, after every core row.
    * `summary` is the seed's own one-line description, so the plan summary reads without the list. */
   | { kind: "seed-module"; module: string; summary: string };
@@ -118,10 +126,17 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   if (locales.length < 1 || locales.length > 2) {
     throw new AppError("provisioning.invalid_locales", { count: locales.length });
   }
-  // Equal codes collide on the series key (node, code), so applyVenue would drop the second series
-  // and leave the venue unable to issue rectificative invoices.
-  if (request.seriesCode === request.rectificativeSeriesCode) {
-    throw new AppError("provisioning.duplicate_series_code", { code: request.seriesCode });
+  // One code per purpose: applyVenue treats a repeated (node, code) as an existing row.
+  const seriesCodes = [
+    { code: request.seriesCode, field: "seriesCode" },
+    { code: request.fullSeriesCode ?? "FF", field: "fullSeriesCode" },
+    { code: request.rectificativeSeriesCode, field: "rectificativeSeriesCode" },
+  ];
+  const repeated = seriesCodes.find((entry, index) =>
+    seriesCodes.slice(0, index).some((prior) => prior.code === entry.code),
+  );
+  if (repeated !== undefined) {
+    throw new AppError("provisioning.duplicate_series_code", repeated);
   }
   const fiscal = resolveFiscalModules(request.location.fiscalTerritory); // throws for unimplemented
   // The territory must belong to the tenant's country: applyVenue writes tax_id into
@@ -145,6 +160,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       country,
       taxId,
       legalName: request.legalName,
+      taxpayerDomicile: request.taxpayerDomicile ?? null,
     },
     {
       kind: "seed-admin",
@@ -186,6 +202,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       taxModule: fiscal.tax,
     },
     { kind: "create-series", code: request.seriesCode, purpose: "standard" },
+    { kind: "create-series", code: request.fullSeriesCode ?? "FF", purpose: "full" },
     { kind: "create-series", code: request.rectificativeSeriesCode, purpose: "rectificative" },
     // Module seeds run LAST, once every core row exists.
     ...modules.flatMap((m) =>

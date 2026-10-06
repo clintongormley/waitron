@@ -35,6 +35,7 @@ declare module "@waitron/shared" {
      * it reaches a screen translatable rather than a raw empty-result crash.
      */
     "series.no_standard_for_node": { nodeId: string };
+    "series.no_full_for_node": { nodeId: string };
     /** A node has no live `purpose='rectificative'` invoice series to number a corrective invoice
      * from (`readLiveSeriesIdTx`). */
     "series.no_rectificative_for_node": { nodeId: string };

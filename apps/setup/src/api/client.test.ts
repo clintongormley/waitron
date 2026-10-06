@@ -38,6 +38,7 @@ const provisionBody: ProvisionBody = {
     country: "ES",
     taxId: "B12345678",
     legalName: "Deli SL",
+    taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
     location: {
       name: "Deli",
       fiscalTerritory: "ES-common",
@@ -52,6 +53,7 @@ const provisionBody: ProvisionBody = {
       dayCutover: "05:00",
     },
     seriesCode: "A",
+    fullSeriesCode: "FF",
     rectificativeSeriesCode: "RA",
     admin: {
       firstNames: "Ada",

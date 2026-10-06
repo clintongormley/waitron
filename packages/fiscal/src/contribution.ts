@@ -81,6 +81,7 @@ export interface FiscalContribution {
     validate(venue: {
       readonly legalName: string;
       readonly seriesCode: string;
+      readonly fullSeriesCode: string;
       readonly rectificativeSeriesCode: string;
       readonly operationDescription: string;
     }): void;

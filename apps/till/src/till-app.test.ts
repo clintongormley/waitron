@@ -39,6 +39,7 @@ import type {
   FloorZone,
   HeldOrderSummary,
   PayOutcome,
+  PartyBill,
   ProductCatalogue,
   StationQueue,
   TabLine,
@@ -158,6 +159,20 @@ const openTable: TableState = {
     unsentDrafts: [],
     reminder: null,
   },
+};
+
+const smallPartyBill: PartyBill = {
+  workingOrderId: "wo-7",
+  revision: 0,
+  invoiceType: "F2",
+  recipient: null,
+  partyId: "v-2",
+  label: null,
+  status: "open",
+  total: "12.00",
+  outstanding: "12.00",
+  hasPayments: false,
+  receiptAvailable: false,
 };
 
 const saleResult: TillSaleResult = {
@@ -420,6 +435,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
     cancelDemoReaderPayment: vi.fn().mockResolvedValue(true),
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
+    setOrderInvoiceChoice: vi.fn().mockResolvedValue({ revision: 1 }),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     retrieveWorkingOrder: vi.fn().mockResolvedValue({
@@ -2726,6 +2742,272 @@ describe("till-app", () => {
     expect(view.issuer).toEqual({ venueName: "Bar Pepe", nif: "B12345678" });
   });
 
+  it("opens customer details before a walk-up full invoice choice can pay", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-full-invoice]")!.click();
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull();
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+    expect(currentApi.pay).not.toHaveBeenCalled();
+  });
+
+  it("asks for a full-invoice recipient before charging a loaded bill over €3,000", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.loadFrom("large-bill", [{ product: cafe, quantity: "2001" }]);
+    await flush(el);
+
+    emit(c, "confirm-payment", { method: "cash", amount: "3001.50" });
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull();
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+    );
+    await flush(el);
+    emit(c, "confirm-payment", { method: "cash", amount: "3001.50" });
+    await flush(el);
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2001" }],
+      { method: "cash", amount: "3001.50" },
+      "large-bill",
+      undefined,
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+    );
+  });
+
+  it("asks for a full-invoice recipient before starting card payment on a loaded bill over €3,000", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.loadFrom("large-bill", [{ product: cafe, quantity: "2001" }]);
+    await flush(el);
+
+    emit(c, "collect-card", {});
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull();
+    expect(currentApi.pay).not.toHaveBeenCalled();
+  });
+
+  it("asks for a full-invoice recipient before placing a loaded invoice-first bill over €3,000", async () => {
+    const { el } = await mountApp({
+      zonePolicy: { serviceMode: "invoice_first" },
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+    });
+    const c = await toCounter(el);
+    c.store.loadFrom("large-bill", [{ product: cafe, quantity: "2001" }]);
+    await flush(el);
+
+    emit(c, "place-order");
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull();
+    expect(currentApi.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("saves a chosen full-invoice recipient before placing an invoice-first bill", async () => {
+    const placeOrder = vi.fn().mockResolvedValue(placedResult);
+    const { el } = await mountApp({
+      zonePolicy: { serviceMode: "invoice_first" },
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      placeOrder,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    const id = c.store.id;
+    const recipient = {
+      taxId: "12345678Z",
+      legalName: "Ana García",
+      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      countryCode: "ES" as const,
+    };
+
+    emit(c, "choose-invoice");
+    await flush(el);
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient,
+      },
+    );
+    await flush(el);
+    emit(c, "place-order");
+    await flush(el);
+
+    expect(currentApi.setOrderInvoiceChoice).toHaveBeenCalledWith(id, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient,
+    });
+    expect(placeOrder).toHaveBeenCalledWith(id);
+    expect(vi.mocked(currentApi.setOrderInvoiceChoice).mock.invocationCallOrder[0]).toBeLessThan(
+      placeOrder.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("sends the chosen Spanish recipient with the first walk-up cash sale", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    const id = c.store.id;
+
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-full-invoice]")!.click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    for (const [name, value] of [
+      ["taxId", "12345678Z"],
+      ["legalName", "Ana García"],
+      ["address", "Calle Mayor 1"],
+      ["postalCode", "28013"],
+      ["locality", "Madrid"],
+      ["province", "Madrid"],
+    ]) {
+      const input = dialog
+        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await dialog.updateComplete;
+    }
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
+      { method: "cash", amount: "5" },
+      id,
+      undefined,
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+    );
+  });
+
+  it("keeps the chosen full-invoice recipient for a card retry after a decline", async () => {
+    const pay = vi
+      .fn()
+      .mockResolvedValueOnce({ outcome: "declined" })
+      .mockResolvedValueOnce({ outcome: "captured", ticket: saleResult });
+    const { el } = await mountApp({ pay });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    const id = c.store.id;
+    const recipient = {
+      taxId: "12345678Z",
+      legalName: "Ana García",
+      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      countryCode: "ES",
+    };
+
+    emit(c, "choose-invoice");
+    await flush(el);
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient,
+      },
+    );
+    await flush(el);
+
+    emit(c, "collect-card", {});
+    await flush(el);
+    expect(ticket(el)).toBeNull();
+    emit(c, "collect-card", {});
+    await flush(el);
+
+    expect(pay).toHaveBeenCalledTimes(2);
+    expect(pay).toHaveBeenNthCalledWith(1, {
+      id,
+      lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
+      invoiceType: "F1",
+      recipient,
+    });
+    expect(pay).toHaveBeenNthCalledWith(2, {
+      id,
+      lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
+      invoiceType: "F1",
+      recipient,
+    });
+    expect(ticket(el)).not.toBeNull();
+  });
+
+  it("does not send one customer's full-invoice choice with a different basket", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    emit(c, "choose-invoice");
+    await flush(el);
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+    );
+    await flush(el);
+
+    c.store.clear();
+    c.store.addProduct(cafe, "2");
+    const nextId = c.store.id;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
+      { method: "cash", amount: "5" },
+      nextId,
+    );
+  });
+
   it("confirm-payment: sends a line's picks as one entry per list, and omits the key on a plain line", async () => {
     // A line carrying picks sends `extras: [{ listId, picks }]` — never the display name or price
     // (the server re-resolves both). A plain line still omits the key.
@@ -2994,6 +3276,418 @@ describe("till-app", () => {
       expect(languageDialog(el)).toBeNull();
       expect(vi.mocked(currentApi.reprint).mock.calls).toEqual([[workingOrderId]]);
     });
+  });
+
+  it("shows a printerless F1 original and rereads its status after later printing", async () => {
+    let printed = false;
+    const getReceiptPrintStatus = vi.fn(async () =>
+      printed ? { status: "queued", jobId: "original", canRetry: false } : { status: "not_queued" },
+    );
+    const printReceipt = vi.fn(async () => {
+      printed = true;
+    });
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getReceiptPrintStatus,
+      printReceipt,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    const id = c.store.id;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+    ).toContain("Factura completa no entregada");
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+    emit(ticket(el)!, "print-receipt");
+    await flush(el);
+    expect(printReceipt).toHaveBeenCalledWith(id);
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+    ).toContain("El original está esperando para imprimirse.");
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
+    expect(getReceiptPrintStatus.mock.calls).toEqual([[id], [id]]);
+    expect(currentApi.recordSale).toHaveBeenCalledOnce();
+  });
+
+  it("retries the exhausted F1 original once while busy, then checks without filing again", async () => {
+    let release!: () => void;
+    let retried = false;
+    const retryReceipt = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      retried = true;
+      return { jobId: "retry" };
+    });
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getReceiptPrintStatus: vi.fn(async () => ({
+        status: retried ? "done" : "failed",
+        jobId: retried ? "retry" : "original",
+        canRetry: !retried,
+      })),
+      retryReceipt,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    const id = c.store.id;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=retry-receipt]")).not.toBeNull();
+    emit(ticket(el)!, "retry-receipt");
+    emit(ticket(el)!, "retry-receipt");
+    await flush(el);
+    expect(retryReceipt).toHaveBeenCalledExactlyOnceWith(id);
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=retry-receipt]")?.hasAttribute("disabled"),
+    ).toBe(true);
+    release();
+    await flush(el);
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+    ).toContain("Entrega el original al cliente.");
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+    ).toContain("Factura completa no entregada");
+    expect(currentApi.recordSale).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a refused F1 retry visible when a later status read recovers", async () => {
+    const getReceiptPrintStatus = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockResolvedValue({ status: "failed", jobId: "original", canRetry: true });
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getReceiptPrintStatus,
+      retryReceipt: vi.fn().mockRejectedValue({ code: "print_queue.failed" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+    ).toContain("No se pudo consultar");
+    emit(ticket(el)!, "refresh-receipt");
+    await flush(el);
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+    ).not.toContain("No se pudo consultar");
+    emit(ticket(el)!, "retry-receipt");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      t("receipt.error"),
+    );
+    emit(ticket(el)!, "refresh-receipt");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      t("receipt.error"),
+    );
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=retry-receipt]")?.hasAttribute("disabled"),
+    ).toBe(false);
+    expect(currentApi.recordSale).toHaveBeenCalledOnce();
+  });
+
+  it("a successful F1 original enqueue followed by a failed read does not offer another original", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getReceiptPrintStatus: vi
+        .fn()
+        .mockResolvedValueOnce({ status: "not_queued" })
+        .mockRejectedValue({ code: "connection.failed" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    emit(ticket(el)!, "print-receipt");
+    await flush(el);
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+    ).toContain("No se pudo consultar");
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(currentApi.printReceipt).toHaveBeenCalledOnce();
+  });
+
+  it.each(["different", "same"])(
+    "ignores an earlier F1 status response after reopening a %s working order",
+    async (order) => {
+      let release!: (value: unknown) => void;
+      const { el } = await mountApp({
+        recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+        getReceiptPrintStatus: vi
+          .fn()
+          .mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                release = resolve;
+              }),
+          )
+          .mockResolvedValue({ status: "not_queued" }),
+      });
+      let c = await toCounter(el);
+      if (order === "same") {
+        emit(c, "retrieve-order", { id: "wo-1" });
+        await flush(el);
+      } else c.store.addProduct(cafe, "2");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      emit(ticket(el)!, "new-sale");
+      await flush(el);
+      c = counter(el)!;
+      if (order === "same") {
+        emit(c, "retrieve-order", { id: "wo-1" });
+        await flush(el);
+      } else c.store.addProduct(cafe, "2");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      release({ status: "done", jobId: "old-original", canRetry: false });
+      await flush(el);
+      expect(
+        ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+      ).toContain("El original no se ha enviado");
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+    },
+  );
+
+  it("confirms customer handover once while busy without device printing capability or refiling", async () => {
+    let release!: (value: unknown) => void;
+    const confirmed = {
+      status: "done",
+      jobId: "original",
+      canRetry: false,
+      handover: { personId: "staff-1", confirmedAt: "2026-08-05T12:40:00.000Z" },
+    };
+    const confirmReceiptHandover = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, deviceId: "dev-1", capabilities: ["take-cash"] }),
+      recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getReceiptPrintStatus: vi
+        .fn()
+        .mockResolvedValue({ status: "done", jobId: "original", canRetry: false }),
+      confirmReceiptHandover,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    const id = c.store.id;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(ticket(el)!.canPrintReceipt).toBe(false);
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=confirm-handover]")).not.toBeNull();
+    emit(ticket(el)!, "confirm-handover");
+    emit(ticket(el)!, "confirm-handover");
+    await flush(el);
+    expect(confirmReceiptHandover).toHaveBeenCalledExactlyOnceWith(id);
+    expect(
+      ticket(el)!
+        .shadowRoot!.querySelector("[data-test=confirm-handover]")
+        ?.hasAttribute("disabled"),
+    ).toBe(true);
+    release(confirmed);
+    await flush(el);
+    expect(ticket(el)!.originalReceiptPrint).toEqual(confirmed);
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+    ).toContain("Entrega al cliente confirmada");
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=confirm-handover]")).toBeNull();
+    emit(ticket(el)!, "confirm-handover");
+    await flush(el);
+    expect(confirmReceiptHandover).toHaveBeenCalledOnce();
+    expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    expect(currentApi.printReceipt).not.toHaveBeenCalled();
+    expect(currentApi.reprint).not.toHaveBeenCalled();
+  });
+
+  it("keeps a refused customer handover visible after a status read recovers and allows retry", async () => {
+    const done = { status: "done", jobId: "original", canRetry: false };
+    const confirmReceiptHandover = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockResolvedValue({
+        ...done,
+        handover: { personId: "staff", confirmedAt: "2026-08-05T12:40:00.000Z" },
+      });
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getReceiptPrintStatus: vi
+        .fn()
+        .mockResolvedValueOnce(done)
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(done),
+      confirmReceiptHandover,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    emit(ticket(el)!, "confirm-handover");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      "No se pudo confirmar la entrega al cliente",
+    );
+    emit(ticket(el)!, "refresh-receipt");
+    await flush(el);
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+    ).toContain("No se pudo consultar");
+    emit(ticket(el)!, "refresh-receipt");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      "No se pudo confirmar la entrega al cliente",
+    );
+    emit(ticket(el)!, "confirm-handover");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=confirm-handover]")).toBeNull();
+    expect(confirmReceiptHandover).toHaveBeenCalledTimes(2);
+    expect(currentApi.recordSale).toHaveBeenCalledOnce();
+  });
+
+  it.each(["not_queued", "queued", "printing", "failed"])(
+    "refuses an emitted customer handover event while the original is %s",
+    async (status) => {
+      const confirmReceiptHandover = vi.fn();
+      const { el } = await mountApp({
+        recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+        getReceiptPrintStatus: vi
+          .fn()
+          .mockResolvedValue(
+            status === "not_queued"
+              ? { status }
+              : { status, jobId: "original", canRetry: status === "failed" },
+          ),
+        confirmReceiptHandover,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      emit(ticket(el)!, "confirm-handover");
+      await flush(el);
+      expect(confirmReceiptHandover).not.toHaveBeenCalled();
+      expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(["different", "same"])(
+    "ignores customer handover completion after reopening a %s working order",
+    async (order) => {
+      let release!: (value: unknown) => void;
+      const { el } = await mountApp({
+        recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+        getReceiptPrintStatus: vi
+          .fn()
+          .mockResolvedValue({ status: "done", jobId: "original", canRetry: false }),
+        confirmReceiptHandover: vi.fn(
+          () =>
+            new Promise((resolve) => {
+              release = resolve;
+            }),
+        ),
+      });
+      let c = await toCounter(el);
+      if (order === "same") {
+        emit(c, "retrieve-order", { id: "wo-1" });
+        await flush(el);
+      } else c.store.addProduct(cafe, "2");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      emit(ticket(el)!, "confirm-handover");
+      await flush(el);
+      expect(currentApi.confirmReceiptHandover).toHaveBeenCalledOnce();
+      emit(ticket(el)!, "new-sale");
+      await flush(el);
+      c = counter(el)!;
+      if (order === "same") {
+        emit(c, "retrieve-order", { id: "wo-1" });
+        await flush(el);
+      } else c.store.addProduct(cafe, "2");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      release({
+        status: "done",
+        jobId: "old-original",
+        canRetry: false,
+        handover: { personId: "old-staff", confirmedAt: "2026-08-05T12:40:00.000Z" },
+      });
+      await flush(el);
+      expect(ticket(el)!.originalReceiptPrint).toEqual({
+        status: "done",
+        jobId: "original",
+        canRetry: false,
+      });
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=confirm-handover]")).not.toBeNull();
+      expect(ticket(el)!.originalReceiptBusy).toBe(false);
+    },
+  );
+
+  it("does not confirm customer handover for F2 even when its print state says done", async () => {
+    const confirmReceiptHandover = vi.fn();
+    const { el } = await mountApp({ confirmReceiptHandover });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    Object.assign(el, {
+      originalReceiptPrint: { status: "done", jobId: "original", canRetry: false },
+    });
+    await flush(el);
+    emit(ticket(el)!, "confirm-handover");
+    await flush(el);
+    expect(confirmReceiptHandover).not.toHaveBeenCalled();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=confirm-handover]")).toBeNull();
+  });
+
+  it("ignores a refused customer handover after locking the till", async () => {
+    let refuse!: (value: unknown) => void;
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getReceiptPrintStatus: vi
+        .fn()
+        .mockResolvedValue({ status: "done", jobId: "original", canRetry: false }),
+      confirmReceiptHandover: vi.fn(
+        () =>
+          new Promise((_resolve, reject) => {
+            refuse = reject;
+          }),
+      ),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    emit(ticket(el)!, "confirm-handover");
+    await flush(el);
+    expect(currentApi.confirmReceiptHandover).toHaveBeenCalledOnce();
+    emit(ticket(el)!, "logout");
+    await flush(el);
+    refuse({ code: "connection.failed" });
+    await flush(el);
+    expect(ticket(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("does not fetch original print status for an F2 completion", async () => {
+    const getReceiptPrintStatus = vi.fn();
+    const { el } = await mountApp({ getReceiptPrintStatus });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(getReceiptPrintStatus).not.toHaveBeenCalled();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")).toBeNull();
   });
 
   it.each(["on_request", "never"] as const)(
@@ -5424,6 +6118,22 @@ describe("till-app", () => {
         menuItemId: null,
         parentProductId: null,
       };
+      const largeTabLine: TabLine = {
+        ...tabLine,
+        quantity: "1.000",
+        unitPriceGross: "3000.01",
+      };
+      const largePartyBill: PartyBill = {
+        ...smallPartyBill,
+        total: "3000.01",
+        outstanding: "3000.01",
+      };
+      const largeOpenTable: TableState = {
+        ...openTable,
+        tabLineCount: 1,
+        tabTotal: "3000.01",
+        party: { ...openTable.party!, outstanding: "3000.01" },
+      };
       it("loads the tab's lines and threads them (with the catalogue) to the screen", async () => {
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
@@ -6112,6 +6822,7 @@ describe("till-app", () => {
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
           transferItems,
+          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
         });
         const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
@@ -6127,6 +6838,33 @@ describe("till-app", () => {
         expect(getTablesState).toHaveBeenCalledTimes(2);
       });
 
+      it("requires staff confirmation before transferring lines off a bill over €3,000", async () => {
+        const transferItems = vi.fn().mockResolvedValue(undefined);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([largeOpenTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [largeTabLine], revision: 0 }),
+          getPartyBills: vi.fn().mockResolvedValue([largePartyBill]),
+          transferItems,
+        });
+        const screen = await toTableOrder(el, largeOpenTable);
+
+        emit(screen, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
+        await flush(el);
+
+        expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).not.toBeNull();
+        expect(transferItems).not.toHaveBeenCalled();
+
+        el.shadowRoot!.querySelector<HTMLElement>(
+          "[data-confirm-different-people] [data-confirm]",
+        )!.click();
+        await flush(el);
+        expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {
+          expectedPartyRevision: 3,
+          partyId: "v-2",
+        });
+      });
+
       it("sends no party with a bill action once the party has left the table while its bill is open", async () => {
         const transferItems = vi.fn().mockResolvedValue(undefined);
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
@@ -6134,6 +6872,18 @@ describe("till-app", () => {
           getTablesState,
           listZones: vi.fn().mockResolvedValue([floorZone]),
           transferItems,
+          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
+          getBillBalance: vi.fn().mockResolvedValue({
+            workingOrderId: "wo-7",
+            status: "open",
+            total: "12.00",
+            received: "0.00",
+            reserved: "0.00",
+            outstanding: "12.00",
+            tips: "0.00",
+            payments: [],
+            paidLines: [],
+          }),
         });
         const screen = await toTableOrder(el, openTable);
         getTablesState.mockResolvedValue([{ ...openTable, party: null }]);
@@ -6157,6 +6907,7 @@ describe("till-app", () => {
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
           splitBill,
+          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
           recordSale,
           reprint,
         });
@@ -6185,6 +6936,41 @@ describe("till-app", () => {
         expect(reprint).toHaveBeenCalledWith("wo-check");
       });
 
+      it("requires staff confirmation before splitting a bill over €3,000 and cancels without writing", async () => {
+        const splitBill = vi.fn().mockResolvedValue({ billId: "wo-check" });
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([largeOpenTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [largeTabLine], revision: 0 }),
+          getPartyBills: vi.fn().mockResolvedValue([largePartyBill]),
+          splitBill,
+        });
+        const screen = await toTableOrder(el, largeOpenTable);
+
+        emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
+        await flush(el);
+
+        const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
+        expect(dialog).not.toBeNull();
+        expect(splitBill).not.toHaveBeenCalled();
+
+        dialog!.querySelector<HTMLElement>("[data-cancel]")!.click();
+        await flush(el);
+        expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
+        expect(splitBill).not.toHaveBeenCalled();
+
+        emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
+        await flush(el);
+        el.shadowRoot!.querySelector<HTMLElement>(
+          "[data-confirm-different-people] [data-confirm]",
+        )!.click();
+        await flush(el);
+        expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {
+          expectedPartyRevision: 3,
+          partyId: "v-2",
+        });
+      });
+
       it("a modifier-dish partial split refusal keeps the origin open and explains the full-line rule", async () => {
         const splitBill = vi.fn().mockRejectedValue({ code: "tab.transfer_modifier_line" });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
@@ -6193,6 +6979,7 @@ describe("till-app", () => {
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
           splitBill,
+          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
         });
         const screen = await toTableOrder(el, openTable);
 
@@ -6218,6 +7005,7 @@ describe("till-app", () => {
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
           splitBill,
+          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
         });
         const screen = await toTableOrder(el, openTable);
 
@@ -7785,6 +8573,123 @@ describe("till-app", () => {
       // The ticket renders the SERVER collect result (its `lines` are the filed placed composition),
       // not the local basket — a local edit between place and collect can't diverge the printed list.
       expect(view.result).toBe(saleResult);
+    });
+
+    it("ignores invoice reads and releases their busy gate after closing and reopening recovery", async () => {
+      let finish!: (value: TillSaleResult) => void;
+      let finishNew!: (value: TillSaleResult) => void;
+      const getFiledTicket = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finish = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishNew = resolve;
+            }),
+        );
+      const { el } = await mountApp({ getFiledTicket });
+      await toCounter(el);
+      const show = async () => {
+        el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+          .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+          .click();
+        await el.updateComplete;
+        return el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      };
+      const first = await show();
+      first.dispatchEvent(
+        new CustomEvent("find-invoice-open", {
+          detail: { workingOrderId: "wo-old" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      first.dispatchEvent(new CustomEvent("find-bill-close", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      const reopened = await show();
+      expect(reopened.busy).toBe(false);
+      reopened.dispatchEvent(
+        new CustomEvent("find-invoice-open", {
+          detail: { workingOrderId: "wo-new" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      finish({ ...saleResult, invoiceType: "F1", invoiceNumber: "FF/7" });
+      await flush(el);
+      expect(ticket(el)).toBeNull();
+      expect(reopened.busy).toBe(true);
+      finishNew({ ...saleResult, invoiceType: "F1", invoiceNumber: "FF/8" });
+      await flush(el);
+      expect(ticket(el)?.result.invoiceNumber).toBe("FF/8");
+      expect(currentApi.collectOrder).not.toHaveBeenCalled();
+    });
+
+    it("opens a filed F1 from Find a bill with its original delivery controls", async () => {
+      const filed = { ...saleResult, invoiceType: "F1" as const, invoiceNumber: "FF/7" };
+      const getFiledTicket = vi.fn().mockResolvedValue(filed);
+      const getReceiptPrintStatus = vi.fn().mockResolvedValue({ status: "not_queued" });
+      const { el } = await mountApp({ getFiledTicket, getReceiptPrintStatus });
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      dialog.dispatchEvent(
+        new CustomEvent("find-invoice-open", {
+          detail: { workingOrderId: "wo-filed" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(ticket(el)?.result).toEqual(filed);
+      expect(ticket(el)?.originalReceiptPrint).toEqual({ status: "not_queued" });
+      expect(ticket(el)?.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+      expect(getFiledTicket).toHaveBeenCalledWith("wo-filed");
+      expect(getReceiptPrintStatus).toHaveBeenCalledWith("wo-filed");
+      expect(currentApi.collectOrder).not.toHaveBeenCalled();
+      expect(currentApi.recordSale).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+    });
+
+    it("keeps invoice recovery open after a read failure and permits retry", async () => {
+      const getFiledTicket = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValueOnce({ ...saleResult, invoiceType: "F1" });
+      const { el } = await mountApp({ getFiledTicket });
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      const open = () =>
+        dialog.dispatchEvent(
+          new CustomEvent("find-invoice-open", {
+            detail: { workingOrderId: "wo-filed" },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      open();
+      await flush(el);
+      expect(ticket(el)).toBeNull();
+      expect(dialog.error).toBe("find_bill.invoice_load_failed");
+      expect(dialog.busy).toBe(false);
+      open();
+      await flush(el);
+      expect(ticket(el)?.result.invoiceType).toBe("F1");
+      expect(currentApi.collectOrder).not.toHaveBeenCalled();
     });
 
     it("Find a bill collects an existing debt and offers a duplicate receipt", async () => {
@@ -10960,11 +11865,47 @@ describe("a failed list refresh after a successful write", () => {
     expect(listWorkingOrders).toHaveBeenCalledTimes(5);
   });
 
+  it("a discard refusal remains visible when its held-list refresh also fails", async () => {
+    const { el } = await mountApp({
+      abandonWorkingOrder: vi.fn().mockRejectedValue({ code: "order.payment_in_flight" }),
+      listWorkingOrders: failingAfterLogin<HeldOrderSummary[]>([]),
+    });
+    const c = await toCounterFake(el);
+    emit(c, "discard-order", { id: "wo-1" });
+    await settle(el);
+    expect(alertText(el)).toContain(codeMessage("order.payment_in_flight"));
+    expect(alertText(el)).not.toContain(t("refresh.held"));
+    expect(el.shadowRoot!.querySelector("[data-refresh-notice][data-active]")).toBeNull();
+  });
+
+  it.each(["a newer successful refresh", "signing out"])(
+    "a failed discard refresh after %s installs no load-failure banner",
+    async (boundary) => {
+      let fail: (error: unknown) => void = () => undefined;
+      const listWorkingOrders = vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockImplementationOnce(() => new Promise((_resolve, reject) => (fail = reject)))
+        .mockResolvedValueOnce([heldSummary]);
+      const { el } = await mountApp({ listWorkingOrders });
+      const c = await toCounterFake(el);
+      emit(c, "discard-order", { id: "wo-1" });
+      await settle(el);
+      if (boundary === "signing out") emit(c, "logout");
+      else emit(c, "discard-order", { id: "wo-2" });
+      await settle(el);
+      fail(new TypeError("Failed to fetch"));
+      await settle(el);
+      expect(alertText(el)).not.toContain(t("refresh.held"));
+      if (boundary !== "signing out") expect(counter(el)!.heldOrders).toEqual([heldSummary]);
+    },
+  );
+
   it("a plain list refresh that fails starts no retry, leaves a countdown alone, and takes over a retry in flight", async () => {
     const rejections: unknown[] = [];
     const onRejection = (event: PromiseRejectionEvent): void => {
       rejections.push(event.reason);
-      event.preventDefault(); // the discard handler does not catch its own refresh's failure
+      event.preventDefault();
     };
     window.addEventListener("unhandledrejection", onRejection);
     try {
@@ -10975,6 +11916,7 @@ describe("a failed list refresh after a successful write", () => {
       emit(c, "discard-order", { id: "wo-1" });
       await settle(el);
       expect(listWorkingOrders).toHaveBeenCalledTimes(2);
+      expect(alertText(el)).toContain(t("refresh.held"));
       expect(el.shadowRoot!.querySelector("[data-refresh-notice][data-active]")).toBeNull();
 
       c.store.addProduct(cafe, "2");
@@ -11002,7 +11944,7 @@ describe("a failed list refresh after a successful write", () => {
       await settle(el);
       expect(countdown(el, "held")).toBe(secondsLeft(10));
       expect(counter(el)!.heldOrders).toEqual([]);
-      expect(rejections).toHaveLength(3);
+      expect(rejections).toHaveLength(0);
     } finally {
       window.removeEventListener("unhandledrejection", onRejection);
     }

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
-import { ticketLinesFrom } from "./receipt-lines.js";
+import { ticketLinesFrom, withReceiptListPrices } from "./receipt-lines.js";
 
 // The receipt's line list, projected from the lines a sale filed (ruling R13's list prices).
 function filed(quantity: string, lineGross: string) {
   return {
+    lineNo: 1,
     descriptions: { "es-ES": "Merluza" },
     variantDescriptions: null,
     variantName: null,
@@ -16,6 +17,22 @@ function filed(quantity: string, lineGross: string) {
     parentLineNo: null,
   };
 }
+
+describe("withReceiptListPrices", () => {
+  it("snapshots weighted and portion-priced list totals while leaving unadjusted lines absent", () => {
+    const lines = [
+      filed("1.000", "3.00"),
+      filed("2.500", "29.23"),
+      { ...filed("0.150", "0.02"), priceQuantity: "0.050" },
+    ];
+    const saved = withReceiptListPrices(
+      lines,
+      [null, decimal("12.99"), decimal("0.01")].map((listUnitGross) => ({ listUnitGross })),
+    );
+    expect(saved.map((line) => line.listGross)).toEqual([undefined, "32.48", "0.03"]);
+    expect(saved.map((line) => line.lineGross)).toEqual(["3.00", "29.23", "0.02"]);
+  });
+});
 
 describe("ticketLinesFrom", () => {
   it("keeps a weighted extra's filed thousandths for the amount printed beneath its dish", () => {

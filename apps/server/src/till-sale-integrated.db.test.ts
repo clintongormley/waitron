@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -22,6 +22,8 @@ import type { VenueResult } from "@waitron/provisioning";
 import {
   allocateInvoiceNumber,
   drawerOpens,
+  invoiceSeries,
+  nodes,
   parties,
   printJobs,
   sales,
@@ -39,6 +41,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import {
+  insertAcceptedOffline,
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
@@ -506,6 +509,245 @@ beforeAll(() => {
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
       Promise.reject(new Error("till-sale-integrated.db.test: resolveClient must never be called")),
+  });
+});
+
+describe("walk-up invoice preparation", () => {
+  const recipient = {
+    taxId: "b12345674",
+    legalName: "  Cliente SL  ",
+    address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+    countryCode: "es",
+  };
+
+  it.each(["1", "2001"])(
+    "saves a validated F1 recipient with %s coffees before money or filing",
+    async (quantity) => {
+      const { cfg, cafe } = await setupVenue();
+      const id = randomUUID();
+      const limited = { ...cfg, simplifiedInvoiceLimit: decimal("3000.00") };
+      await withTransaction(suite.db, async (tx) => {
+        await createOpenOrder(tx, limited, id, [{ menuItemId: cafe.menuItemId, quantity }], null, {
+          zoneId: cafe.zoneId,
+          invoiceChoice: {
+            invoiceType: "F1",
+            recipient,
+            recipientNameMaxLength: backend.recipientNameMaxLength,
+          },
+        });
+      });
+      const [saved] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
+      expect(saved).toMatchObject({
+        status: "open",
+        revision: 0,
+        invoiceType: "F1",
+        recipientTaxId: "B12345674",
+        recipientLegalName: "Cliente SL",
+        recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        recipientCountryCode: "ES",
+      });
+      expect(await saleCount(id)).toBe(0);
+      const paymentRows = suite.db.all(sql`select id from payments where working_order_id = ${id}`);
+      expect(paymentRows).toEqual([]);
+    },
+  );
+
+  it.each([
+    { invoiceType: "F1", recipient: { ...recipient, taxId: "B12345675" }, field: "taxId" },
+    {
+      invoiceType: "F1",
+      recipient: { ...recipient, legalName: "x".repeat(121) },
+      field: "legalName",
+    },
+    { invoiceType: "F1", recipient: { ...recipient, address: "Calle Mayor" }, field: "address" },
+  ])("refuses invalid walk-up $field without leaving an order or lines", async (request) => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity: "1" }], null, {
+          zoneId: cafe.zoneId,
+          invoiceChoice: { ...request, recipientNameMaxLength: backend.recipientNameMaxLength },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "invoice.recipient_invalid",
+      params: { field: request.field },
+    });
+    expect(await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual([]);
+    expect(
+      await suite.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    ).toEqual([]);
+  });
+
+  it.each(["missing", "retired", "other-node"])(
+    "refuses a %s full series during preparation and rolls back the basket",
+    async (condition) => {
+      const { cfg, cafe } = await setupVenue();
+      const other =
+        condition === "other-node"
+          ? (
+              await suite.db
+                .insert(nodes)
+                .values({ locationId: cfg.locationId, name: "Other node" })
+                .returning()
+            )[0]
+          : undefined;
+      const full = and(eq(invoiceSeries.nodeId, cfg.nodeId), eq(invoiceSeries.purpose, "full"));
+      if (condition === "missing") await suite.db.delete(invoiceSeries).where(full);
+      else
+        await suite.db
+          .update(invoiceSeries)
+          .set(
+            condition === "retired"
+              ? { retiredAt: new Date() }
+              : { nodeId: other!.id, code: "other-full" },
+          )
+          .where(full);
+      const before = await suite.db
+        .select()
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.nodeId, cfg.nodeId));
+      const id = randomUUID();
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity: "1" }], null, {
+            zoneId: cafe.zoneId,
+            invoiceChoice: {
+              invoiceType: "F1",
+              recipient,
+              recipientNameMaxLength: backend.recipientNameMaxLength,
+            },
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "series.no_full_for_node" });
+      expect(await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual(
+        [],
+      );
+      expect(
+        await suite.db
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, id)),
+      ).toEqual([]);
+      expect(
+        await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, cfg.nodeId)),
+      ).toEqual(before);
+      expect(await saleCount(id)).toBe(0);
+    },
+  );
+
+  it.each([
+    {
+      invoiceType: ["F1"],
+      recipient,
+      code: "management.request_invalid",
+      params: { field: "invoiceType" },
+    },
+    {
+      invoiceType: null,
+      recipient,
+      code: "management.request_invalid",
+      params: { field: "invoiceType" },
+    },
+    {
+      invoiceType: "F2",
+      recipient,
+      code: "management.request_invalid",
+      params: { field: "recipient" },
+    },
+    {
+      invoiceType: undefined,
+      recipient,
+      code: "management.request_invalid",
+      params: { field: "recipient" },
+    },
+    {
+      invoiceType: "F1",
+      recipient: null,
+      code: "invoice.recipient_invalid",
+      params: { field: "taxId" },
+    },
+    {
+      invoiceType: "F1",
+      recipient: "a name",
+      code: "invoice.recipient_invalid",
+      params: { field: "taxId" },
+    },
+    {
+      invoiceType: "F1",
+      recipient: { ...recipient, countryCode: "FR" },
+      code: "fiscal.foreign_recipient_unsupported",
+      params: { countryCode: "FR" },
+    },
+  ])("refuses malformed or unsupported walk-up invoice input %#", async (request) => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity: "1" }], null, {
+          zoneId: cafe.zoneId,
+          invoiceChoice: {
+            invoiceType: request.invoiceType,
+            recipient: request.recipient,
+            recipientNameMaxLength: backend.recipientNameMaxLength,
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: request.code, params: request.params });
+    expect(await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual([]);
+  });
+
+  it("keeps explicit F2 at exactly the simplified ceiling without customer fields", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(
+        tx,
+        { ...cfg, simplifiedInvoiceLimit: decimal("3000.00") },
+        id,
+        [{ menuItemId: cafe.menuItemId, quantity: "2000" }],
+        null,
+        {
+          zoneId: cafe.zoneId,
+          invoiceChoice: {
+            invoiceType: "F2",
+            recipient: null,
+            recipientNameMaxLength: backend.recipientNameMaxLength,
+          },
+        },
+      ),
+    );
+    const [row] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(row).toMatchObject({
+      invoiceType: "F2",
+      recipientTaxId: null,
+      recipientLegalName: null,
+      recipientAddress: null,
+      recipientCountryCode: null,
+    });
+    expect(await saleCount(id)).toBe(0);
+  });
+
+  it("still refuses an omitted invoice choice above the simplified ceiling", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        createOpenOrder(
+          tx,
+          { ...cfg, simplifiedInvoiceLimit: decimal("3000.00") },
+          id,
+          [{ menuItemId: cafe.menuItemId, quantity: "2001" }],
+          null,
+          { zoneId: cafe.zoneId },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "sale.total_exceeds_simplified_limit" });
+    expect(await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual([]);
   });
 });
 
@@ -1008,6 +1250,77 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     });
     return { id, externalRef };
   }
+
+  it.each([
+    ["captured", "1", "1.50"],
+    ["captured", "2001", "3001.50"],
+    ["accepted_offline", "1", "1.50"],
+    ["accepted_offline", "2001", "3001.50"],
+  ] as const)(
+    "retains an unfiled F1 %s payment of %s coffees while public issuance is disabled",
+    async (state, quantity, amount) => {
+      const { cfg, cafe } = await setupVenue();
+      suite.db.run(
+        sql`update tenants set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid, Madrid, España'`,
+      );
+      const id = randomUUID();
+      await withTransaction(suite.db, async (tx) => {
+        await createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity }], null, {
+          zoneId: cafe.zoneId,
+          invoiceChoice: {
+            invoiceType: "F1",
+            recipient: {
+              taxId: "B12345674",
+              legalName: "Cliente SL",
+              address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+              countryCode: "ES",
+            },
+            recipientNameMaxLength: backend.recipientNameMaxLength,
+          },
+        });
+        const insert = state === "captured" ? insertCapturedPayment : insertAcceptedOffline;
+        await insert(tx, {
+          origin: cfg.origin,
+          workingOrderId: id,
+          provider: "stripe",
+          paymentRef: `pi-ref-${randomUUID()}`,
+          amount: decimal(amount),
+          settledAt: new Date(),
+          externalRef: `pi_lost_${randomUUID()}`,
+        });
+      });
+      const before = {
+        orders: suite.db.all(sql`select * from working_orders order by id`),
+        lines: suite.db.all(sql`select * from working_order_lines order by id`),
+        payments: suite.db.all(sql`select * from payments order by id`),
+        series: suite.db.all(sql`select * from invoice_series order by id`),
+        fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
+        jobs: suite.db.all(sql`select * from print_jobs order by id`),
+      };
+      const { deps, client } = integratedDeps(cfg, suite.db);
+
+      await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
+        code: "sale.full_invoice_unavailable",
+        params: {},
+      });
+
+      expect(client.lastCreateIntent).toBeUndefined();
+      expect(await saleCount(id)).toBe(0);
+      expect(await tendersFor(id)).toEqual([]);
+      expect(await paymentCount(id)).toBe(1);
+      expect(
+        suite.db.all(sql`select state, sale_id from payments where working_order_id = ${id}`),
+      ).toEqual([{ state, sale_id: null }]);
+      expect({
+        orders: suite.db.all(sql`select * from working_orders order by id`),
+        lines: suite.db.all(sql`select * from working_order_lines order by id`),
+        payments: suite.db.all(sql`select * from payments order by id`),
+        series: suite.db.all(sql`select * from invoice_series order by id`),
+        fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
+        jobs: suite.db.all(sql`select * from print_jobs order by id`),
+      }).toEqual(before);
+    },
+  );
 
   it("snapshots the original zone department when a captured card payment is recovered", async () => {
     const { cfg, cafe } = await setupVenue();

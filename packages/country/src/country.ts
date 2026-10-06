@@ -55,7 +55,10 @@ export interface FiscalJurisdiction {
 export const RECEIPT_LABEL_KEYS = [
   "nif",
   "invoice",
+  "fullInvoice",
+  "netUnitPrice",
   "date",
+  "operationDate",
   "order",
   "base",
   "vat",
@@ -68,6 +71,7 @@ export const RECEIPT_LABEL_KEYS = [
   "refund",
   "comp",
   "discount",
+  "vatIncluded",
   "reference",
   "duplicate",
   "practice",

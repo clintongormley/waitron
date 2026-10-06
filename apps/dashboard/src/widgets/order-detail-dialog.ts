@@ -118,7 +118,28 @@ export class OrderDetailDialog extends LitElement {
               <section>
                 <h3>${t("orders.detail.invoices")}</h3>
                 <ul>
-                  ${detail.invoices.map((invoice) => html`<li>${invoice.kind === "credit_note" ? t("orders.detail.credit_note") : invoice.kind === "substitution" ? t("orders.detail.substitution") : t("orders.col.invoice")} ${invoice.number} · ${date(invoice.issuedAt)} · ${money(invoice.total)}${invoice.rungBy === null ? nothing : html` · ${fill(t("orders.detail.rung_by"), { name: invoice.rungBy })}`}</li>`)}
+                  ${detail.invoices.map(
+                    (invoice) =>
+                      html`<li>
+                        ${invoice.kind === "credit_note" ? t("orders.detail.credit_note") : invoice.kind === "substitution" ? t("orders.detail.substitution") : invoice.invoiceType === "F1" ? t("orders.invoice_full") : t("orders.col.invoice")}
+                        ${invoice.number} · ${date(invoice.issuedAt)} ·
+                        ${money(invoice.total)}${invoice.rungBy === null ? nothing : html` · ${fill(t("orders.detail.rung_by"), { name: invoice.rungBy })}`}${
+                          invoice.invoiceType === "F1" && invoice.taxpayerDomicile !== undefined
+                            ? html`<div>
+                                ${t("orders.detail.issuer_address")}: ${invoice.taxpayerDomicile}
+                              </div>`
+                            : nothing
+                        }${
+                          invoice.recipient === undefined
+                            ? nothing
+                            : html`<div>
+                                  ${t("orders.detail.customer")}: ${invoice.recipient.legalName} ·
+                                  ${invoice.recipient.taxId}
+                                </div>
+                                <div>${invoice.recipient.address}</div>`
+                        }
+                      </li>`,
+                  )}
                 </ul>
               </section>
               <section>

@@ -220,6 +220,37 @@ describe("resendPrintJob", () => {
     });
   });
 
+  it.each([false, true, null] as const)(
+    "preserves receiptCopy=%s across two queue resends",
+    async (receiptCopy) => {
+      const cfg = await setup();
+      await withTransaction(suite.db, async (tx) => {
+        const printer = await createPrinter(tx, cfg, {
+          name: "Receipts",
+          transport: "network_tcp",
+          host: "printer.local",
+        });
+        const payload = new Uint8Array([27, 64, 29, 86, 0]);
+        const first = await enqueuePrintJob(tx, cfg, printer.id, payload, "document", {
+          receiptCopy,
+        });
+        const exhausted = { status: "failed", attempts: 5 } as const;
+        await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, first.jobId));
+        const second = await resendPrintJob(tx, first.jobId);
+        await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, second.jobId));
+        const third = await resendPrintJob(tx, second.jobId);
+        for (const { jobId } of [first, second, third]) {
+          const [row] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));
+          expect(row!.receiptCopy).toBe(receiptCopy);
+          expect([...row!.payload]).toEqual([...payload]);
+        }
+        const unrelated = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
+        const [row] = await tx.select().from(printJobs).where(eq(printJobs.id, unrelated.jobId));
+        expect(row!.receiptCopy).toBeNull();
+      });
+    },
+  );
+
   it("stores the sale a job is enqueued with, and every resend in its chain carries it", async () => {
     const cfg = await setup();
     const nodeId = await seedNode(suite.db, brandLocationId(cfg.locationId));

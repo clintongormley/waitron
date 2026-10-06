@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
@@ -10,6 +10,8 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
+import { invoiceSeries } from "./series.js";
+import { sales } from "./sales.js";
 import { locations, tenants } from "./tenants.js";
 
 // A trigger's refusal carries its `RAISE(ABORT, …)` text and nothing else — no table, no column,
@@ -281,6 +283,145 @@ describe("working_orders state machine (enforce_transition)", () => {
       ),
     );
     expect(engineErrorMessage(e2)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("lets an unissued placed bill save its full-invoice recipient with a revision change", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+
+    await inTx(async (tx) =>
+      tx.run(sql`update working_orders
+        set invoice_type = 'F1', recipient_tax_id = 'B12345678',
+            recipient_legal_name = 'Customer Ltd', recipient_address = 'Main Street 1, Madrid',
+            recipient_country_code = 'ES', revision = revision + 1
+        where id = ${id} and revision = 0`),
+    );
+
+    const rows = await suite.db.all(sql`select invoice_type, recipient_tax_id,
+      recipient_legal_name, recipient_address, recipient_country_code, revision
+      from working_orders where id = ${id}`);
+    expect(rows).toEqual([
+      {
+        invoice_type: "F1",
+        recipient_tax_id: "B12345678",
+        recipient_legal_name: "Customer Ltd",
+        recipient_address: "Main Street 1, Madrid",
+        recipient_country_code: "ES",
+        revision: 1,
+      },
+    ]);
+  });
+
+  it("rejects a recipient change on a placed bill without advancing its revision", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ recipientLegalName: "Changed customer" })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("keeps a placed bill's recipient fixed while settling it", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    const settlementError = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ status: "settled", settledAt: now(), recipientLegalName: "Changed customer" })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(settlementError)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("rejects a recipient change after a placed bill has issued a sale", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    const [series] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: nodeA, code: `I${nextOrderNumber}`, purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    await suite.db.insert(sales).values({
+      source: "device",
+      deviceId: deviceA,
+      nodeId: nodeA,
+      seriesId: series!.id,
+      invoiceNumber: 1,
+      issuedAt: AT,
+      issuedOffsetMinutes: 0,
+      total: 0,
+      vatBreakdown: [],
+      locale: "es",
+      invoiceLocales: ["es"],
+      fiscalBackend: "verifactu",
+      fiscalState: "recorded",
+      workingOrderId: id,
+    });
+
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ recipientLegalName: "Changed customer", revision: 1 })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("accepts both invoice choices at insertion and refuses a third choice", async () => {
+    for (const invoiceType of ["F1", "F2"] as const) {
+      const [row] = await inTx((tx) =>
+        tx
+          .insert(workingOrders)
+          .values({
+            source: "device",
+            deviceId: deviceA,
+            nodeId: nodeA,
+            locationId: LOCATION_A,
+            orderNumber: nextOrderNumber++,
+            status: "open",
+            openedAt: AT,
+            invoiceType,
+          })
+          .returning({ invoiceType: workingOrders.invoiceType }),
+      );
+      expect(row!.invoiceType).toBe(invoiceType);
+    }
+    const error = await captureError(() =>
+      inTx(async (tx) =>
+        tx.run(sql`
+      insert into working_orders (id, source, device_id, node_id, location_id, order_number, status, opened_at, invoice_type)
+      values ('invalid-invoice-choice', 'device', ${deviceA}, ${nodeA}, ${LOCATION_A}, ${nextOrderNumber++}, 'open', ${AT}, 'other')
+    `),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe("invoice type must be F1 or F2");
+  });
+
+  it("refuses an invoice type outside F1 and F2", async () => {
+    const id = await open();
+    const error = await captureError(() =>
+      inTx(async (tx) =>
+        tx.run(sql`update working_orders set invoice_type = 'other' where id = ${id}`),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe("invoice type must be F1 or F2");
   });
 
   // Each case changes one column alone: a dashboard order's source can move to another job source

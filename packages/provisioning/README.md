@@ -29,7 +29,7 @@ and neither surviving command migrates anything.
 | `keyring` | nothing at all — no venue directory, no files | once per deployment |
 | `venue`   | a migrated venue directory                    | once per venue      |
 
-`venue` creates the taxpayer row, a location, a node and its standard and rectificative
+`venue` creates the taxpayer row, a location, a node and its standard, full and rectificative
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
 node as a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql`
 (removed 2026-08-04, #57).
@@ -42,18 +42,19 @@ usage: waitron-provision <command> [options]
 
   keyring                                            generate the credential key ring
   venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]
+           [--taxpayer-domicile <address>]
            [--location-name <name>] [--territory <t>] [--locale <l>]...
            [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
-           [--day-cutover <HH:MM>] [--series-code <code>]
+           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]
            [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]
            [--admin-first-names <names>] [--admin-last-names <names>] [--yes]
 ```
 
-Every option is prompted for when omitted, so a bare `waitron-provision venue` is a complete
-interactive session. The two exceptions are `--admin-first-names` and `--admin-last-names`: they are
-read from a flag but never prompted for, so a script that already drives `venue` non-interactively
-is not stopped by a question it did not expect.
+Most options are prompted for when omitted, so a bare `waitron-provision venue` is a complete
+interactive session. `--full-series-code` defaults to `FF` without a prompt.
+`--admin-first-names` and `--admin-last-names` are read from flags but never prompted for, so a
+script that already drives `venue` non-interactively is not stopped by those questions.
 
 ### `keyring`
 
@@ -71,7 +72,7 @@ tmux's own buffer under some configurations, still has it.
 ### `venue`
 
 Stands a sellable venue up in one transaction: the taxpayer row (`tenants` holds exactly one), an
-**admin person**, a location, a node, a standard plus a rectificative invoice series, and
+**admin person**, a location, a node, and standard, full and rectificative invoice series, and
 then every composed module's provisioning seed — the fiscal module's registers the node as a
 Veri\*Factu SIF and starts its chain. It replaced the retired
 `apps/server/sql/bootstrap-tenant.sql`.
@@ -138,13 +139,13 @@ not the venue.
 
 `--territory` currently accepts only `ES-common` (common-territory Spain, Veri\*Factu with IVA); any
 other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also refuses a
-`--locale` count outside one-or-two (`provisioning.invalid_locales`) and equal standard and
-rectificative series codes (`provisioning.duplicate_series_code`) before the directory is opened.
+`--locale` count outside one-or-two (`provisioning.invalid_locales`) and duplicate codes among the
+standard, full and rectificative series (`provisioning.duplicate_series_code`) before the directory is opened.
 The first `--locale` is the language receipts print in. The command checks it neither against the
 country pack's languages nor against a region that fixes one (Catalonia); the dashboard's Receipts
 page and setup do. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
 refuses a legal name or operation description carrying a character XML forbids, an operation
-description over 500 characters, and either series code outside AEAT's character set or longer than
+description over 500 characters, and any series code outside AEAT's character set or longer than
 the 38-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
 races a conflicting row is caught as `provisioning.venue_conflict`. A run against a database whose
 taxpayer row names a different country or tax id is refused with `provisioning.foreign_tenant`, and
@@ -211,7 +212,7 @@ Every refusal is a structured code and its params on stderr — never a raw driv
 | `provisioning.venue_conflict`        | A concurrent run committed a conflicting row between this run's plan and its apply                              | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                                              |
 | `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Today only `ES-common` is implemented.                                                                                                                                                                                               |
 | `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one or two.                                                                                                                                                                                                                     |
-| `provisioning.duplicate_series_code` | `--series-code` and `--rectificative-code` are the same                                                         | Give them different codes; they are two separate series.                                                                                                                                                                             |
+| `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code` and `--rectificative-code` are the same                            | Give each invoice purpose a different code.                                                                                                                                                                                          |
 
 Before a venue is live a code may be deleted freely (CLAUDE.md §3), and this package has deleted
 several: SP-3c dropped `provisioning.id_sistema_invalid` when the software-id bound moved

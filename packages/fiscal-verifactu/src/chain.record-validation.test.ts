@@ -211,9 +211,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
   /** A business customer's name is typed or pasted at the till, and `registros_facturacion` is
    * append-only, so a control character stored there could never be taken out again.
    *
-   * `packages/core`'s `recordSale` hardcodes `counterparty: null`, so the F1 branch is reached by
-   * calling the backend directly — the same bypass `backend.test.ts`'s own F1 cases use. The sale
-   * row is inserted on the SAME `withTransaction` transaction, which is what makes the "nothing was
+   * The sale row is inserted on the SAME `withTransaction` transaction, which makes the "nothing was
    * written" assertions below meaningful: a refusal rolls back both or neither. */
   let sequence = 0;
 

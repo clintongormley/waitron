@@ -1461,6 +1461,7 @@ describe("recordSale — what each line sold and how it was classified", () => {
       // Gross of the net 10.00 at 21% and of the net 2.10 at 10%.
       lineGross: index === 0 ? "12.10" : "2.31",
       classification: index === 0 ? cocktails : lemon,
+      listGross: index === 0 ? "13.31" : undefined,
     }));
   }
 
@@ -1562,6 +1563,7 @@ describe("recordSale — what each line sold and how it was classified", () => {
       "menu_id",
       "menu_version_id",
       "line_gross",
+      "list_gross",
       "classification",
       "price_quantity",
     ];
@@ -1699,6 +1701,220 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
     expect(series!.next).toBe(1);
   });
 
+  it("files a full invoice above the simplified limit with a full series and recipient", async () => {
+    const [fullSeries] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    suite.db.run(
+      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+    );
+    const recipient = {
+      taxId: "12345678Z",
+      legalName: "Ana García",
+      countryCode: "ES",
+    };
+    let filed: SaleForFiscalRecord | undefined;
+    const fake = new FakeFiscalBackend(suite.db, {
+      simplifiedInvoiceLimit: decimal("3000.00"),
+    });
+    const backend = wrapBackend(fake, {
+      recordSale: async (tx, sale) => {
+        filed = sale;
+        return fake.recordSale(tx, sale);
+      },
+    });
+
+    const result = await run(backend, {
+      ...saleOf("3000.01"),
+      seriesId: brandSeriesId(fullSeries!.id),
+      counterparty: recipient,
+      recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+    });
+
+    expect(result.saleId).toBeDefined();
+    expect(filed?.counterparty).toEqual(recipient);
+    const [saved] = await suite.db
+      .select({
+        taxId: sales.counterpartyTaxId,
+        legalName: sales.counterpartyLegalName,
+        countryCode: sales.counterpartyCountryCode,
+      })
+      .from(sales)
+      .where(eq(sales.id, result.saleId));
+    expect(saved).toEqual({
+      taxId: "12345678Z",
+      legalName: "Ana García",
+      countryCode: "ES",
+    });
+  });
+
+  it("files a zero-total full invoice without a tender", async () => {
+    const [fullSeries] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    suite.db.run(
+      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+    );
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await run(backend, {
+      seriesId: brandSeriesId(fullSeries!.id),
+      counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
+      recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      total: "0.00",
+      lines: [
+        {
+          lineNo: 1,
+          name: "Free item",
+          descriptions: { "es-ES": "Free item" },
+          quantity: "1",
+          unitPrice: "0.00",
+          vatRate: "0.00",
+          lineTotal: "0.00",
+        },
+      ],
+      settlement: { kind: "immediate", tenders: [] },
+    });
+
+    const [saved] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(saved).toMatchObject({
+      seriesId: fullSeries!.id,
+      counterpartyTaxId: "12345678Z",
+      total: 0,
+    });
+    expect(await countRows("tenders")).toBe(0);
+    expect(await countRows("sale_settlements")).toBe(1);
+    expect(await backend.recordsFor(nodeId)).toHaveLength(1);
+  });
+
+  it("keeps the full invoice's customer and taxpayer addresses on the filed sale", async () => {
+    const [fullSeries] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    suite.db.run(
+      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+    );
+
+    const result = await run(new FakeFiscalBackend(suite.db), {
+      seriesId: brandSeriesId(fullSeries!.id),
+      counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
+      recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+    });
+
+    const [saved] = suite.db.all<{ customer: string; taxpayer: string }>(
+      sql`select counterparty_address as customer, taxpayer_domicile as taxpayer
+          from sales where id = ${result.saleId}`,
+    );
+    expect(saved).toEqual({
+      customer: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      taxpayer: "Calle Fiscal 8, 28001 Madrid",
+    });
+  });
+
+  it("refuses a full invoice without a customer address before spending its number", async () => {
+    const [fullSeries] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    suite.db.run(
+      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+    );
+
+    const error = await captureError(() =>
+      run(new FakeFiscalBackend(suite.db), {
+        seriesId: brandSeriesId(fullSeries!.id),
+        counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
+      }),
+    );
+
+    expect(error).toMatchObject({ code: "counterparty.invalid", params: { field: "address" } });
+    expect(await countRows("sales")).toBe(0);
+    const [series] = await suite.db
+      .select({ next: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, fullSeries!.id));
+    expect(series!.next).toBe(1);
+  });
+
+  it("refuses a full invoice without a usable taxpayer domicile before spending its number", async () => {
+    const [fullSeries] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+
+    const error = await captureError(() =>
+      run(new FakeFiscalBackend(suite.db), {
+        seriesId: brandSeriesId(fullSeries!.id),
+        counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
+        recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      }),
+    );
+
+    expect(error).toMatchObject({ code: "fiscal.taxpayer_domicile_missing" });
+    expect(await countRows("sales")).toBe(0);
+    suite.db.run(sql`update tenants set taxpayer_domicile = '   ' where id = 1`);
+    const blankError = await captureError(() =>
+      run(new FakeFiscalBackend(suite.db), {
+        seriesId: brandSeriesId(fullSeries!.id),
+        counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
+        recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      }),
+    );
+    expect(blankError).toMatchObject({ code: "fiscal.taxpayer_domicile_missing" });
+    expect(await countRows("sales")).toBe(0);
+    const [series] = await suite.db
+      .select({ next: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, fullSeries!.id));
+    expect(series!.next).toBe(1);
+  });
+
+  it("refuses a full invoice with an empty recipient name before allocating a number", async () => {
+    const [fullSeries] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    const error = await captureError(() =>
+      run(new FakeFiscalBackend(suite.db), {
+        ...saleOf("14.41"),
+        seriesId: brandSeriesId(fullSeries!.id),
+        counterparty: { taxId: "12345678Z", legalName: " ", countryCode: "ES" },
+      }),
+    );
+    expect(error).toMatchObject({ code: "counterparty.invalid", params: { field: "legalName" } });
+    expect(await countRows("sales")).toBe(0);
+    const [series] = await suite.db
+      .select({ next: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, fullSeries!.id));
+    expect(series!.next).toBe(1);
+  });
+
+  it("refuses to file a named full invoice from a standard series", async () => {
+    const error = await captureError(() =>
+      run(new FakeFiscalBackend(suite.db), {
+        ...saleOf("14.41"),
+        counterparty: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          countryCode: "ES",
+        },
+      }),
+    );
+    expect(error).toMatchObject({
+      code: "sale.series_wrong_purpose",
+      params: { expected: "full", actual: "standard" },
+    });
+    expect(await countRows("sales")).toBe(0);
+    const [series] = await suite.db
+      .select({ next: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, seriesId));
+    expect(series!.next).toBe(1);
+  });
+
   it("measures the base plus VAT it files, as the authority does, not the stated total", async () => {
     // A derived breakdown with every line at the cent is not checked against the stated total
     // (`deriveVatBreakdown`), so the two can differ; base 2736.37 at 10% files 2736.37 + 273.64.
@@ -1728,5 +1944,91 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
   it("files any total for a regime that sets no limit", async () => {
     await run(new FakeFiscalBackend(suite.db), saleOf("99999.99"));
     expect(await countRows("sales")).toBe(1);
+  });
+});
+
+describe("recordSale — saved full-invoice service date", () => {
+  it.each([
+    ["2026-02-28T22:50:00Z", "Europe/Madrid", "2026-02-28"],
+    ["2026-02-28T23:10:00Z", "Europe/Madrid", "2026-03-01"],
+    ["2026-02-28T23:10:00Z", "Atlantic/Canary", "2026-02-28"],
+  ])("saves the bill opening date %s in %s", async (openedAt, timeZone, expected) => {
+    await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, locationId));
+    const [bill] = await suite.db
+      .insert(workingOrders)
+      .values({
+        source: "device",
+        deviceId,
+        locationId,
+        nodeId,
+        orderNumber: 1,
+        openedAt,
+      })
+      .returning({ id: workingOrders.id });
+    const [full] = await suite.db
+      .insert(invoiceSeries)
+      .values({
+        nodeId,
+        code: "FF",
+        purpose: "full",
+      })
+      .returning({ id: invoiceSeries.id });
+    suite.db.run(sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, Madrid' where id = 1`);
+    const fake = new FakeFiscalBackend(suite.db);
+    let filed: SaleForFiscalRecord | undefined;
+    const backend = wrapBackend(fake, {
+      recordSale: async (tx, sale) => {
+        filed = sale;
+        return fake.recordSale(tx, sale);
+      },
+    });
+    const { saleId } = await run(backend, {
+      seriesId: brandSeriesId(full!.id),
+      workingOrderId: brandWorkingOrderId(bill!.id),
+      counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
+      recipientAddress: "Calle Mayor 2, 28013 Madrid, España",
+    });
+    const [saved] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(saved).toMatchObject({ operationDate: expected, issuedAt: "2026-03-01T12:05:00.000Z" });
+    expect(filed).not.toHaveProperty("operationDate");
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Pacific/Honolulu" })
+      .where(eq(locations.id, locationId));
+    const [retained] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(retained).toEqual(saved);
+  });
+
+  it("uses the issuance calendar date for a full invoice with no bill", async () => {
+    const [full] = await suite.db
+      .insert(invoiceSeries)
+      .values({
+        nodeId,
+        code: "FF",
+        purpose: "full",
+      })
+      .returning({ id: invoiceSeries.id });
+    suite.db.run(sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, Madrid' where id = 1`);
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      seriesId: brandSeriesId(full!.id),
+      counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
+      recipientAddress: "Calle Mayor 2, 28013 Madrid, España",
+      clock: fixedClock(() => ({
+        instant: new Date("2026-02-28T23:10:00Z"),
+        offsetMinutes: 60,
+        confident: true,
+        confidence: "anchored",
+        anchorAgeSeconds: 0,
+      })),
+      settlement: { kind: "deferred" },
+    });
+    const [saved] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(saved).toMatchObject({ operationDate: "2026-03-01" });
+  });
+
+  it("leaves simplified invoices without a service-date snapshot", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db));
+    const [saved] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(saved).toMatchObject({ operationDate: null });
   });
 });

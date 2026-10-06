@@ -20,6 +20,7 @@ const detail: OrderDetailDto = {
     counter: false,
     saleId: "sale-1",
     invoiceNumber: "A/12",
+    invoiceType: "F2",
     creditNotes: ["R/2"],
     status: "left_without_paying",
     credited: "in_part",
@@ -134,6 +135,74 @@ it("shows the bill's items, invoices, payments, party, departure and copies", as
   ])
     expect(words).toContain(value);
   expect(api.getOrder).toHaveBeenCalledWith("bill-1");
+});
+
+it.each([
+  ["en-GB", "Full invoice", "Customer"],
+  ["es-ES", "Factura completa", "Cliente"],
+])("shows a filed F1's saved recipient in %s", async (locale, label, customer) => {
+  setLocale(locale);
+  const filed = {
+    ...detail,
+    invoices: [
+      {
+        ...detail.invoices[0]!,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "María Ejemplo",
+          countryCode: "ES",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        },
+      },
+    ],
+  };
+  const api = {
+    getOrder: vi.fn().mockResolvedValue(filed),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("A/12"));
+  const words = el.shadowRoot!.textContent!;
+  for (const value of [
+    label,
+    customer,
+    "María Ejemplo",
+    "12345678Z",
+    "Calle Mayor 2, 28013 Madrid, Madrid, España",
+  ])
+    expect(words).toContain(value);
+});
+
+it.each([
+  ["en-GB", "Issuer address"],
+  ["es-ES", "Domicilio fiscal del emisor"],
+])("shows a filed F1's saved taxpayer domicile in %s", async (locale, label) => {
+  setLocale(locale);
+  const filed = {
+    ...detail,
+    invoices: [
+      {
+        ...detail.invoices[0]!,
+        invoiceType: "F1" as const,
+        taxpayerDomicile: "Calle Fiscal 8, 28014 Madrid, Madrid, España",
+      },
+    ],
+  };
+  const api = {
+    getOrder: vi.fn().mockResolvedValue(filed),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("A/12"));
+  expect(el.shadowRoot!.textContent).toContain(label);
+  expect(el.shadowRoot!.textContent).toContain("Calle Fiscal 8, 28014 Madrid, Madrid, España");
 });
 
 it("explains when a bill outside the session's scope cannot be opened", async () => {

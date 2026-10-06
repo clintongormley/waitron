@@ -157,6 +157,7 @@ export class SetupReviewScreen extends LitElement {
           "venue",
           html`
             ${this.#row("review.legal_name", venue?.legalName, "summary-legalName")}
+            ${mode === "demo" ? nothing : this.#row("review.taxpayer_domicile", venue?.taxpayerDomicile, "summary-taxpayerDomicile")}
             ${this.#row("review.tax_id", venue?.taxId, "summary-taxId")}
             ${this.#row("review.country", venue?.country === undefined ? "—" : countryName(venue.country, currentLocale()), "summary-country")}
           `,
@@ -180,6 +181,7 @@ export class SetupReviewScreen extends LitElement {
           "venue",
           html`
             ${this.#row("review.series", venue?.seriesCode, "summary-seriesCode")}
+            ${this.#row("review.full_series", venue?.fullSeriesCode, "summary-fullSeriesCode")}
             ${this.#row("review.rectificative_series", venue?.rectificativeSeriesCode, "summary-rectificativeSeriesCode")}
             ${this.#row("review.operation_description", location?.operationDescription, "summary-operationDescription")}
             ${

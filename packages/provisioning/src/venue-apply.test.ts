@@ -72,6 +72,25 @@ it("provisions late-flag defaults once and preserves edits when the venue plan i
 });
 
 describe("applyVenue: the one taxpayer row", () => {
+  it("stores the taxpayer domicile without copying the location address", async () => {
+    await applyVenue(
+      planVenue(
+        { ...request("B10000007"), taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid" },
+        ALL_MODULES,
+      ),
+      { db: suite.db, modules: ALL_MODULES },
+    );
+
+    const tenant = await suite.db.execute<{ taxpayer_domicile: string }>(
+      sql`select taxpayer_domicile from tenants where id = 1`,
+    );
+    const location = await suite.db.execute<{ address_line1: string }>(
+      sql`select address_line1 from locations`,
+    );
+    expect(tenant.rows).toEqual([{ taxpayer_domicile: "Calle Fiscal 8, 28013 Madrid" }]);
+    expect(location.rows).toEqual([{ address_line1: "Calle Mayor 1" }]);
+  });
+
   it("creates it with id 1 on a fresh database", async () => {
     await applyVenue(planVenue(request("B10000001"), ALL_MODULES), {
       db: suite.db,
@@ -154,7 +173,7 @@ describe("applyVenue: the one taxpayer row", () => {
 });
 
 describe("applyVenue", () => {
-  it("provisions a sellable venue: tenant, location, node, live SIF, two series, and no till", async () => {
+  it("provisions a sellable venue: tenant, location, node, live SIF, three series, and no till", async () => {
     const result = await applyVenue(planVenue(request(), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -185,7 +204,7 @@ describe("applyVenue", () => {
     expect(counts.rows[0]).toEqual({
       tenants: 1,
       nodes: 1,
-      series: 2,
+      series: 3,
       sif: 1,
       default_stations: 1,
       default_departments: 1,
@@ -196,7 +215,7 @@ describe("applyVenue", () => {
 
     const series = await suite.db.execute<{ purpose: string }>(sql`
       select purpose from invoice_series where node_id = ${result.nodeId} order by purpose`);
-    expect(series.rows.map((r) => r.purpose)).toEqual(["rectificative", "standard"]);
+    expect(series.rows.map((r) => r.purpose)).toEqual(["full", "rectificative", "standard"]);
 
     const node = await suite.db.execute<{ filing_module: string; tax_module: string }>(sql`
       select filing_module, tax_module from nodes where id = ${result.nodeId}`);
@@ -467,7 +486,7 @@ describe("applyVenue", () => {
       const series = await suite.db.execute<{ code: string }>(
         sql`select code from invoice_series order by code`,
       );
-      expect(series.rows).toEqual([{ code: "A" }, { code: "R" }]);
+      expect(series.rows).toEqual([{ code: "A" }, { code: "FF" }, { code: "R" }]);
     });
   });
 

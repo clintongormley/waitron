@@ -170,7 +170,10 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
             numeroInstalacion: MIRROR_NUMERO_INSTALACION,
           },
         },
-        series: [{ code: "FA-7", purpose: "standard" }],
+        series: [
+          { code: "FA-7", purpose: "standard" },
+          { code: "FF-7", purpose: "full" },
+        ],
         endorsement,
       },
     },

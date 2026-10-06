@@ -33,8 +33,7 @@ export interface VenueApplyDeps {
 export interface VenueResult {
   locationId: string;
   nodeId: string;
-  /** The ids of the series actually inserted, in plan order: `[standard, rectificative]` for a plan
-   * `planVenue` built. A hand-built plan whose second series collides yields only `[standard]`. */
+  /** The ids of the series actually inserted, in plan order. */
   seriesIds: string[];
   /** One entry per `seed-module` action run, in plan order: the module and its one-line report. */
   seeded: readonly SeedReport[];
@@ -78,6 +77,7 @@ export async function applyVenue(
               country: action.country,
               taxId: action.taxId,
               legalName: action.legalName,
+              taxpayerDomicile: action.taxpayerDomicile ?? null,
             })
             .onConflictDoNothing();
           const stored = await tx

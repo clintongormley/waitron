@@ -366,7 +366,11 @@ describe("promoteMirrorToPrimary", () => {
           modules: {
             "fiscal-verifactu": { nif, idSistemaInformatico: "W1", numeroInstalacion: 7 },
           },
-          series: [{ code: "FA-7", purpose: "standard" }],
+          series: [
+            { code: "FA-7", purpose: "standard" },
+            { code: "FF-7", purpose: "full" },
+            { code: "FR-7", purpose: "rectificative" },
+          ],
           endorsement,
         },
       },
@@ -407,6 +411,29 @@ describe("promoteMirrorToPrimary", () => {
     expect(standings["old-primary"]).toBe("sell-only");
     expect(held!.signerNodeId).toBe(nodeId);
     expect(held!.endorsements).toEqual([endorsement]);
+  });
+
+  it("refuses promotion before changing roles when the mirror has no full invoice series", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await db.execute(
+      sql`update invoice_series set retired_at = current_timestamp where node_id = ${nodeId} and purpose = 'full'`,
+    );
+    const persisted: string[] = [];
+
+    const error = await captureError(() =>
+      promoteMirrorToPrimary(
+        deps(noopLog, async (seriesId) => {
+          persisted.push(seriesId);
+        }),
+        { oldNodeNeutralised: true },
+      ),
+    );
+
+    expect(isAppError(error) && error.code).toBe("series.no_full_for_node");
+    expect(persisted).toEqual([]);
+    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
+    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
   });
 
   it("persists the corrected trading.env BEFORE the point-of-no-return (a persist failure aborts the flip)", async () => {

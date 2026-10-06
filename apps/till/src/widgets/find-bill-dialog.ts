@@ -3,9 +3,10 @@ import { customElement, property, state } from "lit/decorators.js";
 import { formatMoney, stringToCents } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { BillLookupRow, Tender, TillApi } from "../api/client.js";
+import type { BillLookupRow, InvoiceLookupRow, Tender, TillApi } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { trackDialog } from "./track-dialog.js";
@@ -66,6 +67,8 @@ export class TillFindBillDialog extends LitElement {
   @property({ attribute: false }) api!: TillApi;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) error?: StringKey;
+  @state() private kind: "bills" | "invoices" = "bills";
+  @state() private invoiceResults: InvoiceLookupRow[] | null = null;
   @state() private query = "";
   @state() private queryError = false;
   @state() private searchFailed = false;
@@ -86,6 +89,7 @@ export class TillFindBillDialog extends LitElement {
     const q = this.query.trim();
     const generation = ++this.#generation;
     this.results = null;
+    this.invoiceResults = null;
     this.searchFailed = false;
     this.queryError = q === "";
     if (this.queryError) {
@@ -94,8 +98,13 @@ export class TillFindBillDialog extends LitElement {
     }
     this.searching = true;
     try {
-      const { bills } = await this.api.lookUpBills(q);
-      if (generation === this.#generation) this.results = bills;
+      if (this.kind === "invoices") {
+        const { invoices } = await this.api.lookUpInvoices(q);
+        if (generation === this.#generation) this.invoiceResults = invoices;
+      } else {
+        const { bills } = await this.api.lookUpBills(q);
+        if (generation === this.#generation) this.results = bills;
+      }
     } catch {
       if (generation === this.#generation) this.searchFailed = true;
     } finally {
@@ -155,6 +164,28 @@ export class TillFindBillDialog extends LitElement {
         ${
           bill === null
             ? html`
+                <wt-combobox
+                  name="search-kind"
+                  search="never"
+                  .label=${t("find_bill.kind")}
+                  .value=${this.kind}
+                  .disabled=${this.busy}
+                  .options=${[
+                    { value: "bills", label: t("find_bill.unpaid") },
+                    { value: "invoices", label: t("find_bill.invoices") },
+                  ]}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (this.busy) return;
+                    this.kind = event.detail.value === "invoices" ? "invoices" : "bills";
+                    this.#generation++;
+                    this.searching = false;
+                    this.results = null;
+                    this.invoiceResults = null;
+                    this.queryError = false;
+                    this.searchFailed = false;
+                  }}
+                ></wt-combobox>
                 <form
                   @keydown=${(event: KeyboardEvent) => {
                     if (event.key !== "Enter") return;
@@ -168,10 +199,10 @@ export class TillFindBillDialog extends LitElement {
                 >
                   <wt-input
                     name="bill-search"
-                    .label=${t("find_bill.search")}
+                    .label=${t(this.kind === "invoices" ? "find_bill.invoice_search" : "find_bill.search")}
                     .value=${this.query}
                     .required=${true}
-                    .error=${this.queryError ? t("find_bill.query_required") : ""}
+                    .error=${this.queryError ? t(this.kind === "invoices" ? "find_bill.invoice_query_required" : "find_bill.query_required") : ""}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       event.stopPropagation();
                       this.query = event.detail.value;
@@ -182,13 +213,34 @@ export class TillFindBillDialog extends LitElement {
                     data-search
                     variant="secondary"
                     .loading=${this.searching}
+                    .disabled=${this.busy || this.queryError}
                     @click=${() => void this.#search()}
                     >${t("find_bill.search_action")}</wt-button
                   >
                 </form>
                 ${this.searchFailed ? html`<p role="alert">${t("find_bill.search_failed")}</p>` : nothing}
                 ${this.results?.length === 0 ? html`<p>${t("find_bill.none")}</p>` : nothing}
+                ${this.invoiceResults?.length === 0 ? html`<p>${t("find_bill.invoice_none")}</p>` : nothing}
                 <div class="results">
+                  ${this.invoiceResults?.map(
+                    (row) =>
+                      html`<button
+                        class="bill"
+                        data-invoice
+                        type="button"
+                        ?disabled=${this.busy}
+                        @click=${() => {
+                          if (!this.busy)
+                            this.#emit("find-invoice-open", { workingOrderId: row.workingOrderId });
+                        }}
+                      >
+                        <span>${row.invoiceNumber}</span><span>${row.customerName}</span>
+                        <span
+                          >${this.#when(row.issuedAt)} ·
+                          ${formatMoney(row.total, currentLocale())}</span
+                        >
+                      </button>`,
+                  )}
                   ${this.results?.map(
                     (row) =>
                       html` <button

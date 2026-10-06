@@ -1502,6 +1502,7 @@ export interface OrderRowDto {
   counter: boolean;
   saleId: string | null;
   invoiceNumber: string | null;
+  invoiceType: "F1" | "F2" | null;
   creditNotes: string[];
   status: OrderStatus;
   credited: "in_full" | "in_part" | null;
@@ -1529,6 +1530,9 @@ export interface OrderDetailDto {
   }[];
   invoices: {
     kind: "invoice" | "credit_note" | "substitution";
+    invoiceType?: "F1" | "F2";
+    recipient?: { taxId: string; legalName: string; countryCode: string; address: string };
+    taxpayerDomicile?: string;
     number: string;
     issuedAt: string;
     total: string;

@@ -9,6 +9,11 @@ import {
   locations,
   printJobs,
   sales,
+  saleLines,
+  saleSettlements,
+  tenders,
+  invoiceSeries,
+  workingOrders,
   tenantReceipts,
   withTransaction,
 } from "@waitron/db";
@@ -472,6 +477,405 @@ beforeAll(() => {
       Promise.reject(
         new Error("till-api.receipt.test: resolveClient must never be called by recordSale"),
       ),
+  });
+});
+
+describe("GET /api/sales/:id (filed ticket recovery)", () => {
+  it("reopens a filed ticket from another device without payment, filing, printing or drawer writes", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const readerCookie = await loginOnDevice(app, await enrolTillCookie(cfg, []), operatorId);
+    const snapshot = () =>
+      withTransaction(suite.db, async (tx) => ({
+        sales: await tx.select().from(sales),
+        lines: await tx.select().from(saleLines),
+        settlements: await tx.select().from(saleSettlements),
+        tenders: await tx.select().from(tenders),
+        records: await tx.select().from(registrosFacturacion),
+        series: await tx.select().from(invoiceSeries),
+        jobs: await tx.select().from(printJobs),
+        drawers: await tx.select().from(drawerOpens),
+      }));
+    const before = await snapshot();
+    expect(before.sales).toHaveLength(1);
+    expect(before.records).toHaveLength(1);
+    expect(before.jobs).toHaveLength(1);
+    expect(before.drawers).toEqual([]);
+    const freshApp = new Hono();
+    mountTillApi(freshApp, apiDeps(cfg), noopLog);
+    for (const mounted of [app, freshApp]) {
+      const res = await mounted.request(`/api/sales/${orderId}`, {
+        headers: { cookie: readerCookie },
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        invoiceType: "F2",
+        invoiceNumber: "A/1",
+        locale: "es-ES",
+        issuedAt: new Date(before.sales[0]!.issuedAt).toISOString(),
+        total: "1.50",
+        tender: { method: "cash", change: "0.00" },
+        lines: [{ descriptions: { "es-ES": "Agua mineral" }, quantity: "1", gross: "1.50" }],
+      });
+    }
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("requires a session and refuses malformed ids and orders without a filed sale", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const id = randomUUID();
+    const denied = await app.request(`/api/sales/${id}`);
+    expect(denied.status).toBe(401);
+    expect(await denied.json()).toMatchObject({ error: { code: "session.required" } });
+    const cookie = await login(app, cfg, operatorId);
+    const [unissued] = await withTransaction(suite.db, (tx) =>
+      tx
+        .insert(workingOrders)
+        .values({
+          source: "dashboard",
+          locationId: cfg.locationId,
+          nodeId: cfg.nodeId,
+          orderNumber: 1,
+        })
+        .returning(),
+    );
+    for (const unknown of [id, "invalid", unissued!.id]) {
+      const res = await app.request(`/api/sales/${unknown}`, { headers: { cookie } });
+      expect(res.status).toBe(404);
+      expect(res.headers.get("content-type")).toContain("application/json");
+      expect(await res.json()).toMatchObject({ error: { code: "working_order.not_found" } });
+    }
+    expect(await suite.db.select().from(workingOrders)).toEqual([unissued]);
+    expect(await suite.db.select().from(sales)).toEqual([]);
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+  });
+});
+
+describe("GET /api/sales/:id/receipt (original print status)", () => {
+  it("reads printerless issuance and later queued original without filing or printing on GET", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: null });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const get = () => app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
+    const missing = await get();
+    expect(missing.status).toBe(200);
+    expect(await missing.json()).toEqual({ status: "not_queued" });
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId });
+    const queued = await app.request(`/api/sales/${orderId}/receipt`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(queued.status).toBe(200);
+    const [job] = await suite.db.select().from(printJobs);
+    const status = await get();
+    expect(status.status).toBe(200);
+    expect(await status.json()).toEqual({ status: "queued", jobId: job!.id, canRetry: false });
+    await get();
+    expect(await suite.db.select().from(printJobs)).toEqual([job]);
+    expect(await saleCount(cfg)).toBe(1);
+    expect(await registroCount(cfg)).toBe(1);
+  });
+
+  it("requires a session and refuses unknown or malformed order ids", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const unknown = randomUUID();
+    const denied = await app.request(`/api/sales/${unknown}/receipt`);
+    expect(denied.status).toBe(401);
+    const cookie = await login(app, cfg, operatorId);
+    for (const id of [unknown, "invalid"]) {
+      const res = await app.request(`/api/sales/${id}/receipt`, { headers: { cookie } });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ error: { code: "working_order.not_found" } });
+    }
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+  });
+});
+
+describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
+  it("persists the first staff confirmation without refiling or changing original bytes and print status", async () => {
+    const { cfg, each, operatorId, supervisorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    await suite.db.update(printJobs).set({ status: "done" });
+    const jobsBefore = await suite.db.select().from(printJobs);
+    const salesBefore = await suite.db.select().from(sales);
+    const fiscalBefore = await suite.db.select().from(registrosFacturacion);
+    const statusBefore = await app.request(`/api/sales/${orderId}/receipt`, {
+      headers: { cookie },
+    });
+    expect(await statusBefore.json()).toEqual({
+      status: "done",
+      jobId: jobsBefore[0]!.id,
+      canRetry: false,
+    });
+    const confirm = () =>
+      app.request(`/api/sales/${orderId}/receipt/handover`, {
+        method: "POST",
+        headers: { cookie },
+      });
+    const responses = await Promise.all([confirm(), confirm()]);
+    expect(responses.map((res) => res.status)).toEqual([200, 200]);
+    const confirmed = await responses[0]!.json();
+    expect(confirmed).toEqual({
+      status: "done",
+      jobId: jobsBefore[0]!.id,
+      canRetry: false,
+      handover: { personId: operatorId, confirmedAt: expect.any(String) },
+    });
+    expect(new Date(confirmed.handover.confirmedAt).toISOString()).toBe(
+      confirmed.handover.confirmedAt,
+    );
+    expect(await responses[1]!.json()).toEqual(confirmed);
+    const otherCookie = await login(app, cfg, supervisorId);
+    expect(
+      await (
+        await app.request(`/api/sales/${orderId}/receipt/handover`, {
+          method: "POST",
+          headers: { cookie: otherCookie },
+        })
+      ).json(),
+    ).toEqual(confirmed);
+    const reopened = new Hono();
+    mountTillApi(reopened, apiDeps(cfg), noopLog);
+    expect(
+      await (
+        await reopened.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } })
+      ).json(),
+    ).toEqual(confirmed);
+    const jobsAfter = await suite.db.select().from(printJobs);
+    expect(jobsAfter).toEqual([{ ...jobsBefore[0], receiptHandover: confirmed.handover }]);
+    expect(await suite.db.select().from(sales)).toEqual(salesBefore);
+    expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscalBefore);
+  });
+
+  it("refuses unprinted originals even when a duplicate has completed", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: null });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const refused = async () => {
+      const res = await app.request(`/api/sales/${orderId}/receipt/handover`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "receipt.not_printed", params: {} },
+      });
+    };
+    await refused();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    expect(
+      (
+        await app.request(`/api/sales/${orderId}/reprint`, {
+          method: "POST",
+          headers: { cookie },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(200);
+    await suite.db.update(printJobs).set({ status: "done" });
+    await refused();
+    expect(
+      (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
+        .status,
+    ).toBe(200);
+    for (const status of ["queued", "printing", "failed"] as const) {
+      await suite.db.update(printJobs).set({ status }).where(eq(printJobs.receiptCopy, false));
+      await refused();
+    }
+    expect(
+      (await suite.db.select().from(printJobs)).every((job) => job.receiptHandover === null),
+    ).toBe(true);
+  });
+
+  it("requires an active session and refuses unknown order ids before recording handover", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    await suite.db.update(printJobs).set({ status: "done" });
+    expect(
+      (await app.request(`/api/sales/${orderId}/receipt/handover`, { method: "POST" })).status,
+    ).toBe(401);
+    for (const id of [randomUUID(), "invalid"]) {
+      const res = await app.request(`/api/sales/${id}/receipt/handover`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(404);
+      expect(res.headers.get("content-type")).toContain("application/json");
+      expect(await res.json()).toMatchObject({ error: { code: "working_order.not_found" } });
+    }
+    expect(
+      (await suite.db.select().from(printJobs)).every((job) => job.receiptHandover === null),
+    ).toBe(true);
+  });
+});
+
+describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
+  it("resends exhausted originals with the same bytes and printer without refiling or opening the drawer", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const [original] = await suite.db.select().from(printJobs);
+    await suite.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: 5 })
+      .where(eq(printJobs.id, original!.id));
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const retry = () =>
+      app.request(`/api/sales/${orderId}/receipt/retry`, { method: "POST", headers: { cookie } });
+    const responses = await Promise.all([retry(), retry()]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const res = responses.find((response) => response.status === 200)!;
+    const { jobId } = (await res.json()) as { jobId: string };
+    const jobs = await suite.db.select().from(printJobs);
+    expect(jobs).toHaveLength(2);
+    expect(jobs.find((job) => job.id === jobId)).toMatchObject({
+      status: "queued",
+      attempts: 0,
+      kind: "document",
+      receiptCopy: false,
+      printerId,
+      payload: original!.payload,
+      saleId: original!.saleId,
+      resendOf: original!.id,
+    });
+    expect(opensDrawer(original!.payload)).toBe(false);
+    const repeated = await retry();
+    expect(repeated.status).toBe(409);
+    expect(await repeated.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+    expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+    expect(await saleCount(cfg)).toBe(1);
+    expect(await registroCount(cfg)).toBe(1);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("refuses absent, automatically retrying and completed originals even when a duplicate has failed", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: null });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const retry = () =>
+      app.request(`/api/sales/${orderId}/receipt/retry`, { method: "POST", headers: { cookie } });
+    const absent = await retry();
+    expect(absent.status).toBe(404);
+    expect(absent.headers.get("content-type")).toContain("application/json");
+    expect(await absent.json()).toMatchObject({ error: { code: "print_job.not_found" } });
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    expect(
+      (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
+        .status,
+    ).toBe(200);
+    const [original] = await suite.db.select().from(printJobs);
+    for (const [status, attempts] of [
+      ["queued", 0],
+      ["printing", 1],
+      ["failed", 4],
+      ["done", 1],
+    ] as const) {
+      await suite.db
+        .update(printJobs)
+        .set({ status, attempts })
+        .where(eq(printJobs.id, original!.id));
+      const before = await suite.db.select().from(printJobs);
+      const refused = await retry();
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+      expect(await suite.db.select().from(printJobs)).toEqual(before);
+    }
+    expect(
+      (
+        await app.request(`/api/sales/${orderId}/reprint`, {
+          method: "POST",
+          headers: { cookie },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(200);
+    await suite.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: 5 })
+      .where(eq(printJobs.receiptCopy, true));
+    await suite.db.insert(printJobs).values({
+      locationId: original!.locationId,
+      printerId: original!.printerId,
+      saleId: original!.saleId,
+      payload: original!.payload,
+      kind: "document",
+      receiptCopy: false,
+      resendOf: original!.id,
+      status: "failed",
+      attempts: 5,
+    });
+    const before = await suite.db.select().from(printJobs);
+    const refused = await retry();
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+    expect(await suite.db.select().from(printJobs)).toEqual(before);
+  });
+
+  it("requires a session and the device's printing capability before retrying", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    await suite.db.update(printJobs).set({ status: "failed", attempts: 5 });
+    const before = await suite.db.select().from(printJobs);
+    const denied = await app.request(`/api/sales/${orderId}/receipt/retry`, { method: "POST" });
+    expect(denied.status).toBe(401);
+    const restrictedCookie = await loginOnDevice(
+      app,
+      await enrolTillCookie(
+        cfg,
+        CAPABILITY_FLAGS.filter((flag) => flag !== "print-receipt"),
+      ),
+      operatorId,
+    );
+    const forbidden = await app.request(`/api/sales/${orderId}/receipt/retry`, {
+      method: "POST",
+      headers: { cookie: restrictedCookie },
+    });
+    expect(forbidden.status).toBe(403);
+    expect(await forbidden.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
+    for (const id of [randomUUID(), "invalid"]) {
+      const unknown = await app.request(`/api/sales/${id}/receipt/retry`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(unknown.status).toBe(404);
+      expect(await unknown.json()).toMatchObject({ error: { code: "working_order.not_found" } });
+    }
+    expect(await suite.db.select().from(printJobs)).toEqual(before);
   });
 });
 

@@ -10,6 +10,7 @@ import {
 } from "@waitron/shared";
 import {
   insertNodeSeriesTx,
+  readLiveSeriesIdTx,
   lockVenueDatabase,
   nodes,
   openVenueDatabase,
@@ -577,8 +578,8 @@ function wrapHookError(module: string, err: unknown): unknown {
  * Run every module's `backup.restore` hook and settle the node's series, in ONE
  * transaction. Order: check the node exists → hooks in
  * list order → at most one module may return `series` → if one did, retire the node's live series and
- * open the returned ones → on EVERY path read the live standard series id — zero or two live standard
- * series aborts the transaction, so a commit leaves exactly one live standard series. Returns that id
+ * open the returned ones → on EVERY path require one live standard and one live full series —
+ * zero or two of either aborts the transaction. Returns the standard series id
  * (the env is pointed at it) and the hooks' reports.
  */
 export async function runRestoreHooks(args: {
@@ -631,6 +632,7 @@ export async function runRestoreHooks(args: {
         await insertNodeSeriesTx(tx, node.nodeId, replacement.series);
       }
       const seriesId = await readStandardSeriesIdTx(tx, node.nodeId);
+      await readLiveSeriesIdTx(tx, node.nodeId, "full");
       return { seriesId, reports };
     } catch (err) {
       throw wrapHookError(owner, err);

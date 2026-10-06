@@ -1,10 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seriesId as brandSeriesId } from "@waitron/shared";
 import type { SaleLineClassification } from "@waitron/shared";
-import { seedNodeAndSeries, seedSubstitution, seedVenue, seedVoid } from "../test/fixtures.js";
+import {
+  seedNodeAndSeries,
+  seedSale,
+  seedSubstitution,
+  seedVenue,
+  seedVoid,
+} from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { at, chain, classified, CUTOVER, rows, sellLines, TZ } from "../test/category-fixtures.js";
 import type { LineSpec } from "../test/category-fixtures.js";
@@ -71,6 +78,50 @@ describe("computeCategorySales: preconditions", () => {
 });
 
 describe("computeCategorySales at time of sale", () => {
+  it("counts one sale on a full series and one on a standard series under their recorded category", async () => {
+    const [full] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    const line = {
+      vatRate: "10.00",
+      lineTotal: "10.00",
+      lineGross: "11.00",
+      classification: classified(chain(DRINKS)),
+    };
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: at("2026-08-04"),
+      total: "11.00",
+      lines: [line],
+    });
+    await seedSale(
+      suite.db,
+      { ...venue, seriesId: brandSeriesId(full!.id) },
+      {
+        invoiceNumber: 1,
+        issuedAt: at("2026-08-04"),
+        total: "11.00",
+        counterpartyTaxId: "12345678Z",
+        lines: [line],
+      },
+    );
+
+    const report = await run();
+
+    expect(rows(report.tree)).toEqual([
+      {
+        path: "Drinks",
+        id: "cat-drinks",
+        depth: 0,
+        gross: "22.00",
+        net: "20.00",
+        direct: "22.00/20.00/2",
+      },
+    ]);
+    expect([report.gross, report.net]).toEqual(["22.00", "20.00"]);
+  });
+
   it("reports an empty period as an empty, complete report in its mode", async () => {
     expect(await run()).toEqual({
       mode: "at_time_of_sale",

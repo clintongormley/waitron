@@ -1,3 +1,5 @@
+import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
+import { withReceiptListPrices } from "./receipt-lines.js";
 import {
   buildLineExtras,
   editLineExtras,
@@ -910,13 +912,8 @@ async function totalBeforeEdit(
   return cfg.simplifiedInvoiceLimit === null ? null : storedOrderTotal(tx, workingOrderId);
 }
 
-/**
- * Refuses, on the caller's transaction and so before anything it wrote commits, an edit that
- * raised an order's stored total above `before` and over the regime's simplified-invoice limit
- * (`cfg.simplifiedInvoiceLimit`). An edit that leaves the total at or below `before` passes even
- * with the order still over, so an order that grew before the limit existed can be shrunk step by
- * step.
- */
+/** A saved F1 choice has no simplified ceiling. An F2 already over its ceiling can shrink
+ * without first becoming payable. */
 export async function refuseOrderOverSimplifiedLimit(
   tx: Transaction,
   cfg: TillConfig,
@@ -924,6 +921,11 @@ export async function refuseOrderOverSimplifiedLimit(
   before: Decimal | null,
 ): Promise<void> {
   if (cfg.simplifiedInvoiceLimit === null) return;
+  const [order] = await tx
+    .select({ invoiceType: workingOrders.invoiceType })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.id, workingOrderId), eq(workingOrders.nodeId, cfg.nodeId)));
+  if (order?.invoiceType === "F1") return;
   const after = await storedOrderTotal(tx, workingOrderId);
   if (before !== null && compareDecimal(after, before) <= 0) return;
   refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, after);
@@ -1046,6 +1048,11 @@ export async function createOpenOrder(
     partyId?: string | null;
     creditedTo?: string;
     invalidMakeAt?: "ignore";
+    invoiceChoice?: {
+      invoiceType: unknown;
+      recipient: unknown;
+      recipientNameMaxLength: number | null;
+    };
   } = {},
 ): Promise<{
   orderNumber: number;
@@ -1053,8 +1060,19 @@ export async function createOpenOrder(
   identities: OrderLineIdentity[];
   lineRows: WorkingOrderLineInsert[];
 }> {
-  // Checked first so an unknown id is `table.not_found`, not a raw foreign-key failure. An inactive
-  // table is allowed.
+  const choice = placement.invoiceChoice;
+  if (
+    choice?.invoiceType !== undefined &&
+    choice.invoiceType !== "F1" &&
+    choice.invoiceType !== "F2"
+  ) {
+    throw new AppError("management.request_invalid", { field: "invoiceType" });
+  }
+  const recipient =
+    choice?.invoiceType === "F1" ? checkedInvoiceRecipient(choice, choice.recipient) : null;
+  if (recipient === null && choice?.recipient !== undefined && choice.recipient !== null) {
+    throw new AppError("management.request_invalid", { field: "recipient" });
+  }
   const deliveryTableId = placement.deliveryTableId ?? null;
   let effectiveZoneId = placement.zoneId;
   if (deliveryTableId !== null) {
@@ -1079,7 +1097,7 @@ export async function createOpenOrder(
     placement.invalidMakeAt ?? "refuse",
   );
   const { gross, identities, lineContexts, offers } = pricedLines;
-  refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, gross.total);
+  if (recipient === null) refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, gross.total);
   const lineRows = pricedLines.lineRows.map((row) => ({
     ...row,
     creditedTo: placement.creditedTo ?? null,
@@ -1095,6 +1113,11 @@ export async function createOpenOrder(
     orderNumber,
     label,
     status: "open",
+    invoiceType: recipient === null ? "F2" : "F1",
+    recipientTaxId: recipient?.taxId ?? null,
+    recipientLegalName: recipient?.legalName ?? null,
+    recipientAddress: recipient?.address ?? null,
+    recipientCountryCode: recipient?.countryCode ?? null,
     // Not a fiscal field.
     deliveryTableId,
     partyId: placement.partyId ?? null,
@@ -1109,6 +1132,7 @@ export async function createOpenOrder(
     await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts, offers);
   }
 
+  if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
   return { orderNumber, gross, identities, lineRows };
 }
 
@@ -3321,6 +3345,101 @@ export async function readOrderRevision(tx: Transaction, orderId: string): Promi
   return order!.revision;
 }
 
+export interface InvoiceChoiceRequest {
+  revision: number;
+  invoiceType: "F1" | "F2";
+  recipient: {
+    taxId: string;
+    legalName: string;
+    address: string;
+    countryCode: string;
+  } | null;
+}
+
+export async function refuseUnavailableFullInvoice(
+  tx: Transaction,
+  orderId: string,
+): Promise<void> {
+  const [choice] = await tx
+    .select({ invoiceType: workingOrders.invoiceType })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  if (choice?.invoiceType === "F1") {
+    throw new AppError("sale.full_invoice_unavailable", {});
+  }
+}
+
+export async function setOrderInvoiceChoice(
+  db: Database,
+  backend: Pick<FiscalBackend, "recipientNameMaxLength">,
+  cfg: Pick<TillConfig, "nodeId">,
+  orderId: string,
+  request: InvoiceChoiceRequest,
+): Promise<number> {
+  if (request.invoiceType !== "F1" && request.invoiceType !== "F2") {
+    throw new AppError("management.request_invalid", { field: "invoiceType" });
+  }
+  const recipient = request.recipient;
+  let normalizedRecipient: InvoiceChoiceRequest["recipient"] = null;
+  if (request.invoiceType === "F1") {
+    normalizedRecipient = checkedInvoiceRecipient(backend, recipient);
+  }
+  if (request.invoiceType === "F2" && recipient !== null) {
+    throw new AppError("management.request_invalid", { field: "recipient" });
+  }
+  return withTransaction(db, async (tx) => {
+    const [order] = await tx
+      .select({
+        status: workingOrders.status,
+        revision: workingOrders.revision,
+        invoiceType: workingOrders.invoiceType,
+      })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    if (order === undefined || (order.status !== "open" && order.status !== "placed")) {
+      throw new AppError("working_order.not_open", { workingOrderId: orderId });
+    }
+    if (order.status === "placed") {
+      const [issued] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.workingOrderId, orderId))
+        .limit(1);
+      if (issued !== undefined) {
+        throw new AppError("working_order.not_open", { workingOrderId: orderId });
+      }
+    }
+    if (order.revision !== request.revision) {
+      throw new AppError("working_order.out_of_date", {
+        workingOrderId: orderId,
+        revision: order.revision,
+      });
+    }
+    await refusePaymentInFlight(tx, [orderId]);
+    if (order.invoiceType === "F1" && request.invoiceType === "F2") {
+      const [paid] = await tx
+        .select({ id: billPayments.id })
+        .from(billPayments)
+        .where(and(eq(billPayments.workingOrderId, orderId), eq(billPayments.state, "received")))
+        .limit(1);
+      if (paid !== undefined) throw new AppError("invoice.choice_locked", {});
+    }
+    const revision = order.revision + 1;
+    await tx
+      .update(workingOrders)
+      .set({
+        invoiceType: request.invoiceType,
+        recipientTaxId: normalizedRecipient?.taxId ?? null,
+        recipientLegalName: normalizedRecipient?.legalName ?? null,
+        recipientAddress: normalizedRecipient?.address ?? null,
+        recipientCountryCode: normalizedRecipient?.countryCode ?? null,
+        revision,
+      })
+      .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    return revision;
+  });
+}
+
 /**
  * The same composition `grossRows` uses for a line's gross total, so a split line's `line_total` is
  * identical to an add-time line's.
@@ -5382,6 +5501,7 @@ export async function abandonHeldOrder(
 export interface PlaceOrderResult {
   id: string;
   status: "placed" | "settled";
+  invoiceType?: "F1" | "F2";
   invoiceNumber?: string;
   issuedAt?: string;
   total?: string;
@@ -5439,9 +5559,14 @@ export async function placeOrder(
       const issued = await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, operatorId);
       const { saleId } = issued;
       const ticket = await unpaidReceipt(tx, deps.backend, invoice, issued);
+      const [filed] = await tx
+        .select({ counterpartyTaxId: sales.counterpartyTaxId })
+        .from(sales)
+        .where(eq(sales.id, saleId));
       placeResult = {
         id,
         status: "placed",
+        invoiceType: filed!.counterpartyTaxId === null ? "F2" : "F1",
         invoiceNumber: ticket.invoiceNumber,
         issuedAt: ticket.issuedAt,
         total: ticket.total,
@@ -5510,15 +5635,17 @@ export async function issueUnpaidInvoice(
   operatorId: string,
 ): Promise<IssuedInvoice> {
   const { id, priced, clock } = invoice;
+  await refuseUnavailableFullInvoice(tx, id);
+  const selected = await selectOrderInvoice(tx, backend, cfg, id, priced.total);
   const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,
-    seriesId: cfg.seriesId,
+    ...selected.sale,
     workingOrderId: brandWorkingOrderId(id),
     ...language,
     total: priced.total,
-    lines: priced.lines,
+    lines: withReceiptListPrices(priced.lines, invoice.identities),
     vatBreakdown: priced.vatBreakdown,
     clock,
     operatorId,
@@ -5552,7 +5679,7 @@ async function unpaidReceipt(
     total: priced.total,
     ...receiptQr(backend, issued.fiscal.verificationUrl),
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    ...(await receiptLines(tx, invoice.id, priced, invoice.identities)),
+    ...(await receiptLines(tx, invoice.id, priced, invoice.identities, issued.saleId)),
     tender: { method: "unpaid" },
   };
 }

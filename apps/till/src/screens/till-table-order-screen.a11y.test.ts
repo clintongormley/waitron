@@ -135,6 +135,9 @@ const party: TableParty = {
 const partyBills: PartyBill[] = [
   {
     workingOrderId: "wo-1",
+    revision: 0,
+    invoiceType: "F2",
+    recipient: null,
     partyId: "v1",
     label: null,
     status: "settled",
@@ -145,6 +148,9 @@ const partyBills: PartyBill[] = [
   },
   {
     workingOrderId: "wo-2",
+    revision: 0,
+    invoiceType: "F2",
+    recipient: null,
     partyId: "v1",
     label: null,
     status: "open",

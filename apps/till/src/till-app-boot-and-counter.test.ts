@@ -1214,6 +1214,40 @@ describe("till-app simplified-invoice limit", () => {
     expect(said(el)).toContain("3,00 €");
   });
 
+  it("lets a named full-invoice basket grow past the limit without releasing the next basket", async () => {
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(limitedTill) });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "2");
+    emit(c, "choose-invoice");
+    await flush(el);
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+    );
+    await flush(el);
+
+    c.store.addProduct(c.products[0]!, "1");
+    await flush(el);
+    expect(c.store.total).toBe("4.50");
+    expect(banner(el)).toBeNull();
+
+    c.store.clear();
+    c.store.addProduct(c.products[0]!, "2");
+    c.store.addProduct(c.products[0]!, "1");
+    await flush(el);
+    expect(c.store.total).toBe("3.00");
+    expect(said(el)).toContain("3,00 €");
+  });
+
   it("refuses nothing for a server that sends no limit", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);

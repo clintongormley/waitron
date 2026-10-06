@@ -26,6 +26,9 @@ const party: TableParty = {
 
 const paidTab: PartyBill = {
   workingOrderId: "wo-tab",
+  revision: 0,
+  invoiceType: "F2",
+  recipient: null,
   partyId: "v1",
   label: null,
   status: "settled",
@@ -36,6 +39,9 @@ const paidTab: PartyBill = {
 };
 const check: PartyBill = {
   workingOrderId: "wo-check",
+  revision: 0,
+  invoiceType: "F2",
+  recipient: null,
   partyId: "v1",
   label: null,
   status: "open",
@@ -46,6 +52,9 @@ const check: PartyBill = {
 };
 const abandoned: PartyBill = {
   workingOrderId: "wo-gone",
+  revision: 0,
+  invoiceType: "F2",
+  recipient: null,
   partyId: "v1",
   label: null,
   status: "abandoned",

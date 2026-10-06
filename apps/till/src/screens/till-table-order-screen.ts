@@ -628,6 +628,12 @@ export class TillTableOrderScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      .bill-invoice {
+        display: block;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
       .send-to {
         margin: var(--wt-space-3) 0 0;
         padding: 0;
@@ -3026,7 +3032,7 @@ export class TillTableOrderScreen extends LitElement {
           .busy=${this.busy}
           .takesCash=${this.takesCash}
         ></till-tender-pay>
-        ${this.#payWays()}
+        ${this.#fullInvoiceChoice(shown)} ${this.#payWays()}
       </section>`;
     const received = this.#balanceShown()?.received;
     return html`<section class="pay" data-bill-payments>
@@ -3047,8 +3053,25 @@ export class TillTableOrderScreen extends LitElement {
       >
         ${t("bill.pay_with_bill_payments")}
       </wt-button>
-      ${this.#payWays()}
+      ${this.#fullInvoiceChoice(shown)} ${this.#payWays()}
     </section>`;
+  }
+
+  #fullInvoiceChoice(bill: PartyBill | undefined): TemplateResult | typeof nothing {
+    return bill === undefined || !owing(bill)
+      ? nothing
+      : html`<wt-button
+          variant="secondary"
+          size="sm"
+          data-choose-bill-invoice
+          .disabled=${this.busy}
+          @click=${() =>
+            this.#dispatch("choose-bill-invoice", {
+              workingOrderId: bill.workingOrderId,
+              revision: bill.revision,
+            })}
+          >${t("invoice.full")}</wt-button
+        >`;
   }
 
   /** The balance read, when it is the bill on screen's. */
@@ -3210,6 +3233,13 @@ export class TillTableOrderScreen extends LitElement {
         ><span class="bill-name">${this.#billName(index)}</span>${
           bill.workingOrderId === this.party?.mainBillId
             ? html` <span class="bill-main" data-bill-main>${t("table.bill_main")}</span>`
+            : nothing
+        }
+        ${
+          bill.invoiceType === "F1" && bill.recipient !== null
+            ? html`<span class="bill-invoice" data-invoice-choice
+                >${t("invoice.full")} · ${bill.recipient.legalName} · ${bill.recipient.taxId}</span
+              >`
             : nothing
         }</span
       >

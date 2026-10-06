@@ -124,6 +124,7 @@ beforeAll(async () => {
   });
   await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
+  await db.insert(invoiceSeries).values({ nodeId: T.nodeId, code: "FF", purpose: "full" });
   await writeSealedStateRow(db, T.nodeId, await sealNodeState(ENTRIES, RECOVERY_KEY), NOW);
   fixtureDb = join(await mkdtemp(join(tmpdir(), "waitron-stream-fixture-")), "venue.db");
   await db.archiveTo(fixtureDb);

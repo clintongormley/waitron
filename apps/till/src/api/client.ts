@@ -778,6 +778,8 @@ export type Tender = CashTender | CardTender;
  * never the client basket, so the printed line list cannot diverge from the invoice.
  */
 export interface TillSaleLine {
+  /** F1 figures read from the filed sale line; unitPrice is per priceQuantity, base is the line total. */
+  net?: { unitPrice: string; priceQuantity: string; base: string; rate: string; tax?: string };
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
    *  every child line. The six names per answer are the server's, copied by value. */
   optionSnapshots?: OptionSnapshot[];
@@ -825,8 +827,12 @@ export type TenderBlock =
 
 /** `POST /api/sales` success — the ticket payload the receipt view renders. */
 export interface TillSaleResult {
+  issuedOffsetMinutes?: number;
+  operationDate?: string;
+  invoiceType?: "F1" | "F2";
+  recipient?: { taxId: string; legalName: string; countryCode: string; address: string };
   /** Issuer identity stored with the filed invoice; immediate issuance responses may omit it. */
-  issuer?: { venueName: string; nif: string };
+  issuer?: { venueName: string; nif: string; domicile?: string };
   receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The table/operator label and venue order number printed on every document as its grouping key. */
   orderLabel: string | null;
@@ -1008,6 +1014,14 @@ export interface UnpaidDepartureResult {
     invoiceNumber: string;
     amount: string;
   }[];
+}
+
+export interface InvoiceLookupRow {
+  workingOrderId: string;
+  invoiceNumber: string;
+  issuedAt: string;
+  customerName: string;
+  total: string;
 }
 
 export interface BillLookupRow {
@@ -1625,6 +1639,9 @@ export interface TableParty {
  * abandoned bill; `receiptAvailable` says a sale was filed for it, so its receipt can be printed again. */
 export interface PartyBill {
   workingOrderId: string;
+  revision: number;
+  invoiceType: "F1" | "F2";
+  recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
   partyId: string;
   label: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
@@ -1880,6 +1897,15 @@ export interface MadeHereItem {
   note: string | null;
 }
 
+export type OriginalReceiptPrint =
+  | { status: "not_queued" }
+  | {
+      status: "queued" | "printing" | "failed" | "done";
+      jobId: string;
+      canRetry: boolean;
+      handover?: { personId: string; confirmedAt: string };
+    };
+
 export class TillApi {
   #madeHereListener?: (items: MadeHereItem[]) => void;
 
@@ -2010,12 +2036,17 @@ export class TillApi {
     tender: Tender,
     workingOrderId: string,
     zoneId?: string,
+    invoice?: {
+      invoiceType: "F1" | "F2";
+      recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
+    },
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
       tender,
       workingOrderId,
       zoneId: zoneId ?? this.#serviceZoneId,
+      ...invoice,
     });
   }
 
@@ -2029,6 +2060,8 @@ export class TillApi {
   pay(req: {
     id: string;
     lines: SaleLine[];
+    invoiceType?: "F1" | "F2";
+    recipient?: { taxId: string; legalName: string; address: string; countryCode: string } | null;
     zoneId?: string;
     tip?: string;
     allowOffline?: boolean;
@@ -2062,6 +2095,30 @@ export class TillApi {
       `/api/sales/${workingOrderId}/reprint`,
       "POST",
       language === undefined ? {} : { language },
+    );
+  }
+
+  getFiledTicket(workingOrderId: string): Promise<TillSaleResult> {
+    return this.#request<TillSaleResult>(`/api/sales/${workingOrderId}`, "GET");
+  }
+
+  getReceiptPrintStatus(workingOrderId: string): Promise<OriginalReceiptPrint> {
+    return this.#request<OriginalReceiptPrint>(`/api/sales/${workingOrderId}/receipt`, "GET");
+  }
+
+  confirmReceiptHandover(workingOrderId: string): Promise<OriginalReceiptPrint> {
+    return this.#request<OriginalReceiptPrint>(
+      `/api/sales/${workingOrderId}/receipt/handover`,
+      "POST",
+      {},
+    );
+  }
+
+  retryReceipt(workingOrderId: string): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(
+      `/api/sales/${workingOrderId}/receipt/retry`,
+      "POST",
+      {},
     );
   }
 
@@ -2115,6 +2172,21 @@ export class TillApi {
       ...req,
       zoneId: req.zoneId ?? this.#serviceZoneId,
     });
+  }
+
+  setOrderInvoiceChoice(
+    id: string,
+    choice: {
+      revision: number;
+      invoiceType: "F1" | "F2";
+      recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
+    },
+  ): Promise<{ revision: number }> {
+    return this.#request<{ revision: number }>(
+      `/api/working-orders/${id}/invoice-choice`,
+      "PUT",
+      choice,
+    );
   }
 
   /** The cross-till held list → `GET /api/working-orders`: every OPEN working order in the venue. */
@@ -2532,6 +2604,15 @@ export class TillApi {
   /** Who may approve an unpaid departure → `GET /api/unpaid-departure-authorizers`. */
   listUnpaidDepartureAuthorizers(): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>("/api/unpaid-departure-authorizers", "GET");
+  }
+
+  lookUpInvoices(q: string, options: ReadOptions = {}): Promise<{ invoices: InvoiceLookupRow[] }> {
+    return this.#request<{ invoices: InvoiceLookupRow[] }>(
+      `/api/invoices/lookup?q=${encodeURIComponent(q)}`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   lookUpBills(q: string, options: ReadOptions = {}): Promise<{ bills: BillLookupRow[] }> {

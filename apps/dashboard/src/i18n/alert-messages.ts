@@ -29,6 +29,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "One of Waitron's checks could not run. It will try again in a minute.",
     es: "Una de las comprobaciones de Waitron no se ha podido ejecutar. Lo volverá a intentar en un minuto.",
   },
+  "fiscal.taxpayer_domicile_missing": {
+    en: "A full invoice could not be issued because the venue's legal address is missing. Add it before retrying the sale.",
+    es: "No se ha podido emitir una factura completa porque falta el domicilio fiscal del local. Añádelo antes de reintentar la venta.",
+  },
   "station.printer_down": {
     en: "{station}'s printer {printer} has printed nothing since something sent to it got stuck, so {station}'s tickets may not be reaching it. Fix the printer; while {station} is open, closing it on the Prep stations page sends its new work elsewhere (the page shows where).",
     es: "La impresora {printer} de {station} no ha impreso nada desde que se atascó algo que se le envió, así que puede que las comandas de {station} no le lleguen. Arregla la impresora; mientras {station} esté abierta, cerrarla en la página de Estaciones de preparación envía su trabajo nuevo a otro sitio (la página indica adónde).",

@@ -23,6 +23,7 @@ function fullDraft(): DeepPartial<ProvisionBody> {
       country: "ES",
       taxId: "B12345678",
       legalName: "Deli del Sol SL",
+      taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
       location: {
         name: "Calle Mayor",
         fiscalTerritory: "ES-common",
@@ -30,6 +31,7 @@ function fullDraft(): DeepPartial<ProvisionBody> {
         timeZone: "Europe/Madrid",
       },
       seriesCode: "FA",
+      fullSeriesCode: "FF",
       rectificativeSeriesCode: "RF",
       admin: {
         firstNames: "Alba",
@@ -288,8 +290,10 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=summary-country]")).toBe("Spain");
     expect(text(el, "[data-test=summary-taxId]")).toBe("B12345678");
     expect(text(el, "[data-test=summary-legalName]")).toBe("Deli del Sol SL");
+    expect(text(el, "[data-test=summary-taxpayerDomicile]")).toBe("Calle Fiscal 8, 28013 Madrid");
     expect(text(el, "[data-test=summary-location]")).toBe("Calle Mayor");
     expect(text(el, "[data-test=summary-seriesCode]")).toBe("FA");
+    expect(text(el, "[data-test=summary-fullSeriesCode]")).toBe("FF");
     expect(text(el, "[data-test=summary-rectificativeSeriesCode]")).toBe("RF");
     expect(text(el, "[data-test=summary-admin-name]")).toBe("Alba Ramos");
     expect(text(el, "[data-test=summary-admin]")).toBe("Alba");

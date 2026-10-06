@@ -32,6 +32,7 @@ export interface PreparedVenue {
   country: string;
   taxId: string;
   legalName: string;
+  taxpayerDomicile: string | null;
   location: {
     id: string;
     name: string;
@@ -52,6 +53,7 @@ export interface PreparedVenue {
     catalogueId: string | null;
   };
   seriesCode: string;
+  fullSeriesCode: string;
   rectificativeSeriesCode: string;
 }
 
@@ -72,12 +74,15 @@ export async function buildConfigurationBundle(
       country: string;
       taxId: string;
       legalName: string;
+      taxpayerDomicile: string | null;
       seriesCode: string | null;
+      fullSeriesCode: string | null;
       rectificativeSeriesCode: string | null;
     }
   >(sql`
     select
       t.country, t.tax_id as "taxId", t.legal_name as "legalName",
+      t.taxpayer_domicile as "taxpayerDomicile",
       l.id, l.name, l.invoice_locales as "invoiceLocales",
       l.operation_description as "operationDescription", l.fiscal_territory as "fiscalTerritory",
       l.address_line1 as "addressLine1", l.address_line2 as "addressLine2",
@@ -86,6 +91,7 @@ export async function buildConfigurationBundle(
       l.fire_control as "fireControl", l.receipt_print_mode as "receiptPrintMode",
       l.drawer_open_policy as "drawerOpenPolicy", l.catalogue_id as "catalogueId",
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
+      max(s.code) filter (where s.purpose = 'full') as "fullSeriesCode",
       max(s.code) filter (where s.purpose = 'rectificative') as "rectificativeSeriesCode"
     from tenants t
     join locations l on l.id = ${source.locationId}
@@ -94,14 +100,21 @@ export async function buildConfigurationBundle(
     group by t.id, l.id
   `);
   const row = venue.rows[0];
-  if (row === undefined || row.seriesCode === null || row.rectificativeSeriesCode === null) {
+  if (
+    row === undefined ||
+    row.seriesCode === null ||
+    row.fullSeriesCode === null ||
+    row.rectificativeSeriesCode === null
+  ) {
     throw new AppError("setup.request_invalid", { field: "venue" });
   }
   const {
     country,
     taxId,
     legalName,
+    taxpayerDomicile,
     seriesCode,
+    fullSeriesCode,
     rectificativeSeriesCode,
     invoiceLocales,
     ...rest
@@ -116,8 +129,10 @@ export async function buildConfigurationBundle(
       country,
       taxId,
       legalName,
+      taxpayerDomicile,
       location,
       seriesCode,
+      fullSeriesCode,
       rectificativeSeriesCode,
     },
     modules: moduleVersions,
@@ -461,7 +476,14 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   ) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  const venueStrings = ["country", "taxId", "legalName", "seriesCode", "rectificativeSeriesCode"];
+  const venueStrings = [
+    "country",
+    "taxId",
+    "legalName",
+    "seriesCode",
+    "fullSeriesCode",
+    "rectificativeSeriesCode",
+  ];
   const locationStrings = [
     "id",
     "name",
@@ -476,6 +498,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   ];
   if (
     venueStrings.some((field) => typeof venue[field] !== "string") ||
+    (venue.taxpayerDomicile !== null && typeof venue.taxpayerDomicile !== "string") ||
     locationStrings.some((field) => typeof location[field] !== "string") ||
     !Array.isArray(location.invoiceLocales) ||
     location.invoiceLocales.length === 0 ||

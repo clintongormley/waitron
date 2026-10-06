@@ -54,7 +54,7 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
     return {
       nodeId: venue.nodeId,
       seriesId: venue.seriesIds[0]!,
-      rectificativeSeriesId: venue.seriesIds[1]!,
+      rectificativeSeriesId: venue.seriesIds[2]!,
       locationId: venue.locationId,
     };
   } finally {

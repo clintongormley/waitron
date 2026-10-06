@@ -29,6 +29,9 @@ afterEach(cleanupWidgets);
 function bill(workingOrderId: string, status: PartyBill["status"]): PartyBill {
   return {
     workingOrderId,
+    revision: 0,
+    invoiceType: "F2",
+    recipient: null,
     partyId: "v1",
     label: null,
     status,

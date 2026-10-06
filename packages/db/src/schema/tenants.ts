@@ -64,6 +64,7 @@ export const tenants = table(
     country: label("country").notNull(),
     taxId: label("tax_id").notNull(),
     legalName: label("legal_name").notNull(),
+    taxpayerDomicile: label("taxpayer_domicile"),
     createdAt: ts("created_at").notNull().$defaultFn(now),
   },
   (t) => [

@@ -6,7 +6,9 @@ import {
   count,
   enumCheck,
   enumType,
+  flag,
   id,
+  json,
   label,
   newId,
   nowIso,
@@ -53,6 +55,10 @@ export const printJobs = table(
     payload: binary("payload").notNull(),
     // Drawer pulses share transport delivery but cannot be repeated through document resend.
     kind: label("kind").$type<"document" | "drawer">().notNull().default("document"),
+    // Null for other documents and drawer jobs; false for a receipt original, true for a copy.
+    receiptCopy: flag("receipt_copy"),
+    // Staff confirmation of customer handover, separate from the agent's delivered_at stamp.
+    receiptHandover: json<{ personId: string; confirmedAt: string }>("receipt_handover"),
     status: printJobStatus("status").notNull().default("queued"),
     attempts: count("attempts").notNull().default(0),
     lastError: label("last_error"),

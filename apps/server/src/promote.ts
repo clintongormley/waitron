@@ -2,6 +2,7 @@ import "./errors.js";
 import { AppError } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewerTx,
+  readLiveSeriesIdTx,
   readNodeMembership,
   readStandardSeriesId,
   setDeploymentModeTx,
@@ -162,6 +163,7 @@ export async function promoteMirrorToPrimary(
   await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
   // Also what an already-primary re-run returns.
   const seriesId = await readStandardSeriesId(deps.db, deps.nodeId);
+  await withTransaction(deps.db, (tx) => readLiveSeriesIdTx(tx, deps.nodeId, "full"));
 
   if (deps.holders.mode.current === "primary") {
     return { alreadyPrimary: true, seriesId };

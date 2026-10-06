@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { hashPin, deactivatePerson, persons } from "@waitron/identity";
-import { withTransaction } from "@waitron/db";
+import { invoiceSeries, tenants, withTransaction } from "@waitron/db";
+import { recordSale } from "@waitron/core";
+import { and, eq } from "drizzle-orm";
+import { seriesId as brandSeriesId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { send } from "./testing/bill-venue.js";
@@ -194,5 +197,86 @@ describe("Orders routes", () => {
       party: { tables: [expect.stringMatching(/^Mesa /)] },
       departure: { reason: "Se marcharon sin pagar", recordedBy: "Sofía", authorizedBy: "Sofía" },
     });
+  });
+
+  it("identifies filed full and simplified invoices in order details", async () => {
+    const simplified = await billlessSale(venue);
+    const [tenant] = await venue.db.select({ domicile: tenants.taxpayerDomicile }).from(tenants);
+    await withTransaction(venue.db, (tx) =>
+      tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 1, Madrid" }),
+    );
+    let full: string;
+    try {
+      full = await withTransaction(venue.db, async (tx) => {
+        const [series] = await tx
+          .select({ id: invoiceSeries.id })
+          .from(invoiceSeries)
+          .where(
+            and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "full")),
+          );
+        const filed = await recordSale(tx, venue.backend, {
+          origin: venue.cfg.origin,
+          nodeId: venue.cfg.nodeId,
+          seriesId: brandSeriesId(series!.id),
+          locale: venue.cfg.locale,
+          invoiceLocales: venue.cfg.invoiceLocales,
+          counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
+          recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          total: "12.10",
+          lines: [
+            {
+              lineNo: 1,
+              name: "Venta suelta",
+              descriptions: { [venue.cfg.locale]: "Venta suelta" },
+              quantity: "1",
+              unitPrice: "10.00",
+              vatRate: "21.00",
+              lineTotal: "10.00",
+            },
+          ],
+          clock: venue.clock,
+          settlement: {
+            kind: "immediate",
+            tenders: [
+              { method: "cash", amount: "12.10", tipAmount: "0.00", settledAt: new Date() },
+            ],
+          },
+          operatorId: venue.operatorId,
+        });
+        return filed.saleId;
+      });
+    } finally {
+      await withTransaction(venue.db, (tx) =>
+        tx.update(tenants).set({ taxpayerDomicile: tenant!.domicile }),
+      );
+    }
+
+    const simplifiedDetail = await get(venue.supervisorDashboard, `/${simplified}`);
+    const fullDetail = await get(venue.supervisorDashboard, `/${full}`);
+    expect(simplifiedDetail.status).toBe(200);
+    expect(fullDetail.status).toBe(200);
+    expect((simplifiedDetail.json.invoices as object[])[0]).toMatchObject({
+      kind: "invoice",
+      invoiceType: "F2",
+    });
+    expect((fullDetail.json.invoices as object[])[0]).toMatchObject({
+      kind: "invoice",
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        countryCode: "ES",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      },
+    });
+    expect((fullDetail.json.invoices as object[])[0]).toMatchObject({
+      taxpayerDomicile: "Calle Fiscal 1, Madrid",
+    });
+
+    const page = await get(venue.supervisorDashboard, "?anyDate=true&limit=200");
+    expect(page.status).toBe(200);
+    const rows = page.json.rows as { id: string; invoiceType: string | null }[];
+    expect(rows.find((row) => row.id === simplified)?.invoiceType).toBe("F2");
+    expect(rows.find((row) => row.id === full)?.invoiceType).toBe("F1");
   });
 });

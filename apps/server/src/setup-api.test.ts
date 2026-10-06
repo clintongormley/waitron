@@ -125,6 +125,7 @@ function demoBody(): Record<string, unknown> {
       country: "ES",
       taxId: "50000000R",
       legalName: "Waitron Dev SL",
+      taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
       location: {
         name: "Sala principal",
         fiscalTerritory: "ES-common",
@@ -139,6 +140,7 @@ function demoBody(): Record<string, unknown> {
         dayCutover: "05:00",
       },
       seriesCode: "A",
+      fullSeriesCode: "FF",
       rectificativeSeriesCode: "R",
       admin: {
         displayName: "Administradora",
@@ -829,6 +831,63 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     );
   });
 
+  it("passes the full invoice series chosen at setup into provisioning", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const body = demoBody();
+    asRec(body.venue).fullSeriesCode = "F1";
+
+    expect((await postProvision(app, body)).status).toBe(200);
+    expect(provisionRequests[0].venue.fullSeriesCode).toBe("F1");
+  });
+
+  it("passes a taxpayer domicile distinct from the location address into provisioning", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const body = demoBody();
+    asRec(body.venue).taxpayerDomicile = "Calle Fiscal 8, 28013 Madrid";
+
+    expect((await postProvision(app, body)).status).toBe(200);
+    expect(provisionRequests[0].venue).toMatchObject({
+      taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
+      location: { addressLine1: "Calle Mayor 1" },
+    });
+  });
+
+  it("refuses Prepare without a taxpayer domicile before provisioning", async () => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const body = demoBody();
+    body.mode = "prepare";
+    delete asRec(body.venue).taxpayerDomicile;
+
+    const response = await postProvision(app, body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "taxpayerDomicile" } },
+    });
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it("refuses a blank taxpayer domicile before provisioning", async () => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const body = demoBody();
+    body.mode = "prepare";
+    asRec(body.venue).taxpayerDomicile = "   ";
+
+    const response = await postProvision(app, body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "taxpayerDomicile" } },
+    });
+    expect(provision).not.toHaveBeenCalled();
+  });
+
   it("provisions a live venue with a cert: stamps production and seals the cert in order", async () => {
     const app = new Hono();
     const { deps, calls, provisionRequests } = makeDeps();
@@ -1201,6 +1260,11 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
       "a rectificative series code with a space",
       "rectificativeSeriesCode",
       (b) => void (asRec(b.venue).rectificativeSeriesCode = "Serie R"),
+    ],
+    [
+      "a full invoice series code with a space",
+      "fullSeriesCode",
+      (b) => void (asRec(b.venue).fullSeriesCode = "Serie F"),
     ],
     [
       "an operation description carrying a character XML forbids",

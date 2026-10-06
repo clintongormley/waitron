@@ -285,6 +285,9 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0096_operator_script_restore_incident_index": {
     refused: ["UNIQUE constraint failed: index 'incidents_open_dedup'"],
   },
+  "core/0102_full_invoice_model": {
+    refused: ["DROP TABLE `invoice_series`", "FOREIGN KEY constraint failed"],
+  },
   "catalogue/0018_sections_owned_prepare": {
     refused: ["DELETE FROM sections WHERE role = 'library'", "FOREIGN KEY constraint failed"],
   },

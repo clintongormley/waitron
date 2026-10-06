@@ -75,6 +75,7 @@ export interface OrderRow {
   counter: boolean;
   saleId: string | null;
   invoiceNumber: string | null;
+  invoiceType: "F1" | "F2" | null;
   creditNotes: string[];
   status: OrderStatus;
   credited: "in_full" | "in_part" | null;
@@ -143,6 +144,7 @@ function rowsSql(filter: OrderListFilter): SQL {
   select 'bill' as kind, wo.id as id, wo.opened_at as at, wo.order_number as order_number, wo.label as label,
          wo.party_id as party_id, p.name as party_name, dd.label as delivery_label,
          s.id as sale_id, sr.code as series_code, s.invoice_number as invoice_number,
+         s.counterparty_tax_id as counterparty_tax_id,
          cast(s.total as text) as sale_total,
          cast((select coalesce(sum(l.line_total), 0) from working_order_lines l where l.working_order_id = wo.id) as text) as lines_total,
          ${CORRECTIONS} as corrections, null as operator_id, null as operator_name,
@@ -158,6 +160,7 @@ function rowsSql(filter: OrderListFilter): SQL {
   where ${LISTED_BILL}${billScope(filter)}
   union all
   select 'sale', s.id, s.issued_at, null, null, null, null, null, s.id, sr.code, s.invoice_number,
+         s.counterparty_tax_id,
          cast(s.total as text), '0', ${CORRECTIONS}, s.operator_id, op.display_name,
          case when sv.id is not null then 'voided' when ss.id is not null then 'paid' else 'waiting_for_payment' end,
          null
@@ -182,6 +185,7 @@ interface RawRow extends Record<string, unknown> {
   sale_id: string | null;
   series_code: string | null;
   invoice_number: number | null;
+  counterparty_tax_id: string | null;
   sale_total: string | null;
   lines_total: string;
   corrections: string;
@@ -357,6 +361,7 @@ export async function listOrders(tx: Transaction, filter: OrderListFilter): Prom
       saleId: row.sale_id,
       invoiceNumber:
         row.sale_id === null ? null : formatInvoiceNumber(row.series_code!, row.invoice_number!),
+      invoiceType: row.sale_id === null ? null : row.counterparty_tax_id === null ? "F2" : "F1",
       creditNotes: row.sale_id === null ? [] : (notes.get(row.sale_id) ?? []),
       status: row.status,
       credited:
@@ -469,6 +474,9 @@ export interface OrderLine {
 }
 export interface OrderInvoice {
   kind: "invoice" | "credit_note" | "substitution";
+  invoiceType?: "F1" | "F2";
+  recipient?: { taxId: string; legalName: string; countryCode: string; address: string };
+  taxpayerDomicile?: string;
   number: string;
   issuedAt: string;
   total: Decimal;
@@ -597,6 +605,11 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
   const base = await tx
     .select({
       id: sales.id,
+      counterpartyTaxId: sales.counterpartyTaxId,
+      counterpartyLegalName: sales.counterpartyLegalName,
+      counterpartyCountryCode: sales.counterpartyCountryCode,
+      counterpartyAddress: sales.counterpartyAddress,
+      taxpayerDomicile: sales.taxpayerDomicile,
       number: sales.invoiceNumber,
       code: invoiceSeries.code,
       issuedAt: sales.issuedAt,
@@ -639,6 +652,23 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
   return [
     ...base.map((invoice): OrderInvoice => ({
       kind: "invoice",
+      invoiceType: invoice.counterpartyTaxId === null ? "F2" : "F1",
+      ...(invoice.counterpartyTaxId !== null && invoice.taxpayerDomicile !== null
+        ? { taxpayerDomicile: invoice.taxpayerDomicile }
+        : {}),
+      ...(invoice.counterpartyTaxId !== null &&
+      invoice.counterpartyLegalName !== null &&
+      invoice.counterpartyCountryCode !== null &&
+      invoice.counterpartyAddress !== null
+        ? {
+            recipient: {
+              taxId: invoice.counterpartyTaxId,
+              legalName: invoice.counterpartyLegalName,
+              countryCode: invoice.counterpartyCountryCode,
+              address: invoice.counterpartyAddress,
+            },
+          }
+        : {}),
       number: formatInvoiceNumber(invoice.code, invoice.number),
       issuedAt: invoice.issuedAt,
       total: centsToDecimal(invoice.total),
