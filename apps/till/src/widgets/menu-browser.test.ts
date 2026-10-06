@@ -938,6 +938,274 @@ describe("till-menu-browser", () => {
     });
   });
 
+  describe("search across the served menus", () => {
+    /** `key`'s offer on another menu: its own offer, published version and menu. */
+    const offerOn = (
+      menu: "drinks" | "brunch",
+      key: string,
+      name: string,
+      extra: Partial<TillProduct> = {},
+    ): TillProduct =>
+      product(key, name, {
+        menuItemId: `mi-${menu}-${key}`,
+        menuVersionId: `v-${menu}`,
+        catalogueId: `menu-${menu}`,
+        ...extra,
+      });
+    const memberOn = (menu: "drinks" | "brunch", key: string): DocumentMember => ({
+      kind: "product",
+      menuItemId: `mi-${menu}-${key}`,
+      productId: `p-${key}`,
+    });
+
+    // The same product as Lunch's Cola, offered by Drinks at its own price.
+    const colaOnDrinks = offerOn("drinks", "cola", "Cola", { unitPrice: "2.20" });
+    const cortado = offerOn("drinks", "cortado", "Cortado", {
+      variants: [
+        {
+          ...sellingValuesOf(cafe),
+          id: "v-cortado-large",
+          name: "Grande",
+          unitPrice: "2.80",
+          unitPriceDifference: null,
+          available: true,
+        },
+      ],
+    });
+    const coconut = offerOn("drinks", "coconut", "Coconut water", { available: false });
+    const cordial = offerOn("drinks", "cordial", "Cordial", { ordering: "not_sold_separately" });
+    const DRINKS_PRODUCTS = [colaOnDrinks, cortado, coconut, cordial];
+
+    const pancakes = offerOn("brunch", "pancakes", "Pancakes");
+    const porridge = offerOn("brunch", "porridge", "Porridge");
+    const BRUNCH_PRODUCTS = [pancakes, porridge];
+
+    const SERVED = [...PRODUCTS, ...DRINKS_PRODUCTS, ...BRUNCH_PRODUCTS];
+
+    function drinksMenu(): TillZoneMenu {
+      return {
+        id: "menu-drinks",
+        name: "Drinks",
+        isDefault: false,
+        versionId: "v-drinks",
+        structure: {
+          members: [
+            section("sec-soft", "soft-internal", { en: "Soft (EN)" }, [
+              memberOn("drinks", "cola"),
+              memberOn("drinks", "coconut"),
+              memberOn("drinks", "cordial"),
+            ]),
+            memberOn("drinks", "cortado"),
+          ],
+        },
+        ...withShortcuts([]),
+      };
+    }
+
+    function brunchMenu(): TillZoneMenu {
+      return {
+        id: "menu-brunch",
+        name: "Brunch",
+        isDefault: false,
+        versionId: "v-brunch",
+        structure: { members: [memberOn("brunch", "pancakes"), memberOn("brunch", "porridge")] },
+        ...withShortcuts([]),
+      };
+    }
+
+    function served(props: Partial<TillMenuBrowser> = {}) {
+      return mount({
+        menus: [lunch(), drinksMenu(), brunchMenu()],
+        servedProducts: SERVED,
+        ...props,
+      });
+    }
+
+    interface Group {
+      menu: string;
+      heading: string;
+      names: string[];
+      empty: string | null;
+    }
+
+    function groupSections(el: TillMenuBrowser): HTMLElement[] {
+      return [
+        ...root(el).querySelectorAll<HTMLElement>('[data-region="results"] section[data-menu]'),
+      ];
+    }
+
+    function groups(el: TillMenuBrowser): Group[] {
+      return groupSections(el).map((group) => ({
+        menu: group.dataset.menu!,
+        heading: group.querySelector("h3")!.textContent!.trim(),
+        names: names([...group.querySelectorAll<Button>("wt-button[data-kind]")]),
+        empty: group.querySelector(".empty")?.textContent?.trim() ?? null,
+      }));
+    }
+
+    function groupEntry(el: TillMenuBrowser, menu: string, name: string): Button {
+      const group = groupSections(el).find((each) => each.dataset.menu === menu);
+      const found = [...(group?.querySelectorAll<Button>("wt-button[data-kind]") ?? [])].find(
+        (button) => button.querySelector(".name")!.textContent!.trim() === name,
+      );
+      if (!found) throw new Error(`no ${menu} result named ${name}`);
+      return found;
+    }
+
+    const resultsText = (el: TillMenuBrowser) =>
+      root(el).querySelector('[data-region="results"]')!.textContent!;
+
+    it("lists the shown menu's matches first, then each other served menu's, labelled by menu", async () => {
+      const { el } = await served();
+      await search(el, "co");
+      expect(groups(el)).toEqual([
+        { menu: "menu-lunch", heading: "Lunch (this menu)", names: ["Cola"], empty: null },
+        {
+          menu: "menu-drinks",
+          heading: "Drinks",
+          names: ["Cola", "Coconut water", "Cortado"],
+          empty: null,
+        },
+      ]);
+      expect(root(el).querySelector('[data-region="results"] h2')!.textContent!.trim()).toBe(
+        "Search results",
+      );
+    });
+
+    it("keeps the zone's order and draws no group for a menu without a match", async () => {
+      const { el } = await served();
+      await search(el, "pancake");
+      expect(groups(el)).toEqual([
+        {
+          menu: "menu-lunch",
+          heading: "Lunch (this menu)",
+          names: [],
+          empty: "No products match in this menu",
+        },
+        { menu: "menu-brunch", heading: "Brunch", names: ["Pancakes"], empty: null },
+      ]);
+    });
+
+    it("says no menu has a match when none does", async () => {
+      const { el } = await served();
+      await search(el, "zzz");
+      expect(groups(el)).toEqual([]);
+      expect(entries(el, "results")).toEqual([]);
+      expect(resultsText(el)).toContain("No products match in any menu");
+    });
+
+    it("draws one menu's results as before", async () => {
+      const { el } = await served({ menus: [lunch()] });
+      await search(el, "co");
+      expect(groupSections(el)).toEqual([]);
+      expect(names(entries(el, "results"))).toEqual(["Cola"]);
+      expect(root(el).querySelector('[data-region="results"] h2')!.textContent!.trim()).toBe(
+        "Search results",
+      );
+      await search(el, "zzz");
+      expect(resultsText(el)).toContain("No products match");
+      expect(resultsText(el)).not.toContain("menu");
+    });
+
+    it("searches only the menus it is served", async () => {
+      const { el } = await served({ menus: [lunch(), drinksMenu()] });
+      await search(el, "pancake");
+      expect(names(entries(el, "results"))).toEqual([]);
+      el.menus = [lunch(), drinksMenu(), brunchMenu()];
+      await el.updateComplete;
+      expect(names(entries(el, "results"))).toEqual(["Pancakes"]);
+    });
+
+    it("shows a product on two menus once in each, at each menu's price, and rings up the tapped menu's offer", async () => {
+      const { el, store } = await served();
+      await search(el, "cola");
+      expect(groups(el).map((group) => [group.menu, group.names])).toEqual([
+        ["menu-lunch", ["Cola"]],
+        ["menu-drinks", ["Cola"]],
+      ]);
+      const price = (tile: Button) => tile.querySelector(".price")!.textContent;
+      expect(price(groupEntry(el, "menu-lunch", "Cola"))).toBe(
+        `${formatMoney("1.50", currentLocale())}/ea`,
+      );
+      expect(price(groupEntry(el, "menu-drinks", "Cola"))).toBe(
+        `${formatMoney("2.20", currentLocale())}/ea`,
+      );
+      await tap(el, groupEntry(el, "menu-drinks", "Cola"));
+      expect(store.lines).toHaveLength(1);
+      expect(store.lines[0]!.product.menuItemId).toBe("mi-drinks-cola");
+      expect(store.lines[0]!.product.menuVersionId).toBe("v-drinks");
+      expect(store.lines[0]!.product.unitPrice).toBe("2.20");
+    });
+
+    it("opens another menu's product with that menu's choices", async () => {
+      const { el, store } = await served();
+      await search(el, "cortado");
+      await tap(el, groupEntry(el, "menu-drinks", "Cortado"));
+      const picker = root(el).querySelector("till-modifier-picker")!;
+      expect(picker.product).toBe(cortado);
+      const detail: ModifierConfirmDetail = { product: cortado, note: "corto" };
+      picker.dispatchEvent(new CustomEvent("wt-modifier-confirm", { detail }));
+      await el.updateComplete;
+      expect(store.lines).toEqual([{ product: cortado, quantity: "1", note: "corto" }]);
+    });
+
+    it("keeps a sold-out product greyed in its group and leaves out one not sold separately", async () => {
+      const { el, store } = await served();
+      await search(el, "co");
+      const drinksGroup = groups(el).find((group) => group.menu === "menu-drinks")!;
+      expect(drinksGroup.names).not.toContain("Cordial");
+      const soldOut = groupEntry(el, "menu-drinks", "Coconut water");
+      expect(soldOut.disabled).toBe(true);
+      expect(soldOut.querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
+      await tap(el, soldOut);
+      expect(store.lines).toEqual([]);
+    });
+
+    it("follows a change of served menus or products", async () => {
+      const { el } = await served();
+      await search(el, "o");
+      expect(groups(el).map((group) => group.menu)).toEqual([
+        "menu-lunch",
+        "menu-drinks",
+        "menu-brunch",
+      ]);
+      expect(groupEntry(el, "menu-brunch", "Porridge").disabled).toBe(false);
+
+      el.menus = [lunch(), brunchMenu()];
+      await el.updateComplete;
+      expect(groups(el).map((group) => group.menu)).toEqual(["menu-lunch", "menu-brunch"]);
+
+      el.servedProducts = SERVED.map((each) =>
+        each === porridge ? { ...each, available: false } : each,
+      );
+      await el.updateComplete;
+      expect(groupEntry(el, "menu-brunch", "Porridge").disabled).toBe(true);
+    });
+
+    it("puts the newly selected menu first", async () => {
+      const { el } = await served();
+      await search(el, "co");
+      el.menu = drinksMenu();
+      el.products = DRINKS_PRODUCTS;
+      await el.updateComplete;
+      expect(groups(el).map(({ menu, heading }) => ({ menu, heading }))).toEqual([
+        { menu: "menu-drinks", heading: "Drinks (this menu)" },
+        { menu: "menu-lunch", heading: "Lunch" },
+      ]);
+    });
+
+    it("groups the results while a section is open, and goes back to it when cleared", async () => {
+      const { el } = await served();
+      await tap(el, entry(el, "structure", "Comida (ES)"));
+      await search(el, "co");
+      expect(regions(el)).toEqual(["search", "results"]);
+      expect(groups(el).map((group) => group.menu)).toEqual(["menu-lunch", "menu-drinks"]);
+      await search(el, "");
+      expect(regions(el)).toEqual(["search", "section"]);
+      expect(breadcrumb(el)).toBe("Home › Comida (ES)");
+    });
+  });
+
   describe("ordering", () => {
     it("a product tile rings up one of that product", async () => {
       const { el, store } = await mount();

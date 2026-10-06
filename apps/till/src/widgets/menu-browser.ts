@@ -107,6 +107,12 @@ export class TillMenuBrowser extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      [data-region="results"] h3 {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       .divider {
         display: flex;
         align-items: center;
@@ -271,6 +277,12 @@ export class TillMenuBrowser extends LitElement {
   /** This menu's offers as till products. */
   @property({ attribute: false }) products: TillProduct[] = [];
 
+  /** Every menu the device is served in its zone, in the zone's order, the shown one included. */
+  @property({ attribute: false }) menus: readonly TillZoneMenu[] = [];
+
+  /** Every served menu's offers as till products, through the same diet lens as `products`. */
+  @property({ attribute: false }) servedProducts: TillProduct[] = [];
+
   @property({ attribute: false }) store!: WorkingOrderStore;
 
   /** Whether it shows the menu's Handheld display rather than its Till one. */
@@ -295,17 +307,29 @@ export class TillMenuBrowser extends LitElement {
 
   #indexed?: { menu: TillZoneMenu; products: TillProduct[]; index: MenuIndex };
 
+  #otherIndexes = new WeakMap<TillZoneMenu, { products: TillProduct[]; index: MenuIndex }>();
+
   #trailShown: SectionNode[] = [];
 
   /** Each indexed product with its name folded for search. Keyed by the index alone because
    * {@link productName} reads no language. */
-  #searchable?: { index: MenuIndex; names: [TillProduct, string][] };
+  #searchable = new WeakMap<MenuIndex, [TillProduct, string][]>();
 
   #index(menu: TillZoneMenu): MenuIndex {
     const cached = this.#indexed;
     if (cached?.menu === menu && cached.products === this.products) return cached.index;
     const index = indexMenu(menu, this.products);
     this.#indexed = { menu, products: this.products, index };
+    return index;
+  }
+
+  /** Another served menu's index, over `servedProducts`: a menu's structure names only its own
+   * offers, so a product on two menus is indexed at each menu's offer. */
+  #otherIndex(menu: TillZoneMenu): MenuIndex {
+    const cached = this.#otherIndexes.get(menu);
+    if (cached?.products === this.servedProducts) return cached.index;
+    const index = indexMenu(menu, this.servedProducts);
+    this.#otherIndexes.set(menu, { products: this.servedProducts, index });
     return index;
   }
 
@@ -373,14 +397,16 @@ export class TillMenuBrowser extends LitElement {
     </div>`;
   }
 
-  #searchableNames(index: MenuIndex): [TillProduct, string][] {
-    if (this.#searchable?.index === index) return this.#searchable.names;
-    const names = [...index.products.values()].map((product): [TillProduct, string] => [
-      product,
-      foldForSearch(productName(product)),
-    ]);
-    this.#searchable = { index, names };
-    return names;
+  #matches(index: MenuIndex, wanted: string): TillProduct[] {
+    let names = this.#searchable.get(index);
+    if (names === undefined) {
+      names = [...index.products.values()].map((product): [TillProduct, string] => [
+        product,
+        foldForSearch(productName(product)),
+      ]);
+      this.#searchable.set(index, names);
+    }
+    return names.filter(([, name]) => name.includes(wanted)).map(([product]) => product);
   }
 
   #productButton(product: TillProduct, mode: HomeTileMode, onTap: () => void): TemplateResult {
@@ -505,23 +531,42 @@ export class TillMenuBrowser extends LitElement {
     </section>`;
   }
 
-  #results(index: MenuIndex, display: HomeDisplay): TemplateResult {
+  /** A menu's group carries no accessible name: two menus may share one, and two same-named
+   * regions fail axe's landmark-unique. */
+  #results(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
     const wanted = foldForSearch(this.query.trim());
-    const found = this.#searchableNames(index)
-      .filter(([, name]) => name.includes(wanted))
-      .map(([product]) => product);
+    const found = this.#matches(index, wanted);
+    const otherMenus = this.menus.filter((other) => other.id !== menu.id);
+    const others = otherMenus
+      .map((other) => ({ menu: other, found: this.#matches(this.#otherIndex(other), wanted) }))
+      .filter((other) => other.found.length > 0);
+    const tiles = (products: TillProduct[]) =>
+      this.#grid(
+        products.map((product) =>
+          this.#productButton(product, display.tiles, () => this.#pick(product)),
+        ),
+        display,
+      );
+    const empty = (text: string) => html`<p class="empty">${text}</p>`;
+    let body: TemplateResult;
+    if (otherMenus.length === 0)
+      body = found.length === 0 ? empty(t("menu.no_results")) : tiles(found);
+    else if (found.length === 0 && others.length === 0) body = empty(t("menu.no_results_any_menu"));
+    else
+      body = html`<section data-menu=${menu.id}>
+          <h3>${t("menu.results_this_menu").replace("{menu}", () => menu.name)}</h3>
+          ${found.length === 0 ? empty(t("menu.no_results_this_menu")) : tiles(found)}
+        </section>
+        ${others.map(
+          (other) =>
+            html`<section data-menu=${other.menu.id}>
+              <h3>${other.menu.name}</h3>
+              ${tiles(other.found)}
+            </section>`,
+        )}`;
     return html`<section data-region="results" aria-labelledby="results-heading">
       <h2 id="results-heading">${t("menu.results")}</h2>
-      ${
-        found.length === 0
-          ? html`<p class="empty">${t("menu.no_results")}</p>`
-          : this.#grid(
-              found.map((product) =>
-                this.#productButton(product, display.tiles, () => this.#pick(product)),
-              ),
-              display,
-            )
-      }
+      ${body}
     </section>`;
   }
 
@@ -532,7 +577,7 @@ export class TillMenuBrowser extends LitElement {
     const trail = this.#trailShown;
     const display = this.#display(menu);
     let view: TemplateResult;
-    if (this.query.trim() !== "") view = this.#results(index, display);
+    if (this.query.trim() !== "") view = this.#results(menu, index, display);
     else if (trail.length > 0) view = this.#sectionView(trail, index, display);
     else view = this.#home(menu, index, display);
     return html`
