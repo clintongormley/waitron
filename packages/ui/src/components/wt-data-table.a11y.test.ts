@@ -179,6 +179,36 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("a phone-width tree with a toggle focused from the keyboard", async () => {
+    type TreeRow = { id: string; parent: string | null; name: string };
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Categories"></wt-data-table>',
+      theme,
+    )) as WtDataTable<TreeRow>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, sortValue: (row) => row.name },
+    ] satisfies DataTableColumn<TreeRow>[];
+    el.rows = [
+      { id: "food", parent: null, name: "Food" },
+      { id: "break", parent: "food", name: "Breakfast" },
+      { id: "eggs", parent: "break", name: "Eggs" },
+    ];
+    el.rowKey = (row) => row.id;
+    el.rowParent = (row) => row.parent;
+    el.style.width = "360px";
+    await el.updateComplete;
+    for (let i = 0; i < 3; i += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(el.hasAttribute("narrow")).toBe(true);
+    const toggle = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      'tbody tr[data-row-key="food"] button.tree-toggle',
+    )!;
+    toggle.focus();
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    await userEvent.keyboard("{Tab}");
+    expect(toggle.matches(":focus-visible")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
   test("tree mode with an always-open top branch", async () => {
     type TreeRow = { id: string; parent: string | null; name: string };
     const el = (await mountThemed(

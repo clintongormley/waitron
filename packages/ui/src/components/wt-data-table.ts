@@ -615,6 +615,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
+      /* A top-level toggle sits against the scrolling box's edge, which clips an outward ring. */
+      :host([narrow]) .tree-toggle:focus-visible {
+        outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
       .tree-spacer {
         display: inline-block;
         width: var(--tree-arrow-width);

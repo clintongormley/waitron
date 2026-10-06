@@ -344,11 +344,14 @@ export class ProductList extends LitElement {
   @state() private ghost: DragGhost | null = null;
 
   readonly #tableResize = new ResizeObserver(() => this.#scheduleFit());
+  /** `narrow` moves the names without resizing the table or updating it. */
+  readonly #tableNarrow = new MutationObserver(() => this.#scheduleFit());
   #fitFrame = 0;
 
   override disconnectedCallback(): void {
     if (this.#pointerDrag) this.#finishDrag();
     this.#tableResize.disconnect();
+    this.#tableNarrow.disconnect();
     cancelAnimationFrame(this.#fitFrame);
     this.#fitFrame = 0;
     super.disconnectedCallback();
@@ -356,11 +359,11 @@ export class ProductList extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.hasUpdated) this.#tableResize.observe(this.#table()!);
+    if (this.hasUpdated) this.#watchTable();
   }
 
   protected override firstUpdated(): void {
-    this.#tableResize.observe(this.#table()!);
+    this.#watchTable();
     this.#table()!.addController({
       hostUpdated: () => {
         this.#scheduleFit();
@@ -703,8 +706,14 @@ export class ProductList extends LitElement {
     >`;
   }
 
-  /** Re-measured a frame after the table resizes or updates, never inside the resize observer's
-   * callback, which the names' new heights would re-trigger. */
+  #watchTable(): void {
+    const table = this.#table()!;
+    this.#tableResize.observe(table);
+    this.#tableNarrow.observe(table, { attributes: true, attributeFilter: ["narrow"] });
+  }
+
+  /** Re-measured a frame after the table resizes, updates or turns `narrow`, never inside the
+   * resize observer's callback, which the names' new heights would re-trigger. */
   #scheduleFit(): void {
     if (this.#fitFrame) return;
     this.#fitFrame = requestAnimationFrame(() => {
