@@ -883,7 +883,7 @@ Still open from W74:
   #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
   so a lookup by name finds the first row drawn for that device.
 - **When an empty category's delete is refused because only a disabled product was added, the
-  dialog reads "0 products"** (left open by A278, which made the delete request carry the count of
+  dialog reads "0 products"** (left open by A278, #1292, which made the delete request carry the count of
   all products, disabled ones included, so the server refuses with `category.contents_changed` when
   it differs): the dialog then opened counts active products only, so it shows "0 products" beside
   the refusal's "check the new counts" message.
