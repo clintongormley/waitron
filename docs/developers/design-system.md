@@ -2564,8 +2564,9 @@ Where a screen has both, the action follows what the code does: a watcher's or a
 reads Disable while only products are selected (and is not offered when every selected product is
 disabled already) and Delete once a category is in the selection,
 because the category itself is deleted. Products selected directly are disabled; the products
-inside the category, its subcategories included, are disabled only with **Delete it too**, and with
-**Move it up to the parent category** they stay active.
+inside the category, its subcategories included, are disabled only with the delete dialog's
+"Also: deletes … and disables …" answer, and with the answer that moves them to the parent they
+stay active.
 
 ### Products: Active and Available are two different words
 

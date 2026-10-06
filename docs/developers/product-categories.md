@@ -303,25 +303,29 @@ every selected product is disabled already, the toolbar offers no **Disable**; a
 mixes active and disabled products still offers it, and the disabled ones stay disabled. Once a category is in the selection the action
 reads **Delete**, because the category itself is deleted. Products you selected directly are still
 only disabled. The products inside the category, its subcategories included, are disabled only if
-you choose **Delete it too**; with **Move it up to the parent category** they stay active.
-Before deleting a category that holds products or subcategories, choose what happens to its
-contents:
+you choose the dialog's "Also: …" answer; with the other answer they stay active.
+Before deleting a category that holds active products or subcategories, the compact dialog asks
+"What happens to what is inside?". Each answer names what it does, counting only active products
+and leaving out anything that is zero. The place named is the shared parent's path, **No
+category** for the top level, or "each category's parent" when the outermost selected categories
+sit under different parents.
 
-- **Move it up to the parent category** keeps the products active and moves the category's direct
-  products and subcategories to its parent. For a top-level category they move to **All products**.
-  Only the routing rules naming a selected category itself are removed; its subcategories that are
-  not selected keep theirs. The dialog's routing-rule warning counts only the removed ones.
-- **Delete it too** removes the subtree and disables its products. The summary shows how many
-  subcategories and routing rules are removed (category claims and exceptions, in the whole
-  subtree) and how many products the subtree holds. The product count includes products that are
-  disabled already and, when there are any, says how many, as in "3 products, 1 of them already
-  disabled". Every product in the subtree,
+- "1 category and 3 products move to Drinks" keeps the products active and moves the category's
+  direct products and subcategories to its parent. Its subcategories that are not selected keep
+  their routing rules.
+- "Also: deletes 1 category and 2 kitchen routing rules and disables 3 products. They move to
+  Drinks." removes the subtree and disables its products. The rules it lists are the category
+  claims and exceptions naming a subcategory that is not itself selected. Every product in the subtree,
   disabled ones included, is moved to the parent of the outermost selected category that holds it.
 
+When there are any, a paragraph below the question counts the routing rules naming a selected
+category itself, which go whichever answer is chosen.
+
 A category is deleted without confirmation only when it holds no products (disabled ones
-included), no subcategories and no routing rules. When no selected category holds products or
-subcategories, the confirmation asks nothing about contents and says how many routing rules go
-with them, if any. A category's row-menu Delete uses the same path.
+included), no subcategories and no routing rules. When no selected category holds active products
+or subcategories, the confirmation asks nothing about contents, because any disabled products
+inside move up whichever answer is chosen; it says nothing about those products, and says how many
+routing rules go with the categories, if any. A category's row-menu Delete uses the same path.
 If the summary cannot be read, deletion waits for a successful new attempt rather than asking you
 to approve unknown contents. The dialog lists each category being deleted by its full path, adding
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
@@ -340,8 +344,8 @@ with its new counts.
 A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes its station claim and every exception naming it, because both tables
-have a cascading foreign key to `categories`. The dialog's routing-rule warning counts the rules the
-chosen option removes; it does not list products whose station would change. **Move to…** also has no routing preview. Check
+have a cascading foreign key to `categories`. The dialog counts the routing rules each answer
+removes; it does not list products whose station would change. **Move to…** also has no routing preview. Check
 Prep Stations' tester after changing the category tree. A variant is routed by its product's
 category, and a variant still storing a deleted category has it cleared.
 
@@ -396,10 +400,9 @@ repeated IDs are `management.request_invalid` (400), and a malformed UUID is `sh
 (400); a missing or malformed `shown` is `management.request_invalid` with `field: "shown"`.
 Category-summary counts cover each complete subtree, except `ownRoutes`, which counts only the
 routing rules naming the category itself. The browser counts the outermost selected categories when
-ancestors and descendants are selected together, except that under **Move it up to the parent
-category** its routing-rule warning sums `ownRoutes` over every selected category. Under **Delete it
-too** the warning's sentence says the rules name these categories "or ones inside them", because its
-count reaches subcategories the dialog does not list.
+ancestors and descendants are selected together, except that the routing-rule paragraph sums
+`ownRoutes` over every selected category. The rules the "Also: …" answer lists are the outermost
+categories' `routes` less that sum.
 
 The former per-category delete, dependants and product-membership routes are retired. Use the
 category selection operations above. The product editor still saves `primaryCategoryId`, which
