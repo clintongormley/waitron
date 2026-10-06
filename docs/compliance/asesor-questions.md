@@ -9,6 +9,16 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
+Later on **2026-10-06**, the standalone English and Spanish **Word copies were brought up to
+date** from the formulations below. New sections: 1.10 (Q42), 1.11 (the A231 operation-date
+question below) and 6.9 (Q41). Rewritten: 4.3 (Q5, with (f)'s three questions as (e) to (g), and
+full invoices in their own series) and section 6 (Q33 to Q40 as revised on 2026-10-04, each ending
+with its proposed treatment; the AEAT test-service observations appear as one plain sentence where
+they bear on a question, without run numbers). Corrected for #1285 (A261-2c, no invoice when an
+order is placed): 1.1 (Q21's aside about the counter), 2.2 (Q26) and 3.5 (Q32). Section 1.6 (Q22)
+now says the printing choice is made per department. The notes below saying the Word copies are
+out of date are superseded by this one. No enquiry has been sent.
+
 On **2026-10-06**: **Q42 added**, beside Q27–Q29, on a bill paid later by bank transfer — invoice
 now and collect later, or a proforma first and the invoice on payment — asked for full and
 simplified invoices alike. The standalone English and Spanish Word copies do not carry it yet.
@@ -691,7 +701,9 @@ payment. *2026-09-30:* staff can now mark that a table has asked for the bill (#
 only shows on the floor plan and prints nothing. The counter already offers both orders of events per venue (invoice issued when the order is
 confirmed, or a pre-bill then the invoice at payment), and the
 [service design](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) leaves the
-timing for tables to be settled with the advisor. The two routes trade against each other:
+timing for tables to be settled with the advisor. *2026-10-06 (#1285, A261-2c):* the counter no
+longer issues the invoice when the order is confirmed; a quick sale is paid before preparation or on
+collection, and its invoice is issued at payment either way. The two routes trade against each other:
 
 - **Pre-bill, invoice at payment.** The order stays editable until payment, so a late dessert, a
   disputed item or an accepted shortfall is fixed before the invoice exists (a shortfall agreed before
@@ -1748,8 +1760,12 @@ collection. The owner decided on 2026-09-27 how the two things that can change a
 Since 2026-09-27 this is how the product works (`vatRateOn`, `packages/catalogue/src/vat-rates.ts`;
 the issuing paths in `apps/server/src/till-sale.ts`, `bill-payments.ts` and `working-order.ts`).
 The invoice is issued at payment on every path except orders invoiced when they are placed and paid
-on collection, where it is issued at placing, so there the placing day's rate applies. Two
-different events are affected:
+on collection, where it is issued at placing, so there the placing day's rate applies.
+*2026-10-06 (#1285, A261-2c):* invoicing at placing is retired. Outside test helpers,
+`issueUnpaidInvoice` is called only from `apps/server/src/unpaid-departure.ts`, so the one invoice
+issued before payment is a table that leaves without paying (Q28). The Word copy's 2.2 says so, and
+its version of (c)'s second question asks about an invoice issued first and paid later, as in Q28
+and Q42. Two different events are affected:
 
 - **A legal rate change effective from a given date**, for example 1 January. **The edge case: an
   order open across the change pays the new rate on every line.** A New Year's Eve table opened
@@ -1883,6 +1899,12 @@ step: an R5, *por diferencias*, through `recordCorrection`
 (`TipoRectificativa: "I"`, `packages/fiscal-verifactu/src/backend.ts`).
 The original invoice is then settled at nothing owed. The same cancel reaches a bill recorded as
 *left without paying* (Q28). The credit note's VAT breakdown is the original's, negated.
+
+*2026-10-06 (#1285, A261-2c):* the zone that invoices first is retired, so the case above now
+arises only for a bill recorded as left without paying (Q28). `cancelPlacedOrder`
+(`apps/server/src/working-order.ts`) still credits an issued invoice whose bill holds no payment.
+The case would return with Q42's shape (a) or Q27(c). The Word copy's 3.5 says so; the Spanish
+formulation below still opens with the retired case.
 
 The sources, fetched raw on 2026-10-02:
 
