@@ -171,7 +171,7 @@ describe("creating a menu", () => {
     expect(details).toEqual({
       menuId: menu.id,
       rootSectionId: root.id,
-      defaultHomeLayoutId: layout.id,
+      homeSectionId: layout.id,
       handheldColumns: 3,
       handheldTiles: "colours",
       handheldOrder: "home_first",

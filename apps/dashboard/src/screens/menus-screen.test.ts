@@ -370,7 +370,7 @@ function lunchPreview(): MenuPreview {
         alsoOn: ["Dinner Menu"],
       },
     ],
-    warnings: [{ kind: "shortcut_missing", layoutName: "Home", name: "Lager" }],
+    warnings: [{ kind: "shortcut_missing", name: "Lager" }],
     status: statuses()["menu-lunch"]!,
     document: lunchDocument(),
   };
@@ -5081,7 +5081,7 @@ describe("publishing", () => {
     expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch");
     expect(text(inPanel(el, "live"))).toBe(`Version 2, published ${formatIsoMinute(PUBLISHED_AT)}`);
     expect(text(inPanel(el, "warnings"))).toBe(
-      "1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+      "1 shortcut on Lunch Menu's Device Home Page points at something no longer in this menu. It stays as an empty space until you remove it.",
     );
     const reads = client.getMenuPreview.mock.calls.length;
     await chooseTab(el, "structure");
@@ -5178,7 +5178,7 @@ describe("publishing", () => {
     await publish(el);
     await vi.waitFor(() =>
       expect(text(inPanel(el, "result"))).toBe(
-        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Device Home Page points at something no longer in this menu. It stays as an empty space until you remove it.",
       ),
     );
     expect(client.publishMenu).toHaveBeenCalledWith("menu-lunch", LUNCH_HASH);
@@ -5204,7 +5204,7 @@ describe("publishing", () => {
     await publish(el);
     await vi.waitFor(() =>
       expect(text(inPanel(el, "result"))).toBe(
-        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Device Home Page points at something no longer in this menu. It stays as an empty space until you remove it.",
       ),
     );
     await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
@@ -5354,7 +5354,7 @@ describe("publishing", () => {
     lunchOut.resolve({ versionId: "v-lunch-3", number: 3 });
     await vi.waitFor(() =>
       expect(text(inPanel(el, "result"))).toBe(
-        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Home layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+        "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Device Home Page points at something no longer in this menu. It stays as an empty space until you remove it.",
       ),
     );
   });

@@ -5,6 +5,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget, type Theme } from 
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 function product(key: string, name: string, available = true): TillProduct {
   return {
@@ -77,20 +78,15 @@ const menu: TillZoneMenu = {
       red,
     ],
   },
-  homeLayouts: [
-    {
-      id: "lay-home",
-      name: "Home",
-      tiles: [
-        { kind: "product", productId: "p-cafe" },
-        { kind: "product", productId: "p-burger" },
-        { kind: "section", sectionId: "sec-drinks" },
-      ],
-    },
-  ],
-  defaultHomeLayoutId: "lay-home",
-  homeLayoutId: "lay-home",
-  layoutFallback: null,
+  home: {
+    shortcuts: [
+      { kind: "product", productId: "p-cafe" },
+      { kind: "product", productId: "p-burger" },
+      { kind: "section", sectionId: "sec-drinks" },
+    ],
+    handheld: HOME_DISPLAY_DEFAULTS.handheld,
+    till: HOME_DISPLAY_DEFAULTS.till,
+  },
 };
 
 const products = [
@@ -153,20 +149,18 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
           },
         ],
       },
-      homeLayouts: [
-        {
-          id: "lay-home",
-          name: "Home",
-          tiles: [
-            { kind: "product", productId: "p-cafe" },
-            { kind: "empty" },
-            { kind: "product", productId: "p-missing" },
-            { kind: "product", productId: "p-cola" },
-            { kind: "section", sectionId: "sec-empty" },
-            { kind: "product", productId: "p-burger" },
-          ],
-        },
-      ],
+      home: {
+        shortcuts: [
+          { kind: "product", productId: "p-cafe" },
+          { kind: "empty" },
+          { kind: "product", productId: "p-missing" },
+          { kind: "product", productId: "p-cola" },
+          { kind: "section", sectionId: "sec-empty" },
+          { kind: "product", productId: "p-burger" },
+        ],
+        handheld: HOME_DISPLAY_DEFAULTS.handheld,
+        till: HOME_DISPLAY_DEFAULTS.till,
+      },
     };
     el.products = products.map((each) =>
       each.productId === "p-cola" ? { ...each, ordering: "not_sold_separately" } : each,

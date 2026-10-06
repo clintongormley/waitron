@@ -240,12 +240,20 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   const mine = menus.get(menuId);
   if (mine === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   const own = (await liveVersions(tx, [menuId], true)).get(menuId);
-  const entries = diffEntries(own?.document ?? null, mine.document, mine.combined);
-  const removedExtras = removedExtraOnlyProducts(own?.document ?? null, mine.document);
+  // A version in another format holds no `home`: it is compared as no live version, while the
+  // status still reads it, so the menu shows `changed`.
+  const ownDocument = own?.document?.format === MENU_DOCUMENT_FORMAT ? own.document : null;
+  const entries = diffEntries(ownDocument, mine.document, mine.combined);
+  const removedExtras = removedExtraOnlyProducts(ownDocument, mine.document);
 
-  // Every published menu's live version, read only once a change needs another menu.
+  // Every published menu's live version in this format, read only once a change needs another menu.
   let everyLive: Map<string, LiveVersion> | undefined;
-  const allLive = async () => (everyLive ??= await liveVersions(tx, undefined, true));
+  const allLive = async () =>
+    (everyLive ??= new Map(
+      [...(await liveVersions(tx, undefined, true))].filter(
+        ([, version]) => version.document?.format === MENU_DOCUMENT_FORMAT,
+      ),
+    ));
 
   const inactiveOf = async (
     lists: readonly DiffEntry[][],
@@ -374,7 +382,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     clashes: mine.clashes,
     changes: entries.map(({ change }) => change),
     warnings: [
-      ...(await shortcutWarnings(tx, mine.document, mine.omittedShortcuts, sectionNames)),
+      ...(await shortcutWarnings(tx, mine.omittedShortcuts, sectionNames)),
       ...precisionWarnings,
     ],
     status: statusOf(hash, own, mine.clashes.length),
@@ -384,10 +392,9 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
 
 async function shortcutWarnings(
   tx: Transaction,
-  document: MenuDocument,
   omitted: readonly OmittedShortcut[],
   sectionNames: ReadonlyMap<string, string>,
-): Promise<{ kind: "shortcut_missing"; layoutName: string; name: string }[]> {
+): Promise<{ kind: "shortcut_missing"; name: string }[]> {
   const productIds = omitted.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : []));
   const productNames = new Map<string, string>();
   for (const batch of batches(productIds))
@@ -396,10 +403,8 @@ async function shortcutWarnings(
       .from(products)
       .where(inArray(products.id, batch)))
       productNames.set(row.id, row.name);
-  const layoutNames = new Map(document.homeLayouts.map((layout) => [layout.id, layout.name]));
-  return omitted.map(({ layoutId, ref }) => ({
+  return omitted.map(({ ref }) => ({
     kind: "shortcut_missing",
-    layoutName: layoutNames.get(layoutId)!,
     name:
       ref.kind === "missing"
         ? ref.name

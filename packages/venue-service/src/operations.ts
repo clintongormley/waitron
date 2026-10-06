@@ -818,8 +818,8 @@ async function zoneLiveDocuments(
 
 /**
  * What the zone sells: each published menu's live version, with the current availability put back
- * (an unavailable offer is served marked, in its place), and that version's structure and home
- * layouts. An inactive menu, or one with no live version, is left out, and a default that is
+ * (an unavailable offer is served marked, in its place), and that version's structure and Device
+ * Home Page. An inactive menu, or one with no live version, is left out, and a default that is
  * inactive or unpublished gives way to the zone's first menu that is served. Refused
  * `menu.version_changed` unless every `asserted` version is the live version of one of the zone's
  * active menus. With `menuItemIds`, only the offers it names are served; the menus are all listed.
@@ -852,10 +852,7 @@ export async function listZoneOffers(
     isDefault: menuId === defaultMenuId,
     versionId,
     structure: document.root,
-    homeLayouts: document.homeLayouts,
-    defaultHomeLayoutId: document.defaultHomeLayoutId,
-    homeLayoutId: document.defaultHomeLayoutId,
-    layoutFallback: null,
+    home: document.home,
   }));
   return { defaultMenuId, menus, offers: published.flatMap((menu) => served.get(menu.menuId)!) };
 }
@@ -869,12 +866,7 @@ export async function menuState(tx: Transaction, zoneId: string): Promise<ZoneMe
   const documents = published.map((menu) => menu.document);
   // Catalogue's `MenuState` is the type the till reads this answer as.
   const state: MenuState = {
-    menus: published.map(({ menuId, versionId, document }) => ({
-      menuId,
-      versionId,
-      homeLayoutId: document.defaultHomeLayoutId,
-      layoutFallback: null,
-    })),
+    menus: published.map(({ menuId, versionId }) => ({ menuId, versionId })),
     unavailable: await readUnavailable(tx, documents),
   };
   return state;

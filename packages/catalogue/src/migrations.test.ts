@@ -96,8 +96,8 @@ it("gives menu_details the six display settings, each required with its default 
     "till_tiles text 1 'colours'",
     "till_order text 1 'home_first'",
   ]);
-  // The `checks` map in the keys-and-links case below is compared whole, so a CHECK on any of
-  // the six would add an entry that case refuses.
+  // The `checks` map in the keys-and-links case below is compared whole, so a named CHECK on any
+  // of the six would add an entry that case refuses.
 });
 
 describe("the catalogue migration set carries no tenant column", () => {
@@ -507,7 +507,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
 
   it("refuses menu details whose menu, root or layout does not exist, and a root two menus share", async () => {
     const c = await catalogue();
-    const details = { menuId: c.menuId, rootSectionId: c.rootId, defaultHomeLayoutId: c.layoutId };
+    const details = { menuId: c.menuId, rootSectionId: c.rootId, homeSectionId: c.layoutId };
     await refusal(
       () => db.insert(menuDetails).values({ ...details, menuId: missing }),
       "menu_details_menu_fk",
@@ -517,7 +517,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       "menu_details_root_fk",
     );
     await refusal(
-      () => db.insert(menuDetails).values({ ...details, defaultHomeLayoutId: missing }),
+      () => db.insert(menuDetails).values({ ...details, homeSectionId: missing }),
       "menu_details_default_layout_fk",
     );
     // The accepting control, then a second menu naming the same root.

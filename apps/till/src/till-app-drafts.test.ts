@@ -28,6 +28,7 @@ import type {
   TillMenuOffer,
   ZoneOfferCatalogue,
 } from "./api/client.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 // Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
 
@@ -90,10 +91,11 @@ function catalogue(version: string, prices: Record<string, string> = {}): ZoneOf
             productId: each.productId,
           })),
         },
-        homeLayouts: [{ id: "layout-home", name: "Home", tiles: [] }],
-        defaultHomeLayoutId: "layout-home",
-        homeLayoutId: "layout-home",
-        layoutFallback: null,
+        home: {
+          shortcuts: [],
+          handheld: HOME_DISPLAY_DEFAULTS.handheld,
+          till: HOME_DISPLAY_DEFAULTS.till,
+        },
       },
     ],
     offers,
@@ -3042,7 +3044,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
       const state = (versionId: string) => ({
-        menus: [{ menuId: "lunch", versionId, homeLayoutId: "layout-home", layoutFallback: null }],
+        menus: [{ menuId: "lunch", versionId }],
         unavailable: { products: [], optionLabels: [] },
       });
       const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
@@ -3100,7 +3102,7 @@ describe("till-app: other people's drafts and taking one over", () => {
 
 describe("till-app: a menu published while a table's draft is open (D9)", () => {
   const state = (versionId: string, soldOut: string[] = []) => ({
-    menus: [{ menuId: "lunch", versionId, homeLayoutId: "layout-home", layoutFallback: null }],
+    menus: [{ menuId: "lunch", versionId }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
 
@@ -3782,9 +3784,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
 
 describe("till-app: a draft line that cannot be sold now", () => {
   const state = (soldOut: string[]) => ({
-    menus: [
-      { menuId: "lunch", versionId: "v1", homeLayoutId: "layout-home", layoutFallback: null },
-    ],
+    menus: [{ menuId: "lunch", versionId: "v1" }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
 
@@ -4117,7 +4117,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       defaultMenuId: null,
     });
     const at = (versionId: string) => ({
-      menus: [{ menuId: "lunch", versionId, homeLayoutId: "layout-home", layoutFallback: null }],
+      menus: [{ menuId: "lunch", versionId }],
       unavailable: { products: [], optionLabels: [] },
     });
     const refresh = (el: TillApp) => el.shadowRoot!.querySelector("till-basket-refresh-dialog");

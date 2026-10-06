@@ -588,7 +588,7 @@ const steak = dish("steak", "Steak", "lunch", { diet: meaty });
 const wine = dish("wine", "Wine", "drinks", { diet: vegan });
 const beer = dish("beer", "Beer", "drinks", { diet: vegan });
 
-/** Each menu has a layout of shortcuts to both its dishes; `chosen` picks it over the default. */
+/** With `chosen`, the menu's shortcuts are both its dishes; without, it has none. */
 function served(id: string, products: TillProduct[], chosen: boolean, isDefault = false) {
   // The meat dish sits alone in its own section, so a lens that hides it empties the section.
   const [first, second] = products.map((each) => ({
@@ -597,11 +597,9 @@ function served(id: string, products: TillProduct[], chosen: boolean, isDefault 
     productId: each.productId!,
   }));
   const menu = { id, name: id, isDefault, versionId: `${id}-v1` };
-  return servedMenus(
-    [chosen ? { ...menu, homeLayoutId: `${id}-shortcuts` } : menu],
-    [first!, { ...second!, section: `${id} mains` }],
-    { shortcuts: true },
-  )[0]! satisfies TillZoneMenu;
+  return servedMenus([menu], [first!, { ...second!, section: `${id} mains` }], {
+    shortcuts: chosen,
+  })[0]! satisfies TillZoneMenu;
 }
 
 const lunchMenu = served("lunch", [salad, steak], true, true);
@@ -644,14 +642,14 @@ describe("till-card-grid's product-grid card: the menu browser", () => {
     expect(shownNames(browser(), "shortcuts")).toEqual(["Salad", "Steak"]);
   });
 
-  it("switching menus shows the other menu with its own home layout", async () => {
+  it("switching menus shows the other menu with its own Device Home Page", async () => {
     const { el, browser } = await mountBrowser();
     el.selectedMenuId = "drinks";
     await el.updateComplete;
     await browser().updateComplete;
     expect(browser().menu).toBe(drinksMenu);
     expect(browser().products).toEqual([wine, beer]);
-    // Drinks' device layout is its default, which holds no shortcuts.
+    // Drinks' Device Home Page holds no shortcuts.
     expect(shownNames(browser(), "shortcuts")).toEqual([]);
     expect(shownNames(browser(), "structure")).toEqual(["Wine", "drinks mains"]);
   });

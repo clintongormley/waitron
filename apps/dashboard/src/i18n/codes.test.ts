@@ -242,12 +242,8 @@ it("has English and Spanish copy for each menu section code", () => {
   }
 });
 
-it("has English and Spanish copy for each home page layout code", () => {
-  for (const code of [
-    "menu.layout_not_found",
-    "menu.default_layout_required",
-    "menu.shortcut_unreachable",
-  ]) {
+it("has English and Spanish copy for each Device Home Page code", () => {
+  for (const code of ["menu.shortcut_unreachable", "menu.home_display_invalid"]) {
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));

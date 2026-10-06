@@ -52,6 +52,7 @@ import type {
 } from "./api/client.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 // The venue's default menu (catalogue) — every product fixture below is tagged with its id, so the
 // counter grid (which shows only the selected menu's products) renders them under the default selection.
@@ -311,14 +312,15 @@ const defaultStation = {
   open: true,
 };
 
-/** A menu's structure listing one offer, and a layout with no shortcuts. */
+/** A menu's structure listing one offer, and a Device Home Page with no shortcuts. */
 function servedAs(menuItemId: string, productId: string) {
   return {
     structure: { members: [{ kind: "product" as const, menuItemId, productId }] },
-    homeLayouts: [{ id: "home", name: "Home", tiles: [] }],
-    defaultHomeLayoutId: "home",
-    homeLayoutId: "home",
-    layoutFallback: null,
+    home: {
+      shortcuts: [],
+      handheld: HOME_DISPLAY_DEFAULTS.handheld,
+      till: HOME_DISPLAY_DEFAULTS.till,
+    },
   };
 }
 
@@ -5249,12 +5251,13 @@ describe("till-app", () => {
   });
 
   it("retrieve-order resolves the stored menu-item identity when one product has two offers", async () => {
-    const homeLayoutFields = {
+    const homeFields = {
       structure: { members: [] },
-      homeLayouts: [{ id: "layout-home", name: "Home", tiles: [] }],
-      defaultHomeLayoutId: "layout-home",
-      homeLayoutId: "layout-home",
-      layoutFallback: null,
+      home: {
+        shortcuts: [],
+        handheld: HOME_DISPLAY_DEFAULTS.handheld,
+        till: HOME_DISPLAY_DEFAULTS.till,
+      },
     };
     const catalogue = {
       context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
@@ -5265,14 +5268,14 @@ describe("till-app", () => {
           name: "Standard",
           isDefault: true,
           versionId: "version-standard",
-          ...homeLayoutFields,
+          ...homeFields,
         },
         {
           id: "menu-happy",
           name: "Happy hour",
           isDefault: false,
           versionId: "version-happy",
-          ...homeLayoutFields,
+          ...homeFields,
         },
       ],
       offers: [

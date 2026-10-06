@@ -2,7 +2,7 @@ import {
   addMember,
   addShortcut,
   deleteSection,
-  listHomeLayouts,
+  readMenuHome,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -1802,11 +1802,11 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
       vatClass: "general",
     });
     await addMember(tx, root, { kind: "product", productId: water.id });
-    const [home] = await listHomeLayouts(tx, menu.id);
-    const tile = await addShortcut(tx, home!.id, { kind: "section", sectionId: beer.id });
-    await addShortcut(tx, home!.id, { kind: "product", productId: water.id });
+    const home = await readMenuHome(tx, menu.id);
+    const tile = await addShortcut(tx, menu.id, { kind: "section", sectionId: beer.id });
+    await addShortcut(tx, menu.id, { kind: "product", productId: water.id });
     await deleteSection(tx, beer.id);
-    return { menu: menu.id, tile: tile.id, home: home!.id };
+    return { menu: menu.id, tile: tile.id, home: home.homeSectionId };
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -1824,21 +1824,19 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
   });
   await withTransaction(targetSuite.db, async (tx) => {
     const [menu] = await tx.select().from(catalogues).where(eq(catalogues.name, "Missing slots"));
-    const [home] = await listHomeLayouts(tx, menu!.id);
+    const home = await readMenuHome(tx, menu!.id);
     expect(menu!.id).not.toBe(original.menu);
-    expect(home!.id).not.toBe(original.home);
-    expect(home!.tiles[0]!.memberId).not.toBe(original.tile);
+    expect(home.homeSectionId).not.toBe(original.home);
+    expect(home.shortcuts[0]!.memberId).not.toBe(original.tile);
     expect(
-      home!.tiles.map((tile) => [tile.position, tile.ref.kind, tile.name, tile.missingName]),
+      home.shortcuts.map((tile) => [tile.position, tile.ref.kind, tile.name, tile.missingName]),
     ).toEqual([
       [0, "missing", "Missing slots › Beer", "Missing slots › Beer"],
       [1, "product", "Water", null],
     ]);
     const preview = await previewMenu(tx, menu!.id);
-    expect(preview.document.homeLayouts[0]!.tiles[0]).toEqual({ kind: "empty" });
-    expect(preview.warnings).toEqual([
-      { kind: "shortcut_missing", layoutName: "Home", name: "Missing slots › Beer" },
-    ]);
+    expect(preview.document.home.shortcuts[0]).toEqual({ kind: "empty" });
+    expect(preview.warnings).toEqual([{ kind: "shortcut_missing", name: "Missing slots › Beer" }]);
   });
 });
 

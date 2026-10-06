@@ -103,17 +103,13 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Some of the chosen items cannot be used. Refresh the list and try again.",
     es: "Algunos de los elementos elegidos no se pueden usar. Actualiza la lista e inténtalo de nuevo.",
   },
-  "menu.layout_not_found": {
-    en: "This home page layout no longer exists. Refresh the page.",
-    es: "Esta página de inicio ya no existe. Actualiza la página.",
-  },
-  "menu.default_layout_required": {
-    en: "A menu's default home page layout cannot be deleted. Make another layout the default first.",
-    es: "La página de inicio predeterminada de una carta no se puede eliminar. Haz predeterminada otra antes.",
-  },
   "menu.shortcut_unreachable": {
     en: "Only products and sections that are on this menu can be shortcuts on its home page.",
     es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su página de inicio.",
+  },
+  "menu.home_display_invalid": {
+    en: "That home page setting is not available for this device. Refresh the page and try again.",
+    es: "Ese ajuste de la página de inicio no está disponible para este dispositivo. Actualiza la página e inténtalo de nuevo.",
   },
   "menu.clashes_unresolved": {
     en: "Resolve the price clashes before publishing this menu.",

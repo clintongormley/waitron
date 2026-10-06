@@ -25,14 +25,13 @@ import {
   createCategory,
   createExtraList,
   createOptionList,
-  createHomeLayout,
   createProduct,
   createSectionIn,
   deactivateCatalogue,
-  listHomeLayouts,
   menuStatus,
   optionLabels,
   requireMenuRoot,
+  setHomeDisplay,
   updateExtraList,
   updateMenuItem,
   updateProduct,
@@ -837,12 +836,10 @@ describe("GET /api/menu-state", () => {
       optionLabels: string[];
     };
   };
-  /** The answer, each menu narrowed to its version: the layout fields have their own cases. */
   const state = async (v: Lunch, query = `?zoneId=${v.zoneId}`): Promise<MenuState> => {
     const response = await send(v, "GET", `/api/menu-state${query}`);
     expect(response.status).toBe(200);
-    const body = (await response.json()) as MenuState;
-    return { ...body, menus: body.menus.map(({ menuId, versionId }) => ({ menuId, versionId })) };
+    return (await response.json()) as MenuState;
   };
   const nothing = { products: [], optionLabels: [] };
 
@@ -903,27 +900,33 @@ describe("GET /api/menu-state", () => {
   });
 });
 
-describe("the home layout each menu shows the device (D14)", () => {
+describe("the Device Home Page each menu serves", () => {
   const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
-  const homeOf = async (menuId: string) => (await app((tx) => listHomeLayouts(tx, menuId)))[0]!.id;
+  const handheld = { columns: 3, tiles: "colours", order: "home_first" };
+  const till = { columns: 6, tiles: "colours", order: "home_first" };
+  const zonePathOf = (v: Lunch) => `/api/service-zones/${v.zoneId}/offers`;
+  const served = async (v: Lunch, path: string, cookie = v.cookie) => {
+    const response = await v.app.request(path, { headers: { cookie } });
+    expect(response.status).toBe(200);
+    return (await response.json()) as {
+      menus: { home: unknown; versionId: string }[];
+      offers: { id: string; productId: string }[];
+    };
+  };
+  const menuState = async (v: Lunch) => {
+    const response = await send(v, "GET", `/api/menu-state?zoneId=${v.zoneId}`);
+    expect(response.status).toBe(200);
+    return ((await response.json()) as { menus: unknown[] }).menus;
+  };
 
-  it("serves each menu's structure, layouts and the device's layout on both offers routes", async () => {
+  it("serves each menu's structure and Device Home Page on both offers routes, and its version alone in the menu state", async () => {
     const v = await setupLunch();
     await app((tx) => updateSection(tx, v.postresId, { names: { [LOCALE]: "Para terminar" } }));
-    const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
-    await app((tx) => addShortcut(tx, counter, { kind: "section", sectionId: v.postresId }));
+    await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.postresId }));
+    await app((tx) => setHomeDisplay(tx, v.menuId, "till", { columns: 8, order: "menu_first" }));
     const versionId = await publish(v.menuId);
-    const home = await homeOf(v.menuId);
-    const served = async (path: string, cookie = v.cookie) => {
-      const response = await v.app.request(path, { headers: { cookie } });
-      expect(response.status).toBe(200);
-      return (await response.json()) as {
-        menus: unknown[];
-        offers: { id: string; productId: string }[];
-      };
-    };
-    const zonePath = `/api/service-zones/${v.zoneId}/offers`;
-    const flanOffer = (await served(zonePath)).offers.find(
+    const zonePath = zonePathOf(v);
+    const flanOffer = (await served(v, zonePath)).offers.find(
       (offer) => offer.productId === v.flanId,
     )!.id;
     const lunch = {
@@ -946,19 +949,43 @@ describe("the home layout each menu shows the device (D14)", () => {
           },
         ],
       },
-      homeLayouts: [
-        { id: home, name: "Home", tiles: [] },
-        { id: counter, name: "Counter", tiles: [{ kind: "section", sectionId: v.postresId }] },
-      ],
-      defaultHomeLayoutId: home,
-      homeLayoutId: home,
-      layoutFallback: null,
+      home: {
+        shortcuts: [{ kind: "section", sectionId: v.postresId }],
+        handheld,
+        till: { columns: 8, tiles: "colours", order: "menu_first" },
+      },
     };
     for (const path of [zonePath, "/api/default-service-zone/offers"])
-      expect((await served(path)).menus).toEqual([lunch]);
-    // The session names the device, so a request without the device cookie shows the same layout.
+      expect((await served(v, path)).menus).toEqual([lunch]);
+    // The session names the device, so a request without the device cookie is served the same.
     for (const path of [zonePath, "/api/default-service-zone/offers"])
-      expect((await served(path, v.sessionCookie)).menus).toEqual([lunch]);
+      expect((await served(v, path, v.sessionCookie)).menus).toEqual([lunch]);
+    expect(await menuState(v)).toEqual([{ menuId: v.menuId, versionId }]);
+  });
+
+  it("a draft shortcut or display change reaches no device until the menu is published", async () => {
+    const v = await setupLunch();
+    const published = await publish(v.menuId);
+    const before = { shortcuts: [], handheld, till };
+    await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.postresId }));
+    await app((tx) => setHomeDisplay(tx, v.menuId, "handheld", { columns: 5 }));
+    for (const path of [zonePathOf(v), "/api/default-service-zone/offers"]) {
+      const [menu] = (await served(v, path)).menus;
+      expect(menu).toMatchObject({ versionId: published, home: before });
+    }
+    expect(await menuState(v)).toEqual([{ menuId: v.menuId, versionId: published }]);
+    const republished = await publish(v.menuId);
+    expect(republished).not.toBe(published);
+    const after = {
+      shortcuts: [{ kind: "section", sectionId: v.postresId }],
+      handheld: { ...handheld, columns: 5 },
+      till,
+    };
+    for (const path of [zonePathOf(v), "/api/default-service-zone/offers"]) {
+      const [menu] = (await served(v, path)).menus;
+      expect(menu).toMatchObject({ versionId: republished, home: after });
+    }
+    expect(await menuState(v)).toEqual([{ menuId: v.menuId, versionId: republished }]);
   });
 });
 

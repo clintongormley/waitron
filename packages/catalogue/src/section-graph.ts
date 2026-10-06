@@ -176,7 +176,7 @@ export function placementsByProduct(graph: SectionGraph, rootId: string): Map<st
   return found;
 }
 
-/** The menus whose root reaches the section, sorted. A home layout holding it does not count. */
+/** The menus whose root reaches the section, sorted. A Device Home Page holding it does not count. */
 export function menusContaining(graph: SectionGraph, sectionId: string): string[] {
   const menus = new Set<string>();
   const seen = new Set<string>();

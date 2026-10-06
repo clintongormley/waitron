@@ -2,10 +2,9 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
+  HOME_DISPLAY_DEFAULTS,
   addShortcut,
   buildMenuDocument,
-  createHomeLayout,
-  listHomeLayouts,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -145,7 +144,7 @@ async function seedStation(locationId: LocationId, name: string, active = true):
 const sessionOf = (tx: Transaction) =>
   (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }).session;
 
-/** A served menu's version fields, without its structure and layouts. */
+/** A served menu's version fields, without its structure and Device Home Page. */
 const versionOf = ({ id, name, isDefault, versionId }: ZoneMenu) => ({
   id,
   name,
@@ -2445,12 +2444,12 @@ describe("zone offers from the published menus", () => {
   });
 });
 
-describe("each served menu's structure and home layouts", () => {
+describe("each served menu's structure and Device Home Page", () => {
   /**
-   * Dinner gains a "Drinks" section (customer name "Something to drink") holding Cola, and a
-   * "Counter" layout with Drinks and Burger as shortcuts; Dinner is republished.
+   * Dinner gains a "Drinks" section (customer name "Something to drink") holding Cola, and Drinks
+   * and Burger as shortcuts on its Device Home Page; Dinner is republished.
    */
-  async function seedDinnerLayouts() {
+  async function seedDinnerHome() {
     const venue = await seedTwoMenuVenue();
     return scoped(async (tx) => {
       const cola = (
@@ -2471,25 +2470,15 @@ describe("each served menu's structure and home layouts", () => {
         })
       ).id;
       await addMember(tx, drinks, { kind: "product", productId: cola });
-      const counter = (await createHomeLayout(tx, venue.dinner, "Counter")).id;
-      await addShortcut(tx, counter, { kind: "section", sectionId: drinks });
-      await addShortcut(tx, counter, { kind: "product", productId: venue.burger });
+      await addShortcut(tx, venue.dinner, { kind: "section", sectionId: drinks });
+      await addShortcut(tx, venue.dinner, { kind: "product", productId: venue.burger });
       const dinnerVersionId = await publish(tx, venue.dinner);
-      const defaultOf = async (menuId: string) => (await listHomeLayouts(tx, menuId))[0]!.id;
-      return {
-        ...venue,
-        dinnerVersionId,
-        cola,
-        drinks,
-        counter,
-        dinnerHome: await defaultOf(venue.dinner),
-        allDayHome: await defaultOf(venue.menuId),
-      };
+      return { ...venue, dinnerVersionId, cola, drinks };
     });
   }
 
-  it("serves the live structure and layouts, and the default layout to a device with no profile", async () => {
-    const venue = await seedDinnerLayouts();
+  it("serves the live structure and Device Home Page, and each menu's version alone in the menu state", async () => {
+    const venue = await seedDinnerHome();
     await scoped(async (tx) => {
       const colaOffer = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
         (offer) => offer.productId === venue.cola,
@@ -2515,40 +2504,24 @@ describe("each served menu's structure and home layouts", () => {
             },
           ],
         },
-        homeLayouts: [
-          { id: venue.dinnerHome, name: "Home", tiles: [] },
-          {
-            id: venue.counter,
-            name: "Counter",
-            tiles: [
-              { kind: "section", sectionId: venue.drinks },
-              { kind: "product", productId: venue.burger },
-            ],
-          },
-        ],
-        defaultHomeLayoutId: venue.dinnerHome,
-        homeLayoutId: venue.dinnerHome,
-        layoutFallback: null,
+        home: {
+          shortcuts: [
+            { kind: "section", sectionId: venue.drinks },
+            { kind: "product", productId: venue.burger },
+          ],
+          handheld: HOME_DISPLAY_DEFAULTS.handheld,
+          till: HOME_DISPLAY_DEFAULTS.till,
+        },
       });
       expect((await menuState(tx, venue.diningZone)).menus).toEqual([
-        {
-          menuId: venue.menuId,
-          versionId: venue.versionId,
-          homeLayoutId: venue.allDayHome,
-          layoutFallback: null,
-        },
-        {
-          menuId: venue.dinner,
-          versionId: venue.dinnerVersionId,
-          homeLayoutId: venue.dinnerHome,
-          layoutFallback: null,
-        },
+        { menuId: venue.menuId, versionId: venue.versionId },
+        { menuId: venue.dinner, versionId: venue.dinnerVersionId },
       ]);
     });
   });
 
   it("leaves out of the structure an offer whose product is Inactive, keeping its section in place (D5)", async () => {
-    const venue = await seedDinnerLayouts();
+    const venue = await seedDinnerHome();
     await scoped(async (tx) => {
       const colaOffer = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
         (offer) => offer.productId === venue.cola,

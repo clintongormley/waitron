@@ -370,8 +370,8 @@ export interface ProductCatalogue {
  * it can be sold now. */
 export type TillMenuOffer = LiveOffer;
 
-/** A menu in a zone-offers body: the published version its offers come from, that version's
- * structure and home layouts, and the layout this device shows. */
+/** A menu in a zone-offers body: the published version its offers come from, and that version's
+ * structure and Device Home Page. */
 export type TillZoneMenu = ServedMenu;
 
 export interface ZoneOfferCatalogue {

@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget, type Theme } from "./test-helpers.js";
@@ -111,6 +112,33 @@ const plain = section("sec-plain", "plain-internal", {}, [member("tostada")]);
 const productTile = (key: string): DocumentTile => ({ kind: "product", productId: `p-${key}` });
 const sectionTile = (id: string): DocumentTile => ({ kind: "section", sectionId: id });
 
+const HOME_TILES: DocumentTile[] = [
+  productTile("cafe"),
+  productTile("burger"),
+  sectionTile("sec-drinks"),
+  productTile("ghost"),
+  sectionTile("sec-empty"),
+  productTile("water"),
+];
+const FOUR_TILES: DocumentTile[] = [
+  productTile("cafe"),
+  productTile("burger"),
+  productTile("cola"),
+  productTile("water"),
+];
+const COUNTER_TILES: DocumentTile[] = [sectionTile("sec-beer"), productTile("jamon")];
+
+/** A Device Home Page at the default display settings holding `tiles`. */
+function withShortcuts(tiles: DocumentTile[]): Pick<TillZoneMenu, "home"> {
+  return {
+    home: {
+      shortcuts: tiles,
+      handheld: HOME_DISPLAY_DEFAULTS.handheld,
+      till: HOME_DISPLAY_DEFAULTS.till,
+    },
+  };
+}
+
 function lunch(overrides: Partial<TillZoneMenu> = {}): TillZoneMenu {
   return {
     id: "menu-lunch",
@@ -120,38 +148,7 @@ function lunch(overrides: Partial<TillZoneMenu> = {}): TillZoneMenu {
     structure: {
       members: [favourites, drinks, food, empty, plain, member("water"), member("ghost")],
     },
-    homeLayouts: [
-      {
-        id: "lay-home",
-        name: "Home",
-        tiles: [
-          productTile("cafe"),
-          productTile("burger"),
-          sectionTile("sec-drinks"),
-          productTile("ghost"),
-          sectionTile("sec-empty"),
-          productTile("water"),
-        ],
-      },
-      {
-        id: "lay-four",
-        name: "Four",
-        tiles: [
-          productTile("cafe"),
-          productTile("burger"),
-          productTile("cola"),
-          productTile("water"),
-        ],
-      },
-      {
-        id: "lay-counter",
-        name: "Counter",
-        tiles: [sectionTile("sec-beer"), productTile("jamon")],
-      },
-    ],
-    defaultHomeLayoutId: "lay-home",
-    homeLayoutId: "lay-home",
-    layoutFallback: null,
+    ...withShortcuts(HOME_TILES),
     ...overrides,
   };
 }
@@ -168,9 +165,7 @@ function soldOutMenu(): TillZoneMenu {
   ]);
   return lunch({
     structure: { members: [food, soldOut, member("water")] },
-    homeLayouts: [
-      { id: "lay-home", name: "Home", tiles: [sectionTile("sec-soldout"), productTile("water")] },
-    ],
+    ...withShortcuts([sectionTile("sec-soldout"), productTile("water")]),
   });
 }
 
@@ -287,26 +282,15 @@ describe("till-menu-browser", () => {
       expect(root(el).querySelector('[data-region="search"] wt-input')).not.toBeNull();
     });
 
-    it("shows the device's layout's tiles, in their order", async () => {
-      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-counter" }) });
+    it("shows the menu's shortcuts, in their order", async () => {
+      const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       expect(names(entries(el, "shortcuts"))).toEqual(["Beer (EN)", "Jamón"]);
-    });
-
-    it("shows the first layout, the default, when the chosen one is not among the layouts", async () => {
-      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-gone" }) });
-      expect(names(entries(el, "shortcuts"))).toEqual(["Café", "Burger", "Drinks (EN)", "Agua"]);
     });
 
     it("accepts an empty shortcut while keeping the neighboring actions usable", async () => {
       const { el } = await mount({
         menu: lunch({
-          homeLayouts: [
-            {
-              id: "lay-home",
-              name: "Home",
-              tiles: [productTile("water"), { kind: "empty" }, sectionTile("sec-drinks")],
-            },
-          ],
+          ...withShortcuts([productTile("water"), { kind: "empty" }, sectionTile("sec-drinks")]),
         }),
       });
       expect(names(entries(el, "shortcuts"))).toEqual(["Agua", "Drinks (EN)"]);
@@ -322,13 +306,7 @@ describe("till-menu-browser", () => {
     ] as const)("keeps a blank, untappable home cell for %s", async (_reason, tile) => {
       const { el, store } = await mount({
         menu: lunch({
-          homeLayouts: [
-            {
-              id: "lay-home",
-              name: "Home",
-              tiles: [productTile("cafe"), tile, productTile("water")],
-            },
-          ],
+          ...withShortcuts([productTile("cafe"), tile, productTile("water")]),
         }),
         products: PRODUCTS.map((each) =>
           each === cola ? { ...each, ordering: "not_sold_separately" } : each,
@@ -376,7 +354,7 @@ describe("till-menu-browser", () => {
     it("sizes blank cells from the tile's tap target token", async () => {
       const { el, host } = await mount({
         menu: lunch({
-          homeLayouts: [{ id: "lay-home", name: "Home", tiles: [{ kind: "empty" }] }],
+          ...withShortcuts([{ kind: "empty" }]),
         }),
       });
       host.style.setProperty("--wt-tap-min", "60px");
@@ -384,8 +362,8 @@ describe("till-menu-browser", () => {
       expect(getComputedStyle(blank).minHeight).toBe("90px");
     });
 
-    it("shows no shortcuts, and still the structure, for a menu with no layouts", async () => {
-      const { el } = await mount({ menu: lunch({ homeLayouts: [] }) });
+    it("shows no shortcuts, and still the structure, for a menu with no shortcuts", async () => {
+      const { el } = await mount({ menu: lunch(withShortcuts([])) });
       expect(entries(el, "shortcuts")).toEqual([]);
       expect(names(entries(el, "structure"))).toContain("Agua");
     });
@@ -487,7 +465,7 @@ describe("till-menu-browser", () => {
         columns: 6,
         menu: lunch({
           structure: { members: [long, short, desserts, member("lemonade")] },
-          homeLayouts: [{ id: "lay-home", name: "Home", tiles: [] }],
+          ...withShortcuts([]),
         }),
       });
       await widen(host, 390);
@@ -530,7 +508,7 @@ describe("till-menu-browser", () => {
 
   describe("a product tile's price", () => {
     it("reads per unit, the weighed product's per kilo", async () => {
-      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-counter" }) });
+      const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       expect(entry(el, "shortcuts", "Jamón").querySelector(".price")!.textContent).toBe(
         `${formatMoney("10.00", currentLocale())}/kg`,
       );
@@ -597,7 +575,7 @@ describe("till-menu-browser", () => {
     });
 
     it("opens a nested section a tile names directly", async () => {
-      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-counter" }) });
+      const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       await tap(el, entry(el, "shortcuts", "Beer (EN)"));
       expect(breadcrumb(el)).toBe("Home › Beer (EN)");
       expect(names(entries(el, "section"))).toEqual(["Caña"]);
@@ -709,7 +687,7 @@ describe("till-menu-browser", () => {
     });
 
     it("a weighed product asks for its quantity without touching the basket", async () => {
-      const { el, store } = await mount({ menu: lunch({ homeLayoutId: "lay-counter" }) });
+      const { el, store } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       const selected: unknown[] = [];
       store.on("product-selected", (picked) => selected.push(picked));
       await tap(el, entry(el, "shortcuts", "Jamón"));
@@ -718,14 +696,14 @@ describe("till-menu-browser", () => {
     });
 
     it("has no weight entry of its own unless asked to weigh", async () => {
-      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-counter" }) });
+      const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       await tap(el, entry(el, "shortcuts", "Jamón"));
       expect(root(el).querySelector("till-tender-pay")).toBeNull();
     });
 
     it("asked to weigh, takes a weighed product's quantity itself and adds it", async () => {
       const { el, store } = await mount({
-        menu: lunch({ homeLayoutId: "lay-counter" }),
+        menu: lunch(withShortcuts(COUNTER_TILES)),
         weighs: true,
       });
       await tap(el, entry(el, "shortcuts", "Jamón"));
@@ -743,7 +721,7 @@ describe("till-menu-browser", () => {
 
     it("uses the full width for a weighed dish's action", async () => {
       const { el } = await mount({
-        menu: lunch({ homeLayoutId: "lay-counter" }),
+        menu: lunch(withShortcuts(COUNTER_TILES)),
         weighs: true,
       });
       await tap(el, entry(el, "shortcuts", "Jamón"));
@@ -882,7 +860,7 @@ describe("till-menu-browser", () => {
                 red,
               ],
             },
-            homeLayouts: [{ id: "lay-home", name: "Home", tiles: [] }],
+            ...withShortcuts([]),
           }),
           products: painted,
           store,
@@ -1079,7 +1057,7 @@ describe("till-menu-browser", () => {
 
   describe("an unavailable product keeps its place, greyed (D12)", () => {
     it("in the home grid: a grid of four with the second unavailable keeps it second, and a tap does nothing", async () => {
-      const { el, store } = await mount({ menu: lunch({ homeLayoutId: "lay-four" }) });
+      const { el, store } = await mount({ menu: lunch(withShortcuts(FOUR_TILES)) });
       const tiles = entries(el, "shortcuts");
       expect(names(tiles)).toEqual(["Café", "Burger", "Cola", "Agua"]);
       expect(tiles.map((tile) => tile.disabled)).toEqual([false, true, false, false]);
@@ -1140,7 +1118,7 @@ describe("till-menu-browser", () => {
     });
 
     it("says Sold out on a sold-out product in the home grid, a section and search", async () => {
-      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-four" }) });
+      const { el } = await mount({ menu: lunch(withShortcuts(FOUR_TILES)) });
       const soldOut = (button: Button) => button.querySelector(".sold-out")?.textContent?.trim();
       expect(entries(el, "shortcuts").map(soldOut)).toEqual([
         undefined,
@@ -1156,7 +1134,7 @@ describe("till-menu-browser", () => {
 
     it("says it in the till's language", async () => {
       setLocale("es-ES");
-      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-four" }) });
+      const { el } = await mount({ menu: lunch(withShortcuts(FOUR_TILES)) });
       expect(entry(el, "shortcuts", "Burger").querySelector(".sold-out")!.textContent!.trim()).toBe(
         "Agotado",
       );
@@ -1191,7 +1169,7 @@ describe("till-menu-browser", () => {
 
     it("keeps a blank tile for a product in the structure that has no offer", async () => {
       const { el } = await mount({
-        menu: lunch({ homeLayoutId: "lay-four" }),
+        menu: lunch(withShortcuts(FOUR_TILES)),
         products: PRODUCTS.filter((each) => each !== cola),
       });
       expect(names(entries(el, "shortcuts"))).toEqual(["Café", "Burger", "Agua"]);
@@ -1223,7 +1201,7 @@ describe("till-menu-browser", () => {
     it("shows a staff-only product as it shows a public one, and rings it up", async () => {
       // Staff only is for guest ordering, which does not exist yet, so every screen today is staff's.
       const { el, store } = await mount({
-        menu: lunch({ homeLayoutId: "lay-four" }),
+        menu: lunch(withShortcuts(FOUR_TILES)),
         products: withOrdering("staff_only", "cola"),
       });
       expect(names(entries(el, "shortcuts"))).toEqual(["Café", "Burger", "Cola", "Agua"]);
@@ -1324,7 +1302,7 @@ describe("till-menu-browser", () => {
     });
 
     it("says Not found when new products leave the open section with nothing to order", async () => {
-      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-counter" }) });
+      const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       await tap(el, entry(el, "shortcuts", "Beer (EN)"));
       el.products = PRODUCTS.filter((each) => each !== cana);
       await el.updateComplete;

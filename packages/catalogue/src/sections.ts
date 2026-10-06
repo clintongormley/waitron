@@ -93,7 +93,7 @@ async function imageOf(tx: Transaction, value: unknown): Promise<string | null> 
   return value;
 }
 
-/** Any list but a home layout: a layout may only hold what its menu reaches, which no check here
+/** Any list but a Device Home Page: that may only hold what its menu reaches, which no check here
  * establishes. */
 function requireWritableList(graph: SectionGraph, sectionId: string): void {
   const role = graph.role(sectionId);
@@ -128,14 +128,14 @@ async function checkListRef(
     });
 }
 
-/** Any list by id; Home omits missing members. Use listHomeLayouts for its complete tiles. */
+/** Any list by id; Home omits missing members. Use readMenuHome for its complete shortcuts. */
 export async function readSection(tx: Transaction, id: string): Promise<SectionDetails> {
   const [row] = await tx.select(details).from(sections).where(eq(sections.id, id));
   if (!row) throw new AppError("menu_section.not_found", { sectionId: id });
   return { ...row, members: await membersOf(tx, id) };
 }
 
-/** A list's members; Home omits missing members. Use listHomeLayouts for its complete tiles. */
+/** A list's members; Home omits missing members. Use readMenuHome for its complete shortcuts. */
 export async function listMembers(tx: Transaction, sectionId: string): Promise<SectionMember[]> {
   const [row] = await tx
     .select({ id: sections.id })

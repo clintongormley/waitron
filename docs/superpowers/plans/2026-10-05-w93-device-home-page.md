@@ -1739,6 +1739,12 @@ equally strict check of the new behaviour where the behaviour still exists.
 | `apps/till/src/widgets/menu-browser.test.ts:290` | shows the chosen layout `lay-counter` | shows the menu's shortcuts, in order (the same two names) | D3 |
 | `…menu-browser.test.ts:295` | the default when the chosen layout is missing | deleted | D3 |
 | `apps/till/src/screens/till-table-order-screen.test.ts:4170` | "…with that menu's own home layout" via `homeLayoutId` | "…with that menu's own Device Home Page" via `home.shortcuts`; the same checks | D2 |
+| `packages/catalogue/src/menu-home.test.ts` (from `home-layouts.test.ts:257`) **[implementer]** | the missing tile removed was the duplicated layout's copy | the missing tile removed is a deleted `Wine` section's shortcut on the menu's own home; the move and replace checks unchanged | D2 (the copy went with duplication) |
+| `…menu-home.test.ts` (from `home-layouts.test.ts:441`) **[implementer]** | four targets: Lunch's root, a second Lunch layout, Dinner's root, Dinner's home | the same four, the second layout raw-inserted, plus Lunch's own home section, also refused `menu_section.wrong_role` | D2 |
+| `apps/server/src/till-api.sell-published.test.ts:841-847` (`state`) **[implementer]** | narrowed each menu-state entry to `{ menuId, versionId }`, the layout fields having their own cases | returns the answer as served, so its four cases compare each whole entry | D6 (the entry is `{ menuId, versionId }` and nothing else) |
+| `apps/dashboard/src/widgets/menu-preview.test.ts:209` (the Spanish wording case) **[implementer]** | three changes | also `home_shortcuts_changed` and `home_display_changed` for `handheld`, with their Spanish sentences | D5 |
+| `apps/till/src/widgets/menu-browser.test.ts:387` **[implementer]** | "…for a menu with no layouts", `homeLayouts: []` | "…for a menu with no shortcuts", `withShortcuts([])`; the same checks | D3 |
+| `apps/till/src/widgets/card-grid.test.ts:645` **[implementer]** | "…with its own home layout" | "…with its own Device Home Page"; the same checks | D3 |
 
 Fixture-only edits in Task 3 (the `home` block replacing the four layout fields, no assertion
 changed): `packages/catalogue/src/migrations.test.ts:490,500` (the property rename only),
@@ -1748,7 +1754,9 @@ changed): `packages/catalogue/src/migrations.test.ts:490,500` (the property rena
 `till-app-menu-refresh.test.ts:143-146,160`, `till-app-table-service.test.ts:2400-2408`,
 `state/menu-state-poll.test.ts:7`, `card-grid.test.ts:591-605`;
 `apps/dashboard/src/widgets/test-helpers.ts:283-289`, `menu-preview.a11y.test.ts:44`,
-`menus-screen.test.ts:373`. The PR states the count per file.
+`menus-screen.test.ts:373`, and, met while implementing, `menus-screen.a11y.test.ts:158` and
+`api/client-routes.test.ts:917` (each drops a warning's `layoutName`). The PR states the count per
+file.
 
 ### Task 5
 

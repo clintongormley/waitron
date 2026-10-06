@@ -50,7 +50,9 @@ export const menuDetails = table(
   {
     menuId: id("menu_id").primaryKey(),
     rootSectionId: id("root_section_id").notNull(),
-    defaultHomeLayoutId: id("default_home_layout_id").notNull(),
+    // The menu's Device Home Page. The column keeps its old name: renaming it is a migration that
+    // changes nothing a reader sees.
+    homeSectionId: id("default_home_layout_id").notNull(),
     // No CHECK on these six: one makes drizzle rebuild the table; homeDisplayProblem
     // (device-home.ts) holds the ranges. So the text ones are not `enumType`, whose vocabulary
     // the schema-conformance suite requires a CHECK for.
@@ -73,7 +75,7 @@ export const menuDetails = table(
       name: "menu_details_root_fk",
     }),
     foreignKey({
-      columns: [t.defaultHomeLayoutId],
+      columns: [t.homeSectionId],
       foreignColumns: [sections.id],
       name: "menu_details_default_layout_fk",
     }),

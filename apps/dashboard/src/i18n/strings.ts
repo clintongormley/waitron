@@ -2098,6 +2098,8 @@ export const en = {
   "home.preview_heading": "Preview",
   "home.preview_handheld": "Handheld, 3 columns",
   "home.preview_till": "Till, 6 columns",
+  "home.device_handheld": "Handheld",
+  "home.device_till": "Till",
   "home.preview_empty": "No shortcuts yet.",
   "home.tile_product": "Product",
   "home.tile_section": "Section",
@@ -2155,8 +2157,8 @@ export const en = {
   "menu_preview.section_removed": "Section {name} removed from {place}",
   "menu_preview.section_renamed": "{name} renamed",
   "menu_preview.order_changed": "Order changed in {place}",
-  "menu_preview.layout_changed": "Home page layout {name} changed",
-  "menu_preview.default_layout_changed": "Default home page layout changed from {from} to {to}",
+  "menu_preview.home_shortcuts_changed": "Device Home Page shortcuts changed",
+  "menu_preview.home_display_changed": "Device Home Page display for {device} changed",
   "menu_preview.menu_renamed": "Menu renamed from {from} to {to}",
   "menu_preview.field_names": "names",
   "menu_preview.field_name": "name",
@@ -2180,9 +2182,9 @@ export const en = {
   "menu_preview.document_heading_live": "The menu as it is live",
   "menu_preview.warnings_note": "Warnings do not stop you publishing.",
   "menu_preview.shortcut_missing_one":
-    "1 shortcut on {menu}'s {layout} layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
+    "1 shortcut on {menu}'s Device Home Page points at something no longer in this menu. It stays as an empty space until you remove it.",
   "menu_preview.shortcut_missing":
-    "{count} shortcuts on {menu}'s {layout} layout point at things no longer in this menu. They stay as empty spaces until you remove or replace them.",
+    "{count} shortcuts on {menu}'s Device Home Page point at things no longer in this menu. They stay as empty spaces until you remove them.",
   "menu_preview.extra_portion_precision":
     "{product} in {list} has a saved portion of {amount}, which exceeds the unit's {precision} decimal places. Check it before publishing.",
   "menu_preview.publish": "Publish {menu}",
@@ -4356,6 +4358,8 @@ export const es: Record<StringKey, string> = {
   "home.preview_heading": "Vista previa",
   "home.preview_handheld": "Terminal de mano, 3 columnas",
   "home.preview_till": "Caja registradora, 6 columnas",
+  "home.device_handheld": "Terminal de mano",
+  "home.device_till": "Caja registradora",
   "home.preview_empty": "Aún no hay accesos directos.",
   "home.tile_product": "Producto",
   "home.tile_section": "Sección",
@@ -4413,9 +4417,10 @@ export const es: Record<StringKey, string> = {
   "menu_preview.section_removed": "Se ha quitado la sección {name} de {place}",
   "menu_preview.section_renamed": "Se ha cambiado el nombre de {name}",
   "menu_preview.order_changed": "Ha cambiado el orden en {place}",
-  "menu_preview.layout_changed": "Ha cambiado la página de inicio {name}",
-  "menu_preview.default_layout_changed":
-    "La página de inicio predeterminada ha pasado de {from} a {to}",
+  "menu_preview.home_shortcuts_changed":
+    "Han cambiado los accesos directos de la página de inicio del dispositivo",
+  "menu_preview.home_display_changed":
+    "Ha cambiado la presentación de la página de inicio del dispositivo en {device}",
   "menu_preview.menu_renamed": "Se ha cambiado el nombre de la carta de {from} a {to}",
   "menu_preview.field_names": "nombres",
   "menu_preview.field_name": "nombre",
@@ -4439,9 +4444,9 @@ export const es: Record<StringKey, string> = {
   "menu_preview.document_heading_live": "La carta tal como está publicada",
   "menu_preview.warnings_note": "Los avisos no impiden publicar.",
   "menu_preview.shortcut_missing_one":
-    "1 acceso directo de la página {layout} de {menu} apunta a un elemento que ya no está en este menú. Permanece como un espacio vacío hasta que lo quites o reemplaces.",
+    "1 acceso directo de la página de inicio del dispositivo de {menu} apunta a algo que ya no está en esta carta. Queda como un espacio vacío hasta que lo quites.",
   "menu_preview.shortcut_missing":
-    "{count} accesos directos de la página {layout} de {menu} apuntan a elementos que ya no están en este menú. Permanecen como espacios vacíos hasta que los quites o reemplaces.",
+    "{count} accesos directos de la página de inicio del dispositivo de {menu} apuntan a cosas que ya no están en esta carta. Quedan como espacios vacíos hasta que los quites.",
   "menu_preview.extra_portion_precision":
     "{product} en {list} tiene una porción guardada de {amount}, que supera los {precision} decimales de la unidad. Revísala antes de publicar.",
   "menu_preview.publish": "Publicar {menu}",

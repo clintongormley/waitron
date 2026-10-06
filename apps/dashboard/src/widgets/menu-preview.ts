@@ -232,7 +232,7 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   #warningWords(warnings = this.preview?.warnings ?? []): string[] {
-    const groups = new Map<string, number>();
+    let missing = 0;
     const portions: string[] = [];
     for (const warning of warnings) {
       if (warning.kind === "extra_portion_precision") {
@@ -244,17 +244,18 @@ export class MenuPreviewPanel extends LitElement {
             precision: String(warning.precision),
           }),
         );
-      } else groups.set(warning.layoutName, (groups.get(warning.layoutName) ?? 0) + 1);
+      } else missing += 1;
     }
-    return [...groups]
-      .map(([layout, count]) =>
-        fill(count === 1 ? "menu_preview.shortcut_missing_one" : "menu_preview.shortcut_missing", {
-          count: String(count),
-          menu: this.menuName,
-          layout,
-        }),
-      )
-      .concat(portions);
+    const shortcuts =
+      missing === 0
+        ? []
+        : [
+            fill(
+              missing === 1 ? "menu_preview.shortcut_missing_one" : "menu_preview.shortcut_missing",
+              { count: String(missing), menu: this.menuName },
+            ),
+          ];
+    return [...shortcuts, ...portions];
   }
 
   /** One place inside a sentence. */
@@ -367,10 +368,12 @@ export class MenuPreviewPanel extends LitElement {
           change.list,
           {},
         );
-      case "layout_changed":
-        return fill("menu_preview.layout_changed", { name: change.name });
-      case "default_layout_changed":
-        return fill("menu_preview.default_layout_changed", { from: change.from, to: change.to });
+      case "home_shortcuts_changed":
+        return t("menu_preview.home_shortcuts_changed");
+      case "home_display_changed":
+        return fill("menu_preview.home_display_changed", {
+          device: t(change.device === "handheld" ? "home.device_handheld" : "home.device_till"),
+        });
       case "menu_renamed":
         return fill("menu_preview.menu_renamed", { from: change.from, to: change.to });
     }

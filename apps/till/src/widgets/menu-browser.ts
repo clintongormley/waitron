@@ -89,7 +89,7 @@ function folded(text: string): string {
 }
 
 /**
- * The till's menu home: search, then the device's home layout's shortcuts, then the menu's own
+ * The till's menu home: search, then the menu's Device Home Page shortcuts, then the menu's own
  * structure, with each section opening in place behind a breadcrumb. Tiles coordinate only through
  * the store: they never reference the basket or total widgets.
  *
@@ -268,8 +268,8 @@ export class TillMenuBrowser extends LitElement {
     `,
   ];
 
-  /** The menu as a zone-offers body serves it: its structure, its layouts and the device's layout.
-   * Nothing renders until it is set. */
+  /** The menu as a zone-offers body serves it: its structure and its Device Home Page. Nothing
+   * renders until it is set. */
   @property({ attribute: false }) menu?: TillZoneMenu;
 
   /** This menu's offers as till products. */
@@ -443,12 +443,10 @@ export class TillMenuBrowser extends LitElement {
   }
 
   #home(menu: TillZoneMenu, index: MenuIndex): TemplateResult {
-    const layouts = menu.homeLayouts;
-    const layout = layouts.find(({ id }) => id === menu.homeLayoutId) ?? layouts[0];
     return html`
       <section data-region="shortcuts" aria-labelledby="shortcuts-heading">
         <h2 id="shortcuts-heading">${t("menu.shortcuts")}</h2>
-        ${this.#grid((layout?.tiles ?? []).map((tile) => this.#homeTile(tile, index)))}
+        ${this.#grid(menu.home.shortcuts.map((tile) => this.#homeTile(tile, index)))}
       </section>
       <section data-region="structure" aria-labelledby="structure-heading">
         <h2 id="structure-heading">${t("menu.full")}</h2>

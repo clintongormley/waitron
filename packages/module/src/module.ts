@@ -209,39 +209,36 @@ export type ZoneMenuMember =
       readonly members: readonly ZoneMenuMember[];
     };
 
-/** A home layout as the live version holds it: its shortcuts, in order. */
-export interface ZoneHomeLayout {
-  readonly id: string;
-  readonly name: string;
-  readonly tiles: readonly (
+/** How one kind of device presents a menu's Device Home Page. */
+export interface ZoneHomeDisplay {
+  readonly columns: number;
+  readonly tiles: "colours" | "thumbnails";
+  readonly order: "home_first" | "menu_first";
+}
+
+/** A Device Home Page as the live version holds it: its shortcuts in order, and each device's
+ * display settings. */
+export interface ZoneDeviceHome {
+  readonly shortcuts: readonly (
     | { readonly kind: "product"; readonly productId: string }
     | { readonly kind: "section"; readonly sectionId: string }
     | { readonly kind: "empty" }
   )[];
-}
-
-/** Why a device shows its menu's default layout rather than its profile's choice. */
-export type ZoneLayoutFallback = "layout_removed" | "layout_unpublished";
-
-/** The home layout a device shows for one menu, resolved against the live version. */
-export interface ZoneDeviceHomeLayout {
-  readonly homeLayoutId: string;
-  readonly layoutFallback: ZoneLayoutFallback | null;
+  readonly handheld: ZoneHomeDisplay;
+  readonly till: ZoneHomeDisplay;
 }
 
 /**
- * A menu a zone sells from: its live version, whether it is the zone's default, that version's
- * structure and home layouts, and the layout the requesting device shows.
+ * A menu a zone sells from: its live version, whether it is the zone's default, and that version's
+ * structure and Device Home Page.
  */
-export interface ZoneMenu extends ZoneDeviceHomeLayout {
+export interface ZoneMenu {
   readonly id: string;
   readonly name: string;
   readonly isDefault: boolean;
   readonly versionId: string;
   readonly structure: { readonly members: readonly ZoneMenuMember[] };
-  /** The default first. */
-  readonly homeLayouts: readonly ZoneHomeLayout[];
-  readonly defaultHomeLayoutId: string;
+  readonly home: ZoneDeviceHome;
 }
 
 /** What a zone sells: its active, published menus' live versions, each offer marked with its
@@ -260,13 +257,9 @@ export interface ZoneUnavailable {
   readonly optionLabels: readonly string[];
 }
 
-/** A zone's live menu versions with the layout the device shows for each, and what they hold that
- * cannot be sold now. */
+/** A zone's live menu versions, and what they hold that cannot be sold now. */
 export interface ZoneMenuState {
-  readonly menus: readonly ({
-    readonly menuId: string;
-    readonly versionId: string;
-  } & ZoneDeviceHomeLayout)[];
+  readonly menus: readonly { readonly menuId: string; readonly versionId: string }[];
   readonly unavailable: ZoneUnavailable;
 }
 

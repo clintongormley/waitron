@@ -4170,14 +4170,10 @@ describe("till-table-order-screen", () => {
       expect(gridNames(el)).toEqual(["Cerveza"]);
     });
 
-    it("hands the browser the selected menu, with that menu's own home layout", async () => {
+    it("hands the browser the selected menu, with that menu's own Device Home Page", async () => {
       const drinksBar = {
         ...drinksMenu,
-        homeLayouts: [
-          ...drinksMenu.homeLayouts,
-          { id: "drinks-bar", name: "Bar", tiles: [{ kind: "product", productId: "cerveza" }] },
-        ],
-        homeLayoutId: "drinks-bar",
+        home: { ...drinksMenu.home, shortcuts: [{ kind: "product", productId: "cerveza" }] },
       } satisfies TillZoneMenu;
       const { el } = await mount({ ...bothMenus, menus: [foodMenu, drinksBar] });
       expect(grid(el).menu).toBe(foodMenu);

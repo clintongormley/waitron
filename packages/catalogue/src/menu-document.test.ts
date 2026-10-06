@@ -38,6 +38,8 @@ import { createUnit, EACH_UNIT, updateUnit } from "./units.js";
 import { extraListItems } from "./schema/extras.js";
 import { createExtraList } from "./extras.js";
 import { menuDetails } from "./schema/menu.js";
+import { HOME_DISPLAY_DEFAULTS } from "./device-home.js";
+import { setHomeDisplay } from "./menu-home.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 
@@ -73,18 +75,18 @@ async function memberOf(listId: string, ref: { productId?: string; sectionId?: s
   return rows[0]!.id;
 }
 
-async function defaultLayout(menuId: string): Promise<string> {
+async function homeSection(menuId: string): Promise<string> {
   const [row] = await fx.db
-    .select({ id: menuDetails.defaultHomeLayoutId })
+    .select({ id: menuDetails.homeSectionId })
     .from(menuDetails)
     .where(eq(menuDetails.menuId, menuId));
   return row!.id;
 }
 
 let tilePosition = 0;
-async function addTile(layoutId: string, ref: { productId?: string; sectionId?: string }) {
+async function addTile(homeSectionId: string, ref: { productId?: string; sectionId?: string }) {
   await fx.db.insert(sectionMembers).values({
-    sectionId: layoutId,
+    sectionId: homeSectionId,
     position: tilePosition++,
     productId: ref.productId ?? null,
     childSectionId: ref.sectionId ?? null,
@@ -92,18 +94,21 @@ async function addTile(layoutId: string, ref: { productId?: string; sectionId?: 
 }
 
 describe("buildMenuDocument", () => {
-  it("holds the structure with display content, one offer per product, and the layouts", async () => {
+  it("holds the structure with display content, one offer per product, and the Device Home Page", async () => {
     const f = await menusFixture(fx.db);
     const document = await build(f.lunch);
     const lemonade = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
     const lager = await app((tx) => offerOf(tx, f.lunch, f.lager));
     const soup = await app((tx) => offerOf(tx, f.lunch, f.soup));
     expect(document).toMatchObject({
-      format: 2,
+      format: 3,
       menuId: f.lunch,
       menuName: "Lunch Menu",
-      defaultHomeLayoutId: await defaultLayout(f.lunch),
-      homeLayouts: [{ id: await defaultLayout(f.lunch), name: "Home", tiles: [] }],
+      home: {
+        shortcuts: [],
+        handheld: HOME_DISPLAY_DEFAULTS.handheld,
+        till: HOME_DISPLAY_DEFAULTS.till,
+      },
     });
     expect(document.root).toEqual({
       members: [
@@ -263,38 +268,19 @@ describe("buildMenuDocument", () => {
 
   it("keeps an empty slot for a shortcut whose target is not on the menu, and reports it", async () => {
     const f = await menusFixture(fx.db);
-    const layout = await defaultLayout(f.lunch);
-    await addTile(layout, { productId: f.lemonade });
-    await addTile(layout, { productId: f.burger });
-    await addTile(layout, { sectionId: f.beer });
-    await addTile(layout, { sectionId: f.mains });
+    const home = await homeSection(f.lunch);
+    await addTile(home, { productId: f.lemonade });
+    await addTile(home, { productId: f.burger });
+    await addTile(home, { sectionId: f.beer });
+    await addTile(home, { sectionId: f.mains });
     const { document, omittedShortcuts } = await app((tx) => buildMenuDocument(tx, f.lunch));
-    expect(document.homeLayouts[0]!.tiles).toEqual([
+    expect(document.home.shortcuts).toEqual([
       { kind: "product", productId: f.lemonade },
       { kind: "empty" },
       { kind: "section", sectionId: f.beer },
       { kind: "empty" },
     ]);
-    expect(omittedShortcuts).toEqual([
-      { layoutId: layout, ref: product(f.burger) },
-      { layoutId: layout, ref: section(f.mains) },
-    ]);
-  });
-
-  it("puts the default layout first and the others by name", async () => {
-    const f = await menusFixture(fx.db);
-    const home = await defaultLayout(f.lunch);
-    for (const name of ["Terrace", "Counter"])
-      await fx.db
-        .insert(sections)
-        .values({ internalName: name, role: "home_layout", ownerMenuId: f.lunch });
-    const document = await build(f.lunch);
-    expect(document.homeLayouts.map((layout) => layout.name)).toEqual([
-      "Home",
-      "Counter",
-      "Terrace",
-    ]);
-    expect(document.homeLayouts[0]!.id).toBe(home);
+    expect(omittedShortcuts).toEqual([{ ref: product(f.burger) }, { ref: section(f.mains) }]);
   });
 });
 
@@ -1494,38 +1480,29 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
-  it("names the layouts, the default layout and the menu's name", async () => {
+  it("names the menu's renaming, a shortcut change and a display change for the device it changed", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.lunch);
-    const home = await defaultLayout(f.lunch);
-    const [counter] = await fx.db
-      .insert(sections)
-      .values({ internalName: "Counter", role: "home_layout", ownerMenuId: f.lunch })
-      .returning({ id: sections.id });
-    await addTile(home, { productId: f.soup });
-    await fx.db
-      .update(menuDetails)
-      .set({ defaultHomeLayoutId: counter!.id })
-      .where(eq(menuDetails.menuId, f.lunch));
+    await addTile(await homeSection(f.lunch), { productId: f.soup });
+    await app((tx) => setHomeDisplay(tx, f.lunch, "handheld", { tiles: "thumbnails" }));
     await app((tx) => updateMenuDetails(tx, f.lunch, { name: "Midday Menu" }));
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
       { kind: "menu_renamed", from: "Lunch Menu", to: "Midday Menu", source: "this_menu" },
-      { kind: "layout_changed", layoutId: counter!.id, name: "Counter", source: "this_menu" },
-      { kind: "layout_changed", layoutId: home, name: "Home", source: "this_menu" },
-      { kind: "default_layout_changed", from: "Home", to: "Counter", source: "this_menu" },
+      { kind: "home_shortcuts_changed", source: "this_menu" },
+      { kind: "home_display_changed", device: "handheld", source: "this_menu" },
     ]);
   });
 
-  it("names a layout that was removed", async () => {
+  it("a first publish names its shortcuts and a display that differs from the default, and says nothing of a default display", async () => {
     const f = await menusFixture(fx.db);
-    const [counter] = await fx.db
-      .insert(sections)
-      .values({ internalName: "Counter", role: "home_layout", ownerMenuId: f.lunch })
-      .returning({ id: sections.id });
-    const live = await build(f.lunch);
-    await fx.db.delete(sections).where(eq(sections.id, counter!.id));
-    expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
-      { kind: "layout_changed", layoutId: counter!.id, name: "Counter", source: "this_menu" },
+    await addTile(await homeSection(f.lunch), { productId: f.soup });
+    await app((tx) => setHomeDisplay(tx, f.lunch, "till", { order: "menu_first" }));
+    const home = diffMenuDocuments(null, await build(f.lunch)).filter(({ kind }) =>
+      kind.startsWith("home_"),
+    );
+    expect(home).toEqual([
+      { kind: "home_shortcuts_changed", source: "this_menu" },
+      { kind: "home_display_changed", device: "till", source: "this_menu" },
     ]);
   });
 });

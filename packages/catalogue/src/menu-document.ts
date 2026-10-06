@@ -17,8 +17,8 @@ import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import type { MenuOffer } from "./menu-types.js";
 import type { TileRef } from "./section-types.js";
+import { HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "./device-home.js";
 import type {
-  DocumentLayout,
   DocumentMember,
   DocumentTile,
   FrozenOffer,
@@ -36,10 +36,9 @@ import "./errors.js";
 
 export type * from "./menu-document-types.js";
 
-export const MENU_DOCUMENT_FORMAT = 2;
+export const MENU_DOCUMENT_FORMAT = 3;
 
 export interface OmittedShortcut {
-  layoutId: string;
   ref: TileRef;
 }
 
@@ -66,8 +65,6 @@ interface SectionRow {
   names: Record<string, string>;
   image: string | null;
   color: string | null;
-  role: string;
-  ownerMenuId: string | null;
 }
 
 function groupBy<T>(values: readonly T[], keyOf: (value: T) => string | null): Map<string, T[]> {
@@ -97,7 +94,13 @@ export async function buildMenuDocuments(
       .select({
         menuId: menuDetails.menuId,
         rootSectionId: menuDetails.rootSectionId,
-        defaultHomeLayoutId: menuDetails.defaultHomeLayoutId,
+        homeSectionId: menuDetails.homeSectionId,
+        handheldColumns: menuDetails.handheldColumns,
+        handheldTiles: menuDetails.handheldTiles,
+        handheldOrder: menuDetails.handheldOrder,
+        tillColumns: menuDetails.tillColumns,
+        tillTiles: menuDetails.tillTiles,
+        tillOrder: menuDetails.tillOrder,
         menuName: catalogues.name,
       })
       .from(menuDetails)
@@ -145,17 +148,12 @@ export async function buildMenuDocuments(
       names: sections.names,
       image: sections.image,
       color: sections.color,
-      role: sections.role,
-      ownerMenuId: sections.ownerMenuId,
     })
     .from(sections)
     .orderBy(sections.internalName, sections.id);
   const sectionById = new Map(sectionRows.map((row) => [row.id, row]));
   for (const row of sectionRows) sectionNames.set(row.id, row.internalName);
   const offersByMenu = groupBy(offers, (offer) => offer.menuId);
-  const layoutsByMenu = groupBy(sectionRows, (section) =>
-    section.role === "home_layout" ? section.ownerMenuId : null,
-  );
   const ordered: typeof details = [];
   const seen = new Set<string>();
   const order = (id: string): void => {
@@ -205,25 +203,18 @@ export async function buildMenuDocuments(
       });
     const root = { members: listOf(row.rootSectionId, [row.rootSectionId]) };
     const omittedShortcuts: OmittedShortcut[] = [];
-    const layouts = layoutsByMenu.get(row.menuId) ?? [];
-    const homeLayouts = [
-      ...layouts.filter((layout) => layout.id === row.defaultHomeLayoutId),
-      ...layouts.filter((layout) => layout.id !== row.defaultHomeLayoutId),
-    ].map((layout): DocumentLayout => {
-      const tiles: DocumentTile[] = [];
-      for (const { ref } of loaded.tiles(layout.id)) {
-        const onThisMenu =
-          ref.kind === "product"
-            ? onMenu.has(ref.productId)
-            : ref.kind === "section" && reachedSections.has(ref.sectionId);
-        if (ref.kind !== "missing" && onThisMenu) tiles.push(ref);
-        else {
-          tiles.push({ kind: "empty" });
-          omittedShortcuts.push({ layoutId: layout.id, ref });
-        }
+    const shortcuts: DocumentTile[] = [];
+    for (const { ref } of loaded.tiles(row.homeSectionId)) {
+      const onThisMenu =
+        ref.kind === "product"
+          ? onMenu.has(ref.productId)
+          : ref.kind === "section" && reachedSections.has(ref.sectionId);
+      if (ref.kind !== "missing" && onThisMenu) shortcuts.push(ref);
+      else {
+        shortcuts.push({ kind: "empty" });
+        omittedShortcuts.push({ ref });
       }
-      return { id: layout.id, name: layout.internalName, tiles };
-    });
+    }
     const built = {
       rootSectionId: row.rootSectionId,
       clashes: (offersByMenu.get(row.menuId) ?? []).flatMap((offer) => clashesOf(offer.combined)),
@@ -242,8 +233,15 @@ export async function buildMenuDocuments(
         menuName: row.menuName,
         root,
         offers: Object.fromEntries([...onMenu.values()].map((offer) => [offer.id, offer])),
-        homeLayouts,
-        defaultHomeLayoutId: row.defaultHomeLayoutId,
+        home: {
+          shortcuts,
+          handheld: {
+            columns: row.handheldColumns,
+            tiles: row.handheldTiles,
+            order: row.handheldOrder,
+          },
+          till: { columns: row.tillColumns, tiles: row.tillTiles, order: row.tillOrder },
+        },
       },
     } satisfies Omit<BuiltMenu, "workingHash">;
     menus.set(row.menuId, { ...built, workingHash: menuDocumentHash(built.document) });
@@ -801,7 +799,7 @@ export function diffEntries(
   combined: ReadonlyMap<string, CombinedOffer> = new Map(),
 ): DiffEntry[] {
   const next = shapeOf(proposed);
-  const prev = shapeOf(live ?? { ...proposed, root: { members: [] }, offers: {}, homeLayouts: [] });
+  const prev = shapeOf(live ?? { ...proposed, root: { members: [] }, offers: {} });
   const entries: DiffEntry[] = [];
   const push = (change: MenuChange, section?: string): void => {
     if (
@@ -1073,30 +1071,14 @@ export function diffEntries(
     }
   }
 
-  const layoutsBefore = new Map((live?.homeLayouts ?? []).map((layout) => [layout.id, layout]));
-  for (const layout of proposed.homeLayouts) {
-    const was = layoutsBefore.get(layout.id);
-    const changed =
-      was === undefined
-        ? live !== null || layout.tiles.length > 0
-        : was.name !== layout.name || !same(was.tiles, layout.tiles);
-    if (changed)
-      push({ kind: "layout_changed", layoutId: layout.id, name: layout.name, source: "this_menu" });
-  }
-  const kept = new Set(proposed.homeLayouts.map((layout) => layout.id));
-  for (const was of layoutsBefore.values())
-    if (!kept.has(was.id))
-      push({ kind: "layout_changed", layoutId: was.id, name: was.name, source: "this_menu" });
-  if (live !== null && live.defaultHomeLayoutId !== proposed.defaultHomeLayoutId) {
-    const nameIn = (document: MenuDocument) =>
-      document.homeLayouts.find((layout) => layout.id === document.defaultHomeLayoutId)!.name;
-    push({
-      kind: "default_layout_changed",
-      from: nameIn(live),
-      to: nameIn(proposed),
-      source: "this_menu",
-    });
-  }
+  const shortcutsChanged =
+    live === null
+      ? proposed.home.shortcuts.length > 0
+      : !same(live.home.shortcuts, proposed.home.shortcuts);
+  if (shortcutsChanged) push({ kind: "home_shortcuts_changed", source: "this_menu" });
+  for (const device of HOME_DEVICES)
+    if (!same(live?.home[device] ?? HOME_DISPLAY_DEFAULTS[device], proposed.home[device]))
+      push({ kind: "home_display_changed", device, source: "this_menu" });
   return entries;
 }
 
