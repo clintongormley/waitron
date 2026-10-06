@@ -234,7 +234,10 @@ the server checks each at the route, never trusting the till's copy:
 - **Who may sign in.** `GET /api/staff` with a device lists only the people its profile admits
   (`listStaffAdmittedTo`, `@waitron/identity`); a list of colleagues that is not a sign-in list,
   such as the schedule's, asks with `everyone=true`. A switch to another approved profile checks
-  the person's admission again and ends the sessions the new profile does not admit.
+  the person's admission again; that switch, and a manager moving the device onto another profile
+  (Devices → edit), end the sessions the new profile does not admit, and a move onto a kitchen
+  screen's profile ends every session on the device, whatever that profile's admission list says,
+  since nobody signs in on one (`endSessionsNotAdmitted`, `apps/server/src/device.ts`).
 
 ## A successful write followed by a failed refresh is a load failure, not a failed save
 

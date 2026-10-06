@@ -13,9 +13,19 @@ import {
   sameTarget,
 } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
-import { canUseDeviceProfile, listStaffAdmittedTo, sessions } from "@waitron/identity";
+import {
+  canUseDeviceProfile,
+  endDeviceSessions,
+  listStaffAdmittedTo,
+  sessions,
+} from "@waitron/identity";
 import { payments } from "@waitron/payments";
-import { getDeviceProfile, kindOfFormFactor, printerChoices } from "@waitron/layouts";
+import {
+  getDeviceProfile,
+  isSharedDisplay,
+  kindOfFormFactor,
+  printerChoices,
+} from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
 import { requireLiveStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -249,12 +259,18 @@ export async function assertNoPaymentInProgress(tx: Transaction, deviceId: strin
   if (found !== undefined) throw new AppError("device.payment_in_progress", {});
 }
 
-/** Ends each open session on the device whose person `profileId` does not admit. */
+/** Ends each open session on the device whose person `profileId` does not admit; every one when
+ * `profileId` is a shared display, which nobody signs in on whatever its admission list says. */
 export async function endSessionsNotAdmitted(
   tx: Transaction,
   deviceId: string,
   profileId: string,
 ): Promise<void> {
+  const profile = await getDeviceProfile(tx, profileId);
+  if (profile !== undefined && isSharedDisplay(profile.formFactor)) {
+    await endDeviceSessions(tx, deviceId);
+    return;
+  }
   const open = await tx
     .select({ id: sessions.id, personId: sessions.personId })
     .from(sessions)
