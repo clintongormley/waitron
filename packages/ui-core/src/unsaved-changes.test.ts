@@ -8,6 +8,52 @@ import type {
 } from "./unsaved-changes.js";
 
 const coordinators: LeaveCoordinator[] = [];
+
+it("an already aborted leave neither asks nor restores or continues", async () => {
+  const f = fixture("discard");
+  const d = draft(f.coordinator, "saved");
+  d.set("edited");
+  const controller = new AbortController();
+  controller.abort();
+  const request = {
+    scopes: [d.id],
+    reason: "navigation" as const,
+    signal: controller.signal,
+    proceed: () => {
+      throw new Error("aborted request proceeded");
+    },
+  };
+  expect(await f.coordinator.request(request)).toBe("stale");
+  expect(f.questions).toEqual([]);
+  expect(d.value).toBe("edited");
+  expect(d.restored).toEqual([]);
+});
+
+it("an abandoned navigation aborts its question without restoring the draft", async () => {
+  const f = fixture();
+  const d = draft(f.coordinator, "saved");
+  d.set("edited");
+  f.defer();
+  const controller = new AbortController();
+  const pending = f.coordinator.request({
+    scopes: [d.id],
+    reason: "navigation",
+    signal: controller.signal,
+    proceed: () => {
+      throw new Error("abandoned navigation proceeded");
+    },
+  });
+  controller.abort();
+  expect(f.questions[0]!.signal.aborted).toBe(true);
+  expect(await pending).toBe("stale");
+  f.answer("discard");
+  expect(d.value).toBe("edited");
+  expect(d.restored).toEqual([]);
+  expect(d.scope.isDirty()).toBe(true);
+  const retry = f.request([d.id]);
+  f.answer("keep");
+  expect(await retry).toBe("kept");
+});
 afterEach(() => {
   for (const coordinator of coordinators.splice(0)) coordinator.dispose();
 });

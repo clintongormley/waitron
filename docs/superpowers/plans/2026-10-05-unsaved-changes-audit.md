@@ -2,6 +2,40 @@
 
 > 2026-10-06: Hours (A261 step 5) deleted `station-hours-form` and added the Hours page's own editors (`packages/venue-service/src/dashboard/hours-screen.ts`), which this document does not list.
 
+## 2026-10-06 shared history checkpoint
+
+`NavigationGuard` and opt-in `UrlStateController` integration are implemented on the W69 branch.
+The application shells have not enabled the adapter. Their direct route mutations, links,
+signout, page/setup owners and native reload remain Task 5/6 work. The focused browser suites
+are `packages/ui/src/navigation-guard.test.ts` and `url-state.unsaved.test.ts`; they use the real
+coordinator and exercise indexed/unindexed Back and Forward, retained routes, stale answers,
+multiple controllers and rapid traversal. Two deliberately delayed replay-report cases use
+synthetic popstate reports; they do not establish browser scheduling by themselves.
+
+The observed first run failed four route assertions before implementation. The abandoned-request
+core case then failed its renderer-abort assertion. A later double-disposal case failed because
+the old adapter rewrote the replacement's namespace; its lifecycle gate made it pass. Five
+independent installed-clone deletions each failed one intended assertion while one unchanged
+control passed. Restoring that clone passed 39 UI and 33 core cases. The driver’s focused UI
+family passed 48 cases; coverage scoped to the adapter and URL controller reported 99.44% statements,
+100% lines/functions and 98.26% branches. This is focused evidence, not package-wide coverage or CI.
+Logs and controls are retained in Lane E's local `receipts/w69-history-20261006` directory.
+The unchanged dashboard, till and setup shell suites passed 323, 672 and 332 cases respectively.
+The packed ui-core consumer passed its independent browser check, all five affected package/app
+typechecks passed, and the unedited fiscal golden-write/immutability suites passed 20 cases.
+
+`LeaveRequest.signal` is an optional cancellation source for the adapter's decision phase.
+Abandoning navigation aborts its question without restoring registered drafts. The adapter’s
+generation also prevents a late continuation changing the route. Existing requests omit the
+signal and retain their original scope rules. The new cancellation cases are in
+`packages/ui-core/src/unsaved-changes.test.ts`; no existing assertion changed.
+
+Lane C’s `feat/venue-hours` diff adds a dated note to this inventory and the implementation plan:
+its Hours page replaces `station-hours-form`. That branch was not landed at this checkpoint.
+Keep its worktree unchanged and reconcile the new editor owners against main when it lands.
+The final advancing-owner audit and shell/page rollout remain pending; neither proposed W69 PR
+is ready for finish-branch.
+
 Baseline: `5597e06923b64acacf9df54ed6e8fb42e7fa411e`, inspected 2026-10-05 in the W69 documentation worktree. This inventory records **observed source owners** and **proposed protection**. None of its rows is a claim that a browser behavior was run or verified. Read it with the [design](../specs/2026-10-05-unsaved-changes-warning-design.md) and [implementation plan](2026-10-05-unsaved-changes-warning.md).
 
 2026-10-06 implementation checkpoint: Product Add/Edit and its nested Variant form now register

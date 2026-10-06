@@ -1,4 +1,11 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
+import type { LeaveOutcome } from "@waitron/ui-core/unsaved-changes";
+import {
+  NavigationGuard,
+  navigationGuardFor,
+  observeNavigation,
+  type NavigationLeave,
+} from "./navigation-guard.js";
 
 export interface UrlPathConfig {
   /** App path prefix without a trailing slash. */
@@ -6,6 +13,7 @@ export interface UrlPathConfig {
   primary: string;
   /** Navigation field → path label, grouped by primary destination; * applies to every destination. */
   children: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  leave?: NavigationLeave;
 }
 
 function encode(value: string): string {
@@ -21,6 +29,8 @@ function decode(value: string): string {
 
 /** Paths carry navigation identifiers; the owning screen validates their meaning. */
 export class UrlStateController implements ReactiveController {
+  private stopObserving?: () => void;
+  private ownedGuard?: NavigationGuard;
   constructor(
     private readonly host: ReactiveControllerHost & HTMLElement,
     private readonly restore: () => void,
@@ -30,12 +40,15 @@ export class UrlStateController implements ReactiveController {
   }
 
   hostConnected(): void {
-    window.addEventListener("popstate", this.restore);
+    if (this.config.leave) this.ownedGuard = new NavigationGuard(window, this.config.leave);
+    this.stopObserving = observeNavigation(window, this.restore);
     this.restore();
   }
 
   hostDisconnected(): void {
-    window.removeEventListener("popstate", this.restore);
+    this.stopObserving?.();
+    this.ownedGuard?.dispose();
+    this.ownedGuard = undefined;
   }
 
   #children(primary: string): Readonly<Record<string, string>> {
@@ -44,8 +57,9 @@ export class UrlStateController implements ReactiveController {
 
   #read(): Record<string, string | null> {
     const prefix = `${this.config.basePath}/`;
-    if (!location.pathname.startsWith(prefix)) return {};
-    const parts = location.pathname.slice(prefix.length).split("/");
+    const url = new URL(navigationGuardFor(window)?.href ?? location.href);
+    if (!url.pathname.startsWith(prefix)) return {};
+    const parts = url.pathname.slice(prefix.length).split("/");
     if (!parts[0]) return {};
     try {
       const primary = decode(parts[0]);
@@ -65,7 +79,7 @@ export class UrlStateController implements ReactiveController {
     return this.#read()[key] ?? null;
   }
 
-  write(changes: Record<string, string | null>, replace = false): void {
+  write(changes: Record<string, string | null>, replace = false): void | Promise<LeaveOutcome> {
     if (!this.host.isConnected) return;
     const values = { ...this.#read(), ...changes };
     const primary = values[this.config.primary];
@@ -77,8 +91,10 @@ export class UrlStateController implements ReactiveController {
         if (value != null) parts.push(segment, encode(value));
       }
     }
-    const url = new URL(location.href);
+    const guard = navigationGuardFor(window);
+    const url = new URL(guard?.href ?? location.href);
     url.pathname = `${this.config.basePath}/${parts.join("/")}`;
+    if (guard) return guard.write(url, replace);
     if (url.href === location.href) return;
     if (replace) history.replaceState(history.state, "", url);
     else history.pushState(history.state, "", url);

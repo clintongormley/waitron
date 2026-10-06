@@ -22,6 +22,7 @@ export interface DraftScope<T> {
 export interface LeaveRequest {
   scopes: readonly object[];
   reason: LeaveReason;
+  signal?: AbortSignal;
   proceed(): void | Promise<void>;
 }
 
@@ -147,7 +148,7 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
       };
     },
     async request(request) {
-      if (disposed) return "stale";
+      if (disposed || request.signal?.aborted) return "stale";
       if (pending) return "busy";
       const attempt: PendingLeave = {
         roots: [...request.scopes],
@@ -155,6 +156,10 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
         deciding: true,
       };
       pending = attempt;
+      const cancel = () => {
+        if (attempt.deciding) attempt.controller.abort();
+      };
+      request.signal?.addEventListener("abort", cancel, { once: true });
       let onAbort: (() => void) | undefined;
       try {
         const affected = selected(attempt.roots);
@@ -181,6 +186,7 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
         await request.proceed();
         return "proceeded";
       } finally {
+        request.signal?.removeEventListener("abort", cancel);
         if (onAbort) attempt.controller.signal.removeEventListener("abort", onAbort);
         if (pending === attempt) pending = undefined;
       }

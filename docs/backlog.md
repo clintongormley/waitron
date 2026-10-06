@@ -1173,6 +1173,13 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+The shared history adapter is implemented on the branch, with an opt-in URL-controller host.
+Its focused Chromium cases cover holding edited routes, indexed Back/Forward restoration,
+unindexed and old-epoch fallback, one pending destination, multiple controllers and abandoned
+requests. Application shells do not yet install it: sidebar, links, logout, direct receipt/login
+history calls, page/setup owners and native reload remain open. Lane C's pending Hours change
+replaces the audited station-hours form; reconcile its editors after that branch lands.
+
 Refund amount/reason entry now uses the same registry on the branch. Cancel and native Escape
 retain the raw fields until Discard; reverts and untouched suggested amounts remain clean.
 Discard resets only local inputs, and a successful refund releases its draft before the first
