@@ -104,8 +104,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Algunos de los elementos elegidos no se pueden usar. Actualiza la lista e inténtalo de nuevo.",
   },
   "menu.shortcut_unreachable": {
-    en: "Only products and sections that are on this menu can be shortcuts on its home page.",
-    es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su página de inicio.",
+    en: "Only products and sections that are on this menu can be shortcuts on its Device Home Page.",
+    es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su página de inicio del dispositivo.",
   },
   "menu.home_display_invalid": {
     en: "That home page setting is not available for this device. Refresh the page and try again.",
