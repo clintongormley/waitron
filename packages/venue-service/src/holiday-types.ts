@@ -1,7 +1,7 @@
 // Public-holiday types and constants only, safe to import in the browser.
 import type { HolidayFact, LocalDate } from "./hours-types.js";
 
-/** The longest local holiday name, in characters, after trimming. */
+/** The longest local holiday name, in Unicode code points, after trimming. */
 export const LOCAL_HOLIDAY_NAME_MAX = 200;
 
 export interface HolidayCoverage {

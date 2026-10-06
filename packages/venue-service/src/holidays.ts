@@ -8,8 +8,8 @@ import {
 import { getCountryPack } from "@waitron/country-packs";
 import { locations, readTenant, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { localHolidayName } from "./holiday-rules.js";
 import {
-  LOCAL_HOLIDAY_NAME_MAX,
   type HolidayCoverage,
   type HolidayGeography,
   type HolidayRead,
@@ -56,9 +56,8 @@ function parseLocalHoliday(value: unknown): LocalHolidayInput {
   if (typeof value !== "object" || value === null || Array.isArray(value)) invalid("input");
   const { date, name } = value as Record<string, unknown>;
   if (!isLocalDate(date)) invalid("date");
-  if (typeof name !== "string") invalid("name");
-  const trimmed = name.trim();
-  if (trimmed === "" || [...trimmed].length > LOCAL_HOLIDAY_NAME_MAX) invalid("name");
+  const trimmed = localHolidayName(name);
+  if (trimmed === null) invalid("name");
   return { date, name: trimmed };
 }
 
@@ -264,8 +263,8 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     const rows = await geographiesOf(tx, cfg);
     const current = rows.find((row) => matches(row, address));
     const areaOptions =
-      address.calendar !== undefined && address.key !== null
-        ? address.calendar.areasForProvince(address.key.provinceCode).map(({ key, name }) => ({
+      address.calendar !== undefined && address.provinceCode !== null
+        ? address.calendar.areasForProvince(address.provinceCode).map(({ key, name }) => ({
             key,
             name,
           }))
@@ -281,20 +280,21 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     };
   }
 
+  /** `null` when a choice was cleared at an address that has no geography row, so nothing was written. */
   async function saveHolidayArea(
     tx: Transaction,
     cfg: VenueScope,
     input: { areaKey: string | null },
-  ): Promise<HolidayGeography> {
+  ): Promise<HolidayGeography | null> {
     const areaKey = parseAreaKey(input);
     const address = await readAddress(tx, cfg);
     if (address.key === null) invalid("geography");
     const options = address.calendar?.areasForProvince(address.key.provinceCode) ?? [];
     if (options.length === 0) invalid("areaKey");
     if (areaKey !== null && !options.some(({ key }) => key === areaKey)) invalid("areaKey");
-    const row =
-      (await geographiesOf(tx, cfg)).find((candidate) => matches(candidate, address)) ??
-      (await createGeography(tx, cfg, address));
+    const found = (await geographiesOf(tx, cfg)).find((candidate) => matches(candidate, address));
+    if (found === undefined && areaKey === null) return null;
+    const row = found ?? (await createGeography(tx, cfg, address));
     const [updated] = await tx
       .update(holidayGeographies)
       .set({ areaKey })
@@ -326,11 +326,13 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     const current = (await geographiesOf(tx, cfg)).find((row) => matches(row, address));
     if (existing !== null && existing.geographyId !== current?.id) invalid("id");
     const { calendar } = address;
-    if (calendar === undefined)
-      throw new AppError("holiday.local_limit", {
-        limit: 0,
-        year: yearOf(parseLocalHoliday(input).date),
-      });
+    if (calendar === undefined) {
+      const date = (input as { date?: unknown } | null)?.date;
+      throw new AppError(
+        "holiday.local_limit",
+        isLocalDate(date) ? { limit: 0, year: yearOf(date) } : { limit: 0 },
+      );
+    }
     const { date, name } = parseLocalHoliday(input);
     const year = yearOf(date);
     const others = existing === null ? undefined : ne(localHolidays.id, existing.id);

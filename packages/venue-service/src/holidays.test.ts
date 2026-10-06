@@ -14,7 +14,12 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
-import type { LocalHoliday, LocalHolidayInput } from "./holiday-types.js";
+import { localHolidayName } from "./holiday-rules.js";
+import {
+  LOCAL_HOLIDAY_NAME_MAX,
+  type LocalHoliday,
+  type LocalHolidayInput,
+} from "./holiday-types.js";
 import {
   createHolidayStore,
   readHolidayFacts as packageReadHolidayFacts,
@@ -555,6 +560,56 @@ describe("an address that does not resolve", () => {
     ]);
   });
 
+  it("returns no local facts for a matching geography once its country has no holiday capability", async () => {
+    const supported = { ...syntheticPack(3), countryCode: "ZY" };
+    const before = createHolidayStore((country) => (country === "ZY" ? supported : undefined));
+    const cfg = await venue({ country: "ZY" });
+    const saved = await run((tx) => before.saveLocalHoliday(tx, cfg, null, local("2026-03-19")));
+    const read = await run((tx) => store.readHolidays(tx, cfg, "2026-01-01", "2026-12-31"));
+    expect(read).toEqual({
+      facts: [],
+      coverage: [
+        {
+          year: 2026,
+          country: "ZY",
+          provinceCode: "10",
+          regionCode: null,
+          nationalRegional: "unsupported_country",
+          local: "unsupported_country",
+          dataVersion: null,
+          sourceIds: [],
+        },
+      ],
+      sources: [],
+    });
+    const model = await run((tx) => store.readLocalHolidayModel(tx, cfg));
+    expect(model.geographies).toMatchObject([{ id: saved.geographyId, matchesVenue: true }]);
+  });
+
+  it("refuses a pack without capability before looking at the values", async () => {
+    const cfg = await venue({ country: "ZY" });
+    const cases: [unknown, Record<string, unknown>][] = [
+      [null, { limit: 0 }],
+      [{ date: "2026-02-30", name: "Fiesta" }, { limit: 0 }],
+      [
+        { date: "2026-03-19", name: "   " },
+        { limit: 0, year: 2026 },
+      ],
+      [
+        { date: "2026-03-19", name: "x".repeat(201) },
+        { limit: 0, year: 2026 },
+      ],
+    ];
+    for (const [input, params] of cases) {
+      const refused = await refusal(() =>
+        run((tx) => store.saveLocalHoliday(tx, cfg, null, input as LocalHolidayInput)),
+      );
+      expect(refused).toMatchObject({ code: "holiday.local_limit" });
+      expect(refused.params).toEqual(params);
+    }
+    expect(await stored()).toEqual({ geographies: [], entries: [] });
+  });
+
   it("refuses every local save for a resolved address whose pack has no holiday capability", async () => {
     const cfg = await venue({ country: "ZY" });
     const read = await run((tx) => store.readHolidays(tx, cfg, ...year));
@@ -640,6 +695,16 @@ describe("the local allowance", () => {
       venue: { country: "ES", provinceCode: "41", city: "Sevilla" },
       localEntryLimit: 2,
     });
+  });
+
+  it("renames an entry on its own date without colliding with itself", async () => {
+    const cfg = await venue();
+    const saved = await run((tx) => store.saveLocalHoliday(tx, cfg, null, local("2026-03-19")));
+    const renamed = await run((tx) =>
+      store.saveLocalHoliday(tx, cfg, saved.id, local("2026-03-19", "San José")),
+    );
+    expect(renamed).toEqual({ ...saved, name: "San José" });
+    expect((await stored()).entries).toMatchObject([{ id: saved.id, name: "San José" }]);
   });
 
   it("refuses a second entry on a taken date, whatever its name", async () => {
@@ -831,7 +896,7 @@ describe("territorial areas", () => {
   it("stores the choice on a geography with no entries, keeps it across a move away and back, and clears it with null", async () => {
     const cfg = await venue({ province: "Isleshire" });
     const specials = await run((tx) => tx.select().from(specialDates));
-    const geography = await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" }));
+    const geography = (await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" })))!;
     expect(geography).toEqual({
       id: geography.id,
       country: "ZZ",
@@ -855,7 +920,7 @@ describe("territorial areas", () => {
       areaRequired: false,
     });
 
-    const again = await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-b" }));
+    const again = (await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-b" })))!;
     expect(again.id).toBe(geography.id);
     const cleared = await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: null }));
     expect(cleared).toMatchObject({ id: geography.id, areaKey: null });
@@ -863,6 +928,32 @@ describe("territorial areas", () => {
       areaRequired: true,
     });
     expect(await run((tx) => tx.select().from(specialDates))).toEqual(specials);
+  });
+
+  it("offers the area choice from the province alone while the city is missing, but cannot save it", async () => {
+    const cfg = await venue({ province: "Isleshire", city: null });
+    expect(await run((tx) => store.readLocalHolidayModel(tx, cfg))).toMatchObject({
+      venue: { provinceCode: "30", city: null },
+      areaOptions: [
+        { key: "isle-a", name: "Isle A" },
+        { key: "isle-b", name: "Isle B" },
+      ],
+      areaRequired: true,
+    });
+    const read = await run((tx) => store.readHolidays(tx, cfg, ...year));
+    expect(read.coverage).toMatchObject([
+      { nationalRegional: "area_required", local: "address_unresolved" },
+    ]);
+    expect(
+      await refusal(() => run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" }))),
+    ).toMatchObject({ code: "holiday.invalid", params: { field: "geography" } });
+    expect(await stored()).toEqual({ geographies: [], entries: [] });
+  });
+
+  it("clears an area with no geography row by writing nothing", async () => {
+    const cfg = await venue({ province: "Isleshire" });
+    expect(await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: null }))).toBeNull();
+    expect(await stored()).toEqual({ geographies: [], entries: [] });
   });
 
   it("refuses an area nobody sourced, an omitted key and a wrong type", async () => {
@@ -905,8 +996,13 @@ describe("transactions and other callers", () => {
       run(async (tx) => {
         const saved = await store.saveLocalHoliday(tx, cfg, null, local("2026-03-19"));
         await store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" });
-        const read = await store.readHolidays(tx, cfg, "2026-03-19", "2026-03-19");
-        expect(read.facts.map(({ id }) => id)).toEqual([`local:${saved.id}`]);
+        const read = await store.readHolidays(tx, cfg, "2026-03-19", "2026-07-01");
+        expect(read.facts.map(({ id }) => id)).toEqual([`local:${saved.id}`, "shipped:isle-a-day"]);
+        const model = await store.readLocalHolidayModel(tx, cfg);
+        expect(model).toMatchObject({
+          areaRequired: false,
+          geographies: [{ id: saved.geographyId, areaKey: "isle-a", matchesVenue: true }],
+        });
         throw rolledBack;
       }),
     ).rejects.toBe(rolledBack);
@@ -978,10 +1074,33 @@ describe("no network", () => {
   });
 });
 
+describe("the local holiday name rule", () => {
+  it("trims, and counts code points up to the limit", () => {
+    expect(localHolidayName("  Fiesta  ")).toBe("Fiesta");
+    expect(localHolidayName("😀".repeat(LOCAL_HOLIDAY_NAME_MAX))).toBe(
+      "😀".repeat(LOCAL_HOLIDAY_NAME_MAX),
+    );
+    for (const refused of [
+      "😀".repeat(LOCAL_HOLIDAY_NAME_MAX + 1),
+      "e\u0301".repeat(100) + "x",
+      "   ",
+      null,
+      ["Fiesta"],
+    ])
+      expect(localHolidayName(refused)).toBeNull();
+  });
+});
+
 describe("storage", () => {
-  it("refuses an impossible date and a blank name in the database itself", async () => {
+  it("refuses a malformed date and a blank name in the database itself, and an impossible date in the writer", async () => {
     const cfg = await venue();
     const entry = await run((tx) => store.saveLocalHoliday(tx, cfg, null, local("2026-03-19")));
+    // The CHECK reads only the date's shape, so an impossible date is the writer's to refuse.
+    expect(
+      await refusal(() =>
+        run((tx) => store.saveLocalHoliday(tx, cfg, entry.id, local("2026-02-30"))),
+      ),
+    ).toMatchObject({ code: "holiday.invalid", params: { field: "date" } });
     for (const [statement, constraint] of [
       [sql`update local_holidays set date = '2026-3-19' where id = ${entry.id}`, "date"],
       [sql`update local_holidays set name = '  ' where id = ${entry.id}`, "name"],
