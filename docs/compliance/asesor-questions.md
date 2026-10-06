@@ -22,6 +22,10 @@ request, Q21 gained parts (d) and (e): may or must the invoice be issued before 
 counter as well as the table. The Word copies carry them as 1.1(d) and (e); 1.1 is retitled to
 match, and section 1 is now "at the table and the counter".
 
+On **2026-10-07**: **Q43** now records a measurement. In AEAT's preproduction environment, two
+runs of shuffled envíos of up to 1,000 records each got their replies back in the order sent. The
+question to the asesor stands; the Word copies do not carry Q43 yet.
+
 Late on **2026-10-06**: **Q43 added** at the end of the conflicts section, at the owner's request:
 whether AEAT's reply lists a batch's records in the order they were sent. The standalone English
 and Spanish Word copies do not carry it yet.
@@ -2528,8 +2532,11 @@ specification has not been checked for it.
 
 > Cuando remitimos un envío con varios registros de facturación (hasta 1.000), la respuesta de la
 > AEAT contiene una línea (`RespuestaLinea`) por registro. En nuestras pruebas en el entorno de
-> preproducción, cada registro enviado apareció en exactamente una línea de la respuesta; no
-> registramos el orden en que llegaron las líneas.
+> preproducción, cada registro enviado apareció en exactamente una línea de la respuesta. El 7 de
+> octubre de 2026 lo medimos en dos pruebas, con envíos de 2, 5, 50 y 1.000 registros cuyos números
+> de factura, fechas de expedición y horas de generación iban desordenados, y con un registro
+> rechazado en medio de los envíos de 5, 50 y 1.000: en los ocho envíos, la respuesta listó los
+> registros en el mismo orden en que se enviaron. No conocemos ningún documento que lo garantice.
 >
 > **(a)** ¿Garantiza la AEAT que las líneas de la respuesta siguen el orden de los registros del
 > envío, de modo que la línea N corresponde siempre al registro N? ¿Consta en alguna
@@ -2555,9 +2562,23 @@ named by exactly one line (runs 37283677375, 37283909983 and 37283910284). The O
 was not recorded: the probe (`scripts/live-aeat.mjs` in the `@waitron/verifactu` repository) looks
 each sent record up in the reply by invoice number and saves the results in the order sent,
 whatever order AEAT used. An earlier version of this paragraph said the replies listed the records
-in the order sent; nothing we hold shows that. (a) and (b) remain for the asesor.
+in the order sent; those runs do not show that.
 
-Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json).
+**Measured in AEAT's preproduction environment, 2026-10-07 (owner's request, for #1304).** A new
+probe mode (`reply-order`, verifactu PR #138) sent four envíos per run, one chain each, of 2, 5, 50
+and 1,000 records. In each envío the invoice numbers, the issue dates and the record generation
+times were in three different shuffled orders, none sorted either way, so a reply sorted by any of
+them could not match the sent order. A size-2 envío cannot meet that for all three: it reverses
+only the numbers. In the envíos of 5, 50 and 1,000 the middle record was one AEAT refuses (code
+1161). The probe read the reply's order both from the parsed reply and from the raw SOAP text. In
+both runs (37546185953 and 37546549380) all eight replies listed every record in the order sent,
+with the refused record at its own position (3rd, 26th, 501st), and the raw text agreed with the
+parsed lines. Limits: two runs, preproduction only; both runs sent the same shuffle, because the
+order is fixed by envío size; and no AEAT document we hold promises the order. (a) and (b) remain
+for the asesor.
+
+Sources: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json);
+[reply-order evidence](../superpowers/specs/2026-10-07-aeat-reply-order-evidence.json).
 
 This records a question; no enquiry has been sent.
 
