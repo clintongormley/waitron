@@ -6688,12 +6688,17 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   editable tree, resolves quick-sale and receipt choices by department with optional zone overrides,
   and keeps today's zone-menu and device-default-zone controls temporarily in that screen. Its
   follow-up A261-2c removes the retired `locations.order_flow` column after a separate rebuild audit.
-  A261-2c retires `locations.order_flow` and the legacy `invoice_first` style throughout
+  A261-2c remains on the unmerged `refactor/retire-location-order-flow` branch. It retires
+  `locations.order_flow` and the legacy `invoice_first` style throughout
   placement, collection, management selectors, shared types and stored service contexts.
   Placement returns the order id/status without invoicing; collection follows the zone's
   payment timing. Public till boot no longer exposes the retired timing field. Placement
   retains the simplified-invoice-limit refusal. Issued-bill tests create explicit unpaid
   invoices and retain financial, permission, source-device and drawer assertions.
+  The Claude run-it review found that retaining the old placement-limit refusal broadened
+  it to non-fiscal placement. The owner decision is pending: recommended placement succeeds
+  without filing, and collection refuses the over-limit invoice without taking money. The
+  tested exact replacement remains unapplied; the existing money-limit assertion is retained.
   This change requires a venue reset: core/0104 rebuilds locations and venue-service/0020
   rebuilds departments and service policies. The owner approved both populated-upgrade
   reset entries on 2026-10-06. No compatibility or data-preservation path is included.
