@@ -1,3 +1,4 @@
+import { civilDateOf } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import {
   addDays,
@@ -36,6 +37,16 @@ function parsedAs<T>(table: string, parse: () => T): T {
 
 function ids(rows: readonly Row[] | undefined): Set<unknown> {
   return new Set((rows ?? []).map((row) => row.id));
+}
+
+/** The venue's date when the bundle was made, as a save reads it; `null` when it cannot be read. */
+function exportDate(bundle: { readonly createdAt: Date; readonly timeZone: string } | undefined) {
+  if (bundle === undefined) return null;
+  try {
+    return civilDateOf(bundle.createdAt, bundle.timeZone) as LocalDate;
+  } catch {
+    return null;
+  }
 }
 
 /** The `kind:id` key of a cell's one owner, which must be a department or station the bundle holds. */
@@ -98,13 +109,13 @@ function storedMode(row: Row, table: string): string {
  * save could not have written. An import inserts rows as they come, so this holds what the writers
  * hold: canonical times, one cell per subject and day, periods only in a periods cell, a whole week
  * or none, no overlap within a day or across a midnight, and owners the bundle carries. Like a save,
- * it leaves out a clash between two days already past when the bundle was made, and with no
- * readable `createdAt` it checks every pair. A default station's cells may travel, as the default
+ * it leaves out a clash between two days already past in the venue's zone when the bundle was
+ * made, and checks every pair when that date cannot be read. A default station's cells may travel, as the default
  * keeps them, and take no part in the clash check.
  */
 export function validateHoursConfiguration(
   tables: Tables,
-  bundle?: { readonly createdAt: Date },
+  bundle?: { readonly createdAt: Date; readonly timeZone: string },
 ): void {
   const departments = ids(tables.departments);
   const stations = ids(tables.kitchen_stations);
@@ -201,11 +212,7 @@ export function validateHoursConfiguration(
     ...[...departments].map((id) => `department:${id as string}`),
     ...[...stations].filter((id) => !defaults.has(id)).map((id) => `station:${id as string}`),
   ];
-  const exportedAt = bundle?.createdAt.getTime() ?? Number.NaN;
-  // The venue's zone is not known here, and a zone behind UTC can still read the day before.
-  const today = Number.isNaN(exportedAt)
-    ? null
-    : addDays(new Date(exportedAt).toISOString().slice(0, 10) as LocalDate, -1);
+  const today = exportDate(bundle);
   for (const key of subjects) {
     const week = (weekday: number) => weekIntervals.get(key)?.[weekday] ?? null;
     for (const date of states.keys())

@@ -332,7 +332,10 @@ describe("validateHoursConfiguration", () => {
       );
       return tables;
     }
-    const exported = (createdAt: string) => ({ createdAt: new Date(createdAt) });
+    const exported = (createdAt: string, timeZone = "Europe/Madrid") => ({
+      createdAt: new Date(createdAt),
+      timeZone,
+    });
 
     it("is accepted when the pair was already past at export, as the saves skip such pairs", () => {
       expect(() =>
@@ -352,24 +355,27 @@ describe("validateHoursConfiguration", () => {
       ).toThrowError(refusal("special_date_hours"));
     });
 
-    // The pair ends on 25 December. A venue twelve hours behind UTC still reads 25 December
-    // until 26 December 12:00 UTC, so the check keeps the pair through all of 26 December UTC.
-    it("is refused up to the end of the next UTC day, the margin for a zone behind UTC", () => {
-      expect(() =>
-        validateHoursConfiguration(pastClash(), exported("2020-12-26T23:59:59.999Z")),
-      ).toThrowError(refusal("special_date_hours"));
-      expect(() =>
-        validateHoursConfiguration(pastClash(), exported("2020-12-27T00:00:00Z")),
-      ).not.toThrow();
+    // The pair ends on 25 December, so a save skips it from the venue's 26 December onwards.
+    it.each([
+      ["Pacific/Kiritimati", "2020-12-25T09:59:59.999Z", "2020-12-25T10:00:00Z"],
+      ["America/Los_Angeles", "2020-12-26T07:59:59.999Z", "2020-12-26T08:00:00Z"],
+    ])("is refused until 26 December begins in %s, and accepted from then", (zone, before, at) => {
+      expect(() => validateHoursConfiguration(pastClash(), exported(before, zone))).toThrowError(
+        refusal("special_date_hours"),
+      );
+      expect(() => validateHoursConfiguration(pastClash(), exported(at, zone))).not.toThrow();
     });
 
-    it("is refused when the export time is not known or cannot be read", () => {
+    it("is refused when the export time or zone is not known or cannot be read", () => {
       expect(() => validateHoursConfiguration(pastClash())).toThrowError(
         refusal("special_date_hours"),
       );
       expect(() => validateHoursConfiguration(pastClash(), exported("not a time"))).toThrowError(
         refusal("special_date_hours"),
       );
+      expect(() =>
+        validateHoursConfiguration(pastClash(), exported("2026-10-06T10:00:00Z", "Not/A_Zone")),
+      ).toThrowError(refusal("special_date_hours"));
     });
 
     it("still has its own periods checked when it is past", () => {

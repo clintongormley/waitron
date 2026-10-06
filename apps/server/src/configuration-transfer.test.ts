@@ -3319,10 +3319,11 @@ describe("opening hours in a configuration transfer", () => {
     });
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
     const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
-    // Control: the same rows exported on the Saturday itself are refused.
+    // Saturday 26 September ends at 22:00 UTC in Madrid, the bundle's zone, and not in UTC.
+    expect(transferred.venue.location.timeZone).toBe("Europe/Madrid");
     expect(() =>
       validateConfigurationBundle(
-        { ...transferred, createdAt: "2026-09-26T12:00:00.000Z" },
+        { ...transferred, createdAt: "2026-09-26T21:59:59.999Z" },
         ALL_MODULES,
         versions,
       ),
@@ -3332,6 +3333,13 @@ describe("opening hours in a configuration transfer", () => {
         params: { field: "special_date_hours" },
       }),
     );
+    expect(() =>
+      validateConfigurationBundle(
+        { ...transferred, createdAt: "2026-09-26T22:00:00.000Z" },
+        ALL_MODULES,
+        versions,
+      ),
+    ).not.toThrow();
 
     expect(() => validateConfigurationBundle(transferred, ALL_MODULES, versions)).not.toThrow();
     const target = await applyVenue(planVenue(venue("B44005522"), ALL_MODULES), {
