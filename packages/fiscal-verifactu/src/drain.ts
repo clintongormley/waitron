@@ -58,8 +58,9 @@ export const BACKOFF_BASE_MS = 60_000;
 /** The retry ceiling: a batch that keeps failing retries hourly, as art. 16.4 requires. */
 export const BACKOFF_MAX_MS = 3_600_000;
 
-/** How long after a brake-held chain's last send its first held record is sent again
- * (`claimProbes`). */
+/** How long a brake-held chain's first held record waits before it is sent again
+ * (`claimProbes`), counted from the later of when it was held or last probed and when the record
+ * before it was sent. */
 export const BRAKE_PROBE_INTERVAL_MS = BACKOFF_MAX_MS;
 
 /**
@@ -593,20 +594,7 @@ async function haltOpenChainClaims(
           and original_envio.estado = 'rechazado'
       )) or (exists (
         select 1 from envios own where own.registro_id = r.id and own.intentos = 1
-      ) and (
-        select count(run.codigo_error) = ${SAME_CODE_REFUSAL_LIMIT}
-          and count(distinct run.codigo_error) = 1
-          and sum(run.estado = 'rechazado') = ${SAME_CODE_REFUSAL_LIMIT}
-        from (
-          select preceding_envio.estado, preceding_envio.codigo_error
-          from registros_facturacion preceding
-          left join envios preceding_envio on preceding_envio.registro_id = preceding.id
-          where preceding.node_id = r.node_id and preceding.sif_id = r.sif_id
-            and preceding.secuencia < r.secuencia
-          order by preceding.secuencia desc
-          limit ${SAME_CODE_REFUSAL_LIMIT}
-        ) run
-      )))
+      ) and ${sameCodeRunBefore("r")}))
   `);
   if (blocked.rows.length === 0) return claimed;
   const blockedIds = new Set(blocked.rows.map((row) => row.id));
@@ -635,10 +623,10 @@ async function haltOpenChainClaims(
 
 /**
  * True when the `SAME_CODE_REFUSAL_LIMIT` records immediately before `record` on its chain are all
- * `rechazado` with one and the same code — the run clause of `haltOpenChainClaims`, for the alias
- * `record` names in the enclosing query.
+ * `rechazado` with one and the same code: the run rule, for the alias `record` names in the
+ * enclosing query.
  */
-function sameCodeRunBefore(record: "d" | "p"): SQL {
+function sameCodeRunBefore(record: "r" | "d" | "p"): SQL {
   const alias = sql.raw(record);
   return sql`(
     select count(run.codigo_error) = ${SAME_CODE_REFUSAL_LIMIT}
@@ -696,6 +684,8 @@ const HELD_HEADS = sql`
  * The first held record of each chain the same-code run still holds, for this host's environment,
  * with the instant of the chain's last send: when it was held or last probed, or when the record
  * before it was sent, whichever is later. After a refused probe, the record before it is that probe.
+ * A chain with an earlier record still awaiting its answer (`pendiente` or `enviando`) is left out;
+ * a record `claimBatch` claimed in the same transaction already reads `enviando`.
  */
 function brakeHeldHeads(environment: Entorno): SQL {
   return sql`
@@ -704,6 +694,12 @@ function brakeHeldHeads(environment: Entorno): SQL {
     ${HELD_HEADS}
       and d.entorno = ${environment}
       and ${sameCodeRunBefore("d")}
+      and not exists (
+        select 1 from envios awaited_envio
+        join registros_facturacion awaited on awaited.id = awaited_envio.registro_id
+        where awaited.sif_id = d.sif_id and awaited.secuencia < d.secuencia
+          and awaited_envio.estado in ('pendiente', 'enviando')
+      )
   `;
 }
 

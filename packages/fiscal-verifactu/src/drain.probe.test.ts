@@ -302,9 +302,11 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     expect(wire.sent).toEqual([[healthy.registroId, first]]);
     const csv = (await envioOf(healthy.registroId)).csv;
     expect(csv).toEqual(expect.any(String));
+    // One attempt for the claim that held it, one for this probe.
     expect(await envioOf(first!)).toMatchObject({
       estado: "detenido",
       enviado_en: at(HOUR).toISOString(),
+      intentos: 2,
     });
     expect(await ackOf(first!)).toBe("halted");
     expect(await envioOf(second!)).toMatchObject({ estado: "detenido" });
@@ -511,6 +513,38 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
 
     expect(wire.sent).toEqual([[first], [second]]);
     expect(await envioOf(third!)).toMatchObject({ estado: "detenido" });
+  });
+
+  it("waits for an earlier record of the chain whose answer is still awaited, whether it is waiting to retry or claimed in the same pass", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 4 });
+    const [awaited] = seeded.registroIds;
+    for (const key of seeded.facturaKeys.slice(1)) aeat.reject(key, RUN_CODE, "Rechazo");
+    const wire = recording(
+      rewritingLines(aeat.client(), (linea) =>
+        linea.RefExterna === awaited
+          ? { IDFactura: linea.IDFactura, RefExterna: linea.RefExterna, EstadoRegistro: undefined }
+          : linea,
+      ),
+    );
+    await drain(deps(wire.client), T0);
+    const held = await appendPendingAlta(suite.db, seeded, 5);
+    // The unreadable record's retries, each doubling the wait: 00:02, 00:04, 00:08, 00:16, 00:32.
+    for (const minute of [2, 4, 8, 16, 32]) {
+      await drain(deps(wire.client), new Date(Date.UTC(2026, 6, 21, 0, minute)));
+    }
+    expect(await envioOf(held.registroId)).toMatchObject({ estado: "detenido" });
+    expect(await envioOf(awaited!)).toMatchObject({
+      estado: "pendiente",
+      proximo_intento_en: "2026-07-21T01:04:00.000Z",
+    });
+    const before = wire.sent.length;
+
+    await drain(deps(wire.client), at(HOUR));
+    expect(wire.sent).toHaveLength(before);
+
+    await drain(deps(wire.client), new Date("2026-07-21T01:04:00Z"));
+    expect(wire.sent.slice(before)).toEqual([[awaited]]);
   });
 
   describe("controls: never probed, never released", () => {
