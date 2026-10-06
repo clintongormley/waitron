@@ -10,7 +10,7 @@ import { installChangeFeed } from "../change-feed.js";
 import { runMigrations } from "../migrate.js";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedDevice, seedTenant } from "../testing/seed.js";
+import { seedDevice, freshNif } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
 import { kitchenStations } from "./kitchen-stations.js";
@@ -46,7 +46,8 @@ const suite = useVenueDb({
 
 it("adds timing storage without rewriting populated stations, mappings, keys or triggers", async () => {
   const db = suite.db;
-  await seedTenant(db);
+  await db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
+    values (1, 'ES', ${freshNif()}, 'Test SL', ${new Date().toISOString()})`);
   const [location] = await db
     .insert(locations)
     .values({
