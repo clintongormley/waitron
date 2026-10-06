@@ -210,9 +210,13 @@ short dish kitchen name typed after publishing reaches all three surfaces on lin
 menu is published again. A blank kitchen name shows the staff name, including the variant's staff
 name on a variant line. A
 venue with no service zone sells nothing: sent lines with no zone, the till's three line-carrying
-routes, `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders`, take the venue's
-counter-default zone, and refuse `service_zone.default_missing` when it has none
-(`resolveHttpOrderZone`, `apps/server/src/till-api.ts`).
+routes, `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders`, take the starting zone of
+the device's profile when the profile has a department — or, when that zone is switched off or has
+left the department, the first by position of the profile's zones still usable — and refuse
+`device_profile.no_service_zone` when none is; a profile with no
+department takes the venue's counter-default zone, refused `service_zone.default_missing` when the
+venue has none (`resolveHttpOrderZone`, `apps/server/src/till-api.ts`; `resolveNewOrderZone` and
+`readProfileZones`, `packages/venue-service/src/`).
 
 The top-sellers report groups lines under the parent's staff name, `sale_lines.name`, ranks those
 products by quantity sold (name breaks a tie), and lists

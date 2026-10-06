@@ -1036,6 +1036,8 @@ explicit cancellation or replacement.
 [publication plan](superpowers/plans/2026-10-04-forward-only-menu-publication.md).
 The shared calendar it builds on is in (A261 step 5): its menu participant joins the empty
 `VENUE_SERVICE_CALENDAR_PARTICIPANTS` list in `packages/venue-service/src/calendar-participants.ts`.
+It must replace A261 step 2's Task 8 (zone-by-zone menus, the interim path W97 kept) before it
+removes the old menu editor; W97's profiles already scope a till to a department and its zones.
 
 **The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
@@ -4539,8 +4541,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     upgrade-test reset entry on 2026-10-06. Old bookmarks use the surviving Tickets destination;
     older configuration exports are refused before staging. Step 4 remains with its owning lane.
     [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
-- **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
-  profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**
+- **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
+  access and switching (W97) BUILT on `feat/device-profile-access-and-switching`, not yet landed;
+  transfers queued in lane D, equipment queued in lane E, neither implemented.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
   station/watcher bindings; drawers are independent of receipt
@@ -4554,6 +4557,51 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   §10 names the A238/A254/A261 decisions the approved design revises. A261 step 2 keeps its
   existing zone-menu and device-default-zone controls as an interim path; the newer work replaces them
   (W97 retired the device-default-zone control, 2026-10-06).
+  - **W97 delivers** (the profile access and switching plan, Tasks 1–8): each ordering profile has
+    one department, its zones or all of them, and a starting zone, and the server refuses a zone,
+    order, table, party or bill outside them; who may sign in on a profile, by role with per-person
+    exceptions, decides the sign-in list, PIN login and a switch; a device's approved profiles,
+    which a signed-in person switches between on the till (refused during a card payment or with
+    an unsaved order); profile actions (take orders, cash, the two card kinds, prepare, hand over,
+    print, drawer) checked at every till route beside the person's permissions, separate from the
+    screens shown, and a starting screen; a kitchen display's station and watcher lists, from which
+    the manager picks each device's one; all of it in the profile editor and the Devices dialog.
+    The per-device default zone and its Departments and zones control are gone. Rules:
+    [conventions-ui.md](developers/conventions-ui.md), "A device's profile and the signed-in person
+    must both allow what the device does".
+  - **Handed on.** The [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md)
+    must replace A261 step 2's Task 8 (zone-by-zone menus, kept as the interim path) before that
+    plan removes the old menu editor; until then "offered to a department" means offered through
+    one of its zones' `zone_menus`. The [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
+    must define portable assignment, Use default, busy-terminal protection and a drawer
+    independent of receipt printers before it removes today's printer choice, which a switch keeps
+    while the new profile lists the printer and otherwise replaces with the first usable one. The
+    [transfer plan](superpowers/plans/2026-10-04-departmental-tab-transfers.md) consumes W97's
+    admission check and department scope.
+  - **Left open by W97** (each found in its review, none fixed on the branch):
+    - A card payment stuck `attempting` holds its device's profile switch until a manager resolves
+      it on Payments; an `initiated` one has no production writer today, and once hosted payments
+      are wired a missed `checkout.session.expired` webhook would hold it for good
+      (`assertNoPaymentInProgress`, `apps/server/src/device.ts`). The till only says to switch
+      once it finishes; point it at the Payments screen.
+    - The till's Profile button shows whenever the device has more than one approved profile, read
+      at boot: neither approvals added later nor the signed-in person's admission hide or show it
+      until the dialog reads `/api/device/me` again. Approvals stored on a disabled device come
+      back when it is enabled again through a join (unchecked whether that is wanted).
+    - `listOrders`'s `orderIn` filter (`apps/server/src/orders-list.ts`) is applied to `r.id`,
+      which for a sale row of the union is the sale's id, not its order's: today's only caller
+      asks for collectable rows, so nothing reaches it, but a caller without `collectable: true`
+      would get every sale row unfiltered.
+    - The profile editor reads people and the venue's departments and zones, so it needs
+      `person.manage` and `venue_service.manage` beside `layout.configure`; no role holds only the
+      last today. Edit and Duplicate fail with a read error when the departments and zones read
+      fails, and its lists do not update while the editor is open.
+    - `apps/dashboard/src/screens/device-profiles-screen.ts` is over 1,600 lines; "Where it
+      serves" and "Who can sign in" could become widgets of their own.
+    - Task 2's review found no test that fails when `device_profile_admission_roles` or
+      `device_profile_admission_persons` is left out of
+      `apps/server/src/testing/clear-provision-fixture.ts` (read, not run); both tables' keys into
+      `device_profiles` cascade on delete (identity `0007_profile_admission.sql`).
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,

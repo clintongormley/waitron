@@ -13,8 +13,8 @@ talks to the database directly.
 `<till-app>` (`src/till-app.ts`) runs the whole journey and never gates on anything but the sale
 itself:
 
-1. **Lock screen** — pick your name from the pre-login staff roster (`GET /api/staff`) and enter a
-   PIN (`POST /api/session`).
+1. **Lock screen** — pick your name from the people the device's profile admits (`GET /api/staff`)
+   and enter a PIN (`POST /api/session`).
 2. **Counter screen** — a layout-driven composition of the menu browser, basket, total and pay
    widgets, showing the menu offers of its profile's starting zone when the profile has a
    department, or else the venue's counter-default zone (`GET /api/default-service-zone/offers`).

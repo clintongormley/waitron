@@ -159,9 +159,11 @@ till gets a profile of its own.
 - **Opening the drawer by itself.** A cash sale, a hand-keyed card's slip, a collect, a bill payment
   and a bill refund each open a drawer only through `drawerPrinter`
   (`apps/server/src/receipt-print.ts`), which returns the requesting device's current receipt
-  printer only when that printer is active and has a drawer and the device's profile has
-  `open-cash-drawer` ("Open cash drawer" in the profile editor). A handheld whose profile has it
-  opens the drawer like a till; a till whose profile lacks it opens none.
+  printer only when that printer is active and has a drawer and the device's profile allows
+  `open-cash-drawer` ("Open cash drawer" in the profile editor; `profileAllows`,
+  `packages/layouts/src/device-profile.ts`). A handheld whose profile has it opens the drawer like a
+  till; a till whose profile lacks it opens none, and so does a kitchen display, whatever its
+  stored list names.
 - **The Open drawer button** (`POST /api/drawer/open`, `apps/server/src/till-api.ts`) needs a
   signed-in session, and a session always belongs to a device. Disabling a device ends its
   sessions, so they answer `session.required`; a session left open on a device turned off outside
@@ -176,7 +178,8 @@ till gets a profile of its own.
   (`POST /api/working-orders/:id/payments`, `apps/server/src/bill-payments-api.ts`) from a device
   whose profile lacks `take-cash` ("Takes cash") are refused `device.cash_not_allowed`
   (`assertTakesCash`, `apps/server/src/device-session.ts`), and the till app offers no cash choice
-  there.
+  there. A bill refund is checked by how its payment was taken (`refundTender`,
+  `apps/server/src/bill-refunds.ts`): a cash one the same way.
 
 Regressions: the drawer cases in `apps/server/src/receipt-print.test.ts` (among them "every device
 whose profile allows the drawer opens its receipt printer's drawer"),
@@ -192,6 +195,45 @@ One path is outside the rule: the dashboard's "Test open drawer" calibration,
 active printer's drawer for a manager holding both `printer.manage` and `cash.drawer`, with no
 device behind it: its audit row names the printer and the manager and no device. The owner chose to
 leave it as it is (2026-10-02, B29).
+
+## A device's profile and the signed-in person must both allow what the device does
+
+Since W97 (spec `docs/superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md`) a
+device profile decides where its devices serve, who may sign in on them and what they may do, and
+the server checks each at the route, never trusting the till's copy:
+
+- **Actions are checked at the route, beside the person's permission.** A till route that orders,
+  takes a payment, prepares, hands over, prints or opens the drawer checks the profile's action
+  (`assertProfileAction` or `assertDeviceCapability`, `apps/server/src/device-session.ts`) as well
+  as any permission it already asked of the person. Showing or hiding a screen (`show-*`) decides
+  only what the till draws; a hidden screen's route is still refused by its action. Which route
+  needs which action, and the case that fails without each check, is the map at the top of
+  `apps/server/src/till-api.profile-actions.test.ts`; the zone each route acts in is the map at the
+  top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds a row to each and a
+  refusing case. Weaker than that sounds: both maps are comments, and nothing fails when a new
+  route has no row.
+- **A kitchen display may only prepare.** A `kds` profile is a shared display with nobody signed
+  in: `profileAllows` refuses it every action but `prepare-orders`, even one its stored list
+  names, and with nobody signed in a till route that needs a session answers `session.required`.
+  Ordering, payment and the drawer always need a named person.
+- **Where a profile serves.** A profile that takes orders has one department, a set of that
+  department's zones or all of them (`allowedZoneIds: null`, read as the department's zones still
+  switched on), and a starting zone. A new order with no zone named starts in the starting zone,
+  or, when that zone is switched off or has left the department, in the first of the profile's
+  usable zones by position; with none it is refused `device_profile.no_service_zone`
+  (`readProfileZones`, `packages/venue-service/src/profile-access.ts`). A zone outside the profile
+  is refused `service_zone.not_allowed`, and lists show only the profile's zones and their orders.
+  A profile with no department row, reachable only by writing the store directly, keeps the
+  venue's counter-default zone.
+- **A kitchen display's station and watcher lists are its manager's choices, not its routing.** The
+  manager gives each device on the profile one station or watcher from those lists (Devices →
+  edit); what reaches that station still comes from the venue's routing. Taking an entry off a list
+  while a device shows it is refused, naming the device (`device_profile.station_in_use`,
+  `device_profile.watcher_in_use`).
+- **Who may sign in.** `GET /api/staff` with a device lists only the people its profile admits
+  (`listStaffAdmittedTo`, `@waitron/identity`); a list of colleagues that is not a sign-in list,
+  such as the schedule's, asks with `everyone=true`. A switch to another approved profile checks
+  the person's admission again and ends the sessions the new profile does not admit.
 
 ## A successful write followed by a failed refresh is a load failure, not a failed save
 
