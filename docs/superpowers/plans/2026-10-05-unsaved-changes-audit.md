@@ -1424,3 +1424,46 @@ captures are removed from source.
 
 Tasks 1/4 remain partial. Units reassignment and the other remaining audited modal owners, followed
 by Tasks 5–6 pages/history/navigation/native reload, still keep both proposed PRs unfinished.
+
+
+## Units reassignment checkpoint — 2026-10-06
+
+The Units reassignment row now has an owner scope on the W69 branch. Its payload compares
+selected product IDs as a set and the target scalar, preserving the existing Each-to-null mapping
+at submission. Cancel and native Escape use requestClose; Keep retains the selections/target,
+and Discard restores only local values. Search and untouched/reverted entry remain exempt.
+A successful reassignment resets/commits that entry; a refused reassignment retains it. Starting
+a write invalidates an older question and holds the selection/target controls unavailable.
+Disconnect disposes the scope; reconnect protects the retained local draft against its empty seed.
+The modal close handler ignores a bubbled child report.
+
+Commands run for this checkpoint:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/screens/units-reassignment.unsaved.test.ts src/screens/units-screen.test.ts src/screens/unit-owners.unsaved.test.ts src/widgets/unit-form.test.ts src/widgets/unit-form.a11y.test.ts src/screens/units-screen.a11y.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/dashboard typecheck
+pnpm exec eslint apps/dashboard/src/screens/units-screen.ts apps/dashboard/src/screens/units-reassignment.unsaved.test.ts
+```
+
+The final focused family passed 120 tests, including 15 new reassignment cases; the unchanged
+fiscal suites passed 20. The initial new suite observed seven missing-behavior failures with two
+controls passing; follow-up busy-control/child-report cases observed two failures. No existing
+assertion changed. In an independently installed disposable candidate, ten separate deletions
+failed their intended case while an untouched usage/search control passed; restoring the
+candidate passed all 15 reassignment cases. The first target-notification deletion also failed
+the original reverted-input control, which depends on that notification; it was retained as a
+diagnostic and all controls were repeated with the independent untouched control.
+
+A temporary visual probe ran eight EN/ES, light/dark, 390/1280 flows and 16 axe scans. All 16
+editor/warning captures were inspected. The probe and captures were archived outside source;
+final dashboard typecheck, changed-file lint, formatting and diff checks passed. Receipt logs
+are in the lane's local `receipts/w69-units-20261006` folder.
+
+Re-discovery still finds protected baseline owners without their own close interception:
+`catalogue-browser` operation destination/disposition (its current close handlers discard the
+operation), and `canvas-editor-screen` Create/Duplicate name dialogs. Source inspection identifies
+these as next candidates, not verified runtime failures. Reconcile their advancing code before
+TDD, preserve A278's current deletion-count contract, and classify every other discovery hit.
+Tasks 1/4 remain partial; page/history/navigation and native reload are still pending. Neither
+proposed W69 PR is ready for finish-branch.

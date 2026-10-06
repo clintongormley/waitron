@@ -1,5 +1,6 @@
 import type { ContentLanguages } from "@waitron/shared";
-import { baseStyles, setContentLanguages } from "@waitron/ui";
+import { baseStyles, setContentLanguages, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
 import { LitElement, css, html, nothing } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
@@ -18,6 +19,8 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+
+type ReassignmentDraft = { products: string[]; target: string };
 
 type UnitError = { code?: string; params?: { products?: ProductUsingUnit[] } };
 
@@ -120,9 +123,66 @@ export class UnitsScreen extends LitElement {
   @state() private selectingProducts = false;
   @state() private reassignTarget = "";
   private focusTarget: HTMLElement | null = null;
+  readonly #reassignmentOwner = {};
+  #reassignmentScope?: DraftScope<ReassignmentDraft>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeInUseClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.isConnected &&
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this.#reassignmentOwner], reason, proceed() {} })) ===
+      "proceeded";
+
+  #reassignmentDraft(): ReassignmentDraft {
+    return { products: [...this.selectedProducts].sort(), target: this.reassignTarget };
+  }
+
+  #releaseReassignment(): void {
+    this.#reassignmentScope?.dispose();
+    this.#reassignmentScope = undefined;
+    this.#leave = undefined;
+  }
+
+  protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    if (this.inUseUnitId === null) this.#releaseReassignment();
+    else if (!this.#reassignmentScope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#reassignmentScope = this.#leave?.register<ReassignmentDraft>({
+        id: this.#reassignmentOwner,
+        parent: this,
+        current: () => this.#reassignmentDraft(),
+        snapshot: (value) => structuredClone(value),
+        equal: (a, b) =>
+          a.target === b.target &&
+          a.products.length === b.products.length &&
+          a.products.every((id, index) => id === b.products[index]),
+        restore: (value) => {
+          this.selectedProducts = [...value.products];
+          this.reassignTarget = value.target;
+        },
+      });
+      this.#reassignmentScope?.commit({ products: [], target: "" });
+    }
+    if (changed.has("busy") && this.busy)
+      this.#reassignmentScope?.commit({ products: [], target: "" });
+  }
+
+  override disconnectedCallback(): void {
+    this.#releaseReassignment();
+    super.disconnectedCallback();
+  }
+
+  #requestInUseClose(): void {
+    if (!this.isConnected || this.busy) return;
+    if (this.#reassignmentScope)
+      void this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+        "[data-test=in-use-dialog]",
+      )!.requestClose("cancel");
+    else this.#closeInUse();
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.requestUpdate();
     void this.#load();
   }
 
@@ -267,6 +327,7 @@ export class UnitsScreen extends LitElement {
   }
 
   #openInUse(unitId: string, products: ProductUsingUnit[]): void {
+    this.#releaseReassignment();
     this.inUseUnitId = unitId;
     this.inUseProducts = products;
     this.inUseSearch = "";
@@ -276,6 +337,7 @@ export class UnitsScreen extends LitElement {
   }
 
   #closeInUse(): void {
+    this.#releaseReassignment();
     this.inUseUnitId = null;
     this.inUseProducts = [];
     this.inUseSearch = "";
@@ -287,7 +349,9 @@ export class UnitsScreen extends LitElement {
 
   #onSelectionChange(event: CustomEvent<{ selected: string[] }>): void {
     event.stopPropagation();
-    this.selectedProducts = event.detail.selected;
+    if (!this.isConnected || this.inUseUnitId === null || this.busy) return;
+    this.selectedProducts = [...event.detail.selected];
+    this.#reassignmentScope?.changed();
   }
 
   async #changeUnit(): Promise<void> {
@@ -309,6 +373,7 @@ export class UnitsScreen extends LitElement {
       );
       this.selectedProducts = [];
       this.reassignTarget = "";
+      this.#reassignmentScope?.commit({ products: [], target: "" });
     } catch (error) {
       this.#showError(error as UnitError);
     } finally {
@@ -507,7 +572,13 @@ export class UnitsScreen extends LitElement {
         data-test="in-use-dialog"
         .open=${this.inUseUnitId !== null}
         heading=${t("units.delete_unit")}
-        @wt-close=${this.#closeInUse}
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#reassignmentScope ? this.#beforeInUseClose : undefined}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (event.target !== event.currentTarget) return;
+          this.#closeInUse();
+        }}
       >
         ${
           this.inUseProducts.length === 0
@@ -521,9 +592,12 @@ export class UnitsScreen extends LitElement {
                   <wt-button
                     data-test="select-products"
                     variant="secondary"
+                    ?disabled=${this.busy}
                     @click=${() => {
+                      if (!this.isConnected || this.inUseUnitId === null || this.busy) return;
                       this.selectingProducts = !this.selectingProducts;
                       if (!this.selectingProducts) this.selectedProducts = [];
+                      this.#reassignmentScope?.changed();
                     }}
                     >${t(this.selectingProducts ? "units.cancel_selection" : "units.select")}</wt-button
                   >
@@ -569,10 +643,13 @@ export class UnitsScreen extends LitElement {
                           label: localizedName(unit.name),
                         })),
                       ]}
+                      .disabled=${this.busy}
                       .value=${this.reassignTarget}
                       @wt-change=${(event: CustomEvent<{ value: string }>) => {
                         event.stopPropagation();
+                        if (!this.isConnected || this.inUseUnitId === null || this.busy) return;
                         this.reassignTarget = event.detail.value;
+                        this.#reassignmentScope?.changed();
                       }}
                     ></wt-combobox>
                     <wt-button
@@ -595,7 +672,7 @@ export class UnitsScreen extends LitElement {
                   .rows=${inUseRows}
                   .columns=${this.#productColumns()}
                   .rowKey=${(product: ProductUsingUnit) => product.id}
-                  .selectable=${this.selectingProducts}
+                  .selectable=${this.selectingProducts && !this.busy}
                   .selected=${this.selectedProducts}
                   .selectionLabel=${(product: ProductUsingUnit) =>
                     `${t("units.select_product")}: ${product.name}`}
@@ -610,7 +687,7 @@ export class UnitsScreen extends LitElement {
             slot="cancel"
             data-test="cancel-in-use"
             variant="secondary"
-            @click=${this.#closeInUse}
+            @click=${this.#requestInUseClose}
             >${t("action.cancel")}</wt-button
           >
           <wt-button

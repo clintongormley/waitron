@@ -1202,8 +1202,13 @@ refusal, busy transitions, reconnect and stale answers. Ingredient Add/Edit now 
 Escape drops name, active status, allergen declaration or dietary origin. Keep retains the values;
 Discard closes once, while reverts remove unload protection. Successful ingredient writes release
 the scope before the Recipes refresh; refusal retains it. Focused widget and Recipes tests cover
-these boundaries, busy/stale answers, reconnect and same-identity reads. Units reassignment and the
-remaining modal owners, followed by page/history/navigation work, still keep W69 incomplete.
+these boundaries, busy/stale answers, reconnect and same-identity reads. Units reassignment now
+protects product selection and target through Cancel/native Escape. Keep retains both; Discard
+resets local choices without a reassignment or deletion request. Search/reverts remain exempt,
+and accepted reassignment clears protection before a later close. The real Units owner tests
+cover native selection, refusal, busy controls, stale answers, disconnect/reconnect and ancestor
+leave requests. The remaining modal owners, followed by page/history/navigation work, still keep
+W69 incomplete.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
 redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue
