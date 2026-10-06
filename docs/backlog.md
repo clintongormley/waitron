@@ -3550,7 +3550,7 @@ by the owner the same day as two items:
   of the room before the pinned column)_. Wrapping was chosen over an ellipsis because a phone
   cannot show a cut name's full text. The open point (a name got about 46 px at 390 px, so most
   words broke part-way) was answered "maybe (b) and (c)" by the owner (b: drop the product photo at phone
-  width; c: narrow the tree's leading slots), and **W85e** (2026-10-06) did (b) and narrowed
+  width; c: narrow the tree's leading slots), and **W85e** (#1275, 2026-10-06) did (b) and narrowed
   the arrow slot of (c): at phone width (the table's `narrow`) a product row draws no photo, and every tree's
   arrow slot is one cell padding (12 px) narrower, a toggle button keeping its 44 px tap target by
   reaching back over the 12 px before it, which on every row is inside its own cell. Measured in the demo venue at 390 px: a product's
@@ -3562,6 +3562,9 @@ by the owner the same day as two items:
   whenever the table's `narrow` changes), and a narrow toggle's focus ring is drawn inside the button so the
   scrolling box does not clip a top-level one. The Structure tree gains the same 12 px; its long
   names still clip at 390 px (W92's open point above).
+  Left for the owner (the owner's answer was a "maybe"): keep, or undo, either half; hide the
+  folder icon too at phone width so product and category names line up again; narrow the indent
+  step. Before/after screenshots: `~/waitron-campaign/w85e-shots/pair-*.png` (local).
 - Fixed in W85c (#1245, 2026-10-05): in the product editor's variant table the Unit button sat 4 px
   (`--wt-space-1`) after the word Price, which read as no gap. The two now have a `--wt-space-2`
   (8 px) gap between them (`.price-heading`, `apps/dashboard/src/widgets/variant-table.ts`),
