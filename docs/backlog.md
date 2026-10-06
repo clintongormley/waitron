@@ -3195,6 +3195,22 @@ Left open:
   id, postcode and province when the country has no rules for them" in
   `apps/server/src/setup-api.country-pack.test.ts` red, because it sends a Demo for a United
   Kingdom pack with no demo values; that test was left unchanged for the owner to decide.
+  **Owner answer 2026-10-06 (W109 point A):** a country pack carries its own made-up demo
+  identity; there is no form path for a pack without one. The demo-data plan's Task 2 (W109-2,
+  `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`) enforces it with a test that
+  every pack offered at setup carries one, not with a route refusal, so that test stays as it is.
+
+**Demo languages per region — owner decision pending (W109, owner 2026-10-06: "add to the backlog
+for a later decision").** The demo-data plan builds the demo's content languages from the area's
+required languages in the country pack plus Spanish and English (plan, "Languages follow the area"
+table). Three consequences the owner has not yet ruled on; W109 builds them as stated:
+- *Valencian Community:* the demo defaults to Catalan, because the pack says the area requires
+  Catalan. Setup itself keeps Spanish as the default there. Alternative: Spanish default with
+  Catalan beside it.
+- *Balearic Islands:* the demo has no Catalan, because the pack requires no language there, though
+  Catalan is co-official (`docs/compliance/regional-language-rules.md`, Balearic Islands). Alternative: add Catalan, by making the pack require it or by a demo rule.
+- *Madrid and the other single-language areas:* the demo drops the Catalan that setup switches on
+  for every Spanish venue (`es, ca, en`). Alternative: keep setup's whole list.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A

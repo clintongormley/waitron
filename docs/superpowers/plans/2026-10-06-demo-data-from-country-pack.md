@@ -2,16 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: the owner answered the six decisions on 2026-10-06 (~08:19, amended ~08:21); this plan
-is amended to those answers (W109, lane A).** Nothing here is built. Two points the answers do not
-settle are open, both about a country with no demo data (Task 2): see "Open points" below. Task 2
-waits for them; Tasks 1, 3, 4 and 5 do not.
+**Status: the owner answered the six decisions on 2026-10-06 (~08:19, amended ~08:21), and the
+two open points about a country with no demo data on the same day (A at ~10:05, B at ~10:07); this
+plan is amended to all of them (W109, lane A).** Nothing here is built. No task waits for an answer;
+Task 2 is still built last. The three language points the owner sent to the backlog at ~10:58 do
+not change this plan: it is built with the behaviour written here.
 
 **Goal:** A demo venue's menus, floor, staff and example data belong to its country, the way its
 company name and tax number already do (W108, #1276). A Spanish demo's customer-facing text is in
 Spanish and English, with Spanish the default; where the area requires Catalan or Galician, that
 language is the default and Spanish and English come with it — in Barcelona Catalan, Spanish and
-English. A country whose pack has no demo data gets the existing demo data in English.
+English. A country whose pack carries its own made-up demo identity but no demo data of its own
+gets the existing demo data in English, under that identity, and its practice sales are recorded
+through the venue's own fiscal module.
 
 **Architecture:** The data the demo seed writes today (menus, products, option lists, floor, staff,
 adjustment reasons, a few names written inline) becomes one value, a _demo data set_, kept on the
@@ -47,6 +50,23 @@ wizard.
 - Decision 6, changed: a Demo for a country whose pack has no demo data is not refused; it _"falls
   back to the existing demo data in English"_ (owner: _"fall back to English if there is no other
   demo data"_).
+
+**The answers to the two open points (2026-10-06, said in the watcher session; recorded in
+`~/waitron-campaign/questions.md`, "OWNER ANSWER … W109 point A" ~10:05 and "… W109 point B"
+~10:07):**
+
+- Point A, _"B, but for now the only country is Spain"_: _"a country pack carries its own made-up
+  demo identity (company, tax number, location name), rather than the Demo form showing those
+  fields. Spain is the only country today and already has one (W108), so build no form path for a
+  pack without one; make the demo identity part of what a pack must provide to offer Demo (or what
+  the English fallback requires), stated in the plan, so a future country cannot reach the venue
+  screen without it."_
+- Point B, _"B"_: _"build it now, inside W109-2 — the demo's practice sales are recorded through the
+  venue's OWN fiscal module (the composition's fiscal seat), never hard-wired to Spanish
+  Veri\*Factu. Spain stays the only country today, so the Spanish demo's records must come out
+  exactly as before (prove it: same records for a Spanish demo before and after)."_ And: _"Fiscal
+  code is touched only through its existing public seat — no change to hashing, chaining or
+  issuance."_
 
 ---
 
@@ -88,6 +108,16 @@ So today:
   the venue (`apps/server/src/setup-api.ts`, the `seedDemo` call after `provision`). The wizard
   cannot reach it today: it offers only setup-ready packs, and Spain is the only one (the United
   Kingdom pack says `availableForVenueSetup: false`, `packages/country-gb/src/united-kingdom.ts:13`).
+  W108 found that refusing it in `parseProvisionPayload` turns one `setup-api.country-pack.test.ts`
+  case red, and left the route and the test for the owner (`docs/backlog.md`, W108's "Left open").
+- **Practice sales are hard-wired to Veri\*Factu, and on a venue that files nothing they stop at
+  the first sale.** `seedSales` builds `new VerifactuBackend(…)` itself
+  (`apps/server/scripts/demo-seed/seed-sales.ts:14, 170-178`) instead of asking the composition's
+  fiscal seat. Measured 2026-10-06 on `main` at `8cef37de4`, in a throwaway worktree, with a probe
+  test (not committed) that provisions a United Kingdom venue the way
+  `apps/server/src/fiscal-none.e2e.test.ts:69-77` does (territory `GB-vat`, so the node is stamped
+  `filing_module = "none"`) and runs `seedSales` for 3 days: it throws `sif.not_registered` — such a
+  venue gets no practice sales at all, not Spanish fiscal records.
 
 ## How it works after this plan
 
@@ -98,15 +128,23 @@ and one value of it, `CASA_DELGADO_ES`, assembled from what `menu.ts`, `floor.ts
 `DEMO_DATA_SETS`, maps an id to its data set. It is server-side, not in the pack: the pack must
 stay browser-safe and small (the setup wizard bundles it), the data set points at 45 photographs,
 and only the server seeds (`menu.ts` alone is about 600 lines). The pack names it:
-`CountryDemoIdentity` gains `dataSet: string`, and Spain's is `"casa-delgado-es"`. A test fails if
-any pack's `demo.dataSet` names no registered set — the same shape as
-`scripts/module-seams.test.ts`'s check that every filing id names a fiscal module.
+`CountryDemoIdentity` gains `dataSet` (a required string in Task 1; Task 2 makes it optional, for
+the fallback below), and Spain's is `"casa-delgado-es"`. A test fails if any pack's `demo.dataSet`
+names no registered set — the same shape as `scripts/module-seams.test.ts`'s check that every
+filing id names a fiscal module.
 
 **How W108's identity fits.** Unchanged: the company name, tax number, location name and the two
 department trading names stay in the pack, because the setup wizard shows them (prefilled location
 name, the summary). The data set holds everything only the server needs. The trading names stay
 keyed `restaurant` and `deli`, which are the two departments this data set builds; a second
-country's data set with other departments would widen that type then, not now.
+country's data set with other departments would widen that type then, not now. **Since answer A,
+the identity is what a pack must carry to be offered at setup at all** (Task 2): a test fails if a
+setup-ready pack (`VENUE_SETUP_COUNTRY_PACKS`, `packages/country-packs/src/registry.ts:23-25`) has no
+`demo`. That list is the venue screen's one country dropdown for every mode
+(`apps/setup/src/screens/venue-screen.ts:673`), so the guard holds Prepare and Live to it too — this
+plan's reading of answer A (decision 7). The guard is the enforcement: the setup route only finds
+setup-ready packs (`getVenueSetupCountryPack`, `apps/server/src/setup-api.ts:358-359`), so while the
+guard holds, no Demo request can name a pack without an identity.
 
 **What stays shared.** The seed code (every `seed-*.ts` writer), the demo printer, publishing the
 menus last, back-dated practice sales, the login constants (`DEMO_PIN`, `DEMO_ADMIN_EMAIL`,
@@ -115,17 +153,60 @@ menus, products and their prices and VAT classes, option lists, units, floor (zo
 statuses, department internal names), staff names, adjustment reasons, the watcher's name, the
 Drinks menu's name.
 
-**A country with no demo data (decision 6, Task 2).** Its Demo is not refused. The venue is seeded
+**A country with no demo data (decision 6 and answers A and B, Task 2).** "No demo data" now means
+a pack whose demo identity names no data set of its own (`demo.dataSet` absent); by answer A it
+still carries the identity — company, tax number, location name and the two trading names — and
+the demo uses those, exactly as Spain's does today. Its Demo is not refused. The venue is seeded
 from the existing data set, `casa-delgado-es`, in English: content languages English (default),
 staff names in English whatever the person setting it up speaks. **This plan's own choice, not the
 owner's:** an area that requires a language also gets that language switched on beside English,
 because `writeContentLanguages` refuses a list that leaves a required language out
 (`content-languages.ts:185-186`); the text stays English only, so that language is listed as
 missing translations. No pack today has such an area without demo data (the only other pack, the
-United Kingdom's, has no areas). The wizard keeps offering Demo for every setup-ready country. Two things the
-answer does not settle are the open points below: what identity such a demo carries (the pack has
-no made-up company or tax number for it), and whether it gets practice sales. A pack whose
-`demo.dataSet` names nothing still fails a test at build time, so it never ships.
+United Kingdom's, has no areas). Its month of practice sales is recorded like any other demo's,
+through the venue's own fiscal module (below). No real pack reaches the fallback today — Spain
+names `casa-delgado-es`, and the United Kingdom carries no identity at all — so only Task 2's tests
+reach it. **A pack with no identity at all cannot offer Demo:** the
+guard test above stops it, and the seed's own refusal (`apps/server/src/demo-seed.ts:21-24`) stays
+behind it. There is no form path for it: the Demo
+form keeps hiding the tax ID, legal name and operation description (`DEMO_HIDDEN`,
+`apps/setup/src/screens/venue-screen.ts:80-90`).
+
+**Practice sales go through the venue's own fiscal module (answer B, Task 2).** `seedSales` stops
+building `VerifactuBackend` itself and asks the composition's fiscal seat for the venue's backend.
+It works the venue's modules out from its fiscal territory, as provisioning did
+(`venueModuleConfig`, `apps/server/src/provision.ts:28-30`, called by the setup route's provision
+at `apps/server/src/boot.ts:1009-1012`, whose result `provisionVenue` saves at `provision.ts:151`);
+the running server instead reads that saved list (`readModuleConfig`, `boot.ts:798-800`). Both end
+at the same call: `fiscalSlot(modules, stamped)` returns the one fiscal contribution, checked
+against the node's recorded `filing_module` (`packages/module/src/fiscal-slot.ts:12-30`), and its
+`makeBackend` builds the backend (`boot.ts:1377-1378`, through
+`apps/server/src/till-backend.ts:38-49`, for the till). Working the list out afresh picks the same
+fiscal module as the saved one: `venueModuleConfig` sets every fiscal-slot member's switch from the
+territory whatever the base list says (`venueFiscalSelection`, `packages/provisioning/src/venue-fiscal.ts:23-32`, then `selectFiscalModule`, `packages/module/src/fiscal-slot.ts:37-47`). The seed passes the same back-dating clock and the same
+environment it passes today. For Veri\*Factu, `makeBackend` builds
+`new VerifactuBackend({ clock, db, environment, deploymentEnvironment: environment, resolveClient })`
+(`packages/fiscal-verifactu/src/slot.ts:46-53`) — the options `seed-sales.ts:170-178` passes by
+hand today, with a `resolveClient` that likewise always rejects — so a Spanish demo's records are
+unchanged; Task 2 proves it against a golden copy. For a venue whose filing module is `none`, the
+backend is `NoneBackend`, which writes nothing (`packages/fiscal-none/src/backend.ts:12-42`):
+measured 2026-10-06 with the probe above and the seed routed through the seat, a United Kingdom
+venue got 38 practice sales, every one `fiscal_backend = "none"`, and no `registros_facturacion` or
+`envios` row; a whole `seedDemoRestaurant` with `salesDays: 3` on such a venue completed the same
+way. **This plan's reading, not the owner's:** `none` needs no decision — its practice sales are ordinary sales with no fiscal record, which
+is what a till sale there records too (`apps/server/src/fiscal-none.e2e.test.ts:21-26`). Two things stay as they are, because changing either would
+change the Spanish records: the sales sit at fixed UTC hours chosen for a Madrid business day
+(`seed-sales.ts:188-190, 203-208`), and each line's VAT rate comes from `vatRateOn`'s default table
+(`seed-sales.ts:226`), which is Spain's (`packages/catalogue/src/vat-rates.ts:19-27`). That table is
+also what every till sale is priced at, whatever the country: the till paths rate lines through
+`issueMoment` → `rateLines` → `vatRatesOn(on)` with no table given
+(`apps/server/src/issue-moment.ts:14-20`, `packages/catalogue/src/pricing.ts:178-179`). `grep -rn
+"vatRateOn\|vatRatesOn" apps packages --include='*.ts'`, leaving out tests, imports and
+`vat-rates.ts` itself, finds three calls — `pricing.ts:179`, `seed-sales.ts:226` and
+`apps/dashboard/src/widgets/product-editor.ts:643` — none passing a table. So a fallback demo's practice sales carry
+Spain's VAT rates, the rates its own till would: this plan's probe of a three-day United Kingdom
+demo recorded 10% and 21%, and the fresh-context reviewer's probe of the same path recorded 21, 10,
+4 and 0% (its own run, not repeated here). Both are known limits below.
 
 **Languages follow the area, through the pack's own rules.** The demo writes its own
 content-language row, replacing the one setup wrote (as it does today), but now derived from the
@@ -192,29 +273,37 @@ check.
    draft, the side-by-side table in the PR, and a backlog entry saying the text is unchecked.
 5. **Basque** — as recommended: not written now.
 6. **A country with no demo data** (W108's open question) — changed: not refused; it falls back to
-   the existing demo data in English (Task 2). The W108 test that sends a Demo for a mocked UK pack
-   (`apps/server/src/setup-api.country-pack.test.ts`, "keeps the typed tax id, postcode and
-   province when the country has no rules for them") stays as it is: it stubs the seed
-   (`seedDemo: vi.fn(…)`, `:63`), so it passes through the setup route with the fallback in place.
+   the existing demo data in English (Task 2). With answer A this means a pack whose identity
+   names no data set; a pack with no identity cannot offer Demo.
+7. **Answer A, the identity of a fallback demo** (2026-10-06 ~10:05) — the pack carries its own
+   made-up identity; no form path for a pack without one. How this plan holds a pack to it: a test
+   that every setup-ready pack carries `demo` (Task 2); that test is the enforcement. **This plan's
+   reading of the answer, not the owner's words:** because the venue screen shows one country list
+   for every mode (`apps/setup/src/screens/venue-screen.ts:673`), the test makes a demo identity a
+   condition of offering a country in Prepare and Live too, not only in Demo — making the United
+   Kingdom setup-ready would need an identity in its pack and a default operation description
+   (below). The alternative, if the owner objects: offer such a pack in Prepare and Live and hide
+   only the Demo choice for it, which is a form change this plan does not make. No refusal is added
+   to the setup route: the route only finds setup-ready packs (`apps/server/src/setup-api.ts:358-359`),
+   so while the test holds such a refusal could never fire, and W108's "Left open" item
+   (`docs/backlog.md`) is closed by the test instead. The guard test also requires that Demo can fill the operation
+   description, which the Demo form hides and fills only from the filing module's default
+   (`#descriptionDefault`, `apps/setup/src/screens/venue-screen.ts:243-247`; `#next` stops while
+   it is empty, `:510-513`): the `none` module has no such default
+   (`packages/fiscal-none/src/slot.ts:19-26`, which declares no `venueFields`), so a future pack filing with `none` would reach the
+   venue screen and stop there. Read, not run. The test makes that pack's author choose then (a
+   default in the module, or a description in the identity); this plan adds neither.
+8. **Answer B, practice sales in a fallback demo** (2026-10-06 ~10:07) — built now, in Task 2:
+   every demo's practice sales go through the venue's own fiscal module, through the composition's
+   fiscal seat; a Spanish demo's records come out exactly as before, proven against a golden copy
+   captured before the change. **This plan's reading, not the owner's:** routing through the seat
+   needed no further decision — a venue whose filing module is `none` records its practice sales as
+   ordinary sales with no fiscal record (measured, above). A fallback demo's practice sales carry
+   Spain's VAT rates, as its own till's sales would (above; a known limit).
 
-## Open points (asked in lane A's `questions.md`, "W109 — two open points"; Task 2 waits for them)
+## Open points
 
-- **A. The identity of a fallback demo.** A pack with no `demo` has no made-up company, tax number,
-  location name or trading names, and the wizard's Demo form hides the tax ID and legal name fields
-  (`DEMO_HIDDEN`, `apps/setup/src/screens/venue-screen.ts:76-84`), so today the operator could not
-  get past the venue screen. The same list hides the operation description, which Demo fills only
-  from the filing module's default — and the United Kingdom pack files with `none`. **Recommended:**
-  in Demo, a pack with no `demo` shows the tax ID and legal name fields (validated by the pack's
-  own tax-ID rule, as in Prepare), and the operation description too where the filing module
-  supplies no default; the location name starts empty; the summary drops its "fixed demo values"
-  note for such a demo; and the two department trading names come from the data set
-  (`fallbackTradingNames`, `Bar Casa Delgado` and `Deli Delgado`). Alternative: give the pack a
-  made-up identity after all (only the pack can make a tax number its own rule accepts).
-- **B. Practice sales in a fallback demo.** `seed-sales.ts` records every practice sale through
-  `VerifactuBackend` (`seed-sales.ts:14, 170`) and places it in a Madrid business day, whatever the
-  venue's filing module — so a non-Spanish venue would get Spanish fiscal records. **Recommended:**
-  no practice sales in a fallback demo (`salesDays: 0`) until the seed records through the venue's
-  own fiscal module (a known limit below). Alternative: build that first, as part of Task 2.
+None. Points A and B are answered (decisions 7 and 8 above).
 
 ---
 
@@ -225,8 +314,13 @@ check.
   end); any other existing test that goes red is a STOP, not a fix.
 - The golden huella test (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`) and
   `inmutabilidad` pass **unedited** in every task. Task 5 changes the words on demo practice sales
-  (fiscal-adjacent); no task touches `computeHuella`, the chain, numbering, `registros_facturacion`
-  or `recordSale`'s builder.
+  (fiscal-adjacent). **Task 2 changes which code builds the fiscal backend demo practice sales are
+  recorded through** — the composition's fiscal seat instead of a hand-built `VerifactuBackend` —
+  so it takes the full review a fiscal change gets, and it also runs
+  `apps/server/src/fiscal-none.e2e.test.ts` unedited. It reaches fiscal code only through that
+  existing public seat (`fiscalSlot`, `FiscalContribution.makeBackend`). No task
+  touches `computeHuella`, the chain, numbering, issuance, `registros_facturacion`, any fiscal
+  module's package or `recordSale`'s builder.
 - No migration in any task. Existing demo venues change only when reset (pre-live rule, CLAUDE.md
   §3).
 - A country pack stays browser-safe: plain values only, no import beyond `@waitron/country`
@@ -238,11 +332,10 @@ check.
   (CLAUDE.md §3, `docs/developers/products.md`).
 - Each task is its own PR with a backlog entry update; branches `feat/demo-data-<slug>`. **Order:
   Tasks 1, 3, 4, 5, then 2.** Task 2 needs the data set (Task 1), the language rule (Tasks 3 and 4)
-  and Task 5's staff-language change, which it overrides for the fallback; it also waits for open
-  points A and B.
-- Look at anything visual in both themes and at phone width (CLAUDE.md §4): Task 2's venue screen
-  (in the browser harness — no setup-ready pack without demo data exists to open it in the app),
-  and in Task 4 the Content languages page of a Barcelona demo.
+  and Task 5's staff-language change, which it overrides for the fallback, and Task 5's
+  `invoiceLocale` input to `seedSales`, which its golden copy is captured against.
+- Look at anything visual in both themes and at phone width (CLAUDE.md §4): in Task 4 the Content
+  languages page of a Barcelona demo. Task 2 changes nothing a screen draws.
 
 ## Review Focus
 
@@ -252,8 +345,12 @@ check.
 2. **A Galician demo** — Galician the default, Spanish and English enabled, every customer-facing
    text has all three. Pinned in Task 4.
 3. **A Madrid or Balearic demo** — Spanish default, English, no Catalan. Pinned in Task 4.
-4. **A Demo for a country with no demo data** — seeds the existing data in English with no practice
-   sales (as open point B is answered), staff names English; nothing refused. Pinned in Task 2.
+4. **A Demo for a country with no demo data** — a pack whose identity names no data set is seeded
+   from the existing data in English, under its own identity and trading names, staff names
+   English, with a month of practice sales recorded through its own fiscal module (for `none`:
+   sales with no fiscal record); no setup-ready pack lacks an identity (the guard test);
+   and a Spanish demo's practice-sale records are the same as before, row for row. Pinned in
+   Task 2.
 5. **`wa-wt reset demo` in English** — still seeds, staff names English, content default Spanish.
    Pinned in Task 4 (dev path case).
 6. **A data set that misses one language for one text** — the typecheck fails, and the
@@ -346,7 +443,10 @@ export function inLanguages(
   reads the languages once, after `seedCatalogues` has written them (`readContentLanguages`), and
   passes them down. In this task the maps hold only `en` and `es` and the list is `[en, es]` or
   `[es, en]`, so nothing written changes.
-- `CountryDemoIdentity` gains `readonly dataSet: string`.
+- `CountryDemoIdentity` gains `readonly dataSet: string`. Task 2 makes it optional (a pack whose
+  identity names no data set gets the English fallback), so the tests here and in Task 3 that walk
+  the packs read it as `pack.demo?.dataSet` and skip `undefined`, and Task 2 leaves them as they
+  are.
 
 - [ ] **Step 1: Write the failing tests** in `apps/server/scripts/demo-seed/data-set.test.ts`:
 
@@ -360,7 +460,10 @@ import { DEMO_DATA_SETS, demoDataSet, inLanguages } from "./data-set.js";
 
 describe("demo data sets", () => {
   it("resolves every country pack's demo data set", () => {
-    const named = COUNTRY_PACKS.flatMap((pack) => (pack.demo ? [pack.demo.dataSet] : []));
+    const named = COUNTRY_PACKS.flatMap((pack) => {
+      const id = pack.demo?.dataSet;
+      return id === undefined ? [] : [id];
+    });
     expect(named.length).toBeGreaterThan(0);
     for (const id of named) expect(demoDataSet(id).id).toBe(id);
   });
@@ -427,88 +530,203 @@ And in `apps/server/src/demo-seed.test.ts`, a new case: `seedInstalledDemo` pass
 
 ---
 
-### Task 2: A country with no demo data gets the existing demo data in English
+### Task 2: A country with no demo data gets the existing demo data in English, and every demo's practice sales go through the venue's own fiscal module
 
-Branch `feat/demo-data-english-fallback`. **Built last, after Task 5, and only once open points A
-and B are answered;** written here for their recommended defaults.
+Branch `feat/demo-data-english-fallback`. **Built last, after Task 5.** Written to the owner's
+answers A and B (decisions 7 and 8). Fiscal-adjacent: the full review a fiscal change gets, and the
+fiscal suites below run unedited.
 
 **Files:**
+- Modify: `packages/country/src/country.ts` (`CountryDemoIdentity.dataSet` becomes optional,
+  `readonly dataSet?: string`; absent means the demo seeds the fallback data set in English)
 - Modify: `apps/server/scripts/demo-seed/data-set.ts` (`FALLBACK_DEMO_DATA_SET_ID =
-  "casa-delgado-es"`; `DemoDataSet` gains `fallbackTradingNames`; `demoContentLanguages` gains the
-  no-demo branch)
-- Modify: `apps/server/scripts/demo-seed/data-sets/casa-delgado-es.ts` (`fallbackTradingNames:
-  { restaurant: "Bar Casa Delgado", deli: "Deli Delgado" }`)
-- Modify: `apps/server/src/demo-seed.ts` (`seedInstalledDemo`: a pack with no `demo` no longer
-  throws; it seeds the fallback set with staff language `"en"`, the data set's trading names and
-  `salesDays: 0`)
-- Modify: `apps/setup/src/screens/venue-screen.ts` (in Demo, a pack with no `demo` shows the tax ID
-  and legal name fields — `#shows` stops hiding them for that pack — and the location name is not
-  prefilled; `#next` sends the typed values. Demo also hides the operation description
-  (`DEMO_HIDDEN`, `:76-84`), fills it only from the filing module's default
-  (`#descriptionDefault`, `:224-229`) and refuses Next while it is empty (`:483-486`); the United
-  Kingdom pack's filing is `none` (`packages/country-gb/src/united-kingdom.ts:21`), so the field is
-  also shown in Demo whenever the filing module supplies no default)
-- Modify: `apps/setup/src/screens/review-screen.ts` and the `review.demo_defaults` strings
-  (`apps/setup/src/i18n/strings/venue.ts:98`, `:283`): the summary's note that the legal name and
-  tax ID are "Waitron's fixed demo values" (`review-screen.ts:150`) is shown only when the pack
-  has a `demo`; a fallback demo, whose operator typed them, gets no such note. Spain's note and its
-  pin (`review-screen.test.ts:374-387`) are unchanged.
-- Test: `apps/server/src/demo-seed.test.ts`, `apps/server/scripts/demo-seed/data-set.test.ts`,
-  `apps/server/scripts/demo-seed/seed.test.ts`, `apps/setup/src/screens/venue-screen.test.ts`,
-  `apps/setup/src/screens/review-screen.test.ts`
-- Test change: `apps/server/src/demo-seed.test.ts:78-85`, "refuses, seeding nothing, a venue whose
-  country has no demo identity" becomes the fallback case (table at the end).
-- Unchanged: `apps/server/src/setup-api.ts` (no refusal is added) and
-  `setup-api.country-pack.test.ts`.
+  "casa-delgado-es"`; `demoDataSetFor(identity)`; `demoContentLanguages` gains the fallback
+  branch)
+- Modify: `apps/server/src/demo-seed.ts` (`seedInstalledDemo`: `dataSet: demoDataSetFor(identity)`,
+  and staff language `"en"` when the identity names no data set; `salesDays` stays
+  `INSTALLED_DEMO_SALES_DAYS` and the trading names stay the identity's own; the refusal of a pack
+  with no identity at `:21-24` stays)
+- Modify: `apps/server/scripts/dev-setup.ts` (`demoDataSetFor(DEMO_IDENTITY)` in place of Task 1's
+  `demoDataSet(…dataSet)`, which stops typechecking once `dataSet` is optional; Spain names its set,
+  so nothing it seeds changes)
+- Modify: `apps/server/scripts/demo-seed/seed-sales.ts` — the backend comes from the composition's
+  fiscal seat: drop the `@waitron/fiscal-verifactu` import (`:14`) and the hand-built
+  `new VerifactuBackend(…)` (`:170-178`); in their place read the node's stamped `filing_module`
+  and its location's `fiscal_territory` (`nodes` joined to `locations` on `nodes.location_id`,
+  `packages/db/src/schema/nodes.ts:20-29`, `packages/db/src/schema/tenants.ts:95`), and build
+  `fiscalSlot(enabledModules(ALL_MODULES, venueModuleConfig({ overrides: new Map() }, territory)),
+  filingModule).makeBackend({ db, clock: backDating.clock, environment })` — `ALL_MODULES` from
+  `../../src/modules.js`, `venueModuleConfig` from `../../src/provision.js`, `enabledModules` and
+  `fiscalSlot` from `@waitron/module`. The empty base is enough: `venueModuleConfig` forces every
+  fiscal-slot member's switch from the territory whatever the base says
+  (`venueFiscalSelection`, `packages/provisioning/src/venue-fiscal.ts:23-32`, then `selectFiscalModule`, `packages/module/src/fiscal-slot.ts:37-47`). Nothing else in the file changes: the Madrid
+  placement, the VAT lookup, the deterministic sequence and `demoSeedEnvironment`'s refusal of
+  production stay as they are. `SeedSalesInput` is unchanged.
+- Create: `apps/server/scripts/demo-seed/seed-sales.golden.test.ts` and its fixture
+  `apps/server/scripts/demo-seed/testing/spanish-practice-sales.golden.json` (Step 1)
+- Test helper (grown in Step 2, before the cases that use it): `apps/server/scripts/demo-seed/testing/provision-venue.ts` gains an optional
+  `country: "GB"` that provisions a United Kingdom venue the way
+  `apps/server/src/fiscal-none.e2e.test.ts:69-77, 98-130` does — territory `GB-vat`, the modules
+  `enabledModules(ALL_MODULES, venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat"))`
+  for both `planVenue` and `applyVenue`, receipt `en-GB`, a GB tax ID, time zone `Europe/London`
+  (a fixture growing; Spain stays the default)
+- Test: `apps/server/scripts/demo-seed/data-set.test.ts`, `apps/server/src/demo-seed.test.ts`,
+  `apps/server/scripts/demo-seed/seed-sales.test.ts`, `apps/server/scripts/demo-seed/seed.test.ts`
+  (new cases only; no existing test changes in this task)
+- Unchanged: `apps/server/src/demo-seed.test.ts:78-85`, "refuses, seeding nothing, a venue whose
+  country has no demo identity" — still true with answer A; `apps/server/src/setup-api.ts` and
+  `setup-api.country-pack.test.ts` (no route refusal; the guard is the enforcement, decision 7); no
+  setup screen and no setup test (no form path); every fiscal package.
 
 **Interfaces:**
 - Consumes: `DemoDataSet`, `demoDataSet`, `demoContentLanguages` (Tasks 1 and 3), `demoSeedLocale`
-  (Task 5).
+  and `SeedSalesInput.invoiceLocale` (Task 5); `fiscalSlot`, `enabledModules` (`@waitron/module`),
+  `venueModuleConfig` (`apps/server/src/provision.ts:28-30`), `FiscalContribution.makeBackend`
+  (`packages/fiscal/src/contribution.ts:53-55`).
 - Produces:
 
 ```ts
-// data-set.ts
+// packages/country/src/country.ts — CountryDemoIdentity
+/** The demo data set this country's demo seeds; absent, the fallback set in English. */
+readonly dataSet?: string;
+
+// apps/server/scripts/demo-seed/data-set.ts
 export const FALLBACK_DEMO_DATA_SET_ID = "casa-delgado-es";
-// DemoDataSet gains:
-readonly fallbackTradingNames: { readonly restaurant: string; readonly deli: string };
-// demoContentLanguages: when getCountryPack(country)?.demo is undefined, the languages are
-// ["en", ...required.filter((language) => language !== "en")], default "en".
+/** The pack's own data set, or the fallback when its identity names none. */
+export function demoDataSetFor(identity: CountryDemoIdentity): DemoDataSet {
+  return demoDataSet(identity.dataSet ?? FALLBACK_DEMO_DATA_SET_ID);
+}
+// demoContentLanguages: when getCountryPack(geography.country)?.demo?.dataSet is undefined, the
+// languages are ["en", ...required.filter((language) => language !== "en")], default "en".
 ```
 
-- [ ] **Step 1: Write the failing tests.**
-  - `demo-seed.test.ts`: a `GB` venue (whose pack has no `demo`) calls `seedDemoRestaurant` once
-    with `dataSet: DEMO_DATA_SETS["casa-delgado-es"]`, `locale: "en"` even when `admin.locale` is
-    `es-ES`, `salesDays: 0`, and `departmentTradingNames: { restaurant: "Bar Casa Delgado", deli:
-    "Deli Delgado" }` — the replacement for the refusal case (table).
-  - `data-set.test.ts`: `demoContentLanguages(set, { country: "GB", area: null })` is
-    `{ defaultLanguage: "en", languages: ["en"], required: [] }` (the real GB pack has no `demo`).
-  - `seed.test.ts`, real database: provision the helper's venue, set its tenant's `country` to `GB`
-    and its location's `province` to null (a fixture growing — the GB pack has no provinces), run
-    `seedDemoRestaurant` with the fallback set, `locale: "en"`, `salesDays: 0`: content languages
-    `{ defaultLanguage: "en", languages: ["en"] }`, no missing translations, a product's stored
-    customer name is `{ en: … }` only.
-  - `venue-screen.test.ts`: with a setup-ready pack lacking `demo` AND whose filing is `none` (not
-    `SPARSE_PACK`, `:1192`, whose filing is `verifactu` and would pass either way), the Demo form
-    shows the tax ID, legal name and operation description fields, refuses Next while they are
-    empty, and sends the typed values; Spain's Demo still hides them and sends its demo identity
-    (the existing cases at `:802` and `:941`, unchanged).
-  - `review-screen.test.ts`: a Demo for a pack lacking `demo` shows no "fixed demo values" note.
-- [ ] **Step 2: Run and watch them fail.**
-  Run: `pnpm --filter @waitron/server exec vitest run src/demo-seed.test.ts scripts/demo-seed/data-set.test.ts scripts/demo-seed/seed.test.ts`
-  and `pnpm --filter @waitron/setup exec vitest run src/screens/venue-screen.test.ts src/screens/review-screen.test.ts`
-  Expected: FAIL — `seedInstalledDemo` throws for GB; the GB languages are `es, en`; the Demo form
-  hides the three fields; the summary shows the fixed-values note.
-- [ ] **Step 3: Implement** the four changes above.
-- [ ] **Step 4: Make the listed `demo-seed.test.ts` change**; run Step 2's commands again and
-  `pnpm --filter @waitron/server exec vitest run src/setup-api.test.ts src/setup-api.country-pack.test.ts src/demo-seed.db.test.ts`.
-  Expected: PASS, with a `Tests` count printed.
-- [ ] **Step 5: Prove by deletion**: put the throw back in `seedInstalledDemo`; the GB case fails.
-  Make the no-demo branch of `demoContentLanguages` return the base languages; the GB language
-  cases fail. Restore both.
-- [ ] **Step 6: Look** at the venue screen and the summary in Demo for a pack without demo data, in
-  the browser harness (no such pack is setup-ready in the app), light and dark, 1280 and 390 px.
-- [ ] **Step 7: Commit, backlog entry** (W108's open question closed by decision 6; the practice
-  sales limit stays recorded), **`finish-branch`**.
+- [ ] **Step 1: Capture the Spanish practice sales as they are, before any other change.** Write
+  `seed-sales.golden.test.ts`:
+  - Its first statement is `process.env.TZ = "Europe/Madrid"`: the seed stamps each sale with the
+    host's offset (`seed-sales.ts:215`), and that offset is inside every record's hash. Measured
+    2026-10-06 with a probe of this shape on `main` at `8cef37de4`: the same run under `TZ=UTC`
+    differed from the Madrid run in `huella` and `offset_minutos` on all 31
+    `registros_facturacion` rows, in `anterior_huella` on 30 of them (the first record has no
+    previous hash; these row counts are the fresh-context reviewer's, this plan's probe recorded
+    only which columns differed) and in `issued_offset_minutes` on all 31 sales.
+  - It pins the date with `vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-01T09:30:00.000Z") })`
+    before provisioning and restores real timers after seeding: the seed anchors its days on
+    `Date.now()` (`seed-sales.ts:184`), and `creado_en` defaults to the current time.
+  - It provisions a Spanish venue through `createDemoVenueProvisioner` with a fixed `nifBase` and
+    `nifFormat: "calculated"` (the NIF is in every record and its hash), leaves `WAITRON_ENV` unset
+    as `seed.test.ts` does (its header, `:1-5`), and calls **`seedSales` directly** with `days: 3`,
+    `invoiceLocale: "es-ES"` and a fixed product list — one product per VAT class (`general`,
+    `reduced`, `super_reduced`, `zero`) and one with `customerName: null`. Not `seedDemoRestaurant`:
+    measured with the same probe, two runs of the whole seed on the same pinned date and zone
+    differed in line names, totals and VAT rates, and so in every hash, because the order of the
+    product pool it hands `seedSales` (`listAvailableProducts`, `seed.ts:75`) changes between
+    runs; with a fixed list, two runs agreed in every column but the generated ids. Task 2 changes
+    only how `seedSales` gets its backend, so the comparison sits there.
+  - It reads `sales`, `sale_lines`, `tenders`, `registros_facturacion` and `envios`, ordered by
+    invoice number, line number and `secuencia`, through a **named column list** per table: every
+    column the table has when the fixture is captured, less the generated ids (`id`, `node_id`,
+    `series_id`, `sale_id`, `sif_id`, `registro_id`, which differed between the two probe runs).
+    Named rather than `select *`, so a later migration that adds a column does not break the
+    comparison; such a column is simply not compared. It compares the rows with `toEqual` against
+    the fixture. With `WAITRON_WRITE_GOLDEN=1` it writes the fixture instead (the probe's three days
+    came to 31 sales, 68 lines and about 130 KB of JSON).
+  - The test stays in the suite after Task 2, as the guard on the Spanish practice sales.
+    `WAITRON_WRITE_GOLDEN=1` is for this first capture only: it is never used to make a failing
+    comparison pass. A comparison that fails means the Spanish records changed, which is a STOP;
+    a re-recorded fixture in a diff is a review finding unless the owner asked for the change.
+  - What a failing comparison prints: the rows whose values differ — every `huella` from the first
+    changed record onwards, since each record's hash covers the one before. A seed that recorded
+    through a backend writing no fiscal record would print all 31 `registros_facturacion` rows as
+    missing (the `none` backend writes none — measured, above).
+
+  Run it once with `WAITRON_WRITE_GOLDEN=1` on the unchanged branch, then format the fixture —
+  prettier does not ignore that path (`pnpm exec prettier --file-info` on it prints
+  `"ignored": false`, parser `json`), so the pre-push format check reads it:
+  `pnpm exec prettier --write apps/server/scripts/demo-seed/testing/spanish-practice-sales.golden.json`
+  — then run it without the variable:
+  `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed-sales.golden.test.ts`.
+  Expected: PASS with a `Tests` count. Commit the test and the fixture alone (`git commit -s`), as
+  the branch's first commit; no later commit on the branch touches the fixture.
+
+- [ ] **Step 2: Grow the test helper, then write the failing tests.** First add the helper's
+  `country: "GB"` option (Files, above), so the United Kingdom cases below fail for the reason
+  Step 3 names and not for a missing option.
+  - `data-set.test.ts`:
+    - `demoContentLanguages(set, { country: "GB", area: null })` is
+      `{ defaultLanguage: "en", languages: ["en"], required: [] }` (the real United Kingdom pack
+      names no data set; its rules give `required: []` with or without an area — measured
+      2026-10-06 with `resolveInstalledContentLanguageRules` through `tsx`).
+    - `demoDataSetFor(getCountryPack("ES")!.demo!)` and `demoDataSetFor` of an identity with no
+      `dataSet` both return `DEMO_DATA_SETS["casa-delgado-es"]`.
+    - **The guard (answer A, and the enforcement of it):** a function in the test file lists what
+      stops a pack being offered at setup — in any mode, since the venue screen has one country
+      list (decision 7) — no `demo`, or a supported jurisdiction whose filing module (the `ALL_MODULES` member whose
+      `fiscal.id` is that jurisdiction's `modules.filing`) has no
+      `venueFields.defaults.operationDescription`, the value the Demo form fills its hidden
+      operation description from (`apps/server/src/setup-api.ts:535-549`,
+      `apps/setup/src/screens/venue-screen.ts:243-247`). One case: it lists nothing for every pack
+      in `VENUE_SETUP_COUNTRY_PACKS`. The other direction, a case of its own: for
+      `{ ...getCountryPack("GB")!, availableForVenueSetup: true }` it lists both problems (no
+      identity; filing module `none` has no default).
+  - `demo-seed.test.ts`: the file mocks `@waitron/country-packs` so that `getCountryPack` also
+    answers a made-up country `XX` whose `demo` has a legal name, tax ID, location name and its own
+    trading names but no `dataSet`, and passes every other code to the real registry (a fixture
+    growing). A `XX` venue with `admin.locale` `es-ES` calls `seedDemoRestaurant` once, its input
+    pinned whole with `toStrictEqual`: the venue's ids, `dataSet: DEMO_DATA_SETS["casa-delgado-es"]`,
+    `locale: "en"`, `salesDays: 30`, and `XX`'s own trading names.
+  - `seed-sales.test.ts`, real database: on a United Kingdom venue from the helper, `seedSales` with
+    `days: 3` records at least one sale, every sale's `fiscal_backend` is `"none"`, and
+    `registros_facturacion` and `envios` hold no row.
+  - `seed.test.ts`, real database: on a United Kingdom venue from the helper, `seedDemoRestaurant`
+    with `dataSet: DEMO_DATA_SETS["casa-delgado-es"]`, `locale: "en"` and `salesDays: 3` leaves
+    content languages `{ defaultLanguage: "en", languages: ["en"] }`, no missing translations, a
+    product's stored customer name `{ en: … }` only, and practice sales whose `fiscal_backend` is
+    `"none"` with no `registros_facturacion` row.
+- [ ] **Step 3: Run them and watch them fail.**
+  Run: `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/data-set.test.ts src/demo-seed.test.ts scripts/demo-seed/seed-sales.test.ts scripts/demo-seed/seed.test.ts`
+  Expected: FAIL — `demoDataSetFor` is not exported; the `XX` venue reaches `demoDataSet(undefined)`
+  and throws `no demo data set "undefined"`; `data-set.test.ts`'s United Kingdom languages are `es, en`; the
+  two real-database United Kingdom cases throw `sif.not_registered` from the practice sales
+  (measured, "What happens today"), before any language is checked. The guard's two cases
+  pass already — Spain carries an identity and Veri\*Factu supplies a default — and the second one
+  is their check that the guard can fail.
+- [ ] **Step 4: Implement** the changes listed under Files.
+- [ ] **Step 5: Run** Step 3's command again, the golden copy, the setup route, the two boot cases
+  that run the real setup route into `seedInstalledDemo` for a Spanish Demo, the installed path and
+  the fiscal suites:
+  `pnpm --filter @waitron/server exec vitest run scripts/demo-seed src/demo-seed src/setup-api.test.ts src/setup-api.country-pack.test.ts src/fiscal-none.e2e.test.ts scripts/dev-setup.test.ts`,
+  `pnpm --filter @waitron/server exec vitest run src/boot.test.ts -t "provisions a demo venue, writes trading.env|finishes a provision whose venue had already committed"`
+  (`boot.test.ts:2012` and `:3659`; a name filter, so run on its own — it would filter every file
+  given beside it, and its `Tests` count must read 2),
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts inmutabilidad`,
+  `pnpm --filter @waitron/country-es exec vitest run` and
+  `pnpm --filter @waitron/country-packs exec vitest run`.
+  Expected: PASS, each with a `Tests` count; the golden copy, the golden huella test,
+  `inmutabilidad` and `fiscal-none.e2e.test.ts` unedited
+  (`git diff <Step 1's commit> HEAD -- apps/server/scripts/demo-seed/testing/spanish-practice-sales.golden.json`
+  prints nothing). Measured 2026-10-06 in the throwaway worktree, on `main`'s code before Tasks 1
+  to 5: with `seedSales` routed through the seat as above, the golden probe matched the unchanged
+  seed's output in every column but the generated ids; the seed folder, `src/demo-seed` and
+  `scripts/dev-setup.test.ts` passed unchanged (14 files, 67 tests); and `tsc --noEmit` on
+  `apps/server`, whose `tsconfig.json` includes `scripts`, passed.
+- [ ] **Step 6: Check the seed no longer names a regime:**
+  `grep -n '@waitron/fiscal-verifactu\|@waitron/verifactu\|VerifactuBackend' apps/server/scripts/demo-seed/seed-sales.ts`
+  prints nothing. `scripts/module-seams.test.ts` does not read `apps/server/scripts` (its header,
+  `:21-23`), so the United Kingdom cases are what keep the seed off a hard-wired module.
+- [ ] **Step 7: Prove by deletion**, restoring after each:
+  - Put `new VerifactuBackend(…)` back in `seedSales`: the United Kingdom cases in
+    `seed-sales.test.ts` and `seed.test.ts` fail with `sif.not_registered`. The golden copy still
+    passes — it proves the Spanish records did not change, not that the seat is used.
+  - Change the deterministic sequence's seed (`makeLcg(0x9e3779b9)`, `seed-sales.ts:183`) by one:
+    the golden copy fails, printing the changed rows.
+  - Make the fallback branch of `demoContentLanguages` return the base languages: the United
+    Kingdom language cases fail.
+  - Make `seedInstalledDemo` use `demoSeedLocale(venue)` for the fallback too: the `XX` case fails
+    on `locale`.
+- [ ] **Step 8: Commit, backlog entry** (W108's "Left open" item closed by the guard test: no
+  setup-ready pack can lack an identity, so the setup route can no longer receive a Demo for one;
+  decision 6's fallback built; the practice-sales
+  limit replaced by what "Known limits" below still lists), **`finish-branch`**.
 
 ---
 
@@ -604,8 +822,9 @@ it.each([
 
 it("carries every language the demo can enable where a venue can be set up", () => {
   for (const pack of COUNTRY_PACKS) {
-    if (pack.demo === undefined) continue;
-    const set = demoDataSet(pack.demo.dataSet);
+    const id = pack.demo?.dataSet;
+    if (id === undefined) continue;
+    const set = demoDataSet(id);
     for (const area of pack.administrativeAreas) {
       if (resolveFiscalJurisdiction(pack, area.code)?.supported !== true) continue;
       const { languages } = demoContentLanguages(set, { country: pack.countryCode, area: area.code });
@@ -745,7 +964,7 @@ that is Task 2's, built after this one.
 - Modify: `apps/server/src/demo-seed.ts` (`demoSeedLocale` reads `venue.admin.locale`, not the
   receipt language)
 - Modify: `apps/server/scripts/demo-seed/seed.ts` (read the location's receipt language through
-  drizzle's `locations.invoiceLocales` — a `labelList` column, `packages/db/src/schema/tenants.ts:95`;
+  drizzle's `locations.invoiceLocales` — a `labelList` column, `packages/db/src/schema/tenants.ts:93`;
   raw SQL would return JSON text — and pass its first entry to `seedSales`)
 - Modify: `apps/server/scripts/demo-seed/seed-sales.ts` (`SeedSalesInput.locale` becomes
   `invoiceLocale: string`; `SEED_INVOICE_LOCALE` no longer read there)
@@ -779,7 +998,7 @@ export function demoSeedLocale(venue: VenueRequest): SeedLocale {
   the fiscal gates:
   `pnpm --filter @waitron/server exec vitest run scripts/demo-seed src/demo-seed` and
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts inmutabilidad`.
-  Expected: PASS; the golden and immutability suites unedited.
+  Expected: PASS; the golden huella test and `inmutabilidad` unedited.
 - [ ] **Step 5: Prove by deletion**: make `demoSeedLocale` read the receipt language again; the
   `ca-ES`/`es-ES` case fails. Restore.
 - [ ] **Step 6: Look** at one stored Barcelona practice sale where the till or dashboard shows a
@@ -796,6 +1015,8 @@ numbers are from `main` at `3137f5838`; the files they point into were unchanged
 (checked with `git diff --stat 3137f5838 401ecd27c` over them on 2026-10-06). **Re-check them
 before each task:** no task starts until lane C's A261-5 Hours has landed, and that branch changes
 `seed-floor.ts`, so the plan's `seed-floor.ts` line numbers (and maybe others) will have moved.
+The amendment to answers A and B (every line number in Task 2 and in "A country
+with no demo data" and "Practice sales go through…" above) reads `main` at `8cef37de4`.
 
 | Task | File | What changes | Kind |
 | --- | --- | --- | --- |
@@ -806,7 +1027,6 @@ before each task:** no task starts until lane C's A261-5 Hours has landed, and t
 | 5 | `apps/server/src/demo-seed.test.ts:10-12` | the `venueWithLocales` helper also sets `admin.locale` to its first receipt language, so the existing cases keep their values | fixture grows |
 | 5 | `apps/server/src/demo-seed.test.ts:22-30` | the `demoSeedLocale` table's title says it reads the admin's language (its rows keep their values through the helper above); new rows are added in Step 1 | test title change |
 | 5 | `apps/server/scripts/demo-seed/seed-sales.test.ts` (4), `seed-sales.dated.test.ts` (1) | `locale: "es"` → `invoiceLocale: "es-ES"` | call-site argument; no assertion changes |
-| 2 | `apps/server/src/demo-seed.test.ts:78-85`, "refuses, seeding nothing, a venue whose country has no demo identity" | becomes "seeds a venue whose country has no demo data from the existing set, in English, without practice sales": instead of a rejection and no seed call, exactly one seed call whose input is pinned whole (data set, `locale: "en"`, `salesDays: 0`, trading names) | assertion change — decision 6 (as strict: the whole input is pinned) |
 
 Checked and NOT changed: `seed-option-lists.test.ts:57` is `toMatchObject`; `seed.test.ts`,
 `seed.integration.test.ts`, `seed-media.test.ts`, `dev-setup.test.ts` and `demo-seed.db.test.ts`
@@ -814,19 +1034,43 @@ assert nothing about content languages or whole customer-name maps (read on 2026
 draft's reviewer; `demo-seed.db.test.ts`'s staff language flips from `es` to `en` in Task 5, since
 its venue has no admin locale, and nothing there reads it). The three stored maps pinned whole in
 `seed-catalogue.test.ts` (`:111-114`, `:318-331`, `:336-342`) stay `{ en, es }` in every task: the
-Madrid test venue carries Spanish and English only. `boot.test.ts` (`:2036`, `:3677`) and
+Madrid test venue carries Spanish and English only. `boot.test.ts`'s two Demo cases (`:2012`, `:3659`, below) and
 `dev-setup.test.ts` (`:218`) run the real seed on Madrid venues and assert nothing about languages
-(grep by the amendment's reviewer). `setup-api.country-pack.test.ts`'s Demo cases for the mocked UK
-pack stay as they are: they stub the seed, so nothing tests the path from the setup route into
-`seedInstalledDemo` for such a country end to end — Task 2's `demo-seed.test.ts` and `seed.test.ts`
-cases cover the two halves separately. `management-api.membership.test.ts`
+(grep by the amendment's reviewer). `setup-api.country-pack.test.ts` stays as it is: Task 2 adds no
+route refusal. Its cases stub the seed (`seedDemo: vi.fn(…)`, `:63`). Two `boot.test.ts` cases run
+the real setup route into `seedInstalledDemo` for a Spanish Demo (`:2012` and `:3659`, in Task 2's
+Step 5), but nothing does so for a fallback country: no real pack is one, so Task 2's
+`demo-seed.test.ts` and `seed.test.ts` cases cover the two halves separately. Task 2 adds cases to
+`seed-sales.test.ts` and `seed.test.ts` but changes none of the existing ones: measured, every
+suite in the demo seed folder, `src/demo-seed*` and `scripts/dev-setup.test.ts` passed unchanged
+with the seed routed through the seat (14 files, 67 tests, on `main`'s code before Tasks 1 to
+5). `demo-seed.test.ts:78-85` (the refusal of a pack with no identity) stays as it is. `management-api.membership.test.ts`
 and `mirror-bundle-api.test.ts` call a local `seedStaff` (`:97`, `:158`), not the demo writer.
 
 ## Known limits this plan leaves (recorded in the backlog, not built)
 
-- **Practice sales are Spain-only.** `seed-sales.ts` files through `VerifactuBackend` directly and
-  places sales in a Madrid business day; a second country's demo, or a fallback demo with practice
-  sales (open point B), needs it to record through the venue's own fiscal module first.
+- **Practice sales are placed for Madrid.** Task 2 records them through the venue's own fiscal
+  module, but they stay at fixed UTC hours chosen to sit inside a Madrid business day
+  (`seed-sales.ts:188-190, 203-208`), stamped with the host's offset as a till sale is
+  (`seed-sales.ts:215`, `apps/server/src/till-backend.ts:21`). Moving them would change the
+  Spanish records, which answer B keeps as they are. A future pack in a time zone far from Madrid
+  may see some practice sales land on a neighbouring business day in its reports (worked out from
+  the hours, not measured).
+- **Practice sales carry Spain's VAT rates, as every till sale does.** The rates come from the one
+  shipped table (`packages/catalogue/src/vat-rates.ts:19-27`), which the till's own pricing also
+  reads whatever the country (above). A per-country rate table is product-wide work, not this
+  plan's.
+- **A demo identity is a condition of being offered at setup in any mode.** Task 2's guard reads
+  the one country list the venue screen shows for Demo, Prepare and Live alike
+  (`apps/setup/src/screens/venue-screen.ts:673`), so a country cannot be offered for Prepare or
+  Live without a made-up demo identity either — this plan's reading of answer A (decision 7). The
+  alternative, if the owner objects: keep the country and hide only the Demo choice for a pack
+  without an identity (a form change, not made here).
+- **A pack whose filing module has no default operation description cannot be offered at setup.**
+  The same guard fails for it, in every mode for the same reason (no setup-ready pack is such a
+  pack today; the United Kingdom's filing module `none` has none,
+  `packages/fiscal-none/src/slot.ts:19-26`, which declares no `venueFields`); whoever makes such a pack setup-ready chooses then
+  between a default in the module and a description in the demo identity (decision 7).
 - **One photo folder.** The 45 photographs stay where they are (`deploy/Dockerfile` copies that
   folder); a second data set with its own photos moves them into per-set folders then.
 - **Two departments, `restaurant` and `deli`,** fixed by `CountryDemoIdentity`'s type.
@@ -847,8 +1091,18 @@ and `mirror-bundle-api.test.ts` call a local `seedStaff` (`:97`, `:158`), not th
 - The order keeps `main` working after each task: Task 1 changes no output; Task 3 adds text and
   the language rule while the writers still cut to `[en, es]`; Task 4 is the first to change output
   and needs that text present for the Catalan and Galician defaults; Task 5 changes the staff and
-  receipt language; Task 2 adds the fallback on top of all of them.
+  receipt language; Task 2 adds the fallback on top of all of them and moves every demo's practice
+  sales onto the venue's own fiscal module, leaving a Spanish demo's records as they were.
 - The first draft was reviewed by a fresh-context reader in two rounds (2026-10-06, reading only);
   its findings were corrected before the owner's answers. The amendment to the answers replaced the
   "follow setup's list" rule (and with it the extracted `provisionedContentLanguages` and three
   changed checks in Task 4), the refusal in Task 2, and the order of tasks.
+- The amendment to answers A and B (2026-10-06) rewrote Task 2: the venue-screen and review-screen
+  form path and `fallbackTradingNames` are gone (the pack's own identity supplies the trading
+  names); a guard test holds every setup-ready pack to an identity (no route refusal: the route only
+  finds setup-ready packs); practice
+  sales go through the composition's fiscal seat for every demo, with a golden copy of the Spanish
+  records taken before the change; `CountryDemoIdentity.dataSet` becomes optional in Task 2, and
+  the pack-walking tests of Tasks 1 and 3 read it through `pack.demo?.dataSet` so that change
+  leaves them as they are. Its receipts come from probes run 2026-10-06 in a throwaway worktree at
+  `8cef37de4`, none committed.
