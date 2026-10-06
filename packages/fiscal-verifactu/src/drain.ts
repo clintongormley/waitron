@@ -481,7 +481,7 @@ async function claimBatch(
  * never sent an ordinary cancellation of a rejected original.
  *
  * No incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each held record
- * beside the nearest earlier case on its chain. A `halted` ack is written per held id, because this
+ * beside the case that holds it. A `halted` ack is written per held id, because this
  * bulk UPDATE bypasses `setEstado`'s `writeAck`.
  */
 async function haltOpenChainClaims(

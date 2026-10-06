@@ -25,7 +25,7 @@ export interface FilingCaseReport extends FilingCase {
 
 export interface HeldRecord {
   registroId: string;
-  /** The nearest earlier case on the same chain, or null when the chain has none before it. */
+  /** The case that holds this record (see `heldRecords`), or null when none does. */
   caseId: string | null;
 }
 
@@ -143,23 +143,53 @@ export async function listFilingCases(tx: Transaction): Promise<FilingCaseReport
 }
 
 /**
- * Every `detenido` record that has no case of its own: the records held behind another one. Each
- * names the nearest earlier case on its chain (`sif_id`), which is the one that holds it.
+ * Every `detenido` record that has no case of its own: the records held behind another one. A
+ * held cancellation whose original alta (same `sif_id`, same invoice identity) is `rechazado` or
+ * `detenido` names its original's case. Any other held record names the case of the nearest
+ * earlier `detenido` record on its chain (`sif_id`): that record's own case, or, when it has none,
+ * the case it names in turn. A `rechazado` record holds nothing, so its case is never named for a
+ * record after it.
  */
 export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
-  const { rows } = await tx.execute<{ registro_id: string; case_id: string | null }>(sql`
-    select e.registro_id,
-      (select c.id
-         from filing_cases c
-         join registros_facturacion o on o.id = c.registro_id
-        where o.sif_id = r.sif_id and o.secuencia < r.secuencia
-        order by o.secuencia desc
-        limit 1) as case_id
+  const { rows } = await tx.execute<{
+    registro_id: string;
+    sif_id: string;
+    estado: string;
+    tipo_registro: string;
+    identity: string;
+    case_id: string | null;
+  }>(sql`
+    select e.registro_id, r.sif_id, e.estado, r.tipo_registro,
+      r.id_emisor_factura || '|' || r.num_serie_factura || '|' || r.fecha_expedicion_factura
+        as identity,
+      c.id as case_id
     from envios e
     join registros_facturacion r on r.id = e.registro_id
-    where e.estado = 'detenido'
-      and not exists (select 1 from filing_cases own where own.registro_id = e.registro_id)
+    left join filing_cases c on c.registro_id = e.registro_id
+    where e.estado in ('detenido', 'rechazado')
     order by r.sif_id, r.secuencia
   `);
-  return rows.map((row) => ({ registroId: row.registro_id, caseId: row.case_id }));
+  const held: HeldRecord[] = [];
+  // Per chain: the case each original alta answers to, keyed by invoice identity.
+  const altaCases = new Map<string, string | null>();
+  let chain: string | null = null;
+  let holding: string | null = null;
+  for (const row of rows) {
+    if (row.sif_id !== chain) {
+      chain = row.sif_id;
+      holding = null;
+      altaCases.clear();
+    }
+    let caseId = row.case_id;
+    if (row.estado === "detenido" && caseId === null) {
+      caseId =
+        row.tipo_registro === "anulacion" && altaCases.has(row.identity)
+          ? altaCases.get(row.identity)!
+          : holding;
+      held.push({ registroId: row.registro_id, caseId });
+    }
+    if (row.tipo_registro === "alta") altaCases.set(row.identity, caseId);
+    if (row.estado === "detenido") holding = caseId;
+  }
+  return held;
 }

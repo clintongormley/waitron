@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   UNIQUE_VIOLATION,
   captureError,
+  newId,
   refusalOn,
   triggerRaised,
   withTransaction,
@@ -11,7 +12,12 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedPendingEnvios, seedSecondChain } from "../test/drain-fixtures.js";
+import {
+  appendPendingAlta,
+  seedPendingEnvios,
+  seedSecondChain,
+  type SeededDrain,
+} from "../test/drain-fixtures.js";
 import {
   heldRecords,
   listFilingCases,
@@ -19,6 +25,8 @@ import {
   recordCaseEvent,
   type FilingCaseEvidence,
 } from "./filing-cases.js";
+import { envios } from "./schema/envios.js";
+import { registrosFacturacion } from "./schema/registros.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -59,6 +67,44 @@ async function openCaseOnFirstRecord() {
     }),
   );
   return { seeded, registroId, opened };
+}
+
+/** A cancellation of `originalId`, appended to the original's own chain at `secuencia`. */
+async function appendCancellation(
+  seeded: SeededDrain,
+  originalId: string,
+  secuencia: number,
+): Promise<string> {
+  const records = await suite.db.select().from(registrosFacturacion);
+  const original = records.find((row) => row.id === originalId)!;
+  const head = records
+    .filter((row) => row.sifId === original.sifId)
+    .sort((a, b) => b.secuencia - a.secuencia)[0]!;
+  const id = newId();
+  const huella = "C".repeat(63) + String(secuencia % 10);
+  await suite.db.insert(registrosFacturacion).values({
+    ...original,
+    id,
+    secuencia,
+    tipoRegistro: "anulacion",
+    tipoFactura: null,
+    descripcionOperacion: null,
+    desglose: null,
+    cuotaTotal: null,
+    importeTotal: null,
+    primerRegistro: false,
+    anteriorIdEmisorFactura: head.idEmisorFactura,
+    anteriorNumSerieFactura: head.numSerieFactura,
+    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
+    anteriorHuella: head.huella,
+    huella,
+  });
+  await suite.db.execute(sql`
+    update cadenas set secuencia = ${secuencia}, ultimo_registro_id = ${id}, ultima_huella = ${huella}
+    where node_id = ${seeded.nodeId}
+  `);
+  await suite.db.insert(envios).values({ registroId: id, proximoIntentoEn: OPENED_AT });
+  return id;
 }
 
 function appErrorCode(error: unknown): string | undefined {
@@ -369,7 +415,7 @@ describe("listFilingCases", () => {
 });
 
 describe("heldRecords", () => {
-  it("lists every held record with no case of its own, beside the nearest earlier case on its chain", async () => {
+  it("lists every held record with no case of its own, beside the nearest earlier held record's case on its chain", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 5 });
     const [first, heldAfterFirst, second, heldAfterSecond, waiting] = seeded.registroIds as [
       string,
@@ -411,6 +457,66 @@ describe("heldRecords", () => {
       ]),
     );
     expect(held.map((record) => record.registroId)).not.toContain(waiting);
+  });
+
+  it("names the nearest earlier HELD record's case, not a later rejected record's", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    const [conflict, rejected, held] = seeded.registroIds as [string, string, string];
+    await setEstado(conflict, "detenido");
+    await setEstado(rejected, "rechazado");
+    await setEstado(held, "detenido");
+    const conflictCase = await inTx(async (tx) => {
+      const opened = await openFilingCase(tx, {
+        registroId: conflict,
+        cause: "fiscal.huella_divergente",
+        evidence: EVIDENCE,
+        now: OPENED_AT,
+      });
+      await openFilingCase(tx, {
+        registroId: rejected,
+        cause: "fiscal.registro_rechazado",
+        evidence: EVIDENCE,
+        now: LATER,
+      });
+      return opened;
+    });
+
+    const listed = await inTx((tx) => heldRecords(tx));
+
+    expect(listed).toEqual([{ registroId: held, caseId: conflictCase.id }]);
+  });
+
+  it("names a held cancellation's original's case, and the records held behind it the same case", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [original, unrelated] = seeded.registroIds as [string, string];
+    await setEstado(original, "rechazado");
+    await setEstado(unrelated, "rechazado");
+    const originalCase = await inTx(async (tx) => {
+      const opened = await openFilingCase(tx, {
+        registroId: original,
+        cause: "fiscal.registro_rechazado",
+        evidence: EVIDENCE,
+        now: OPENED_AT,
+      });
+      await openFilingCase(tx, {
+        registroId: unrelated,
+        cause: "fiscal.registro_rechazado",
+        evidence: EVIDENCE,
+        now: LATER,
+      });
+      return opened;
+    });
+    const cancellation = await appendCancellation(seeded, original, 3);
+    await setEstado(cancellation, "detenido");
+    const behind = await appendPendingAlta(suite.db, seeded, 4);
+    await setEstado(behind.registroId, "detenido");
+
+    const held = await inTx((tx) => heldRecords(tx));
+
+    expect(held).toEqual([
+      { registroId: cancellation, caseId: originalCase.id },
+      { registroId: behind.registroId, caseId: originalCase.id },
+    ]);
   });
 });
 
