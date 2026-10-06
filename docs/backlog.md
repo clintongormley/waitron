@@ -220,7 +220,9 @@ Track C.
 [#1068](https://github.com/clintongormley/waitron/pull/1068)) have landed. **Owner decision
 (2026-10-01):** deleting only empty folders
 stays immediate, including any routing rules attached to them; a confirmation is shown when the
-selected folders contain products or subfolders. Each dev venue needs `wa-wt reset demo
+selected folders contain products or subfolders. **Reversed 2026-10-06 (owner, A279):** a folder
+holding only routing rules gets the confirmation, saying how many rules go with it; a folder with
+nothing at all is still deleted at once. Each dev venue needs `wa-wt reset demo
 <worktree-name>` after slices 1 and 2, and after slice 2 the owner's box needs a reset too: library
 sections and their placements disappear and per-menu extras are retired. Reload tills running the
 older build before using the new published document. Status and remaining work:
@@ -882,11 +884,9 @@ Still open from W74:
 - **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
   #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
   so a lookup by name finds the first row drawn for that device.
-- **A category holding only routing rules is deleted without the dialog** (raised in #1217's
-  review): the no-dialog path checks subcategories and products only, so its rules go unannounced.
-  The check dates from commit `5ffa5c633c` (2026-10-01), whose message records the owner's
-  decision that day to keep this shortcut; queued as A279 and held for the owner to say whether
-  that decision stands.
+- **A category holding only routing rules was deleted without the dialog** (raised in #1217's
+  review): fixed by A279 on the owner's 2026-10-06 answer — it now gets the confirmation with the
+  rule count.
 - **The delete dialog stretches to nearly the full screen height**, with empty space below its
   text, at 1280 and 390 wide (seen on the demo stack while checking #1220; not caused by it, and
   not traced further). _2026-10-05: W70a (#1265) changes compact height only; this standard

@@ -300,8 +300,9 @@ every selected product is disabled already, the toolbar offers no **Disable**; a
 mixes active and disabled products still offers it, and the disabled ones stay disabled. Once a category is in the selection the action
 reads **Delete**, because the category itself is deleted. Products you selected directly are still
 only disabled. The products inside the category, its subcategories included, are disabled only if
-you choose **Delete it too**; with **Move it up to the parent category** they stay active. Before deleting a non-empty category, choose
-what happens to its contents:
+you choose **Delete it too**; with **Move it up to the parent category** they stay active.
+Before deleting a category that holds products or subcategories, choose what happens to its
+contents:
 
 - **Move it up to the parent category** keeps the products active and moves the category's direct
   products and subcategories to its parent. For a top-level category they move to **All products**.
@@ -314,7 +315,10 @@ what happens to its contents:
   disabled". Every product in the subtree,
   disabled ones included, is moved to the parent of the outermost selected category that holds it.
 
-An empty category is deleted without confirmation. A category's row-menu Delete uses the same path.
+A category is deleted without confirmation only when it holds no products (disabled ones
+included), no subcategories and no routing rules. One holding only routing rules gets the
+confirmation, which asks nothing about its contents and says how many rules go with it. A
+category's row-menu Delete uses the same path.
 If the summary cannot be read, deletion waits for a successful new attempt rather than asking you
 to approve unknown contents. The dialog lists each category being deleted by its full path, adding
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
@@ -325,8 +329,9 @@ switched off already. The delete request carries the counts
 the dashboard read before deleting, the number of all products, disabled ones included, among them,
 and the server compares them again inside the delete itself: if
 they no longer match, nothing is deleted and the dialog shows the new counts with the refusal's own
-message. If an empty category, which is deleted without confirmation, has gained subcategories,
-products (disabled ones included) or routing rules by then, the dialog opens with its new counts.
+message. If a category with nothing in it at all, which is deleted without confirmation, has
+gained subcategories, products (disabled ones included) or routing rules by then, the dialog opens
+with its new counts.
 A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes its station claim and every exception naming it, because both tables
