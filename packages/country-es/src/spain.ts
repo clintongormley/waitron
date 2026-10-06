@@ -241,8 +241,8 @@ const BALEARIC_ISLANDS: LanguageLaw = {
   defaultContentLocale: "ca-ES",
 };
 
-// The owner's choice, not a law: service is offered in Spanish everywhere in Spain;
-// docs/backlog.md → "Content languages per region".
+// The owner's choice, not a law: service is offered in Spanish; docs/backlog.md → "Content
+// languages per region".
 const SPANISH: LanguageLaw = {
   requiredContentLocales: ["es-ES"],
   defaultContentLocale: "es-ES",

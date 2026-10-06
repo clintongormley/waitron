@@ -13,16 +13,16 @@ A new venue starts with its content languages already chosen: the languages Wait
 for its region, plus English. In Spain Waitron keeps Spanish enabled in every region, and Catalan
 as well in Catalonia, the Valencian Community and the Balearic Islands, and Galician in Galicia;
 there that regional language is the default. Elsewhere in Spain Spanish is the default. A venue in
-another country starts with its country's language and English. To add another, open **Settings**, then **Content languages**, which lists your languages with the
-default first. Select **Add language**, choose the language and select **Add**; the list shows your
-country's official languages first, under **Official languages**, while any of them is not yet
-added. The added language's translation fields are then available throughout your content
-editors. To change the default, select **Set as default** on that language's row.
+another country starts with its country's language and English. To add another, open
+**Settings**, then **Content languages**, which lists your languages with the default first.
+Select **Add language**, choose the language and select **Add**; the list shows your country's
+official languages first, under **Official languages**, while any of them is not yet added. The
+added language's translation fields are then available throughout your content editors. To change
+the default, select **Set as default** on that language's row.
 
-Waitron keeps some languages enabled for every venue in a region: the ones a regional law asks for,
-and Spanish everywhere in Spain. Such a language is marked **Required** and has no **Remove**, and
-if it is ever missing, your next save on this page adds it back. Where the region also asks for foreign languages, the page shows a notice while you
-have fewer than it asks for.
+A language Waitron keeps enabled for your region is marked **Required** and has no **Remove**, and
+if it is ever missing, your next save on this page adds it back. Where the region also asks for
+foreign languages, the page shows a notice while you have fewer than it asks for.
 
 For example, with Spanish as the default and English alongside, a product whose customer-facing name
 reads **Pan de verano** in Spanish can leave its English one empty while you prepare the translation.
