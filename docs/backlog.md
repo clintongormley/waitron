@@ -2758,9 +2758,8 @@ and must not be swept with it.
 passport, residence certificate and so on, enumerated in
 `@waitron/verifactu`'s AEAT XSD (`SuministroInformacion.xsd`) — and choosing wrongly files a record
 into an append-only table that can never be unfiled. Whoever wires up business-customer sales makes
-that call. No HTTP route supplies a counterparty today — core's `recordSale` hardcodes `null` and
-nothing calls `recordSubstitution` from a route — but `packages/core`'s substitution path types it as
-required, so the refusal is one route away, not one feature away.
+that call. A231 adds the saved Spanish-recipient choice around issuance, with public F1 disabled. Foreign
+recipient support remains outside that build; `recordSubstitution` still has no HTTP route.
 
 ### A1d. Things the A1 review wave raised and did not fix
 
@@ -2778,32 +2777,43 @@ required, so the refusal is one route away, not one feature away.
   a helper would collapse it.** Cosmetic, and cheapest alongside the tip-collection work that touches
   `#onPayTab`.
 
-### A1e. Simplified and full invoices need separate series — OPEN (found 2026-09-29)
+### A1e. Simplified and full invoices use separate series — BUILT, PUBLIC F1 DISABLED (2026-10-06)
 
-RD 1619/2012 art. 7.1.a), last paragraph, requires separate series for simplified and full invoices
-issued in the same calendar year (quoted in
-[verifactu-findings.md §10.1](compliance/verifactu-findings.md), correction of 2026-09-29).
-The A231 branch adds a `full` purpose beside `standard` and `rectificative`, provisions its series,
-and makes core require it for F1 and F3. F1 issuance remains disabled; no route calls
-`recordSubstitution`. **Next action:** finish A231's issuance and delivery gates, then obtain the
-owner's fiscal sign-off before landing. Asesor Q5(d) remains open for F3 and R5.
+A231 [#1256](https://github.com/clintongormley/waitron/pull/1256) adds the `full` purpose beside
+`standard` and `rectificative`, provisions its series, and makes core require it for F1 and F3.
+Public F1 issuance remains disabled; no route calls `recordSubstitution`. The separate-series
+basis is recorded in [verifactu-findings.md §10.1](compliance/verifactu-findings.md).
+**Next action:** complete A231's enablement gates below. Asesor Q5(d) remains open for F3 and R5.
 
-### A231. Full invoices at the till — IMPLEMENTATION IN PROGRESS (2026-10-04)
+### A231. Full invoices at the till — GATED IMPLEMENTATION LANDED (2026-10-06)
 
-**2026-10-06 landing approval:** the owner authorised landing [#1256](https://github.com/clintongormley/waitron/pull/1256) after #1264. The rebased candidate retains the country-pack demo identity, venue-detail checks and fiscal-readiness diagnostics; migrations follow main after regeneration. Public F1 stays disabled pending physical 58/80 mm paper/QR checks, A231p and the asesor manual-remedy approval. The owner approved historical-export option A at 09:18: the retained encrypted fixture now checks the current artifact refusal while preserving its provenance, HTTP 400 and unchanged database/staging checks. Current-head validation and landing are the next steps.
+The owner authorised the gated implementation, which landed as
+[#1256](https://github.com/clintongormley/waitron/pull/1256), squash `2d972685530676fbe7c182760f0d96f461214e47`.
+Existing preproduction venues require a reset for the schema change. Public F1 issuance remains
+disabled. The [design](superpowers/specs/2026-10-03-full-invoices-at-till-design.md) and
+[implementation plan](superpowers/plans/2026-10-03-full-invoices-at-till.md) retain the decisions
+and dated implementation receipts.
 
-A231 proposes an F1 path for bills above €3,000 VAT included and for smaller bills on request,
-chosen before invoice issue. The legal basis and dated primary-source excerpts are in the
-[design](superpowers/specs/2026-10-03-full-invoices-at-till-design.md). It and the
-[implementation plan](superpowers/plans/2026-10-03-full-invoices-at-till.md) cover Spanish recipient
-details, A230's tax-ID check-letter validation, a separate full-invoice series (A1e), every issuance
-path, receipt-printer delivery, VAT reporting and mixed/split payments. F3 conversion of an already
-issued F2, F1's R1–R4 correction path and foreign-recipient `IDOtro`/`IDType` remain separate decisions.
-The implementation branch returns the saved F1 recipient and taxpayer domicile when replaying a settled bill, and renders those identity details on paper and on the till. Original and replay receipt payloads now also carry the filed net unit price, price quantity, line base and VAT rate. Paper and till now distinguish F1 and show filed net unit prices, their price quantities, taxable bases and VAT rates for dishes and extras; F1 extras show their combined filed quantity. Per-line VAT now reads the filed line gross and net base, and appears beside each dish and extra on paper and the till; the saved per-rate summary remains. After the device-battery change landed, the branch regenerated its core migrations after `0099_device_battery` and supplies the service-zone mode in its two invoice-first browser fixtures. The branch now snapshots discounted lines’ undiscounted gross totals on append-only sale lines and uses filed base/tax for F1 discount reconciliation, including a control with altered display prices. F1 discount and comp rows now identify the saved reductions as VAT-inclusive, separately from the filed net prices, bases and tax; F2 wording remains unchanged. The shared receipt hook now queues an F1 original even in on-request or never receipt mode; real captured-card completion tests retain F2 optional printing and verify settled-bill replay adds no invoice or job. Original and duplicate receipt jobs now carry an explicit marker that queue resends preserve. An F1 original request keeps the existing job in every delivery state; if issuance had no printer, a later request queues its unmarked original, while a duplicate alone does not suppress it. An authenticated receipt-status read now reports an absent original, the latest original print attempt or a completed original, ignoring duplicates and retaining completion after a later failed resend. It exposes retry eligibility after automatic attempts are exhausted. The till client now reads this status and can request an exhausted original’s retry through a session- and device-capability-gated route. HTTP F2 cases retain the original bytes/printer and fiscal rows, refuse completed or automatically retrying originals, and enqueue one attempt for two concurrent requests. The till completion screen now shows an undelivered-F1 warning with original print status and offers later printing, exhausted-job retry and a status check. Successful printing still asks staff to hand the original to the customer. The branch now records an explicit staff handover confirmation on a completed original, using the session person and server time. Concurrent and repeated confirmations retain the first stamp; the status read retains it after a later completed original resend. Printerless issuance, uncompleted originals and a completed duplicate alone refuse confirmation. The till completion screen now offers an explicit handover confirmation after original printing completes, even on a device without printing capability. It shows the saved confirmation, blocks repeated clicks, keeps action refusals through recovering status reads, and ignores late completion/refusal responses after reopening or locking the till. Added browser tests and both-theme accessibility checks cover these controls. The branch now adds an authenticated filed-ticket GET and till client method for later recovery. HTTP cases cover a captured-card F1 after the live domicile changes, an F2 read from another device without printing capability, repeat reads without new financial or print rows, and refusals for unissued or unknown orders. The branch now supplies an authenticated F1 lookup by exact invoice number or saved customer name, limited to twenty newest matching bills. Added HTTP cases retain checked sale/payment/tender/series/print rows, find settled invoices, exclude an unissued F1 choice and an F2, and treat name-search wildcard characters literally. The till client forwards the lookup’s read signal and refusal details. Find a bill now has a separate Full invoices search mode that opens the saved invoice with its original-delivery controls, without collecting payment or filing another sale. Added browser cases cover read failure/retry and closing/reopening while a read is pending; both-theme accessibility and English/Spanish phone/desktop screenshots cover the invoice search. The action gate blocks double requests, status reads retain action refusals, and late responses cannot overwrite a reopened ticket, including the same working-order id. The owner chose service started on 2026-10-05 at 15:35: snapshot the date the bill was opened, when the table was seated or the first order was placed, and show it only when different from the issue date. This provisional rule awaits asesor confirmation. The branch now snapshots the F1 service day on `sales.operation_date` at issuance, using the bill opening instant in its venue time zone. A full invoice with no bill uses the issue day; F2 keeps no operation-date snapshot. Original and replay responses carry a distinct operation day from the saved sale, independent of later venue time-zone changes. Paper and till now render the saved distinct F1 operation day with receipt-language labels, without converting that calendar day to the renderer’s time zone. Decoded 58/80 mm cases cover originals and duplicates; F2 and absent-date controls omit the row. The remaining issuance checks are still outstanding. Local decoded 58/80 mm output and eight browser screenshots cover the net rows; physical paper and QR scanning remain unverified.
+The build covers a Spanish recipient's saved tax ID, name and address, a separate full-invoice
+series, taxpayer domicile, filed receipt data and replay, original/duplicate printing, delivery
+status and retry, staff handover confirmation, invoice lookup, and reporting. Paper and till
+omit the location address when an F1 shows its filed taxpayer domicile; phone/email and the
+F2/absent-domicile controls remain. Automatic F1 credit/refund/cancellation is refused.
+The operation day is the owner's provisional service-start rule, awaiting asesor confirmation.
 
-Draft implementation [#1256](https://github.com/clintongormley/waitron/pull/1256) is open after both run-it reviews and convention fixes. Its earlier-head CI passed on `ce3b1fc047cb77fd7730dae71e2e66f41be8b19d`. The branch has since rebased over W111 (#1261): paper and till omit the location address when an F1 shows the filed taxpayer domicile, while retaining phone and email. F2 and an F1 without a domicile retain the location address. Focused receipt/server tests, till tests and the unedited fiscal golden/immutability suites pass; current-head CI after this rebase remains pending. Rendered previews are not physical paper or QR-scanning evidence.
+The retained whole-branch reviews, focused checks, normal push hook and required current-head CI
+checks passed before landing; four deliberately skipped CI jobs are recorded in the receipts.
+The merge has its own CI run `37433083859`; its result was pending at this dated update. The owner approved the historical-export fixture's current artifact
+refusal, including its could-not-open operator advice; provenance, HTTP400/domain-error,
+unchanged-database and empty-staging checks remain. This is preproduction format rejection,
+with no backward-compatibility implementation.
 
-**Next action:** complete current-head CI after the two run-it reviews and convention fixes, then obtain physical 58/80 mm paper/QR inspection and owner review. The approved [implementation plan](superpowers/plans/2026-10-03-full-invoices-at-till.md) records the gated acceptance checks. Public F1 issuance stays disabled until A231p and the asesor’s manual remedy approval; enabled public-path acceptance belongs to that later enablement change. Existing preproduction venues require a reset for this schema change.
+**Next action:** verify physical 58/80 mm paper and QR output, complete A231p's original-delivery
+choices, obtain the asesor's manual-remedy approval and settle applicable B2B delivery before
+enabling public F1. The enablement change needs its own direct, invoice-first, unpaid-departure,
+offline and zero-total public-path acceptance checks. F3 conversion, F1's R1–R4 correction path
+and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Follow the campaign's current
+queue order; this landing does not start another fiscal item.
 
 **Discard-refresh finding, 2026-10-05:** an installed checkout at `9cbdbede8864bcb0d72157308c7e568d946dc587` logged four unhandled fetch rejections in the refresh group; the plain-refresh case deliberately expected three. The owner authorised fixing this inside A231 at 18:00. The branch now catches a failed held-list refresh after discard and shows the existing load-failure wording, while retaining an action refusal and ignoring a failure superseded by another refresh or session. Its existing retry/countdown/list assertions remain; the three-rejection expectation is now zero with an added displayed-failure assertion. `pnpm --filter @waitron/till exec vitest run src/till-app.test.ts` passed 648 tests without an unhandled-error report after this change. No separate fourth diagnostic was present in that run.
 
@@ -2931,7 +2941,11 @@ The rebase retains Venue details and the fiscal clock warning. The completed Cla
 focused checks, normal push hook and every current-head CI job passed before landing.
 The merge has its own CI run `37425891984`; its result is still pending at this update.
 This dated landing supersedes the implementation checkpoint above.
-**Next action:** read the merge's CI result, then rebase and land the approved A231 [#1256](https://github.com/clintongormley/waitron/pull/1256).
+**Update, 2026-10-06 (landings complete):** every job in W41s-10c merge CI `37425891984`,
+licence `37425891395` and CodeQL `37425891101` completed successfully. A231 #1256 has now
+landed with public F1 disabled; this supersedes the CI/landing next action and provisioning
+checkpoint below. **Next action:** continue the approved dependent W41s tasks in campaign order,
+keeping each task's fiscal and adviser gates.
 **Update, 2026-10-06 (A231 CI):** the rebased provisioning CLI fixture omitted the required
 taxpayer domicile. Its eight refusal cases failed locally with `Unexpected prompt`; supplying
 the domicile restores them without changing their assertions. The provisioning coverage run
@@ -6236,7 +6250,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   - **A reprint shows the current trim:** the address, phone, email, slogan and logo are read when a
     copy prints (`buildReceiptBytes`, `apps/server/src/receipt-print.ts`), not kept with the sale, so
     a copy of an earlier sale shows today's.
-  - **Overlap with lane E's A231 (full invoices at the till), for whoever rebases second:** on an F1
+  - **Resolved by A231 #1256 (2026-10-06):** on an F1
     that prints the taxpayer's domicile, the location address is not printed as well.
   - **Overlap with A231d (invoices by email):** its approved design adds a contact email and
     optional phone to the location's settings; the venue-wide `phone` and `email` above already

@@ -139,3 +139,18 @@ Both affected server suites passed 145 tests; the unedited golden huella and imm
 The new tests first failed on paper (two cases) and till (one case, three controls passed). The minimal exclusions then passed four server files (357 tests), three till files (811 tests), and the unedited fiscal golden/immutability files (20 tests). In a frozen-installed disposable checkout, omitting the exclusions failed the paper and till cases; restoring them passed two paper cases and four till cases. Existing long-domicile assertions normalize whitespace added by centring wrapped lines while retaining every expected address word and identity/QR assertion. Sixteen themed/browser-language captures and eight actual paper-raster previews were inspected; the temporary visual harness initially failed on an out-of-workspace screenshot path, then passed with captures inside the worktree. The initial paper-export harness accidentally copied additional tests without their helpers; the corrected export-only harness passed. These harness failures supply no product-verification claim. Temporary sources and candidate checkout were removed; receipts remain in the campaign folder. Required new-head CI, physical 58/80 mm printing/QR scans and owner approval remain outstanding. Public F1 issuance stays disabled.
 
 **2026-10-06 owner-authorised landing rebase:** the owner approved landing #1264 then #1256. A231 rebases over main `31642bfee4b07b17877fb0b4908cd6f3fb1888ef`, retaining W108's country-pack demo identity and prefilled-name help, W41s-10c's readiness diagnostics and A261-7's venue-detail checks. The existing 100-commit candidate was consolidated without changing its tree before rebasing; its prior head remains recorded in the campaign receipts. The migration directory was reset to main and regenerated as `0103_full_invoice_model` and `0104_bill_invoice_choice_transition`. Main SQL/snapshots and existing journal entries compare unchanged; the custom transition SQL compares byte for byte with the approved candidate. The approved reset entry follows the renamed rebuild with both refusal strings unchanged. The kitchen-timing upgrade fixture now stages only through its named migration in both phases; its existing row, schema, foreign-key and trigger checks are retained. Public F1 remains disabled; physical 58/80 mm paper/QR checks, A231p and the asesor's manual remedy approval remain open.
+
+## Landing receipt, 2026-10-06
+
+The owner authorised the gated implementation to land ("Land both"). PR
+[#1256](https://github.com/clintongormley/waitron/pull/1256) merged as `2d972685530676fbe7c182760f0d96f461214e47`.
+The current regenerated model/transition migrations are `0103_full_invoice_model` and
+`0104_bill_invoice_choice_transition`; populated preproduction venues require a reset.
+This dated receipt supersedes earlier landing waits and migration-number checkpoints.
+Public F1 remains disabled: physical 58/80 mm paper/QR checks, A231p and the asesor's
+manual-remedy approval remain enablement gates. The service-start date remains provisional.
+Retained whole-branch review approval, focused tests, normal push hook and exact-head CI
+passed before merging; enabled public paths require their later acceptance checks.
+Exact-head CI `37432123633`, licence `37432123436` and CodeQL `37432120818` completed
+successfully on `dc0f85d9628aa3260390f043c8ad10744eee2641`; every job was read, including
+four scoped skips. The merge's own CI run is `37433083859`, pending at this receipt.
