@@ -5,6 +5,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedWatchers } from "./seed-watchers.js";
+import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 import type { SeedLocale } from "./menu.js";
 
 const suite = useVenueDb({
@@ -46,7 +47,7 @@ describe("seedWatchers", () => {
       };
 
       const rows = await withTransaction(suite.db, async (tx) => {
-        await seedWatchers(tx, { locationId, locale, stationIds });
+        await seedWatchers(tx, { locationId, locale, dataSet: CASA_DELGADO_ES, stationIds });
         const { rows } = await tx.execute<{
           name: string;
           every_station: number;

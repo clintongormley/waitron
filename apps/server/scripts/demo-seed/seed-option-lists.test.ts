@@ -9,6 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAvailableProducts, listOptionLists, readProductModifiers } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { seedOptionLists } from "./seed-option-lists.js";
+import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
@@ -35,8 +36,14 @@ describe("seedOptionLists", () => {
         const { productsByImage } = await seedCatalogues(tx, {
           locationId,
           locale: LOCALE,
+          dataSet: CASA_DELGADO_ES,
         });
-        await seedOptionLists(tx, { productsByImage, locale: LOCALE });
+        await seedOptionLists(tx, {
+          productsByImage,
+          locale: LOCALE,
+          dataSet: CASA_DELGADO_ES,
+          languages: ["en", "es"],
+        });
         const steak = productsByImage.get("solomillo.png")!;
         const coffee = productsByImage.get("cafe-solo.png")!;
         return {

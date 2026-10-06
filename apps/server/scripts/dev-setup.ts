@@ -35,6 +35,7 @@ import { seedDemoRestaurant } from "./demo-seed/seed.js";
 import { demoSeedEnvironment } from "./demo-seed/seed-sales.js";
 import { DEMO_ADMIN_EMAIL, DEMO_DASHBOARD_PASSWORD } from "./demo-seed/staff.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/menu.js";
+import { demoDataSet } from "./demo-seed/data-set.js";
 
 export { parseEnvFile };
 
@@ -248,6 +249,7 @@ async function provisionVenue(
     locale: seedLocale,
     salesDays,
     departmentTradingNames: DEMO_IDENTITY.departmentTradingNames,
+    dataSet: demoDataSet(DEMO_IDENTITY.dataSet),
   });
 
   // The displays bind the station and watcher created by the seed.

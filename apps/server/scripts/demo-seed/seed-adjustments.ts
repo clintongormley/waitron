@@ -9,8 +9,10 @@ import {
 } from "@waitron/adjustments";
 import { decimal } from "@waitron/shared";
 import type { SeedLocale } from "./menu.js";
+import type { DemoDataSet } from "./data-set.js";
+import { inLanguages } from "./in-languages.js";
 
-type SeedReason = Omit<AdjustmentReasonInput, "name" | "names"> & {
+export type SeedReason = Omit<AdjustmentReasonInput, "name" | "names"> & {
   names: Record<SeedLocale, string>;
 };
 
@@ -85,14 +87,22 @@ export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason[] = [
 /** Creates each example reason not already present under its name in the seed's language. */
 export async function seedAdjustmentReasons(
   tx: Transaction,
-  { locale }: { locale: SeedLocale },
+  {
+    locale,
+    dataSet,
+    languages,
+  }: { locale: SeedLocale; dataSet: DemoDataSet; languages: readonly string[] },
 ): Promise<void> {
   const present = new Set(
     (await listAdjustmentReasons(tx, { includeInactive: true })).map((reason) => reason.name),
   );
-  for (const reason of DEMO_ADJUSTMENT_REASONS) {
+  for (const reason of dataSet.adjustmentReasons) {
     const name = reason.names[locale];
     if (present.has(name)) continue;
-    await createAdjustmentReason(tx, { ...reason, name });
+    await createAdjustmentReason(tx, {
+      ...reason,
+      names: inLanguages(reason.names, languages),
+      name,
+    });
   }
 }

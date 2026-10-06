@@ -13,6 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listSalePolicies } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { seedFloor } from "./seed-floor.js";
+import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
@@ -35,7 +36,12 @@ describe("seedFloor", () => {
     const { locationId } = await provisionVenue();
 
     const policies = await withTransaction(suite.db, async (tx) => {
-      await seedFloor(tx, { locationId, locale: LOCALE, departmentTradingNames: TRADING_NAMES });
+      await seedFloor(tx, {
+        locationId,
+        locale: LOCALE,
+        departmentTradingNames: TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+      });
       return listSalePolicies(tx, { locationId: brandLocationId(locationId) });
     });
 
@@ -54,7 +60,12 @@ describe("seedFloor", () => {
     const { locationId } = await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
-      await seedFloor(tx, { locationId, locale: LOCALE, departmentTradingNames: TRADING_NAMES });
+      await seedFloor(tx, {
+        locationId,
+        locale: LOCALE,
+        departmentTradingNames: TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+      });
 
       const { rows: zones } = await tx.execute<{ name: string; active: number }>(
         sql`select name, active from floor_zones where location_id = ${locationId} order by display_order`,
@@ -103,7 +114,12 @@ describe("seedFloor", () => {
       const { locationId } = await provisionVenue();
 
       const rows = await withTransaction(suite.db, async (tx) => {
-        await seedFloor(tx, { locationId, locale, departmentTradingNames: TRADING_NAMES });
+        await seedFloor(tx, {
+          locationId,
+          locale,
+          departmentTradingNames: TRADING_NAMES,
+          dataSet: CASA_DELGADO_ES,
+        });
         const { rows } = await tx.execute<{ name: string; trading_name: string }>(
           sql`select name, trading_name from departments where location_id = ${locationId} order by default_service_mode desc`,
         );

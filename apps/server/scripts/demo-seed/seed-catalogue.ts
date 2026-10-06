@@ -19,17 +19,14 @@ import {
   setProductVariants,
   writeContentLanguages,
 } from "@waitron/catalogue";
-import {
-  CASA_DELGADO,
-  DELI_TAKEAWAY,
-  MENU_DEL_DIA,
-  type SeedCatalogue,
-  type SeedLocale,
-} from "./menu.js";
+import type { SeedCatalogue, SeedLocale } from "./menu.js";
+import type { DemoDataSet } from "./data-set.js";
+import { inLanguages } from "./in-languages.js";
 
 export interface SeedCataloguesInput {
   locationId: string;
   locale: SeedLocale;
+  dataSet: DemoDataSet;
 }
 
 export interface SeedCataloguesResult {
@@ -85,13 +82,12 @@ async function resolveStationIds(tx: Transaction, locationId: string): Promise<S
 /** Casa Delgado becomes the location's default menu; the other menus are added beside it. */
 export async function seedCatalogues(
   tx: Transaction,
-  { locationId, locale }: SeedCataloguesInput,
+  { locationId, locale, dataSet }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
   const stationIds = await resolveStationIds(tx, locationId);
-  await writeContentLanguages(tx, {
-    defaultLanguage: locale,
-    languages: locale === "en" ? ["en", "es"] : ["es", "en"],
-  });
+  const languages = locale === "en" ? ["en", "es"] : ["es", "en"];
+  await writeContentLanguages(tx, { defaultLanguage: locale, languages });
+  const translated = (text: Readonly<Record<string, string>>) => inLanguages(text, languages);
   const productsByImage = new Map<string, string>();
   const menuItemsByProduct = new Map<string, string>();
 
@@ -120,7 +116,7 @@ export async function seedCatalogues(
       const section = await createSectionIn(
         tx,
         rootSectionId,
-        { internalName: cat.name[locale], names: cat.name },
+        { internalName: cat.name[locale], names: translated(cat.name) },
         undefined,
         locale,
       );
@@ -131,9 +127,9 @@ export async function seedCatalogues(
               await createUnit(
                 tx,
                 {
-                  name: product.unit.name,
+                  name: translated(product.unit.name),
                   precision: product.unit.precision,
-                  abbreviation: product.unit.abbreviation,
+                  abbreviation: translated(product.unit.abbreviation),
                 },
                 locale,
               )
@@ -143,8 +139,9 @@ export async function seedCatalogues(
           catalogueId: catalogue.id,
           categoryId: category.id,
           name: product.staffName ?? product.customerName[locale],
-          customerName: product.customerName,
-          description: product.description,
+          customerName: translated(product.customerName),
+          description:
+            product.description === undefined ? undefined : translated(product.description),
           kitchenName: product.kitchenName,
           dietaryDeclarations: product.dietaryDeclarations,
           ...(unitId === undefined ? { pricingUnit: product.pricingUnit } : { unitId }),
@@ -158,7 +155,7 @@ export async function seedCatalogues(
             created.id,
             product.variants.map((variant) => ({
               name: variant.staffName ?? variant.customerName[locale],
-              customerName: variant.customerName,
+              customerName: translated(variant.customerName),
               kitchenName: variant.kitchenName ?? null,
               image: null,
               unitPrice: variant.unitPrice,
@@ -186,20 +183,18 @@ export async function seedCatalogues(
     return catalogue.id;
   };
 
-  const drinksCategories = CASA_DELGADO.categories.filter((category) => category.station === "bar");
-  const drinksId = await seedOne({
-    name: { en: "Drinks", es: "Bebidas" },
-    categories: drinksCategories,
-  });
+  const { restaurant, lunch, deli, drinksName } = dataSet.menus;
+  const drinksCategories = restaurant.categories.filter((category) => category.station === "bar");
+  const drinksId = await seedOne({ name: drinksName, categories: drinksCategories });
   const casaId = await seedOne(
     {
-      ...CASA_DELGADO,
-      categories: CASA_DELGADO.categories.filter((category) => category.station !== "bar"),
+      ...restaurant,
+      categories: restaurant.categories.filter((category) => category.station !== "bar"),
     },
     provisionedMenus[0]?.id,
   );
-  const diaId = await seedOne(MENU_DEL_DIA);
-  const deliId = await seedOne(DELI_TAKEAWAY);
+  const diaId = await seedOne(lunch);
+  const deliId = await seedOne(deli);
 
   const drinksRoot = await requireMenuRoot(tx, drinksId);
   for (const menuId of [casaId, diaId])

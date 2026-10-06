@@ -7,6 +7,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifyPin, type PersonRoleValue } from "@waitron/identity";
 import { seedStaff } from "./seed-staff.js";
+import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 import { DEMO_ADMIN_EMAIL, DEMO_PIN, DEMO_STAFF } from "./staff.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
@@ -28,7 +29,7 @@ describe("seedStaff", () => {
     await provisionVenue();
 
     const persons = await withTransaction(suite.db, async (tx) => {
-      await seedStaff(tx);
+      await seedStaff(tx, { dataSet: CASA_DELGADO_ES });
 
       const { rows } = await tx.execute<{
         display_name: string;
@@ -62,7 +63,7 @@ describe("seedStaff", () => {
     await provisionVenue();
 
     const rows = await withTransaction(suite.db, async (tx) => {
-      await seedStaff(tx);
+      await seedStaff(tx, { dataSet: CASA_DELGADO_ES });
 
       const { rows } = await tx.execute<{
         display_name: string;

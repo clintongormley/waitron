@@ -288,6 +288,7 @@ export const SPAIN: CountryPack = {
     taxId: "B00000000",
     locationName: "Casa Delgado",
     departmentTradingNames: { restaurant: "Bar Casa Delgado", deli: "Deli Delgado" },
+    dataSet: "casa-delgado-es",
   },
   taxIdentifier: { label: "NIF", validate: validateSpanishNif },
   postalCode: { validate: validateSpanishPostalCode },

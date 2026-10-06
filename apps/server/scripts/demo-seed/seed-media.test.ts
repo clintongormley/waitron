@@ -11,6 +11,7 @@ import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedCatalogues } from "./seed-catalogue.js";
+import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, readImageBytes } from "@waitron/media";
 import { seedMedia } from "./seed-media.js";
 // The regex the public `GET /media/:filename` route accepts.
@@ -40,6 +41,7 @@ describe("seedMedia", () => {
       const { productsByImage } = await seedCatalogues(tx, {
         locationId,
         locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
       });
       await seedMedia(tx, { productsByImage });
       const { rows } = await tx.execute<{ id: string; image: string | null }>(
@@ -94,6 +96,7 @@ describe("seedMedia", () => {
       const { productsByImage } = await seedCatalogues(tx, {
         locationId,
         locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
       });
       await seedMedia(tx, { productsByImage });
       const before = await tx.execute(

@@ -19,6 +19,7 @@ import {
   readMenuStructure,
 } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
+import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
@@ -39,7 +40,11 @@ describe("seedCatalogues", () => {
   it("includes Drinks as a folder in both restaurant menus", async () => {
     const { locationId } = await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
-      const { menuIds } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const { menuIds } = await seedCatalogues(tx, {
+        locationId,
+        locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
+      });
       const restaurant = await readMenuStructure(tx, menuIds.restaurant);
       const lunch = await readMenuStructure(tx, menuIds.lunch);
       return { restaurant, lunch, drinksId: menuIds.drinks };
@@ -54,7 +59,11 @@ describe("seedCatalogues", () => {
   it("charges Drinks' beer price through the restaurant menu with its inherited source", async () => {
     const { locationId } = await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
-      const { menuIds, productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const { menuIds, productsByImage } = await seedCatalogues(tx, {
+        locationId,
+        locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
+      });
       const beerId = productsByImage.get("cana-cerveza.png")!;
       const { rows } = await tx.execute<{ unit_price: number }>(
         sql`select unit_price from products where id = ${beerId}`,
@@ -78,7 +87,11 @@ describe("seedCatalogues", () => {
   it("keeps each menu's own sections beside its included Drinks folder", async () => {
     const { locationId } = await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
-      const { menuIds, productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const { menuIds, productsByImage } = await seedCatalogues(tx, {
+        locationId,
+        locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
+      });
       const sections = await tx.select().from(sectionsTable);
       const sectionNames = new Map(sections.map((row) => [row.id, row.internalName]));
       const topLevel = async (menuId: string) =>
@@ -122,7 +135,7 @@ describe("seedCatalogues", () => {
   it("seeds no two categories with one parent, and no two Active products, sharing a name", async () => {
     const { locationId } = await provisionVenue();
     const { categories, products } = await withTransaction(suite.db, async (tx) => {
-      await seedCatalogues(tx, { locationId, locale: LOCALE });
+      await seedCatalogues(tx, { locationId, locale: LOCALE, dataSet: CASA_DELGADO_ES });
       const categories = await tx.execute<{ parent: string | null; name: string }>(sql`
         select d.parent_id as parent, c.name from categories c
         left join category_details d on d.category_id = c.id`);
@@ -143,7 +156,11 @@ describe("seedCatalogues", () => {
   it("names each menu's top level after the menu, the provisioned one included", async () => {
     const { locationId } = await provisionVenue();
     const named = await withTransaction(suite.db, async (tx) => {
-      const { menuIds } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const { menuIds } = await seedCatalogues(tx, {
+        locationId,
+        locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
+      });
       const { rows } = await tx.execute<{ menu: string; root: string }>(sql`
         select c.name as menu, s.internal_name as root
         from menu_details d
@@ -164,7 +181,11 @@ describe("seedCatalogues", () => {
     const { locationId } = await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
-      const out = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const out = await seedCatalogues(tx, {
+        locationId,
+        locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
+      });
       const menus = await listAccessibleCatalogues(tx, locationId);
       const { products } = await listAvailableProducts(tx, locationId);
       const contentLanguages = await readContentLanguages(tx, LOCALE);
