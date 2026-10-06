@@ -9,7 +9,7 @@ import { getCountryPack } from "@waitron/country-packs";
 import { locations, readTenant, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { compareHolidayFacts, holidayDateName } from "./holiday-naming.js";
-import { localHolidayName } from "./holiday-rules.js";
+import { holidayCityKey, localHolidayName } from "./holiday-rules.js";
 import {
   type HolidayCoverage,
   type HolidayGeography,
@@ -43,11 +43,6 @@ interface Address {
   provinceCode: string | null;
   city: string | null;
   key: { country: string; provinceCode: string; cityKey: string } | null;
-}
-
-/** Cities compare after NFC, trimmed with inner whitespace collapsed, and lowercased. */
-export function holidayCityKey(city: string): string {
-  return city.normalize("NFC").trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
 function invalid(field: string): never {

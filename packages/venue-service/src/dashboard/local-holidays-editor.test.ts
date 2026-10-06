@@ -385,7 +385,7 @@ describe("Local holidays: adding and changing an entry", () => {
     const { api, state, calls } = server();
     const el = await mount(api);
     await click(el, part(el, "add-local"));
-    expect(modal(el)!.getAttribute("heading")).toBe("Add a local holiday");
+    expect(modal(el)!.getAttribute("heading")).toBe("Add a local holiday for Sevilla");
     expect(field(el, "holidayDate")!.required).toBe(true);
     expect(field(el, "holidayName")!.required).toBe(true);
     expect(field(el, "holidayName")!.hint).toBe("As your town council publishes it");
@@ -419,6 +419,97 @@ describe("Local holidays: adding and changing an entry", () => {
     expect(calls("GET").length).toBe(reads + 1);
     expect(document.activeElement === el && el.shadowRoot!.activeElement).toBe(
       part(el, "add-local"),
+    );
+  });
+
+  const DOS_HERMANAS_NOW = () =>
+    localModel({
+      venue: { country: "ES", provinceCode: "41", city: "Dos Hermanas" },
+      geographies: [{ ...SEVILLA, matchesVenue: false }],
+      entries: [],
+    });
+
+  it("does not save a new holiday silently after the address moves to another city: it says so, keeps the values, and saves on the next Save", async () => {
+    const { api, state, calls } = server();
+    const el = await mount(api);
+    await click(el, part(el, "add-local"));
+    expect(modal(el)!.getAttribute("heading")).toBe("Add a local holiday for Sevilla");
+    await setField(el, "holidayDate", "2026-09-08");
+    await setField(el, "holidayName", "Feria");
+
+    state.model = DOS_HERMANAS_NOW();
+    api.rereadWatches();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("Add a local holiday for Dos Hermanas");
+    await click(el, saveButton(el));
+    expect(calls("POST")).toEqual([]);
+    expect(await bottomMessage(el)).toBe(
+      "The venue's address has changed to Dos Hermanas, so this holiday will be saved for Dos Hermanas. Press Save again to save it.",
+    );
+    expect(field(el, "holidayDate")!.value).toBe("2026-09-08");
+    expect(field(el, "holidayName")!.value).toBe("Feria");
+    expect(saveButton(el).disabled).toBe(false);
+
+    state.writes.push({ id: "e2", geographyId: "g-dos", date: "2026-09-08", name: "Feria" });
+    await click(el, saveButton(el));
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    expect(calls("POST")).toEqual([
+      ["/management-api/venue-service/local-holidays", { date: "2026-09-08", name: "Feria" }],
+    ]);
+  });
+
+  it("says the address change in Spanish", async () => {
+    setLocale("es");
+    const { api, state, calls } = server();
+    const el = await mount(api);
+    await click(el, part(el, "add-local"));
+    expect(modal(el)!.getAttribute("heading")).toBe("Añadir un festivo local en Sevilla");
+    await setField(el, "holidayDate", "2026-09-08");
+    await setField(el, "holidayName", "Feria");
+    state.model = DOS_HERMANAS_NOW();
+    api.rereadWatches();
+    await settle(el);
+    await click(el, saveButton(el));
+    expect(calls("POST")).toEqual([]);
+    expect(await bottomMessage(el)).toBe(
+      "La dirección del local ha cambiado a Dos Hermanas, así que este festivo se guardará para Dos Hermanas. Pulsa Guardar otra vez para guardarlo.",
+    );
+  });
+
+  it("saves at once when the address is only spelled differently, as the server matches it", async () => {
+    const { api, state, calls } = server();
+    const el = await mount(api);
+    await click(el, part(el, "add-local"));
+    await setField(el, "holidayDate", "2026-09-08");
+    await setField(el, "holidayName", "Feria");
+    state.model = localModel({ venue: { country: "ES", provinceCode: "41", city: "  SEVILLA " } });
+    api.rereadWatches();
+    await settle(el);
+    state.writes.push({ id: "e2", geographyId: SEVILLA.id, date: "2026-09-08", name: "Feria" });
+    await click(el, saveButton(el));
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    expect(calls("POST")).toHaveLength(1);
+  });
+
+  it("leaves an address that lost its city to the server's refusal, naming no city in the heading", async () => {
+    const { api, state, calls } = server();
+    const el = await mount(api);
+    await click(el, part(el, "add-local"));
+    await setField(el, "holidayDate", "2026-09-08");
+    await setField(el, "holidayName", "Feria");
+    state.model = localModel({
+      venue: { country: "ES", provinceCode: "41", city: null },
+      geographies: [{ ...SEVILLA, matchesVenue: false }],
+      entries: [],
+    });
+    api.rereadWatches();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("Add a local holiday");
+    state.writes.push({ reject: { code: "holiday.invalid", params: { field: "geography" } } });
+    await click(el, saveButton(el));
+    expect(calls("POST")).toHaveLength(1);
+    expect(await bottomMessage(el)).toBe(
+      "Local holidays need the venue's city and a recognised province. Set them in Venue details.",
     );
   });
 
@@ -652,6 +743,69 @@ describe("Local holidays: an earlier address and the holiday area", () => {
       expect(saveButton(el).disabled).toBe(false);
     },
   );
+
+  const VIELHA_AREAS = [
+    { key: "aran", name: "Arán" },
+    { key: "lleida-rest", name: "Lleida, fuera del territorio de Arán" },
+  ];
+  const GRAN_CANARIA_AREAS = [
+    { key: "gran-canaria", name: "Gran Canaria" },
+    { key: "lanzarote", name: "Lanzarote" },
+  ];
+  const areaModel = (
+    provinceCode: string,
+    city: string,
+    areaOptions: { key: string; name: string }[],
+  ) =>
+    localModel({
+      venue: { country: "ES", provinceCode, city },
+      areaOptions,
+      areaRequired: true,
+      geographies: [],
+      entries: [],
+    });
+
+  it("drops an area save's late refusal once the address has moved, freeing the new address's choice", async () => {
+    const { api, state } = server(areaModel("25", "Vielha", VIELHA_AREAS));
+    const el = await mount(api);
+    const held = deferred();
+    state.writes.push(held.promise);
+    await chooseOption(field(el, "holidayArea")!, "aran");
+    await settle(el);
+    expect(field(el, "holidayArea")!.disabled).toBe(true);
+
+    state.model = areaModel("35", "Las Palmas de Gran Canaria", GRAN_CANARIA_AREAS);
+    api.rereadWatches();
+    await settle(el);
+    expect(field(el, "holidayArea")!.options.map(({ label }) => label)).toEqual([
+      "Gran Canaria",
+      "Lanzarote",
+    ]);
+    expect(field(el, "holidayArea")!.disabled).toBe(false);
+
+    held.resolve({ reject: { code: "holiday.invalid", params: { field: "areaKey" } } });
+    await settle(el);
+    expect(field(el, "holidayArea")!.error).toBe("");
+    expect(field(el, "holidayArea")!.disabled).toBe(false);
+  });
+
+  it("keeps an area refusal through a read of the same address, and clears it once the address moves", async () => {
+    const { api, state } = server(areaModel("25", "Vielha", VIELHA_AREAS));
+    const el = await mount(api);
+    state.writes.push({ reject: { code: "holiday.invalid", params: { field: "areaKey" } } });
+    await chooseOption(field(el, "holidayArea")!, "aran");
+    await settle(el);
+    expect(field(el, "holidayArea")!.error).toBe("Choose one of the areas offered.");
+
+    api.rereadWatches();
+    await settle(el);
+    expect(field(el, "holidayArea")!.error).toBe("Choose one of the areas offered.");
+
+    state.model = areaModel("35", "Las Palmas de Gran Canaria", GRAN_CANARIA_AREAS);
+    api.rereadWatches();
+    await settle(el);
+    expect(field(el, "holidayArea")!.error).toBe("");
+  });
 
   it("offers only the sourced areas, required until one is chosen, and saves the choice before any entry exists", async () => {
     const areaOptions = [

@@ -555,6 +555,9 @@ const en = {
   "holidays.empty": "No local holidays entered.",
   "holidays.add": "Add a local holiday",
   "holidays.add_heading": "Add a local holiday",
+  "holidays.add_heading_city": "Add a local holiday for {city}",
+  "holidays.address_moved":
+    "The venue's address has changed to {city}, so this holiday will be saved for {city}. Press Save again to save it.",
   "holidays.edit_heading": "Edit local holiday",
   "holidays.name_hint": "As your town council publishes it",
   "holidays.name_too_long": "Use at most {max} characters.",
@@ -1145,6 +1148,9 @@ const es: Record<keyof typeof en, string> = {
   "holidays.empty": "No hay festivos locales introducidos.",
   "holidays.add": "Añadir un festivo local",
   "holidays.add_heading": "Añadir un festivo local",
+  "holidays.add_heading_city": "Añadir un festivo local en {city}",
+  "holidays.address_moved":
+    "La dirección del local ha cambiado a {city}, así que este festivo se guardará para {city}. Pulsa Guardar otra vez para guardarlo.",
   "holidays.edit_heading": "Editar festivo local",
   "holidays.name_hint": "Como lo publica tu ayuntamiento",
   "holidays.name_too_long": "Usa como máximo {max} caracteres.",

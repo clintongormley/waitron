@@ -16,7 +16,7 @@ import {
   type LocalHoliday,
   type LocalHolidayModel,
 } from "../holiday-types.js";
-import { localHolidayName } from "../holiday-rules.js";
+import { holidayAddressKey, localHolidayName } from "../holiday-rules.js";
 import type { LocalDate } from "../hours-types.js";
 import type { HoursApi } from "./hours-client.js";
 import { browserToday, format, formatDate } from "./hours-view.js";
@@ -24,7 +24,17 @@ import { t } from "./strings.js";
 
 type ReturnTo = () => HTMLElement | null;
 type Editor =
-  | { kind: "entry"; id: string | null; date: string; name: string }
+  | {
+      kind: "entry";
+      id: string | null;
+      date: string;
+      name: string;
+      /**
+       * A new entry's address as the manager last saw it, by `holidayAddressKey`: the server files
+       * it under the address current when it arrives.
+       */
+      address?: string | null;
+    }
   | { kind: "remove"; entry: LocalHoliday }
   | { kind: "forget"; geography: HolidayGeography };
 
@@ -124,6 +134,11 @@ export class LocalHolidaysEditor extends LitElement {
     super.connectedCallback();
     this.#detach = this.api.watchLocalHolidays(
       (model) => {
+        if (this.model && holidayAddressKey(this.model.venue) !== holidayAddressKey(model.venue)) {
+          this.#areaGeneration++;
+          this.areaError = "";
+          this.areaBusy = false;
+        }
         this.model = model;
         this.readError = "";
       },
@@ -210,6 +225,15 @@ export class LocalHolidaysEditor extends LitElement {
     if (Object.keys(this.#check(editor)).length > 0) {
       void this.#focusInvalid();
       return;
+    }
+    if (editor.kind === "entry" && editor.id === null) {
+      const { venue } = this.model!;
+      const address = holidayAddressKey(venue);
+      if (address !== null && address !== editor.address) {
+        this.editor = { ...editor, address };
+        this.bottomRefusal = format("holidays.address_moved", { city: venue.city! });
+        return;
+      }
     }
     void this.#write(editor);
   }
@@ -298,9 +322,15 @@ export class LocalHolidaysEditor extends LitElement {
 
   #content(editor: Editor, errors: Record<string, string>) {
     switch (editor.kind) {
-      case "entry":
+      case "entry": {
+        const city = this.model!.venue.city;
         return {
-          heading: t(editor.id === null ? "holidays.add_heading" : "holidays.edit_heading"),
+          heading:
+            editor.id !== null
+              ? t("holidays.edit_heading")
+              : city === null
+                ? t("holidays.add_heading")
+                : format("holidays.add_heading_city", { city }),
           body: html`<wt-input
               type="date"
               name="holidayDate"
@@ -326,6 +356,7 @@ export class LocalHolidaysEditor extends LitElement {
           save: t("hours.save"),
           danger: false,
         };
+      }
       case "remove":
         return {
           heading: t("holidays.remove_heading"),
@@ -584,8 +615,16 @@ export class LocalHolidaysEditor extends LitElement {
                         variant="secondary"
                         data-test="add-local"
                         @click=${() =>
-                          this.#open({ kind: "entry", id: null, date: "", name: "" }, () =>
-                            this.renderRoot.querySelector<HTMLElement>('[data-test="add-local"]'),
+                          this.#open(
+                            {
+                              kind: "entry",
+                              id: null,
+                              date: "",
+                              name: "",
+                              address: holidayAddressKey(model.venue),
+                            },
+                            () =>
+                              this.renderRoot.querySelector<HTMLElement>('[data-test="add-local"]'),
                           )}
                         >${t("holidays.add")}</wt-button
                       >
