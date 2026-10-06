@@ -2494,8 +2494,8 @@ none of these actions: no Add a local holiday, no row menu and no Remove. In the
 the date panel lists each holiday on the chosen date under its heading, with its kind (national,
 regional or local) and its source: the official source, linked where it has an address, or
 "Entered by you for" the city. A line follows on how complete that year's official holidays are,
-and a second on its local holidays when the venue has a coverage record for that year. Above the month grid, a line names each year shown whose official
-holidays are not known to be complete.
+and a second on its local holidays when the calendar's read includes that year's coverage. Above
+the month grid, a line names each year shown whose official holidays are not known to be complete.
 
 In the week grid and the date panel a period stays on one line, so hours wrap only between
 periods. The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
