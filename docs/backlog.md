@@ -1658,15 +1658,20 @@ review):** `resolveLines` in `packages/fiscal-verifactu/src/drain.ts` used to ma
 a claimed record by `RefExterna` alone; a review probe gave invoice B's accepted line invoice A's
 reference and the drain marked A `aceptado` though AEAT had rejected it. Now a line is applied to a
 record only when it is the one line naming that record, by reference or by invoice, and it carries
-both the record's reference and the invoice (issuer NIF, number, date) the record was sent as. Any
+both the record's reference and the invoice (issuer NIF, number, date) the record was sent as. A
+line whose `Operacion.TipoOperacion` names the other operation ("Anulacion" on a registration's
+line, "Alta" on a cancellation's) is not applied either and leaves the record unknown; a line with
+no operation is not refused for that. Any
 other record of the envío, including one AEAT's reply gave no line for, becomes unknown at once:
 it waits for a later send, its chain's records not yet sent wait behind it, and it raises
 `fiscal.estado_desconocido` with the invoice sent and every line that named it. Before, a record
 with no line sat `enviando` until the five-minute recovery or a restart. **Still open:** a line
 naming no record of the envío by either is ignored and recorded nowhere; and no run against real
-AEAT has shown that a cancellation's reply line names the cancelled invoice under the plain field
-names (the schema and the library's fake do) — if it does not, every cancellation comes back
-unknown and is retried with an alert.
+AEAT has shown that a cancellation's reply line names the cancelled invoice (the schema types the
+line's `IDFactura` with the plain field names, and the library's fake echoes the cancelled invoice
+there). If AEAT named a different invoice on that line, the cancellation would come back unknown
+and be retried with an alert; a line without the plain field names is refused by the library's
+parser, which backs off the whole envío.
 **Re-examine the hold behind an unknown outcome once the asesor answers — OPEN (waiting on the
 asesor; owner 2026-10-06).** `claimBatch` in `packages/fiscal-verifactu/src/drain.ts` does not send a
 record while an earlier record of its chain is `enviando` or waits for a retry (W41s-2, #1213,

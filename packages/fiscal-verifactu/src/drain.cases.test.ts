@@ -16,13 +16,7 @@ import {
   type SeededDrain,
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
-import {
-  DEFAULT_SKIP_RETRY_MS,
-  RECUPERACION_ENVIANDO_MS,
-  backoffMs,
-  drain,
-  type DrainDeps,
-} from "./drain.js";
+import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
 import { heldRecords, listFilingCases, recordCaseEvent } from "./filing-cases.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
@@ -78,7 +72,7 @@ function rewritingLines(
   };
 }
 
-/** The reply's line for `registroId` names a record outside the envío. */
+/** The reply's line for `registroId` carries a reference outside the envío. */
 const misnaming = (client: VerifactuClient, registroId: string) =>
   rewritingLines(client, (linea) =>
     linea.RefExterna === registroId ? { ...linea, RefExterna: "not-in-this-batch" } : linea,
@@ -632,7 +626,7 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     expect(await cases()).toHaveLength(1);
   });
 
-  it("does not hold a record of the same envío when the reply is applied, even when the reply has no line for it", async () => {
+  it("does not hold a record of the same envío when the reply is applied, even when its line carries another reference", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [conflicting, unanswered] = seeded.registroIds;
@@ -658,10 +652,7 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     const wire = recording(real);
 
     // Past the unanswered record's retry (`backoffMs(1)`), so this pass claims it.
-    const result = await drain(
-      deps(wire.client),
-      new Date(FIRST.getTime() + RECUPERACION_ENVIANDO_MS + 1),
-    );
+    const result = await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
 
     expect(wire.sent).toEqual([]);
     expect(await envioOf(unanswered!)).toMatchObject({ estado: "detenido", incidencia: true });

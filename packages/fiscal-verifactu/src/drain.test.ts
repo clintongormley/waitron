@@ -1104,7 +1104,7 @@ describe("drain — Route B's lookup and the write transaction", () => {
   });
 });
 
-describe("drain — a reply line naming no record in the batch", () => {
+describe("drain — a reply line whose reference names no record in the batch", () => {
   it("applies no line to its record, leaving it unknown, and saves the others", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });

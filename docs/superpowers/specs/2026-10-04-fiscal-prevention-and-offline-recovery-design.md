@@ -130,7 +130,9 @@ These are proposed requirements, not a claim that all current paths have been ve
 | D9: short series checked against local/device/AEAT history | Replace the allocation method with §2–3. Lookups supply evidence, not reservations. Add the agreed emergency prefix and explicit later short-series change. |
 
 **Implemented, 2026-10-06 (W41s-3; owner review pending).** A pointer, not a revision of the
-table above: `packages/fiscal-verifactu/src/drain.ts` keeps every line of AEAT's reply. A rejection
+table above: `packages/fiscal-verifactu/src/drain.ts` keeps every line of AEAT's reply.
+_(2026-10-06, W41s-3c: a line is now applied only when it is its record's one line by reference or
+invoice and matches both; see `docs/backlog.md`.)_ A rejection
 on its own no longer holds its chain (D2, on §7.1's receipts; only code 1161 was tested, triggered
 artificially). A conflict, or a held cancellation, holds the later unsent records of its chain. A
 record of the conflict's own envío is not held when the reply is applied; one whose outcome is still
