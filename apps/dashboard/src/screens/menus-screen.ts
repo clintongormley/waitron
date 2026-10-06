@@ -525,6 +525,7 @@ export class MenusScreen extends LitElement {
   /** Null until the open menu's preview is read, which happens only on the Preview tab. */
   @state() private preview: MenuPreview | null = null;
   @state() private previewError = false;
+  @state() private previewResetRequired = false;
   /** The menus whose publish is out. Replaced, never mutated, so a change re-renders. */
   @state() private publishing: ReadonlySet<string> = new Set();
   /** From the probes' container queries: "narrow" at 30rem or less, where each status sits under
@@ -625,7 +626,8 @@ export class MenusScreen extends LitElement {
   readonly #previewQueries = new DashboardQueries(
     this,
     () => this.api,
-    () => {
+    (error) => {
+      this.previewResetRequired = codeOf(error) === "menu.reset_required";
       this.previewError = true;
       if (this.status === null) this.statusError = true;
     },
@@ -970,10 +972,12 @@ export class MenusScreen extends LitElement {
     this.#previewFor = menuId;
     this.preview = null;
     this.previewError = false;
+    this.previewResetRequired = false;
     try {
       await this.#previewQueries.watch("getMenuPreview", [menuId], (value) => {
         this.preview = value;
         this.previewError = false;
+        this.previewResetRequired = false;
         this.status = value.status;
         this.statusError = false;
       });
@@ -987,6 +991,7 @@ export class MenusScreen extends LitElement {
     this.#previewQueries.release("getMenuPreview");
     this.preview = null;
     this.previewError = false;
+    this.previewResetRequired = false;
   }
 
   /** The query slot holds one watch, so watching another menu's home stops the earlier one. */
@@ -2131,6 +2136,7 @@ export class MenusScreen extends LitElement {
       .statusFailed=${this.statusError}
       .preview=${this.preview}
       .failed=${this.previewError}
+      .failureReason=${this.previewResetRequired ? codeMessage("menu.reset_required") : ""}
       .publishing=${this.publishing.has(this.menuId!)}
       .result=${this.publishResult}
       @wt-menu-publish=${(event: CustomEvent<{ hash: string }>) => {
@@ -2287,7 +2293,7 @@ export class MenusScreen extends LitElement {
         ${t("home.preview_loading")}
       </p>`;
     return html`<p class="error" role="alert" data-test="home-preview-error">
-        ${t("home.preview_error")}
+        ${this.previewResetRequired ? codeMessage("menu.reset_required") : t("home.preview_error")}
       </p>
       <div>
         <wt-button

@@ -343,6 +343,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "An item on this order can only be added as an extra to another dish. Remove it and try again",
     es: "Un artículo de este pedido solo se puede añadir como extra de otro plato. Quítalo e inténtalo de nuevo",
   },
+  "menu.reset_required": {
+    en: "This venue has a menu in an unsupported format. Reset the venue before using menus.",
+    es: "Este local tiene una carta en un formato no compatible. Restablece el local antes de usar las cartas.",
+  },
   "menu.version_changed": {
     en: "The menu has changed since this order was started. Check the order and try again",
     es: "La carta ha cambiado desde que se empezó este pedido. Revisa el pedido e inténtalo de nuevo",

@@ -29,6 +29,8 @@ import {
   createSectionIn,
   deactivateCatalogue,
   menuStatus,
+  menuVersions,
+  menuPublications,
   optionLabels,
   requireMenuRoot,
   setHomeDisplay,
@@ -1021,4 +1023,35 @@ it("sells a product reached only through an included menu at that menu's price",
     .select({ gross: workingOrderLines.unitPriceGross })
     .from(workingOrderLines);
   expect(held.map((l) => l.gross)).toContain(350);
+});
+
+it("refuses format-2 menu reads through the till with the venue-reset code", async () => {
+  const v = await setupLunch();
+  await publish(v.menuId);
+  const [row] = await suite.db.select().from(menuVersions).where(eq(menuVersions.menuId, v.menuId));
+  const [old] = await suite.db
+    .insert(menuVersions)
+    .values({
+      ...row!,
+      id: randomUUID(),
+      number: 2,
+      document: { ...row!.document, format: 2, home: undefined } as unknown as typeof row.document,
+      contentHash: "old-document-hash",
+    })
+    .returning({ id: menuVersions.id });
+  await suite.db
+    .update(menuPublications)
+    .set({ versionId: old!.id })
+    .where(eq(menuPublications.menuId, v.menuId));
+  for (const path of [
+    `/api/service-zones/${v.zoneId}/offers`,
+    "/api/default-service-zone/offers",
+    `/api/menu-state?zoneId=${v.zoneId}`,
+  ]) {
+    const response = await send(v, "GET", path);
+    expect(await response.json(), path).toEqual({
+      error: { code: "menu.reset_required", params: { menuId: v.menuId } },
+    });
+    expect(response.status, path).toBe(400);
+  }
 });

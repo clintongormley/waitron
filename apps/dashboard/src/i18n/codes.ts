@@ -103,6 +103,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Some of the chosen items cannot be used. Refresh the list and try again.",
     es: "Algunos de los elementos elegidos no se pueden usar. Actualiza la lista e inténtalo de nuevo.",
   },
+  "menu.reset_required": {
+    en: "This venue has a menu in an unsupported format. Reset the venue before using menus.",
+    es: "Este local tiene una carta en un formato no compatible. Restablece el local antes de usar las cartas.",
+  },
   "menu.shortcut_unreachable": {
     en: "Only products and sections that are on this menu can be shortcuts on its Device Home Page.",
     es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su página de inicio del dispositivo.",

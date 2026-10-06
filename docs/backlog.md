@@ -1848,6 +1848,9 @@ boundary if required. No change to decimal parsing is included in A280.
 **Upgrading:** two migrations, core `0101_product_color.sql` and catalogue
 `0025_category_color.sql`, each add one nullable column (`products.color`,
 `category_details.color`) with no table rebuild, so a venue migrates in place with no reset.
+> **2026-10-06, A291:** old-format live menus now require a venue reset. W92's republish advice
+> below applies only to a live document already in format 3.
+
 Republish every menu after upgrading: a version published before W92 carries no product colours,
 so its product tiles stay plain, and a menu with products on it reads as changed until it is
 published again (the document format number is unchanged, so such a version is still sold from;
@@ -1900,9 +1903,9 @@ drawing.
 **Upgrading:** one migration, catalogue `0026_device_home_page.sql`, drops the
 `device_profile_home_layouts` table (each profile's layout choices) and adds six columns to
 `menu_details`, each required with a default, with no table rebuild, so a venue migrates in place.
-Published menus move to document format 3. Republish every menu after upgrading — a version in
-format 2 is no longer sold from — or reset the venue. Until a menu is published again no device is
-served it and it reads as changed; its preview opens and it publishes. A venue that made extra
+Published menus move to document format 3. **A291 DONE (2026-10-06): reset the venue if it holds
+a live menu in an older format.** Status, preview, publish and serving refuse it with
+`menu.reset_required`; republishing format 2 is no longer an upgrade path. A venue that made extra
 named layouts keeps their sections, which the menu no longer reads; a reset clears them. Export a
 configuration bundle again after upgrading: one exported before W93 records an older catalogue
 schema version, which the import refuses (`validateConfigurationBundle`,
@@ -1923,13 +1926,12 @@ Left open:
 - On the till, opening a section from lower on the screen leaves the page scrolled, so the
   breadcrumb is out of view. I believe this predates W93: neither `main`'s nor W93's
   `apps/till/src/widgets/menu-browser.ts` scrolls on opening a section (read, not bisected).
-- The upgrade path, previewing and publishing a menu whose live version is format 2, was not looked
-  at on the dev stack. The shared demo venue could not start: `main`'s core migration
-  `0103_full_invoice_model.sql` (A231, #1256) failed at ``DROP TABLE `invoice_series` `` with
-  "FOREIGN KEY constraint failed" on that venue, so it was reset. The path is covered by automated
-  tests only: "a live version in format 2 is not served, and its menu shows changed" and "previews
-  and publishes a menu whose live version is format 2", in
-  `packages/catalogue/src/menu-publication.test.ts`.
+- **A291 DONE (2026-10-06):** removed format-2 preview/republication and silent omission from till
+  reads. Unsupported live documents refuse with `menu.reset_required`, localized in dashboard and
+  till; Preview and Home display the reset instruction. Catalogue and real management/till route
+  tests cover the refusal; configuration export/import still leaves publications behind. Reset the
+  venue instead of republishing old menus. Historical W93 Decision 5 has a dated superseding note.
+
 - The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) is a hand
   copy of the till's menu browser (`apps/till/src/widgets/menu-browser.ts`): the thumbnail, the tile
   painting, the section trail, the two-block home arrangement, the breadcrumb and about a hundred lines

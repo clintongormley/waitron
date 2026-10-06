@@ -1,5 +1,9 @@
 # One product colour everywhere (W92) — implementation plan
 
+> **2026-10-06, A291:** the old-format serving and republish advice in this historical document
+> is superseded. Unsupported live menu documents refuse with `menu.reset_required`; reset the
+> venue. See [the current contract](../../developers/product-categories.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Every task is test-first: write the failing test, run it and watch it

@@ -1,5 +1,9 @@
 # W92 — One product colour everywhere, inherited from reporting categories (design)
 
+> **2026-10-06, A291:** the old-format serving and republish advice in this historical document
+> is superseded. Unsupported live menu documents refuse with `menu.reset_required`; reset the
+> venue. See [the current contract](../../developers/product-categories.md).
+
 Status: design, 2026-10-05, amended the same day after the plan review. Branch
 `feat/product-colours`, rebased onto `main` c2b886e99, which holds W72e (#1241, f556de968: the
 Products tree's category name box keeps its refusal in view at 390 px). Its own PR, before W93. W88

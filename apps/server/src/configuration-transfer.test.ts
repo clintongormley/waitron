@@ -16,6 +16,8 @@ import {
   listOptionLists,
   menuStatus,
   menuVersions,
+  menuPublications,
+  menuDocumentHash,
   previewMenu,
   publishMenu,
   readMenuStructure,
@@ -1242,58 +1244,83 @@ it("refuses a bundle whose photo still carries alt text and labels, as it refuse
   });
 });
 
-it("leaves publication behind, so an imported venue's menus arrive unpublished", async () => {
-  const photo = await samplePreparedImage({ width: 9 });
-  const source = await applyVenue(planVenue(venue("B11223344"), ALL_MODULES), {
-    db: suite.db,
-    modules: ALL_MODULES,
-  });
-  await withTransaction(suite.db, async (tx) => {
-    const { image } = await uploadImage(tx, { image: photo, names: { es: "Limonada" } }, {});
-    const menu = await createCatalogue(tx, { name: "Published menu" });
-    const lemonade = await createProduct(tx, {
-      catalogueId: menu.id,
-      categoryId: null,
-      name: "Limonada",
-      pricingUnit: "each",
-      unitPrice: "3.00",
-      vatClass: "reduced",
-      image: image.filename,
+it.each([3, 2])(
+  "leaves format-%s publication behind, so an imported venue's menus arrive unpublished",
+  async (format) => {
+    const photo = await samplePreparedImage({ width: 9 });
+    const source = await applyVenue(planVenue(venue("B11223344"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
     });
-    const { rootSectionId } = await readMenuStructure(tx, menu.id);
-    await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
-    await publishMenu(tx, menu.id, (await previewMenu(tx, menu.id)).hash, "source-admin");
-  });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-  const transferred = await buildConfigurationBundle(
-    suite.db,
-    source,
-    ALL_MODULES,
-    new Date("2026-09-26T12:00:00Z"),
-    versions,
-  );
-  for (const table of ["menu_versions", "menu_publications", "menu_version_images"])
-    expect(Object.keys(transferred.tables)).not.toContain(table);
-  await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
-    db: targetSuite.db,
-    modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
-  });
-  await withTransaction(targetSuite.db, async (tx) => {
-    const [menu] = await tx
-      .select({ id: catalogues.id })
-      .from(catalogues)
-      .where(eq(catalogues.name, "Published menu"));
-    expect((await menuStatus(tx, [menu!.id])).get(menu!.id)).toEqual({
-      state: "unpublished",
-      clashes: 0,
+    await withTransaction(suite.db, async (tx) => {
+      const { image } = await uploadImage(tx, { image: photo, names: { es: "Limonada" } }, {});
+      const menu = await createCatalogue(tx, { name: "Published menu" });
+      const lemonade = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name: "Limonada",
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "reduced",
+        image: image.filename,
+      });
+      const { rootSectionId } = await readMenuStructure(tx, menu.id);
+      await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
+      await publishMenu(tx, menu.id, (await previewMenu(tx, menu.id)).hash, "source-admin");
+      if (format === 2) {
+        const [row] = await tx.select().from(menuVersions).where(eq(menuVersions.menuId, menu.id));
+        const document = {
+          ...row!.document,
+          format: 2,
+          home: undefined,
+        } as unknown as typeof row.document;
+        const [old] = await tx
+          .insert(menuVersions)
+          .values({
+            ...row!,
+            id: crypto.randomUUID(),
+            number: 2,
+            document,
+            contentHash: menuDocumentHash(document),
+          })
+          .returning({ id: menuVersions.id });
+        await tx
+          .update(menuPublications)
+          .set({ versionId: old!.id })
+          .where(eq(menuPublications.menuId, menu.id));
+      }
     });
-    expect(await tx.select().from(menuVersions)).toEqual([]);
-    // The working menu came across whole, so publishing it on the new venue has something to show.
-    expect((await readMenuStructure(tx, menu!.id)).nodes).toHaveLength(1);
-  });
-});
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-09-26T12:00:00Z"),
+      versions,
+    );
+    for (const table of ["menu_versions", "menu_publications", "menu_version_images"])
+      expect(Object.keys(transferred.tables)).not.toContain(table);
+    await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    await withTransaction(targetSuite.db, async (tx) => {
+      const [menu] = await tx
+        .select({ id: catalogues.id })
+        .from(catalogues)
+        .where(eq(catalogues.name, "Published menu"));
+      expect((await menuStatus(tx, [menu!.id])).get(menu!.id)).toEqual({
+        state: "unpublished",
+        clashes: 0,
+      });
+      expect(await tx.select().from(menuVersions)).toEqual([]);
+      // The working menu came across whole, so publishing it on the new venue has something to show.
+      expect((await readMenuStructure(tx, menu!.id)).nodes).toHaveLength(1);
+    });
+  },
+);
 
 it("transfers the adjustment reasons, inactive ones included, with their limits and order", async () => {
   const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {

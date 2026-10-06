@@ -7525,3 +7525,51 @@ describe("colour swatches on the Structure tab", () => {
     expect(form.getAttribute("heading")).toBe(t("menus.edit_section"));
   });
 });
+
+it.each(["en", "es-ES"])(
+  "shows the venue-reset refusal on Preview in %s and offers no publish action",
+  async (locale) => {
+    setLocale(locale);
+    onTestFinished(() => setLocale("en"));
+    const el = await mount(
+      api({
+        getMenuPreview: vi
+          .fn()
+          .mockRejectedValue({ code: "menu.reset_required", params: { menuId: "menu-lunch" } }),
+      }),
+      PREVIEW_PATH,
+    );
+    await vi.waitFor(() =>
+      expect(
+        text(
+          q(el, "dashboard-menu-preview")!.shadowRoot!.querySelector('[data-test="preview-error"]'),
+        ),
+      ).toContain(codeMessage("menu.reset_required")),
+    );
+    expect(
+      q(el, "dashboard-menu-preview")!.shadowRoot!.querySelector('[data-test="publish"]'),
+    ).toBeNull();
+  },
+);
+
+it.each(["en", "es-ES"])(
+  "shows the venue-reset refusal in the Home preview in %s",
+  async (locale) => {
+    setLocale(locale);
+    onTestFinished(() => setLocale("en"));
+    const el = await mount(
+      api({
+        getMenuPreview: vi
+          .fn()
+          .mockRejectedValue({ code: "menu.reset_required", params: { menuId: "menu-lunch" } }),
+      }),
+      PREVIEW_PATH,
+    );
+    await chooseTab(el, "home");
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="home-preview-error"]'))).toContain(
+        codeMessage("menu.reset_required"),
+      ),
+    );
+  },
+);

@@ -469,22 +469,13 @@ describe("a live version published before its document froze VAT", () => {
     return earlier!.id;
   }
 
-  it("is not served for selling, as if the menu had no live version, and its menu shows changed", async () => {
+  it("refuses an earlier document format with the venue-reset code", async () => {
     const f = await menusFixture(fx.db);
-    const lunch = await liveInEarlierFormat(f.lunch);
-    const dinner = await publish(f.dinner);
-    const live = await app((tx) => readLiveDocuments(tx, [f.lunch, f.dinner]));
-    expect([...live.keys()]).toEqual([f.dinner]);
-    expect(live.get(f.dinner)!.versionId).toBe(dinner.versionId);
-    await expect(
-      app((tx) =>
-        assertLiveVersions(tx, [f.lunch, f.dinner], [{ menuId: f.lunch, versionId: lunch }]),
-      ),
-    ).rejects.toMatchObject({
-      code: "menu.version_changed",
-      params: { menus: [{ menuId: f.lunch, liveVersionId: null }] },
+    await liveInEarlierFormat(f.lunch);
+    await expect(app((tx) => readLiveDocuments(tx, [f.lunch]))).rejects.toMatchObject({
+      code: "menu.reset_required",
+      params: { menuId: f.lunch },
     });
-    expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
   });
 });
 
@@ -519,40 +510,41 @@ describe("a live version published before the Device Home Page", () => {
     return earlier!.id;
   }
 
-  it("a live version in format 2 is not served, and its menu shows changed", async () => {
-    const f = await menusFixture(fx.db);
-    const lunch = await liveInFormat2(f.lunch);
-    const dinner = await publish(f.dinner);
-    const live = await app((tx) => readLiveDocuments(tx, [f.lunch, f.dinner]));
-    expect([...live.keys()]).toEqual([f.dinner]);
-    expect(live.get(f.dinner)!.versionId).toBe(dinner.versionId);
-    await expect(
-      app((tx) =>
-        assertLiveVersions(tx, [f.lunch, f.dinner], [{ menuId: f.lunch, versionId: lunch }]),
-      ),
-    ).rejects.toMatchObject({
-      code: "menu.version_changed",
-      params: { menus: [{ menuId: f.lunch, liveVersionId: null }] },
-    });
-    expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
-  });
+  it.each(["read", "assert", "status", "preview", "publish"] as const)(
+    "refuses a format-2 live version on %s without changing its publication",
+    async (operation) => {
+      const f = await menusFixture(fx.db);
+      const { hash } = await app((tx) => previewMenu(tx, f.lunch));
+      const versionId = await liveInFormat2(f.lunch);
+      const before = await versionRows();
+      const read = (tx: Transaction) => {
+        switch (operation) {
+          case "read":
+            return readLiveDocuments(tx, [f.lunch, f.dinner]);
+          case "assert":
+            return assertLiveVersions(tx, [f.lunch], [{ menuId: f.lunch, versionId }]);
+          case "status":
+            return menuStatus(tx, [f.lunch]);
+          case "preview":
+            return previewMenu(tx, f.lunch);
+          case "publish":
+            return publishMenu(tx, f.lunch, hash, "person-1");
+        }
+      };
+      await expect(app(async (tx) => read(tx))).rejects.toMatchObject({
+        code: "menu.reset_required",
+        params: { menuId: f.lunch },
+      });
+      expect(await versionRows()).toEqual(before);
+      expect(
+        (
+          await fx.db.select().from(menuPublications).where(eq(menuPublications.menuId, f.lunch))
+        )[0]!.versionId,
+      ).toBe(versionId);
+    },
+  );
 
-  it("previews and publishes a menu whose live version is format 2", async () => {
-    const f = await menusFixture(fx.db);
-    await liveInFormat2(f.lunch);
-    const preview = await app((tx) => previewMenu(tx, f.lunch));
-    expect(preview.status.state).toBe("changed");
-    expect(preview.changes).toEqual(menuDocument.diffMenuDocuments(null, preview.document));
-    expect(preview.changes).toContainEqual(
-      expect.objectContaining({ kind: "product_added", productId: f.soup }),
-    );
-    const published = await app((tx) => publishMenu(tx, f.lunch, preview.hash, "person-1"));
-    const live = (await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!;
-    expect(live.versionId).toBe(published.versionId);
-    expect(live.document.format).toBe(3);
-  });
-
-  it("compares another menu only when its live version is in this format", async () => {
+  it("refuses a format-2 version in another menu needed for shared-change comparison", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await publish(f.dinner);
@@ -561,29 +553,22 @@ describe("a live version published before the Device Home Page", () => {
       expect.objectContaining({ productId: f.lemonade, alsoOn: ["Dinner Menu"] }),
     );
     await liveInFormat2(f.dinner);
-    const { changes } = await app((tx) => previewMenu(tx, f.lunch));
-    const lemonade = changes.find(
-      (change) => "productId" in change && change.productId === f.lemonade,
-    );
-    expect(lemonade).toMatchObject({ kind: "product_changed", fields: ["color"] });
-    expect(lemonade).not.toHaveProperty("alsoOn");
+    await expect(app((tx) => previewMenu(tx, f.lunch))).rejects.toMatchObject({
+      code: "menu.reset_required",
+      params: { menuId: f.dinner },
+    });
   });
 
-  it("names an including menu as also changed only when its live version is in this format", async () => {
+  it("refuses a format-2 including menu when comparing an included menu's changes", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.drinksMenu);
     await publish(f.lunch);
     await liveInFormat2(f.dinner);
     await app((tx) => updateSection(tx, f.beer, { internalName: "Beers" }));
-    const { changes } = await app((tx) => previewMenu(tx, f.drinksMenu));
-    expect(changes).toContainEqual(
-      expect.objectContaining({
-        kind: "section_changed",
-        sectionId: f.beer,
-        source: "this_menu",
-        alsoOn: ["Lunch Menu"],
-      }),
-    );
+    await expect(app((tx) => previewMenu(tx, f.drinksMenu))).rejects.toMatchObject({
+      code: "menu.reset_required",
+      params: { menuId: f.dinner },
+    });
   });
 });
 

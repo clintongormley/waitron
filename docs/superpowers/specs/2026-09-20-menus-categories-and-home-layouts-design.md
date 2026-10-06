@@ -1,5 +1,9 @@
 # Menus, reusable categories and service home layouts
 
+> **2026-10-06, A291:** the old-format serving and republish advice in this historical document
+> is superseded. Unsupported live menu documents refuse with `menu.reset_required`; reset the
+> venue. See [the current contract](../../developers/product-categories.md).
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to

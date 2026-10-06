@@ -5887,3 +5887,47 @@ describe("owned section routes", () => {
     );
   });
 });
+
+it("refuses format-2 menus through management status, preview and publish routes", async () => {
+  const app = mountApp();
+  const menuId = await createCatalogueVia(app, "Old published menu");
+  const path = `/management-api/catalogues/${menuId}`;
+  const preview = await send(app, "GET", `${path}/preview`);
+  expect(preview.status).toBe(200);
+  const { hash } = (await preview.json()) as MenuPreview;
+  expect(
+    (await send(app, "POST", `${path}/publish`, { body: { expectedHash: hash } })).status,
+  ).toBe(200);
+  const [row] = await suite.db.select().from(menuVersions).where(eq(menuVersions.menuId, menuId));
+  const [old] = await suite.db
+    .insert(menuVersions)
+    .values({
+      ...row!,
+      id: crypto.randomUUID(),
+      number: 2,
+      document: { ...row!.document, format: 2, home: undefined } as unknown as typeof row.document,
+      contentHash: "old-document-hash",
+    })
+    .returning({ id: menuVersions.id });
+  await suite.db
+    .update(menuPublications)
+    .set({ versionId: old!.id })
+    .where(eq(menuPublications.menuId, menuId));
+  for (const [method, route] of [
+    ["GET", "/management-api/catalogues/status"],
+    ["GET", `${path}/status`],
+    ["GET", `${path}/preview`],
+    ["POST", `${path}/publish`],
+  ] as const) {
+    const response = await send(app, method!, route!, {
+      body: method === "POST" ? { expectedHash: hash } : undefined,
+    });
+    expect(await response.json(), route).toEqual({
+      error: { code: "menu.reset_required", params: { menuId } },
+    });
+    expect(response.status, route).toBe(400);
+  }
+  expect(
+    (await suite.db.select().from(menuVersions).where(eq(menuVersions.menuId, menuId))).length,
+  ).toBe(2);
+});
