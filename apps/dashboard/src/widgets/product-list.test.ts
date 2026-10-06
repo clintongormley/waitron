@@ -1321,7 +1321,7 @@ describe("product-list", () => {
     expect(unit("bun:small")).toBe("/ bandeja");
   });
 
-  it("names a measured unit after its price before the venue's unit list has loaded", async () => {
+  it("names a measured unit after its price from the product's own unit", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "ham", unitId: "kg", unit: kilo, unitPrice: "48.00" })],
       unitLanguage: "en",
