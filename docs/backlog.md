@@ -1379,6 +1379,14 @@ covers reverts, raw invalid input, enclosing leave, live reads, reconnect, depar
 replacement bills and busy transitions. Remaining audit classification and page/setup/history/
 navigation/native reload work keep W69 incomplete.
 
+Venue department, zone and trading name cells now have independent draft scopes on the branch.
+Cancel, Escape and replacement preserve the edited cell until you choose Discard. Accepted writes
+commit before refresh; refused writes, newer input and live-removed edited rows stay protected.
+Reconnect uses a new scope identity, so departed replies and controls cannot close its retained
+draft. Immediate-save collection/paid/receipt choices remain exempt. The dated audit records the
+focused checks; station-printer owners and the remaining navigation/native-reload rollout still
+keep W69 incomplete.
+
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected
 EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell receipts are

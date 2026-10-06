@@ -94,6 +94,7 @@ async function mount(write?: Promise<void>, refreshFails = false) {
     },
     createDepartment: record,
     updateDepartment: record,
+    updateZone: record,
     createZone: record,
     configureZone: record,
     replaceHours: record,
@@ -492,4 +493,323 @@ it("a reconnected venue form protects its retained draft against the original ba
   expect(unload()).toBe(true);
   await field(screen, "trading-name", "Casa Delgado");
   expect(unload()).toBe(false);
+});
+
+const nameCells = [
+  {
+    key: "department-name",
+    action: "department-name",
+    name: "departmentName",
+    initial: "Restaurant and bar",
+    edited: "Terrace",
+    want: ["d1", { name: "Terrace", tradingName: "Casa Delgado", defaultServiceMode: "table_tab" }],
+  },
+  {
+    key: "zone-name",
+    action: "zone-name",
+    name: "zoneName",
+    initial: "Dining room",
+    edited: "Terrace",
+    want: ["z1", { name: "Terrace" }],
+  },
+  {
+    key: "trading-name",
+    action: "trading-name",
+    name: "tradingName",
+    initial: "Casa Delgado",
+    edited: "Casa Terrace",
+    want: [
+      "d1",
+      { name: "Restaurant and bar", tradingName: "Casa Terrace", defaultServiceMode: "table_tab" },
+    ],
+  },
+] as const;
+async function settleCell(screen: VenueOperationsScreen) {
+  await screen.updateComplete;
+  await (screen.shadowRoot!.querySelector("[data-test=policy-tree]") as LitElement).updateComplete;
+}
+async function editCell(
+  screen: VenueOperationsScreen,
+  item: (typeof nameCells)[number],
+  value: string,
+) {
+  const host = find(screen.shadowRoot!, `[name="${item.name}"]`)!;
+  host.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await settleCell(screen);
+}
+for (const item of nameCells) {
+  it(`inline ${item.key} asks on Cancel and Escape, preserving Keep and discarding only on approval`, async () => {
+    const { screen, writes } = await mount();
+    await action(screen, `edit-${item.action}`);
+    await settleCell(screen);
+    await editCell(screen, item, item.edited);
+    expect(unload()).toBe(true);
+    await action(screen, `cancel-${item.action}`);
+    await choose("keep");
+    expect((find(screen.shadowRoot!, `[name="${item.name}"]`) as HTMLInputElement).value).toBe(
+      item.edited,
+    );
+    find(screen.shadowRoot!, `[name="${item.name}"]`)!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
+    );
+    await choose("discard");
+    await expect.poll(() => find(screen.shadowRoot!, `[name="${item.name}"]`)).toBeUndefined();
+    expect(writes).toEqual([]);
+    expect(unload()).toBe(false);
+  });
+  it(`inline ${item.key} treats trimmed reverts as clean and commits before refresh failure`, async () => {
+    const { screen, writes } = await mount(undefined, true);
+    await action(screen, `edit-${item.action}`);
+    await settleCell(screen);
+    await editCell(screen, item, item.edited);
+    expect(unload()).toBe(true);
+    await editCell(screen, item, ` ${item.initial} `);
+    expect(unload()).toBe(false);
+    await editCell(screen, item, ` ${item.edited} `);
+    await action(screen, `save-${item.action}`);
+    await expect.poll(() => find(screen.shadowRoot!, `[name="${item.name}"]`)).toBeUndefined();
+    expect(writes).toEqual([item.want]);
+    expect(unload()).toBe(false);
+  });
+  it(`inline ${item.key} keeps newer input after an accepted write`, async () => {
+    const write = deferred();
+    const { screen, writes } = await mount(write.promise);
+    await action(screen, `edit-${item.action}`);
+    await settleCell(screen);
+    await editCell(screen, item, item.edited);
+    await action(screen, `save-${item.action}`);
+    await expect.poll(() => writes.length).toBe(1);
+    await editCell(screen, item, "Newer value");
+    write.resolve();
+    await expect
+      .poll(
+        () =>
+          (
+            find(screen.shadowRoot!, `[data-test=save-${item.action}]`) as
+              HTMLButtonElement | undefined
+          )?.disabled,
+      )
+      .toBe(false);
+    expect((find(screen.shadowRoot!, `[name="${item.name}"]`) as HTMLInputElement).value).toBe(
+      "Newer value",
+    );
+    expect(unload()).toBe(true);
+    await editCell(screen, item, item.edited);
+    expect(unload()).toBe(false);
+    expect(writes).toEqual([item.want]);
+  });
+}
+it("inline names ask before replacing a department cell and ignore its departed controls", async () => {
+  const { screen, writes } = await mount();
+  await action(screen, "edit-department-name");
+  await settleCell(screen);
+  await editCell(screen, nameCells[0], "Draft");
+  const oldCancel = find(screen.shadowRoot!, "[data-test=cancel-department-name]")!;
+  const oldSave = find(screen.shadowRoot!, "[data-test=save-department-name]")!;
+  const buttons = screen
+    .shadowRoot!.querySelector("[data-test=policy-tree]")!
+    .shadowRoot!.querySelectorAll<HTMLElement>("[data-test=edit-department-name]");
+  buttons[0]!.click();
+  await choose("keep");
+  expect((find(screen.shadowRoot!, "[name=departmentName]") as HTMLInputElement).value).toBe(
+    "Draft",
+  );
+  buttons[0]!.click();
+  await choose("discard");
+  await settleCell(screen);
+  expect((find(screen.shadowRoot!, "[name=departmentName]") as HTMLInputElement).value).toBe(
+    "Deli",
+  );
+  oldCancel.click();
+  oldSave.click();
+  await settleCell(screen);
+  expect((find(screen.shadowRoot!, "[name=departmentName]") as HTMLInputElement).value).toBe(
+    "Deli",
+  );
+  expect(writes).toEqual([]);
+  expect(unload()).toBe(false);
+});
+it("independent inline names retain their own draft and baseline through a live read", async () => {
+  const { screen, refresh } = await mount();
+  await action(screen, "edit-department-name");
+  await action(screen, "edit-trading-name");
+  await settleCell(screen);
+  await editCell(screen, nameCells[0], "Staff draft");
+  await editCell(screen, nameCells[2], "Receipt draft");
+  const next = structuredClone(model);
+  next.departments[0]!.name = "Remote name";
+  await refresh(next);
+  await settleCell(screen);
+  await action(screen, "cancel-department-name");
+  await choose("discard");
+  expect((find(screen.shadowRoot!, "[name=tradingName]") as HTMLInputElement).value).toBe(
+    "Receipt draft",
+  );
+  expect(unload()).toBe(true);
+  await editCell(screen, nameCells[2], "Casa Delgado");
+  expect(unload()).toBe(false);
+});
+
+for (const item of nameCells) {
+  it(`inline ${item.key} retains refused and blank input without losing another cell`, async () => {
+    const write = deferred();
+    const { screen, writes } = await mount(write.promise);
+    await action(screen, `edit-${item.action}`);
+    await settleCell(screen);
+    await editCell(screen, item, " ");
+    expect(unload()).toBe(true);
+    await action(screen, `save-${item.action}`);
+    expect(writes).toEqual([]);
+    await editCell(screen, item, item.edited);
+    await action(screen, `save-${item.action}`);
+    await expect.poll(() => writes.length).toBe(1);
+    write.reject({ code: "connection.failed" });
+    await expect
+      .poll(
+        () =>
+          (find(screen.shadowRoot!, `[data-test=save-${item.action}]`) as HTMLButtonElement)
+            .disabled,
+      )
+      .toBe(false);
+    expect(unload()).toBe(true);
+    await action(screen, `cancel-${item.action}`);
+    await choose("keep");
+    expect((find(screen.shadowRoot!, `[name="${item.name}"]`) as HTMLInputElement).value).toBe(
+      item.edited,
+    );
+    expect(writes).toEqual([item.want]);
+  });
+}
+it("a departed inline write cannot commit or close a reconnected draft", async () => {
+  const write = deferred();
+  const { screen, writes } = await mount(write.promise);
+  await action(screen, "edit-department-name");
+  await settleCell(screen);
+  await editCell(screen, nameCells[0], "Terrace");
+  await action(screen, "save-department-name");
+  await expect.poll(() => writes.length).toBe(1);
+  screen.remove();
+  expect(unload()).toBe(false);
+  app.shadowRoot!.append(screen);
+  await settleCell(screen);
+  expect(unload()).toBe(true);
+  write.resolve();
+  await expect
+    .poll(
+      () =>
+        (
+          find(screen.shadowRoot!, "[data-test=save-department-name]") as
+            HTMLButtonElement | undefined
+        )?.disabled,
+    )
+    .toBe(false);
+  expect((find(screen.shadowRoot!, "[name=departmentName]") as HTMLInputElement).value).toBe(
+    "Terrace",
+  );
+  expect(unload()).toBe(true);
+  await editCell(screen, nameCells[0], "Restaurant and bar");
+  expect(unload()).toBe(false);
+});
+it("inline save aborts its pending discard and newer values remain protected", async () => {
+  const { screen, writes } = await mount();
+  await action(screen, "edit-department-name");
+  await settleCell(screen);
+  await editCell(screen, nameCells[0], "Terrace");
+  await action(screen, "cancel-department-name");
+  const q = await question();
+  expect(q.open).toBe(true);
+  await action(screen, "save-department-name");
+  await expect.poll(() => find(screen.shadowRoot!, "[name=departmentName]")).toBeUndefined();
+  expect(q.open).toBe(false);
+  await action(screen, "edit-department-name");
+  await settleCell(screen);
+  await editCell(screen, nameCells[0], "New draft");
+  q.dispatchEvent(
+    new CustomEvent("wt-unsaved-choice", {
+      detail: { decision: "discard" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await settleCell(screen);
+  expect((find(screen.shadowRoot!, "[name=departmentName]") as HTMLInputElement).value).toBe(
+    "New draft",
+  );
+  expect(writes).toEqual([nameCells[0].want]);
+  expect(unload()).toBe(true);
+});
+it("inline Escape discard returns focus to the row name", async () => {
+  const { screen } = await mount();
+  await action(screen, "edit-department-name");
+  await settleCell(screen);
+  await editCell(screen, nameCells[0], "Draft");
+  const host = find(screen.shadowRoot!, "[name=departmentName]")!;
+  host.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
+  );
+  await choose("discard");
+  await settleCell(screen);
+  const table = screen.shadowRoot!.querySelector("[data-test=policy-tree]")!;
+  await expect
+    .poll(() => table.shadowRoot!.activeElement?.getAttribute("data-test"))
+    .toBe("edit-department-name");
+});
+
+it("a live read cannot hide a removed department with a dirty inline name", async () => {
+  const { screen, refresh, writes } = await mount();
+  await action(screen, "edit-department-name");
+  await settleCell(screen);
+  await editCell(screen, nameCells[0], "Retained name");
+  const next = structuredClone(model);
+  next.departments = next.departments.filter((row) => row.id !== "d1");
+  await refresh(next);
+  await settleCell(screen);
+  expect(
+    (find(screen.shadowRoot!, "[name=departmentName]") as HTMLInputElement | undefined)?.value,
+  ).toBe("Retained name");
+  expect(unload()).toBe(true);
+  await action(screen, "cancel-department-name");
+  await choose("discard");
+  await settleCell(screen);
+  expect(find(screen.shadowRoot!, "[name=departmentName]")).toBeUndefined();
+  expect(writes).toEqual([]);
+  expect(unload()).toBe(false);
+});
+
+it("a live read retains a dirty zone name when its department disappears", async () => {
+  const { screen, refresh } = await mount();
+  await action(screen, "edit-zone-name");
+  await settleCell(screen);
+  await editCell(screen, nameCells[1], "Garden");
+  const next = structuredClone(model);
+  next.departments = next.departments.filter((row) => row.id !== "d1");
+  await refresh(next);
+  await settleCell(screen);
+  expect((find(screen.shadowRoot!, "[name=zoneName]") as HTMLInputElement | undefined)?.value).toBe(
+    "Garden",
+  );
+  await action(screen, "cancel-zone-name");
+  await choose("discard");
+  await settleCell(screen);
+  expect(find(screen.shadowRoot!, "[name=zoneName]")).toBeUndefined();
+  expect(unload()).toBe(false);
+});
+
+it("a retained removed name does not count as an available department for moving a zone", async () => {
+  const { screen, refresh } = await mount();
+  await action(screen, "edit-department-name");
+  await settleCell(screen);
+  await editCell(screen, nameCells[0], "Retained name");
+  const next = structuredClone(model);
+  next.departments = next.departments.filter((row) => row.id !== "d1");
+  next.zones[0]!.departmentId = "d2";
+  next.zones[0]!.departmentName = "Deli";
+  await refresh(next);
+  await settleCell(screen);
+  expect((find(screen.shadowRoot!, "[name=departmentName]") as HTMLInputElement).value).toBe(
+    "Retained name",
+  );
+  expect(find(screen.shadowRoot!, "[data-test=move-tree-zone-z1]")).toBeUndefined();
 });

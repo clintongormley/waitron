@@ -2903,3 +2903,26 @@ real dashboard settings container/sidebar, browser history traversal and activat
 reload remain unverified by this checkpoint. Synthetic beforeunload checks establish
 listener cancellation, not display of a native browser prompt. Other contributed inline
 settings and the advancing device-profile audit keep W69 incomplete.
+
+## Venue inline name cells checkpoint — 2026-10-06
+
+On the W69 branch, your department name, zone name and trading name changes register
+independently. Cancel, dispatched Escape and replacing a cell ask before discarding its draft.
+Keep retains the value; approved Escape discard returns focus to the row name. Trimmed reverts
+are clean. Accepted writes commit their captured value before refresh; newer input and refused
+writes stay protected. Live reads retain edited names, including a removed department or a zone
+whose department disappeared. Reconnect registers retained values against the original baseline
+with a new identity; an older reply cannot close that retained cell.
+
+`packages/venue-service/src/dashboard/venue-operations-screen.unsaved.test.ts` exercises these
+routes through the real table and shared leave coordinator. Existing assertions were unchanged.
+The first inline run failed eleven new cases; later runs caught reconnect, focus and live-removal
+edges before their fixes. Commands, logs, installed deletion controls and visual captures are in
+Lane E's local `receipts/w69-venue-names-20261006/` directory. The eight temporary visual flows
+exercise EN/ES, both themes and 390/1280 widths, with sixteen axe scans. Synthetic unload checks
+establish listener cancellation only; actual sidebar/history/native reload remains Task 5.
+
+The collection-number, paid and receipt-mode controls already submit their change from
+`wt-change`; they remain exempt from staged-draft protection. Their existing behavior tests ran
+unchanged. Station-printer owners, remaining configuration owners, advancing-lane reconciliation
+and the complete shell/navigation/native-reload audit remain pending. W69 is still incomplete.
