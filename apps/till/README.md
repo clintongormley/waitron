@@ -18,6 +18,8 @@ itself:
 2. **Counter screen** — a layout-driven composition of the menu browser, basket, total and pay
    widgets, showing the menu offers of its profile's starting zone when the profile has a
    department, or else the venue's counter-default zone (`GET /api/default-service-zone/offers`).
+   A person who signs in again with nobody else signed in between comes back to the zone they left,
+   while it is still offered, and the menu they chose there.
 3. **Pay** — one **cash** tender; the sale is filed by `POST /api/sales`, which re-prices the basket
    authoritatively (the browser never sends a price). _(2026-09-30, lane B item B15: a bill that
    already holds a payment, or one the operator splits with Pay items, Contribute or Split equally,

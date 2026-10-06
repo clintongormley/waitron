@@ -186,7 +186,8 @@ whose profile allows the drawer opens its receipt printer's drawer"),
 `apps/server/src/till-api.receipt.test.ts` ("opens a handheld's drawer on a cash sale when its
 profile allows the drawer"), `apps/server/src/till-api.fiscal-sale-paths.test.ts` and
 `apps/server/src/bill-payments-api.test.ts`; and the `device.cash_not_allowed` cases in
-`till-api.test.ts`, `till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts`. Weaker
+`till-api.test.ts`, `till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts`, and the
+cash refund case in `till-api.profile-actions.test.ts`. Weaker
 than the rule: each holds only the routes it names, so a new route that queues a `drawer` job
 without `drawerPrinter`, or takes cash without `assertTakesCash`, is seen by nothing.
 
@@ -205,8 +206,9 @@ the server checks each at the route, never trusting the till's copy:
 - **Actions are checked at the route, beside the person's permission.** A till route that orders,
   takes a payment, prepares, hands over, prints or opens the drawer checks the profile's action
   (`assertProfileAction` or `assertDeviceCapability`, `apps/server/src/device-session.ts`) as well
-  as any permission it already asked of the person. Showing or hiding a screen (`show-*`) decides
-  only what the till draws; a hidden screen's route is still refused by its action. Which route
+  as any permission it already asked of the person, except the routes the action map named below
+  lists as left unchecked by decision. Showing or hiding a screen (`show-*`) decides only what the
+  till draws; a hidden screen's route is still refused by its action. Which route
   needs which action, and the case that fails without each check, is the map at the top of
   `apps/server/src/till-api.profile-actions.test.ts`; the zone each route acts in is the map at the
   top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds a row to each and a

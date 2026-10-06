@@ -1342,8 +1342,11 @@ plans to retire the editor.
   rename them to what they prove.
 
 **A sale needs a zone (lane B's B4, #571) — what is left open.** Every sale line is priced from the
-menu offers of its order's service zone; a sale with no `zoneId` takes the venue's counter-default
-zone, and a venue with none is refused `service_zone.default_missing`.
+menu offers of its order's service zone. Since W97 (2026-10-06), a sale with no `zoneId` takes its
+device profile's starting zone when the profile has a department — the first of the profile's zones
+still usable when that one is not — and is refused `device_profile.no_service_zone` when none is;
+otherwise it takes the venue's counter-default zone, and a venue with none is refused
+`service_zone.default_missing` (`resolveNewOrderZone`, `packages/venue-service/src/operations.ts`).
 
 - **`GET /api/products` has no caller in the till app, and `listAvailableProducts` is off the sale
   path.** `TillApi.listProducts` (`apps/till/src/api/client.ts`) is kept because the till's tests
@@ -3030,7 +3033,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
       a till only when the till starts again — a page load, a move to another server or a
       re-enrolment, or in dev mode the lock screen's switch-device button (the profile is read in
       `#boot`, `apps/till/src/till-app.ts`, as the layout and the hardware switches already are),
-      so signing out and in again does not pick it up. A review measured the header on
+      so signing out and in again does not pick it up. Since W97 (2026-10-06) a profile switch on
+      the till reads the device's setup again too (`#onProfileSwitch`). A review measured the header on
       2026-10-02 in real Chromium at 390 px, with the real `till-tab-shell` mounted with two phone
       tabs and an operator signed in: with only Find a bill offered — what main offers every
       handheld; `apps/till/src/widgets/tab-shell.ts` is unchanged by C130 — the page measured
@@ -4563,8 +4567,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     exceptions, decides the sign-in list, PIN login and a switch; a device's approved profiles,
     which a signed-in person switches between on the till (refused during a card payment or with
     an unsaved order); profile actions (take orders, cash, the two card kinds, prepare, hand over,
-    print, drawer) checked at every till route beside the person's permissions, separate from the
-    screens shown, and a starting screen; a kitchen display's station and watcher lists, from which
+    print, drawer) checked at the till routes beside the person's permissions, except those the
+    route map in `apps/server/src/till-api.profile-actions.test.ts` lists as unchecked by decision,
+    separate from the screens shown, and a starting screen; a kitchen display's station and watcher lists, from which
     the manager picks each device's one; all of it in the profile editor and the Devices dialog.
     The per-device default zone and its Departments and zones control are gone. Rules:
     [conventions-ui.md](developers/conventions-ui.md), "A device's profile and the signed-in person
@@ -4602,6 +4607,19 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       `device_profile_admission_persons` is left out of
       `apps/server/src/testing/clear-provision-fixture.ts` (read, not run); both tables' keys into
       `device_profiles` cascade on delete (identity `0007_profile_admission.sql`).
+    - **A profile switch or a zone move that commits while a till write is in flight does not stop
+      that write** (found by the finish-branch run-it review, 2026-10-06; for the owner, not fixed
+      on the branch). (i) A till write route checks the profile's action before its write
+      transaction opens (most routes before reading the body, too), so the request writes under the old profile's
+      actions: with a delayed request body, a switch to a profile without `take-orders` still
+      saved the order, answered 200. Checking outside the write transaction predates W97 for the
+      older checks: on `main`, `assertTakesCash` and `assertDeviceCapability` also run before the
+      route's write transaction, and on `POST /api/pay` before the body read. (ii) The routes whose
+      work runs in a helper that opens its own transaction call `gateZones`
+      (`apps/server/src/zone-access.ts`) before that transaction — chosen in Task 4 to avoid a
+      second turn in the write queue — so a zone moved to another department in between is still
+      written: with a delayed order-update body, a zone moved to Deli still answered 200. **Next
+      action:** decide whether to check both again inside the write transaction.
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,
@@ -5383,8 +5401,9 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
     in the #657 item above), and boot never reads the `superseded` that
     `reconcileMembershipOnBoot` returns (`apps/server/src/boot.ts`, where it is called);
     `shouldFenceRestart` (`membership-fence.ts`) has no caller outside its test (`git grep`);
-    `device-api.ts`'s ticket-item advance route does not enforce the `act-as-kds` capability, and
-    the obstacle its comment gave (null profile ids) no longer exists; `enrol-rate-limit.ts` keeps
+    `device-api.ts`'s ticket-item advance route did not enforce the `act-as-kds` capability
+    (resolved by W97, 2026-10-06: it and the kitchen-notice acknowledge route now check the
+    profile's `prepare-orders` action through `assertProfileAction`); `enrol-rate-limit.ts` keeps
     one global limit whose stated reason (snitun) is gone; `provision-till.test.ts` inserts its
     tenant with `onConflictDoNothing`, so a second call's new NIF is silently kept out;
     `provision.ts` stamps the deployment in its own transaction before `applyVenue`, a split with no
@@ -6529,7 +6548,8 @@ bump it when a fixed version is published, and run the certificate suites in tho
   space between a disabled zone's name and its "Disabled" word in the policy tree. Found along
   the way, each left as it is: enabling a zone or a department leaves what disabling switched off
   as it is — a department's zones stay disabled, a zone's tables stay disabled, and its routing
-  exceptions, watcher zones and till starting zones stay gone; `PATCH /management-api/zones/:id`
+  exceptions and watcher zones stay gone (a profile's starting zone is kept since W97, 2026-10-06:
+  `readProfileZones` falls back to the profile's first usable zone while it is disabled); `PATCH /management-api/zones/:id`
   sets `active: true` on a zone whose department is disabled, with no refusal (`updateZone`,
   `apps/server/src/tables.ts`; run on W110e's branch: 204), though the screen does not offer
   Enable there; `PATCH /management-api/tables/:id` with a `zoneId` and no `active` moves an

@@ -2665,10 +2665,13 @@ only after login and device validation. Kitchen displays keep their bound statio
 operator destinations from a path. Unsaved canvas tabs stay out of both URL writes and history,
 including when you reselect them; saved tabs become destinations after persistence.
 Only meaningful navigation pushes history. Payment steps, modifier dialogs and draft edits do not;
-an automatic return home after payment replaces the current entry. Menu choice is a browser-tab
-preference in `sessionStorage`, retained through new and parked orders. Every successful login resets
-it to the location default (or the first available menu). Refresh currently returns to PIN login,
-so logging in after refresh also resets the menu. It belongs in neither the path nor browser history.
+an automatic return home after payment replaces the current entry. The till holds the menu choice in
+memory for the tab, retained through new and parked orders. A person who signs in again
+with nobody else signed in between comes back to the zone they left, while it is still offered, and
+the menu they chose there, while that zone still offers it. A different person, a sign-in after a
+reload (refresh returns to PIN login) or a profile switch starts at the device's starting zone (the
+profile's, or else the venue's counter default) and that zone's default menu, or its first. It
+belongs in neither the path nor browser history.
 
 Dietary filters (vegan, vegetarian, no meat and no fish) follow the same login boundary. The till app
 owns the selection and passes it to counter and table-order screens, including embedded cards.
