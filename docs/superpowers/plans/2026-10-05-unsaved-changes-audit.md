@@ -1,5 +1,30 @@
 # W69 editable-form inventory
 
+## 2026-10-06 My schedule page checkpoint
+
+Cover and time-off requests register separate child scopes under the schedule screen. Each scope
+compares the existing request body; the time-off note keeps exact whitespace and empty means null.
+Keep retains both forms, while Discard restores the affected scopes. An accepted request resets
+and commits only its own unchanged form before refreshing lists. Newer input instead compares
+against the submitted snapshot; a failed write remains dirty. Disconnect releases both scopes,
+resets the local forms and invalidates old replies. An unchanged roster refresh does not notify
+a draft change or dismiss a pending question.
+
+The first new browser suite reported 14 failing cases before implementation. A corrected wait in
+the later-input case then produced the same 14 failures. The added unchanged-roster case failed
+before its condition was narrowed. Five independent guard removals in a frozen-installed disposable
+clone each failed their intended assertion while the clean-page control passed. The first stale-reply
+control survived the visible-note assertion; adding a revert-to-empty assertion caught the old
+reply changing the replacement baseline. The restored pair reported 21 passes and the clone was
+removed. Exact commands and outputs: Lane E `receipts/w69-my-schedule-20261006/`.
+
+The real dashboard shell cases fill the native note input and exercise sidebar, voluntary logout,
+language change, history Back and forced expiry. Eight native Keep/Discard flows in EN/ES,
+light/dark and 390/1280 widths passed sixteen axe scans. Sixteen captures were inspected in four
+contact sheets; API reads and writes were synthetic. Activated native reload and actual workforce
+server writes remain unverified. Existing assertions were unchanged. Other page/till/tab/context
+owners and the final advancing-owner inventory remain open; W69 is not ready for finish-branch.
+
 ## 2026-10-06 setup mode choices checkpoint
 
 The mode screen now requests a root decision before its existing patch/goto sequence when

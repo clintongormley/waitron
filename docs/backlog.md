@@ -1173,6 +1173,11 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+My schedule now registers cover and time-off requests independently on the branch. Each submitted
+request clears only its own draft before refreshing lists; failed writes and newer input remain
+protected. The new native-input shell cases exercise sidebar, logout, language change, history Back
+and forced expiry. The dated audit records the focused checks and their limits.
+
 The shared history adapter is implemented on the branch. The dashboard now installs it and
 requests route decisions before sidebar navigation, Account settings transitions, product deep
 links and ordinary same-app anchors. Its profile cases exercise indexed Back/Forward, Keep,
