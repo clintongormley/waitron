@@ -1505,7 +1505,10 @@ Their writes commit before refresh; resending an invitation leaves an edited sta
 Profile detail and credential modals also use the registry. Successful writes commit before
 refresh; independently accepted authenticator steps and the Google redirect clear their own
 scope. Recovery-code output is exempt, and disconnect clears sensitive local values.
-The remaining form owners stay tracked in the W69
+Reader rename and discovery names also use the registry on this branch. Compare trimmed names
+and commit each accepted row separately before refresh, so accepting one reader does not discard
+another edited name. Give each opening its own identity and ignore departed close reports.
+Details and unpair confirmations stay exempt. The remaining form owners stay tracked in the W69
 backlog entry. Page navigation is a separate part of that
 rollout. The coordinator's dirty-only unload registration
 requests the browser's own warning; the [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md)

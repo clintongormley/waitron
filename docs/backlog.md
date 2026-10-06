@@ -1284,8 +1284,14 @@ Cancel, native Escape and closing Add ask before cleanup; Keep retains the draft
 Successful pairing commits before refresh, while a newer delivered value stays dirty without allowing
 another acceptance of the completed request. Request replacement, disconnect and delayed native close
 reports invalidate departed settings. Focused cases are in
-`apps/dashboard/src/screens/device-pair.unsaved.test.ts`. Payments reader dialogs and the other
-modal owners remain pending.
+`apps/dashboard/src/screens/device-pair.unsaved.test.ts`. Reader rename and discovered-reader
+names now use the shared registry on this branch. Cancel and native Escape retain edited names
+until Discard; trimmed reverts close directly. Each accepted name commits before list refresh,
+while another edited discovery name or newer delivered input stays unsaved. Pending writes block
+dismissal. Details and unpair confirmations remain exempt. Replacement, disconnect and delayed
+native close reports are covered in `apps/dashboard/src/screens/payment-readers.unsaved.test.ts`,
+alongside the unchanged Payments behavior and accessibility suites. Manual outcome/note/PIN
+attestation and independent provider forms remain pending, as do the other modal owners.
 Printer detail name/connection are page owners for the remaining page/navigation work. Other audited
 modal owners also remain to be wired. Keep automatic saves on their existing paths.
 
