@@ -240,7 +240,7 @@ it.each(["staff", "supervisor", "manager", "admin"])(
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await flush(el);
     expect(modal.open).toBe(false);
-    expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).toBeNull();
+    await expect.poll(() => el.shadowRoot!.querySelector("dashboard-profile-screen")).toBeNull();
     expect(new URL(location.href).pathname).toBe(
       role === "staff" ? "/manage/my-schedule" : "/manage/overview",
     );
@@ -1044,7 +1044,7 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(modal.open).toBe(false);
     expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
-    expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+    await expect.poll(() => new URL(location.href).pathname).toBe("/manage/catalogue");
   });
 
   it("keeps the underlying screen after saving your profile — a save re-probes the session while the URL still says profile", async () => {
@@ -1094,7 +1094,7 @@ describe("dashboard-app", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
-    expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+    await expect.poll(() => new URL(location.href).pathname).toBe("/manage/catalogue");
   });
 
   it("disables the relocated Edit button until profile data has actually loaded, and never throws if clicked early", async () => {
@@ -1175,6 +1175,7 @@ describe("dashboard-app", () => {
     expect(editButton()).toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await flush(el);
+    await expect.poll(() => profileScreen.isConnected).toBe(false);
 
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
     await flush(el);

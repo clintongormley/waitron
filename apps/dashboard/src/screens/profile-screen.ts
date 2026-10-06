@@ -248,7 +248,7 @@ export class ProfileScreen extends LitElement {
   #operation = 0;
   #scope?: DraftScope<Record<Field, string>>;
   #leave?: LeaveCoordinator;
-  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+  readonly requestLeave = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
     (!this.#scope ||
       (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded");
@@ -1089,7 +1089,7 @@ export class ProfileScreen extends LitElement {
         heading=${this.#modalHeading()}
         .open=${this.mode !== "view"}
         .dismissible=${!this.busy}
-        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        .beforeClose=${this.#scope ? this.requestLeave : undefined}
         @wt-close=${(e: Event) => {
           // wt-close is composed: without this guard a nested modal's close would close this one.
           if (e.target !== e.currentTarget) return;

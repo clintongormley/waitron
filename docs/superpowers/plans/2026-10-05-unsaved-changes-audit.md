@@ -1646,3 +1646,50 @@ from product source. Synthetic unload checks establish listener behavior, not a 
 Tasks 1/4 remain partial. Next: the dashboard's outer profile Close/Cancel, inline split/transfer
 choices, then Tasks 5/6 page/setup/history/navigation and native reload. Neither proposed W69
 PR is ready for finish-branch; this checkpoint does not complete the item.
+
+
+## 2026-10-06 outer profile container checkpoint
+
+`dashboard-app` routes the profile footer Close through the outer modal’s `requestClose`, and
+its stable `beforeClose` delegates to `profile-screen.requestLeave`. The child’s existing guard
+retains its busy-write refusal and asks for that child’s scope only. Native outer cancel follows
+the same guard; Keep retains the child, its exact telephone and profile URL, while Discard closes
+the profile and replaces its URL with the underlying screen. Child close reports still cannot
+close the outer container. The profile URL/history navigation paths remain Task 5 work.
+
+Before implementation, `dashboard-app.profile-unsaved.test.ts` had four intended failures and
+two passing controls. Its added shell cases cover exact submitted values, refused writes,
+success before refresh refusal, stale Discard after save/disconnect/security expiry, reverts and
+an unrelated retained draft. A real child Escape case checks preserved focus and values. These
+cases exercise native `cancel` for the outer route; they do not establish keyboard access to an
+outer dialog while its nested editor is topmost.
+
+The existing shell cases for four landing roles, the catalogue return before/after profile save,
+and fresh-reopen readiness now await the native close report. Their destinations, underlying
+screen and readiness expectations remain unchanged. The queue’s FYI notes identify them for the
+future PR’s Changed test checks. No fiscal, monetary, permission or sign-in check changed.
+
+A whole-shell visual scan reported light-theme desktop selected-navigation contrast of 4.32:1.
+A disposable probe using main’s dashboard shell reproduced that result with the profile closed.
+The backlog records it outside W69; warning/editor accessibility scans cover those modal surfaces.
+The new harness also supplies the underlying schedule’s actual roster read, avoiding a fixture-only
+load error. Initial diagnostic logs and final captures remain in the local campaign receipts.
+
+The six-suite family passed 632 browser cases before the final roster-fixture addition; the final
+profile owner suites passed all 32 cases after it. Four independently removed guards each failed
+one intended case beside a passing reverted-close control: native outer interception, footer
+request-close, child busy refusal and child dirty-scope consultation. Restoring the installed
+copy passed all ten new shell cases. An attempted all-scope mutation instead passed an invalid
+request shape and failed structurally; it is not a deletion receipt. The corrected child-guard
+probe supplies the fourth receipt.
+
+Eight final EN/ES, light/dark, 390/1280 visual flows passed sixteen modal accessibility scans;
+all sixteen final warning/kept-editor captures were inspected in four contact sheets. The
+filtered owner/visual run passed 29 selected cases, with 21 deliberately unselected cases; it
+is not a package-wide result. Unedited golden-write/immutability suites passed twenty cases.
+Dashboard types, scoped lint, formatting and diff check passed. Local commands, diagnostics,
+baseline probe and captures are retained under `receipts/w69-profile-container-20261006`.
+The temporary visual source/captures and restored candidate were removed from product source.
+
+Tasks 1/4 remain partial. Inline split/transfer choices and Tasks 5/6 page/setup/history/navigation
+and native reload remain. Neither proposed W69 PR is ready for finish-branch at this checkpoint.

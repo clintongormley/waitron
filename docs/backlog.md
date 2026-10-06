@@ -1222,11 +1222,23 @@ choice; Discard resets only local entry, leaving the party draft intact. Confirm
 before dispatching the existing request. Focused browser cases cover child reports, reconnect,
 detached controls and delayed clean closes against replacement openings. Station choices and
 line removals already retained by the party draft remain exempt from a second warning. Remaining
-inline split/transfer selections, the profile container close and page/history/navigation work
+inline split/transfer selections and page/history/navigation work
 keep W69 incomplete. Line-edit station choices now ask through Cancel/native Escape on the branch.
 Keep retains the chosen station; Discard closes without retrying. Confirm accepts the existing exact
 retry directly and invalidates an older question. Focused browser cases cover clean/reverted entry,
 ancestor leave, replacement controls, child close reports, disconnect and immediate operator lock.
+The outer Account settings dialog now consults its child’s guard before footer Close or native
+Escape. Keep preserves the child and profile URL; Discard closes only that profile. A child save
+in flight refuses outer close, and forced expiry clears credential proof without asking. Focused
+real-shell cases cover reverts, save/refused refresh, stale answers and unrelated retained drafts.
+
+**Sidebar contrast (found during W69, 2026-10-06) — OPEN.** At desktop width in the light theme,
+axe reports the selected My schedule navigation button at 4.32:1 against the required 4.5:1.
+A disposable-copy probe using `dashboard-app.ts` from main `fd836ea05f46b03f23803a243b98ba075b4ea22b`
+reproduced it with the profile closed (`baseline-sidebar-contrast.log` in this checkpoint’s local
+receipts). W69 leaves the sidebar palette unchanged. Adjust the selected navigation’s token use,
+then check the real desktop sidebar in both themes. The profile warning/editor scans passed when
+restricted to those visible modal surfaces; the whole-shell scan still reports this separate issue.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
 redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue

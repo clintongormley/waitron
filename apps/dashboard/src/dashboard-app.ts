@@ -1,4 +1,4 @@
-import { LeaveController } from "@waitron/ui";
+import { LeaveController, type LeaveReason } from "@waitron/ui";
 import { dashboardPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -1780,6 +1780,11 @@ export class DashboardApp extends LitElement {
     `;
   }
 
+  readonly #beforeProfileClose = async (reason: LeaveReason): Promise<boolean> => {
+    const profile = this.renderRoot.querySelector<ProfileScreen>("dashboard-profile-screen");
+    return profile ? profile.requestLeave(reason) : true;
+  };
+
   /** profile-screen's per-field edit modals nest inside this one deliberately: this modal is the page,
    * they are its forms. */
   #renderProfileModal(): TemplateResult {
@@ -1788,6 +1793,7 @@ export class DashboardApp extends LitElement {
         size="standard"
         heading=${t("profile.title")}
         .open=${this.profileOpen}
+        .beforeClose=${this.#beforeProfileClose}
         @wt-close=${(e: Event) => {
           // profile-screen's own nested edit modal sends the same composed, bubbling wt-close.
           if (e.target !== e.currentTarget) return;
@@ -1809,7 +1815,11 @@ export class DashboardApp extends LitElement {
             : nothing
         }
         <wt-form-actions slot="footer">
-          <wt-button slot="cancel" data-test="close-profile" @click=${() => this.#closeProfile()}
+          <wt-button
+            slot="cancel"
+            data-test="close-profile"
+            @click=${(event: Event) =>
+              void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("cancel")}
             >${t("action.close")}</wt-button
           >
           ${
