@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { MenuDocument } from "../api/client.js";
 import type { DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
 import {
@@ -84,6 +84,21 @@ describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) =>
     );
     el.shadowRoot!.querySelector<HTMLElement>('[data-region="structure"] wt-button.tile')!.click();
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders search results, named by a heading drawn for screen readers only, accessibly", async () => {
+    const { el, host } = await mountWidget<DeviceHomePreview>(
+      "dashboard-device-home-preview",
+      { document: lunch() },
+      theme,
+    );
+    await search(el, "a");
+    const results = el.shadowRoot!.querySelector('[data-region="results"]')!;
+    expect(results.querySelectorAll(".tile").length).toBeGreaterThan(0);
+    const heading = el.shadowRoot!.getElementById(results.getAttribute("aria-labelledby")!)!;
+    expect(heading.textContent!.trim()).toBe("Resultados de la búsqueda");
+    expect(heading.getBoundingClientRect().width).toBeLessThanOrEqual(1);
     await expectNoA11yViolations(host);
   });
 

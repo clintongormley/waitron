@@ -1,6 +1,11 @@
 import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { ContentLanguageController, baseStyles, readableTextColor } from "@waitron/ui";
+import {
+  ContentLanguageController,
+  baseStyles,
+  readableTextColor,
+  visuallyHiddenStyles,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -109,9 +114,7 @@ export class DeviceHomePreview extends LitElement {
       }
 
       [data-region="results"] h2 {
-        margin: 0;
-        font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
+        ${visuallyHiddenStyles}
       }
 
       .divider {

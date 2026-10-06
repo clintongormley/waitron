@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { CATEGORY_PALETTE, setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import type {
@@ -1203,6 +1203,107 @@ describe("till-menu-browser", () => {
       await search(el, "");
       expect(regions(el)).toEqual(["search", "section"]);
       expect(breadcrumb(el)).toBe("Home › Comida (ES)");
+    });
+
+    describe.each(["light", "dark"] as const)("between the groups (%s theme)", (theme) => {
+      async function servedIn(menus: TillZoneMenu[]) {
+        const { el, host } = await mountWidget<TillMenuBrowser>(
+          "till-menu-browser",
+          {
+            menu: lunch(),
+            products: PRODUCTS,
+            store: new WorkingOrderStore(),
+            menus,
+            servedProducts: SERVED,
+          },
+          theme,
+        );
+        await widen(host, 600);
+        return { el, host };
+      }
+
+      /** The colour `--wt-color-border` resolves to where the results are drawn. */
+      function borderToken(el: TillMenuBrowser): string {
+        const probe = document.createElement("span");
+        probe.style.color = "var(--wt-color-border)";
+        root(el).querySelector('[data-region="results"]')!.appendChild(probe);
+        const colour = getComputedStyle(probe).color;
+        probe.remove();
+        return colour;
+      }
+
+      const lineAbove = (group: HTMLElement) => {
+        const style = getComputedStyle(group);
+        return { width: style.borderTopWidth, colour: style.borderTopColor };
+      };
+
+      it("draws a thin line in the border colour between consecutive menu groups, and none outside them", async () => {
+        const { el } = await servedIn([lunch(), drinksMenu(), brunchMenu()]);
+        await search(el, "o");
+        const sections = groupSections(el);
+        expect(sections.map((group) => group.dataset.menu)).toEqual([
+          "menu-lunch",
+          "menu-drinks",
+          "menu-brunch",
+        ]);
+        const line = { width: "1px", colour: borderToken(el) };
+        expect(lineAbove(sections[0]!).width).toBe("0px");
+        expect(lineAbove(sections[1]!)).toEqual(line);
+        expect(lineAbove(sections[2]!)).toEqual(line);
+        for (const group of sections) expect(getComputedStyle(group).borderBottomWidth).toBe("0px");
+        expect(root(el).querySelectorAll('[data-region="results"] hr')).toHaveLength(0);
+
+        // The line lies below the group above's last tile and above the next group's heading.
+        for (const [above, below] of [
+          [sections[0]!, sections[1]!],
+          [sections[1]!, sections[2]!],
+        ] as const) {
+          const lastTile = [...above.querySelectorAll<HTMLElement>("wt-button[data-kind]")].at(-1)!;
+          const lineTop = below.getBoundingClientRect().top;
+          expect(lastTile.getBoundingClientRect().bottom).toBeLessThan(lineTop);
+          expect(lineTop).toBeLessThan(below.querySelector("h3")!.getBoundingClientRect().top);
+        }
+      });
+
+      it("draws no line for a device served one menu", async () => {
+        const { el } = await servedIn([lunch()]);
+        await search(el, "co");
+        expect(groupSections(el)).toEqual([]);
+        const results = root(el).querySelector<HTMLElement>('[data-region="results"]')!;
+        const lines = [results, ...results.querySelectorAll<HTMLElement>("section, hr")].filter(
+          (node) => node.localName === "hr" || getComputedStyle(node).borderTopWidth !== "0px",
+        );
+        expect(lines).toEqual([]);
+      });
+
+      it.each([
+        ["en-GB", "Search results"],
+        ["es-ES", "Resultados de la búsqueda"],
+      ] as const)(
+        "in %s, names the results region for screen readers without drawing its heading, so the first group's heading is at the top",
+        async (locale, name) => {
+          setLocale(locale);
+          const { el } = await servedIn([lunch(), drinksMenu()]);
+          await search(el, "co");
+          const results = root(el).querySelector<HTMLElement>('[data-region="results"]')!;
+          const heading = root(el).getElementById(results.getAttribute("aria-labelledby")!)!;
+          expect(heading.localName).toBe("h2");
+          expect(heading.textContent!.trim()).toBe(name);
+          expect(
+            await page.getByRole("heading", { name, level: 2, exact: true }).elements(),
+          ).toEqual([heading]);
+          const box = heading.getBoundingClientRect();
+          expect(box.width).toBeLessThanOrEqual(1);
+          expect(box.height).toBeLessThanOrEqual(1);
+          expect(getComputedStyle(heading).overflow).toBe("hidden");
+          const firstHeading = groupSections(el)[0]!.querySelector("h3")!;
+          expect(
+            Math.abs(
+              firstHeading.getBoundingClientRect().top - results.getBoundingClientRect().top,
+            ),
+          ).toBeLessThan(1);
+        },
+      );
     });
   });
 
