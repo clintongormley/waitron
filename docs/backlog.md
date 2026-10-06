@@ -6557,9 +6557,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   editable tree, resolves quick-sale and receipt choices by department with optional zone overrides,
   and keeps today's zone-menu and device-default-zone controls temporarily in that screen. Its
   follow-up A261-2c removes the retired `locations.order_flow` column after a separate rebuild audit.
-  Review follow-ups: the Numbered collection choice applies to the new `prepay` and
-  `ticket_then_pay` quick-sale paths; decide whether to extend it to retained legacy
-  `invoice_first` zones before changing their behavior.
+  Owner decision, 2026-10-05: retire the legacy `invoice_first` collection-ticket path
+  in A261-2c alongside the column, with a venue reset accepted. That implementation has not
+  landed; the item is parked pending the populated-upgrade test's reset decision.
+  The Numbered collection choice applies to `prepay` and `ticket_then_pay` quick sales.
   A261-2d identifies the `floor_zones` name key in `createServiceZone` and the
   server's `createZone`/`updateZone`; primary-key clashes remain database errors. Focused
   real-database tests force all three clashes and retain duplicate-name and rollback checks.
@@ -6569,7 +6570,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   item, `apps/server/src/tables.ts` still translates every unique refusal in `createTable`,
   `updateTable`, `createStatus` and `updateStatus` to a label collision; a separate
   follow-up should identify each label key and force another-key clash.
-  A261-2e runs an encrypted export captured from `c47122f55^` through the current setup import
+  [A261-2e, PR #1277](https://github.com/clintongormley/waitron/pull/1277) is landed. It runs an encrypted export captured from `c47122f55^` through the current setup import
   route. It answers `setup.request_invalid` (`module:core`); every database table's rows match
   their before-state and the staging directory remains empty. Setup now tells you in English and
   Spanish to export again from a box running the current version for a module-version or
