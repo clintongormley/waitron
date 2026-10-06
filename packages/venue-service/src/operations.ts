@@ -1,7 +1,6 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import {
   catalogues,
-  devices,
   diningTables,
   floorZones,
   refusalOn,
@@ -31,7 +30,6 @@ import { AppError, type LocationId } from "@waitron/shared";
 import {
   departmentSalePolicies,
   departments,
-  deviceZoneDefaults,
   orderServiceContexts,
   saleReceiptHeaders,
   workingLineContexts,
@@ -40,6 +38,7 @@ import {
   zoneServicePolicies,
 } from "./schema/service.js";
 import { routeExceptions } from "./schema/routing.js";
+import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
 
 export interface VenueScope {
@@ -298,7 +297,6 @@ export async function deactivateServiceZone(
 
   await tx.delete(routeExceptions).where(eq(routeExceptions.zoneId, zoneId));
   await tx.delete(watcherZones).where(eq(watcherZones.zoneId, zoneId));
-  await tx.delete(deviceZoneDefaults).where(eq(deviceZoneDefaults.zoneId, zoneId));
   await tx.update(diningTables).set({ active: false }).where(eq(diningTables.zoneId, zoneId));
   await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zoneId));
 }
@@ -824,11 +822,15 @@ export async function menuState(tx: Transaction, zoneId: string): Promise<ZoneMe
   return state;
 }
 
-/** Resolve an explicit service zone, or the venue's configured counter default for a new order. */
+/**
+ * A new order's zone: the one named, else the profile's starting zone when the profile has a
+ * department, else the venue's counter default. A named zone is not checked against the profile
+ * here.
+ */
 export async function resolveNewOrderZone(
   tx: Transaction,
   cfg: VenueScope,
-  input: { zoneId?: string | null; deviceId?: string | null },
+  input: { zoneId?: string | null; profileId?: string | null },
 ): Promise<{
   zoneId: string;
   departmentId: string;
@@ -839,19 +841,13 @@ export async function resolveNewOrderZone(
   if (input.zoneId !== undefined && input.zoneId !== null) {
     return resolveZoneContext(tx, cfg, input.zoneId);
   }
-  if (input.deviceId !== undefined && input.deviceId !== null) {
-    const [deviceDefault] = await tx
-      .select({ zoneId: deviceZoneDefaults.zoneId })
-      .from(deviceZoneDefaults)
-      .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, deviceZoneDefaults.zoneId))
-      .where(
-        and(
-          eq(deviceZoneDefaults.deviceId, input.deviceId),
-          eq(zoneServicePolicies.locationId, cfg.locationId),
-        ),
-      );
-    if (deviceDefault !== undefined) {
-      return resolveZoneContext(tx, cfg, deviceDefault.zoneId);
+  if (input.profileId !== undefined && input.profileId !== null) {
+    const zones = await readProfileZones(tx, cfg, input.profileId);
+    if (zones.departmentId !== null) {
+      if (zones.startingZoneId === null) {
+        throw new AppError("device_profile.no_service_zone", { profileId: input.profileId });
+      }
+      return resolveZoneContext(tx, cfg, zones.startingZoneId);
     }
   }
   const [policy] = await tx
@@ -865,60 +861,6 @@ export async function resolveNewOrderZone(
     );
   if (policy === undefined) throw new AppError("service_zone.default_missing", {});
   return resolveZoneContext(tx, cfg, policy.zoneId);
-}
-
-/** Set the initial counter zone for one enrolled device at this venue. */
-export async function setDeviceDefaultZone(
-  tx: Transaction,
-  cfg: VenueScope,
-  deviceId: string,
-  zoneId: string,
-): Promise<void> {
-  const [device] = await tx
-    .select({ id: devices.id })
-    .from(devices)
-    .where(
-      and(
-        eq(devices.locationId, cfg.locationId),
-        eq(devices.id, deviceId),
-        eq(devices.active, true),
-      ),
-    );
-  if (device === undefined)
-    throw new AppError("route.subject_not_found", { subject: "device", id: deviceId });
-  await resolveZoneContext(tx, cfg, zoneId);
-  await tx
-    .insert(deviceZoneDefaults)
-    .values({ deviceId, zoneId })
-    .onConflictDoUpdate({
-      target: [deviceZoneDefaults.deviceId],
-      set: { zoneId },
-    });
-}
-
-export async function listDeviceDefaultZones(
-  tx: Transaction,
-  cfg: VenueScope,
-): Promise<{ deviceId: string; zoneId: string }[]> {
-  return tx
-    .select({ deviceId: deviceZoneDefaults.deviceId, zoneId: deviceZoneDefaults.zoneId })
-    .from(deviceZoneDefaults)
-    .innerJoin(devices, eq(devices.id, deviceZoneDefaults.deviceId))
-    .where(eq(devices.locationId, cfg.locationId));
-}
-
-export async function clearDeviceDefaultZone(
-  tx: Transaction,
-  cfg: VenueScope,
-  deviceId: string,
-): Promise<void> {
-  const [device] = await tx
-    .select({ id: devices.id })
-    .from(devices)
-    .where(and(eq(devices.id, deviceId), eq(devices.locationId, cfg.locationId)));
-  if (device !== undefined) {
-    await tx.delete(deviceZoneDefaults).where(eq(deviceZoneDefaults.deviceId, deviceId));
-  }
 }
 
 /** Snapshot the zone's current department and payment flow when a new order opens. */
@@ -1002,6 +944,22 @@ export async function findOrderServiceContext(
       ),
     );
   return row === undefined ? null : { ...row, serviceMode: row.serviceMode as ServiceMode };
+}
+
+/**
+ * A WHERE condition that holds for an order whose recorded zone is one of `zoneIds`, or that has no
+ * recorded zone at this location. `orderId` is the outer query's order id, table-qualified.
+ */
+export function orderInZones(cfg: VenueScope, orderId: SQL, zoneIds: readonly string[]): SQL {
+  const outside =
+    zoneIds.length === 0
+      ? sql``
+      : sql` and osc.zone_id not in (${sql.join(
+          zoneIds.map((zoneId) => sql`${zoneId}`),
+          sql`, `,
+        )})`;
+  return sql`not exists (select 1 from order_service_contexts osc
+    where osc.working_order_id = ${orderId} and osc.location_id = ${cfg.locationId}${outside})`;
 }
 
 /** Each named order's frozen service mode, read at once; an order with no context is absent. */

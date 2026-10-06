@@ -45,7 +45,7 @@ import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts } from "./zone-offers.js";
 import { partyRevisionOfOrder } from "../parties.js";
 import { parkOrder, placeOrder } from "../working-order.js";
-import { deviceRequestCfg } from "./session-device.js";
+import { BASIC_ACTIONS, deviceRequestCfg } from "./session-device.js";
 
 /**
  * A provisioned venue for the bill payment suites that take a card on a reader: real Veri*Factu
@@ -179,9 +179,18 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
         {
           name: "Counter till",
           formFactor: "till",
-          capabilities: ["integrated-card-payment", "open-cash-drawer", "take-cash"],
+          capabilities: [
+            ...BASIC_ACTIONS,
+            "integrated-card-payment",
+            "open-cash-drawer",
+            "take-cash",
+          ],
         },
-        { name: "Cash till", formFactor: "till", capabilities: ["open-cash-drawer", "take-cash"] },
+        {
+          name: "Cash till",
+          formFactor: "till",
+          capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
+        },
       ])
       .returning({ id: deviceProfiles.id });
     const printer = await createPrinter(

@@ -132,6 +132,8 @@ export class TillTabShell extends LitElement {
   /** Suppresses the whole operator `<header>`: a kitchen display shows just its cards, no operator
    * chrome (owner decision 2026-09-04). */
   @property({ type: Boolean }) kiosk = false;
+  /** The device is approved for more than one profile, so a signed-in person may switch it. */
+  @property({ type: Boolean }) canSwitchProfile = false;
 
   @queryAssignedElements({ slot: "drill" }) private drillNodes!: HTMLElement[];
 
@@ -217,6 +219,16 @@ export class TillTabShell extends LitElement {
                             variant="secondary"
                             @click=${() => this.#emit("show-schedule")}
                             >${t("schedule.open")}</wt-button
+                          >`
+                        : nothing
+                    }
+                    ${
+                      this.canSwitchProfile
+                        ? html`<wt-button
+                            class="profile"
+                            variant="secondary"
+                            @click=${() => this.#emit("open-profile")}
+                            >${t("profile.open")}</wt-button
                           >`
                         : nothing
                     }

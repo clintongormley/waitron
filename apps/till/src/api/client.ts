@@ -23,7 +23,7 @@ import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
  * {@link menuOfferToTillProduct} from an offer and by `getHeldOrder` from a retrieved line.
  */
 
-import type { CanvasDef, CapabilityFlag, ReceiptConfig } from "../layout.js";
+import type { CanvasDef, CapabilityFlag, NavigationScreen, ReceiptConfig } from "../layout.js";
 import type {
   ExtraSelection,
   KitchenSignal,
@@ -131,6 +131,8 @@ export interface TillInfo {
    * (also a no-profile or cookieless request).
    */
   inactivityTimeoutSeconds: number | null;
+  /** The screen the CALLING device's profile opens at each sign-in; absent or `null` for none. */
+  startingScreen?: NavigationScreen | null;
   /** This node's id, so the app can tell which `servers` entry it is on. */
   nodeId: string;
   /** The venue's routable servers, primary first; `[]` when no membership document is held. */
@@ -1368,6 +1370,22 @@ export interface DeviceIdentity {
   paymentSlipPrinterId: string | null;
   /** The switched-on printers the device's profile lists for each kind of printing, in list order. */
   printerChoices: { receipt: PrinterChoice[]; paymentSlip: PrinterChoice[] };
+  /** The device's active profile. A server too old to send it offers no switch. */
+  profileId?: string;
+  /** The profiles a signed-in person may switch the device to, the active one first. */
+  approvedProfiles?: ProfileChoice[];
+}
+
+export interface ProfileChoice {
+  id: string;
+  name: string;
+}
+
+/** `POST /api/device/active-profile` success: the device's profile and printers as stored. */
+export interface DeviceProfileSwitched {
+  activeProfileId: string;
+  receiptPrinterId: string | null;
+  paymentSlipPrinterId: string | null;
 }
 
 export interface PrinterChoice {
@@ -1949,8 +1967,12 @@ export class TillApi {
     return this.#localesPromise;
   }
 
-  listStaff(): Promise<StaffMember[]> {
-    return this.#request<StaffMember[]>("/api/staff", "GET");
+  /** The people who may sign in on this device; with `everyone`, every active colleague. */
+  listStaff(options: { everyone?: boolean } = {}): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      options.everyone === true ? "/api/staff?everyone=true" : "/api/staff",
+      "GET",
+    );
   }
 
   login(personId: string, pin: string): Promise<SessionResult> {
@@ -2376,6 +2398,18 @@ export class TillApi {
    */
   getDeviceIdentity(): Promise<DeviceIdentity> {
     return this.#request<DeviceIdentity>("/api/device/me", "GET");
+  }
+
+  /**
+   * Switch the session's device to another approved profile → `POST /api/device/active-profile`. The
+   * server refuses a profile the device is not approved for (`device_profile.not_approved`), one the
+   * signed-in person may not use (`device_profile.not_admitted`), and a switch during a card payment
+   * the device started (`device.payment_in_progress`).
+   */
+  switchDeviceProfile(profileId: string): Promise<DeviceProfileSwitched> {
+    return this.#request<DeviceProfileSwitched>("/api/device/active-profile", "POST", {
+      profileId,
+    });
   }
 
   /**

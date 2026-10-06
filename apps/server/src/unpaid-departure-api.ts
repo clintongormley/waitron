@@ -18,6 +18,7 @@ import { requestCfg } from "./request-config.js";
 import { requireSession } from "./till-session.js";
 import { recordUnpaidDeparture, type UnpaidDepartureRequest } from "./unpaid-departure.js";
 import "./errors.js";
+import { checkZones } from "./zone-access.js";
 
 /** The body, refused field by field as `management.request_invalid`, as a bill refund's is. */
 function parseDeparture(body: Record<string, unknown>): UnpaidDepartureRequest {
@@ -44,7 +45,7 @@ export function mountUnpaidDepartureApi(
 ): void {
   app.post("/api/parties/:id/unpaid-departure", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId, sessionId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
@@ -57,13 +58,14 @@ export function mountUnpaidDepartureApi(
       );
       const result = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
         const checkedRequest = { ...request, override: withCheck(request.override, checked) };
-        return withTransaction(deps.db, (tx) =>
-          recordUnpaidDeparture(tx, { ...deps, log }, cfg, partyId, checkedRequest, {
+        return withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          return recordUnpaidDeparture(tx, { ...deps, log }, cfg, partyId, checkedRequest, {
             personId,
             sessionId,
             attempts,
-          }),
-        );
+          });
+        });
       });
       return c.json(result);
     }),

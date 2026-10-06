@@ -46,6 +46,9 @@ export const deviceProfiles = table(
     // Auto-logout idle timeout in seconds; NULL = never. `validateInactivityTimeout`
     // (@waitron/layouts) forces NULL for a kds profile on write; the database does not.
     inactivityTimeoutSeconds: count("inactivity_timeout_seconds"),
+    // NULL = the canvas's first view. No CHECK: one would make drizzle-kit rebuild this table. The
+    // store (`validateStartingScreen`, @waitron/layouts) refuses a screen the profile does not show.
+    startingScreen: label("starting_screen"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
     retiredAt: tsString("retired_at"),

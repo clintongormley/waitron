@@ -406,3 +406,17 @@ test("a real click on the thumb of a switch that is on turns it off exactly once
   expect(el.checked).toBe(false);
   expect(changes.count).toBe(1);
 });
+
+test("describes the switch by its description, and by nothing without one", async () => {
+  const el = await mount(
+    '<wt-switch label="Every zone" description="Includes zones added later"></wt-switch>',
+  );
+  const input = el.shadowRoot!.querySelector("input")!;
+  const described = input.getAttribute("aria-describedby")!;
+  expect(el.shadowRoot!.getElementById(described)?.textContent?.trim()).toBe(
+    "Includes zones added later",
+  );
+  el.removeAttribute("description");
+  await (el as import("./wt-switch.js").WtSwitch).updateComplete;
+  expect(input.hasAttribute("aria-describedby")).toBe(false);
+});

@@ -13,7 +13,12 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorizeManager, endDeviceSessions, type Permission } from "@waitron/identity";
+import {
+  authorizeManager,
+  endDeviceSessions,
+  profilesAdmitting,
+  type Permission,
+} from "@waitron/identity";
 import {
   chooseDevicePrinter,
   kindOfFormFactor,
@@ -25,13 +30,25 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import {
+  assertProfileAction,
   parseDeviceCookie,
   readDeviceCookie,
   requireDevice,
   setDeviceCookie,
   sightingDue,
 } from "./device-session.js";
-import { requireDeviceName, resolveDeviceBinding, updateDeviceSettings } from "./device.js";
+import {
+  approveDeviceProfiles,
+  assertNoPaymentInProgress,
+  endSessionsNotAdmitted,
+  keepApprovedAfterSwitch,
+  readApprovedAlternatives,
+  readApprovedProfiles,
+  requireDeviceName,
+  resolveDeviceBinding,
+  switchActiveProfile,
+  updateDeviceSettings,
+} from "./device.js";
 import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
@@ -44,7 +61,7 @@ import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
-import { isUuid, requireSession } from "./till-session.js";
+import { isUuid, requireSession, signedInPersonOn } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TillConfig } from "./till-config.js";
@@ -96,6 +113,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,
   "session.required": 401,
   "device.forbidden_station": 403,
+  "device.forbidden_action": 403,
+  "device_profile.not_approved": 403,
+  "device_profile.not_admitted": 403,
+  "device_profile.incompatible": 400,
+  "device.payment_in_progress": 409,
   // The knock's own refusals. `pairing_closed` is a 403 rather than a 401: the door is shut, not
   // the caller unknown, and the device's next step is a person, not a credential.
   "device.pairing_closed": 403,
@@ -113,6 +135,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.not_found": 404,
   "station.not_found": 404,
   "watcher.not_found": 404,
+  "station.not_allowed": 400,
+  "watcher.not_allowed": 400,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -235,6 +259,18 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       const choices = await printerChoices(deps.db, device.deviceProfileId, device.locationId);
+      const approvedProfiles = await withTransaction(deps.db, async (tx) => {
+        const [active, ...alternatives] = await readApprovedProfiles(tx, device.deviceId);
+        if (active === undefined) return [];
+        const personId = await signedInPersonOn(tx, c, device.deviceId);
+        if (personId === null) return [active, ...alternatives];
+        const admitted = await profilesAdmitting(
+          tx,
+          personId,
+          alternatives.map((profile) => profile.id),
+        );
+        return [active, ...alternatives.filter((profile) => admitted.includes(profile.id))];
+      });
       // Non-secret config only: the reader's credentials never ride this response.
       return c.json({
         deviceId: device.deviceId,
@@ -246,6 +282,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         receiptPrinterId: device.receiptPrinterId,
         paymentSlipPrinterId: device.paymentSlipPrinterId,
         printerChoices: choices,
+        profileId: device.deviceProfileId,
+        // Its active profile first, then the approved ones the person signed in on it may use; every
+        // approved one with nobody signed in. Display only: the switch checks both again.
+        approvedProfiles,
       });
     }),
   );
@@ -285,6 +325,20 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         return row!;
       });
       return c.json(stored, 200);
+    }),
+  );
+
+  // ── Switch the session's device to another approved profile (SESSION-GUARDED) ──────────────────
+  // A signed-in person is required, so a shared display with nobody signed in cannot switch.
+  app.post("/api/device/active-profile", (c) =>
+    run(c, log, async () => {
+      const { personId, sessionId, device } = await requireSession({ db: deps.db }, c);
+      const body = await readJsonBody<{ profileId?: unknown }>(c);
+      const profileId = requireBodyUuid(body.profileId, "profileId");
+      const switched = await withTransaction(deps.db, (tx) =>
+        switchActiveProfile(tx, { deviceId: device.deviceId, sessionId, personId, profileId }),
+      );
+      return c.json(switched, 200);
     }),
   );
 
@@ -383,6 +437,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       if (device.stationId === null) throw new AppError("device.unauthorized", {});
+      assertProfileAction(device, "prepare-orders");
       const stationId = device.stationId;
       const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id");
@@ -395,11 +450,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   );
 
   // ── Bump one of the bound station's items (DEVICE-GUARDED) ────────────────────────────────────────────
-  // The `act-as-kds` capability flag is not enforced here; the route is gated by `requireDevice` and
-  // station ownership.
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      assertProfileAction(device, "prepare-orders");
       const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id");
       // A malformed id names no item exactly as an absent one does — screened to the SAME
@@ -433,7 +487,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       // The inner join always matches: `device_profile_id` is NOT NULL with a RESTRICT FK.
-      const { rows, madeHere } = await gated(sessionId, async (tx) => ({
+      const { rows, madeHere, alternatives } = await gated(sessionId, async (tx) => ({
         rows: await tx
           .select({
             id: devices.id,
@@ -462,6 +516,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           .leftJoin(watchers, eq(watchers.id, devices.watcherId))
           .orderBy(desc(devices.enrolledAt)),
         madeHere: await listMadeHereStations(tx),
+        alternatives: await readApprovedAlternatives(tx),
       }));
       return c.json(
         rows.map(
@@ -484,6 +539,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             profileRetired: profileRetiredAt !== null,
             kind: kindOfFormFactor(formFactor),
             madeHereStationIds: madeHere.get(row.id) ?? [],
+            approvedProfileIds: [
+              row.deviceProfileId,
+              ...(alternatives.get(row.id) ?? []).map((profile) => profile.id),
+            ],
           }),
         ),
       );
@@ -526,6 +585,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         receiptPrinterId?: unknown;
         paymentSlipPrinterId?: unknown;
         madeHereStationIds?: unknown;
+        approvedProfileIds?: unknown;
       }>(c);
       await gated(sessionId, async (tx) => {
         if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
@@ -559,6 +619,16 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         if (madeHere !== undefined && (!Array.isArray(madeHere) || !madeHere.every(isUuid))) {
           throw new AppError("management.request_invalid", { field: "madeHereStationIds" });
         }
+        // Absent leaves the stored approvals alone; the active profile is approved either way.
+        const approvedIds = body.approvedProfileIds;
+        if (
+          approvedIds !== undefined &&
+          (!Array.isArray(approvedIds) || !approvedIds.every(isUuid))
+        ) {
+          throw new AppError("management.request_invalid", { field: "approvedProfileIds" });
+        }
+        const switching = profileId !== device.deviceProfileId;
+        if (switching) await assertNoPaymentInProgress(tx, id);
         const binding = await resolveDeviceBinding(tx, deps.cfg, {
           profileId,
           stationId,
@@ -589,6 +659,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         if (madeHere !== undefined) {
           await setMadeHereStations(tx, deps.cfg, id, madeHere as string[]);
         }
+        await keepApprovedAfterSwitch(tx, id, device.deviceProfileId, profileId);
+        if (approvedIds !== undefined) await approveDeviceProfiles(tx, id, approvedIds as string[]);
+        if (switching) await endSessionsNotAdmitted(tx, id, profileId);
       });
       return c.body(null, 204);
     }),

@@ -43,13 +43,14 @@ import type {
   JoinRequestRow,
   PairingModeState,
   Printer,
+  ProfileKitchenLists,
   ReaderRow,
   Station,
   Watcher,
 } from "../api/client.js";
 
 type PairField = "name" | "profile" | "binding";
-type EditField = PairField | "receipt" | "slip" | "reader";
+type EditField = PairField | "receipt" | "slip" | "reader" | "approved";
 type IdentityErrors = Record<PairField, string>;
 type FieldRefusal = { field: EditField; code: string } | null;
 
@@ -58,7 +59,10 @@ const FIELD_BY_CODE: Record<string, EditField> = {
   "device.name_taken": "name",
   "device.station_required": "binding",
   "watcher.not_found": "binding",
+  "station.not_allowed": "binding",
+  "watcher.not_allowed": "binding",
   "device_profile.not_found": "profile",
+  "device_profile.incompatible": "approved",
 };
 
 const FIELD_BY_PARAM: Record<string, EditField> = {
@@ -68,6 +72,7 @@ const FIELD_BY_PARAM: Record<string, EditField> = {
   watcherId: "binding",
   receiptPrinterId: "receipt",
   paymentSlipPrinterId: "slip",
+  approvedProfileIds: "approved",
 };
 
 /** The field a refusal is about, when it is one of `shown` (CLAUDE.md §3: by what the error carries). */
@@ -79,7 +84,9 @@ function refusedField(
   const code = codeOf(error);
   const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
   let field: EditField | undefined;
-  if (code === "management.request_invalid" || code === "device.binding_invalid")
+  // An unknown approved profile names its field; an unknown active profile names none.
+  const named = code === "device_profile.not_found" && typeof params.field === "string";
+  if (code === "management.request_invalid" || code === "device.binding_invalid" || named)
     field = typeof params.field === "string" ? FIELD_BY_PARAM[params.field] : undefined;
   // A made-here station refused the same way names no field the form marks.
   else if (code === "station.not_found")
@@ -113,6 +120,8 @@ interface EditForm {
   receiptPrinterId: string;
   paymentSlipPrinterId: string;
   madeHere: string[];
+  /** Ticked profiles staff may switch to; only those {@link DevicesScreen} offers are sent. */
+  approved: string[];
 }
 
 /** A Shows choice as the ids a request carries. */
@@ -271,6 +280,10 @@ export class DevicesScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
+      .field-error {
+        margin: var(--wt-space-2) 0 0;
+        color: var(--wt-color-danger);
+      }
     `,
   ];
 
@@ -296,6 +309,7 @@ export class DevicesScreen extends LitElement {
   @state() private devices: DeviceRow[] = [];
   @state() private stations: Station[] = [];
   @state() private watchers: Watcher[] = [];
+  @state() private kitchenLists: ({ profileId: string } & ProfileKitchenLists)[] = [];
   @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
   @state() private pairing: PairingModeState | undefined;
@@ -361,6 +375,7 @@ export class DevicesScreen extends LitElement {
     receiptPrinterId: "",
     paymentSlipPrinterId: "",
     madeHere: [],
+    approved: [],
   };
   /** Edit's Shows offers it even when switched off; a save replaces it with what was saved. */
   @state() private editHeld: HeldBinding | null = null;
@@ -399,6 +414,9 @@ export class DevicesScreen extends LitElement {
         }),
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.deviceProfiles = value;
+        }),
+        this.#queries.watch("listProfileKitchenLists", [], (value) => {
+          this.kitchenLists = value;
         }),
         this.#queries.watch("listPrinters", [], (value) => {
           this.printers = value;
@@ -572,7 +590,8 @@ export class DevicesScreen extends LitElement {
     }
   }
 
-  /** A returning device starts from its own row; a profile, station or watcher since gone starts empty. */
+  /** A returning device starts from its own row; a profile, station or watcher since gone, or one
+   * its profile no longer lists, starts empty. */
   #toSettings(request: JoinRequestRow): void {
     const back = request.returning ?? null;
     const profileId =
@@ -584,7 +603,10 @@ export class DevicesScreen extends LitElement {
     this.pairStep = "settings";
     this.pairName = waitingName(request);
     this.chosenProfileId = profileId;
-    this.chosenBinding = back === null ? "" : this.#activeBinding(back);
+    const binding = back === null ? "" : this.#activeBinding(back);
+    this.chosenBinding = this.#bindingOptions(profileId).some((option) => option.value === binding)
+      ? binding
+      : "";
     this.formAttempted = false;
     this.fieldRefusal = null;
     this.pairError = null;
@@ -838,6 +860,7 @@ export class DevicesScreen extends LitElement {
       receiptPrinterId: device.receiptPrinterId ?? "",
       paymentSlipPrinterId: device.paymentSlipPrinterId ?? "",
       madeHere: device.madeHereStationIds,
+      approved: device.approvedProfileIds,
     };
     this.editAttempted = false;
     this.editRefusal = null;
@@ -891,7 +914,7 @@ export class DevicesScreen extends LitElement {
 
   #editErrors(): Record<EditField, string> {
     return withRefusal(
-      { ...this.#editOwnErrors(), receipt: "", slip: "", reader: "" },
+      { ...this.#editOwnErrors(), receipt: "", slip: "", reader: "", approved: "" },
       this.editRefusal,
     );
   }
@@ -903,9 +926,13 @@ export class DevicesScreen extends LitElement {
 
   #onEditProfile(profileId: string): void {
     const profile = this.deviceProfiles.find((p) => p.id === profileId);
+    const offered = this.#bindingOptions(profileId, this.editHeld).some(
+      (option) => option.value === this.editForm.binding,
+    );
     this.#setEdit(
       {
         profileId,
+        binding: offered ? this.editForm.binding : "",
         receiptPrinterId: this.#firstSwitchedOn(profile?.receiptPrinterIds ?? []),
         paymentSlipPrinterId: this.#firstSwitchedOn(profile?.paymentSlipPrinterIds ?? []),
       },
@@ -913,7 +940,40 @@ export class DevicesScreen extends LitElement {
       "binding",
       "receipt",
       "slip",
+      "approved",
     );
+  }
+
+  /** The other live profiles of the chosen profile's form factor: the only ones the server approves. */
+  #approvalChoices(): DeviceProfile[] {
+    const chosen = this.deviceProfiles.find((p) => p.id === this.editForm.profileId);
+    if (chosen === undefined) return [];
+    return this.deviceProfiles.filter(
+      (p) => p.formFactor === chosen.formFactor && p.id !== chosen.id,
+    );
+  }
+
+  #approvedOf(ids: readonly string[]): string[] {
+    return this.#approvalChoices()
+      .filter((p) => ids.includes(p.id))
+      .map((p) => p.id);
+  }
+
+  /**
+   * Sent only when the ticked profiles differ from what the server keeps without them: the stored
+   * approvals, the device's current profile among them, so an edit that leaves them alone says
+   * nothing.
+   */
+  #approvalsToSend(device: DeviceRow): { approvedProfileIds?: string[] } {
+    const ticked = this.#approvedOf(this.editForm.approved);
+    const kept = this.#approvedOf(device.approvedProfileIds);
+    const same = ticked.length === kept.length && ticked.every((id) => kept.includes(id));
+    return same ? {} : { approvedProfileIds: ticked };
+  }
+
+  #onApprovedChange(profileId: string, checked: boolean): void {
+    const rest = this.editForm.approved.filter((id) => id !== profileId);
+    this.#setEdit({ approved: checked ? [...rest, profileId] : rest }, "approved");
   }
 
   /**
@@ -973,7 +1033,9 @@ export class DevicesScreen extends LitElement {
     this.editError = null;
     this.editRefusal = null;
     const savedBinding = this.#editBindingShown() ? form.binding : "";
-    const picked = this.#bindingOptions().find((option) => option.value === savedBinding);
+    const picked = this.#bindingOptions(form.profileId, this.editHeld).find(
+      (option) => option.value === savedBinding,
+    );
     const sent = {
       name: form.name.trim(),
       profileId: form.profileId,
@@ -981,6 +1043,7 @@ export class DevicesScreen extends LitElement {
       receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
       paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
       ...(this.#editBindingShown() ? {} : { madeHereStationIds: this.#madeHereToSend() }),
+      ...this.#approvalsToSend(device),
     };
     try {
       await this.api.updateDevice(device.id, sent);
@@ -993,6 +1056,7 @@ export class DevicesScreen extends LitElement {
         ...(this.#editBindingShown() ? (["binding"] as const) : []),
         "receipt",
         "slip",
+        ...(this.#approvalChoices().length > 0 ? (["approved"] as const) : []),
       ]);
       if (field === null) this.editError = codeOf(error);
       else this.editRefusal = { field, code: codeOf(error) };
@@ -1003,8 +1067,17 @@ export class DevicesScreen extends LitElement {
     if (savedBinding !== this.editHeld?.value)
       this.editHeld = picked === undefined ? null : { value: savedBinding, name: picked.label };
     // The reader save below can fail and keep the dialog open, which then edits what was just saved.
-    const { name: label, profileId: deviceProfileId, ...rest } = sent;
-    this.editing = { ...device, ...rest, label, deviceProfileId };
+    const { name: label, profileId: deviceProfileId, approvedProfileIds, ...rest } = sent;
+    this.editing = {
+      ...device,
+      ...rest,
+      label,
+      deviceProfileId,
+      approvedProfileIds:
+        approvedProfileIds === undefined
+          ? device.approvedProfileIds
+          : [deviceProfileId, ...approvedProfileIds],
+    };
     const readerId = this.chosenReaderId === "" ? null : this.chosenReaderId;
     if (this.readerState === "ready" && readerId !== this.#storedReaderId) {
       // Saved separately: the reader belongs to the payments module and its own permission (spec §5).
@@ -1301,6 +1374,7 @@ export class DevicesScreen extends LitElement {
     disabled = false,
     held: HeldBinding | null = null,
   ): TemplateResult {
+    const bindingOptions = this.#bindingOptions(values.profileId, held);
     return html`<wt-input
         data-test=${`${prefix}-name`}
         name="name"
@@ -1346,10 +1420,14 @@ export class DevicesScreen extends LitElement {
               required
               label=${t("devices.shows")}
               search="auto"
-              placeholder=${t("devices.join_pick_binding")}
+              placeholder=${
+                bindingOptions.length === 0
+                  ? t("devices.binding_none_listed")
+                  : t("devices.join_pick_binding")
+              }
               searchPlaceholder=${t("categories.combobox_search")}
               noResultsLabel=${t("categories.combobox_no_results")}
-              .options=${this.#bindingOptions(held)}
+              .options=${bindingOptions}
               .value=${values.binding}
               ?disabled=${disabled}
               .error=${errors.binding}
@@ -1360,19 +1438,29 @@ export class DevicesScreen extends LitElement {
       }`;
   }
 
-  /** The switched-on stations and watchers, plus `held` in its group, marked, when it is not one. */
+  /**
+   * The switched-on stations and watchers `profileId` lists, plus `held` in its group, marked, when
+   * the profile lists it and it is switched off.
+   */
   #bindingOptions(
+    profileId: string,
     held: HeldBinding | null = null,
   ): { value: string; label: string; group: string }[] {
+    const lists = this.kitchenLists.find((entry) => entry.profileId === profileId);
+    const listed = new Set([
+      ...(lists?.stationIds ?? []).map((id) => `station:${id}`),
+      ...(lists?.watcherIds ?? []).map((id) => `watcher:${id}`),
+    ]);
+    if (held !== null && !listed.has(held.value)) held = null;
     const stationOptions = this.stations
-      .filter((station) => station.active)
+      .filter((station) => station.active && listed.has(`station:${station.id}`))
       .map((station) => ({
         value: `station:${station.id}`,
         label: station.name,
         group: t("devices.stations_group"),
       }));
     const watcherOptions = this.watchers
-      .filter((watcher) => watcher.active)
+      .filter((watcher) => watcher.active && listed.has(`watcher:${watcher.id}`))
       .map((watcher) => ({
         value: `watcher:${watcher.id}`,
         label: watcher.name,
@@ -1535,7 +1623,7 @@ export class DevicesScreen extends LitElement {
           @wt-change=${(e: CustomEvent<{ value: string }>) =>
             this.#setEdit({ paymentSlipPrinterId: e.detail.value }, "slip")}
         ></wt-combobox>
-        ${kitchen ? nothing : this.#renderMadeHere()}
+        ${this.#renderApproved(errors.approved)} ${kitchen ? nothing : this.#renderMadeHere()}
         ${this.readerState === "hidden" ? nothing : this.#renderReader(errors.reader)}
       </div>
       <wt-form-actions
@@ -1587,6 +1675,35 @@ export class DevicesScreen extends LitElement {
               ${station.name}</label
             >`,
         )}
+    </fieldset>`;
+  }
+
+  #renderApproved(error: string): TemplateResult | typeof nothing {
+    const choices = this.#approvalChoices();
+    if (choices.length === 0) return nothing;
+    return html`<fieldset class="made-here" data-test="edit-approved-profiles">
+      <legend>${t("devices.approved_profiles")}</legend>
+      <p class="hint">${t("devices.approved_profiles_hint")}</p>
+      ${choices.map(
+        (profile) =>
+          html`<label class="check">
+            <input
+              type="checkbox"
+              name="approvedProfileIds"
+              value=${profile.id}
+              .checked=${live(this.editForm.approved.includes(profile.id))}
+              ?disabled=${this.editSaving}
+              @change=${(e: Event) =>
+                this.#onApprovedChange(profile.id, (e.target as HTMLInputElement).checked)}
+            />
+            ${profile.name}</label
+          >`,
+      )}
+      ${
+        error === ""
+          ? nothing
+          : html`<p class="field-error" data-test="edit-approved-error">${error}</p>`
+      }
     </fieldset>`;
   }
 

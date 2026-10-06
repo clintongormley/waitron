@@ -110,6 +110,20 @@ describe("till-tab-shell", () => {
     expect(fired).toBe(1);
   });
 
+  it("offers Profile before Printers only when the device can switch profile, emitting open-profile", async () => {
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", { tabs });
+    expect(el.shadowRoot!.querySelector("wt-button.profile")).toBeNull();
+    el.canSwitchProfile = true;
+    await el.updateComplete;
+    const profile = el.shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!;
+    expect(profile.textContent).toContain(t("profile.open"));
+    expect(profile.nextElementSibling).toBe(el.shadowRoot!.querySelector("wt-button.printers"));
+    let fired = 0;
+    el.addEventListener("open-profile", () => (fired += 1));
+    profile.click();
+    expect(fired).toBe(1);
+  });
+
   it("shows the operator name in the header", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
       tabs,

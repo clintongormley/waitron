@@ -15,11 +15,39 @@ declare module "@waitron/shared" {
       actual: string;
     };
     "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
+    /** The device's active profile may not work in this zone. Names only the zone tried. */
+    "service_zone.not_allowed": { zoneId: string };
     "route.not_found": { routeId: string };
     "route.subject_not_found": { subject: string; id: string };
     "route.station_inactive": { stationId: string };
     "station.fallback_loop": { stationId: string; fallbackStationId: string };
     "time_zone.unreadable": Record<string, never>;
+    "device_profile.access_invalid": {
+      field:
+        | "profileId"
+        | "departmentId"
+        | "allowedZoneIds"
+        | "startingZoneId"
+        | "stationIds"
+        | "watcherIds";
+      reason:
+        | "not_found"
+        | "unavailable"
+        | "outside_department"
+        | "outside_allowed"
+        | "empty"
+        | "required"
+        | "department_required"
+        | "shared_display";
+    };
+    /** A device was given a station or watcher its profile's list does not name. */
+    "station.not_allowed": { stationId: string };
+    "watcher.not_allowed": { watcherId: string };
+    /** A profile's list lost a station or watcher an active device on the profile still shows. */
+    "device_profile.station_in_use": { stationId: string; deviceId: string; deviceName: string };
+    "device_profile.watcher_in_use": { watcherId: string; deviceId: string; deviceName: string };
+    /** The profile has a department but none of its zones can be used now, so it cannot order. */
+    "device_profile.no_service_zone": { profileId: string };
     // `route.dish_not_sent` is declared in apps/server's errors.ts, which raises it.
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };

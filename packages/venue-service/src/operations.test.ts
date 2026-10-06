@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
@@ -26,9 +26,7 @@ import {
 import {
   CORE_MIGRATIONS,
   captureError,
-  deviceProfiles,
   engineErrorMessage,
-  devices,
   diningTables,
   parties,
   partyTables,
@@ -41,6 +39,7 @@ import {
   watcherZones,
   withTransaction,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
@@ -54,7 +53,7 @@ import { readWeekHours, replaceWeekHours } from "./hours.js";
 import type { WeekDay } from "./hours-types.js";
 import { createException, resolveMakers, setClaim } from "./routing-store.js";
 import { routeExceptions } from "./schema/routing.js";
-import { deviceZoneDefaults, zoneSalePolicies, zoneMenus } from "./schema/service.js";
+import { zoneSalePolicies, zoneMenus } from "./schema/service.js";
 import {
   copyOrderServiceContext,
   copyWorkingLineContext,
@@ -82,13 +81,11 @@ import {
   readSaleReceiptHeader,
   resolveZoneContext,
   retargetOrderServiceContext,
-  setDeviceDefaultZone,
   setDepartmentSalePolicyField,
   setZoneSalePolicyOverride,
   updateDepartment,
-  clearDeviceDefaultZone,
-  listDeviceDefaultZones,
   menuState,
+  orderInZones,
 } from "./operations.js";
 
 const suite = useVenueDb({
@@ -1323,11 +1320,11 @@ describe("departments", () => {
     ).toEqual({ active: true });
   });
 
-  it("removes a zone's routing, watcher and device selections while retaining its menu and policy", async () => {
+  it("removes a zone's routing and watcher selections while retaining its menu and policy", async () => {
     await seedUnitTenant();
     const cfg = { locationId: brandLocationId(await seedLocation("Zone cleanup")) };
     const zoneId = await seedZone(cfg.locationId, "Terrace");
-    const { routeId, watcherId, deviceId, menuId } = await scoped(async (tx) => {
+    const { routeId, watcherId, menuId } = await scoped(async (tx) => {
       const department = await createDepartment(tx, cfg, {
         name: "Restaurant",
         defaultServiceMode: "table_tab",
@@ -1352,24 +1349,7 @@ describe("departments", () => {
         })
         .returning({ id: watchers.id });
       await tx.insert(watcherZones).values({ watcherId: watcher!.id, zoneId });
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({
-          name: `Till ${randomUUID()}`,
-          formFactor: "till",
-        })
-        .returning({ id: deviceProfiles.id });
-      const [device] = await tx
-        .insert(devices)
-        .values({
-          locationId: cfg.locationId,
-          deviceProfileId: profile!.id,
-          label: "Till 1",
-          tokenHash: "scrypt$00$00",
-        })
-        .returning({ id: devices.id });
-      await setDeviceDefaultZone(tx, cfg, device!.id, zoneId);
-      return { routeId: route!.id, watcherId: watcher!.id, deviceId: device!.id, menuId: menu.id };
+      return { routeId: route!.id, watcherId: watcher!.id, menuId: menu.id };
     });
 
     await scoped((tx) => deactivateServiceZone(tx, cfg, zoneId));
@@ -1381,9 +1361,6 @@ describe("departments", () => {
     ).toEqual([]);
     expect(
       await db.select().from(watcherZones).where(eq(watcherZones.watcherId, watcherId)),
-    ).toEqual([]);
-    expect(
-      await db.select().from(deviceZoneDefaults).where(eq(deviceZoneDefaults.deviceId, deviceId)),
     ).toEqual([]);
     expect(
       await db
@@ -1720,76 +1697,9 @@ async function addLine(tx: Transaction, venue: SellingVenue, orderId: string, li
   return id;
 }
 
-async function seedDevice(venue: SellingVenue, label: string): Promise<string> {
-  const [profile] = await db
-    .insert(deviceProfiles)
-    .values({ name: label, formFactor: "till" })
-    .returning({ id: deviceProfiles.id });
-  const [device] = await db
-    .insert(devices)
-    .values({
-      locationId: venue.cfg.locationId,
-      deviceProfileId: profile!.id,
-      label,
-      tokenHash: "scrypt$00$00",
-    })
-    .returning({ id: devices.id });
-  return device!.id;
-}
-
 describe("order service context", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("returns to the counter default after a device default is cleared", async () => {
-    const venue = await seedSellingVenue();
-    const deviceId = await seedDevice(venue, "Bar till");
-    await scoped(async (tx) => {
-      await tx.execute(
-        sql`update zone_service_policies set is_counter_default = true where zone_id = ${venue.diningZone}`,
-      );
-      await setDeviceDefaultZone(tx, venue.cfg, deviceId, venue.barZone);
-      expect(await listDeviceDefaultZones(tx, venue.cfg)).toContainEqual({
-        deviceId,
-        zoneId: venue.barZone,
-      });
-      await clearDeviceDefaultZone(tx, venue.cfg, deviceId);
-      await clearDeviceDefaultZone(tx, venue.cfg, deviceId);
-      expect(await listDeviceDefaultZones(tx, venue.cfg)).not.toContainEqual(
-        expect.objectContaining({ deviceId }),
-      );
-      expect(await resolveNewOrderZone(tx, venue.cfg, { deviceId })).toMatchObject({
-        zoneId: venue.diningZone,
-      });
-    });
-  });
-
-  it("starts a device's new order in its own default zone ahead of the venue's counter default", async () => {
-    const venue = await seedSellingVenue();
-    const { cfg } = venue;
-    const counterTill = await seedDevice(venue, "Counter till");
-    const barTill = await seedDevice(venue, "Bar till");
-    await scoped(async (tx) => {
-      await tx.execute(sql`
-        update zone_service_policies set is_counter_default = true
-        where zone_id = ${venue.diningZone}`);
-      // Set twice: the second call re-points the device rather than keeping its first zone.
-      await setDeviceDefaultZone(tx, cfg, barTill, venue.diningZone);
-      await setDeviceDefaultZone(tx, cfg, barTill, venue.barZone);
-
-      await expect(resolveNewOrderZone(tx, cfg, { deviceId: barTill })).resolves.toEqual({
-        zoneId: venue.barZone,
-        departmentId: venue.barId,
-        departmentName: "Bar",
-        serviceMode: "prepay",
-        defaultMenuId: expect.any(String),
-      });
-      await expect(resolveNewOrderZone(tx, cfg, { deviceId: counterTill })).resolves.toMatchObject({
-        zoneId: venue.diningZone,
-        departmentId: venue.restaurantId,
-      });
-    });
   });
 
   it("moves an order onto another zone's department and service mode, keeping its line snapshots", async () => {
@@ -2650,6 +2560,41 @@ describe("findOrderServiceZones", () => {
       expect(await findOrderServiceZones(tx, venue.cfg, [])).toEqual(new Map());
       expect(prepared).not.toHaveBeenCalled();
       expect(await findOrderServiceZones(tx, elsewhere, [order])).toEqual(new Map());
+    });
+  });
+});
+
+describe("orderInZones", () => {
+  it("keeps orders in the named zones and orders with no zone, and leaves out the rest", async () => {
+    const venue = await seedSellingVenue();
+    const elsewhere = { locationId: brandLocationId(await seedLocation("Elsewhere in zones")) };
+    await scoped(async (tx) => {
+      const dining = await openOrder(tx, venue, 1);
+      const bar = await openOrder(tx, venue, 2);
+      const none = await openOrder(tx, venue, 3);
+      await recordOrderServiceContext(tx, venue.cfg, dining, venue.diningZone);
+      await recordOrderServiceContext(tx, venue.cfg, bar, venue.barZone);
+      const shown = async (cfg: typeof venue.cfg, zoneIds: string[]) =>
+        (
+          await tx
+            .select({ id: workingOrders.id })
+            .from(workingOrders)
+            .where(
+              and(
+                inArray(workingOrders.id, [dining, bar, none]),
+                orderInZones(cfg, sql`"working_orders"."id"`, zoneIds),
+              ),
+            )
+        )
+          .map((row) => row.id)
+          .sort();
+      expect(await shown(venue.cfg, [venue.diningZone])).toEqual([dining, none].sort());
+      expect(await shown(venue.cfg, [venue.diningZone, venue.barZone])).toEqual(
+        [dining, bar, none].sort(),
+      );
+      expect(await shown(venue.cfg, [])).toEqual([none]);
+      // A context recorded at another location is no zone of this one.
+      expect(await shown(elsewhere, [])).toEqual([dining, bar, none].sort());
     });
   });
 });

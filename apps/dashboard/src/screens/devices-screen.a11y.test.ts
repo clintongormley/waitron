@@ -66,6 +66,7 @@ const devices: DeviceRow[] = [
   {
     id: "d1",
     madeHereStationIds: [],
+    approvedProfileIds: ["dp1"],
     kind: "kds_station",
     stationId: "s1",
     watcherId: null,
@@ -85,6 +86,7 @@ const devices: DeviceRow[] = [
   {
     id: "d2",
     madeHereStationIds: [],
+    approvedProfileIds: [],
     kind: "kds_station",
     stationId: null,
     watcherId: null,
@@ -113,6 +115,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: "dep-1",
+    allowedZoneIds: null,
+    startingZoneId: "zone-1",
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
   {
     id: "dp2",
@@ -123,6 +131,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: "dep-1",
+    allowedZoneIds: null,
+    startingZoneId: "zone-1",
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
   {
     id: "dp3",
@@ -133,6 +147,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: null,
+    allowedZoneIds: null,
+    startingZoneId: null,
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
 ];
 
@@ -181,6 +201,13 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     listStations: vi.fn().mockResolvedValue(stations),
     listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
+    listProfileKitchenLists: vi.fn().mockResolvedValue([
+      {
+        profileId: "dp3",
+        stationIds: stations.map((station) => station.id),
+        watcherIds: watchers.map((watcher) => watcher.id),
+      },
+    ]),
     listPrinters: vi.fn().mockResolvedValue(printers),
     pairingMode: vi.fn().mockResolvedValue({
       open: false,
@@ -392,6 +419,62 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
   );
 
   it.each([390, 1280])(
+    "renders a till's Edit dialog with a refused approval accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const till: DeviceRow = {
+        ...devices[0]!,
+        id: "till",
+        kind: "till",
+        stationId: null,
+        binding: null,
+        approvedProfileIds: ["dp1", "dp-bar"],
+      };
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        {
+          api: stubApi({
+            listDevices: vi.fn().mockResolvedValue([till]),
+            listDeviceProfiles: vi
+              .fn()
+              .mockResolvedValue([
+                ...deviceProfiles,
+                { ...deviceProfiles[0]!, id: "dp-bar", name: "Bar till" },
+                { ...deviceProfiles[0]!, id: "dp-deli", name: "Deli till" },
+              ]),
+            updateDevice: vi.fn().mockRejectedValue({
+              code: "device_profile.incompatible",
+              params: { field: "approvedProfileIds" },
+            }),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      deep(el.shadowRoot!, "[data-test=edit-device-till]")!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=edit-approved-profiles]")).not.toBeNull(),
+      );
+      el.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test=edit-approved-profiles] input[value="dp-deli"]',
+      )!.click();
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-save]")!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=edit-approved-error]")).not.toBeNull(),
+      );
+      await flush(el);
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      const dialog = el
+        .shadowRoot!.querySelector("[data-test=edit-device-modal]")!
+        .shadowRoot!.querySelector("dialog")!;
+      expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it.each([390, 1280])(
     "renders the Add a device dialog with waiting rows accessibly at %ipx",
     async (width) => {
       await page.viewport(width, 900);
@@ -405,6 +488,42 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       await vi.waitFor(() =>
         expect(deep(el.shadowRoot!, "[data-test=being-paired-r2]")).not.toBeNull(),
       );
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it.each([390, 1280])(
+    "renders Pair for a kitchen profile that lists nothing yet accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        { api: stubApi({ listProfileKitchenLists: vi.fn().mockResolvedValue([]) }) },
+        theme,
+      );
+      await flush(el);
+      await openAdd(el);
+      await openPair(el);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=pair-profile]")).not.toBeNull(),
+      );
+      await chooseOption(el.shadowRoot!.querySelector("[data-test=pair-profile]")!, "dp3");
+      await flush(el);
+      expect(
+        (
+          el.shadowRoot!.querySelector("[data-test=pair-binding]") as HTMLElement & {
+            placeholder: string;
+          }
+        ).placeholder,
+      ).toBe(t("devices.binding_none_listed"));
+      const pairDialog = el
+        .shadowRoot!.querySelector("[data-test=pair-modal]")!
+        .shadowRoot!.querySelector("dialog")!;
+      expect(pairDialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      const pairBody = pairDialog.querySelector<HTMLElement>(".body")!;
+      expect(pairBody.scrollWidth).toBeLessThanOrEqual(pairBody.clientWidth);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);
     },

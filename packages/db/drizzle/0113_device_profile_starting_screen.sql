@@ -1,0 +1,1 @@
+ALTER TABLE `device_profiles` ADD `starting_screen` text;

@@ -477,6 +477,17 @@ describe("TillApi", () => {
     });
   });
 
+  it("listStaff asks for every colleague, whatever the device's profile admits, when told to", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse([]));
+
+    await new TillApi("", fetchStub).listStaff({ everyone: true });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/staff?everyone=true",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
   it("listStaff GETs the pre-login roster", async () => {
     const roster = [{ personId: "u1", displayName: "Ana" }];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(roster));
@@ -2651,6 +2662,27 @@ describe("TillApi", () => {
         method: "PUT",
         credentials: "include",
         body: JSON.stringify({ paymentSlipPrinterId: "S1" }),
+      }),
+    );
+    expect(r).toEqual(stored);
+  });
+
+  it("switchDeviceProfile POSTs the profile to /api/device/active-profile and returns what was stored", async () => {
+    const stored = {
+      activeProfileId: "pr-bar",
+      receiptPrinterId: "P1",
+      paymentSlipPrinterId: null,
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(stored));
+
+    const r = await new TillApi("", fetchStub).switchDeviceProfile("pr-bar");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/active-profile",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({ profileId: "pr-bar" }),
       }),
     );
     expect(r).toEqual(stored);

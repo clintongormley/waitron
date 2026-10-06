@@ -43,7 +43,11 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { cancelBody, giveAway } from "./testing/cancel-line.js";
-import { revokedDeviceSessionCookie, seedSessionDevice } from "./testing/session-device.js";
+import {
+  BASIC_ACTIONS,
+  revokedDeviceSessionCookie,
+  seedSessionDevice,
+} from "./testing/session-device.js";
 import "./errors.js";
 import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
 
@@ -455,7 +459,11 @@ describe("who may record it", () => {
     const [profile] = await inTx(venue, (tx) =>
       tx
         .insert(deviceProfiles)
-        .values({ name: "Handheld", formFactor: "phone-portrait", capabilities: ["take-cash"] })
+        .values({
+          name: "Handheld",
+          formFactor: "phone-portrait",
+          capabilities: [...BASIC_ACTIONS, "take-cash"],
+        })
         .returning({ id: deviceProfiles.id }),
     );
     const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {
@@ -498,7 +506,7 @@ describe("who may record it", () => {
         .values({
           name: "Handheld origin",
           formFactor: "phone-portrait",
-          capabilities: ["take-cash"],
+          capabilities: [...BASIC_ACTIONS, "take-cash"],
         })
         .returning({ id: deviceProfiles.id }),
     );

@@ -5,6 +5,7 @@ import type { Logger } from "./logger.js";
 import { listOrders } from "./orders-list.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
+import { orderZoneCondition, type OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
 export const BILL_LOOKUP_LIMIT = 20;
@@ -23,7 +24,11 @@ export interface BillLookupRow {
 }
 
 /** A till sees only bills the collect route can settle, after the same filters as Orders. */
-export async function lookUpBills(tx: Transaction, q: string): Promise<BillLookupRow[]> {
+export async function lookUpBills(
+  tx: Transaction,
+  q: string,
+  inZones?: OrderZoneCondition,
+): Promise<BillLookupRow[]> {
   const { rows } = await listOrders(tx, {
     status: "unpaid",
     dates: "any",
@@ -32,6 +37,7 @@ export async function lookUpBills(tx: Transaction, q: string): Promise<BillLooku
     limit: BILL_LOOKUP_LIMIT,
     collectable: true,
     scope: "all",
+    ...(inZones === undefined ? {} : { orderIn: inZones }),
   });
   return rows.flatMap((row): BillLookupRow[] =>
     row.stillOwed === null ||
@@ -57,11 +63,14 @@ export async function lookUpBills(tx: Transaction, q: string): Promise<BillLooku
 export function mountBillLookupApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   app.get("/api/bills/lookup", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const q = c.req.query("q")?.trim() ?? "";
       if (q === "" || q.length > 100)
         throw new AppError("management.request_invalid", { field: "q" });
-      return c.json({ bills: await withTransaction(deps.db, (tx) => lookUpBills(tx, q)) });
+      const bills = await withTransaction(deps.db, async (tx) =>
+        lookUpBills(tx, q, await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId)),
+      );
+      return c.json({ bills });
     }),
   );
 }

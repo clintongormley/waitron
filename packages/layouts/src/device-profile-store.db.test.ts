@@ -2,6 +2,7 @@ import {
   CORE_MIGRATIONS,
   captureError,
   deviceProfilePrinters,
+  deviceProfiles,
   devices,
   locations,
   printers,
@@ -14,7 +15,7 @@ import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/i
 import type { PersonRoleValue } from "@waitron/identity";
 import { AppError, isAppError } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_CANVASES } from "./default-canvases.js";
 import { createCanvas, deleteCanvas } from "./canvas-store.js";
 import {
@@ -23,6 +24,7 @@ import {
   getDeviceProfile,
   getDeviceProfileWithPrinters,
   listDeviceProfiles,
+  readProfileStartingScreen,
   updateDeviceProfile,
 } from "./device-profile-store.js";
 
@@ -124,6 +126,7 @@ describe("device-profile store against a real migrated database", () => {
         canvasId: null,
         capabilities: ["open-cash-drawer", "integrated-card-payment"],
         inactivityTimeoutSeconds: null, // omitted on create ⇒ NULL (never)
+        startingScreen: null,
         receiptPrinterIds: [],
         paymentSlipPrinterIds: [],
       });
@@ -153,6 +156,7 @@ describe("device-profile store against a real migrated database", () => {
       capabilities: ["act-as-kds"],
       formFactor: "kds",
       inactivityTimeoutSeconds: null,
+      startingScreen: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
     });
@@ -210,6 +214,7 @@ describe("device-profile store against a real migrated database", () => {
       canvasId,
       capabilities: [],
       inactivityTimeoutSeconds: null,
+      startingScreen: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
     });
@@ -298,6 +303,7 @@ describe("device-profile store against a real migrated database", () => {
       canvasId,
       capabilities: ["integrated-card-payment"],
       inactivityTimeoutSeconds: null,
+      startingScreen: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
     });
@@ -621,6 +627,7 @@ describe("device-profile store against a real migrated database", () => {
       canvasId: null,
       capabilities: [],
       inactivityTimeoutSeconds: null,
+      startingScreen: null,
     });
 
     const renamed = await inTx((tx) =>
@@ -776,6 +783,170 @@ describe("device-profile store against a real migrated database", () => {
   });
 });
 
+describe("a profile's starting screen and shared-display actions", () => {
+  let managerSession: string;
+
+  beforeEach(async () => {
+    managerSession = await seedSession("manager");
+  });
+
+  const till = (name: string, capabilities: string[], startingScreen?: unknown) =>
+    inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: managerSession,
+        name,
+        formFactor: "till",
+        canvasId: null,
+        capabilities,
+        ...(startingScreen === undefined ? {} : { startingScreen }),
+      }),
+    );
+
+  it("stores a starting screen the profile shows, and reads null when none was given", async () => {
+    try {
+      const expo = await till("Pass", ["show-expo", "take-orders"], "show-expo");
+      const plain = await till("Plain", ["show-expo"]);
+      expect(await inTx((tx) => readProfileStartingScreen(tx, expo.id))).toBe("show-expo");
+      expect(await inTx((tx) => readProfileStartingScreen(tx, plain.id))).toBeNull();
+    } finally {
+      await purgeProfiles();
+    }
+  });
+
+  it("reads null for a stored starting screen that is not a navigation screen", async () => {
+    try {
+      const [row] = await suite.db
+        .insert(deviceProfiles)
+        .values({
+          name: "Written directly",
+          formFactor: "till",
+          capabilities: ["show-expo", "act-as-kds"],
+          startingScreen: "act-as-kds",
+        })
+        .returning({ id: deviceProfiles.id });
+      const [other] = await suite.db
+        .insert(deviceProfiles)
+        .values({ name: "Unknown screen", formFactor: "till", startingScreen: "counter" })
+        .returning({ id: deviceProfiles.id });
+      expect(await inTx((tx) => readProfileStartingScreen(tx, row!.id))).toBeNull();
+      expect(await inTx((tx) => readProfileStartingScreen(tx, other!.id))).toBeNull();
+    } finally {
+      await purgeProfiles();
+    }
+  });
+
+  it("refuses a starting screen the profile does not show, writing nothing", async () => {
+    try {
+      const error = await errorOf(() => till("Pass", ["show-station"], "show-expo"));
+      expect(typeof error === "string" ? error : [error.code, error.params]).toEqual([
+        "device_profile.invalid",
+        { reason: "bad_starting_screen" },
+      ]);
+      expect(await rowCount()).toBe(0);
+    } finally {
+      await purgeProfiles();
+    }
+  });
+
+  it("keeps the starting screen when an update omits it, and clears it on null", async () => {
+    try {
+      const created = await till("Pass", ["show-expo"], "show-expo");
+      const update = (startingScreen?: unknown) =>
+        inTx((tx) =>
+          updateDeviceProfile(tx, {
+            managementSessionId: managerSession,
+            id: created.id,
+            name: "Pass",
+            formFactor: "till",
+            canvasId: null,
+            capabilities: ["show-expo", "show-schedule"],
+            ...(startingScreen === undefined ? {} : { startingScreen }),
+          }),
+        );
+      await update();
+      expect(await inTx((tx) => readProfileStartingScreen(tx, created.id))).toBe("show-expo");
+      await update("show-schedule");
+      expect(await inTx((tx) => readProfileStartingScreen(tx, created.id))).toBe("show-schedule");
+      await update(null);
+      expect(await inTx((tx) => readProfileStartingScreen(tx, created.id))).toBeNull();
+    } finally {
+      await purgeProfiles();
+    }
+  });
+
+  it("refuses an update that hides the starting screen, leaving the profile as it was", async () => {
+    try {
+      const created = await till("Pass", ["show-expo", "take-orders"], "show-expo");
+      const error = await errorOf(() =>
+        inTx((tx) =>
+          updateDeviceProfile(tx, {
+            managementSessionId: managerSession,
+            id: created.id,
+            name: "Pass",
+            formFactor: "till",
+            canvasId: null,
+            capabilities: ["take-orders"],
+          }),
+        ),
+      );
+      expect(typeof error === "string" ? error : error.params).toEqual({
+        reason: "bad_starting_screen",
+      });
+      expect((await inTx((tx) => getDeviceProfile(tx, created.id)))!.capabilities).toEqual([
+        "show-expo",
+        "take-orders",
+      ]);
+      expect(await inTx((tx) => readProfileStartingScreen(tx, created.id))).toBe("show-expo");
+    } finally {
+      await purgeProfiles();
+    }
+  });
+
+  it("refuses a kitchen display an ordering, payment or drawer action on create and update", async () => {
+    try {
+      const kds = (capabilities: string[]) =>
+        inTx((tx) =>
+          createDeviceProfile(tx, {
+            managementSessionId: managerSession,
+            name: `Kitchen ${capabilities.join()}`,
+            formFactor: "kds",
+            canvasId: null,
+            capabilities,
+          }),
+        );
+      for (const flag of [
+        "take-orders",
+        "take-cash",
+        "hand-keyed-card-payment",
+        "open-cash-drawer",
+      ]) {
+        const error = await errorOf(() => kds(["act-as-kds", flag]));
+        expect(typeof error === "string" ? error : error.params).toEqual({
+          reason: "shared_display_action",
+        });
+      }
+      const created = await kds(["act-as-kds", "prepare-orders"]);
+      const error = await errorOf(() =>
+        inTx((tx) =>
+          updateDeviceProfile(tx, {
+            managementSessionId: managerSession,
+            id: created.id,
+            name: created.name,
+            formFactor: "kds",
+            canvasId: null,
+            capabilities: ["act-as-kds", "integrated-card-payment"],
+          }),
+        ),
+      );
+      expect(typeof error === "string" ? error : error.params).toEqual({
+        reason: "shared_display_action",
+      });
+    } finally {
+      await purgeProfiles();
+    }
+  });
+});
+
 /**
  * The keys out of and into device_profiles among core and identity's tables, which
  * `translateWriteError`'s doc relies on.
@@ -794,6 +965,24 @@ describe("what can refuse a write to device_profiles", () => {
       where m.type = 'table' and (f."table" = 'device_profiles' or m.name = 'device_profiles')
       order by child, column`);
     expect(rows).toEqual([
+      {
+        child: "device_approved_profiles",
+        column: "device_profile_id",
+        parent: "device_profiles",
+        on_delete: "CASCADE",
+      },
+      {
+        child: "device_profile_admission_persons",
+        column: "device_profile_id",
+        parent: "device_profiles",
+        on_delete: "CASCADE",
+      },
+      {
+        child: "device_profile_admission_roles",
+        column: "device_profile_id",
+        parent: "device_profiles",
+        on_delete: "CASCADE",
+      },
       {
         child: "device_profile_printers",
         column: "device_profile_id",

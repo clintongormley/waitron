@@ -118,6 +118,19 @@ it.each([
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile. Not `devices`, which a device's heartbeat changes every minute.
   ["listPrinterProfiles", [], ["device_profile_printers", "device_profiles"]],
+  // `readProfileKitchenLists` (packages/venue-service/src/profile-access.ts): the list rows of
+  // live profiles, filtered and ordered by the station and watcher rows they name.
+  [
+    "listProfileKitchenLists",
+    [],
+    [
+      "device_profiles",
+      "device_profile_stations",
+      "device_profile_watchers",
+      "kitchen_stations",
+      "watchers",
+    ],
+  ],
   // `computeCategorySales` (packages/reporting/src/category-sales.ts) reads the period's lines under
   // the same inclusion clauses as the other reports, on the venue clock from `locations`; current
   // mode adds today's classification (`currentClassifications`, packages/catalogue).

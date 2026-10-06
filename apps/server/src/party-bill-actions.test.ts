@@ -189,6 +189,7 @@ async function refundInFull(billId: string, paymentId: string): Promise<void> {
       sessionId: session.id,
       attempts: overridePinAttempts(createPinThrottle(), deviceId),
     },
+    "cash",
   );
 }
 

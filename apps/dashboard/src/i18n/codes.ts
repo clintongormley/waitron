@@ -370,10 +370,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   // Client-side pseudo-codes live here, not in `t()`, so one editor banner resolves them and the
   // server's codes through the same `codeMessage` call.
-  "device_profiles.err_no_name": {
-    en: "Enter a name for this device profile",
-    es: "Introduce un nombre para este perfil de dispositivo",
-  },
   "canvas_editor.err_no_name": {
     en: "Enter a name for this canvas",
     es: "Introduce un nombre para este lienzo",
@@ -516,6 +512,38 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "device.name_taken": {
     en: "An active device here already has that name — choose another",
     es: "Ya hay un dispositivo activo con ese nombre aquí. Elige otro",
+  },
+  "device.payment_in_progress": {
+    en: "A card payment on this device is still in progress. Change its profile once the payment finishes or is cancelled",
+    es: "Hay un pago con tarjeta en curso en este dispositivo. Cambia su perfil cuando el pago termine o se cancele",
+  },
+  "device_profile.incompatible": {
+    en: "That profile is for another kind of device. Untick it",
+    es: "Ese perfil es para otro tipo de dispositivo. Desmárcalo",
+  },
+  "station.not_allowed": {
+    en: "This device's profile does not list that station. Choose one it lists",
+    es: "El perfil de este dispositivo no incluye esa estación. Elige una de las que incluye",
+  },
+  "watcher.not_allowed": {
+    en: "This device's profile does not list that watcher. Choose one it lists",
+    es: "El perfil de este dispositivo no incluye ese punto de seguimiento. Elige uno de los que incluye",
+  },
+  "device_profile.station_in_use": {
+    en: "A kitchen screen on this profile still shows that station. Choose another station for it on Devices first",
+    es: "Una pantalla de cocina con este perfil todavía muestra esa estación. Elige otra para ella en Dispositivos primero",
+  },
+  "device_profile.watcher_in_use": {
+    en: "A kitchen screen on this profile still shows that watcher. Choose another for it on Devices first",
+    es: "Una pantalla de cocina con este perfil todavía muestra ese punto de seguimiento. Elige otro para ella en Dispositivos primero",
+  },
+  "device_profile.access_invalid": {
+    en: "Something this profile names is no longer available. Check its choices and save again",
+    es: "Algo que nombra este perfil ya no está disponible. Revisa sus opciones y vuelve a guardar",
+  },
+  "device_profile.admission_invalid": {
+    en: "Check who can sign in on this profile and save again",
+    es: "Revisa quién puede iniciar sesión con este perfil y vuelve a guardar",
   },
   "device.binding_invalid": {
     en: "This profile cannot use that printer, or it has been disabled. Choose another",

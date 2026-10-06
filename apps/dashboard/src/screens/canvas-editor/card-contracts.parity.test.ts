@@ -9,12 +9,19 @@ import {
   CARD_TYPES as SRC_TYPES,
   CAPABILITY_FLAGS as SRC_CAPS,
   FORM_FACTORS as SRC_FF,
+  NAVIGATION_SCREENS as SRC_NAVIGATION,
+  PROFILE_ACTIONS as SRC_ACTIONS,
+  PROFILE_SCREENS as SRC_SCREENS,
 } from "@waitron/layouts/src/canvas.js";
 import {
   MAX_TAB_TITLE_LENGTH as SRC_TITLE,
   SELLING_FORM_FACTORS as SRC_SELLING,
 } from "@waitron/layouts/src/validate-canvas.js";
 import { DEFAULT_CANVASES as SRC_DEF } from "@waitron/layouts/src/default-canvases.js";
+import {
+  isSharedDisplay as srcIsSharedDisplay,
+  validateCapabilities as srcValidateCapabilities,
+} from "@waitron/layouts/src/device-profile.js";
 import {
   CARD_CONTRACTS,
   CARD_TYPES,
@@ -23,8 +30,13 @@ import {
   FORM_FACTORS,
   GRID_MAX_COLUMNS,
   MAX_TAB_TITLE_LENGTH,
+  NAVIGATION_SCREENS,
+  PROFILE_ACTIONS,
+  PROFILE_SCREENS,
   SALE_CRITICAL_CARDS,
   SELLING_FORM_FACTORS,
+  isSharedDisplay,
+  sharedDisplayMay,
 } from "./card-contracts.js";
 
 describe("card-contracts mirror parity", () => {
@@ -36,6 +48,26 @@ describe("card-contracts mirror parity", () => {
     expect(MAX_TAB_TITLE_LENGTH).toBe(SRC_TITLE);
     expect([...SALE_CRITICAL_CARDS]).toEqual([...SRC_SALE]);
     expect([...SELLING_FORM_FACTORS]).toEqual([...SRC_SELLING]);
+  });
+
+  it("mirrors a profile's actions, screens and the screens it may start on", () => {
+    expect([...PROFILE_ACTIONS]).toEqual([...SRC_ACTIONS]);
+    expect([...PROFILE_SCREENS]).toEqual([...SRC_SCREENS]);
+    expect([...NAVIGATION_SCREENS]).toEqual([...SRC_NAVIGATION]);
+  });
+
+  it("mirrors which form factor is a shared display and which flags the server lets one hold", () => {
+    for (const formFactor of SRC_FF)
+      expect(isSharedDisplay(formFactor), formFactor).toBe(srcIsSharedDisplay(formFactor));
+    const serverAllows = (flag: (typeof SRC_CAPS)[number]) => {
+      try {
+        srcValidateCapabilities([flag], "kds");
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    for (const flag of SRC_CAPS) expect(sharedDisplayMay(flag), flag).toBe(serverAllows(flag));
   });
 
   it("mirrors each card's contract fields (spans, states, permission, capability, saleCritical, config keys)", () => {

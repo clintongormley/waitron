@@ -173,10 +173,9 @@ export class TillCardGrid extends LitElement {
   }
 
   /**
-   * Advisory: it only ever removes a card. The server checks the integrated-card, print and drawer
-   * capabilities on the operations themselves (`assertDeviceCapability`), and `take-cash` on a cash
-   * payment (`assertTakesCash`); no route checks `act-as-kds`
-   * (apps/server/src/device-api.ts), so `kds-board`'s capability is checked here alone.
+   * Advisory: it only ever removes a card. The server checks profile actions on the routes the map
+   * in `apps/server/src/till-api.profile-actions.test.ts` lists; `act-as-kds` is a screen, which no
+   * route checks, so `kds-board`'s capability is checked here alone.
    */
   #capable(card: CardInstance): boolean {
     if (card.type === "tender-pay") return true; // it hides cash itself, and always offers card

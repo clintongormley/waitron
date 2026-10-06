@@ -34,6 +34,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
 import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -452,7 +453,11 @@ describe("approval through the route (plan D6)", () => {
       const [drawerProfile] = await inTx(venue, (tx) =>
         tx
           .insert(deviceProfiles)
-          .values({ name: "Drawer till", formFactor: "till", capabilities: ["open-cash-drawer"] })
+          .values({
+            name: "Drawer till",
+            formFactor: "till",
+            capabilities: [...BASIC_ACTIONS, "open-cash-drawer"],
+          })
           .returning({ id: deviceProfiles.id }),
       );
       const drawerDevice = await enrolDeviceForTest(venue.db, venue.cfg, {
@@ -500,8 +505,12 @@ describe("approval through the route (plan D6)", () => {
         tx
           .insert(deviceProfiles)
           .values([
-            { name: "Bucket till", formFactor: "till", capabilities: [] },
-            { name: "Bucket phone", formFactor: "phone-portrait", capabilities: [] },
+            { name: "Bucket till", formFactor: "till", capabilities: [...BASIC_ACTIONS] },
+            {
+              name: "Bucket phone",
+              formFactor: "phone-portrait",
+              capabilities: [...BASIC_ACTIONS],
+            },
           ])
           .returning({ id: deviceProfiles.id }),
       );

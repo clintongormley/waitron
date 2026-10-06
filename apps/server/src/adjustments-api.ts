@@ -35,6 +35,7 @@ import {
 } from "./till-api.js";
 import { requestCfg } from "./request-config.js";
 import { requireSession } from "./till-session.js";
+import { checkZones } from "./zone-access.js";
 import "./errors.js";
 
 const NOTE_LIMIT = 500;
@@ -125,7 +126,7 @@ export function mountAdjustmentsApi(
   // One that leaves the bill exactly paid files its invoice on the requesting device's till.
   app.post("/api/working-orders/:id/adjustments", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBill(c.req.param("id"));
@@ -141,6 +142,7 @@ export function mountAdjustmentsApi(
         const approver = withCheck(parsedApprover, checked);
         const saleCfg = sendingCfg(cfg, c, session.device);
         return withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
           const applied = await applyAdjustment(
             tx,
             cfg,
@@ -159,12 +161,14 @@ export function mountAdjustmentsApi(
 
   app.post("/api/working-orders/:id/adjustments/preview", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c);
+      const { personId } = session;
       const id = requireBill(c.req.param("id"));
       const ask = parseAsk(id, personId, asObject(await readRawJsonBody<unknown>(c)));
-      const preview = await withTransaction(deps.db, (tx) =>
-        previewAdjustment(tx, ask, deps.venueLocale),
-      );
+      const preview = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        return previewAdjustment(tx, ask, deps.venueLocale);
+      });
       return c.json(preview);
     }),
   );

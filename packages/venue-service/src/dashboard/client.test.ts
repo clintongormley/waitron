@@ -105,7 +105,6 @@ describe("VenueServiceApi", () => {
     const model = {
       departments: [{ id: "d1" }],
       zones: [],
-      deviceZones: [],
       zoneMenus: [],
       readiness: [],
       settings: { editSentLines: false },
@@ -263,22 +262,17 @@ describe("VenueServiceApi", () => {
         }),
       )
       .mockResolvedValueOnce(jsonResponse([{ id: "m1", name: "Restaurant", active: true }]))
-      .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs", active: false }]))
-      .mockResolvedValueOnce(
-        jsonResponse([{ id: "t1", label: "Till", kind: "till", active: true }]),
-      );
+      .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs", active: false }]));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
 
     await expect(api.load()).resolves.toMatchObject({
       menus: [{ id: "m1", name: "Restaurant" }],
       floorZones: [{ id: "z1", name: "Upstairs", active: false }],
-      devices: [{ id: "t1", label: "Till", kind: "till", active: true }],
     });
     expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
       "/management-api/venue-service",
       "/management-api/catalogues",
       "/management-api/zones?includeInactive=true",
-      "/management-api/devices",
     ]);
   });
 
@@ -306,21 +300,6 @@ describe("VenueServiceApi", () => {
     ]);
   });
 
-  it("sets and clears a device's default zone through the same device endpoint", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.setDeviceDefaultZone("till-1", "terrace");
-    await api.clearDeviceDefaultZone("till-1");
-    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method, init.body])).toEqual([
-      [
-        "/management-api/venue-service/devices/till-1/default-zone",
-        "PUT",
-        JSON.stringify({ zoneId: "terrace" }),
-      ],
-      ["/management-api/venue-service/devices/till-1/default-zone", "DELETE", undefined],
-    ]);
-  });
-
   it("reads through its background copy passively, so a refresh keeps no session alive", async () => {
     const empty = {
       departments: [],
@@ -343,7 +322,7 @@ describe("VenueServiceApi", () => {
     expect(background.liveData).toBe(liveData);
 
     await background.load();
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
       expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
     }
@@ -351,10 +330,10 @@ describe("VenueServiceApi", () => {
 
     fetchImpl.mockClear();
     await api.load();
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
       expect(new Headers(init.headers).get("x-waitron-live")).toBeNull();
     }
-    expect(onSuccess).toHaveBeenCalledTimes(4);
+    expect(onSuccess).toHaveBeenCalledTimes(3);
   });
 });

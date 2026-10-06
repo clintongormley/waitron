@@ -32,7 +32,7 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
+import type { CapabilityFlag, FormFactor, ProfileAction } from "@waitron/layouts";
 import {
   DEV_DEVICE_HEADER,
   DEVICE_COOKIE,
@@ -286,7 +286,7 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
  * throw), or the thrown code + params when it refuses. */
 async function probeCapability(
   cookieValue: string | null,
-  capability: CapabilityFlag,
+  capability: ProfileAction,
   action: string,
 ): Promise<{ ok: true } | { ok: false; code: string; params: unknown }> {
   const { res, thrown } = await runProbe(cookieValue, async (deps, c) => {

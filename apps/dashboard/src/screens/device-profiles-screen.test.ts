@@ -4,7 +4,17 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
-import type { Canvas, DeviceProfile, DashboardApi, Printer } from "../api/client.js";
+import type {
+  Canvas,
+  DeviceProfile,
+  DashboardApi,
+  PersonRole,
+  PersonSummary,
+  Printer,
+  ProfileScopeChoices,
+  Station,
+  Watcher,
+} from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
@@ -14,6 +24,16 @@ const canvases: Canvas[] = [
   { id: "c1", name: "Counter till", definition: {} },
   { id: "c2", name: "Kitchen board", definition: {} },
 ];
+
+const EVERY_ROLE: PersonRole[] = ["staff", "supervisor", "manager", "admin"];
+
+/** Where and for whom a profile with nothing narrowed serves: every zone, every role. */
+const OPEN_ACCESS = {
+  allowedZoneIds: null,
+  admittedRoles: EVERY_ROLE,
+  personExceptions: [],
+  startingScreen: null,
+};
 
 const profiles: DeviceProfile[] = [
   {
@@ -25,6 +45,9 @@ const profiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    ...OPEN_ACCESS,
+    departmentId: "d1",
+    startingZoneId: "z1",
   },
   {
     id: "p2",
@@ -35,10 +58,41 @@ const profiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    ...OPEN_ACCESS,
+    departmentId: null,
+    startingZoneId: null,
   },
 ];
 
 const NO_PRINTERS = { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
+
+/** The venue's one department and its zones, a switched-off one among them. */
+const scopeChoices: ProfileScopeChoices = {
+  departments: [{ id: "d1", name: "Restaurante", active: true }],
+  zones: [
+    { id: "z1", name: "Comedor", departmentId: "d1", active: true },
+    { id: "z2", name: "Terraza", departmentId: "d1", active: true },
+    { id: "z4", name: "Barra vieja", departmentId: "d1", active: false },
+  ],
+};
+
+/** What a new ordering profile sends when the venue has one department: it, at its first zone. */
+const ORDERING = { departmentId: "d1", allowedZoneIds: null, startingZoneId: "z1" };
+
+function person(
+  personId: string,
+  displayName: string,
+  role: PersonRole,
+  status: PersonSummary["status"] = "active",
+): PersonSummary {
+  return { personId, displayName, role, status, hasPassword: true, hasTotp: false, email: null };
+}
+
+const staff = [
+  person("pe-ana", "Ana", "staff"),
+  person("pe-luis", "Luis", "manager"),
+  person("pe-marta", "Marta", "supervisor", "suspended"),
+];
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
@@ -49,6 +103,11 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
     listCanvases: vi.fn().mockResolvedValue(canvases),
     listPrinters: vi.fn().mockResolvedValue([]),
+    listStations: vi.fn().mockResolvedValue([]),
+    listWatchers: vi.fn().mockResolvedValue([]),
+    listProfileKitchenLists: vi.fn().mockResolvedValue([]),
+    getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
+    listStaff: vi.fn().mockResolvedValue(staff),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -174,6 +233,7 @@ describe("device-profiles-screen list mode", () => {
       "till",
       null,
       NO_PRINTERS,
+      ORDERING,
     );
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2);
   });
@@ -205,6 +265,7 @@ describe("device-profiles-screen editor form", () => {
       "tablet-landscape",
       null,
       NO_PRINTERS,
+      ORDERING,
     );
     // Back in list mode after a successful save.
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
@@ -229,6 +290,7 @@ describe("device-profiles-screen editor form", () => {
       "phone-portrait",
       null,
       NO_PRINTERS,
+      ORDERING,
     );
   });
 
@@ -254,6 +316,7 @@ describe("device-profiles-screen editor form", () => {
       "phone-portrait",
       null,
       NO_PRINTERS,
+      ORDERING,
     );
   });
 
@@ -279,6 +342,7 @@ describe("device-profiles-screen editor form", () => {
       "phone-portrait",
       null,
       NO_PRINTERS,
+      ORDERING,
     );
   });
 
@@ -298,6 +362,7 @@ describe("device-profiles-screen editor form", () => {
       "till",
       null,
       NO_PRINTERS,
+      ORDERING,
     );
   });
 
@@ -380,7 +445,7 @@ describe("device-profiles-screen editor form", () => {
       "p1",
       "Front counter",
       "c1",
-      ["integrated-card-payment", "open-cash-drawer"],
+      [],
       "kds",
       null,
       NO_PRINTERS,
@@ -465,7 +530,7 @@ describe("device-profiles-screen editor form", () => {
       "p1",
       "Front counter",
       "c1",
-      ["integrated-card-payment", "open-cash-drawer"],
+      [],
       "kds",
       null,
       NO_PRINTERS,
@@ -1024,10 +1089,15 @@ describe("device-profiles-screen printer lists", () => {
     toggle(el, "payment-slip-printers-pr1", true);
     await el.updateComplete;
     await save(el);
-    expect(api.createDeviceProfile).toHaveBeenCalledWith("Caja", null, [], "till", null, {
-      receiptPrinterIds: ["pr2"],
-      paymentSlipPrinterIds: ["pr1"],
-    });
+    expect(api.createDeviceProfile).toHaveBeenCalledWith(
+      "Caja",
+      null,
+      [],
+      "till",
+      null,
+      { receiptPrinterIds: ["pr2"], paymentSlipPrinterIds: ["pr1"] },
+      ORDERING,
+    );
   });
 
   it("copies a profile's printer lists when it is duplicated", async () => {
@@ -1052,5 +1122,812 @@ describe("device-profiles-screen printer lists", () => {
     await el.updateComplete;
     expect(switchedOn(el, "receipt-printers")).toEqual([]);
     expect(switchedOn(el, "payment-slip-printers")).toEqual([]);
+  });
+});
+
+describe("device-profiles-screen station and watcher lists", () => {
+  const station = (id: string, name: string, active = true): Station => ({
+    id,
+    name,
+    displayOrder: 0,
+    isDefault: false,
+    active,
+    showsRestOfOrder: false,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+  const watcher = (id: string, name: string): Watcher => ({
+    id,
+    name,
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: false,
+    displayOrder: 0,
+    active: true,
+    printerIds: [],
+  });
+  const kitchen = profiles[1]!;
+
+  async function editKitchen(overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi({
+      getDeviceProfile: vi.fn().mockResolvedValue(kitchen),
+      listStations: vi
+        .fn()
+        .mockResolvedValue([
+          station("s1", "Grill"),
+          station("s2", "Cold"),
+          station("s3", "Pastry"),
+          station("s-off", "Old grill", false),
+        ]),
+      listWatchers: vi.fn().mockResolvedValue([watcher("w1", "Pass"), watcher("w2", "Bar pass")]),
+      listProfileKitchenLists: vi
+        .fn()
+        .mockResolvedValue([{ profileId: "p2", stationIds: ["s1", "s-off"], watcherIds: ["w1"] }]),
+      ...overrides,
+    });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
+    await flush(el);
+    return { api, el };
+  }
+
+  type Switch = HTMLElement & { checked: boolean; label: string };
+  const switchesIn = (el: DeviceProfilesScreen, group: string) => [
+    ...el.shadowRoot!.querySelectorAll<Switch>(`[data-test=${group}] wt-switch`),
+  ];
+  const shown = (el: DeviceProfilesScreen, group: string) =>
+    switchesIn(el, group).map((s) => [s.label, s.checked]);
+
+  async function save(el: DeviceProfilesScreen) {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+  }
+
+  it("shows a kitchen display's listed stations and watchers switched on, and the others off", async () => {
+    const { el } = await editKitchen();
+    expect(shown(el, "profile-stations")).toEqual([
+      ["Grill", true],
+      [`Old grill (${t("devices.station_disabled_mark")})`, true],
+      ["Cold", false],
+      ["Pastry", false],
+    ]);
+    expect(shown(el, "profile-watchers")).toEqual([
+      ["Pass", true],
+      ["Bar pass", false],
+    ]);
+  });
+
+  it("draws no station or watcher list for a profile that is not a kitchen display", async () => {
+    const el = await mount(
+      stubApi({ listStations: vi.fn().mockResolvedValue([station("s1", "Grill")]) }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=profile-stations]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=profile-watchers]")).toBeNull();
+  });
+
+  it("saves the lists it changed, keeping a listed station switched off since", async () => {
+    const { api, el } = await editKitchen();
+    toggle(el, "profile-station-s2", true);
+    toggle(el, "profile-watcher-w1", false);
+    await el.updateComplete;
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
+      stationIds: ["s1", "s-off", "s2"],
+      watcherIds: [],
+    });
+  });
+
+  it("opened before the lists' first read arrives, still saves from the profile's stored lists", async () => {
+    const stored = [{ profileId: "p2", stationIds: ["s1", "s-off"], watcherIds: ["w1"] }];
+    const { api, el } = await editKitchen({
+      listProfileKitchenLists: vi
+        .fn()
+        .mockReturnValueOnce(new Promise(() => {}))
+        .mockResolvedValue(stored),
+    });
+    toggle(el, "profile-station-s2", true);
+    await el.updateComplete;
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
+      stationIds: ["s1", "s-off", "s2"],
+      watcherIds: ["w1"],
+    });
+  });
+
+  it("sends no lists when they are unchanged", async () => {
+    const { api, el } = await editKitchen();
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]).toHaveLength(7);
+  });
+
+  it("creates a kitchen display with the stations and watchers chosen", async () => {
+    const api = stubApi({
+      listStations: vi.fn().mockResolvedValue([station("s1", "Grill")]),
+      listWatchers: vi.fn().mockResolvedValue([watcher("w1", "Pass")]),
+    });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    change(el, "profile-name", "Kitchen 2");
+    selectFormFactor(el, "kds");
+    await flush(el);
+    toggle(el, "profile-station-s1", true);
+    toggle(el, "profile-watcher-w1", true);
+    await el.updateComplete;
+    await save(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+      stationIds: ["s1"],
+      watcherIds: ["w1"],
+    });
+  });
+
+  it("copies a kitchen display's switched-on stations and watchers when it is duplicated", async () => {
+    const { api, el } = await editKitchen();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p2]")!.click();
+    await flush(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+      stationIds: ["s1"],
+      watcherIds: ["w1"],
+    });
+  });
+
+  it("names the screen that still shows a station the save took off, under the stations, and keeps the draft", async () => {
+    const { el } = await editKitchen({
+      updateDeviceProfile: vi.fn().mockRejectedValue({
+        code: "device_profile.station_in_use",
+        params: { stationId: "s1", deviceId: "d1", deviceName: "Grill screen" },
+      }),
+    });
+    toggle(el, "profile-station-s1", false);
+    await el.updateComplete;
+    await save(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=profile-stations-error]")?.textContent?.trim(),
+    ).toBe(t("device_profiles.station_in_use").replace("{device}", "Grill screen"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+      t("form.fix_fields"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeTruthy();
+    expect(shown(el, "profile-stations")).toContainEqual(["Grill", false]);
+
+    toggle(el, "profile-station-s1", true);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=profile-stations-error]")).toBeNull();
+  });
+
+  it("names the screen that still shows a watcher the save took off, under the watchers", async () => {
+    const { el } = await editKitchen({
+      updateDeviceProfile: vi.fn().mockRejectedValue({
+        code: "device_profile.watcher_in_use",
+        params: { watcherId: "w1", deviceId: "d2", deviceName: "Pass screen" },
+      }),
+    });
+    toggle(el, "profile-watcher-w1", false);
+    await el.updateComplete;
+    await save(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=profile-watchers-error]")?.textContent?.trim(),
+    ).toBe(t("device_profiles.watcher_in_use").replace("{device}", "Pass screen"));
+  });
+});
+
+describe("device-profiles-screen where a profile serves and who signs in (W97)", () => {
+  type Field = HTMLElement & { value: string; error: string; required: boolean; checked: boolean };
+  const q = (el: DeviceProfilesScreen, testId: string) =>
+    el.shadowRoot!.querySelector<Field>(`[data-test="${testId}"]`);
+  const text = (el: DeviceProfilesScreen, testId: string) =>
+    q(el, testId)?.textContent?.replace(/\s+/g, " ").trim() ?? null;
+  const bottom = (el: DeviceProfilesScreen) =>
+    el.shadowRoot!.querySelector(".form-message")?.textContent?.trim() ?? null;
+  const saveButton = (el: DeviceProfilesScreen) => q(el, "profile-save")!;
+  const options = (el: DeviceProfilesScreen, testId: string) =>
+    (q(el, testId) as unknown as Combobox).options.map((o) => o.value);
+
+  async function save(el: DeviceProfilesScreen) {
+    saveButton(el).click();
+    await flush(el);
+  }
+
+  async function openCreate(api = stubApi()) {
+    const el = await mount(api);
+    q(el, "create")!.click();
+    await flush(el);
+    change(el, "profile-name", "Terraza");
+    await el.updateComplete;
+    return el;
+  }
+
+  async function openEdit(profile: DeviceProfile, overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi({
+      listDeviceProfiles: vi.fn().mockResolvedValue([profile, profiles[1]]),
+      getDeviceProfile: vi.fn().mockResolvedValue(profile),
+      ...overrides,
+    });
+    const el = await mount(api);
+    q(el, `edit-${profile.id}`)!.click();
+    await flush(el);
+    return { api, el };
+  }
+
+  const extras = (api: DashboardApi) => vi.mocked(api.updateDeviceProfile).mock.calls[0]![7];
+
+  it("keeps a stored zone switched off since when a save changes only the name", async () => {
+    const { api, el } = await openEdit({
+      ...profiles[0]!,
+      allowedZoneIds: ["z1", "z4"],
+      startingZoneId: "z1",
+    });
+    change(el, "profile-name", "Renamed counter");
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledOnce();
+    expect(extras(api)).toBeUndefined();
+  });
+
+  it("saves a name change on a profile whose only zone is switched off, sending no zones", async () => {
+    const { api, el } = await openEdit({
+      ...profiles[0]!,
+      allowedZoneIds: ["z4"],
+      startingZoneId: "z4",
+    });
+    change(el, "profile-name", "Renamed counter");
+    toggle(el, "profile-role-staff", false);
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledOnce();
+    expect(extras(api)).toEqual({ admittedRoles: ["supervisor", "manager", "admin"] });
+    expect(q(el, "editor-form")).toBeNull();
+  });
+
+  it("asks for zones once the manager edits where a profile with no zone left serves", async () => {
+    const { api, el } = await openEdit({
+      ...profiles[0]!,
+      allowedZoneIds: ["z4"],
+      startingZoneId: "z4",
+    });
+    toggle(el, "profile-zone-z1", true);
+    await flush(el);
+    toggle(el, "profile-zone-z1", false);
+    await flush(el);
+    await save(el);
+    expect(api.updateDeviceProfile).not.toHaveBeenCalled();
+    expect(text(el, "profile-zones-error")).toBe(t("device_profiles.err_zones_required"));
+  });
+
+  it("keeps a reopened new profile's departments when the first opening's read arrives late", async () => {
+    let arriveLate!: (choices: ProfileScopeChoices) => void;
+    const api = stubApi({
+      getProfileScopeChoices: vi
+        .fn()
+        .mockImplementationOnce(
+          () => new Promise<ProfileScopeChoices>((resolve) => (arriveLate = resolve)),
+        )
+        .mockResolvedValueOnce({
+          departments: [{ id: "d2", name: "Deli", active: true }],
+          zones: [{ id: "dz2", name: "Deli counter", departmentId: "d2", active: true }],
+        }),
+    });
+    const el = await mount(api);
+    q(el, "create")!.click();
+    await flush(el);
+    q(el, "profile-cancel")!.click();
+    await flush(el);
+    q(el, "create")!.click();
+    await flush(el);
+    arriveLate(scopeChoices);
+    await flush(el);
+    expect(q(el, "profile-department")!.value).toBe("d2");
+    expect(options(el, "profile-department")).toEqual(["d2"]);
+    expect(options(el, "profile-starting-zone")).toEqual(["dz2"]);
+  });
+
+  it("stays on a new profile opened while an edit's reads were still on their way", async () => {
+    let arriveLate!: (profile: DeviceProfile) => void;
+    const api = stubApi({
+      getDeviceProfile: vi.fn(
+        () => new Promise<DeviceProfile>((resolve) => (arriveLate = resolve)),
+      ),
+    });
+    const el = await mount(api);
+    q(el, "edit-p1")!.click();
+    await flush(el);
+    q(el, "create")!.click();
+    await flush(el);
+    change(el, "profile-name", "Terraza");
+    await flush(el);
+    arriveLate(profiles[0]!);
+    await flush(el);
+    expect(q(el, "editor-form")!.hasAttribute("data-editing-id")).toBe(false);
+    expect(q(el, "profile-name")!.value).toBe("Terraza");
+  });
+
+  it("starts a new profile in the venue's only department, at its first zone, using every zone", async () => {
+    const api = stubApi();
+    const el = await openCreate(api);
+    expect(q(el, "profile-department")!.value).toBe("d1");
+    expect(q(el, "profile-department")!.required).toBe(true);
+    expect(q(el, "profile-every-zone")!.checked).toBe(true);
+    expect(text(el, "profile-zones-hint")).toBe(
+      t("device_profiles.every_zone_hint").replace("{department}", "Restaurante"),
+    );
+    expect(q(el, "profile-starting-zone")!.value).toBe("z1");
+    expect(q(el, "profile-starting-zone")!.required).toBe(true);
+    expect(options(el, "profile-starting-zone")).toEqual(["z1", "z2"]);
+    await save(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual(ORDERING);
+  });
+
+  it("asks for a department when the venue has several, beside the field and at the bottom, and sends nothing until one is chosen", async () => {
+    const api = stubApi({
+      getProfileScopeChoices: vi.fn().mockResolvedValue({
+        departments: [...scopeChoices.departments, { id: "d2", name: "Deli", active: true }],
+        zones: [
+          ...scopeChoices.zones,
+          { id: "z3", name: "Mostrador", departmentId: "d2", active: true },
+        ],
+      }),
+    });
+    const el = await openCreate(api);
+    expect(q(el, "profile-department")!.value).toBe("");
+    await save(el);
+    expect(api.createDeviceProfile).not.toHaveBeenCalled();
+    expect(q(el, "profile-department")!.error).toBe(t("device_profiles.err_department_required"));
+    expect(bottom(el)).toBe(t("form.fix_fields"));
+    expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+    await chooseOption(q(el, "profile-department")!, "d2");
+    await flush(el);
+    expect(q(el, "profile-department")!.error).toBe("");
+    expect(q(el, "profile-starting-zone")!.value).toBe("z3");
+    expect(bottom(el)).toBeNull();
+    expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+    await save(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+      departmentId: "d2",
+      allowedZoneIds: null,
+      startingZoneId: "z3",
+    });
+  });
+
+  it("offers some zones from the department's switched-on ones, and the starting zone only among those", async () => {
+    const { api, el } = await openEdit(profiles[0]!);
+    expect(q(el, "profile-zones")).toBeNull();
+    toggle(el, "profile-every-zone", false);
+    await flush(el);
+    const zoneSwitches = [...q(el, "profile-zones")!.querySelectorAll<Field>("wt-switch")];
+    expect(zoneSwitches.map((s) => s.dataset.test)).toEqual(["profile-zone-z1", "profile-zone-z2"]);
+    expect(zoneSwitches.every((s) => s.checked)).toBe(true);
+    toggle(el, "profile-zone-z1", false);
+    await flush(el);
+    expect(options(el, "profile-starting-zone")).toEqual(["z2"]);
+    expect(q(el, "profile-starting-zone")!.value).toBe("z2");
+    await save(el);
+    expect(extras(api)).toEqual({
+      departmentId: "d1",
+      allowedZoneIds: ["z2"],
+      startingZoneId: "z2",
+    });
+  });
+
+  it("refuses some zones with none chosen, beside the zones", async () => {
+    const { api, el } = await openEdit(profiles[0]!);
+    toggle(el, "profile-every-zone", false);
+    await flush(el);
+    toggle(el, "profile-zone-z1", false);
+    toggle(el, "profile-zone-z2", false);
+    await flush(el);
+    await save(el);
+    expect(api.updateDeviceProfile).not.toHaveBeenCalled();
+    expect(text(el, "profile-zones-error")).toBe(t("device_profiles.err_zones_required"));
+    expect(q(el, "profile-starting-zone")!.error).toBe(
+      t("device_profiles.err_starting_zone_required"),
+    );
+    expect(bottom(el)).toBe(t("form.fix_fields"));
+  });
+
+  it("lists who can sign in, following the roles and each person's own rule", async () => {
+    const { api, el } = await openEdit(profiles[0]!);
+    expect(text(el, "admitted-people")).toBe(
+      t("device_profiles.admitted_people").replace("{names}", "Ana, Luis"),
+    );
+    toggle(el, "profile-role-staff", false);
+    await flush(el);
+    expect(text(el, "admitted-people")).toBe(
+      t("device_profiles.admitted_people").replace("{names}", "Luis"),
+    );
+    await chooseOption(q(el, "profile-person-pe-ana")!, "allow");
+    await chooseOption(q(el, "profile-person-pe-luis")!, "deny");
+    await flush(el);
+    expect(text(el, "admitted-people")).toBe(
+      t("device_profiles.admitted_people").replace("{names}", "Ana"),
+    );
+    expect(q(el, "profile-person-pe-marta")).toBeNull();
+    await save(el);
+    expect(extras(api)).toEqual({
+      admittedRoles: ["supervisor", "manager", "admin"],
+      personExceptions: [
+        { personId: "pe-ana", admitted: true },
+        { personId: "pe-luis", admitted: false },
+      ],
+    });
+  });
+
+  it("says so when nobody can sign in", async () => {
+    const { el } = await openEdit(profiles[0]!);
+    await chooseOption(q(el, "profile-person-pe-ana")!, "deny");
+    await chooseOption(q(el, "profile-person-pe-luis")!, "deny");
+    await flush(el);
+    expect(text(el, "admitted-people")).toBe(t("device_profiles.admitted_nobody"));
+  });
+
+  it("refuses a profile no role can sign in on, beside the roles, sending nothing", async () => {
+    const { api, el } = await openEdit(profiles[0]!);
+    for (const role of EVERY_ROLE) toggle(el, `profile-role-${role}`, false);
+    await flush(el);
+    await save(el);
+    expect(api.updateDeviceProfile).not.toHaveBeenCalled();
+    expect(text(el, "profile-roles-error")).toBe(t("device_profiles.err_roles_required"));
+    expect(bottom(el)).toBe(t("form.fix_fields"));
+    toggle(el, "profile-role-manager", true);
+    await flush(el);
+    expect(q(el, "profile-roles-error")).toBeNull();
+    expect(bottom(el)).toBeNull();
+  });
+
+  it("draws actions and screens as separate groups, and offers a kitchen display only Prepares orders", async () => {
+    const { api, el } = await openEdit({
+      ...profiles[0]!,
+      capabilities: ["take-orders", "open-cash-drawer", "act-as-kds", "prepare-orders"],
+    });
+    const flags = (group: string) =>
+      [...q(el, group)!.querySelectorAll<Field>("wt-switch")].map((s) => s.dataset.test);
+    expect(flags("profile-actions")).toEqual([
+      "cap-take-orders",
+      "cap-take-cash",
+      "cap-integrated-card-payment",
+      "cap-hand-keyed-card-payment",
+      "cap-prepare-orders",
+      "cap-hand-over-orders",
+      "cap-print-receipt",
+      "cap-open-cash-drawer",
+    ]);
+    expect(flags("profile-screens")).toEqual([
+      "cap-act-as-kds",
+      "cap-show-station",
+      "cap-show-expo",
+      "cap-show-schedule",
+    ]);
+    expect(text(el, "actions-hint")).toBe(t("device_profiles.actions_hint"));
+    selectFormFactor(el, "kds");
+    await flush(el);
+    expect(flags("profile-actions")).toEqual(["cap-prepare-orders"]);
+    expect(text(el, "actions-hint")).toBe(t("device_profiles.shared_display_actions_hint"));
+    expect(q(el, "profile-department")).toBeNull();
+    expect(q(el, "profile-roles")).toBeNull();
+    expect(q(el, "profile-starting-screen")).toBeNull();
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![3]).toEqual([
+      "act-as-kds",
+      "prepare-orders",
+    ]);
+  });
+
+  it("starts on a ticked screen or the first tab, and clears a starting screen whose switch goes off", async () => {
+    const { api, el } = await openEdit({
+      ...profiles[0]!,
+      capabilities: ["show-schedule", "show-station"],
+      startingScreen: "show-schedule",
+    });
+    expect(q(el, "profile-starting-screen")!.value).toBe("show-schedule");
+    expect(options(el, "profile-starting-screen")).toEqual(["", "show-station", "show-schedule"]);
+    toggle(el, "cap-show-expo", true);
+    await flush(el);
+    expect(options(el, "profile-starting-screen")).toEqual([
+      "",
+      "show-station",
+      "show-expo",
+      "show-schedule",
+    ]);
+    toggle(el, "cap-show-schedule", false);
+    await flush(el);
+    expect(q(el, "profile-starting-screen")!.value).toBe("");
+    await save(el);
+    expect(extras(api)).toEqual({ startingScreen: null });
+  });
+
+  it("can clear a starting screen from its own field", async () => {
+    const { api, el } = await openEdit({
+      ...profiles[0]!,
+      capabilities: ["show-schedule"],
+      startingScreen: "show-schedule",
+    });
+    await chooseOption(q(el, "profile-starting-screen")!, "");
+    await flush(el);
+    await save(el);
+    expect(extras(api)).toEqual({ startingScreen: null });
+  });
+
+  it("says a kitchen display's station and watcher lists are what each screen picks from on Devices", async () => {
+    const grill: Station = {
+      id: "s1",
+      name: "Grill",
+      displayOrder: 0,
+      isDefault: false,
+      active: true,
+      showsRestOfOrder: false,
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    };
+    const { el } = await openEdit(profiles[1]!, {
+      listStations: vi.fn().mockResolvedValue([grill]),
+    });
+    expect(text(el, "kitchen-lists-hint")).toBe(t("device_profiles.kitchen_lists_hint"));
+  });
+
+  it.each([
+    [
+      {
+        code: "device_profile.access_invalid",
+        params: { field: "departmentId", reason: "not_found" },
+      },
+      "department",
+      "device_profiles.err_department",
+    ],
+    [
+      {
+        code: "device_profile.access_invalid",
+        params: { field: "allowedZoneIds", reason: "outside_department" },
+      },
+      "zones",
+      "device_profiles.err_zones",
+    ],
+    [
+      {
+        code: "device_profile.access_invalid",
+        params: { field: "startingZoneId", reason: "unavailable" },
+      },
+      "starting-zone",
+      "device_profiles.err_starting_zone",
+    ],
+    [
+      {
+        code: "device_profile.admission_invalid",
+        params: { field: "admittedRoles", reason: "empty" },
+      },
+      "roles",
+      "device_profiles.err_roles_required",
+    ],
+    [
+      {
+        code: "device_profile.admission_invalid",
+        params: { field: "personExceptions", reason: "not_found", personId: "pe-gone" },
+      },
+      "people",
+      "device_profiles.err_people",
+    ],
+    [
+      { code: "device_profile.invalid", params: { reason: "shared_display_action" } },
+      "actions",
+      "device_profiles.err_shared_display_action",
+    ],
+    [
+      { code: "device_profile.invalid", params: { reason: "bad_starting_screen" } },
+      "starting-screen",
+      "device_profiles.err_starting_screen",
+    ],
+  ] as const)(
+    "keeps the draft and puts a refusal (%o) under its field",
+    async (refusal, field, sentence) => {
+      const { el } = await openEdit(profiles[0]!, {
+        updateDeviceProfile: vi.fn().mockRejectedValue(refusal),
+      });
+      change(el, "profile-name", "Draft name");
+      await el.updateComplete;
+      await save(el);
+      const target = q(el, `profile-${field}`);
+      const shown =
+        target?.tagName === "WT-COMBOBOX" ? target.error : text(el, `profile-${field}-error`);
+      expect(shown).toBe(t(sentence));
+      expect(bottom(el)).toBe(t("form.fix_fields"));
+      expect(q(el, "editor-form")).not.toBeNull();
+      expect(q(el, "profile-name")!.value).toBe("Draft name");
+      expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+    },
+  );
+
+  it("drops a refusal from its field once that field changes", async () => {
+    const { el } = await openEdit(profiles[0]!, {
+      updateDeviceProfile: vi.fn().mockRejectedValue({
+        code: "device_profile.access_invalid",
+        params: { field: "startingZoneId", reason: "unavailable" },
+      }),
+    });
+    await save(el);
+    expect(q(el, "profile-starting-zone")!.error).toBe(t("device_profiles.err_starting_zone"));
+    await chooseOption(q(el, "profile-starting-zone")!, "z2");
+    await flush(el);
+    expect(q(el, "profile-starting-zone")!.error).toBe("");
+    expect(bottom(el)).toBeNull();
+  });
+
+  it("says a refusal that names no field at the bottom", async () => {
+    const { el } = await openEdit(profiles[0]!, {
+      updateDeviceProfile: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    await save(el);
+    expect(bottom(el)).toBe(codeMessage("connection.failed"));
+  });
+
+  it("keeps an open draft through a live refresh, and reloads the list after a save", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const el = await mount(api);
+    q(el, "edit-p1")!.click();
+    await flush(el);
+    change(el, "profile-name", "Draft name");
+    toggle(el, "profile-role-staff", false);
+    await flush(el);
+    vi.mocked(api.listStaff).mockResolvedValue([...staff, person("pe-new", "Nora", "manager")]);
+    liveData.invalidate([
+      { type: "persons", id: "pe-new" },
+      { type: "device_profiles", id: "p1" },
+    ]);
+    await vi.waitFor(() => expect(api.listStaff).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(q(el, "profile-name")!.value).toBe("Draft name");
+    expect(q(el, "profile-role-staff")!.checked).toBe(false);
+    expect(text(el, "admitted-people")).toBe(
+      t("device_profiles.admitted_people").replace("{names}", "Luis, Nora"),
+    );
+    const listReads = vi.mocked(api.listDeviceProfiles).mock.calls.length;
+    await save(el);
+    expect(q(el, "editor-form")).toBeNull();
+    expect(vi.mocked(api.listDeviceProfiles).mock.calls.length).toBe(listReads + 1);
+  });
+
+  it("duplicates only the zones still switched on, moving the start onto one of them", async () => {
+    const offZone: DeviceProfile = {
+      ...profiles[0]!,
+      allowedZoneIds: ["z1", "z4"],
+      startingZoneId: "z4",
+    };
+    const api = stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([offZone]) });
+    const el = await mount(api);
+    q(el, "duplicate-p1")!.click();
+    await flush(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+      departmentId: "d1",
+      allowedZoneIds: ["z1"],
+      startingZoneId: "z1",
+    });
+  });
+
+  it.each([
+    [
+      "its department is switched off",
+      { ...scopeChoices, departments: [{ id: "d1", name: "Restaurante", active: false }] },
+      ["z1"],
+    ],
+    ["none of its zones is still on", scopeChoices, ["z4"]],
+  ] as const)(
+    "duplicates no scope when %s, leaving the server to refuse the copy",
+    async (_case, choices, zones) => {
+      const api = stubApi({
+        listDeviceProfiles: vi
+          .fn()
+          .mockResolvedValue([
+            { ...profiles[0]!, allowedZoneIds: [...zones], startingZoneId: zones[0] },
+          ]),
+        getProfileScopeChoices: vi.fn().mockResolvedValue(choices),
+      });
+      const el = await mount(api);
+      q(el, "duplicate-p1")!.click();
+      await flush(el);
+      expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toBeUndefined();
+    },
+  );
+
+  it("reads the departments and zones when the editor opens, not while the list is showing", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const el = await mount(api);
+    expect(api.getProfileScopeChoices).not.toHaveBeenCalled();
+    q(el, "edit-p1")!.click();
+    await flush(el);
+    expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(1);
+    liveData.invalidate([
+      { type: "departments", id: "d1" },
+      { type: "floor_zones", id: "z1" },
+    ]);
+    await flush(el);
+    expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens an edit with its stored zones even when the departments arrive after the click", async () => {
+    let arrive!: (choices: ProfileScopeChoices) => void;
+    const api = stubApi({
+      getDeviceProfile: vi
+        .fn()
+        .mockResolvedValue({ ...profiles[0]!, allowedZoneIds: ["z2"], startingZoneId: "z2" }),
+      getProfileScopeChoices: vi.fn(
+        () => new Promise<ProfileScopeChoices>((resolve) => (arrive = resolve)),
+      ),
+    });
+    const el = await mount(api);
+    q(el, "edit-p1")!.click();
+    await flush(el);
+    arrive(scopeChoices);
+    await flush(el);
+    expect(q(el, "profile-every-zone")!.checked).toBe(false);
+    expect(q(el, "profile-zone-z2")!.checked).toBe(true);
+    expect(q(el, "profile-zone-z1")!.checked).toBe(false);
+    expect(q(el, "profile-starting-zone")!.value).toBe("z2");
+  });
+
+  it("starts a new profile in the only department even when the departments arrive after the click", async () => {
+    let arrive!: (choices: ProfileScopeChoices) => void;
+    const api = stubApi({
+      getProfileScopeChoices: vi.fn(
+        () => new Promise<ProfileScopeChoices>((resolve) => (arrive = resolve)),
+      ),
+    });
+    const el = await mount(api);
+    q(el, "create")!.click();
+    await flush(el);
+    arrive(scopeChoices);
+    await flush(el);
+    expect(q(el, "profile-department")!.value).toBe("d1");
+    expect(q(el, "profile-starting-zone")!.value).toBe("z1");
+  });
+
+  it("explains department and starting zone with a help button, and shows the meaning of each empty choice as chosen", async () => {
+    const { el } = await openEdit(profiles[0]!);
+    for (const field of ["profile-department", "profile-starting-zone"]) {
+      const help = q(el, field)!.querySelector('wt-help-tooltip[slot="help"]');
+      expect(help?.getAttribute("aria-label")).toBeTruthy();
+      expect(help?.textContent?.trim()).toBeTruthy();
+      expect((q(el, field) as unknown as Combobox).placeholder).toBe("");
+    }
+    for (const field of ["profile-starting-screen", "profile-person-pe-ana"]) {
+      const box = q(el, field) as unknown as Combobox & { showEmptyOption: boolean };
+      expect(box.showEmptyOption).toBe(true);
+      expect(box.placeholder).toBe("");
+    }
+  });
+
+  it("describes the every-zone switch by its hint", async () => {
+    const { el } = await openEdit(profiles[0]!);
+    expect((q(el, "profile-every-zone") as unknown as { description: string }).description).toBe(
+      t("device_profiles.every_zone_hint").replace("{department}", "Restaurante"),
+    );
+  });
+
+  it("copies where a profile serves, who signs in and its starting screen when it is duplicated", async () => {
+    const narrowed: DeviceProfile = {
+      ...profiles[0]!,
+      capabilities: ["show-schedule"],
+      allowedZoneIds: ["z2"],
+      startingZoneId: "z2",
+      admittedRoles: ["manager"],
+      personExceptions: [{ personId: "pe-ana", admitted: true }],
+      startingScreen: "show-schedule",
+    };
+    const api = stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([narrowed]) });
+    const el = await mount(api);
+    q(el, "duplicate-p1")!.click();
+    await flush(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+      departmentId: "d1",
+      allowedZoneIds: ["z2"],
+      startingZoneId: "z2",
+      admittedRoles: ["manager"],
+      personExceptions: [{ personId: "pe-ana", admitted: true }],
+      startingScreen: "show-schedule",
+    });
   });
 });

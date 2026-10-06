@@ -127,6 +127,8 @@ import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/tab-shell.js";
 import "./widgets/find-bill-dialog.js";
 import "./widgets/printers-dialog.js";
+import "./widgets/profile-dialog.js";
+import type { ProfileNotice } from "./widgets/profile-dialog.js";
 import type { PrinterSlot } from "./widgets/printers-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 import "./widgets/card-grid.js";
@@ -197,7 +199,14 @@ import type {
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
 import { kindOfFormFactor } from "./layout.js";
-import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
+import type {
+  CanvasDef,
+  CapabilityFlag,
+  DeviceKind,
+  NavigationScreen,
+  ReceiptConfig,
+  TabDef,
+} from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
 import {
@@ -214,7 +223,12 @@ import type { BasketRefusal, OrderLine } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
-import type { DevDeviceList, DeviceIdentity, DevicePrintersChange } from "./api/client.js";
+import type {
+  DevDeviceList,
+  DeviceIdentity,
+  DevicePrintersChange,
+  ProfileChoice,
+} from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
 import type {
@@ -386,6 +400,15 @@ function draftRefusalError({ refused, ownerName }: DraftRefused, unsent = false)
     : tableWriteError({ code: refused });
 }
 
+/** The device's profile refusing a zone's offers says so in its own words; any other failure to
+ * read them is a load failure. */
+function zoneLoadError(error: unknown): CounterError {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === "device_profile.no_service_zone" || code === "service_zone.not_allowed"
+    ? { code }
+    : "service_zone.load_error";
+}
+
 /** A refused take-over: the drafts have been read again, so each says what changed. */
 function takeOverRefusalError(code: string): CounterError {
   if (code === "draft.out_of_date" || code === "draft.taken_over") return "table.take_over_changed";
@@ -497,6 +520,7 @@ function lineWriteError(error: unknown): CounterError {
 /** Refusals the counter shows in their own words (`codeMessage`): each names what to do next, where
  * the generic "try again" would send the operator round the same refusal. */
 const ACTIONABLE_REFUSALS = new Set([
+  "device.forbidden_action",
   "order.payment_in_flight",
   "product.unavailable",
   "product.not_sold_separately",
@@ -862,9 +886,10 @@ function isPermanentSaleRefusal(error: unknown): boolean {
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
 }
 
-/** `POST /api/pay` throws this code only for a device not set up for the reader. */
+/** `POST /api/pay` names its reader refusal `pay`; a profile that takes no orders is `take-orders`. */
 function isReaderRefusal(error: unknown): boolean {
-  return (error as { code?: string } | undefined)?.code === "device.forbidden_action";
+  const refused = error as { code?: string; action?: unknown } | undefined;
+  return refused?.code === "device.forbidden_action" && refused.action === "pay";
 }
 
 /**
@@ -1043,6 +1068,7 @@ export class TillApp extends LitElement {
 
   /** The device profile's idle logout in seconds; `null` disables it. */
   #inactivityTimeoutSeconds: number | null = null;
+  #startingScreen: NavigationScreen | null = null;
 
   readonly #onInteraction = (): void => this.sessionActivity.noteInteraction();
 
@@ -1338,8 +1364,10 @@ export class TillApp extends LitElement {
   #operatorSession = 0;
   @state() private counterServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
+  /** Who browsed the counter last, in which zone, and the menu they chose there by hand (null: the
+   * zone's default). Held in memory only, so a reload starts from the profile's starting zone. */
+  #browsing?: { personId: string; zoneId: string; menuId: string | null };
   #counterOfferRequest = 0;
-  /** The grid's selected menu, reset to the default at login and changed by the switcher. */
   @state() private selectedCatalogueId = "";
   @state() private selectedDiet: DietPredicate | null = null;
   @state() private operatorName = "";
@@ -1517,6 +1545,12 @@ export class TillApp extends LitElement {
   };
   @state() private printersOpen = false;
   @state() private printersError: { code: string; field?: string } | null = null;
+  /** The profiles the device may be switched to, the active one first, as the server last said. */
+  @state() private approvedProfiles: ProfileChoice[] = [];
+  @state() private activeProfileId = "";
+  @state() private profileOpen = false;
+  @state() private profileNotice: ProfileNotice = null;
+  @state() private profileBusy = false;
   /** Printer switches are sent one at a time, each once the one before has answered or been cut
    * off, so each answer is newer than the one before. A switch with no answer within
    * `TABLE_REQUEST_LIMIT_MS` is cut off, so it cannot hold back the picks after it; a cut-off
@@ -1653,6 +1687,24 @@ export class TillApp extends LitElement {
     );
   }
 
+  /** A canvas tab of the screen's name is selected; otherwise the screen opens through `#pushDrill`,
+   * which opens only one `#affordances` offers. */
+  #openStartingScreen(): void {
+    const screen = this.#startingScreen;
+    if (screen === null) return;
+    const destinations = {
+      "show-station": "station",
+      "show-expo": "expo",
+      "show-schedule": "schedule",
+    } as const satisfies Record<NavigationScreen, TillDestination>;
+    const destination = destinations[screen];
+    if (this.canvas?.tabs.some((tab) => tab.key === destination)) {
+      if (this.capabilities.includes(screen)) this.#onTabSelect(destination, false, true);
+      return;
+    }
+    this.#pushDrill({ kind: destination });
+  }
+
   #restoreDestination(): void {
     const requested = this.#url.read("till-view");
     const destination =
@@ -1761,9 +1813,7 @@ export class TillApp extends LitElement {
       this.defaultReaderId = till.defaultReaderId;
       this.receipt = till.receipt ?? {};
       this.venueAddress = till.venueAddress ?? [];
-      this.canvas = till.canvas;
-      this.capabilities = till.capabilities;
-      this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
+      this.#applyProfileSetup(till);
       // Validated and retained, but not written to the URL: the front-door surfaces are not `/tabs/*`
       // destinations, so the tab is published only when the shell opens.
       this.activeTabKey = this.#requestedTab();
@@ -1855,10 +1905,17 @@ export class TillApp extends LitElement {
   }
 
   async #onLoggedIn(event: Event): Promise<void> {
-    const { personId, displayName, permissions, locale } = (event as CustomEvent<LoggedInDetail>)
-      .detail;
+    const { locale, ...signedIn } = (event as CustomEvent<LoggedInDetail>).detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
     this.#preLoginChoice = undefined;
+    await this.#enterSignedIn(signedIn);
+  }
+
+  /** `switched`: a profile switch, which leaves the screen the old profile was on. */
+  async #enterSignedIn(
+    { personId, displayName, permissions }: Omit<LoggedInDetail, "locale">,
+    switched = false,
+  ): Promise<void> {
     this.#loginPending = true;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
@@ -1868,10 +1925,29 @@ export class TillApp extends LitElement {
     // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
     this.#floorLoaded = false;
-    let offerLoadFailed = false;
+    let offerLoadFailed: CounterError | false = false;
+    // The same person signing in again, with nobody else in between, comes back to the zone they
+    // left and the menu they chose there.
+    const returning = this.#browsing?.personId === personId ? this.#browsing : undefined;
+    let keptMenu: string | null = null;
     try {
-      const catalogue = await this.api.listDefaultZoneOffers();
+      let catalogue = await this.api.listDefaultZoneOffers();
       if (replaced()) return;
+      if (
+        returning !== undefined &&
+        returning.zoneId !== catalogue.context.zoneId &&
+        (catalogue.zones ?? []).some((zone) => zone.id === returning.zoneId)
+      ) {
+        try {
+          catalogue = {
+            ...(await this.api.listZoneOffers(returning.zoneId)),
+            zones: catalogue.zones,
+          };
+        } catch {
+          // The zone left can no longer be read: start from the profile's starting zone.
+        }
+        if (replaced()) return;
+      }
       const { zones, context } = catalogue;
       this.#loadCounterOffers(catalogue);
       this.counterServiceZones = zones ?? [];
@@ -1879,22 +1955,29 @@ export class TillApp extends LitElement {
       this.api.setServiceZone(context.zoneId);
       this.receiptPrintMode = context.receiptPrintMode ?? "auto";
       if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
-    } catch {
+      if (returning?.zoneId === context.zoneId) keptMenu = returning.menuId;
+    } catch (error) {
       if (replaced()) return;
-      offerLoadFailed = true;
+      offerLoadFailed = zoneLoadError(error);
       this.#loadCounterOffers({ offers: [], menus: [] }, false);
       this.counterServiceZones = [];
       this.counterServiceZoneId = "";
     }
-    // A fresh login starts on the zone's default menu, regardless of the previous menu preference.
-    this.#selectMenu(this.#defaultCatalogueId());
+    const kept = keptMenu !== null && this.menus.some((menu) => menu.id === keptMenu);
+    this.#selectMenu(kept ? keptMenu! : this.#defaultCatalogueId());
+    this.#browsing = {
+      personId,
+      zoneId: this.counterServiceZoneId,
+      menuId: kept ? keptMenu : null,
+    };
     this.#selectDiet(null);
     this.operatorName = displayName;
     this.#loginPending = false;
     this.operatorPersonId = personId;
     this.#resumeOrderDraft();
+    if (switched) this.#endProfileSwitch();
     this.permissions = permissions;
-    this.errorKey = offerLoadFailed ? "service_zone.load_error" : undefined;
+    this.errorKey = offerLoadFailed === false ? undefined : offerLoadFailed;
     this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
@@ -1903,10 +1986,14 @@ export class TillApp extends LitElement {
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
     if (landsOnFloor) await this.#loadFloorData(replaced);
     if (replaced()) return;
-    // History may change while login data loads and the lock screen still owns the page.
-    this.#setActiveTab(this.#requestedTab(), true, true);
+    // History may change while login data loads and the lock screen still owns the page. A switched
+    // profile starts on its own canvas's first tab, whatever tab the address names.
+    this.#setActiveTab(switched ? this.canvas?.tabs[0]?.key : this.#requestedTab(), true, true);
     this.#setScreen(landsOnFloor ? "floor" : "counter");
-    this.#restoreDestination();
+    if (switched)
+      this.#url.write({ "till-view": null, "till-station": null, "till-watcher": null }, true);
+    else this.#restoreDestination();
+    if (this.drill === undefined) this.#openStartingScreen();
     const showsCounterLists = this.#showsCounterLists();
     if (showsCounterLists) {
       // Each list says its own failure, so one that fails never stops the others loading.
@@ -1923,7 +2010,7 @@ export class TillApp extends LitElement {
     if (showsCounterLists || this.#affordances().includes("schedule")) {
       // Loaded after the landing screen is shown, and a failure is swallowed, so the roster never blocks a sale.
       try {
-        const staff = await this.api.listStaff();
+        const staff = await this.api.listStaff({ everyone: true });
         if (replaced()) return;
         this.staff = staff;
       } catch {
@@ -2156,8 +2243,13 @@ export class TillApp extends LitElement {
 
   /** Menu selection filters the product grid without changing the working order or browser history. */
   #onMenuSelected(event: CustomEvent<{ id: string }>): void {
-    if (this.#tableCatalogueActive()) this.#selectTableMenu(event.detail.id);
-    else this.#selectMenu(event.detail.id);
+    if (this.#tableCatalogueActive()) {
+      this.#selectTableMenu(event.detail.id);
+      return;
+    }
+    this.#selectMenu(event.detail.id);
+    if (this.#browsing !== undefined && this.selectedCatalogueId === event.detail.id)
+      this.#browsing = { ...this.#browsing, menuId: event.detail.id };
   }
 
   #tableCatalogueActive(): boolean {
@@ -2223,10 +2315,11 @@ export class TillApp extends LitElement {
       await this.#refreshStationQueue();
       if (session !== this.#operatorSession) return;
       this.#selectMenu(defaultMenuId ?? this.#defaultCatalogueId(menus));
+      this.#browsing = { personId: this.operatorPersonId, zoneId: context.zoneId, menuId: null };
       this.errorKey = undefined;
-    } catch {
+    } catch (error) {
       if (request === this.#counterOfferRequest && session === this.#operatorSession)
-        this.errorKey = "service_zone.load_error";
+        this.errorKey = zoneLoadError(error);
     }
   }
 
@@ -3763,6 +3856,104 @@ export class TillApp extends LitElement {
   #holdIdentity(identity: DeviceIdentity): void {
     this.#printersReads++;
     this.#heldIdentity = identity;
+    this.approvedProfiles = identity.approvedProfiles ?? [];
+    this.activeProfileId = identity.profileId ?? "";
+  }
+
+  /** Reads the device again first, so approvals changed since boot are what is offered. */
+  async #onOpenProfile(): Promise<void> {
+    const session = this.#operatorSession;
+    await this.#readPrinters();
+    if (session !== this.#operatorSession) return;
+    this.profileNotice = null;
+    this.profileBusy = false;
+    this.profileOpen = true;
+  }
+
+  /**
+   * The counter basket and an order with no party are this browser's alone, and a table draft's
+   * last change may not have reached the server, so the server cannot refuse the switch for them:
+   * re-entering after it starts a new draft and drops the old one unsaved. The dialog stays open
+   * over the screen until that new draft is started, so no edit lands in the one being dropped.
+   */
+  async #onProfileSwitch(event: CustomEvent<{ profileId: string }>): Promise<void> {
+    if (this.profileBusy) return;
+    const { profileId } = event.detail;
+    if (profileId === this.activeProfileId) {
+      this.profileOpen = false;
+      return;
+    }
+    if (this.#store.lines.length > 0 || this.#partylessDraft.lines.length > 0) {
+      this.profileNotice = "order_open";
+      return;
+    }
+    const session = this.#operatorSession;
+    this.profileNotice = null;
+    this.profileBusy = true;
+    const sync = this.#draftSync;
+    if (sync !== undefined) {
+      const saved = await sync.flush();
+      if (session !== this.#operatorSession) return;
+      if (saved !== "saved") {
+        this.profileBusy = false;
+        this.profileNotice =
+          saved !== "failed" && DRAFT_REFUSALS.has(saved.refused)
+            ? "draft_replaced"
+            : "draft_unsaved";
+        return;
+      }
+    }
+    try {
+      await this.api.switchDeviceProfile(profileId);
+    } catch (error) {
+      if (session !== this.#operatorSession) return;
+      const code = (error as { code?: unknown } | null)?.code;
+      this.profileNotice = { code: typeof code === "string" ? code : "server.internal" };
+      this.profileBusy = false;
+      return;
+    }
+    if (session !== this.#operatorSession) return;
+    try {
+      await this.#enterSwitchedProfile(session);
+    } finally {
+      this.#endProfileSwitch();
+    }
+  }
+
+  #endProfileSwitch(): void {
+    this.profileBusy = false;
+    this.profileOpen = false;
+  }
+
+  /** The parts of the till's setup that come from the device's profile. */
+  #applyProfileSetup(till: TillInfo): void {
+    this.canvas = till.canvas;
+    this.capabilities = till.capabilities;
+    this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
+    this.#startingScreen = till.startingScreen ?? null;
+  }
+
+  /** The new profile's setup, and browsing begun again from its starting zone and default menu. */
+  async #enterSwitchedProfile(session: number): Promise<void> {
+    try {
+      const till = await this.api.getTill();
+      if (session !== this.#operatorSession) return;
+      this.#applyProfileSetup(till);
+    } catch {
+      if (session === this.#operatorSession) this.errorKey = "boot.error";
+      return;
+    }
+    await this.#readPrinters();
+    if (session !== this.#operatorSession) return;
+    this.#browsing = undefined;
+    await this.#enterSignedIn(
+      {
+        personId: this.operatorPersonId,
+        displayName: this.operatorName,
+        permissions: this.permissions,
+      },
+      true,
+    );
   }
 
   #onPrintersChange(event: CustomEvent<DevicePrintersChange>): Promise<void> {
@@ -4034,14 +4225,15 @@ export class TillApp extends LitElement {
 
   /** Select a validated canvas tab and load its floor data when needed. Explicit selection closes the
    * overlay; history restores a permitted regular destination over the tab. The first floor visit
-   * loads zones and statuses too, while later visits refresh only live occupancy. */
-  #onTabSelect(key: string, fromHistory = false): void {
+   * loads zones and statuses too, while later visits refresh only live occupancy. `replace` puts the
+   * tab in the current history entry rather than a new one. */
+  #onTabSelect(key: string, fromHistory = false, replace = fromHistory): void {
     if (!this.#inShell()) return;
     const tab = this.canvas?.tabs.find((candidate) => candidate.key === key);
     if (tab === undefined) return;
     this.#dismissStationChoices();
     const wasShowingOrder = this.#tableCatalogueActive();
-    this.#setActiveTab(key, fromHistory, fromHistory);
+    this.#setActiveTab(key, replace, fromHistory);
     if (key === "counter") void this.#loadStations();
     if (fromHistory) this.#restoreDestination();
     else if (this.drill !== undefined) this.#popDrill();
@@ -6814,6 +7006,7 @@ export class TillApp extends LitElement {
     this.#closeCancelCrediting();
     this.findingBill = false;
     this.printersOpen = false;
+    this.profileOpen = false;
     this.invoiceRecipientBill = undefined;
     this.invoiceRecipientOpen = false;
     this.invoiceRecipientRefusal = "";
@@ -7846,6 +8039,7 @@ export class TillApp extends LitElement {
         @back-to-counter=${() => this.#onBackToCounter()}
         @open-allergens=${() => this.#onOpenAllergens()}
         @open-printers=${() => void this.#onOpenPrinters()}
+        @open-profile=${() => void this.#onOpenProfile()}
         @close-allergens=${() => this.#onCloseAllergens()}
         @logout=${() => void this.#onLogout()}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
@@ -7899,6 +8093,22 @@ export class TillApp extends LitElement {
                   void this.#onPrintersChange(event)}
                 @close=${() => (this.printersOpen = false)}
               ></till-printers-dialog>`
+            : nothing
+        }
+        ${
+          this.profileOpen
+            ? html`<till-profile-dialog
+                .open=${true}
+                .profiles=${this.approvedProfiles}
+                .activeProfileId=${this.activeProfileId}
+                .notice=${this.profileNotice}
+                .busy=${this.profileBusy}
+                @profile-switch=${(event: CustomEvent<{ profileId: string }>) =>
+                  void this.#onProfileSwitch(event)}
+                @close=${() => {
+                  if (!this.profileBusy) this.profileOpen = false;
+                }}
+              ></till-profile-dialog>`
             : nothing
         }
         ${
@@ -8056,6 +8266,7 @@ export class TillApp extends LitElement {
                       .operatorName=${this.operatorName}
                       .affordances=${this.#affordanceList}
                       .kiosk=${this.deviceMode}
+                      .canSwitchProfile=${this.approvedProfiles.length > 1}
                       .loadLocales=${this.#loadLocales}
                       @tab-select=${(e: CustomEvent<{ key: string }>) => {
                         this.#onTabSelect(e.detail.key);

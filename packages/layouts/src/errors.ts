@@ -44,9 +44,15 @@ declare module "@waitron/shared" {
     "canvas.name_taken": Record<string, never>;
     "canvas.in_use": Record<string, never>;
     "device_profile.invalid": {
-      reason: "bad_capabilities" | "bad_canvas_ref" | "bad_inactivity_timeout";
+      reason:
+        | "bad_capabilities"
+        | "bad_canvas_ref"
+        | "bad_inactivity_timeout"
+        | "shared_display_action"
+        | "bad_starting_screen";
     };
-    "device_profile.not_found": Record<string, never>;
+    /** `field` names the request field that held the id, where that is not the path's own. */
+    "device_profile.not_found": { field?: "approvedProfileIds" };
     "device_profile.name_taken": Record<string, never>;
     "device_profile.in_use": Record<string, never>;
     "theme.invalid": {

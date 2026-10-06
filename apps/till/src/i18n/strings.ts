@@ -287,6 +287,15 @@ export const en = {
   "reader_picker.empty": "No active readers configured",
   "reader_picker.offline": "Offline",
   "card_reader.not_set_up": "This device is not set up to use the card reader",
+  "profile.open": "Profile",
+  "profile.title": "This device's profile",
+  "profile.label": "Device profile",
+  "profile.switch": "Switch",
+  "profile.order_open": "Hold or clear the order in progress before switching profile.",
+  "profile.draft_unsaved":
+    "The order's last change could not be saved. Try again, or remove it, before switching profile.",
+  "profile.draft_replaced":
+    "The order's last change was refused, and the saved order is shown instead. Check it, then switch profile.",
   "printers.open": "Printers",
   "printers.title": "This device's printers",
   "printers.receipt": "Receipt printer",
@@ -1285,6 +1294,15 @@ export const es: Record<StringKey, string> = {
   "reader_picker.empty": "No hay lectores activos configurados",
   "reader_picker.offline": "Sin conexión",
   "card_reader.not_set_up": "Este dispositivo no está configurado para usar el lector de tarjetas",
+  "profile.open": "Perfil",
+  "profile.title": "Perfil de este dispositivo",
+  "profile.label": "Perfil de dispositivo",
+  "profile.switch": "Cambiar",
+  "profile.order_open": "Aparca o vacía el pedido en curso antes de cambiar de perfil.",
+  "profile.draft_unsaved":
+    "No se pudo guardar el último cambio del pedido. Vuelve a intentarlo, o quítalo, antes de cambiar de perfil.",
+  "profile.draft_replaced":
+    "Se rechazó el último cambio del pedido y se muestra el pedido guardado. Revísalo y luego cambia de perfil.",
   "printers.open": "Impresoras",
   "printers.title": "Impresoras de este dispositivo",
   "printers.receipt": "Impresora de tickets",

@@ -351,6 +351,10 @@ separate conditions for order type and ordering device. The delivery area is fou
 - **A takeaway or delivery order** uses its own area, such as "Pickup", whatever device took it.
   That is how "takeaway goes to the packing station" becomes an ordinary exception.
 
+> **2026-10-06 follow-up (W97):** a device's default zone and `device_zone_defaults` are gone,
+> replaced by a device profile's starting zone; see the
+> [devices, menus and service zones design](2026-10-04-devices-menus-and-service-zones-design.md).
+
 ### 5.5 Station claims
 
 - **A station claims folders.** A claim covers everything inside the folder, including products

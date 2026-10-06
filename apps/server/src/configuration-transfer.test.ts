@@ -69,7 +69,14 @@ import {
   setProfilePrinterLists,
 } from "@waitron/layouts";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import {
+  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
+  hashPassword,
+  hashPin,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
 import { recordSale } from "@waitron/core";
 import { categoryDetails } from "@waitron/catalogue";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
@@ -90,6 +97,7 @@ import {
   departments,
   readHolidays,
   readLocalHolidayModel,
+  readProfileServiceAccess,
   readSpecialDate,
   readWeekHours,
   replaceWeekHours,
@@ -97,6 +105,7 @@ import {
   saveHolidayArea,
   saveLocalHoliday,
   saveSpecialDate,
+  setProfileServiceAccess,
   setStationToday,
   stationStates,
   type WeekCell,
@@ -2398,6 +2407,130 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
   });
 });
 
+it("transfers a profile's department, zones and station list, leaving a retired profile's behind", async () => {
+  const source = await applyVenue(planVenue(venue("B24680135"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const cfg = { locationId: brandLocationId(source.locationId) };
+  const original = await withTransaction(suite.db, async (tx) => {
+    const restaurant = await createDepartment(tx, cfg, {
+      name: "Restaurant",
+      defaultServiceMode: "table_tab",
+    });
+    await createServiceZone(tx, cfg, { name: "Dining room", departmentId: restaurant.id });
+    const terrace = await createServiceZone(tx, cfg, {
+      name: "Terrace",
+      departmentId: restaurant.id,
+    });
+    const [grill] = await tx
+      .insert(kitchenStations)
+      .values({ locationId: source.locationId, name: "Grill" })
+      .returning({ id: kitchenStations.id });
+    const [live, retired] = await tx
+      .insert(deviceProfiles)
+      .values([
+        { name: "Terrace handheld", formFactor: "phone-portrait" },
+        { name: "Old till", formFactor: "till" },
+      ])
+      .returning({ id: deviceProfiles.id });
+    for (const profile of [live!, retired!]) {
+      await setProfileServiceAccess(tx, cfg, profile.id, {
+        departmentId: restaurant.id,
+        allowedZoneIds: [terrace.id],
+        startingZoneId: terrace.id,
+        stationIds: [grill!.id],
+        watcherIds: [],
+      });
+    }
+    // Provisioning gave the seeded ordering profiles a scope; clear it so the rows that travel are
+    // this test's own.
+    const seeded = await tx
+      .select({ id: deviceProfiles.id })
+      .from(deviceProfiles)
+      .where(sql`${deviceProfiles.id} not in (${live!.id}, ${retired!.id})`);
+    for (const { id } of seeded) {
+      await setProfileServiceAccess(tx, cfg, id, {
+        departmentId: null,
+        allowedZoneIds: null,
+        startingZoneId: null,
+        stationIds: [],
+        watcherIds: [],
+      });
+    }
+    return { live: live!.id, retired: retired!.id };
+  });
+  await retireProfile(source.locationId, original.retired);
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-06T12:00:00Z"),
+    versions,
+  );
+  for (const table of [
+    "device_profile_service_access",
+    "device_profile_zones",
+    "device_profile_stations",
+  ]) {
+    expect(
+      transferred.tables[table]!.map((row) => row.device_profile_id),
+      table,
+    ).toEqual([original.live]);
+  }
+  await applyVenue(planVenue(venue("B13570246"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await withTransaction(targetSuite.db, async (tx) => {
+    const [location] = await tx
+      .select({ id: kitchenStations.locationId })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, "Grill"));
+    const [profile] = await tx
+      .select({ id: deviceProfiles.id })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.name, "Terrace handheld"));
+    const access = await readProfileServiceAccess(
+      tx,
+      { locationId: brandLocationId(location!.id) },
+      profile!.id,
+    );
+    const zones = new Map(
+      (await tx.select({ id: floorZones.id, name: floorZones.name }).from(floorZones)).map(
+        (zone) => [zone.id, zone.name],
+      ),
+    );
+    const stations = new Map(
+      (
+        await tx
+          .select({ id: kitchenStations.id, name: kitchenStations.name })
+          .from(kitchenStations)
+      ).map((station) => [station.id, station.name]),
+    );
+    return {
+      department: (
+        await tx
+          .select({ name: departments.name })
+          .from(departments)
+          .where(eq(departments.id, access.departmentId ?? ""))
+      )[0]?.name,
+      allowed: (access.allowedZoneIds ?? []).map((id) => zones.get(id)),
+      starting: zones.get(access.startingZoneId ?? ""),
+      stations: access.stationIds.map((id) => stations.get(id)),
+    };
+  });
+  expect(imported).toEqual({
+    department: "Restaurant",
+    allowed: ["Terrace"],
+    starting: "Terrace",
+    stations: ["Grill"],
+  });
+});
+
 /** Creates `tables` in order, fills them, checks the fixture breaks no foreign key, exports them
  * declared in reverse order with the first as the leave-behind table, and drops them again. */
 async function exportScratch(
@@ -2428,6 +2561,88 @@ async function exportScratch(
       await suite.db.execute(sql`drop table if exists ${sql.identifier(table.name)}`);
   }
 }
+
+it("transfers a profile's admitted roles and person exceptions, leaving a retired profile's and the exporting operator's behind", async () => {
+  const source = await applyVenue(planVenue(venue("B35792468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTransaction(suite.db, async (tx) => {
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.role, "admin"));
+    const [mia] = await tx
+      .insert(persons)
+      .values({ displayName: "Mia", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    const [live, retired] = await tx
+      .insert(deviceProfiles)
+      .values([
+        { name: "Bar till", formFactor: "till" },
+        { name: "Old till", formFactor: "till" },
+      ])
+      .returning({ id: deviceProfiles.id });
+    for (const profile of [live!, retired!]) {
+      await tx
+        .insert(deviceProfileAdmissionRoles)
+        .values({ deviceProfileId: profile.id, role: "manager" });
+      await tx.insert(deviceProfileAdmissionPersons).values([
+        { deviceProfileId: profile.id, personId: mia!.id, admitted: true },
+        { deviceProfileId: profile.id, personId: admin!.id, admitted: false },
+      ]);
+    }
+    return { admin: admin!.id, mia: mia!.id, live: live!.id, retired: retired!.id };
+  });
+  await retireProfile(source.locationId, original.retired);
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    { ...source, sourceOperatorId: original.admin },
+    ALL_MODULES,
+    new Date("2026-10-06T12:00:00Z"),
+    versions,
+  );
+  expect(
+    transferred.tables.device_profile_admission_roles!.map((row) => row.device_profile_id),
+  ).toEqual([original.live]);
+  expect(
+    transferred.tables
+      .device_profile_admission_persons!.map((row) => `${row.device_profile_id} ${row.person_id}`)
+      .sort(),
+  ).toEqual([`${original.live} ${original.admin}`, `${original.live} ${original.mia}`].sort());
+  await applyVenue(planVenue(venue("B46813579"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await withTransaction(targetSuite.db, async (tx) => ({
+    roles: await tx
+      .select({ profile: deviceProfiles.name, role: deviceProfileAdmissionRoles.role })
+      .from(deviceProfileAdmissionRoles)
+      .innerJoin(
+        deviceProfiles,
+        eq(deviceProfiles.id, deviceProfileAdmissionRoles.deviceProfileId),
+      ),
+    exceptions: await tx
+      .select({
+        profile: deviceProfiles.name,
+        person: persons.displayName,
+        admitted: deviceProfileAdmissionPersons.admitted,
+      })
+      .from(deviceProfileAdmissionPersons)
+      .innerJoin(
+        deviceProfiles,
+        eq(deviceProfiles.id, deviceProfileAdmissionPersons.deviceProfileId),
+      )
+      .innerJoin(persons, eq(persons.id, deviceProfileAdmissionPersons.personId)),
+  }));
+  expect(imported).toEqual({
+    roles: [{ profile: "Bar till", role: "manager" }],
+    exceptions: [{ profile: "Bar till", person: "Mia", admitted: true }],
+  });
+});
 
 it("follows a key that names no parent columns to the parent's primary key, composite ones included", async () => {
   const ids = await exportScratch(

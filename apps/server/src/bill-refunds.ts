@@ -41,6 +41,7 @@ import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.j
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { enqueueBillRefundDrawer } from "./receipt-print.js";
+import type { TenderKind } from "./device-session.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { fingerprint } from "./parties.js";
 import { refusePaymentInFlight } from "./working-order.js";
@@ -477,28 +478,40 @@ export async function attestCardRefund(
 }
 
 /**
+ * How the payment was taken, for the profile check a refund makes before its transaction: cash, a
+ * card keyed on a separate terminal (a `manual` provider row), or a card on a connected reader.
+ * `undefined` when the bill has no such payment, which the refund itself then refuses. No update in
+ * the tree sets a payment's `method` or its provider row's `provider`.
+ */
+export async function refundTender(
+  db: Database,
+  workingOrderId: string,
+  paymentId: string,
+): Promise<TenderKind | undefined> {
+  const [payment] = await db
+    .select({ method: billPayments.method })
+    .from(billPayments)
+    .where(and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)));
+  if (payment === undefined) return undefined;
+  if (payment.method === "cash") return "cash";
+  return (await findPaymentByBillPayment(db, paymentId))?.provider === MANUAL_PROVIDER
+    ? "hand-keyed-card"
+    : "reader-card";
+}
+
+/**
  * The override whose PIN the refund's transaction will check: `authorize` does for an operator
  * lacking `sale.refund`, and a hand-keyed card refund confirmed done checks it as the confirmer
  * otherwise. Read without writing; the transaction decides again.
  */
 async function refundOverrideToCheck(
   db: Database,
-  workingOrderId: string,
-  paymentId: string,
+  tender: TenderKind | undefined,
   req: BillRefundRequest,
   sessionId: string,
 ): Promise<{ personId: string; pin: string } | undefined> {
   if (req.override === undefined) return undefined;
-  let confirmsHandKeyedCard = false;
-  if (req.manualConfirmed === true) {
-    const [payment] = await db
-      .select({ method: billPayments.method })
-      .from(billPayments)
-      .where(and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)));
-    confirmsHandKeyedCard =
-      payment?.method === "card" &&
-      (await findPaymentByBillPayment(db, paymentId))?.provider === MANUAL_PROVIDER;
-  }
+  const confirmsHandKeyedCard = req.manualConfirmed === true && tender === "hand-keyed-card";
   return overrideToCheck(
     db,
     { sessionId, permission: "sale.refund" },
@@ -518,7 +531,8 @@ async function refundOverrideToCheck(
  *
  * Cash and staff-confirmed standalone-terminal refunds are completed in this transaction. A
  * connected card refund is written `pending` before its provider is asked (design §6b), and the
- * bill is locked until the evidence settles it.
+ * bill is locked until the evidence settles it. `tender` is what {@link refundTender} answered for
+ * the payment.
  */
 export async function refundBillPayment(
   deps: BillRefundDeps,
@@ -527,16 +541,11 @@ export async function refundBillPayment(
   paymentId: string,
   req: BillRefundRequest,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
+  tender: TenderKind | undefined,
 ): Promise<BillRefundResult> {
   const applied = money(decimal(req.appliedAmount));
   const tip = money(decimal(req.tipAmount));
-  const toCheck = await refundOverrideToCheck(
-    deps.db,
-    workingOrderId,
-    paymentId,
-    req,
-    operator.sessionId,
-  );
+  const toCheck = await refundOverrideToCheck(deps.db, tender, req, operator.sessionId);
   let release = (): void => {};
   try {
     const begun = await withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) => {

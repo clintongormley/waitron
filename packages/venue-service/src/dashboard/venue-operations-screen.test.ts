@@ -67,8 +67,6 @@ const model: VenueServiceView = {
     { id: "z1", name: "Dining room" },
     { id: "z2", name: "Deli counter" },
   ],
-  devices: [],
-  deviceZones: [],
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
@@ -133,9 +131,6 @@ function field(el: VenueOperationsScreen, name: string) {
 function input(el: VenueOperationsScreen, name: string) {
   return el.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
 }
-/** One of the kitchen settings' dropdowns. */
-/** A till's starting-zone dropdown. */
-type TillZone = HTMLElement & { value: string; options: { value: string; label: string }[] };
 /** A dropdown's choices, as the text a person reads. */
 function options(box: Element) {
   return (box as Element & { options: { label: string }[] }).options
@@ -170,6 +165,7 @@ async function type(el: VenueOperationsScreen, name: string, value: string) {
   control.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await settle(el);
 }
+
 /** Opens a dropdown's list and clicks the row it already shows, as a person can, and returns
  * how many `wt-change` events the dropdown sent. */
 async function clickChosenRow(box: HTMLElement): Promise<number> {
@@ -238,21 +234,6 @@ describe("venue operations screen", () => {
       expect(find(el, '[data-test="new-hours"]')).toBeNull();
     }
     expect(table(el, "policy-tree")).not.toBeNull();
-  });
-
-  it("keeps device starting zones available below the policy tree outside the legacy tabs", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-      }),
-    } as unknown as VenueServiceApi);
-    const tree = table(el, "policy-tree");
-    const tills = table(el, "tills");
-    expect(tills.closest("wt-tabs")).toBeNull();
-    expect(tree.compareDocumentPosition(tills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(tills.checkVisibility()).toBe(true);
-    expect(tills.shadowRoot!.querySelector('wt-combobox[name="till-t1-starts-in"]')).not.toBeNull();
   });
 
   it("opens retained zone menus from the policy tree outside the legacy tabs", async () => {
@@ -1338,6 +1319,57 @@ describe("venue operations screen", () => {
     expect(save).toHaveBeenCalledTimes(1);
   });
 
+  /** A department's paid choice, open in its dropdown and showing pay before preparation. */
+  async function openPaidChoice(save: ReturnType<typeof vi.fn>, load = vi.fn()) {
+    load.mockResolvedValue({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: "prepay",
+            collectionNumber: "none",
+            receiptPrintMode: "auto",
+            printTradingName: true,
+          },
+        ],
+        zones: [],
+      },
+    });
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField: save,
+    } as unknown as VenueServiceApi);
+    table(el, "policy-tree")
+      .shadowRoot!.querySelector<HTMLButtonElement>('[data-test="edit-paid"]')!
+      .click();
+    await settle(el);
+    const control = table(el, "policy-tree").shadowRoot!.querySelector<
+      HTMLElement & { value: string }
+    >('wt-combobox[name="paidWhen"]')!;
+    expect(control.value).toBe("prepay");
+    return { el, control };
+  }
+
+  // Fails if choosing the paid choice a department already has saves it again.
+  it("saves nothing when the paid choice already shown is chosen again", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const load = vi.fn();
+    const { el, control } = await openPaidChoice(save, load);
+    expect(await clickChosenRow(control)).toBe(1);
+    await settle(el);
+    expect(save).not.toHaveBeenCalled();
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a paid choice's change inside the screen", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { control } = await openPaidChoice(save);
+    expect(await changesHeardOutside(() => chooseOption(control, "ticket_then_pay"))).toBe(0);
+    await vi.waitFor(() => expect(save).toHaveBeenCalledWith("d1", "paidWhen", "ticket_then_pay"));
+  });
+
   it("does not present a missing paid policy as pay before preparation", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -1927,13 +1959,11 @@ describe("venue operations screen", () => {
     en: {
       departments: "No departments yet.",
       zones: "No service zones yet.",
-      tills: "No active tills.",
       "zone-menus": "No menus in this service zone yet.",
     },
     es: {
       departments: "Todavía no hay departamentos.",
       zones: "Todavía no hay zonas de servicio.",
-      tills: "No hay cajas activas.",
       "zone-menus": "Todavía no hay cartas en esta zona de servicio.",
     },
   };
@@ -1949,23 +1979,12 @@ describe("venue operations screen", () => {
         ...model,
         departments: [],
         floorZones: [],
-        devices: [],
       }),
     } as unknown as VenueServiceApi);
     await selectTab(empty, "departments");
     expect(emptySentence(empty, "departments")).toBe(expected.departments);
     await selectTab(empty, "zones");
     expect(emptySentence(empty, "zones")).toBe(expected.zones);
-    expect(emptySentence(empty, "tills")).toBe(expected.tills);
-
-    const allTillsOff = await mount({
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        devices: [{ id: "t2", label: "Old till", kind: "till", active: false }],
-      }),
-    } as unknown as VenueServiceApi);
-    await selectTab(allTillsOff, "zones");
-    expect(emptySentence(allTillsOff, "tills")).toBe(expected.tills);
 
     const noMenus = await mount({
       load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
@@ -1985,217 +2004,6 @@ describe("venue operations screen", () => {
     expect(button.hasAttribute("disabled")).toBe(true);
   });
 
-  it("lists active tills, excludes kitchen screens, and saves and clears a starting zone", async () => {
-    const view: VenueServiceView = {
-      ...model,
-      devices: [
-        { id: "t1", label: "Front till", kind: "till", active: true },
-        { id: "k1", label: "Kitchen screen", kind: "kds_station", active: true },
-        { id: "t2", label: "Old till", kind: "till", active: false },
-      ],
-      deviceZones: [],
-    };
-    const api = {
-      load: vi
-        .fn()
-        .mockResolvedValueOnce(view)
-        .mockResolvedValue({ ...view, deviceZones: [{ deviceId: "t1", zoneId: "z1" }] }),
-      setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
-      clearDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "zones");
-    expect(tableText(el, "tills")).toContain("Front till");
-    expect(tableText(el, "tills")).not.toContain("Kitchen screen");
-    expect(tableText(el, "tills")).not.toContain("Old till");
-    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>(
-      'wt-combobox[label="Front till: Starts in"]',
-    )!;
-    expect(selector).not.toBeNull();
-    expect(selector.getAttribute("name")).toBe("till-t1-starts-in");
-    expect(selector.options[0]!.label).toBe("The venue's counter zone");
-    await chooseOption(selector, "z1");
-    await settle(el);
-    expect(api.setDeviceDefaultZone).toHaveBeenCalledWith("t1", "z1");
-    await chooseOption(selector, "");
-    await settle(el);
-    expect(api.clearDeviceDefaultZone).toHaveBeenCalledWith("t1");
-  });
-  it("shows a stored starting zone when the zones view first loads", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-        deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
-      }),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
-    expect(selector.value).toBe("z1");
-  });
-
-  it("does not offer inactive zones or zones in inactive departments as starting zones", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        departments: [model.departments[0]!, { ...model.departments[1]!, active: false }],
-        zones: [
-          { ...model.zones[0]!, active: false },
-          { ...model.zones[0]!, id: "z2", name: "Deli counter", departmentId: "d2", active: true },
-        ],
-        floorZones: [
-          { ...model.floorZones[0]!, active: false },
-          { ...model.floorZones[1]!, active: true },
-        ],
-        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-      }),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
-    expect(selector.options.map((option) => option.value)).toEqual([""]);
-  });
-
-  it("returns a refused starting-zone choice to the stored counter default", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-        deviceZones: [],
-      }),
-      setDeviceDefaultZone: vi.fn().mockRejectedValue(new Error("refused")),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "zones");
-    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
-    await chooseOption(selector, "z1");
-    await settle(el);
-    expect(api.setDeviceDefaultZone).toHaveBeenCalledWith("t1", "z1");
-    expect(selector.value).toBe("");
-    expect(pageAlert(el)).toContain("could not be saved");
-  });
-
-  it("restores a stored zone when clearing it is refused", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-        deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
-      }),
-      clearDeviceDefaultZone: vi.fn().mockRejectedValue(new Error("refused")),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "zones");
-    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
-    expect(selector.value).toBe("z1");
-    await chooseOption(selector, "");
-    await settle(el);
-    expect(api.clearDeviceDefaultZone).toHaveBeenCalledWith("t1");
-    expect(selector.value).toBe("z1");
-    expect(pageAlert(el)).toContain("could not be saved");
-  });
-
-  // Fails if choosing the zone a till already starts in saves it again.
-  it("saves nothing when the starting zone already shown is chosen again", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-        deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
-      }),
-      setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
-      clearDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "zones");
-    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
-    expect(await clickChosenRow(selector)).toBe(1);
-    await settle(el);
-    expect(api.setDeviceDefaultZone).not.toHaveBeenCalled();
-    expect(api.clearDeviceDefaultZone).not.toHaveBeenCalled();
-    expect(api.load).toHaveBeenCalledTimes(1);
-    expect(selector.value).toBe("z1");
-  });
-
-  it("keeps a starting zone's change inside the screen", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-        deviceZones: [],
-      }),
-      setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
-    expect(await changesHeardOutside(() => chooseOption(selector, "z1"))).toBe(0);
-  });
-
-  it.each(["devices", "device_zone_defaults"] as const)(
-    "refreshes the till table after %s changes elsewhere",
-    async (type) => {
-      const liveData = new LiveData();
-      const initial = {
-        ...model,
-        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-        deviceZones: [],
-      };
-      const load = vi.fn().mockResolvedValue(initial);
-      const el = await mount({ load, liveData } as unknown as VenueServiceApi);
-      await selectTab(el, "zones");
-      load.mockResolvedValue({
-        ...initial,
-        devices: [{ id: "t1", label: "Updated till", kind: "till", active: true }],
-        deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
-      });
-      liveData.invalidate([{ type }]);
-      await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-      expect(tableText(el, "tills")).toContain("Updated till");
-      expect(table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!.value).toBe(
-        "z1",
-      );
-    },
-  );
-
-  it.each(["en", "es"] as const)(
-    "keeps the %s starting-zone choice readable on a phone",
-    async (locale) => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      await page.viewport(390, 844);
-      try {
-        setLocale(locale);
-        const el = await mount({
-          load: vi.fn().mockResolvedValue({
-            ...model,
-            devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-          }),
-        } as unknown as VenueServiceApi);
-        hosts.at(-1)!.style.width = "310px";
-        await selectTab(el, "zones");
-        const root = table(el, "tills").shadowRoot!;
-        const scroll = root.querySelector<HTMLElement>(".scroll")!;
-        const box = root.querySelector<TillZone>("wt-combobox")!;
-        const selector = box.shadowRoot!.querySelector<HTMLElement>(".trigger")!;
-        const minimumTapHeight = Number.parseFloat(
-          getComputedStyle(selector).getPropertyValue("--wt-tap-min"),
-        );
-        expect(selector.getBoundingClientRect().height).toBeGreaterThanOrEqual(minimumTapHeight);
-        expect(selector.getBoundingClientRect().right).toBeLessThanOrEqual(
-          scroll.getBoundingClientRect().right,
-        );
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d")!;
-        // The text's own room, which stops short of the chevron.
-        const shown = selector.querySelector<HTMLElement>(".value")!;
-        context.font = getComputedStyle(shown).font;
-        expect(context.measureText(box.options[0]!.label).width).toBeLessThanOrEqual(
-          shown.clientWidth,
-        );
-      } finally {
-        await page.viewport(width, height);
-      }
-    },
-  );
   it("shows a load error when the venue configuration request fails", async () => {
     const api = {
       load: vi.fn().mockRejectedValue(new Error("offline")),
@@ -2712,22 +2520,6 @@ describe("the venue lists", () => {
     expect(column(el, "zones", 0)).toEqual(["Dining room", "Deli counter"]);
     await sortBy(el, "zones", "name");
     expect(column(el, "zones", 0)).toEqual(["Deli counter", "Dining room"]);
-  });
-
-  it("sorts active tills by their labels", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        devices: [
-          { id: "t1", label: "Zebra till", kind: "till", active: true },
-          { id: "t2", label: "Apple till", kind: "till", active: true },
-        ],
-      }),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    expect(column(el, "tills", 0)).toEqual(["Zebra till", "Apple till"]);
-    await sortBy(el, "tills", "name");
-    expect(column(el, "tills", 0)).toEqual(["Apple till", "Zebra till"]);
   });
 
   it("marks disabled departments, and names a zone's non-default menus", async () => {
@@ -3399,14 +3191,12 @@ it("returns focus to a row's menu after an edit opened from it is saved", async 
 });
 
 describe("where focus goes after a change that saves at once", () => {
-  const withTill: VenueServiceView = {
+  const withSecondMenu: VenueServiceView = {
     ...model,
     zoneMenus: [
       ...model.zoneMenus,
       { zoneId: "z1", menuId: "m2", displayOrder: 1, isDefault: false },
     ],
-    devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-    deviceZones: [],
   };
   /** Waits until the save has reloaded the screen (`load` cleared before the change) and handed
    * its controls back. */
@@ -3418,12 +3208,12 @@ describe("where focus goes after a change that saves at once", () => {
     await settle(el);
   }
 
-  it("leaves focus on a till's starting zone after it is changed, though Make available opened an editor earlier", async () => {
-    const load = vi.fn().mockResolvedValue(structuredClone(withTill));
+  it("leaves focus on a department's print switch after it is changed, though Make available opened an editor earlier", async () => {
+    const load = vi.fn().mockResolvedValue(structuredClone(withSecondMenu));
     const el = await mount({
       load,
       liveData: new LiveData(),
-      setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
+      setDepartmentSalePolicyField: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
     await action(el, "menus-tree-zone-z1");
@@ -3432,23 +3222,17 @@ describe("where focus goes after a change that saves at once", () => {
     const makeAvailable = find(el, '[data-test="new-assignment-z1"]')!;
     expect(el.shadowRoot!.activeElement).toBe(makeAvailable);
     load.mockClear();
-    load.mockResolvedValue({
-      ...structuredClone(withTill),
-      deviceZones: [{ deviceId: "t1", zoneId: "z1" }],
-    });
-    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
-    await userEvent.click(selector.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
-    const row = [...selector.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (option) => option.textContent!.trim() === "Dining room",
+    const control = table(el, "policy-tree").shadowRoot!.querySelector<HTMLElement>(
+      'wt-switch[name="printTradingName"]',
     )!;
-    await userEvent.click(row);
+    await userEvent.click(control.shadowRoot!.querySelector<HTMLElement>("input")!);
     await saved(el, load);
     expect(el.shadowRoot!.activeElement).not.toBe(makeAvailable);
-    expect(table(el, "tills").shadowRoot!.activeElement).toBe(selector);
+    expect(table(el, "policy-tree").shadowRoot!.activeElement).toBe(control);
   });
 
   it("leaves focus on a zone menu's row menu after Make default", async () => {
-    const load = vi.fn().mockResolvedValue(structuredClone(withTill));
+    const load = vi.fn().mockResolvedValue(structuredClone(withSecondMenu));
     const el = await mount({
       load,
       liveData: new LiveData(),
@@ -3781,30 +3565,6 @@ describe("the venue screen's fields are the shared field components", () => {
     control.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await settle(el);
     expect(name.error).toBe("");
-  });
-
-  // Fails if a till's starting zone stops being a compact dropdown named for its till.
-  it("draws each till's starting zone as a compact dropdown named for the till", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-      }),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    const zone = table(el, "tills").shadowRoot!.querySelector<Dropdown>("wt-combobox")!;
-    expect(zone).not.toBeNull();
-    expect([zone.label, zone.hideLabel, zone.search, zone.placeholder, zone.value]).toEqual([
-      "Front till: Starts in",
-      true,
-      "auto",
-      "The venue's counter zone",
-      "",
-    ]);
-    expect(options(zone)).toEqual([
-      ["", "The venue's counter zone"],
-      ["z1", "Dining room"],
-    ]);
   });
 
   // Fails if the Spanish catalogue loses the dropdowns' search wording or the stepper's buttons.

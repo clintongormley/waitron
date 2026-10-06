@@ -44,7 +44,14 @@ export type CapabilityFlag =
   | "show-station"
   | "show-expo"
   | "show-schedule"
-  | "take-cash";
+  | "take-cash"
+  | "take-orders"
+  | "hand-keyed-card-payment"
+  | "prepare-orders"
+  | "hand-over-orders";
+
+/** A screen a profile may start on (`NAVIGATION_SCREENS` in `packages/layouts/src/canvas.ts`). */
+export type NavigationScreen = "show-station" | "show-expo" | "show-schedule";
 
 export type CardType =
   | "product-grid"

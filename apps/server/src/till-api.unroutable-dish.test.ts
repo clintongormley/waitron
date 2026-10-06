@@ -39,6 +39,7 @@ import {
   unsentDishLines,
   updateOrderLine,
 } from "./working-order.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 // A pay-first order, or an open counter order in a zone that sends before payment, is sent to the
 // kitchen when it is paid. A dish no rule or active default station can take does not refuse the
@@ -60,7 +61,11 @@ let catalogueId: string;
 async function enrolTill(): Promise<string> {
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: ["take-cash"] })
+    .values({
+      name: `Till ${randomUUID()}`,
+      formFactor: "till",
+      capabilities: [...BASIC_ACTIONS, "take-cash"],
+    })
     .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.db, v.cfg, {
     name: `Counter till ${randomUUID()}`,
@@ -999,6 +1004,23 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       }
     },
   );
+
+  it("asks a new sale that names no zone in the zone its new orders start in", async () => {
+    const made = await strandedDish("Zoneless question");
+    const response = await app.request("/api/dead-ends/sale", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({
+        step: "pay",
+        lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
+      }),
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await response.json()).toMatchObject({
+      sends: true,
+      deadEnds: [{ key: "0", name: made.name, why: "switched_off" }],
+    });
+  });
 
   it("asks an existing sale in its stored zone when the request omits or conflicts on zone", async () => {
     const made = await dish("Table zone lager");

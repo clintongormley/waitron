@@ -1036,6 +1036,8 @@ explicit cancellation or replacement.
 [publication plan](superpowers/plans/2026-10-04-forward-only-menu-publication.md).
 The shared calendar it builds on is in (A261 step 5): its menu participant joins the empty
 `VENUE_SERVICE_CALENDAR_PARTICIPANTS` list in `packages/venue-service/src/calendar-participants.ts`.
+It must replace A261 step 2's Task 8 (zone-by-zone menus, the interim path W97 kept) before it
+removes the old menu editor; W97's profiles already scope a till to a department and its zones.
 
 **The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
@@ -1340,8 +1342,11 @@ plans to retire the editor.
   rename them to what they prove.
 
 **A sale needs a zone (lane B's B4, #571) — what is left open.** Every sale line is priced from the
-menu offers of its order's service zone; a sale with no `zoneId` takes the venue's counter-default
-zone, and a venue with none is refused `service_zone.default_missing`.
+menu offers of its order's service zone. Since W97 (2026-10-06), a sale with no `zoneId` takes its
+device profile's starting zone when the profile has a department — the first of the profile's zones
+still usable when that one is not — and is refused `device_profile.no_service_zone` when none is;
+otherwise it takes the venue's counter-default zone, and a venue with none is refused
+`service_zone.default_missing` (`resolveNewOrderZone`, `packages/venue-service/src/operations.ts`).
 
 - **`GET /api/products` has no caller in the till app, and `listAvailableProducts` is off the sale
   path.** `TillApi.listProducts` (`apps/till/src/api/client.ts`) is kept because the till's tests
@@ -3036,7 +3041,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
       a till only when the till starts again — a page load, a move to another server or a
       re-enrolment, or in dev mode the lock screen's switch-device button (the profile is read in
       `#boot`, `apps/till/src/till-app.ts`, as the layout and the hardware switches already are),
-      so signing out and in again does not pick it up. A review measured the header on
+      so signing out and in again does not pick it up. Since W97 (2026-10-06) a profile switch on
+      the till reads the device's setup again too (`#onProfileSwitch`). A review measured the header on
       2026-10-02 in real Chromium at 390 px, with the real `till-tab-shell` mounted with two phone
       tabs and an operator signed in: with only Find a bill offered — what main offers every
       handheld; `apps/till/src/widgets/tab-shell.ts` is unchanged by C130 — the page measured
@@ -4134,13 +4140,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
-  (`packages/venue-service/src/operations.ts`): the device's default, else the zone marked
-  `is_counter_default`, neither filtered by service mode. Since A178d the box is a `wt-combobox`,
-  which shows an empty box for a value with no matching option (read, not run). Since #1004 the
-  dashboard's Departments and zones screen sets a device's default zone, through `PUT
-/management-api/venue-service/devices/:deviceId/default-zone`. **Next action:** find whether a
-  `table_tab` zone can be the counter default or a device default; if it can, decide whether that
-  is refused where it is set or handled by the till.
+  (`packages/venue-service/src/operations.ts`): the profile's starting zone when the profile has a
+  department, else the zone marked `is_counter_default`, neither filtered by service mode. Since
+  A178d the box is a `wt-combobox`, which shows an empty box for a value with no matching option
+  (read, not run). W97 retired the per-device default zone and the dashboard control #1004 added
+  for it (2026-10-06).
+  **Next action:** find whether a `table_tab` zone can be the counter default or a profile's
+  starting zone; if it can, decide whether that is refused where it is set or handled by the till.
 - **Is a `+` sub-line enough for a doneness answer on the kitchen ticket?** Doneness is a modifier
   the venue adds itself (Task 10); an options answer prints on the kitchen ticket as an indented
   `+ <list kitchen name>: <label kitchen name>` line. **Open, and worth a cook's eye before a real
@@ -4429,7 +4435,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   remain manager-only (owner amendment, 2026-10-04).
   [Step 2](superpowers/plans/2026-10-04-departments-and-zones.md) (#1233) puts departments and
   zones in one editable tree and keeps today's zone-menu and device-default-zone controls
-  temporarily in that screen. A261-2c — DONE (#1285). Non-fiscal
+  temporarily in that screen (W97 retired the device-default-zone control, 2026-10-06).
+  A261-2c — DONE (#1285). Non-fiscal
   placement accepts an over-limit order; collection refuses the over-limit invoice without taking
   money (owner decision, 2026-10-06). A261-2d — DONE (#1274); left open:
   A rename refusal without a supplied name remains a database error, rather than returning an
@@ -4546,8 +4553,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     upgrade-test reset entry on 2026-10-06. Old bookmarks use the surviving Tickets destination;
     older configuration exports are refused before staging. Step 4 remains with its owning lane.
     [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
-- **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
-  profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**
+- **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
+  access and switching (W97) BUILT on `feat/device-profile-access-and-switching`, not yet landed;
+  transfers queued in lane D, equipment queued in lane E, neither implemented.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
   station/watcher bindings; drawers are independent of receipt
@@ -4559,7 +4567,67 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md);
   [departmental transfer plan](superpowers/plans/2026-10-04-departmental-tab-transfers.md).
   §10 names the A238/A254/A261 decisions the approved design revises. A261 step 2 keeps its
-  existing zone-menu and device-default-zone controls as an interim path; the newer work replaces them.
+  existing zone-menu and device-default-zone controls as an interim path; the newer work replaces them
+  (W97 retired the device-default-zone control, 2026-10-06).
+  - **W97 delivers** (the profile access and switching plan, Tasks 1–8): each ordering profile has
+    one department, its zones or all of them, and a starting zone, and the server refuses a zone,
+    order, table, party or bill outside them; who may sign in on a profile, by role with per-person
+    exceptions, decides the sign-in list, PIN login and a switch; a device's approved profiles,
+    which a signed-in person switches between on the till (refused during a card payment or with
+    an unsaved order); profile actions (take orders, cash, the two card kinds, prepare, hand over,
+    print, drawer) checked at the till routes beside the person's permissions, except those the
+    route map in `apps/server/src/till-api.profile-actions.test.ts` lists as unchecked by decision,
+    separate from the screens shown, and a starting screen; a kitchen display's station and watcher lists, from which
+    the manager picks each device's one; all of it in the profile editor and the Devices dialog.
+    The per-device default zone and its Departments and zones control are gone. Rules:
+    [conventions-ui.md](developers/conventions-ui.md), "A device's profile and the signed-in person
+    must both allow what the device does".
+  - **Handed on.** The [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md)
+    must replace A261 step 2's Task 8 (zone-by-zone menus, kept as the interim path) before that
+    plan removes the old menu editor; until then "offered to a department" means offered through
+    one of its zones' `zone_menus`. The [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
+    must define portable assignment, Use default, busy-terminal protection and a drawer
+    independent of receipt printers before it removes today's printer choice, which a switch keeps
+    while the new profile lists the printer and otherwise replaces with the first usable one. The
+    [transfer plan](superpowers/plans/2026-10-04-departmental-tab-transfers.md) consumes W97's
+    admission check and department scope.
+  - **Left open by W97** (each found in its review, none fixed on the branch):
+    - A card payment stuck `attempting` holds its device's profile switch until a manager resolves
+      it on Payments; an `initiated` one has no production writer today, and once hosted payments
+      are wired a missed `checkout.session.expired` webhook would hold it for good
+      (`assertNoPaymentInProgress`, `apps/server/src/device.ts`). The till only says to switch
+      once it finishes; point it at the Payments screen.
+    - The till's Profile button shows whenever the device has more than one approved profile, read
+      at boot: neither approvals added later nor the signed-in person's admission hide or show it
+      until the dialog reads `/api/device/me` again. Approvals stored on a disabled device come
+      back when it is enabled again through a join (unchecked whether that is wanted).
+    - `listOrders`'s `orderIn` filter (`apps/server/src/orders-list.ts`) is applied to `r.id`,
+      which for a sale row of the union is the sale's id, not its order's: today's only caller
+      asks for collectable rows, so nothing reaches it, but a caller without `collectable: true`
+      would get every sale row unfiltered.
+    - The profile editor reads people and the venue's departments and zones, so it needs
+      `person.manage` and `venue_service.manage` beside `layout.configure`; no role holds only the
+      last today. Edit and Duplicate fail with a read error when the departments and zones read
+      fails, and its lists do not update while the editor is open.
+    - `apps/dashboard/src/screens/device-profiles-screen.ts` is over 1,600 lines; "Where it
+      serves" and "Who can sign in" could become widgets of their own.
+    - Task 2's review found no test that fails when `device_profile_admission_roles` or
+      `device_profile_admission_persons` is left out of
+      `apps/server/src/testing/clear-provision-fixture.ts` (read, not run); both tables' keys into
+      `device_profiles` cascade on delete (identity `0007_profile_admission.sql`).
+    - **A profile switch or a zone move that commits while a till write is in flight does not stop
+      that write** (found by the finish-branch run-it review, 2026-10-06; for the owner, not fixed
+      on the branch). (i) A till write route checks the profile's action before its write
+      transaction opens (most routes before reading the body, too), so the request writes under the old profile's
+      actions: with a delayed request body, a switch to a profile without `take-orders` still
+      saved the order, answered 200. Checking outside the write transaction predates W97 for the
+      older checks: on `main`, `assertTakesCash` and `assertDeviceCapability` also run before the
+      route's write transaction, and on `POST /api/pay` before the body read. (ii) The routes whose
+      work runs in a helper that opens its own transaction call `gateZones`
+      (`apps/server/src/zone-access.ts`) before that transaction — chosen in Task 4 to avoid a
+      second turn in the write queue — so a zone moved to another department in between is still
+      written: with a delayed order-update body, a zone moved to Deli still answered 200. **Next
+      action:** decide whether to check both again inside the write transaction.
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,
@@ -5341,8 +5409,9 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
     in the #657 item above), and boot never reads the `superseded` that
     `reconcileMembershipOnBoot` returns (`apps/server/src/boot.ts`, where it is called);
     `shouldFenceRestart` (`membership-fence.ts`) has no caller outside its test (`git grep`);
-    `device-api.ts`'s ticket-item advance route does not enforce the `act-as-kds` capability, and
-    the obstacle its comment gave (null profile ids) no longer exists; `enrol-rate-limit.ts` keeps
+    `device-api.ts`'s ticket-item advance route did not enforce the `act-as-kds` capability
+    (resolved by W97, 2026-10-06: it and the kitchen-notice acknowledge route now check the
+    profile's `prepare-orders` action through `assertProfileAction`); `enrol-rate-limit.ts` keeps
     one global limit whose stated reason (snitun) is gone; `provision-till.test.ts` inserts its
     tenant with `onConflictDoNothing`, so a second call's new NIF is silently kept out;
     `provision.ts` stamps the deployment in its own transaction before `applyVenue`, a split with no
@@ -6487,7 +6556,8 @@ bump it when a fixed version is published, and run the certificate suites in tho
   space between a disabled zone's name and its "Disabled" word in the policy tree. Found along
   the way, each left as it is: enabling a zone or a department leaves what disabling switched off
   as it is — a department's zones stay disabled, a zone's tables stay disabled, and its routing
-  exceptions, watcher zones and till starting zones stay gone; `PATCH /management-api/zones/:id`
+  exceptions and watcher zones stay gone (a profile's starting zone is kept since W97, 2026-10-06:
+  `readProfileZones` falls back to the profile's first usable zone while it is disabled); `PATCH /management-api/zones/:id`
   sets `active: true` on a zone whose department is disabled, with no refusal (`updateZone`,
   `apps/server/src/tables.ts`; run on W110e's branch: 204), though the screen does not offer
   Enable there; `PATCH /management-api/tables/:id` with a `zoneId` and no `active` moves an

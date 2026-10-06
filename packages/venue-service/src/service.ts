@@ -26,6 +26,7 @@ import {
   readSaleReceiptHeader,
   resolveZoneContext,
   menuState,
+  orderInZones,
 } from "./operations.js";
 import {
   acknowledgeKitchenNotice,
@@ -37,6 +38,16 @@ import {
   readReleaseReminderMinutes,
   recordKitchenNotices,
 } from "./kitchen-notices.js";
+import {
+  assertProfileBinding,
+  assertProfileZone,
+  readProfileKitchenLists,
+  readProfileServiceAccess,
+  readProfileServiceScopes,
+  readProfileZones,
+  setProfileKitchenLists,
+  setProfileServiceScope,
+} from "./profile-access.js";
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
@@ -60,6 +71,15 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listZoneOffers,
   menuState,
   resolveNewOrderZone,
+  readProfileServiceAccess,
+  readProfileZones,
+  assertProfileZone,
+  readProfileKitchenLists,
+  setProfileKitchenLists,
+  readProfileServiceScopes,
+  setProfileServiceScope,
+  assertProfileBinding,
+  orderInZones,
   recordOrderContext: recordOrderServiceContext,
   retargetOrderContext: retargetOrderServiceContext,
   recordLineContexts: recordWorkingLineContexts,

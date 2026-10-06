@@ -14,6 +14,7 @@ import {
   watcherZones,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { deviceProfileWatchers } from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
 import { requireLiveStation } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
@@ -171,6 +172,7 @@ export const WATCHER_SETTINGS: readonly Reference[] = [
   { table: watcherStations, column: watcherStations.watcherId },
   { table: watcherZones, column: watcherZones.watcherId },
   { table: watcherPrinters, column: watcherPrinters.watcherId },
+  { table: deviceProfileWatchers, column: deviceProfileWatchers.watcherId },
 ];
 
 export function watchersInUse(tx: Transaction, ids: readonly string[]): Promise<Set<string>> {

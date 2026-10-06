@@ -13,6 +13,7 @@ import { AppError, centsToDecimal } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
+import { orderZoneCondition, type OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
 export interface InvoiceLookupRow {
@@ -23,7 +24,11 @@ export interface InvoiceLookupRow {
   total: string;
 }
 
-async function lookUpInvoices(tx: Transaction, q: string): Promise<InvoiceLookupRow[]> {
+export async function lookUpInvoices(
+  tx: Transaction,
+  q: string,
+  inZones?: OrderZoneCondition,
+): Promise<InvoiceLookupRow[]> {
   const invoice = /^([^/\s]+)\s*\/\s*(\d{1,9})$/.exec(q);
   const pattern = `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
   const search = invoice
@@ -50,6 +55,7 @@ async function lookUpInvoices(tx: Transaction, q: string): Promise<InvoiceLookup
         isNull(sales.correctsSaleId),
         isNull(saleSubstitutions.substitutionSaleId),
         search,
+        inZones?.(sql`${workingOrders.id}`),
       ),
     )
     .orderBy(desc(sales.issuedAt), sql`"sales".rowid desc`)
@@ -66,11 +72,18 @@ async function lookUpInvoices(tx: Transaction, q: string): Promise<InvoiceLookup
 export function mountInvoiceLookupApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   app.get("/api/invoices/lookup", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const q = c.req.query("q")?.trim() ?? "";
       if (q === "" || q.length > 100)
         throw new AppError("management.request_invalid", { field: "q" });
-      return c.json({ invoices: await withTransaction(deps.db, (tx) => lookUpInvoices(tx, q)) });
+      const invoices = await withTransaction(deps.db, async (tx) =>
+        lookUpInvoices(
+          tx,
+          q,
+          await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId),
+        ),
+      );
+      return c.json({ invoices });
     }),
   );
 }

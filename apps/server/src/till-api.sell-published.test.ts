@@ -60,6 +60,7 @@ import { createTable } from "./tables.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 // A till sells from each menu's PUBLISHED version, driven over HTTP to a genuine chained record:
 // the version a basket asserts, the availability the server overlays, and `/api/menu-state`.
@@ -258,7 +259,11 @@ async function setupLunch(): Promise<Lunch> {
   });
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: ["take-cash"] })
+    .values({
+      name: `Till ${randomUUID()}`,
+      formFactor: "till",
+      capabilities: [...BASIC_ACTIONS, "take-cash"],
+    })
     .returning({ id: deviceProfiles.id });
   const device = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${randomUUID()}`,

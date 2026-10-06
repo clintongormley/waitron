@@ -26,7 +26,7 @@ import {
 import { createPairingMode, PAIRING_HOLD_MS, type PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
-import { enrolDeviceForTest } from "./testing/enrol.js";
+import { enrolDeviceForTest, listOnProfile } from "./testing/enrol.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
@@ -613,6 +613,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
         runsPass: false,
       }),
     );
+    await withTransaction(suite.db, (tx) => listOnProfile(tx, profileId, { watcherId }));
     const made = await knock(venue, { kind: "device", label: "Pass screen" });
     await claimFor(app, venue, made, holdId);
     const path = `/management-api/device-join-requests/${made.joinId}/accept`;
@@ -659,6 +660,9 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
+    await withTransaction(suite.db, (tx) =>
+      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
+    );
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
@@ -754,6 +758,9 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
+    await withTransaction(suite.db, (tx) =>
+      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
+    );
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
@@ -799,6 +806,9 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
+    await withTransaction(suite.db, (tx) =>
+      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
+    );
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
@@ -814,6 +824,44 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect((await errorOf(res)).code).toBe("device.station_required");
     // The consuming delete rolled back with the throw: only a success consumes the request here.
     expect(await pendingCount()).toBe(1);
+  });
+
+  it("a station or watcher the kds profile does not list is 400, and the request survives", async () => {
+    const venue = await setupVenue(suite.db);
+    const { app, holdId } = openApp(venue.cfg);
+    const profileId = await seedProfile("kds");
+    const { id: watcherId } = await withTransaction(suite.db, (tx) =>
+      createWatcher(tx, venue.cfg, {
+        name: "Unlisted pass",
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+      }),
+    );
+    const cases = [
+      [{ stationId: venue.defaultStationId }, "station.not_allowed"],
+      [{ watcherId }, "watcher.not_allowed"],
+    ] as const;
+    for (const [index, [binding, code]] of cases.entries()) {
+      const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
+      await claimFor(app, venue, made, holdId);
+      const res = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${made.joinId}/accept`,
+        { cookie: venue.managerCookie, body: { name: "Pantalla Cocina", profileId, ...binding } },
+      );
+      expect({ code, status: res.status }).toEqual({ code, status: 400 });
+      expect((await errorOf(res)).code).toBe(code);
+      expect(await pendingCount()).toBe(index + 1);
+      const [enrolled] = await suite.db
+        .select({ id: devices.id })
+        .from(devices)
+        .where(eq(devices.id, made.joinId));
+      expect(enrolled).toBeUndefined();
+    }
   });
 
   it("screens the body, and refuses the request before any of it is acted on", async () => {

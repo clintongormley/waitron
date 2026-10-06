@@ -30,6 +30,17 @@ describe.each(["light", "dark"] as const)("wt-switch a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 
+  test("with a description read to assistive technology", async () => {
+    const el = await mountThemed(
+      '<wt-switch label="Todas las zonas" description="Incluye las zonas que se añadan" checked></wt-switch>',
+      theme,
+    );
+    const input = el.shadowRoot!.querySelector("input")!;
+    const described = el.shadowRoot!.getElementById(input.getAttribute("aria-describedby")!);
+    expect(described?.textContent).toBe("Incluye las zonas que se añadan");
+    await expectNoA11yViolations(host);
+  });
+
   test("disabled", async () => {
     await mountThemed('<wt-switch label="Activado" disabled></wt-switch>', theme);
     await expectNoA11yViolations(host);

@@ -15,7 +15,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
-import { getPrintedReceipt } from "@waitron/layouts";
+import { getPrintedReceipt, profileAllows } from "@waitron/layouts";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
@@ -37,7 +37,7 @@ function printConfig(cfg: Pick<TillConfig, "locationId">): PrintConfig {
 export interface DevicePrinter extends EscSetting {
   id: string;
   hasCashDrawer: boolean;
-  /** The device's profile has `open-cash-drawer`. */
+  /** The device's profile permits `open-cash-drawer` (`profileAllows`). */
   opensDrawer: boolean;
 }
 
@@ -83,6 +83,7 @@ async function resolveDevicePrinter(
       hasCashDrawer: printers.hasCashDrawer,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
+      formFactor: deviceProfiles.formFactor,
       capabilities: deviceProfiles.capabilities,
     })
     .from(devices)
@@ -90,8 +91,14 @@ async function resolveDevicePrinter(
     .innerJoin(printers, and(eq(printers.id, column), eq(printers.active, true)))
     .where(eq(devices.id, origin.deviceId));
   if (row === undefined) return undefined;
-  const { capabilities, ...printer } = row;
-  return { ...printer, opensDrawer: (capabilities as string[]).includes("open-cash-drawer") };
+  const { formFactor, capabilities, ...printer } = row;
+  return {
+    ...printer,
+    opensDrawer: profileAllows(
+      { formFactor, capabilities: capabilities as string[] },
+      "open-cash-drawer",
+    ),
+  };
 }
 
 /** Use the filed issuer where available and the current optional trim, address and logo. */

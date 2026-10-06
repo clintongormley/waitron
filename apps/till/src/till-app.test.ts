@@ -29,6 +29,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillPrintersDialog } from "./widgets/printers-dialog.js";
+import type { TillProfileDialog } from "./widgets/profile-dialog.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
@@ -41,6 +42,7 @@ import type {
   PayOutcome,
   PartyBill,
   ProductCatalogue,
+  ServiceZoneSummary,
   StationQueue,
   TabLine,
   TableServiceStatus,
@@ -1506,6 +1508,18 @@ describe("till-app", () => {
     );
   });
 
+  it("says in its own words that the device's profile has no zone left to order in", async () => {
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockRejectedValue({ code: "device_profile.no_service_zone" }),
+    });
+
+    const c = await toCounter(el);
+    expect(c.products).toEqual([]);
+    const alert = el.shadowRoot!.querySelector('[role="alert"]')?.textContent;
+    expect(alert).toContain(codeMessage("device_profile.no_service_zone"));
+    expect(alert).not.toContain(t("service_zone.load_error"));
+  });
+
   it("changes and manually refreshes the counter's service zone", async () => {
     const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
     defaultCatalogue.zones = [
@@ -1632,6 +1646,16 @@ describe("till-app", () => {
     expect(c.selectedServiceZoneId).toBe("deli");
     expect(c.products.map((product) => product.id)).toEqual(["deli-product"]);
     expect(currentApi.setServiceZone).toHaveBeenLastCalledWith("deli");
+  });
+
+  it("asks for every colleague for the roster loaded after sign-in, and only the profile's people for the sign-in list", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    await flush(el);
+
+    const calls = vi.mocked(currentApi.listStaff).mock.calls;
+    expect(calls[0]).toEqual([]);
+    expect(calls.at(-1)).toEqual([{ everyone: true }]);
   });
 
   it("a failing listStaff on the first login leaves the roster empty and never blocks the counter (no unhandled rejection)", async () => {
@@ -2057,6 +2081,37 @@ describe("till-app", () => {
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("card_reader.not_set_up"));
       expect(banner.textContent).not.toContain(t("sale.error"));
+    });
+
+    it("says the profile does not allow it when the server refuses the sale for want of a profile action", async () => {
+      const el = await toHandheld(
+        withCounterTab,
+        {
+          capabilities: withReader,
+          cardProvider: "stripe_terminal",
+          activeReaders: readers,
+          defaultReaderId: readers[0]!.id,
+        },
+        {
+          pay: vi.fn().mockRejectedValue({
+            code: "device.forbidden_action",
+            status: 403,
+            action: "take-orders",
+          }),
+        },
+      );
+      selectTab(el, "counter");
+      await flush(el);
+      const c = counter(el)!;
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(codeMessage("device.forbidden_action"));
+      expect(banner.textContent).not.toContain(t("card_reader.not_set_up"));
     });
 
     it("puts its sale tab's pay card back to its choices after the reader payment is refused", async () => {
@@ -5823,6 +5878,93 @@ describe("till-app", () => {
       .reverse()
       .find((e) => e.event === "nav");
     expect(nav?.fields.screen).toBe("schedule");
+  });
+
+  describe("the profile's starting screen", () => {
+    const rosterApi = {
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+      listMyAbsences: vi.fn().mockResolvedValue([]),
+    };
+
+    it("opens at sign-in, over the canvas's first tab", async () => {
+      const { el } = await mountApp({
+        ...rosterApi,
+        getTill: vi.fn().mockResolvedValue({ ...till, startingScreen: "show-schedule" }),
+      });
+      await toCounter(el);
+      expect(schedule(el)).not.toBeNull();
+      expect(counter(el)).not.toBeNull();
+    });
+
+    it("opens nothing when the profile no longer shows that screen", async () => {
+      const { el } = await mountApp({
+        ...rosterApi,
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
+          startingScreen: "show-schedule",
+        }),
+      });
+      await toCounter(el);
+      expect(schedule(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+    });
+
+    it("selects the canvas's tab of that name when the canvas has the screen as a tab", async () => {
+      const withScheduleTab = {
+        ...till.canvas,
+        tabs: [...till.canvas.tabs, { key: "schedule", title: "Horario", columns: 24, cards: [] }],
+      };
+      const { el } = await mountApp({
+        ...rosterApi,
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          canvas: withScheduleTab,
+          startingScreen: "show-schedule",
+        }),
+      });
+      await toCounter(el);
+      expect(shell(el)!.activeTabKey).toBe("schedule");
+      expect(schedule(el)).toBeNull();
+    });
+
+    it("selects a starting tab in place of the sign-in's history entry, so Back does not return to the first tab", async () => {
+      const withScheduleTab = {
+        ...till.canvas,
+        tabs: [...till.canvas.tabs, { key: "schedule", title: "Horario", columns: 24, cards: [] }],
+      };
+      history.replaceState(null, "", "/");
+      const { el } = await mountApp({
+        ...rosterApi,
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          canvas: withScheduleTab,
+          startingScreen: "show-schedule",
+        }),
+      });
+      await flush(el);
+      const entries = history.length;
+      await toCounter(el);
+      expect(shell(el)!.activeTabKey).toBe("schedule");
+      expect(history.length).toBe(entries);
+    });
+
+    it("opens again for the next person after a logout", async () => {
+      const { el } = await mountApp({
+        ...rosterApi,
+        getTill: vi.fn().mockResolvedValue({ ...till, startingScreen: "show-schedule" }),
+      });
+      await toCounter(el);
+      emit(schedule(el)!, "back-to-counter");
+      await flush(el);
+      expect(schedule(el)).toBeNull();
+      emit(shell(el)!, "logout");
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
+      await flush(el);
+      expect(schedule(el)).not.toBeNull();
+    });
   });
 
   it("show-schedule shows the schedule screen (basket preserved) and threads the roster + operator id", async () => {
@@ -10587,27 +10729,183 @@ describe("till-app", () => {
       expect(location.pathname).not.toContain("/menu/");
     });
 
-    it.each(["p1", "p2"])(
-      "resets the menu after logout and a new login as %s",
-      async (personId) => {
-        const { el } = await mountApp({ listProducts: twoMenuProducts });
-        const c = await toCounter(el);
+    it("keeps the menu after logout and a new login as p1", async () => {
+      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const c = await toCounter(el);
+      switcherButtons(el)[1]!.click();
+      await flush(el);
+      expect(gridNames(el)).toEqual(["Cerveza"]);
+      emit(c, "logout");
+      await flush(el);
+      emit(lock(el)!, "logged-in", {
+        personId: "p1",
+        displayName: "Operator",
+        permissions: [],
+      });
+      await flush(el);
+      expect(gridNames(el)).toEqual(["Cerveza"]);
+      expect(switcherButtons(el)[1]!.getAttribute("aria-pressed")).toBe("true");
+      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+    });
+
+    it.each(["p2"])("resets the menu after logout and a new login as %s", async (personId) => {
+      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const c = await toCounter(el);
+      switcherButtons(el)[1]!.click();
+      await flush(el);
+      expect(gridNames(el)).toEqual(["Cerveza"]);
+      emit(c, "logout");
+      await flush(el);
+      emit(lock(el)!, "logged-in", {
+        personId,
+        displayName: "Operator",
+        permissions: [],
+      });
+      await flush(el);
+      expect(gridNames(el)).toEqual(["Bocadillo"]);
+      expect(switcherButtons(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
+    });
+
+    describe("browsing state across sign-ins, zones and screens", () => {
+      const zone = (id: string, name: string): ServiceZoneSummary => ({
+        id,
+        name,
+        departmentId: "department-restaurant",
+        departmentName: "Restaurant",
+        serviceMode: "prepay",
+      });
+      /** The profile's starting zone: Comida by default, Bebidas beside it. */
+      const startOffers = async (): Promise<ZoneOfferCatalogue> => {
+        const catalogue = fixtureOffers(await twoMenuProducts());
+        catalogue.context = { ...catalogue.context, zoneId: "zone-start" };
+        catalogue.zones = [zone("zone-start", "Sala"), zone("zone-terrace", "Terraza")];
+        return catalogue;
+      };
+      /** The terrace: Cócteles by default, Vinos beside it. */
+      const terraceOffers = (): ZoneOfferCatalogue => {
+        const catalogue = fixtureOffers({
+          menus: [
+            { id: "cat-cocktails", name: "Cócteles", isDefault: true },
+            { id: "cat-wine", name: "Vinos", isDefault: false },
+          ],
+          products: [
+            {
+              ...bocadillo,
+              id: "mojito",
+              menuItemId: "menu-item-mojito",
+              name: "Mojito",
+              catalogueId: "cat-cocktails",
+              catalogueName: "Cócteles",
+            },
+            {
+              ...cerveza,
+              id: "rioja",
+              menuItemId: "menu-item-rioja",
+              name: "Rioja",
+              catalogueId: "cat-wine",
+              catalogueName: "Vinos",
+            },
+          ],
+        });
+        catalogue.context = { ...catalogue.context, zoneId: "zone-terrace" };
+        return catalogue;
+      };
+      const zoned = () => ({
+        listProducts: twoMenuProducts,
+        listDefaultZoneOffers: vi.fn(startOffers),
+        listZoneOffers: vi.fn(async (zoneId: string) =>
+          zoneId === "zone-terrace" ? terraceOffers() : startOffers(),
+        ),
+      });
+      const signInAgain = async (el: TillApp, personId: string) => {
+        emit(counter(el)!, "logout");
+        await flush(el);
+        emit(lock(el)!, "logged-in", { personId, displayName: "Operator", permissions: [] });
+        await flush(el);
+      };
+      const toTerraceWine = async (el: TillApp) => {
+        emit(counter(el)!, "counter-zone-selected", { zoneId: "zone-terrace" });
+        await flush(el);
+        expect(gridNames(el)).toEqual(["Mojito"]);
+        switcherButtons(el)[1]!.click();
+        await flush(el);
+        expect(gridNames(el)).toEqual(["Rioja"]);
+      };
+
+      it("brings the same person back to the zone they left, with its manual menu", async () => {
+        const { el } = await mountApp(zoned());
+        await toCounter(el);
+        await toTerraceWine(el);
+        await signInAgain(el, "p1");
+        expect(counter(el)!.selectedServiceZoneId).toBe("zone-terrace");
+        expect(currentApi.setServiceZone).toHaveBeenLastCalledWith("zone-terrace");
+        expect(gridNames(el)).toEqual(["Rioja"]);
+      });
+
+      it("starts another person at the profile's starting zone and its default menu", async () => {
+        const { el } = await mountApp(zoned());
+        await toCounter(el);
+        await toTerraceWine(el);
+        await signInAgain(el, "p2");
+        expect(counter(el)!.selectedServiceZoneId).toBe("zone-start");
+        expect(gridNames(el)).toEqual(["Bocadillo"]);
+        await signInAgain(el, "p1");
+        expect(counter(el)!.selectedServiceZoneId).toBe("zone-start");
+        expect(gridNames(el)).toEqual(["Bocadillo"]);
+      });
+
+      it("selects each zone's default menu on a zone change, the zone left included", async () => {
+        const { el } = await mountApp(zoned());
+        await toCounter(el);
         switcherButtons(el)[1]!.click();
         await flush(el);
         expect(gridNames(el)).toEqual(["Cerveza"]);
-        emit(c, "logout");
-        await flush(el);
-        emit(lock(el)!, "logged-in", {
-          personId,
-          displayName: "Operator",
-          permissions: [],
-        });
+        await toTerraceWine(el);
+        emit(counter(el)!, "counter-zone-selected", { zoneId: "zone-start" });
         await flush(el);
         expect(gridNames(el)).toEqual(["Bocadillo"]);
-        expect(switcherButtons(el)[0]!.getAttribute("aria-pressed")).toBe("true");
-        expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
-      },
-    );
+        await signInAgain(el, "p1");
+        expect(gridNames(el)).toEqual(["Bocadillo"]);
+      });
+
+      it("keeps the manual menu across a screen change and a table opened in another zone", async () => {
+        const terraceTable: TableState = {
+          ...freeTable,
+          id: "table-terrace",
+          zoneId: "zone-terrace",
+        };
+        const { el } = await mountApp({
+          ...zoned(),
+          getTablesState: vi.fn().mockResolvedValue([terraceTable]),
+          listZones: vi.fn().mockResolvedValue([{ ...floorZone, id: "zone-terrace" }]),
+        });
+        await toCounter(el);
+        switcherButtons(el)[1]!.click();
+        await flush(el);
+        selectTab(el, "floor");
+        await flush(el);
+        emit(floor(el)!, "open-table", { tableId: terraceTable.id, seated: false });
+        await flush(el);
+        expect(currentApi.listZoneOffers).toHaveBeenLastCalledWith("zone-terrace");
+        expect(tableOrder(el)!.selectedMenuId).toBe("cat-cocktails");
+        selectTab(el, "counter");
+        await flush(el);
+        expect(counter(el)!.selectedServiceZoneId).toBe("zone-start");
+        expect(gridNames(el)).toEqual(["Cerveza"]);
+      });
+
+      it("starts a reloaded page at the profile's starting zone and its default menu", async () => {
+        const { el } = await mountApp(zoned());
+        await toCounter(el);
+        await toTerraceWine(el);
+        el.remove();
+        const { el: reloaded } = await mountApp(zoned());
+        await toCounter(reloaded);
+        expect(counter(reloaded)!.selectedServiceZoneId).toBe("zone-start");
+        expect(gridNames(reloaded)).toEqual(["Bocadillo"]);
+      });
+    });
 
     it("ignores a stale stored menu and selects the default at login", async () => {
       sessionStorage.setItem("waitron.lastMenu", "removed");
@@ -14196,4 +14494,278 @@ it("ignores a clock reply from a signed-out operator after another operator sign
   await flush(el);
   expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")).toBeNull();
   expect(counter(el)).not.toBeNull();
+});
+
+describe("switching the device's profile from the header", () => {
+  const COUNTER = { id: "pr-counter", name: "Counter till" };
+  const BAR = { id: "pr-bar", name: "Bar till" };
+  const identity = {
+    deviceId: "till-dev",
+    name: "Till 1",
+    formFactor: "till",
+    stationId: null,
+    receiptPrinterId: null,
+    paymentSlipPrinterId: null,
+    printerChoices: { receipt: [], paymentSlip: [] },
+    profileId: COUNTER.id,
+    approvedProfiles: [COUNTER, BAR],
+  };
+  const foodMenu = { id: "cat-food", name: "Comida", isDefault: true };
+  const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
+  const twoMenus = vi.fn().mockResolvedValue({
+    menus: [foodMenu, drinksMenu],
+    products: [
+      { ...cafe, catalogueId: "cat-food", catalogueName: "Comida" },
+      {
+        ...cafe,
+        id: "cerveza",
+        menuItemId: "menu-item-cerveza",
+        name: "Cerveza",
+        catalogueId: "cat-drinks",
+        catalogueName: "Bebidas",
+      },
+    ],
+  });
+  const profileDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillProfileDialog>("till-profile-dialog");
+  const profileButton = (el: TillApp) =>
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>("wt-button.profile");
+
+  async function openProfile(overrides: Record<string, unknown> = {}) {
+    const { el } = await mountApp({
+      getDeviceIdentity: vi.fn().mockResolvedValue(identity),
+      switchDeviceProfile: vi.fn().mockResolvedValue({
+        activeProfileId: BAR.id,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      }),
+      ...overrides,
+    });
+    const c = await toCounter(el);
+    profileButton(el)!.click();
+    await flush(el);
+    return { el, c };
+  }
+
+  it("offers no Profile button on a device approved for one profile", async () => {
+    const { el } = await mountApp({
+      getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity, approvedProfiles: [COUNTER] }),
+    });
+    await toCounter(el);
+    expect(profileButton(el)).toBeNull();
+  });
+
+  it("opens on the approved profiles, read again, with the active one chosen", async () => {
+    const getDeviceIdentity = vi.fn().mockResolvedValue(identity);
+    const { el } = await openProfile({ getDeviceIdentity });
+    const dialog = profileDialog(el)!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.profiles).toEqual([COUNTER, BAR]);
+    expect(dialog.activeProfileId).toBe(COUNTER.id);
+    expect(dialog.notice).toBeNull();
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses to switch while an order is in progress, sending nothing until it is cleared", async () => {
+    const switchDeviceProfile = vi.fn().mockResolvedValue({
+      activeProfileId: BAR.id,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+    });
+    const { el, c } = await openProfile({ switchDeviceProfile });
+    c.store.addProduct(cafe, "1");
+    await flush(el);
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    expect(switchDeviceProfile).not.toHaveBeenCalled();
+    expect(profileDialog(el)!.notice).toBe("order_open");
+    expect(c.store.lines).toHaveLength(1);
+
+    c.store.clear();
+    await flush(el);
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    expect(switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+  });
+
+  it("a switch reads the till's setup again and starts again from the zone's default menu, still signed in", async () => {
+    const switchedTabs = till.canvas.tabs.map((tab) => ({ ...tab, title: `${tab.title} (bar)` }));
+    const getTill = vi
+      .fn()
+      .mockResolvedValueOnce(till)
+      .mockResolvedValue({ ...till, canvas: { ...till.canvas, tabs: switchedTabs } });
+    const { el } = await openProfile({ listProducts: twoMenus, getTill });
+    emit(counter(el)!, "menu-selected", { id: "cat-drinks" });
+    await flush(el);
+    expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+    const zoneReads = vi.mocked(currentApi.listDefaultZoneOffers).mock.calls.length;
+
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    await flush(el);
+
+    expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+    expect(profileDialog(el)).toBeNull();
+    expect(getTill).toHaveBeenCalledTimes(2);
+    expect((shell(el) as HTMLElement & { tabs: { title: string }[] }).tabs).toEqual(switchedTabs);
+    expect(vi.mocked(currentApi.listDefaultZoneOffers).mock.calls.length).toBe(zoneReads + 1);
+    expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
+    expect(counter(el)).not.toBeNull();
+    expect(lock(el)).toBeNull();
+  });
+
+  it("a switch opens the new profile's starting screen, in place of the screen open before it", async () => {
+    const getTill = vi
+      .fn()
+      .mockResolvedValueOnce(till)
+      .mockResolvedValue({ ...till, startingScreen: "show-schedule" });
+    const { el } = await openProfile({
+      getTill,
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+      listMyAbsences: vi.fn().mockResolvedValue([]),
+    });
+    emit(counter(el)!, "show-expo");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    await flush(el);
+
+    expect(schedule(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
+  });
+
+  it("a switch to a profile with no starting screen lands on the canvas's first tab", async () => {
+    const { el } = await openProfile();
+    emit(counter(el)!, "show-expo");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
+    expect(counter(el)).not.toBeNull();
+  });
+
+  it("does not leave the dialog busy when a step after the switch throws", async () => {
+    const rejections: unknown[] = [];
+    const onRejection = (event: PromiseRejectionEvent): void => {
+      rejections.push(event.reason);
+      event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    try {
+      let switched = false;
+      const { el } = await openProfile({
+        // A device read after the switch with no printer choices makes the printers step throw.
+        getDeviceIdentity: vi.fn(async () =>
+          switched ? { ...identity, printerChoices: undefined } : identity,
+        ),
+        switchDeviceProfile: vi.fn(async () => {
+          switched = true;
+          return { activeProfileId: BAR.id, receiptPrinterId: null, paymentSlipPrinterId: null };
+        }),
+      });
+
+      emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+      await flush(el);
+      await flush(el);
+
+      expect(rejections).toHaveLength(1);
+      expect(profileDialog(el)).toBeNull();
+    } finally {
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
+  });
+
+  it("a switch to a profile with no starting screen lands on the first tab, though the tab left is also on the new canvas", async () => {
+    const withScheduleTab = {
+      ...till.canvas,
+      tabs: [...till.canvas.tabs, { key: "schedule", title: "Horario", columns: 24, cards: [] }],
+    };
+    const { el } = await openProfile({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: withScheduleTab }),
+    });
+    emit(shell(el)!, "tab-select", { key: "schedule" });
+    await flush(el);
+    expect(shell(el)!.activeTabKey).toBe("schedule");
+
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    await flush(el);
+
+    expect(shell(el)!.activeTabKey).toBe(withScheduleTab.tabs[0]!.key);
+  });
+
+  it("a switch starts at the new profile's starting zone, not the zone the same person left", async () => {
+    const zones = ["zone-start", "zone-terrace"].map((id) => ({
+      id,
+      name: id,
+      departmentId: "department-restaurant",
+      departmentName: "Restaurant",
+      serviceMode: "prepay" as const,
+    }));
+    const offersIn = async (zoneId: string, menu: string): Promise<ZoneOfferCatalogue> => {
+      const catalogue = fixtureOffers({
+        menus: [{ id: menu, name: menu, isDefault: true }],
+        products: [{ ...cafe, catalogueId: menu, catalogueName: menu }],
+      });
+      catalogue.context = { ...catalogue.context, zoneId };
+      catalogue.zones = zones;
+      return catalogue;
+    };
+    const listDefaultZoneOffers = vi
+      .fn()
+      .mockImplementationOnce(() => offersIn("zone-start", "menu-start"))
+      .mockImplementation(() => offersIn("zone-bar", "menu-bar"));
+    const { el } = await mountApp({
+      getDeviceIdentity: vi.fn().mockResolvedValue(identity),
+      switchDeviceProfile: vi.fn().mockResolvedValue({
+        activeProfileId: BAR.id,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      }),
+      listDefaultZoneOffers,
+      listZoneOffers: vi.fn((zoneId: string) => offersIn(zoneId, `menu-${zoneId}`)),
+    });
+    await toCounter(el);
+    emit(counter(el)!, "counter-zone-selected", { zoneId: "zone-terrace" });
+    await flush(el);
+    expect(counter(el)!.selectedServiceZoneId).toBe("zone-terrace");
+    profileButton(el)!.click();
+    await flush(el);
+
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    await flush(el);
+
+    expect(counter(el)!.selectedServiceZoneId).toBe("zone-bar");
+    expect(currentApi.setServiceZone).toHaveBeenLastCalledWith("zone-bar");
+    expect(vi.mocked(currentApi.listZoneOffers)).toHaveBeenCalledTimes(1);
+  });
+
+  it("a refused switch keeps the dialog open with the refusal and reads nothing again", async () => {
+    const getTill = vi.fn().mockResolvedValue(till);
+    const { el } = await openProfile({
+      getTill,
+      switchDeviceProfile: vi.fn().mockRejectedValue({ code: "device_profile.not_admitted" }),
+    });
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    expect(profileDialog(el)!.notice).toEqual({ code: "device_profile.not_admitted" });
+    expect(profileDialog(el)!.busy).toBe(false);
+    expect(getTill).toHaveBeenCalledTimes(1);
+  });
+
+  it("choosing the active profile closes the dialog without a request", async () => {
+    const { el } = await openProfile();
+    emit(profileDialog(el)!, "profile-switch", { profileId: COUNTER.id });
+    await flush(el);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+    expect(profileDialog(el)).toBeNull();
+  });
 });

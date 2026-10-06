@@ -36,6 +36,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 /**
  * Exercise device authentication through the sale route to a fiscal record.
@@ -206,7 +207,7 @@ async function seedHandheldProfile(): Promise<string> {
     .values({
       name: `Handheld ${profileCounter}`,
       formFactor: "phone-portrait",
-      capabilities: ["take-cash"],
+      capabilities: [...BASIC_ACTIONS, "take-cash"],
     })
     .returning({ id: deviceProfiles.id });
   return profile!.id;

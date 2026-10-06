@@ -4,10 +4,12 @@ import { and, eq, isNull } from "drizzle-orm";
 import { AppError, deviceId as brandDeviceId, isUuid } from "@waitron/shared";
 import type { DeviceId } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { authorize, hashSessionToken, sessions, type Permission } from "@waitron/identity";
+import type { ProfileAction } from "@waitron/layouts";
 import {
   deviceBindingColumns,
+  assertProfileAction,
   deviceProfileJoin,
   recordSighting,
   sightingDue,
@@ -57,18 +59,40 @@ export function readSessionToken(c: Context): string | null {
   return getCookie(c, SESSION_COOKIE) ?? null;
 }
 
+/** The person of the request's open session on `deviceId`, or `null` when there is none: a
+ * missing, unknown or ended session, or one opened on another device. */
+export async function signedInPersonOn(
+  tx: Transaction,
+  c: Context,
+  deviceId: string,
+): Promise<string | null> {
+  const token = readSessionToken(c);
+  if (token === null || !isUuid(token)) return null;
+  const [found] = await tx
+    .select({ personId: sessions.personId })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.tokenHash, hashSessionToken(token)),
+        eq(sessions.deviceId, deviceId),
+        isNull(sessions.endedAt),
+      ),
+    );
+  return found?.personId ?? null;
+}
+
 /**
  * Resolves the request's cookie to an OPEN shift session and the device it was opened on, or throws
  * `session.required`. The lookup is by the token's hash with `ended_at IS NULL`, so an unknown token
  * and a logged-out session fail as a missing cookie does. A session whose device has been revoked
  * throws `device.unauthorized`. Login and logout deliberately do not call this. With `permission`,
  * the session's person must also hold it (`authorize`, no override), checked in the same
- * transaction.
+ * transaction; with `action`, the device's active profile must permit it (`assertProfileAction`).
  */
 export async function requireSession(
   deps: { db: Database },
   c: Context,
-  options: { permission?: Permission } = {},
+  options: { permission?: Permission; action?: ProfileAction } = {},
 ): Promise<{ personId: string; sessionId: string; deviceId: DeviceId; device: DeviceBinding }> {
   const token = readSessionToken(c);
   if (token === null || !isUuid(token)) throw new AppError("session.required", {});
@@ -94,6 +118,9 @@ export async function requireSession(
     if (sightingDue(found.lastSeenAt, seenAt)) await recordSighting(tx, found.deviceId, seenAt);
     if (options.permission !== undefined) {
       await authorize(tx, { sessionId: found.id, permission: options.permission });
+    }
+    if (options.action !== undefined) {
+      assertProfileAction(toDeviceBinding(found.deviceId, found), options.action);
     }
     return found;
   });

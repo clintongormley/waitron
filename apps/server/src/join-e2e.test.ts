@@ -39,6 +39,7 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
+import { listOnProfile } from "./testing/enrol.js";
 
 /** Hooks a case sets to land a race at a fixed point; each is a no-op unless a case sets it. */
 const between = vi.hoisted(() => ({
@@ -831,6 +832,9 @@ describe("a disabled device comes back as the same device", () => {
     const app = mountWithSignIn(venue);
     const profileId = await seedProfile("till");
     const kitchenId = await seedProfile("kds");
+    await withTransaction(suite.db, (tx) =>
+      listOnProfile(tx, kitchenId, { stationId: venue.defaultStationId }),
+    );
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const [person] = await suite.db
@@ -856,6 +860,9 @@ describe("a disabled device comes back as the same device", () => {
     const venue = await setupVenue(suite.db);
     const app = mountWithSignIn(venue);
     const kitchenId = await seedProfile("kds");
+    await withTransaction(suite.db, (tx) =>
+      listOnProfile(tx, kitchenId, { stationId: venue.defaultStationId }),
+    );
     const holdId = await openWindow(app, venue);
     const joined = await knock(app, "Pass screen");
     const accepted = await pair(app, venue, holdId, joined, {

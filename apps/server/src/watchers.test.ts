@@ -17,6 +17,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { deviceProfileWatchers } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import {
   inTx,
@@ -386,6 +387,28 @@ describe("removing a watcher, and enabling it again", () => {
       zones: [],
       printers: [],
     });
+  });
+
+  it("deletes a watcher a profile lists, taking it off the profile's list", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const { id } = await followingWatcher(v);
+    await inTx(v, async (tx) => {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: `Pass ${randomUUID()}`, formFactor: "kds" })
+        .returning({ id: deviceProfiles.id });
+      await tx
+        .insert(deviceProfileWatchers)
+        .values({ deviceProfileId: profile!.id, watcherId: id });
+    });
+    expect(await inTx(v, (tx) => watchersInUse(tx, [id]))).toEqual(new Set());
+    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id));
+    expect((await settingsRows(v, id)).watcher).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(deviceProfileWatchers).where(eq(deviceProfileWatchers.watcherId, id)),
+      ),
+    ).toEqual([]);
   });
 
   it("disables a watcher a switched-off device still names, dropping only its printers", async () => {

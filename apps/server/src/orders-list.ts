@@ -61,6 +61,12 @@ export interface OrderListFilter {
   after?: OrderCursor;
   only?: string;
   collectable?: boolean;
+  /**
+   * A further condition on `r.id`, applied to sale rows too, where `r.id` is the sale's id rather
+   * than its order's: it filters by order only with `collectable: true`, which keeps bill rows
+   * alone.
+   */
+  orderIn?: (orderId: SQL) => SQL;
   scope: "all" | { today: { from: string; to: string; timeZone: string; dayCutover: string } };
 }
 export interface OrderRow {
@@ -278,6 +284,7 @@ function filterClauses(filter: OrderListFilter): SQL[] {
       and not exists (select 1 from bill_payments bp
                       where bp.working_order_id = r.id and bp.state in ('pending', 'received'))`);
   }
+  if (filter.orderIn !== undefined) clauses.push(filter.orderIn(sql`r.id`));
   if (filter.after !== undefined) {
     const { at, id } = filter.after;
     clauses.push(sql`(r.at < ${at} or (r.at = ${at} and r.id < ${id}))`);

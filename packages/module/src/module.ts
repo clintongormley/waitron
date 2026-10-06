@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import type { Decimal, LocationId } from "@waitron/shared";
 import type { ChangeSource } from "@waitron/shared";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database, SQL, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
 import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
 import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
@@ -415,8 +415,94 @@ export interface VenueServiceContribution {
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { locationId: LocationId },
-    input: { zoneId?: string | null; deviceId?: string | null },
+    /** A profile with a department starts at its starting zone, ahead of the venue's counter
+     *  default; one with a department and no usable zone is refused
+     *  `device_profile.no_service_zone`. */
+    input: { zoneId?: string | null; profileId?: string | null },
   ): Promise<OrderServiceContext>;
+  /** A profile's department, zones and kitchen lists as they stand now. A null department means no
+   *  department restriction, with null zones and starting zone; with a department, an empty zone
+   *  list and a null starting zone mean the profile cannot order. An unknown profile is refused
+   *  `device_profile.access_invalid`. */
+  readProfileServiceAccess(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    profileId: string,
+  ): Promise<{
+    departmentId: string | null;
+    allowedZoneIds: string[] | null;
+    startingZoneId: string | null;
+    stationIds: string[];
+    watcherIds: string[];
+  }>;
+  /** Each live profile's stored station and watcher lists, switched-off entries included. */
+  readProfileKitchenLists(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+  ): Promise<{ profileId: string; stationIds: string[]; watcherIds: string[] }[]>;
+  /** Replaces a profile's station and watcher lists; a list not named stays as stored. Each must be
+   *  switched on here unless already listed; removing one an active device on the profile shows is
+   *  refused `device_profile.station_in_use` or `device_profile.watcher_in_use`, naming the device. */
+  setProfileKitchenLists(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    profileId: string,
+    lists: { stationIds?: readonly string[]; watcherIds?: readonly string[] },
+  ): Promise<void>;
+  /** Each named profile's scope as last saved: `allowedZoneIds` null means every zone of the
+   *  department, and a zone switched off since is still named. No saved scope reads all null. */
+  readProfileServiceScopes(
+    tx: Transaction,
+    profileIds: readonly string[],
+  ): Promise<
+    {
+      profileId: string;
+      departmentId: string | null;
+      allowedZoneIds: string[] | null;
+      startingZoneId: string | null;
+    }[]
+  >;
+  /** Replaces a profile's department, zones and starting zone; its station and watcher lists stay.
+   *  A field not named keeps its stored value, and naming none leaves a stored department's scope
+   *  untouched; a kitchen display starts from no scope. Refused `device_profile.access_invalid`,
+   *  naming the field, for no department on a profile that is not a kitchen display, any of the
+   *  three on one that is, a zone outside the department or a starting zone outside the allowed
+   *  ones. */
+  setProfileServiceScope(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    profileId: string,
+    scope: {
+      departmentId?: string | null;
+      allowedZoneIds?: readonly string[] | null;
+      startingZoneId?: string | null;
+    },
+  ): Promise<void>;
+  /** Refused `station.not_allowed` or `watcher.not_allowed` unless the profile's list names the
+   *  device's station or watcher; an empty list permits none. */
+  assertProfileBinding(
+    tx: Transaction,
+    profileId: string,
+    binding: { stationId: string | null; watcherId: string | null },
+  ): Promise<void>;
+  /** The department and zone half of {@link readProfileServiceAccess}. */
+  readProfileZones(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    profileId: string,
+  ): Promise<{
+    departmentId: string | null;
+    allowedZoneIds: string[] | null;
+    startingZoneId: string | null;
+  }>;
+  /** Refused `service_zone.not_allowed` when the profile has a department and `zoneId` is not one of
+   *  the zones it may order in now. */
+  assertProfileZone(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    profileId: string,
+    zoneId: string,
+  ): Promise<void>;
   recordOrderContext(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -445,6 +531,10 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, ServiceMode>>;
+  /** A condition, for a query's WHERE, that holds for an order whose recorded zone is one of
+   *  `zoneIds` or that has no recorded zone. `orderId` is the outer query's order id, written
+   *  table-qualified. */
+  orderInZones(cfg: { locationId: LocationId }, orderId: SQL, zoneIds: readonly string[]): SQL;
   /** Each named order's recorded service zone in one read; an order with no context is absent. */
   findOrderZones(
     tx: Transaction,

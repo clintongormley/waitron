@@ -334,7 +334,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   action: navigation, refresh, logout and session expiry never open one. Save the authenticated email
   and the successful method only with Remember selected, never in tab storage.
 - **A login's refusal never says whether the account exists** (owner, 2026-09-30): unknown,
-  suspended, pending, wrong password or PIN and wrong code all answer one code (`password.invalid`
+  suspended, pending, wrong password or PIN, wrong code and, on a till's PIN sign-in, a person the
+  device's profile does not admit all answer one code (`password.invalid`
   or `pin.invalid`) after the same hashing work, shown as one sentence for every cause, marking no
   field on a sign-in form — only a missing or malformed value is marked there; identity's refusals
   carry the real cause as a log-only `reason`, which `createErrorBoundary` logs. One owner-approved
@@ -344,6 +345,15 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   suites conventions-ui.md names, weaker than the set looks — some sign-in routes have no case of
   their own, and a new one is seen by none. See
   [conventions-ui.md](docs/developers/conventions-ui.md).
+- **A device's profile and the signed-in person must both allow what a till does.** A till route
+  that orders, takes a payment, prepares, hands over, prints or opens the drawer checks the
+  profile's action beside the person's permission, except the routes the map atop
+  `apps/server/src/till-api.profile-actions.test.ts` leaves unchecked by decision; the profile's
+  zones bound where it serves, and its admission list who may sign in. A new till route adds a row
+  to that map and to the zone map atop `apps/server/src/till-api.profile-zones.test.ts`, and a
+  refusing case — weaker than that sounds: both route maps are comments, and nothing fails when a
+  new route has no row. Cost: W97's per-task review found a bill refund route checking no action.
+  See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`**, so the
   menu stays on a phone's screen (owner decision, A155). Cost: most tables put the menu past a
   phone's right edge. Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name — it
@@ -967,8 +977,8 @@ browser test** — most of these rules exist because a test passed while proving
   printer has a drawer, handhelds included (`drawerPrinter`, `apps/server/src/receipt-print.ts`);
   nothing per till decides it, and a till that must not open a drawer it shares gets a profile of
   its own (approved by the owner 2026-10-03, A238). `take-cash` decides whether a device takes cash
-  at all: a cash sale, collection or bill payment from a profile without it is refused
-  `device.cash_not_allowed` (`assertTakesCash`, `apps/server/src/device-session.ts`). The manual open needs a session on an
+  at all: a cash sale, collection or bill payment, or a refund of a cash bill payment, from a
+  profile without it is refused `device.cash_not_allowed` (`assertTakesCash`, `apps/server/src/device-session.ts`). The manual open needs a session on an
   active device, the profile's `open-cash-drawer`, and always `cash.drawer`
   or the PIN of someone holding it. The one exception is the dashboard's "Test open drawer"
   calibration (`POST /management-api/printers/:id/test-drawer`), which opens any active printer's
@@ -977,8 +987,8 @@ browser test** — most of these rules exist because a test passed while proving
   audit row. Guards, weaker than the rule: the drawer cases in
   `apps/server/src/receipt-print.test.ts`, `apps/server/src/till-api.receipt.test.ts` and
   `apps/server/src/bill-payments-api.test.ts`, the `device.cash_not_allowed` cases in
-  `apps/server/src/till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts`, the
-  calibration case in `apps/server/src/print-api.test.ts` and the drawer resend refusal in
+  `apps/server/src/till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts`, the cash
+  refund case in `apps/server/src/till-api.profile-actions.test.ts`, the calibration case in `apps/server/src/print-api.test.ts` and the drawer resend refusal in
   `packages/printing/src/outbox.test.ts` — each holds only the routes or functions it names, and
   nothing stops a new route queuing a `drawer` job without `drawerPrinter`
   or taking cash without `assertTakesCash`. Pointer: #324; the card slip, B30; A238;

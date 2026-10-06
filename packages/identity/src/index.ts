@@ -7,6 +7,18 @@ export type { SecretCheck } from "./secret-check.js";
 export { foldForUniqueness } from "./fold.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";
 export { endDeviceSessions, endSession, loginWithPin } from "./login.js";
+export {
+  canUseDeviceProfile,
+  listStaffAdmittedTo,
+  profilesAdmitting,
+  readProfileAdmissions,
+  setProfileAdmission,
+} from "./profile-admission.js";
+export type { ProfileAdmission } from "./profile-admission.js";
+export {
+  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
+} from "./schema/profile-admission.js";
 export type { Session } from "./login.js";
 export {
   IDLE_TIMEOUT_MS,

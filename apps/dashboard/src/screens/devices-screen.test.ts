@@ -90,6 +90,7 @@ const devices: DeviceRow[] = [
   {
     id: "d1",
     madeHereStationIds: [],
+    approvedProfileIds: ["dp1"],
     kind: "kds_station",
     stationId: "s1",
     watcherId: null,
@@ -109,6 +110,7 @@ const devices: DeviceRow[] = [
   {
     id: "d2",
     madeHereStationIds: [],
+    approvedProfileIds: [],
     kind: "kds_station",
     stationId: null,
     watcherId: null,
@@ -137,6 +139,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: "dep-1",
+    allowedZoneIds: null,
+    startingZoneId: "zone-1",
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
   {
     id: "dp2",
@@ -147,6 +155,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: "dep-1",
+    allowedZoneIds: null,
+    startingZoneId: "zone-1",
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
   {
     id: "dp3",
@@ -157,6 +171,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: null,
+    allowedZoneIds: null,
+    startingZoneId: null,
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
 ];
 
@@ -233,6 +253,13 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStations: vi.fn().mockResolvedValue(stations),
     listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
+    listProfileKitchenLists: vi.fn().mockResolvedValue(
+      ["dp3", "pk"].map((profileId) => ({
+        profileId,
+        stationIds: ["s1", "s2", "s-off"],
+        watcherIds: ["w1", "w-off"],
+      })),
+    ),
     listPrinters: vi.fn().mockResolvedValue(printers),
     pairingMode: vi.fn().mockResolvedValue(SHUT),
     takePairingHold: vi.fn().mockResolvedValue({ holdId: "h1", openUntil: TAKEN_UNTIL }),
@@ -1383,6 +1410,34 @@ describe("the Edit dialog", () => {
     );
   });
 
+  it("offers a kitchen screen only what its profile lists, and empties Shows on a profile that does not list its choice", async () => {
+    const api = editApi({
+      listDeviceProfiles: vi
+        .fn()
+        .mockResolvedValue([
+          ...editProfiles,
+          { ...editProfiles[2]!, id: "pk2", name: "Bar screen" },
+        ]),
+      listProfileKitchenLists: vi.fn().mockResolvedValue([
+        { profileId: "pk", stationIds: ["s1"], watcherIds: ["w1"] },
+        { profileId: "pk2", stationIds: ["s2"], watcherIds: [] },
+      ]),
+    });
+    const el = await openEdit(api, "k1");
+    expect(field(el, "edit-binding").options).toEqual([
+      { value: "station:s1", label: "Cocina", group: t("devices.stations_group") },
+      { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
+    ]);
+    expect(field(el, "edit-binding").value).toBe("station:s1");
+
+    await chooseOption(field(el, "edit-profile"), "pk2");
+    await el.updateComplete;
+    expect(field(el, "edit-binding").options).toEqual([
+      { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
+    ]);
+    expect(field(el, "edit-binding").value).toBe("");
+  });
+
   it("marks a held station as disabled and a held watcher as disabled, in English and Spanish", async () => {
     const before = currentLocale();
     try {
@@ -1962,6 +2017,151 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-profile").error).toBe("");
     expect((q(el, "[data-test=edit-binding]") as Field | null)?.error ?? "").toBe("");
     expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+  });
+
+  describe("the profiles staff may switch to", () => {
+    const tills: DeviceProfile[] = [
+      ...editProfiles,
+      { ...editProfiles[0]!, id: "pc", name: "Bar till" },
+      { ...editProfiles[0]!, id: "pd", name: "Deli till" },
+      { ...editProfiles[2]!, id: "pl", name: "Grill screen" },
+    ];
+    const approvedTill: DeviceRow = { ...till, approvedProfileIds: ["pa", "pc"] };
+
+    function approvalApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
+      return editApi({
+        listDevices: vi.fn().mockResolvedValue([approvedTill, kitchen]),
+        listDeviceProfiles: vi.fn().mockResolvedValue(tills),
+        ...overrides,
+      });
+    }
+
+    const boxes = (el: DevicesScreen) => [
+      ...(q(el, "[data-test=edit-approved-profiles]")?.querySelectorAll<HTMLInputElement>(
+        "input",
+      ) ?? []),
+    ];
+
+    it("offers the other profiles of the device's form factor, ticking those approved", async () => {
+      const el = await openEdit(approvalApi());
+      expect(boxes(el).map((box) => [box.value, box.checked, box.name])).toEqual([
+        ["pc", true, "approvedProfileIds"],
+        ["pd", false, "approvedProfileIds"],
+      ]);
+    });
+
+    it("a kitchen screen is offered only kitchen screen profiles", async () => {
+      const el = await openEdit(approvalApi(), "k1");
+      expect(boxes(el).map((box) => box.value)).toEqual(["pl"]);
+    });
+
+    it("Save leaves the approvals out while they and the profile are unchanged", async () => {
+      const api = approvalApi();
+      const el = await openEdit(api);
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
+        "approvedProfileIds",
+      );
+    });
+
+    it("Save sends the ticked profiles once they change", async () => {
+      const api = approvalApi();
+      const el = await openEdit(api);
+      q(el, '[data-test=edit-approved-profiles] input[value="pd"]')!.click();
+      q(el, '[data-test=edit-approved-profiles] input[value="pc"]')!.click();
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1].approvedProfileIds).toEqual(["pd"]);
+    });
+
+    it("choosing another profile keeps the replaced one ticked and stops offering the new one", async () => {
+      const api = approvalApi();
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pd");
+      await flush(el);
+      expect(boxes(el).map((box) => [box.value, box.checked])).toEqual([
+        ["pa", true],
+        ["pc", true],
+      ]);
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      // The server keeps the replaced profile approved without being told.
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({ profileId: "pd" });
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
+        "approvedProfileIds",
+      );
+    });
+
+    it("unticking the replaced profile sends the approvals without it", async () => {
+      const api = approvalApi();
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pd");
+      await flush(el);
+      q(el, '[data-test=edit-approved-profiles] input[value="pa"]')!.click();
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
+        profileId: "pd",
+        approvedProfileIds: ["pc"],
+      });
+    });
+
+    it("an incompatible profile refusal shows under the approvals, and a change clears it", async () => {
+      const api = approvalApi({
+        updateDevice: vi.fn().mockRejectedValue({
+          code: "device_profile.incompatible",
+          params: { field: "approvedProfileIds" },
+        }),
+      });
+      const el = await openEdit(api);
+      await save(el);
+      await vi.waitFor(() =>
+        expect(text(el, "[data-test=edit-approved-error]")).toBe(
+          codeMessage("device_profile.incompatible"),
+        ),
+      );
+      expect(await bottom(el)).toBe(t("form.fix_fields"));
+      q(el, '[data-test=edit-approved-profiles] input[value="pd"]')!.click();
+      await flush(el);
+      expect(q(el, "[data-test=edit-approved-error]")).toBeNull();
+    });
+
+    it("an approved profile that no longer exists shows under the approvals, not the profile", async () => {
+      const api = approvalApi({
+        updateDevice: vi.fn().mockRejectedValue({
+          code: "device_profile.not_found",
+          params: { field: "approvedProfileIds" },
+        }),
+      });
+      const el = await openEdit(api);
+      await save(el);
+      await vi.waitFor(() =>
+        expect(text(el, "[data-test=edit-approved-error]")).toBe(
+          codeMessage("device_profile.not_found"),
+        ),
+      );
+      expect(q(el, "[data-test=edit-profile]")!.getAttribute("aria-invalid")).not.toBe("true");
+      expect((q(el, "[data-test=edit-profile]") as unknown as { error: string }).error).toBe("");
+      expect(await bottom(el)).toBe(t("form.fix_fields"));
+    });
+
+    it("a payment in progress is said at the bottom", async () => {
+      const api = approvalApi({
+        updateDevice: vi.fn().mockRejectedValue({ code: "device.payment_in_progress" }),
+      });
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pd");
+      await flush(el);
+      await save(el);
+      await vi.waitFor(async () =>
+        expect(await bottom(el)).toBe(codeMessage("device.payment_in_progress")),
+      );
+      expect(codeMessage("device.payment_in_progress")).not.toBe(codeMessage("totally.unknown"));
+      expect(codeMessage("device_profile.incompatible")).not.toBe(codeMessage("totally.unknown"));
+    });
   });
 
   it("a saved edit whose refresh fails closes the dialog and says the list could not be read", async () => {
@@ -2938,6 +3138,62 @@ describe("add a device", () => {
     expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
   });
 
+  it("offers a kitchen profile only the stations and watchers it lists, and says when it lists none", async () => {
+    const api = stubApi({
+      listDeviceProfiles: vi
+        .fn()
+        .mockResolvedValue([
+          ...deviceProfiles,
+          { ...deviceProfiles[2]!, id: "dp4", name: "Empty" },
+        ]),
+      listProfileKitchenLists: vi
+        .fn()
+        .mockResolvedValue([{ profileId: "dp3", stationIds: ["s2"], watcherIds: ["w1"] }]),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
+    await el.updateComplete;
+    const binding = () =>
+      q(el, "[data-test=pair-binding]") as HTMLElement & {
+        options: unknown[];
+        placeholder: string;
+      };
+    expect(binding().options).toEqual([
+      { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
+      { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
+    ]);
+    expect(binding().placeholder).toBe(t("devices.join_pick_binding"));
+
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp4");
+    await el.updateComplete;
+    expect(binding().options).toEqual([]);
+    expect(binding().placeholder).toBe(t("devices.binding_none_listed"));
+  });
+
+  it("a refusal that the profile does not list the station goes under Shows", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi
+        .fn()
+        .mockRejectedValue({ code: "station.not_allowed", params: { stationId: "s1" } }),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
+    await el.updateComplete;
+    await chooseOption(q(el, "[data-test=pair-binding]")!, "station:s1");
+    await el.updateComplete;
+
+    q(el, "[data-test=pair-submit]")!.click();
+
+    await vi.waitFor(() =>
+      expect((q(el, "[data-test=pair-binding]") as Field).error).toBe(
+        codeMessage("station.not_allowed"),
+      ),
+    );
+    expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
+  });
+
   it("puts a request-invalid refusal under the field its params name", async () => {
     const api = stubApi({
       acceptDeviceJoinRequest: vi
@@ -3592,6 +3848,18 @@ describe("add a device", () => {
       vi.mocked(api.listStations).mockResolvedValue([
         { ...stations[0]!, active: false },
         stations[1]!,
+      ]);
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
+      expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("");
+    });
+
+    it("whose station its profile no longer lists opens with Shows empty", async () => {
+      const api = waiting();
+      vi.mocked(api.listProfileKitchenLists).mockResolvedValue([
+        { profileId: "dp3", stationIds: ["s2"], watcherIds: [] },
       ]);
       const el = await openAdd(api);
       await toEnableSettings(el);

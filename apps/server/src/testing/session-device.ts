@@ -2,11 +2,21 @@ import { eq } from "drizzle-orm";
 import { devices, withTransaction, workingOrders, type Database } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { loginWithPin } from "@waitron/identity";
-import { CAPABILITY_FLAGS } from "@waitron/layouts";
+import { CAPABILITY_FLAGS, type ProfileAction } from "@waitron/layouts";
 import { deviceOrigin, locationId as brandLocationId } from "@waitron/shared";
 import type { DeviceOrigin } from "@waitron/shared";
 import type { TillConfig } from "../till-config.js";
 import { SESSION_COOKIE } from "../till-session.js";
+
+/** Taking orders, a card keyed on a separate terminal, preparing and handing over: what a profile
+ * did without listing anything until profiles named these actions. A fixture whose subject is
+ * another flag lists them beside it. */
+export const BASIC_ACTIONS = [
+  "take-orders",
+  "hand-keyed-card-payment",
+  "prepare-orders",
+  "hand-over-orders",
+] as const satisfies readonly ProfileAction[];
 
 /**
  * A till device at `cfg`'s location whose profile allows every capability: the device a fixture

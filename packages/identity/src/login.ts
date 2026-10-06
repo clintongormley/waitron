@@ -1,8 +1,10 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { nowIso } from "@waitron/db";
+import { devices, nowIso } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import { sessions } from "./schema/sessions.js";
 import { verifyPersonCredential } from "./credential.js";
+import { canUseDeviceProfile } from "./profile-admission.js";
 import type { PersonRoleValue } from "./permissions.js";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
 import type { SecretCheck } from "./secret-check.js";
@@ -21,7 +23,10 @@ export interface Session {
   locale: string | null;
 }
 
-/** Throws `pin.invalid`, whatever the reason the person cannot sign in. */
+/**
+ * Throws `pin.invalid`, whatever the reason the person cannot sign in — a person the device's
+ * current profile does not admit included, refused only after their PIN was checked.
+ */
 export async function loginWithPin(
   tx: Transaction,
   input: { deviceId: string; personId: string; pin: string; checked?: SecretCheck },
@@ -32,6 +37,14 @@ export async function loginWithPin(
     input.pin,
     input.checked,
   );
+  const [device] = await tx
+    .select({ profileId: devices.deviceProfileId })
+    .from(devices)
+    .where(eq(devices.id, input.deviceId));
+  // An unknown device is left to the session's foreign key to refuse.
+  if (device !== undefined && !(await canUseDeviceProfile(tx, device.profileId, input.personId))) {
+    throw new AppError("pin.invalid", {}, { reason: "not_admitted" });
+  }
 
   const token = mintSessionToken();
   const [row] = await tx

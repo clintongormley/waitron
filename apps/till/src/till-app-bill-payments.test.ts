@@ -2821,6 +2821,17 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(inDialog(onHandheld, "wt-form-actions")!.error).toBe(says);
   });
 
+  it("says the profile does not allow it, not that the reader is not set up, for another refused action", async () => {
+    const refused = {
+      code: "device.forbidden_action",
+      status: 403,
+      action: "hand-keyed-card-payment",
+    };
+    const el = await takeOnReader(vi.fn().mockRejectedValue(refused));
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("device.forbidden_action"));
+    expect(inDialog(el, "wt-form-actions")!.error).not.toBe(t("card_reader.not_set_up"));
+  });
+
   it("stops saying to tap or insert the card once the reader payment is refused", async () => {
     let refuse: (reason: unknown) => void = () => undefined;
     const el = await takeOnReader(

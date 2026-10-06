@@ -5,13 +5,14 @@ import { menuItems, menuVersions } from "@waitron/catalogue";
 import {
   catalogues,
   count,
-  devices,
+  deviceProfiles,
   enumCheck,
   enumType,
   flag,
   floorZones,
   id,
   json,
+  kitchenStations,
   label,
   locations,
   newId,
@@ -19,6 +20,7 @@ import {
   sales,
   table,
   tsString,
+  watchers,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -203,23 +205,103 @@ export const zoneMenus = table(
  */
 const ZONE_MENU_KEY: [AnySQLiteColumn, AnySQLiteColumn] = [zoneMenus.zoneId, zoneMenus.menuId];
 
-export const deviceZoneDefaults = table(
-  "device_zone_defaults",
+/**
+ * The department a device profile orders for and the zone it starts in. A profile with no row has no
+ * department restriction. `every_zone` false with no `device_profile_zones` rows allows no zone,
+ * so deleting those rows narrows the profile rather than widening it to the whole department.
+ * `setProfileServiceAccess` checks the department and zones against the venue's live rows; the
+ * keys only refuse an id that exists nowhere.
+ */
+export const deviceProfileServiceAccess = table(
+  "device_profile_service_access",
   {
-    deviceId: id("device_id").notNull(),
+    deviceProfileId: id("device_profile_id").notNull(),
+    departmentId: id("department_id").notNull(),
+    everyZone: flag("every_zone").notNull().default(false),
+    startingZoneId: id("starting_zone_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.deviceProfileId], name: "device_profile_service_access_pk" }),
+    foreignKey({
+      columns: [t.deviceProfileId],
+      foreignColumns: [deviceProfiles.id],
+      name: "device_profile_service_access_profile_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.departmentId],
+      foreignColumns: [departments.id],
+      name: "device_profile_service_access_department_fk",
+    }),
+    foreignKey({
+      columns: [t.startingZoneId],
+      foreignColumns: [floorZones.id],
+      name: "device_profile_service_access_starting_zone_fk",
+    }),
+  ],
+);
+
+/** The explicit subset of zones a profile with `every_zone` false may order in. */
+export const deviceProfileZones = table(
+  "device_profile_zones",
+  {
+    deviceProfileId: id("device_profile_id").notNull(),
     zoneId: id("zone_id").notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.deviceId], name: "device_zone_defaults_pk" }),
+    primaryKey({ columns: [t.deviceProfileId, t.zoneId], name: "device_profile_zones_pk" }),
     foreignKey({
-      columns: [t.deviceId],
-      foreignColumns: [devices.id],
-      name: "device_zone_defaults_device_fk",
-    }),
+      columns: [t.deviceProfileId],
+      foreignColumns: [deviceProfileServiceAccess.deviceProfileId],
+      name: "device_profile_zones_access_fk",
+    }).onDelete("cascade"),
     foreignKey({
       columns: [t.zoneId],
       foreignColumns: [floorZones.id],
-      name: "device_zone_defaults_zone_fk",
+      name: "device_profile_zones_zone_fk",
+    }),
+  ],
+);
+
+/** The kitchen stations a device using this profile may be set to show. */
+export const deviceProfileStations = table(
+  "device_profile_stations",
+  {
+    deviceProfileId: id("device_profile_id").notNull(),
+    stationId: id("station_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.deviceProfileId, t.stationId], name: "device_profile_stations_pk" }),
+    foreignKey({
+      columns: [t.deviceProfileId],
+      foreignColumns: [deviceProfiles.id],
+      name: "device_profile_stations_profile_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.stationId],
+      foreignColumns: [kitchenStations.id],
+      name: "device_profile_stations_station_fk",
+    }),
+  ],
+);
+
+/** The watchers a device using this profile may be set to show. */
+export const deviceProfileWatchers = table(
+  "device_profile_watchers",
+  {
+    deviceProfileId: id("device_profile_id").notNull(),
+    watcherId: id("watcher_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.deviceProfileId, t.watcherId], name: "device_profile_watchers_pk" }),
+    foreignKey({
+      columns: [t.deviceProfileId],
+      foreignColumns: [deviceProfiles.id],
+      name: "device_profile_watchers_profile_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.watcherId],
+      foreignColumns: [watchers.id],
+      name: "device_profile_watchers_watcher_fk",
     }),
   ],
 );

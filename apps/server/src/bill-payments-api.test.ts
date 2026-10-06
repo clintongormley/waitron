@@ -63,7 +63,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { OriginConfig } from "./till-config.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { revokedDeviceSessionCookie } from "./testing/session-device.js";
+import { BASIC_ACTIONS, revokedDeviceSessionCookie } from "./testing/session-device.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cancelBody } from "./testing/cancel-line.js";
@@ -230,16 +230,29 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       .values({
         name: "Counter till",
         formFactor: "till",
-        capabilities: ["integrated-card-payment", "open-cash-drawer", "take-cash"],
+        capabilities: [
+          ...BASIC_ACTIONS,
+          "integrated-card-payment",
+          "open-cash-drawer",
+          "take-cash",
+        ],
       })
       .returning({ id: deviceProfiles.id });
     const [handheldProfile] = await tx
       .insert(deviceProfiles)
-      .values({ name: "Handheld", formFactor: "phone-portrait", capabilities: ["take-cash"] })
+      .values({
+        name: "Handheld",
+        formFactor: "phone-portrait",
+        capabilities: [...BASIC_ACTIONS, "take-cash"],
+      })
       .returning({ id: deviceProfiles.id });
     const [noCashProfile] = await tx
       .insert(deviceProfiles)
-      .values({ name: "Handheld without cash", formFactor: "phone-portrait" })
+      .values({
+        name: "Handheld without cash",
+        formFactor: "phone-portrait",
+        capabilities: [...BASIC_ACTIONS],
+      })
       .returning({ id: deviceProfiles.id });
     const printer = await createPrinter(
       tx,
@@ -4072,7 +4085,11 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
     const otherTill = await withTransaction(suite.db, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
-        .values({ name: "Second till", formFactor: "till", capabilities: ["open-cash-drawer"] })
+        .values({
+          name: "Second till",
+          formFactor: "till",
+          capabilities: [...BASIC_ACTIONS, "open-cash-drawer"],
+        })
         .returning({ id: deviceProfiles.id });
       const printer = await createPrinter(
         tx,
@@ -4120,10 +4137,15 @@ describe("a till whose profile does not allow the drawer it prints to", () => {
         where id = (select device_profile_id from devices where id = ${venue.deviceId})`,
     );
   beforeEach(() => {
-    setTillCapabilities(["integrated-card-payment", "take-cash"]);
+    setTillCapabilities([...BASIC_ACTIONS, "integrated-card-payment", "take-cash"]);
   });
   afterEach(() => {
-    setTillCapabilities(["integrated-card-payment", "open-cash-drawer", "take-cash"]);
+    setTillCapabilities([
+      ...BASIC_ACTIONS,
+      "integrated-card-payment",
+      "open-cash-drawer",
+      "take-cash",
+    ]);
   });
 
   async function opensFor(paymentId: string) {

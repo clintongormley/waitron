@@ -706,13 +706,27 @@ declare module "@waitron/shared" {
      */
     "device.forbidden_station": { stationId: string };
     /**
-     * A device whose profile lacks the capability tried an action that needs it
-     * (`assertDeviceCapability`, `device-session.ts`), enforced on the server. `action` names the
-     * refused operation, a symbol the route passes.
+     * A device whose active profile does not permit the action tried it (`assertProfileAction`,
+     * `device-session.ts`). `action` names the refused operation: the profile action, or the
+     * symbol a route that predates the action names passes.
      */
     "device.forbidden_action": { action: string };
     /** A cash payment from a device whose profile does not take cash (`assertTakesCash`). */
     "device.cash_not_allowed": Record<string, never>;
+    /**
+     * A device's active profile cannot change while a card payment it started is still unresolved
+     * (`payments.state` `attempting` or `initiated`): the payment finishes or is cancelled first.
+     */
+    "device.payment_in_progress": Record<string, never>;
+    /**
+     * A switch named a profile the device is not approved for: never approved, withdrawn since the
+     * till last read the list, retired, of another form factor, or unknown.
+     */
+    "device_profile.not_approved": Record<string, never>;
+    /** The person signed in on the device may not sign in on the profile they tried to switch to. */
+    "device_profile.not_admitted": Record<string, never>;
+    /** A manager approved, for a device, a profile of another form factor than its active one. */
+    "device_profile.incompatible": { field: "approvedProfileIds" };
     /**
      * The device-management surface named a device id that matches nothing, or, on
      * `PATCH /management-api/devices/:id` alone, a disabled device (`active = false`). Unlike

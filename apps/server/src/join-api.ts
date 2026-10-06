@@ -63,6 +63,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.not_found": 404,
   "station.not_found": 404,
   "watcher.not_found": 404,
+  "station.not_allowed": 400,
+  "watcher.not_allowed": 400,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,

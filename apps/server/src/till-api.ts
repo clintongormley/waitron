@@ -30,6 +30,7 @@ import {
   endSession,
   listActivePersonsWithPermission,
   listActiveStaff,
+  listStaffAdmittedTo,
   loginWithPin,
   permissionsForRole,
   setPersonLocale,
@@ -48,7 +49,7 @@ import {
   getDeviceProfile,
   kindOfFormFactor,
 } from "@waitron/layouts";
-import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
+import type { CanvasDef, CapabilityFlag, NavigationScreen, ProfileAction } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
 import {
@@ -184,11 +185,13 @@ import {
 } from "./till-session.js";
 import {
   assertDeviceCapability,
+  assertProfileAction,
   assertDeviceStillProven,
-  assertTakesCash,
+  assertTakesTender,
   requireDeviceProof,
   tryReadDevice,
   type DeviceBinding,
+  type TenderKind,
 } from "./device-session.js";
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
@@ -203,6 +206,14 @@ import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
+import {
+  checkZones,
+  gateZones,
+  inScope,
+  readZoneScope,
+  visibleOrders,
+  type ZoneSubject,
+} from "./zone-access.js";
 
 export interface TillApiDeps {
   db: Database;
@@ -236,14 +247,35 @@ export interface TillApiDeps {
 
 async function resolveHttpOrderZone(
   deps: TillApiDeps,
+  session: { device: { deviceProfileId: string } },
   lineCount: number,
   requestedZoneId: string | undefined,
 ): Promise<string | undefined> {
   if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
-  return withTransaction(
-    deps.db,
-    async (tx) => (await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {})).zoneId,
+  return withTransaction(deps.db, (tx) =>
+    newOrderZoneIn(tx, deps, session, lineCount, requestedZoneId),
   );
+}
+
+/** {@link resolveHttpOrderZone} for a route already inside its transaction. */
+async function newOrderZoneIn(
+  tx: Transaction,
+  deps: TillApiDeps,
+  session: { device: { deviceProfileId: string } },
+  lineCount: number,
+  requestedZoneId: string | undefined,
+): Promise<string | undefined> {
+  if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
+  return (
+    await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
+      profileId: session.device.deviceProfileId,
+    })
+  ).zoneId;
+}
+
+/** The subjects that are named: a request's optional body ids leave out what they do not carry. */
+function named(...subjects: (ZoneSubject | false)[]): ZoneSubject[] {
+  return subjects.filter((subject): subject is ZoneSubject => subject !== false);
 }
 
 /** The subset of `apps/till`'s `CardProvider` union this surface hands out. */
@@ -410,6 +442,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "station.not_found": 404,
   "kitchen_notice.not_found": 404,
   "service_zone.not_found": 404,
+  // The request is sound; the device's profile may not work in that zone.
+  "service_zone.not_allowed": 403,
+  "device_profile.no_service_zone": 409,
   "service_zone.default_missing": 409,
   "service_zone.offer_not_allowed": 400,
   "service_zone.mode_incompatible": 409,
@@ -880,13 +915,15 @@ function requireLineNo(tabId: string, raw: string): number {
 
 /**
  * `POST /api/orders/:id/courses/:courseId/<suffix>`. Session-gated with no permission: the
- * `fire_control` venue setting decides which UI shows the button, not who may call it.
+ * `fire_control` venue setting decides which UI shows the button, not who may call it. The profile
+ * must permit `action`.
  */
 function mountCourseVerb(
   app: Hono,
   deps: TillApiDeps,
   log: Logger,
   suffix: string,
+  action: ProfileAction,
   verb: (
     tx: Transaction,
     cfg: OriginConfig,
@@ -897,18 +934,26 @@ function mountCourseVerb(
 ): void {
   app.post(`/api/orders/:id/courses/:courseId/${suffix}`, (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId }]);
         await verb(tx, cfg, orderId, courseId, personId);
       });
       return c.body(null, 200);
     }),
   );
+}
+
+/** A till tender's card is taken here, never on a connected reader. */
+function tillTenderKind(tender: TillTender | undefined): TenderKind | undefined {
+  if (tender?.method === "cash") return "cash";
+  if (tender?.method === "card") return "hand-keyed-card";
+  return undefined;
 }
 
 /** A kitchen display cannot open a shift session. */
@@ -1065,11 +1110,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Deliberately unauthenticated: the lock screen's roster. No PIN material, role or status.
+  // Deliberately unauthenticated: the lock screen's roster. No PIN material, role or status. A
+  // request that identifies a device lists only the people its profile admits, unless it asks for
+  // `everyone`, as a roster of colleagues does: that is the list a request with no device gets.
   app.get("/api/staff", (c) =>
     run(c, log, async () => {
+      // Before the transaction: `tryReadDevice` opens one of its own when a sighting is due.
+      const device =
+        c.req.query("everyone") === "true"
+          ? null
+          : await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
       const staff = await withTransaction(deps.db, async (tx) => {
-        return listActiveStaff(tx);
+        return device === null
+          ? listActiveStaff(tx)
+          : listStaffAdmittedTo(tx, device.deviceProfileId);
       });
       return c.json(staff);
     }),
@@ -1106,10 +1160,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         let canvas: CanvasDef;
         let capabilities: CapabilityFlag[] = [];
         let inactivityTimeoutSeconds: number | null = null;
+        let startingScreen: NavigationScreen | null = null;
         if (device != null) {
           const profile = await getDeviceProfile(tx, device.deviceProfileId);
           capabilities = device.capabilities;
           inactivityTimeoutSeconds = profile?.inactivityTimeoutSeconds ?? null;
+          startingScreen = profile?.startingScreen ?? null;
           let assigned: CanvasDef | undefined;
           if (profile?.canvasId != null) {
             assigned = (await getCanvas(tx, profile.canvasId))?.definition;
@@ -1161,6 +1217,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           canvas,
           capabilities,
           inactivityTimeoutSeconds,
+          startingScreen,
           defaultReaderProvider,
           defaultReaderId,
           activeReaders,
@@ -1204,6 +1261,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         canvas: boot.canvas,
         capabilities: boot.capabilities,
         inactivityTimeoutSeconds: boot.inactivityTimeoutSeconds,
+        ...(boot.startingScreen === null ? {} : { startingScreen: boot.startingScreen }),
         // The till polls each server's `GET /api/node` to follow the primary across a failover.
         nodeId: deps.cfg.nodeId,
         servers: routableServers(held),
@@ -1243,8 +1301,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = await requireSession(deps, c);
       const result = await withTransaction(deps.db, async (tx) => {
         const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
-          deviceId: device.deviceId,
+          profileId: device.deviceProfileId,
         });
+        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
         const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, context.zoneId);
         return {
           context: {
@@ -1254,7 +1313,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             receiptPrintMode: salePolicy.receiptPrintMode,
           },
           zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter(
-            (zone) => zone.serviceMode !== "table_tab",
+            (zone) => zone.serviceMode !== "table_tab" && inScope(scope, zone.id),
           ),
           ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId)),
         };
@@ -1268,9 +1327,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // product differently from another zone's menu.
   app.get("/api/service-zones/:zoneId/offers", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
       const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
         const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, zoneId);
         return {
@@ -1289,15 +1349,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/menu-state", (c) =>
     run(c, log, async () => {
-      const { device } = await requireSession(deps, c);
-      const named = c.req.query("zoneId");
-      const zoneId = named === undefined ? undefined : requireUuidParam(named, "ServiceZoneId");
+      const session = await requireSession(deps, c);
+      const { device } = session;
+      const asked = c.req.query("zoneId");
+      const zoneId = asked === undefined ? undefined : requireUuidParam(asked, "ServiceZoneId");
       const state = await withTransaction(deps.db, async (tx) => {
+        if (zoneId !== undefined) await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const zone =
           zoneId === undefined
             ? (
                 await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
-                  deviceId: device.deviceId,
+                  profileId: device.deviceProfileId,
                 })
               ).zoneId
             : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).zoneId;
@@ -1323,6 +1385,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       if (body.zoneId !== undefined) requireUuidParam(body.zoneId, "ServiceZoneId");
       const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(
+          tx,
+          deps.cfg,
+          session,
+          named(
+            body.zoneId !== undefined && { zoneId: body.zoneId },
+            body.workingOrderId !== undefined && { orderId: body.workingOrderId },
+          ),
+        );
         const at = new Date();
         const order =
           body.workingOrderId === undefined
@@ -1341,7 +1412,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           order === undefined ? null : await VENUE_SERVICE.findOrderContext(tx, cfg, order.id);
         const zoneId =
           order === undefined
-            ? await resolveHttpOrderZone(deps, body.lines.length, body.zoneId)
+            ? await newOrderZoneIn(tx, deps, session, body.lines.length, body.zoneId)
             : context?.zoneId;
         const mode =
           context?.serviceMode ??
@@ -1420,9 +1491,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { permission: "sale.take_payment" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
-      // Not fenced against a handheld: a sale files under the submitting node's SIF,
-      // and a manual card is charged on a terminal the POS never talks to. Cash is fenced by the
-      // `take-cash` capability, the integrated reader (`POST /api/pay`) by its own.
       const body = await readJsonBody<TillSaleRequest>(c);
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
@@ -1430,9 +1498,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
-      const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
+      // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
+      // the profile lacks; both before the zone, so a profile that cannot sell is told so.
+      assertTakesTender(session.device, tillTenderKind(body.tender));
+      assertProfileAction(session.device, "take-orders");
+      const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
+      await gateZones(
+        deps,
+        session,
+        named(
+          zoneId !== undefined && { zoneId },
+          body.workingOrderId !== undefined && { orderId: body.workingOrderId },
+        ),
+      );
       const saleCfg = sendingCfg(cfg, c, session.device);
-      if (body.tender?.method === "cash") assertTakesCash(session.device);
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         saleCfg,
@@ -1451,7 +1530,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const device = session.device;
-      await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
+      assertTakesTender(device, "reader-card");
+      assertProfileAction(device, "take-orders");
       const body = await readJsonBody<IntegratedPayRequest>(c);
       // Screened before the provider guard, so a malformed body is a 400 whatever the card config.
       requireUuidParam(body.id, "WorkingOrderId");
@@ -1465,7 +1545,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
-      const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
+      const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
+      await gateZones(
+        deps,
+        session,
+        named(zoneId !== undefined && { zoneId }, { orderId: body.id }),
+      );
       if (body.readerId !== undefined) {
         requireUuidParam(body.readerId, "CardReaderId");
       }
@@ -1499,7 +1584,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // replays the existing open order's `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const body = await readJsonBody<{
@@ -1519,7 +1604,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
-      const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
+      const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
+      await gateZones(
+        deps,
+        session,
+        named(zoneId !== undefined && { zoneId }, { orderId: body.id }),
+      );
       const result = await parkOrder({ db: deps.db }, cfg, {
         id: body.id,
         lines: body.lines,
@@ -1534,16 +1624,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Venue-wide: every open working order, whatever `node_id` it carries.
   app.get("/api/working-orders", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const orders = await listHeldOrders({ db: deps.db }, deps.cfg);
-      return c.json(orders);
+      return c.json(await visibleOrders(deps, session, orders));
     }),
   );
 
   app.get("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      await gateZones(deps, session, [{ orderId: id }]);
       const order = await getHeldOrder({ db: deps.db }, deps.cfg, id);
       return c.json(order);
     }),
@@ -1551,18 +1642,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/working-orders/:id/placed", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      await gateZones(deps, session, [{ orderId: id }]);
       return c.json(await getPlacedCounterOrder({ db: deps.db }, deps.cfg, id));
     }),
   );
 
   app.put("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{
         lines: ({
           menuItemId: string;
@@ -1592,9 +1685,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.put("/api/working-orders/:id/invoice-choice", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{
         revision?: unknown;
         invoiceType: "F1" | "F2";
@@ -1616,9 +1710,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.delete("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      await gateZones(deps, session, [{ orderId: id }]);
       await abandonHeldOrder({ db: deps.db }, cfg, id);
       return c.body(null, 200);
     }),
@@ -1626,10 +1721,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/working-orders/:id/place", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      await gateZones(deps, session, [{ orderId: id }]);
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         sendingCfg(cfg, c, session.device),
@@ -1642,9 +1738,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/working-orders/:id/prep", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
+      await gateZones(deps, session, [{ orderId: id }]);
       await sendToPrep({ db: deps.db }, cfg, id);
       return c.body(null, 200);
     }),
@@ -1688,7 +1785,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/kitchen-notices/:id/acknowledge", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "prepare-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
@@ -1701,7 +1798,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "prepare-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
@@ -1719,7 +1816,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // so the route screens `to`, and a malformed id gets the same no-op 200.
   app.post("/api/orders/:id/stations/:sid/advance", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "prepare-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const orderId = c.req.param("id");
       const stationId = c.req.param("sid");
@@ -1737,7 +1834,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  mountCourseVerb(app, deps, log, "fire", fireCourse);
+  mountCourseVerb(app, deps, log, "fire", "take-orders", fireCourse);
 
   app.get("/api/expo/queue", (c) =>
     run(c, log, async () => {
@@ -1791,26 +1888,30 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // Unlike `fire`/`away`, `bumpCourseReady` does not existence-check the course: an unknown one
   // updates zero rows and answers 200.
-  mountCourseVerb(app, deps, log, "ready", bumpCourseReady);
+  mountCourseVerb(app, deps, log, "ready", "prepare-orders", bumpCourseReady);
 
-  mountCourseVerb(app, deps, log, "away", markCourseAway);
+  mountCourseVerb(app, deps, log, "away", "hand-over-orders", markCourseAway);
 
   app.get("/api/orders/counter-waiting", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
-      return c.json(await listCounterWaiting({ db: deps.db }, deps.cfg));
+      const session = await requireSession(deps, c);
+      const waiting = await listCounterWaiting({ db: deps.db }, deps.cfg);
+      return c.json(await visibleOrders(deps, session, waiting));
     }),
   );
 
   // The non-fiscal counter handover; the fiscal collect is `POST /api/working-orders/:id/collect`.
   app.post("/api/orders/:id/collect", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "hand-over-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
       const body = await readJsonBody<Record<string, unknown>>(c);
       const submissionId = body.submissionId === undefined ? undefined : submissionIdOf(body);
-      await withTransaction(deps.db, (tx) => handOverOrder(tx, cfg, id, submissionId));
+      await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        return handOverOrder(tx, cfg, id, submissionId);
+      });
       return c.body(null, 200);
     }),
   );
@@ -1818,10 +1919,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Re-enqueues through the same outbox a fire uses, so a broken printer cannot make it hang.
   app.post("/api/orders/:id/reprint", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         await reprintOrderTickets(tx, cfg, id);
       });
       return c.body(null, 200);
@@ -1834,6 +1936,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const ticket = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
           .from(sales)
@@ -1848,9 +1951,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/sales/:id/receipt", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const status = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
           .from(sales)
@@ -1868,6 +1972,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const status = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
           .from(sales)
@@ -1886,6 +1991,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await assertDeviceCapability(deps, c, "print-receipt", "receipt_retry", session.device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
           .from(sales)
@@ -1911,6 +2017,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const cfg = requestCfg(deps.cfg, session);
         await assertDeviceCapability(deps, c, "print-receipt", action, session.device);
         const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+        await gateZones(deps, session, [{ orderId: id }]);
         if (action === "receipt")
           await printSaleReceipt({ db: deps.db, backend: deps.backend }, cfg, id, false);
         else await printSalePaymentSlip(deps.db, cfg, id);
@@ -1925,6 +2032,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       await assertDeviceCapability(deps, c, "print-receipt", "reprint", session.device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      await gateZones(deps, session, [{ orderId: id }]);
       const { language } = await readJsonBody<{ language?: unknown }>(c);
       if (language !== undefined && typeof language !== "string") {
         throw new AppError("management.request_invalid", { field: "language" });
@@ -1989,8 +2097,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
+      await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ tender: TillTender }>(c);
-      if (body.tender?.method === "cash") assertTakesCash(session.device);
+      assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         cfg,
@@ -2013,10 +2122,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId, sessionId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
+      await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ reason: string; override?: unknown }>(c);
       const override = parseOverrideField(body.override);
       await cancelPlacedOrder(
@@ -2033,9 +2143,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/tables", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { device } = await requireSession(deps, c);
       const tables = await withTransaction(deps.db, async (tx) => {
-        return listTables(tx, deps.cfg);
+        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
+        return (await listTables(tx, deps.cfg)).filter((table) => inScope(scope, table.zoneId));
       });
       return c.json(tables);
     }),
@@ -2043,9 +2154,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/tables/state", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { device } = await requireSession(deps, c);
       const state = await withTransaction(deps.db, async (tx) => {
-        return listTablesWithState(tx, deps.cfg, deps.floorAnnotators ?? []);
+        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
+        return (await listTablesWithState(tx, deps.cfg, deps.floorAnnotators ?? [])).filter(
+          (table) => inScope(scope, table.zoneId),
+        );
       });
       return c.json(state);
     }),
@@ -2053,9 +2167,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/zones", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { device } = await requireSession(deps, c);
       const zones = await withTransaction(deps.db, async (tx) => {
-        return listZones(tx, deps.cfg);
+        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
+        return (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
       });
       return c.json(zones);
     }),
@@ -2073,7 +2188,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tables/:id/seat", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
@@ -2081,6 +2196,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ guestCount?: unknown }>(c);
       const guestCount = requireGuestCount(body.guestCount);
       const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
         return seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
       });
       return c.json(result);
@@ -2089,7 +2205,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/parties/:id/finish", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const { personId } = session;
       const partyId = requirePartyParam(c.req.param("id"));
       const body = await readJsonBody<{ expectedPartyRevision?: unknown }>(c);
       const expectedPartyRevision = requireRevision(
@@ -2097,6 +2214,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         "expectedPartyRevision",
       );
       const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return finishTable(tx, { partyId, expectedPartyRevision, operatorId: personId });
       });
       return c.json(result);
@@ -2105,32 +2223,37 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tables/:id/cleared", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      await withTransaction(deps.db, (tx) => markTableCleared(tx, id));
+      await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
+        return markTableCleared(tx, id);
+      });
       return c.body(null, 204);
     }),
   );
 
   app.post("/api/parties/:id/bill-request", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const { personId } = session;
       const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const args = groupCommand(personId, body);
       const { requested } = body;
       if (typeof requested !== "boolean") throw invalid("requested");
-      const answer = await withTransaction(deps.db, (tx) =>
-        requestBill(tx, partyId, requested, args),
-      );
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return requestBill(tx, partyId, requested, args);
+      });
       return c.json(answer);
     }),
   );
 
   app.put("/api/parties/:id/name", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const expectedPartyRevision = requireRevision(
@@ -2139,9 +2262,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       );
       // The wire always carries a name; null or "" clears it.
       if (body.name === undefined) throw invalid("name");
-      const named = await withTransaction(deps.db, (tx) =>
-        setPartyName(tx, { partyId, name: body.name, expectedPartyRevision }),
-      );
+      const named = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return setPartyName(tx, { partyId, name: body.name, expectedPartyRevision });
+      });
       return c.json(named);
     }),
   );
@@ -2152,7 +2276,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   ] as const) {
     app.post(`/api/parties/:id/${path}`, (c) =>
       run(c, log, async () => {
-        const session = await requireSession(deps, c);
+        const session = await requireSession(deps, c, { action: "take-orders" });
         const { personId } = session;
         const cfg = requestCfg(deps.cfg, session);
         const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
@@ -2160,9 +2284,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const tableId = requireTargetTable(body[field], field);
         const command = tableActionCommand(personId, body);
         const sendCfg = sendingCfg(cfg, c, session.device);
-        const result = await withTransaction(deps.db, (tx) =>
-          act(tx, sendCfg, partyId, tableId, command),
-        );
+        const result = await withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
+          return act(tx, sendCfg, partyId, tableId, command);
+        });
         return c.json(result);
       }),
     );
@@ -2170,7 +2295,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/parties/:id/split-table", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
@@ -2188,21 +2313,23 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         "expectedPartyRevision",
       );
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const result = await withTransaction(deps.db, (tx) =>
-        splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
+      const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
           expectedPartyRevision,
           operatorId: personId,
-        }),
-      );
+        });
+      });
       return c.json(result);
     }),
   );
 
   app.get("/api/parties/:id/bills", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
       const bills = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return readPartyBills(tx, partyId);
       });
       return c.json(bills);
@@ -2211,34 +2338,43 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/parties/:id/groups", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      const groups = await withTransaction(deps.db, (tx) => listOrderGroups(tx, partyId));
+      const groups = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return listOrderGroups(tx, partyId);
+      });
       return c.json(groups);
     }),
   );
 
   app.get("/api/parties/:id/current-orders", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      const current = await withTransaction(deps.db, (tx) => readCurrentOrders(tx, partyId));
+      const current = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return readCurrentOrders(tx, partyId);
+      });
       return c.json(current);
     }),
   );
 
   app.get("/api/parties/:id/print-problems", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      const problems = await withTransaction(deps.db, (tx) => listPrintProblems(tx, partyId));
+      const problems = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return listPrintProblems(tx, partyId);
+      });
       return c.json({ problems });
     }),
   );
 
   app.post("/api/parties/:id/groups", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
@@ -2250,45 +2386,48 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...billOf(body),
       };
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const submitted = await withTransaction(deps.db, (tx) =>
-        submitGroups(tx, sendCfg, partyId, input),
-      );
+      const submitted = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return submitGroups(tx, sendCfg, partyId, input);
+      });
       return c.json(submitted);
     }),
   );
 
   app.post("/api/parties/:id/groups/:gid/fire", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const command = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
-      const fired = await withTransaction(deps.db, (tx) =>
-        fireGroup(tx, cfg, partyId, groupId, command),
-      );
+      const fired = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return fireGroup(tx, cfg, partyId, groupId, command);
+      });
       return c.json(fired);
     }),
   );
 
-  for (const [step, command] of [
-    ["ready", bumpGroupReady],
-    ["away", markGroupAway],
+  for (const [step, command, action] of [
+    ["ready", bumpGroupReady, "prepare-orders"],
+    ["away", markGroupAway, "hand-over-orders"],
   ] as const) {
     app.post(`/api/parties/:id/groups/:gid/${step}`, (c) =>
       run(c, log, async () => {
-        const session = await requireSession(deps, c);
+        const session = await requireSession(deps, c, { action });
         const { personId } = session;
         const cfg = requestCfg(deps.cfg, session);
         const partyId = requirePartyParam(c.req.param("id"));
         const groupId = c.req.param("gid");
         if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
         const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
-        const answer = await withTransaction(deps.db, (tx) =>
-          command(tx, cfg, partyId, groupId, args),
-        );
+        const answer = await withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          return command(tx, cfg, partyId, groupId, args);
+        });
         return c.json(answer);
       }),
     );
@@ -2301,16 +2440,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   ] as const) {
     app.post(`/api/parties/:id/${path}`, (c) =>
       run(c, log, async () => {
-        const session = await requireSession(deps, c);
+        const session = await requireSession(deps, c, { action: "hand-over-orders" });
         const { personId } = session;
         const cfg = requestCfg(deps.cfg, session);
         const partyId = requirePartyParam(c.req.param("id"));
         const body = asObject(await readRawJsonBody<unknown>(c));
         const args = groupCommand(personId, body);
         const items = parseLineQuantities(body.items, "items");
-        const answer = await withTransaction(deps.db, (tx) =>
-          command(tx, cfg, partyId, items, args),
-        );
+        const answer = await withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          return command(tx, cfg, partyId, items, args);
+        });
         return c.json(answer);
       }),
     );
@@ -2318,23 +2458,24 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/parties/:id/groups/:gid/served", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "hand-over-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
-      const answer = await withTransaction(deps.db, (tx) =>
-        markGroupServed(tx, cfg, partyId, groupId, args),
-      );
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return markGroupServed(tx, cfg, partyId, groupId, args);
+      });
       return c.json(answer);
     }),
   );
 
   app.post("/api/parties/:id/groups/:gid/snooze", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
@@ -2344,32 +2485,35 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const args = groupCommand(personId, body);
       if (typeof body.minutes !== "number") throw invalid("minutes");
       const minutes = body.minutes;
-      const answer = await withTransaction(deps.db, (tx) =>
-        snoozeReminder(tx, cfg, partyId, groupId, minutes, args),
-      );
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return snoozeReminder(tx, cfg, partyId, groupId, minutes, args);
+      });
       return c.json(answer);
     }),
   );
 
   app.post("/api/parties/:id/groups/:gid/unsnooze", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
-      const answer = await withTransaction(deps.db, (tx) =>
-        unsnoozeReminder(tx, cfg, partyId, groupId, args),
-      );
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return unsnoozeReminder(tx, cfg, partyId, groupId, args);
+      });
       return c.json(answer);
     }),
   );
 
   app.put("/api/parties/:id/groups/order", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const { personId } = session;
       const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const command = groupCommand(personId, body);
@@ -2377,16 +2521,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!Array.isArray(heldGroupIds) || !heldGroupIds.every((id) => typeof id === "string")) {
         throw invalid("heldGroupIds");
       }
-      const reordered = await withTransaction(deps.db, (tx) =>
-        reorderHeldGroups(tx, partyId, heldGroupIds as string[], command),
-      );
+      const reordered = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return reorderHeldGroups(tx, partyId, heldGroupIds as string[], command);
+      });
       return c.json(reordered);
     }),
   );
 
   app.post("/api/parties/:id/groups/move", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
@@ -2394,50 +2539,56 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const command = groupCommand(personId, body);
       const moves = parseLineQuantities(body.moves, "moves");
       const target = parseMoveTarget(body.target);
-      const moved = await withTransaction(deps.db, (tx) =>
-        moveLinesToGroup(tx, cfg, partyId, moves, target, command),
-      );
+      const moved = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return moveLinesToGroup(tx, cfg, partyId, moves, target, command);
+      });
       return c.json(moved);
     }),
   );
 
   app.get("/api/parties/:id/drafts", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const partyId = requireDraftPartyParam(c.req.param("id"));
-      const drafts = await withTransaction(deps.db, (tx) => readDrafts(tx, deps.cfg, partyId));
+      const drafts = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return readDrafts(tx, deps.cfg, partyId);
+      });
       return c.json({ drafts });
     }),
   );
 
   app.put("/api/parties/:id/drafts", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requireDraftPartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const draftId = requireDraftId(body.draftId);
       const revision = requireRevision(body.revision);
-      const draft = await withTransaction(deps.db, (tx) =>
-        saveDraft(tx, cfg, partyId, personId, { draftId, revision, lines: body.lines }),
-      );
+      const draft = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return saveDraft(tx, cfg, partyId, personId, { draftId, revision, lines: body.lines });
+      });
       return c.json(draft);
     }),
   );
 
   app.post("/api/parties/:id/drafts/:did/take-over", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requireDraftPartyParam(c.req.param("id"));
       const draftId = requireDraftParam(c.req.param("did"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const revision = requireRevision(body.revision);
-      const draft = await withTransaction(deps.db, (tx) =>
-        takeOverDraft(tx, cfg, partyId, draftId, personId, revision),
-      );
+      const draft = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return takeOverDraft(tx, cfg, partyId, draftId, personId, revision);
+      });
       return c.json(draft);
     }),
   );
@@ -2451,6 +2602,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const draftId = requireDraftParam(body.draftId);
       if (!Array.isArray(body.lineIds)) throw invalid("lineIds");
       const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
         const at = new Date();
         const draft = (await readDrafts(tx, cfg, partyId)).find((entry) => entry.id === draftId);
         if (draft === undefined) throw new AppError("draft.not_found", { draftId });
@@ -2501,7 +2653,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/parties/:id/drafts/:did/submit", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requireDraftPartyParam(c.req.param("id"));
@@ -2515,9 +2667,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...billOf(body),
       };
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const submitted = await withTransaction(deps.db, (tx) =>
-        submitDraft(tx, sendCfg, partyId, draftId, input),
-      );
+      const submitted = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return submitDraft(tx, sendCfg, partyId, draftId, input);
+      });
       return c.json(submitted);
     }),
   );
@@ -2532,6 +2685,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidParam(body.workingOrderId, "WorkingOrderId");
       if (body.toZoneId !== undefined) requireUuidParam(body.toZoneId, "ServiceZoneId");
       const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(
+          tx,
+          deps.cfg,
+          session,
+          named({ orderId: id }, body.toZoneId !== undefined && { zoneId: body.toZoneId }),
+        );
         const at = new Date();
         const [order] = await tx
           .select({
@@ -2593,7 +2752,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.put("/api/working-orders/:id/make-at", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const body = await readJsonBody<{ revision: unknown; lines: Record<string, string | null> }>(
@@ -2603,6 +2762,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.lines === null || typeof body.lines !== "object" || Array.isArray(body.lines))
         throw invalid("lines");
       const revision = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [order] = await tx
           .select({ status: workingOrders.status, revision: workingOrders.revision })
           .from(workingOrders)
@@ -2638,20 +2798,23 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/working-orders/:id/lines", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
-      const tab = await withTransaction(deps.db, async (tx) => ({
-        lines: await readTabLines(tx, deps.cfg, id),
-        revision: await readOrderRevision(tx, id),
-        editSentLines: await VENUE_SERVICE.readEditSentLines(tx),
-      }));
+      const tab = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        return {
+          lines: await readTabLines(tx, deps.cfg, id),
+          revision: await readOrderRevision(tx, id),
+          editSentLines: await VENUE_SERVICE.readEditSentLines(tx),
+        };
+      });
       return c.json(tab);
     }),
   );
 
   app.post("/api/working-orders/:id/lines/move-station", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -2668,13 +2831,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         if (!isUuid(lineId)) throw new AppError("tab.line_not_found", { tabId: id, lineId });
       if (typeof body.stationId !== "string" || !isUuid(body.stationId))
         throw new AppError("station.not_found", { stationId: String(body.stationId) });
-      const result = await withTransaction(deps.db, (tx) =>
-        moveDishesToStation(tx, cfg, id, {
+      const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        return moveDishesToStation(tx, cfg, id, {
           submissionId,
           lineIds,
           stationId: body.stationId as string,
-        }),
-      );
+        });
+      });
       return c.json(result);
     }),
   );
@@ -2682,7 +2846,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // One line of any open order, edited from the copy at `revision` (plan D10).
   app.put("/api/working-orders/:id/lines/:lineNo", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
@@ -2691,6 +2855,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const copy = requireRevision(revision);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const saved = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const revision = await updateOrderLine(tx, sendCfg, id, lineNo, patch, copy, personId);
         await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
         return { revision, party: await partyRevisionOfOrder(tx, id) };
@@ -2701,7 +2866,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.patch("/api/working-orders/:id/lines/:lineNo/course", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
@@ -2711,6 +2876,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("course.not_found", { courseId });
       }
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         await setLineCourse(tx, cfg, id, lineNo, courseId);
       });
       return c.body(null, 200);
@@ -2720,11 +2886,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // An omitted or empty `lineNos` releases every held line of the tab outside a held group.
   app.post("/api/working-orders/:id/lines/send", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{ lineNos?: number[] }>(c);
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         await sendLines(tx, cfg, id, body.lineNos ?? []);
       });
       return c.body(null, 200);
@@ -2733,11 +2900,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/working-orders/:id/lines/recall", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{ lineNos?: number[] }>(c);
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         await recallLines(tx, cfg, id, body.lineNos ?? []);
       });
       return c.body(null, 200);
@@ -2755,6 +2923,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (statusId !== null && !isUuid(statusId))
         throw new AppError("status.not_found", { statusId });
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
         await setTableStatus(tx, cfg, id, statusId);
       });
       return c.body(null, 200);
@@ -2795,6 +2964,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { zoneId, posX, posY, rotation } = body;
       const shape = body.shape as FloorTableShape;
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ tableId: id }, { zoneId }]);
         await authorize(tx, { sessionId, permission: "venue.configure" });
         await setTablePlacement(tx, cfg, id, { zoneId, posX, posY, shape, rotation });
       });
@@ -2811,6 +2981,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
         await authorize(tx, { sessionId, permission: "venue.configure" });
         await clearPlacement(tx, cfg, id);
       });
@@ -2820,7 +2991,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/bills/:id/split", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const billId = requireTabParam(c.req.param("id"));
@@ -2829,6 +3000,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const command = billCommand(personId, body);
       const saleCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: billId }]);
         const split = await splitBill(tx, cfg, billId, transfers, command);
         await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);
         return split;
@@ -2840,14 +3012,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // The path is the bill merged INTO.
   app.post("/api/bills/:id/merge", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const intoBillId = requireTabParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const fromBillId = requireOtherBill(body.fromBillId, "fromBillId");
       const command = billCommand(personId, body);
-      await withTransaction(deps.db, (tx) => mergeBills(tx, cfg, intoBillId, fromBillId, command));
+      await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: intoBillId }, { orderId: fromBillId }]);
+        return mergeBills(tx, cfg, intoBillId, fromBillId, command);
+      });
       return c.body(null, 204);
     }),
   );
@@ -2855,7 +3030,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // The path is the bill the items leave.
   app.post("/api/bills/:id/transfer", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const fromBillId = requireTabParam(c.req.param("id"));
@@ -2863,9 +3038,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const toBillId = requireOtherBill(body.toBillId, "toBillId");
       const transfers = requireTransfers(body.transfers);
       const command = billCommand(personId, body);
-      await withTransaction(deps.db, (tx) =>
-        transferItems(tx, cfg, fromBillId, toBillId, transfers, command),
-      );
+      await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: fromBillId }, { orderId: toBillId }]);
+        return transferItems(tx, cfg, fromBillId, toBillId, transfers, command);
+      });
       return c.body(null, 204);
     }),
   );
@@ -2873,7 +3049,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // A move changes no amount, so nothing is invoiced here.
   app.post("/api/bills/:id/move", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const billId = requireTabParam(c.req.param("id"));
@@ -2881,9 +3057,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const to = requireMoveTarget(body.to);
       const command = moveCommand(personId, body);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const result = await withTransaction(deps.db, (tx) =>
-        moveBill(tx, sendCfg, billId, to, command),
-      );
+      const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [
+          { orderId: billId },
+          ...named(
+            "tableId" in to && { tableId: to.tableId },
+            "counter" in to && to.counter.zoneId !== null && { zoneId: to.counter.zoneId },
+          ),
+        ]);
+        return moveBill(tx, sendCfg, billId, to, command);
+      });
       return c.json(result);
     }),
   );

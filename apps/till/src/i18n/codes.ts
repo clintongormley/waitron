@@ -63,6 +63,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Those tables are in different service areas, so they cannot be joined",
     es: "Esas mesas están en zonas de servicio distintas, así que no se pueden unir",
   },
+  "service_zone.not_allowed": {
+    en: "This device's profile does not work in that area. Choose one of its own areas",
+    es: "El perfil de este dispositivo no trabaja en esa zona. Elige una de sus zonas",
+  },
+  "device_profile.no_service_zone": {
+    en: "This device's profile has no area it can take orders in. Ask a manager to set one up",
+    es: "El perfil de este dispositivo no tiene ninguna zona en la que tomar pedidos. Pide a un responsable que configure una",
+  },
   "service_zone.mode_incompatible": {
     en: "That table is in an area that does not seat guests. Choose another table",
     es: "Esa mesa está en una zona sin servicio de mesa. Elige otra mesa",
@@ -374,10 +382,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // `device.join_rate_limited`, `device.join_full` and `device.join_stale` are deliberately UNMAPPED:
   // each leaves the operator only "try again", which the generic sentence says, and naming one would
   // tell an unapproved device something about the venue's state.
-  // `device.forbidden_action` is deliberately UNMAPPED: the server refuses other actions with it too
-  // (`assertDeviceCapability`, `apps/server/src/device-session.ts`), so the two
-  // card reader paths (the counter's card collect and the bill pay dialog) show
-  // `card_reader.not_set_up` themselves.
+  // The two card reader paths (the counter's card collect and the bill pay dialog) show
+  // `card_reader.not_set_up` for the reader's own `device.forbidden_action` (action `pay`).
+  "device.forbidden_action": {
+    en: "This device's profile doesn't allow that. Ask a manager to change it.",
+    es: "El perfil de este dispositivo no lo permite. Pide a un responsable que lo modifique.",
+  },
   "device.pairing_closed": {
     en: "New devices aren't being accepted right now. Ask a manager to open Add a device in the dashboard.",
     es: "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que abra «Añadir un dispositivo» en el panel.",
@@ -389,6 +399,26 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "device.binding_invalid": {
     en: "That printer is not available to this device. Choose another",
     es: "Esa impresora no está disponible para este dispositivo. Elige otra",
+  },
+  "device_profile.not_approved": {
+    en: "This device can no longer switch to that profile. Choose another",
+    es: "Este dispositivo ya no puede cambiar a ese perfil. Elige otro",
+  },
+  "device_profile.not_admitted": {
+    en: "You can't sign in on that profile. Choose another",
+    es: "No puedes iniciar sesión con ese perfil. Elige otro",
+  },
+  "station.not_allowed": {
+    en: "That profile does not list the station this device shows. Choose another, or ask a manager to change the device's station",
+    es: "Ese perfil no incluye la estación que muestra este dispositivo. Elige otro, o pide a un responsable que cambie la estación del dispositivo",
+  },
+  "watcher.not_allowed": {
+    en: "That profile does not list the watcher this device shows. Choose another, or ask a manager to change the device's watcher",
+    es: "Ese perfil no incluye el punto de seguimiento que muestra este dispositivo. Elige otro, o pide a un responsable que cambie el punto de seguimiento del dispositivo",
+  },
+  "device.payment_in_progress": {
+    en: "A card payment on this device is still in progress. Switch once it finishes or is cancelled",
+    es: "Hay un pago con tarjeta en curso en este dispositivo. Cambia cuando termine o se cancele",
   },
   "device.cash_not_allowed": {
     en: "This device does not take cash. Take cash at a till.",

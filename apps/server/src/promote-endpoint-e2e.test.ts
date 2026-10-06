@@ -47,6 +47,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { freePort } from "./testing/free-ports.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 // The promote endpoint end to end over HTTP, each boot on its own venue directory: an admin-login
 // promote restarts the mirror as a primary that sells and chains on its own reserved SIF without
@@ -236,7 +237,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
       id: DEVICE_PROFILE_ID,
       name: "Counter",
       formFactor: "till",
-      capabilities: ["take-cash"],
+      capabilities: [...BASIC_ACTIONS, "take-cash"],
     })
     .onConflictDoNothing();
   await admin

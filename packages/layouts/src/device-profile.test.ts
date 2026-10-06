@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import {
+  isSharedDisplay,
+  profileAllows,
   validateCapabilities,
   validateInactivityTimeout,
+  validateStartingScreen,
   DEFAULT_PROFILE_CAPABILITIES,
   DEFAULT_DEVICE_PROFILES,
   defaultProfileName,
@@ -44,6 +47,101 @@ describe("validateCapabilities", () => {
       expect((e as AppError).params).toEqual({ reason: "bad_capabilities" });
     }
   });
+});
+
+describe("validateCapabilities on a shared display", () => {
+  it("refuses a kitchen display an ordering, payment or drawer action", () => {
+    for (const flag of [
+      "take-orders",
+      "take-cash",
+      "integrated-card-payment",
+      "hand-keyed-card-payment",
+      "open-cash-drawer",
+    ]) {
+      try {
+        validateCapabilities(["act-as-kds", flag], "kds");
+        throw new Error(`accepted ${flag}`);
+      } catch (e) {
+        expect(e).toBeInstanceOf(AppError);
+        expect((e as AppError).code).toBe("device_profile.invalid");
+        expect((e as AppError).params).toEqual({ reason: "shared_display_action" });
+      }
+    }
+  });
+
+  it("accepts a kitchen display's prepare action and screens", () => {
+    expect(validateCapabilities(["act-as-kds", "prepare-orders", "show-expo"], "kds")).toEqual([
+      "act-as-kds",
+      "prepare-orders",
+      "show-expo",
+    ]);
+  });
+
+  it("accepts the same ordering and payment actions on a named-login form factor", () => {
+    expect(validateCapabilities(["take-orders", "take-cash", "open-cash-drawer"], "till")).toEqual([
+      "take-orders",
+      "take-cash",
+      "open-cash-drawer",
+    ]);
+  });
+});
+
+describe("profileAllows", () => {
+  it("allows a named-login profile exactly the actions it lists", () => {
+    const profile = { formFactor: "till", capabilities: ["take-orders", "show-station"] } as const;
+    expect(profileAllows(profile, "take-orders")).toBe(true);
+    expect(profileAllows(profile, "prepare-orders")).toBe(false);
+  });
+
+  it("does not read a screen as permission for the action on it", () => {
+    const viewOnly = {
+      formFactor: "tablet-landscape",
+      capabilities: ["show-station", "show-expo"],
+    } as const;
+    expect(profileAllows(viewOnly, "prepare-orders")).toBe(false);
+    expect(profileAllows(viewOnly, "hand-over-orders")).toBe(false);
+  });
+
+  it("refuses a shared display ordering, payment and drawer actions even when listed", () => {
+    const stored = {
+      formFactor: "kds",
+      capabilities: ["take-orders", "take-cash", "open-cash-drawer", "prepare-orders"],
+    } as const;
+    expect(profileAllows(stored, "take-orders")).toBe(false);
+    expect(profileAllows(stored, "take-cash")).toBe(false);
+    expect(profileAllows(stored, "open-cash-drawer")).toBe(false);
+    expect(profileAllows(stored, "prepare-orders")).toBe(true);
+  });
+
+  it("derives the shared display from the kds form factor alone", () => {
+    expect(isSharedDisplay("kds")).toBe(true);
+    for (const ff of ["till", "phone-portrait", "tablet-landscape"] as const)
+      expect(isSharedDisplay(ff)).toBe(false);
+  });
+});
+
+describe("validateStartingScreen", () => {
+  const caps = ["take-orders", "show-expo", "show-schedule"] as const;
+
+  it("accepts null, meaning the canvas's own first view", () => {
+    expect(validateStartingScreen(null, caps)).toBeNull();
+  });
+
+  it("accepts a navigation screen the profile shows", () => {
+    expect(validateStartingScreen("show-expo", caps)).toBe("show-expo");
+  });
+
+  for (const bad of ["show-station", "take-orders", "act-as-kds", "counter", 3, ""]) {
+    it(`refuses ${JSON.stringify(bad)}`, () => {
+      try {
+        validateStartingScreen(bad, [...caps, "act-as-kds"]);
+        throw new Error("should have thrown");
+      } catch (e) {
+        expect(e).toBeInstanceOf(AppError);
+        expect((e as AppError).params).toEqual({ reason: "bad_starting_screen" });
+      }
+    });
+  }
 });
 
 describe("validateInactivityTimeout", () => {
@@ -105,9 +203,18 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
       "show-expo",
       "show-schedule",
       "take-cash",
+      "take-orders",
+      "hand-keyed-card-payment",
+      "prepare-orders",
+      "hand-over-orders",
     ]);
-    expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual(["act-as-kds"]);
-    expect(DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]).toEqual([]);
+    expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual(["act-as-kds", "prepare-orders"]);
+    expect(DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]).toEqual([
+      "take-orders",
+      "hand-keyed-card-payment",
+      "prepare-orders",
+      "hand-over-orders",
+    ]);
     expect(DEFAULT_PROFILE_CAPABILITIES["tablet-landscape"]).toEqual([]);
     expect(validateCapabilities(["take-cash"])).toEqual(["take-cash"]);
   });

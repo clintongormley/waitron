@@ -51,7 +51,7 @@ import { addTabRound } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { BASIC_ACTIONS, seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP surface of the split, un-join and merge routes: the session guard, the malformed-`:id`/`tableId`
 // screens, the result shapes and the STATUS mapping for `table.not_joined`. The successful merge case also
@@ -474,7 +474,11 @@ describe("a split-off check after the till that made it has forgotten it", () =>
         .returning({ id: persons.id });
       const [profile] = await tx
         .insert(deviceProfiles)
-        .values({ name: "Counter till", formFactor: "till", capabilities: ["take-cash"] })
+        .values({
+          name: "Counter till",
+          formFactor: "till",
+          capabilities: [...BASIC_ACTIONS, "take-cash"],
+        })
         .returning({ id: deviceProfiles.id });
       return { tabId: tab.tabId, personId: person!.id, profileId: profile!.id };
     });
