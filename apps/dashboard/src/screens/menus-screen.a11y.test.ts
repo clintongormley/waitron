@@ -144,6 +144,7 @@ function api(state: State): DashboardApi {
       hash: "a".repeat(64),
     }),
     getMenuPreview: vi.fn().mockResolvedValue({
+      live: null,
       clashes: [],
       hash: "b".repeat(64),
       changes: [

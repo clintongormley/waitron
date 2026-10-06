@@ -400,6 +400,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     ],
     status: statusOf(hash, own, mine.clashes.length),
     document: mine.document,
+    live: ownDocument === null ? null : { versionId: own!.versionId, document: ownDocument },
   };
 }
 

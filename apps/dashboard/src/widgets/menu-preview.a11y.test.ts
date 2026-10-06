@@ -21,6 +21,7 @@ const live: MenuStatus = {
 };
 
 const changes: MenuPreview = {
+  live: null,
   clashes: [],
   hash: "b".repeat(64),
   changes: [

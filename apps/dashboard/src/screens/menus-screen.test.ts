@@ -344,6 +344,7 @@ function statuses(): Record<string, MenuStatus> {
 /** Lunch's pending changes: one of its own and one a shared product brings. */
 function lunchPreview(): MenuPreview {
   return {
+    live: null,
     clashes: [],
     hash: LUNCH_HASH,
     changes: [
@@ -390,6 +391,7 @@ function lunchDocument() {
 /** Dinner's working state differs from its live version 5 by nothing a change can list. */
 function dinnerPreview(): MenuPreview {
   return {
+    live: null,
     clashes: [],
     hash: "c".repeat(64),
     changes: [],

@@ -44,6 +44,7 @@ const DOCUMENT = menuDocument(
 
 function preview(changes: MenuChange[], warnings: MenuPreview["warnings"] = []): MenuPreview {
   return {
+    live: null,
     clashes: [],
     hash: NEW_HASH,
     changes,

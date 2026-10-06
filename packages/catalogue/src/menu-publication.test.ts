@@ -93,6 +93,40 @@ async function sectionMemberOf(listId: string, sectionId: string) {
   return row!.id;
 }
 
+describe("preview live snapshot", () => {
+  it("has no live snapshot before the first publication", async () => {
+    const f = await menusFixture(fx.db);
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.live).toBeNull();
+    expect(menuDocumentHash(preview.document)).toBe(preview.hash);
+  });
+
+  it("keeps the live snapshot's price and image after working rows change", async () => {
+    const f = await menusFixture(fx.db);
+    const firstPreview = await app((tx) => previewMenu(tx, f.lunch));
+    const frozen = structuredClone(firstPreview.document);
+    const published = await app((tx) => publishMenu(tx, f.lunch, firstPreview.hash, "person-1"));
+    const soupId = await app((tx) => offerOf(tx, f.lunch, f.soup));
+    await app(async (tx) => {
+      await updateMenuItem(tx, f.lunch, soupId, { grossPrice: "7.25" });
+      await updateProduct(tx, f.soup, { image: "new-soup.jpg" });
+    });
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.live).toEqual({ versionId: published.versionId, document: frozen });
+    expect(preview.live!.document.offers[soupId]).toMatchObject({
+      unitPrice: "5.00",
+      image: null,
+    });
+    expect(preview.document.offers[soupId]).toMatchObject({
+      unitPrice: "7.25",
+      image: "new-soup.jpg",
+    });
+    expect(firstPreview.document).toEqual(frozen);
+    expect(menuDocumentHash(preview.document)).toBe(preview.hash);
+    expect(menuDocumentHash(preview.live!.document)).toBe(firstPreview.hash);
+  });
+});
+
 describe("publishMenu", () => {
   it("writes version 1, its images, and points the publication at it", async () => {
     const f = await menusFixture(fx.db);

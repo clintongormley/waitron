@@ -136,6 +136,51 @@ export interface LiveOffer extends Omit<MenuOffer, "ordering" | "combined">, Pub
   offeredModifiers: LiveOfferedModifier[];
 }
 
+export type MenuField =
+  | { kind: "summary" }
+  | { kind: "name"; audience: "staff" | "customer" | "kitchen"; language?: string }
+  | { kind: "description"; language: string }
+  | {
+      kind:
+        | "price"
+        | "override"
+        | "image"
+        | "color"
+        | "unit"
+        | "allergens"
+        | "diet"
+        | "vat"
+        | "ordering";
+    }
+  | { kind: "variants" | "extras" | "options" }
+  | { kind: "portion" | "maxQuantity" | "limits" | "default" | "members" };
+
+export type MenuTarget =
+  | { kind: "title"; menuId: string }
+  | { kind: "list"; sectionIds: string[] }
+  | { kind: "section"; sectionIds: string[]; field: MenuField }
+  | {
+      kind: "product";
+      sectionIds: string[];
+      menuItemId: string;
+      productId: string;
+      variantId?: string;
+      listId?: string;
+      extraProductId?: string;
+      optionLabelId?: string;
+      field: MenuField;
+    }
+  | {
+      kind: "home";
+      device: "handheld" | "till";
+      field: "shortcuts" | "columns" | "tiles" | "order";
+    };
+
+export interface MenuOccurrence {
+  target: MenuTarget;
+  ancestorSectionIds: string[];
+}
+
 /** Where a change came from (spec §11.1). */
 export type MenuChangeSource = "this_menu" | "shared_product" | "included_menu";
 
@@ -242,6 +287,7 @@ export interface MenuPreview {
   status: MenuStatus;
   /** What the publish would make live. */
   document: MenuDocument;
+  live: { versionId: string; document: MenuDocument } | null;
 }
 
 /** The version a publish made live. */

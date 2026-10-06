@@ -4491,6 +4491,7 @@ describe("publishing a menu", () => {
 
     const first = await preview(app, menuId);
     expect(first.hash).toMatch(HASH);
+    expect(first.live).toBeNull();
     expect(first.changes).toEqual([
       expect.objectContaining({ kind: "product_added", name, under: [], source: "this_menu" }),
     ]);
@@ -4523,6 +4524,7 @@ describe("publishing a menu", () => {
       warnings: [],
       status: current,
       document: first.document,
+      live: { versionId: one.versionId, document: first.document },
     });
 
     expect(
@@ -4535,6 +4537,7 @@ describe("publishing a menu", () => {
     expect(await status(app, menuId)).toMatchObject({ state: "changed", clashes: 0, version: 1 });
     const second = await preview(app, menuId);
     expect(second.hash).not.toBe(first.hash);
+    expect(second.live).toEqual({ versionId: one.versionId, document: first.document });
     expect(second.changes).toEqual([
       expect.objectContaining({ kind: "price_changed", name, from: "2.00", to: "2.50" }),
     ]);
