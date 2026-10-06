@@ -1207,7 +1207,13 @@ are in `section-details-form.unsaved.test.ts` and `menu-details.unsaved.test.ts`
 Search and category filters remain exempt; hidden selections stay in the submitted choice.
 Accepted placements clear only their successful destinations, leaving refused ones unsaved.
 Section additions commit before closing and refreshing. Focused cases are in
-`menu-selections.unsaved.test.ts` and the Catalogue/Menu screen suites. Other audited modal
+`menu-selections.unsaved.test.ts` and the Catalogue/Menu screen suites. Member replacement choices
+and layout create/duplicate/rename names now use the same registry. Cancel retains a replacement
+choice until Discard; layout names also use native Escape. Successful writes commit their submitted
+values, including a late input event retained after a layout write. Include menu remains an
+immediate-write exemption, checked through the real warning controller for success and refusal.
+Focused cases are in `member-replacement.unsaved.test.ts` and `menu-layout.unsaved.test.ts` under
+`apps/dashboard/src/`. Other audited modal
 owners and page/navigation protection remain to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)

@@ -721,3 +721,20 @@ partial refusal retains only the failed choices. Keep the placement dialog's own
 available to its screen's focus return; nested close events cannot dismiss that owner. Cases:
 `apps/dashboard/src/widgets/menu-selections.unsaved.test.ts` and the existing Catalogue/Menu
 screen suites. Other audited owners remain pending.
+
+
+Member replacement and layout names also use the registry on the W69 branch. A replacement's
+Cancel requests leave for its pending choice; a layout name's Cancel/native Escape requests leave
+for its trimmed name. Successful acceptance commits the submitted value; newer input remains
+compared with that value. Include menu still writes on selection and is exempt. Focused receipts
+(2026-10-06): `pnpm --filter @waitron/dashboard exec vitest run
+src/widgets/member-replacement.unsaved.test.ts src/screens/menu-layout.unsaved.test.ts` ran
+21 cases in Chromium, including immediate Include menu success/refusal and late layout results. Deleting the
+replacement Cancel request, either change notification, either submitted-value commit, replacement
+identity disposal or the layout dialog gate in an installed disposable candidate made its selected
+assertion fail; restoring the candidate ran all 19 cases successfully.
+
+A completion belonging to a departed layout still releases its write's busy state before ignoring
+the stale form result. The two departed-layout cases reproduced a stuck busy flag when that
+release followed the identity check; each failed at the new view's disabled editor. Moving only
+that release before the check made both pass, and each installed-candidate deletion failed again.

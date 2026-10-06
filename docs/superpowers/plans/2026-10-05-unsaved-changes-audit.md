@@ -182,3 +182,20 @@ Focused browser cases: `apps/dashboard/src/widgets/section-details-form.unsaved.
 `apps/dashboard/src/screens/menu-details.unsaved.test.ts`. Layout metadata, membership selections,
 member replacement and the remaining modal/page inventory are still pending; this checkpoint does
 not establish page navigation protection.
+
+## Replacement/layout rollout checkpoint (2026-10-06)
+
+The subsequent W69 branch checkpoint wires the inline `member-list-editor` replacement choice and
+the menu screen's layout create/duplicate/rename name dialog. Replacement Cancel asks through the
+shared registry; layout Cancel and native Escape use its dialog gate. A changed replacement scope
+disposes its old draft and invalidates its question. Both owners commit the submitted value after
+acceptance, retaining newer input against that baseline. Layout names compare after trimming.
+
+`apps/dashboard/src/widgets/member-replacement.unsaved.test.ts` and
+`apps/dashboard/src/screens/menu-layout.unsaved.test.ts` exercise the actual owners, their successful
+and refused write boundaries and unload registration. Include menu is **E**: the current
+`menus-screen` invokes `#includeMenu` immediately on a dropdown choice, with no staged confirmation.
+The new controller-hosted cases check both success and refusal without a discard question. Immediate
+member additions and existing tile operations remain exempt. Other audited modal owners and all
+page/navigation owners remain pending. This supersedes the replacement/layout pending status in
+the earlier checkpoints; it does not establish page navigation protection.
