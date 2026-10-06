@@ -13,12 +13,12 @@ const PROFILES = [
 
 const STATES: [string, Partial<TillProfileDialog>][] = [
   ["the active profile chosen", {}],
-  ["a refusal under the profile", { error: { code: "device_profile.not_admitted" } }],
-  ["a refusal naming no field", { error: { code: "device.payment_in_progress" } }],
-  ["an order in progress", { orderOpen: true }],
-  ["an unsaved order change", { draftUnsaved: true }],
-  ["an order change refused and replaced", { draftReplaced: true }],
-  ["a station the profile does not list", { error: { code: "station.not_allowed" } }],
+  ["a refusal under the profile", { notice: { code: "device_profile.not_admitted" } }],
+  ["a refusal naming no field", { notice: { code: "device.payment_in_progress" } }],
+  ["an order in progress", { notice: "order_open" }],
+  ["an unsaved order change", { notice: "draft_unsaved" }],
+  ["an order change refused and replaced", { notice: "draft_replaced" }],
+  ["a station the profile does not list", { notice: { code: "station.not_allowed" } }],
   ["a switch out", { busy: true }],
 ];
 

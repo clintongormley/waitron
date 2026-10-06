@@ -19,6 +19,14 @@ const ABOUT_CHOICE = new Set([
   "watcher.not_allowed",
 ]);
 
+const ORDER_NOTICES = {
+  order_open: "profile.order_open",
+  draft_unsaved: "profile.draft_unsaved",
+  draft_replaced: "profile.draft_replaced",
+} as const;
+
+export type ProfileNotice = { code: string } | keyof typeof ORDER_NOTICES | null;
+
 /**
  * Lets a signed-in person switch the device to another profile it is approved for. The dialog only
  * reports the choice; the app owns the request and says why a switch was refused.
@@ -39,14 +47,9 @@ export class TillProfileDialog extends LitElement {
   @property({ type: Boolean }) open = false;
   @property({ attribute: false }) profiles: ProfileChoice[] = [];
   @property() activeProfileId = "";
-  /** The server's refusal of the last switch. */
-  @property({ attribute: false }) error: { code: string } | null = null;
-  /** An order is in progress on this device, so the switch waits until it is held or cleared. */
-  @property({ type: Boolean }) orderOpen = false;
-  /** The open order's last change could not be saved, so the switch waits until it is. */
-  @property({ type: Boolean }) draftUnsaved = false;
-  /** The server refused the open order's last change and its saved order now shows instead. */
-  @property({ type: Boolean }) draftReplaced = false;
+  /** Why the last switch did not happen: the server's refusal, or the state of the order in
+   * progress on this device. */
+  @property({ attribute: false }) notice: ProfileNotice = null;
   @property({ type: Boolean }) busy = false;
 
   @state() private chosen = "";
@@ -56,7 +59,7 @@ export class TillProfileDialog extends LitElement {
   protected override willUpdate(changed: PropertyValues<this>): void {
     if ((changed.has("open") || changed.has("activeProfileId")) && this.open)
       this.chosen = this.activeProfileId;
-    if (changed.has("error")) this.refusalShown = true;
+    if (changed.has("notice")) this.refusalShown = true;
   }
 
   #emit<T>(type: string, detail?: T): void {
@@ -64,19 +67,18 @@ export class TillProfileDialog extends LitElement {
   }
 
   #fieldError(): string {
-    const code = this.error?.code;
+    const code = typeof this.notice === "object" ? this.notice?.code : undefined;
     return code !== undefined && ABOUT_CHOICE.has(code) && this.refusalShown
       ? codeMessage(code)
       : "";
   }
 
   #bottomMessage(): string {
-    if (this.orderOpen) return t("profile.order_open");
-    if (this.draftUnsaved) return t("profile.draft_unsaved");
-    if (this.draftReplaced) return t("profile.draft_replaced");
-    if (this.error === null) return "";
-    if (ABOUT_CHOICE.has(this.error.code)) return this.refusalShown ? t("form.fix_fields") : "";
-    return codeMessage(this.error.code);
+    const notice = this.notice;
+    if (notice === null) return "";
+    if (typeof notice === "string") return t(ORDER_NOTICES[notice]);
+    if (ABOUT_CHOICE.has(notice.code)) return this.refusalShown ? t("form.fix_fields") : "";
+    return codeMessage(notice.code);
   }
 
   override render() {
@@ -86,6 +88,7 @@ export class TillProfileDialog extends LitElement {
       ${trackDialog()}
       .open=${true}
       .heading=${t("profile.title")}
+      .dismissible=${!this.busy}
       @wt-close=${() => this.#emit("close")}
     >
       <div class="fields">

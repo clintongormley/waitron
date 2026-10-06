@@ -385,8 +385,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // The two card reader paths (the counter's card collect and the bill pay dialog) show
   // `card_reader.not_set_up` for the reader's own `device.forbidden_action` (action `pay`).
   "device.forbidden_action": {
-    en: "This device's profile doesn't allow that",
-    es: "El perfil de este dispositivo no lo permite",
+    en: "This device's profile doesn't allow that. Ask a manager to change it.",
+    es: "El perfil de este dispositivo no lo permite. Pide a un responsable que lo modifique.",
   },
   "device.pairing_closed": {
     en: "New devices aren't being accepted right now. Ask a manager to open Add a device in the dashboard.",

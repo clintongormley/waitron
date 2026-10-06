@@ -79,7 +79,7 @@ describe("till-profile-dialog", () => {
   ])("a %s refusal shows under the profile, and choosing another clears it", async (code) => {
     const el = await mountDialog();
     await chooseOption(picker(el), "pr-bar");
-    el.error = { code };
+    el.notice = { code };
     await el.updateComplete;
     expect(picker(el).error).toBe(codeMessage(code));
     expect(await bottom(el)).toBe(t("form.fix_fields"));
@@ -90,24 +90,24 @@ describe("till-profile-dialog", () => {
   });
 
   it("a refusal naming no field is said at the bottom", async () => {
-    const el = await mountDialog({ error: { code: "device.payment_in_progress" } });
+    const el = await mountDialog({ notice: { code: "device.payment_in_progress" } });
     expect(picker(el).error).toBe("");
     expect(await bottom(el)).toBe(codeMessage("device.payment_in_progress"));
     expect(codeMessage("device.payment_in_progress")).not.toBe(codeMessage("nope.unknown"));
   });
 
   it("an order in progress is said at the bottom", async () => {
-    const el = await mountDialog({ orderOpen: true });
+    const el = await mountDialog({ notice: "order_open" });
     expect(await bottom(el)).toBe(t("profile.order_open"));
   });
 
   it("an unsaved order change is said at the bottom", async () => {
-    const el = await mountDialog({ draftUnsaved: true });
+    const el = await mountDialog({ notice: "draft_unsaved" });
     expect(await bottom(el)).toBe(t("profile.draft_unsaved"));
   });
 
   it("a refused order change, replaced by the saved order, is said at the bottom", async () => {
-    const el = await mountDialog({ draftReplaced: true });
+    const el = await mountDialog({ notice: "draft_replaced" });
     expect(await bottom(el)).toBe(t("profile.draft_replaced"));
   });
 
@@ -115,6 +115,7 @@ describe("till-profile-dialog", () => {
     const el = await mountDialog({ busy: true });
     expect(button(el, "profile-switch").loading).toBe(true);
     expect(button(el, "profile-cancel").disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.dismissible).toBe(false);
   });
 
   it("draws nothing while closed", async () => {

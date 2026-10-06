@@ -14562,7 +14562,7 @@ describe("switching the device's profile from the header", () => {
     expect(dialog.open).toBe(true);
     expect(dialog.profiles).toEqual([COUNTER, BAR]);
     expect(dialog.activeProfileId).toBe(COUNTER.id);
-    expect(dialog.error).toBeNull();
+    expect(dialog.notice).toBeNull();
     expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
   });
 
@@ -14578,7 +14578,7 @@ describe("switching the device's profile from the header", () => {
     emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
     await flush(el);
     expect(switchDeviceProfile).not.toHaveBeenCalled();
-    expect(profileDialog(el)!.orderOpen).toBe(true);
+    expect(profileDialog(el)!.notice).toBe("order_open");
     expect(c.store.lines).toHaveLength(1);
 
     c.store.clear();
@@ -14756,7 +14756,7 @@ describe("switching the device's profile from the header", () => {
     });
     emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
     await flush(el);
-    expect(profileDialog(el)!.error).toEqual({ code: "device_profile.not_admitted" });
+    expect(profileDialog(el)!.notice).toEqual({ code: "device_profile.not_admitted" });
     expect(profileDialog(el)!.busy).toBe(false);
     expect(getTill).toHaveBeenCalledTimes(1);
   });

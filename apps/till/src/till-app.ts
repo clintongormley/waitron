@@ -128,6 +128,7 @@ import "./widgets/tab-shell.js";
 import "./widgets/find-bill-dialog.js";
 import "./widgets/printers-dialog.js";
 import "./widgets/profile-dialog.js";
+import type { ProfileNotice } from "./widgets/profile-dialog.js";
 import type { PrinterSlot } from "./widgets/printers-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 import "./widgets/card-grid.js";
@@ -1367,8 +1368,6 @@ export class TillApp extends LitElement {
    * zone's default). Held in memory only, so a reload starts from the profile's starting zone. */
   #browsing?: { personId: string; zoneId: string; menuId: string | null };
   #counterOfferRequest = 0;
-  /** The grid's selected menu: the zone's default after a zone change or another person's login,
-   * and otherwise the switcher's last choice. */
   @state() private selectedCatalogueId = "";
   @state() private selectedDiet: DietPredicate | null = null;
   @state() private operatorName = "";
@@ -1550,13 +1549,8 @@ export class TillApp extends LitElement {
   @state() private approvedProfiles: ProfileChoice[] = [];
   @state() private activeProfileId = "";
   @state() private profileOpen = false;
-  @state() private profileError: { code: string } | null = null;
+  @state() private profileNotice: ProfileNotice = null;
   @state() private profileBusy = false;
-  /** A switch was asked for while an order is in progress on this device. */
-  @state() private profileOrderOpen = false;
-  /** A switch was asked for while the open order's draft held a change the server has not got. */
-  @state() private profileDraftUnsaved = false;
-  @state() private profileDraftReplaced = false;
   /** Printer switches are sent one at a time, each once the one before has answered or been cut
    * off, so each answer is newer than the one before. A switch with no answer within
    * `TABLE_REQUEST_LIMIT_MS` is cut off, so it cannot hold back the picks after it; a cut-off
@@ -1819,10 +1813,7 @@ export class TillApp extends LitElement {
       this.defaultReaderId = till.defaultReaderId;
       this.receipt = till.receipt ?? {};
       this.venueAddress = till.venueAddress ?? [];
-      this.canvas = till.canvas;
-      this.capabilities = till.capabilities;
-      this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
-      this.#startingScreen = till.startingScreen ?? null;
+      this.#applyProfileSetup(till);
       // Validated and retained, but not written to the URL: the front-door surfaces are not `/tabs/*`
       // destinations, so the tab is published only when the shell opens.
       this.activeTabKey = this.#requestedTab();
@@ -3874,10 +3865,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     await this.#readPrinters();
     if (session !== this.#operatorSession) return;
-    this.profileError = null;
-    this.profileOrderOpen = false;
-    this.profileDraftUnsaved = false;
-    this.profileDraftReplaced = false;
+    this.profileNotice = null;
     this.profileBusy = false;
     this.profileOpen = true;
   }
@@ -3895,14 +3883,12 @@ export class TillApp extends LitElement {
       this.profileOpen = false;
       return;
     }
-    this.profileDraftUnsaved = false;
-    this.profileDraftReplaced = false;
     if (this.#store.lines.length > 0 || this.#partylessDraft.lines.length > 0) {
-      this.profileOrderOpen = true;
+      this.profileNotice = "order_open";
       return;
     }
     const session = this.#operatorSession;
-    this.profileOrderOpen = false;
+    this.profileNotice = null;
     this.profileBusy = true;
     const sync = this.#draftSync;
     if (sync !== undefined) {
@@ -3910,9 +3896,10 @@ export class TillApp extends LitElement {
       if (session !== this.#operatorSession) return;
       if (saved !== "saved") {
         this.profileBusy = false;
-        if (saved !== "failed" && DRAFT_REFUSALS.has(saved.refused))
-          this.profileDraftReplaced = true;
-        else this.profileDraftUnsaved = true;
+        this.profileNotice =
+          saved !== "failed" && DRAFT_REFUSALS.has(saved.refused)
+            ? "draft_replaced"
+            : "draft_unsaved";
         return;
       }
     }
@@ -3921,7 +3908,7 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (session !== this.#operatorSession) return;
       const code = (error as { code?: unknown } | null)?.code;
-      this.profileError = { code: typeof code === "string" ? code : "server.internal" };
+      this.profileNotice = { code: typeof code === "string" ? code : "server.internal" };
       this.profileBusy = false;
       return;
     }
@@ -3938,15 +3925,20 @@ export class TillApp extends LitElement {
     this.profileOpen = false;
   }
 
+  /** The parts of the till's setup that come from the device's profile. */
+  #applyProfileSetup(till: TillInfo): void {
+    this.canvas = till.canvas;
+    this.capabilities = till.capabilities;
+    this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
+    this.#startingScreen = till.startingScreen ?? null;
+  }
+
   /** The new profile's setup, and browsing begun again from its starting zone and default menu. */
   async #enterSwitchedProfile(session: number): Promise<void> {
     try {
       const till = await this.api.getTill();
       if (session !== this.#operatorSession) return;
-      this.canvas = till.canvas;
-      this.capabilities = till.capabilities;
-      this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
-      this.#startingScreen = till.startingScreen ?? null;
+      this.#applyProfileSetup(till);
     } catch {
       if (session === this.#operatorSession) this.errorKey = "boot.error";
       return;
@@ -8109,10 +8101,7 @@ export class TillApp extends LitElement {
                 .open=${true}
                 .profiles=${this.approvedProfiles}
                 .activeProfileId=${this.activeProfileId}
-                .error=${this.profileError}
-                .orderOpen=${this.profileOrderOpen}
-                .draftUnsaved=${this.profileDraftUnsaved}
-                .draftReplaced=${this.profileDraftReplaced}
+                .notice=${this.profileNotice}
                 .busy=${this.profileBusy}
                 @profile-switch=${(event: CustomEvent<{ profileId: string }>) =>
                   void this.#onProfileSwitch(event)}

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
   draftServer,
@@ -958,7 +958,7 @@ describe("till-app: switching the device's profile with a table order open", () 
     await askToSwitch(el);
 
     expect(switchDeviceProfile).not.toHaveBeenCalled();
-    expect(profileDialog(el)!.draftUnsaved).toBe(true);
+    expect(profileDialog(el)!.notice).toBe("draft_unsaved");
     expect(rows(el)).toEqual(["Beer ×1"]);
   });
 
@@ -1008,6 +1008,36 @@ describe("till-app: switching the device's profile with a table order open", () 
     expect(profileDialog(el)).toBeNull();
   });
 
+  it("keeps the dialog open over the screen when Escape is pressed while the switch is out", async () => {
+    let answerTill: (value: unknown) => void = () => {};
+    const { el } = await mountApp({
+      ...profiles,
+      switchDeviceProfile: switchStub(),
+      getTill: vi
+        .fn()
+        .mockResolvedValueOnce(till(drillCanvas))
+        .mockImplementationOnce(() => new Promise((resolve) => (answerTill = resolve))),
+    });
+    await openMesa(el);
+    await askToSwitch(el);
+    const dialog = profileDialog(el)!;
+    const native = dialog
+      .shadowRoot!.querySelector("wt-dialog")!
+      .shadowRoot!.querySelector("dialog")!;
+    expect(native.matches(":modal")).toBe(true);
+
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+
+    expect(dialog.busy).toBe(true);
+    expect(native.matches(":modal")).toBe(true);
+
+    answerTill(till(drillCanvas));
+    await flush(el, 6);
+
+    expect(profileDialog(el)).toBeNull();
+  });
+
   it("says the order's change was refused and replaced, not that it could not be saved, when the switch's save is refused", async () => {
     const switchDeviceProfile = switchStub();
     const { el } = await mountApp({
@@ -1024,8 +1054,7 @@ describe("till-app: switching the device's profile with a table order open", () 
     await askToSwitch(el);
 
     expect(switchDeviceProfile).not.toHaveBeenCalled();
-    expect(profileDialog(el)!.draftUnsaved).toBe(false);
-    expect(profileDialog(el)!.draftReplaced).toBe(true);
+    expect(profileDialog(el)!.notice).toBe("draft_replaced");
     expect(rows(el)).toEqual([]);
   });
 
@@ -1044,7 +1073,7 @@ describe("till-app: switching the device's profile with a table order open", () 
     await askToSwitch(el);
 
     expect(switchDeviceProfile).not.toHaveBeenCalled();
-    expect(profileDialog(el)!.orderOpen).toBe(true);
+    expect(profileDialog(el)!.notice).toBe("order_open");
     expect(rows(el)).toEqual(["Beer ×1"]);
   });
 });
