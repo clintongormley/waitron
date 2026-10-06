@@ -1553,7 +1553,9 @@ rejection no longer holds the later records of its chain (D2, on
 [§7.1's receipts](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1));
 only rejection code 1161 was tested, and it was triggered artificially. A conflict with AEAT's
 copy, or a held cancellation, holds the later records of its chain that have not been sent. A
-cancellation whose original was rejected or is held is itself held and never sent. When the
+record sent in the conflict's own envío is not held when the reply is applied; one whose outcome is
+still unknown is held at its next claim like any later record of that chain, and is not sent again.
+A cancellation whose original was rejected or is held is itself held and never sent. When the
 lookup that follows a duplicate answer fails, only that record's outcome becomes unknown. Each
 record that needs a person's decision gets a filing case, kept in tables whose rows cannot be
 changed or deleted; resolving a case releases nothing yet (Tasks 8–9 do that). A new ongoing

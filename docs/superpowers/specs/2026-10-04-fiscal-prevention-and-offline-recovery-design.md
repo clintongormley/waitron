@@ -133,6 +133,8 @@ These are proposed requirements, not a claim that all current paths have been ve
 table above: `packages/fiscal-verifactu/src/drain.ts` keeps every line of AEAT's reply. A rejection
 no longer holds its chain (D2, on §7.1's receipts; only code 1161 was tested, triggered
 artificially). A conflict, or a held cancellation, holds the later unsent records of its chain. A
+record of the conflict's own envío is not held when the reply is applied; one whose outcome is still
+unknown is held at its next claim like any later record of that chain, and is not sent again. A
 cancellation whose original is rejected or held is held and never sent. A failed duplicate lookup
 makes only that record's outcome unknown. Filing cases (`src/filing-cases.ts`) are append-only,
 and resolving one releases nothing until Tasks 8–9. A new ongoing alert,

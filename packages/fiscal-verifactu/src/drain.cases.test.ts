@@ -12,8 +12,14 @@ import {
   type SeededDrain,
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
-import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
-import { listFilingCases, recordCaseEvent } from "./filing-cases.js";
+import {
+  DEFAULT_SKIP_RETRY_MS,
+  RECUPERACION_ENVIANDO_MS,
+  backoffMs,
+  drain,
+  type DrainDeps,
+} from "./drain.js";
+import { heldRecords, listFilingCases, recordCaseEvent } from "./filing-cases.js";
 import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -292,7 +298,7 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     expect(await cases()).toHaveLength(1);
   });
 
-  it("never holds a record that was in the same envío, even when the reply has no line for it", async () => {
+  it("does not hold a record of the same envío when the reply is applied, even when the reply has no line for it", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [conflicting, unanswered] = seeded.registroIds;
@@ -316,6 +322,78 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     expect((await envioOf(conflicting!)).estado).toBe("detenido");
     expect(await envioOf(unanswered!)).toMatchObject({ estado: "enviando", incidencia: false });
     expect(await ackOf(unanswered!)).toBeUndefined();
+  });
+
+  it("holds an unanswered record of the conflict's envío at its next claim, once its claim is recovered, and never sends it again", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [conflicting, unanswered] = seeded.registroIds;
+    await collideAtAeat(aeat, seeded, conflicting!);
+    const real = aeat.client();
+    const secondLineMisnamed: VerifactuClient = {
+      submit: async (cabecera, registros) => {
+        const respuesta = await real.submit(cabecera, registros);
+        return {
+          ...respuesta,
+          RespuestaLinea: respuesta.RespuestaLinea.map((linea) =>
+            linea.RefExterna === unanswered ? { ...linea, RefExterna: "not-in-this-batch" } : linea,
+          ),
+        };
+      },
+      consultar: (...args) => real.consultar(...args),
+    };
+    await drain(deps(secondLineMisnamed), FIRST);
+    const wire = recording(real);
+
+    // Past the claim's staleness cutoff: the pass recovers it to pending, then claims it.
+    const result = await drain(
+      deps(wire.client),
+      new Date(FIRST.getTime() + RECUPERACION_ENVIANDO_MS + 1),
+    );
+
+    expect(wire.sent).toEqual([]);
+    expect(await envioOf(unanswered!)).toMatchObject({ estado: "detenido", incidencia: true });
+    expect(await ackOf(unanswered!)).toBe("halted");
+    expect(result.recordsSubmitted).toBe(0);
+    expect(result.recordsHalted).toBe(1);
+    const [opened] = await cases();
+    expect(opened).toMatchObject({ registroId: conflicting, cause: "fiscal.huella_divergente" });
+    expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
+      { registroId: unanswered, caseId: opened!.id },
+    ]);
+  });
+  it("holds a record of the conflict's envío whose status was unreadable at its retry, and never sends it again", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [conflicting, unreadable] = seeded.registroIds;
+    await collideAtAeat(aeat, seeded, conflicting!);
+    const real = aeat.client();
+    const secondLineUnreadable: VerifactuClient = {
+      submit: async (cabecera, registros) => {
+        const respuesta = await real.submit(cabecera, registros);
+        return {
+          ...respuesta,
+          RespuestaLinea: respuesta.RespuestaLinea.map((linea) =>
+            linea.RefExterna === unreadable ? { ...linea, EstadoRegistro: undefined } : linea,
+          ),
+        };
+      },
+      consultar: (...args) => real.consultar(...args),
+    };
+    await drain(deps(secondLineUnreadable), FIRST);
+    expect((await envioOf(unreadable!)).estado).toBe("pendiente");
+    const wire = recording(real);
+
+    const result = await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
+
+    expect(wire.sent).toEqual([]);
+    expect(await envioOf(unreadable!)).toMatchObject({ estado: "detenido", incidencia: true });
+    expect(await ackOf(unreadable!)).toBe("halted");
+    expect(result.recordsHalted).toBe(1);
+    const [opened] = await cases();
+    expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
+      { registroId: unreadable, caseId: opened!.id },
+    ]);
   });
 });
 
@@ -343,7 +421,7 @@ describe("drain — a cancellation whose original was not accepted", () => {
     expect(await incidentCodes()).toEqual(["fiscal.registro_rechazado"]);
   });
 
-  it("holds a cancellation of an original held for a conflict without sending it", async () => {
+  it("holds a cancellation of an original held for a conflict by the chain rule, as any later record of that chain, without sending it", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [original] = seeded.registroIds;
@@ -405,6 +483,7 @@ describe("drain — a duplicate whose lookup fails", () => {
       registroId: duplicate,
       codigo: 3000,
       csv,
+      lookupFailed: true,
     });
     expect(result.recordsAccepted).toBe(1);
     expect(result.nextDueAt).toEqual(retryAt);
@@ -452,6 +531,61 @@ describe("drain — an unknown outcome blocks later claims on its chain", () => 
     await drain(deps(wire.client), retryAt);
     expect(wire.sent).toEqual([[other.registroId], [unknown, successor.registroId]]);
     expect(await cases()).toEqual([]);
+  });
+});
+
+describe("drain — an unknown outcome says whether a duplicate lookup failed", () => {
+  async function unknownParams(): Promise<Record<string, unknown>[]> {
+    const { rows } = await suite.db.execute<{ params: string }>(sql`
+      select params from incidents where code = 'fiscal.estado_desconocido'
+    `);
+    return rows.map((row) => JSON.parse(row.params) as Record<string, unknown>);
+  }
+
+  it("names no lookup when the reply line itself is unreadable", async () => {
+    const aeat = fakeAeat();
+    await seedPendingEnvios(suite.db, { count: 1 });
+    const real = aeat.client();
+    const withoutStatus: VerifactuClient = {
+      submit: async (cabecera, registros) => {
+        const respuesta = await real.submit(cabecera, registros);
+        return {
+          ...respuesta,
+          RespuestaLinea: respuesta.RespuestaLinea.map((l) => ({
+            ...l,
+            EstadoRegistro: undefined,
+          })),
+        };
+      },
+      consultar: (...args) => real.consultar(...args),
+    };
+
+    await drain(deps(withoutStatus), FIRST);
+
+    const params = await unknownParams();
+    expect(params).toHaveLength(1);
+    expect(params[0]).not.toHaveProperty("lookupFailed");
+  });
+
+  it("says lookupFailed false when the lookup answered without the record", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [duplicate] = seeded.registroIds;
+    await drain(deps(aeat.client()), FIRST);
+    await suite.db.execute(sql`
+      update envios set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
+      where registro_id = ${duplicate}
+    `);
+    const real = aeat.client();
+    const lookupFindsNothing: VerifactuClient = {
+      submit: (cabecera, registros) => real.submit(cabecera, registros),
+      consultar: async (...args) => ({ ...(await real.consultar(...args)), registros: [] }),
+    };
+
+    await drain(deps(lookupFindsNothing), SECOND);
+
+    expect((await envioOf(duplicate!)).estado).toBe("pendiente");
+    expect(await unknownParams()).toEqual([expect.objectContaining({ lookupFailed: false })]);
   });
 });
 

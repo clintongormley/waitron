@@ -472,8 +472,13 @@ async function claimBatch(
 /**
  * Holds a row `claimBatch` just claimed, in the claim's own transaction so it never reaches
  * `client.submit`, when an earlier row of its chain is `detenido`, or when it is a cancellation
- * whose original (same chain, same invoice identity) is `rechazado` or `detenido`. A held row
- * becomes `detenido` with `incidencia`, so every later claimed row of its chain is held with it.
+ * whose original (same chain, same invoice identity) is `rechazado`. A held row becomes
+ * `detenido` with `incidencia`, so every later claimed row of its chain is held with it.
+ *
+ * A conflict never holds a record of its own envío when the reply is applied; one whose outcome
+ * is still unknown is held here at its next claim like any later record of the chain, and is not
+ * sent again. The same rule holds a cancellation whose original, on the same chain, is
+ * `detenido`: that original is an earlier row of the chain.
  *
  * A `rechazado` row holds nothing behind it: in the design's §7.1 runs (code 1161 only) AEAT
  * answered each successor of a rejected record on its own and accepted it. A cancellation of a
@@ -508,7 +513,7 @@ async function haltOpenChainClaims(
           and original.id_emisor_factura = r.id_emisor_factura
           and original.num_serie_factura = r.num_serie_factura
           and original.fecha_expedicion_factura = r.fecha_expedicion_factura
-          and original_envio.estado in ('rechazado', 'detenido')
+          and original_envio.estado = 'rechazado'
       )))
   `);
   if (blocked.rows.length === 0) return claimed;
@@ -653,7 +658,8 @@ async function persistResponse(
 }
 
 /** Routes one resolved line to its estado transition + side effects. `sentIds` is the envío's
- * batch, which a conflict never holds. */
+ * batch, which a conflict does not hold when the reply is applied (see `haltOpenChainClaims` for
+ * one whose outcome stays unknown). */
 async function applyOutcome(
   tx: Transaction,
   { row, linea, efectivo, lookup, duplicateAcceptedWithErrors }: ResolvedLine,
@@ -748,8 +754,9 @@ async function openCase(
 }
 
 /**
- * An unreadable reply, or a duplicate lookup that failed or found no evidence, stays pending for a
- * later send. The incident keeps the envío's CSV, which AEAT never returns again.
+ * An unreadable reply, or a duplicate lookup that failed or did not settle whose record AEAT holds,
+ * stays pending for a later send. The incident keeps the envío's CSV, which AEAT never returns
+ * again. `lookupFailed` is given only when a duplicate lookup ran.
  */
 async function awaitReadableAnswer(
   tx: Transaction,
@@ -758,6 +765,7 @@ async function awaitReadableAnswer(
   csv: string | null,
   now: Date,
   result: DrainResult,
+  lookupFailed?: boolean,
 ): Promise<void> {
   const next = new Date(now.getTime() + backoffMs(row.intentos));
   await tx.execute(sql`
@@ -775,6 +783,7 @@ async function awaitReadableAnswer(
       codigo: linea.CodigoErrorRegistro ?? null,
       mensaje: linea.DescripcionErrorRegistro ?? null,
       csv,
+      ...(lookupFailed === undefined ? {} : { lookupFailed }),
     }),
     now,
     result,
@@ -819,7 +828,8 @@ async function setEstado(
 /**
  * Holds a conflict's still-`pendiente`/`enviando` successors on its chain (same `sif_id`, higher
  * `secuencia`) as `detenido`, flagging `incidencia`, except the records of this envío: those were
- * sent, and each keeps its own line's outcome. Writes a `halted` ack for each, because this bulk
+ * sent, and each keeps its own line's outcome here. One whose outcome stays unknown is held at its
+ * next claim instead (`haltOpenChainClaims`). Writes a `halted` ack for each, because this bulk
  * UPDATE bypasses `setEstado`.
  *
  * A subquery rather than `UPDATE ... FROM`, which this engine refused with an alias on the target
@@ -945,7 +955,8 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
  *
  * A conflict opens a case and holds this chain's records not yet sent: AEAT holds another record
  * under this identity, and no probe has sent a successor after one (design §7.1 tested only a
- * rejected predecessor AEAT holds nothing for).
+ * rejected predecessor AEAT holds nothing for). A record of this envío is not held here, but one
+ * whose outcome stays unknown is held at its next claim (`haltOpenChainClaims`).
  */
 async function handleDuplicate(
   tx: Transaction,
@@ -962,7 +973,7 @@ async function handleDuplicate(
   const annulled = efectivo === "duplicate_annulled";
   if (lookup !== null) {
     if ("failed" in lookup) {
-      await awaitReadableAnswer(tx, row, linea, csv, now, result);
+      await awaitReadableAnswer(tx, row, linea, csv, now, result, true);
       return;
     }
     if (lookup.matched) {
@@ -991,7 +1002,7 @@ async function handleDuplicate(
       return;
     }
     if (lookup.matched === null) {
-      await awaitReadableAnswer(tx, row, linea, csv, now, result);
+      await awaitReadableAnswer(tx, row, linea, csv, now, result, false);
       return;
     }
   }

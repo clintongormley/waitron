@@ -104,9 +104,12 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * `./drain.ts`: AEAT's reply line for this record has a missing or unrecognised status, so
-     * whether AEAT stored it is unknown. A warning: the record waits for a later send. `estado` is
-     * the line's raw status text; `csv` is the envío's, kept because AEAT never returns it again.
+     * `./drain.ts`: whether AEAT stored this record is unknown — its reply line has a missing or
+     * unrecognised status, or the line is a duplicate (error 3000) whose lookup failed or did not
+     * settle whose record AEAT holds. A warning: the record waits for a later send. `estado` is the
+     * line's raw status text; `csv` is the envío's, kept because AEAT never returns it again.
+     * `lookupFailed` is present only when a duplicate lookup ran: `true` when it failed, `false`
+     * when it answered without settling it.
      */
     "fiscal.estado_desconocido": {
       registroId: string;
@@ -114,14 +117,16 @@ declare module "@waitron/shared" {
       codigo: number | null;
       mensaje: string | null;
       csv: string | null;
+      lookupFailed?: boolean;
     };
 
     /**
      * `./drain.ts`'s `handleDuplicate` (error 3000): AEAT's own copy of this identity is `Anulada`,
      * and the record is a sale, or a cancellation whose fingerprint differs from the one AEAT
      * holds or for which AEAT returns no record. Holds the record and its chain's later records not
-     * yet sent, and opens a filing case. No `codigo`/`mensaje` params: they would only ever repeat
-     * 3000.
+     * yet sent, and opens a filing case. A record of the same envío is not held when the reply is
+     * applied; one whose outcome is still unknown is held at its next claim like any later record
+     * of the chain. No `codigo`/`mensaje` params: they would only ever repeat 3000.
      */
     "fiscal.duplicado_anulado": { registroId: string };
 
