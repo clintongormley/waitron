@@ -152,26 +152,37 @@ export class ImageLibrary extends LitElement {
         background: var(--wt-color-primary);
         color: var(--wt-color-on-primary);
       }
-      /* Side by side, the photo taking the larger share, wherever the dialog has room for both
-         bases; one above the other where it has not. Driven by the dialog's width, not the
-         viewport's. */
+      /* Side by side wherever the dialog has room for 12 × --wt-tap-min plus the gap; one above
+         the other where it has not. Driven by the dialog's width, not the viewport's. */
       .viewer {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-4);
         align-items: flex-start;
+        /* The photo's width at the height cap. Invalid while --photo-ratio is absent (before the
+           photo loads, after it fails), so each reader below takes its fallback. */
+        --photo-cap: calc(60dvh * var(--photo-ratio));
       }
       .viewer img {
         flex: 3 1 calc(var(--wt-tap-min) * 7);
         min-width: 0;
         height: auto;
         max-height: 60dvh;
+        max-width: var(--photo-cap, none);
         object-fit: contain;
         background: var(--wt-color-surface);
         border-radius: var(--wt-radius-md);
       }
+      /* Flex wraps on each item's basis clamped by its max-width (pinned by the wrap-point tests in
+         image-library.narrow.test.ts), so the list's basis takes on what the photo's cap takes off
+         its own, keeping the wrap point where the photo's and the list's original bases
+         (12 × --wt-tap-min) put it. */
       .uses {
-        flex: 2 1 calc(var(--wt-tap-min) * 5);
+        flex: 2 1
+          calc(
+            var(--wt-tap-min) * 5 +
+              max(0px, var(--wt-tap-min) * 7 - var(--photo-cap, var(--wt-tap-min) * 7))
+          );
         min-width: 0;
       }
       .uses h3 {
@@ -500,7 +511,21 @@ export class ImageLibrary extends LitElement {
       @click=${(event: MouseEvent) => this.#closeOnBackdrop(event, viewing.image.id)}
     >
       <div class="viewer">
-        <img src=${`/media/${encodeURIComponent(viewing.image.filename)}`} alt=${name} />
+        <img
+          src=${`/media/${encodeURIComponent(viewing.image.filename)}`}
+          alt=${name}
+          @load=${(event: Event) => {
+            const image = event.currentTarget as HTMLImageElement;
+            image.parentElement!.style.setProperty(
+              "--photo-ratio",
+              String(image.naturalWidth / image.naturalHeight),
+            );
+          }}
+          @error=${(event: Event) =>
+            (event.currentTarget as HTMLImageElement).parentElement!.style.removeProperty(
+              "--photo-ratio",
+            )}
+        />
         <section class="uses">
           <h3 id="uses-heading">${t("image.uses")}</h3>
           ${
