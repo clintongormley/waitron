@@ -487,3 +487,22 @@ The EN/ES, light/dark, 390/1280 matrix covers Add/Edit and the shared confirmati
 and immediate seat/no-show/cancel/complete commands also have explicit exemption cases. Inline
 seating choices remain page work, as do actual navigation and native reload; synthetic unload checks establish cancellation
 of the listener only. Other contributed and till modal owners remain Task 4 work.
+
+## 2026-10-06 Station Add/Rename checkpoint
+
+When you edit a station's Add name, display order or timing thresholds, Cancel and native Escape
+ask through the shared registry. Rename protects the name after the same trimming its update
+submits. Add compares the existing numeric values and preserves its untrimmed create request.
+Keep preserves the visible fields; Discard restores and closes only that editor. Clean or reverted
+values close directly. Synthetic unload checks cover listener cancellation, not a native reload.
+
+Accepted writes commit their captured values before refresh. Newer delivered input stays visible
+and dirty, refusals retain the draft, and pending writes block dismissal. A connected opening owns
+its dialog and control handlers. Disconnect unregisters its scope and aborts its question; departed
+field events and successful/refused write replies leave a reconnected editor alone.
+
+`packages/venue-service/src/dashboard/prep-stations-screen.unsaved.test.ts` exercises these paths
+alongside the existing prep-station behavior, settings and accessibility suites. The EN/ES,
+light/dark, 390/1280 matrix covers Add/Rename and their shared warning. This is a partial Task 4
+checkpoint: exceptions, hours, watchers, department/zone forms and other audited modal owners still
+need integration. Page/history/native reload remain Tasks 5–6.

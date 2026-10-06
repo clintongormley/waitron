@@ -3,6 +3,10 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
   submitOnEnter,
   ReorderController,
   reorder,
@@ -387,6 +391,72 @@ export class PrepStationsScreen extends LitElement {
       if (this.#readErrorShown) this.#showError("");
     },
   );
+  #stationScope?: DraftScope<StationInput>;
+  #renameScope?: DraftScope<{ name: string }>;
+  #stationIdentity?: object;
+  #renameIdentity?: object;
+  #leave?: LeaveCoordinator;
+
+  #syncStationDrafts(): void {
+    if (this.editor?.kind !== "station") {
+      this.#stationScope?.dispose();
+      this.#stationScope = undefined;
+      this.#stationIdentity = undefined;
+    } else if (!this.#stationIdentity) {
+      const id = (this.#stationIdentity = {});
+      this.#leave ??= leaveCoordinatorFor(this);
+      this.#stationScope = this.#leave?.register({
+        id,
+        current: () => this.draft,
+        snapshot: (value) => ({ ...value }),
+        equal: (a, b) =>
+          Object.keys(a).every((key) =>
+            Object.is(a[key as keyof StationInput], b[key as keyof StationInput]),
+          ),
+        restore: (value) => {
+          this.draft = { ...value };
+        },
+      });
+    }
+    if (!this.rename) {
+      this.#renameScope?.dispose();
+      this.#renameScope = undefined;
+      this.#renameIdentity = undefined;
+    } else if (!this.#renameIdentity) {
+      const id = (this.#renameIdentity = {});
+      this.#leave ??= leaveCoordinatorFor(this);
+      this.#renameScope = this.#leave?.register({
+        id,
+        current: () => ({ name: this.rename!.name }),
+        snapshot: (value) => ({ ...value }),
+        equal: (a, b) => a.name.trim() === b.name.trim(),
+        restore: (value) => {
+          if (this.rename) this.rename = { ...this.rename, name: value.name };
+        },
+      });
+    }
+  }
+
+  async #beforeStationClose(
+    reason: LeaveReason,
+    rename: boolean,
+    identity: object | undefined,
+  ): Promise<boolean> {
+    if (this.busy) return false;
+    const scope = rename ? this.#renameScope : this.#stationScope;
+    if (!scope) return true;
+    const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed() {} });
+    return (
+      identity === (rename ? this.#renameIdentity : this.#stationIdentity) &&
+      outcome === "proceeded"
+    );
+  }
+
+  readonly #beforeAddClose = (reason: LeaveReason) =>
+    this.#beforeStationClose(reason, false, this.#stationIdentity);
+  readonly #beforeRenameClose = (reason: LeaveReason) =>
+    this.#beforeStationClose(reason, true, this.#renameIdentity);
+
   #loaded = false;
   #showError(message: string, fromRead = false): void {
     this.error = message;
@@ -397,6 +467,7 @@ export class PrepStationsScreen extends LitElement {
     if (this.error === "" || this.#readErrorShown) this.#showError(message, true);
   }
   protected override willUpdate(changed: PropertyValues<this>) {
+    this.#syncStationDrafts();
     if (changed.has("readOnly") && this.readOnly) {
       this.tab = "stations";
       this.testProduct = "";
@@ -414,6 +485,14 @@ export class PrepStationsScreen extends LitElement {
     }
   }
   override disconnectedCallback() {
+    if (this.#stationIdentity || this.#renameIdentity) this.busy = false;
+    this.#stationScope?.dispose();
+    this.#renameScope?.dispose();
+    this.#stationScope = undefined;
+    this.#renameScope = undefined;
+    this.#stationIdentity = undefined;
+    this.#renameIdentity = undefined;
+    this.#leave = undefined;
     if (this.#healthTimer) clearInterval(this.#healthTimer);
     if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
@@ -760,13 +839,16 @@ export class PrepStationsScreen extends LitElement {
       this.rename = { ...draft, error: t("prep.name_required"), invalid: true, fieldError: true };
       return;
     }
+    const identity = this.#renameIdentity;
+    const scope = this.#renameScope;
     this.busy = true;
     this.rename = { ...draft, error: "", invalid: false, fieldError: false };
     try {
       await this.api.updateStation(draft.id, { name: draft.name.trim() });
     } catch (error) {
+      if (!this.isConnected || identity !== this.#renameIdentity) return;
       this.rename = {
-        ...draft,
+        ...this.rename!,
         error: t(codeOf(error) === "station.name_taken" ? "prep.name_taken" : "prep.save_error"),
         invalid: false,
         fieldError: codeOf(error) === "station.name_taken",
@@ -774,57 +856,72 @@ export class PrepStationsScreen extends LitElement {
       this.busy = false;
       return;
     }
-    this.rename = undefined;
+    if (!this.isConnected || identity !== this.#renameIdentity) return;
+    scope?.commit({ name: draft.name });
+    if (!scope?.isDirty()) {
+      this.renderRoot
+        .querySelector<HTMLElementTagNameMap["wt-modal"]>("[data-test=station-rename]")
+        ?.closeAfter("saved");
+      this.rename = undefined;
+    }
     await this.#load();
     this.busy = false;
   }
   #renameDialog() {
     const draft = this.rename;
     if (!draft) return nothing;
-    return html`<wt-modal
-      open
-      size="compact"
-      data-test="station-rename"
-      heading=${t("venue.rename")}
-      @wt-close=${() => {
-        this.rename = undefined;
-      }}
-    >
-      <wt-input
-        name="stationName"
-        label=${t("prep.name")}
-        required
-        .value=${draft.name}
-        .error=${draft.fieldError ? draft.error : ""}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          this.rename = {
-            ...draft,
-            name: event.detail.value,
-            error: "",
-            invalid: false,
-            fieldError: false,
-          };
+    const identity = this.#renameIdentity;
+    return keyed(
+      identity,
+      html`<wt-modal
+        open
+        size="compact"
+        data-test="station-rename"
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#beforeRenameClose}
+        heading=${t("venue.rename")}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (identity === this.#renameIdentity) this.rename = undefined;
         }}
-        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-station-name"]'))}
-      ></wt-input>
-      ${draft.error ? html`<p class="error" role="alert">${draft.invalid ? t("prep.fix_fields") : draft.error}</p>` : nothing}
-      <wt-form-actions slot="footer">
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          @click=${() => {
-            this.rename = undefined;
+      >
+        <wt-input
+          name="stationName"
+          label=${t("prep.name")}
+          required
+          .value=${draft.name}
+          .error=${draft.fieldError ? draft.error : ""}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            if (!this.isConnected || identity !== this.#renameIdentity) return;
+            this.rename = {
+              ...draft,
+              name: event.detail.value,
+              error: "",
+              invalid: false,
+              fieldError: false,
+            };
+            this.#renameScope?.changed();
           }}
-          >${t("prep.cancel")}</wt-button
-        >
-        <wt-button
-          data-test="save-station-name"
-          ?disabled=${this.busy || draft.invalid}
-          @click=${() => void this.#saveStationName()}
-          >${t("prep.save")}</wt-button
-        >
-      </wt-form-actions>
-    </wt-modal>`;
+          @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-station-name"]'))}
+        ></wt-input>
+        ${draft.error ? html`<p class="error" role="alert">${draft.invalid ? t("prep.fix_fields") : draft.error}</p>` : nothing}
+        <wt-form-actions slot="footer">
+          <wt-button
+            slot="cancel"
+            variant="secondary"
+            @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.requestClose("cancel")}
+            >${t("prep.cancel")}</wt-button
+          >
+          <wt-button
+            data-test="save-station-name"
+            ?disabled=${this.busy || draft.invalid}
+            @click=${() => void this.#saveStationName()}
+            >${t("prep.save")}</wt-button
+          >
+        </wt-form-actions>
+      </wt-modal>`,
+    );
   }
   #openStation() {
     this.editor = { kind: "station" };
@@ -840,6 +937,7 @@ export class PrepStationsScreen extends LitElement {
   }
   #change(field: keyof StationInput, value: string) {
     this.draft = { ...this.draft, [field]: field === "name" ? value : Number(value) };
+    this.#stationScope?.changed();
     this.fieldError = { ...this.fieldError, [field]: "" };
     this.#showError("");
   }
@@ -864,17 +962,29 @@ export class PrepStationsScreen extends LitElement {
       return;
     }
     if (this.busy) return;
+    const identity = this.#stationIdentity;
+    const scope = this.#stationScope;
     this.busy = true;
     this.#showError("");
     try {
       await this.api.createStation(d);
-      this.editor = undefined;
+      if (!this.isConnected || identity !== this.#stationIdentity) return;
+      scope?.commit(d);
+      if (!scope?.isDirty()) {
+        this.renderRoot
+          .querySelector<HTMLElementTagNameMap["wt-modal"]>("[data-test=save-station]")
+          ?.closest<HTMLElementTagNameMap["wt-modal"]>("wt-modal")
+          ?.closeAfter("saved");
+        this.editor = undefined;
+      }
       await this.#load();
     } catch (e) {
+      if (!this.isConnected || identity !== this.#stationIdentity) return;
       if (codeOf(e) === "station.name_taken") this.fieldError = { name: t("prep.name_taken") };
       else this.#showError(t("prep.save_error"));
     } finally {
-      this.busy = false;
+      if (this.isConnected && (identity === this.#stationIdentity || !this.editor))
+        this.busy = false;
     }
   }
   #exceptionText(exception?: RouteException): string {
@@ -2729,6 +2839,7 @@ export class PrepStationsScreen extends LitElement {
     );
   }
   #field(field: keyof StationInput, label: string, type = "number") {
+    const identity = this.#stationIdentity;
     return html`<div>
       <wt-input
         data-test=${field === "overdueAfterMinutes" ? "overdue" : field}
@@ -2738,7 +2849,11 @@ export class PrepStationsScreen extends LitElement {
         required
         .value=${String(this.draft[field])}
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector("[data-test=save-station]"))}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#change(field, e.detail.value)}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          if (this.isConnected && identity === this.#stationIdentity)
+            this.#change(field, e.detail.value);
+        }}
       ></wt-input
       >${this.fieldError[field] ? html`<p class="error" data-field-error=${field} role="alert">${this.fieldError[field]}</p>` : nothing}
     </div>`;
@@ -2746,127 +2861,131 @@ export class PrepStationsScreen extends LitElement {
   #dialog() {
     if (!this.editor || this.pending) return nothing;
     const editor = this.editor;
-    return html`<wt-modal
-      size=${editor.kind === "claim" || editor.kind === "exception_delete" ? "compact" : "standard"}
-      open
-      heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.kind === "exception_delete" ? t("prep.confirm_delete_exception") : editor.kind === "exception" ? (editor.id ? t("prep.edit_exception") : t("prep.add_exception")) : t("prep.new_station")}
-      @wt-close=${() => {
-        this.editor = undefined;
-      }}
-      ><div class="form">
-        ${
-          editor.kind === "exception_delete"
-            ? html`<p>
-                ${this.#exceptionText(this.view?.routing.exceptions.find((e) => e.id === editor.id))}
-              </p>`
-            : editor.kind === "exception"
-              ? html`<div>
+    return keyed(
+      editor.kind === "station" ? this.#stationIdentity : editor,
+      html`<wt-modal
+        .dismissible=${editor.kind !== "station" || !this.busy}
+        .beforeClose=${editor.kind === "station" ? this.#beforeAddClose : undefined}
+        size=${editor.kind === "claim" || editor.kind === "exception_delete" ? "compact" : "standard"}
+        open
+        heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.kind === "exception_delete" ? t("prep.confirm_delete_exception") : editor.kind === "exception" ? (editor.id ? t("prep.edit_exception") : t("prep.add_exception")) : t("prep.new_station")}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (this.editor === editor) this.editor = undefined;
+        }}
+        ><div class="form">
+          ${
+            editor.kind === "exception_delete"
+              ? html`<p>
+                  ${this.#exceptionText(this.view?.routing.exceptions.find((e) => e.id === editor.id))}
+                </p>`
+              : editor.kind === "exception"
+                ? html`<div>
+                      <wt-combobox
+                        data-test="exception-what"
+                        name="what"
+                        label=${t("prep.what")}
+                        placeholder=${t("prep.everything")}
+                        .options=${this.#exceptionOptions()}
+                        .value=${this.exceptionDraft.categoryId ? `category:${this.exceptionDraft.categoryId}` : this.exceptionDraft.productId ? `product:${this.exceptionDraft.productId}` : ""}
+                        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                          const value = e.detail.value;
+                          this.exceptionDraft = {
+                            ...this.exceptionDraft,
+                            categoryId: value.startsWith("category:") ? value.slice(9) : null,
+                            productId: value.startsWith("product:") ? value.slice(8) : null,
+                          };
+                          this.exceptionFieldError = "";
+                          this.#showError("");
+                        }}
+                      ></wt-combobox
+                      >${this.exceptionFieldError ? html`<p class="error" role="alert" data-field-error="condition">${this.exceptionFieldError}</p>` : nothing}
+                    </div>
                     <wt-combobox
-                      data-test="exception-what"
-                      name="what"
-                      label=${t("prep.what")}
-                      placeholder=${t("prep.everything")}
-                      .options=${this.#exceptionOptions()}
-                      .value=${this.exceptionDraft.categoryId ? `category:${this.exceptionDraft.categoryId}` : this.exceptionDraft.productId ? `product:${this.exceptionDraft.productId}` : ""}
+                      data-test="exception-zone"
+                      name="zone"
+                      label=${t("prep.service_zone")}
+                      placeholder=${t("prep.any_zone")}
+                      .options=${[{ value: "", label: t("prep.any_zone") }, ...(this.view?.zones.filter((z) => z.active !== false).map((z) => ({ value: z.id, label: z.name })) ?? [])]}
+                      .value=${this.exceptionDraft.zoneId ?? ""}
                       @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                        const value = e.detail.value;
                         this.exceptionDraft = {
                           ...this.exceptionDraft,
-                          categoryId: value.startsWith("category:") ? value.slice(9) : null,
-                          productId: value.startsWith("product:") ? value.slice(8) : null,
+                          zoneId: e.detail.value || null,
                         };
                         this.exceptionFieldError = "";
                         this.#showError("");
                       }}
                     ></wt-combobox
-                    >${this.exceptionFieldError ? html`<p class="error" role="alert" data-field-error="condition">${this.exceptionFieldError}</p>` : nothing}
-                  </div>
-                  <wt-combobox
-                    data-test="exception-zone"
-                    name="zone"
-                    label=${t("prep.service_zone")}
-                    placeholder=${t("prep.any_zone")}
-                    .options=${[{ value: "", label: t("prep.any_zone") }, ...(this.view?.zones.filter((z) => z.active !== false).map((z) => ({ value: z.id, label: z.name })) ?? [])]}
-                    .value=${this.exceptionDraft.zoneId ?? ""}
-                    @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                      this.exceptionDraft = {
-                        ...this.exceptionDraft,
-                        zoneId: e.detail.value || null,
-                      };
-                      this.exceptionFieldError = "";
-                      this.#showError("");
-                    }}
-                  ></wt-combobox
-                  ><wt-combobox
-                    data-test="exception-target"
-                    name="target"
-                    label=${t("prep.made_at")}
-                    required
-                    .options=${this.#exceptionTargetOptions()}
-                    .value=${this.exceptionTarget}
-                    @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                      this.exceptionTarget = e.detail.value;
-                      this.exceptionDraft = {
-                        ...this.exceptionDraft,
-                        target: targetFor(e.detail.value),
-                      };
-                      this.#showError("");
-                    }}
-                  ></wt-combobox>`
-              : editor.kind === "claim"
-                ? html`<wt-combobox
-                      data-test="claim-choice"
-                      label=${t("prep.folder")}
-                      .options=${this.#claimOptions()}
+                    ><wt-combobox
+                      data-test="exception-target"
+                      name="target"
+                      label=${t("prep.made_at")}
+                      required
+                      .options=${this.#exceptionTargetOptions()}
+                      .value=${this.exceptionTarget}
                       @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                        const id = e.detail.value;
-                        void this.#setClaim(
-                          id,
-                          targetFor(editor.stationId ?? NO_PREPARATION),
-                          "claim",
-                        );
+                        this.exceptionTarget = e.detail.value;
+                        this.exceptionDraft = {
+                          ...this.exceptionDraft,
+                          target: targetFor(e.detail.value),
+                        };
+                        this.#showError("");
                       }}
-                    ></wt-combobox
-                    >${this.claimError && this.claimField === "claim" ? html`<p class="error" data-field-error="claim" role="alert">${this.claimError}</p>` : nothing}`
-                : html`${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}`
-        }
-        ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
-      </div>
-      <wt-form-actions slot="footer">
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          @click=${() => {
-            this.editor = undefined;
-          }}
-          >${t("prep.cancel")}</wt-button
-        >${
-          editor.kind === "station"
-            ? html`<wt-button
-                data-test="save-station"
-                ?disabled=${this.busy}
-                @click=${() => void this.#saveStation()}
-                >${t("prep.save")}</wt-button
-              >`
-            : editor.kind === "exception"
+                    ></wt-combobox>`
+                : editor.kind === "claim"
+                  ? html`<wt-combobox
+                        data-test="claim-choice"
+                        label=${t("prep.folder")}
+                        .options=${this.#claimOptions()}
+                        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                          const id = e.detail.value;
+                          void this.#setClaim(
+                            id,
+                            targetFor(editor.stationId ?? NO_PREPARATION),
+                            "claim",
+                          );
+                        }}
+                      ></wt-combobox
+                      >${this.claimError && this.claimField === "claim" ? html`<p class="error" data-field-error="claim" role="alert">${this.claimError}</p>` : nothing}`
+                  : html`${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}`
+          }
+          ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
+        </div>
+        <wt-form-actions slot="footer">
+          <wt-button
+            slot="cancel"
+            variant="secondary"
+            @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.requestClose("cancel")}
+            >${t("prep.cancel")}</wt-button
+          >${
+            editor.kind === "station"
               ? html`<wt-button
-                  data-test="save-exception"
-                  ?disabled=${this.busy || !this.exceptionTarget}
-                  @click=${() => void this.#saveException()}
+                  data-test="save-station"
+                  ?disabled=${this.busy}
+                  @click=${() => void this.#saveStation()}
                   >${t("prep.save")}</wt-button
                 >`
-              : editor.kind === "exception_delete"
+              : editor.kind === "exception"
                 ? html`<wt-button
-                    data-test="confirm-delete-exception"
-                    variant="danger"
-                    ?disabled=${this.busy}
-                    @click=${() => void this.#preview({ kind: "exception_delete", id: editor.id }, () => this.api.deleteException(editor.id), true)}
-                    >${t("prep.delete")}</wt-button
+                    data-test="save-exception"
+                    ?disabled=${this.busy || !this.exceptionTarget}
+                    @click=${() => void this.#saveException()}
+                    >${t("prep.save")}</wt-button
                   >`
-                : nothing
-        }
-      </wt-form-actions></wt-modal
-    >`;
+                : editor.kind === "exception_delete"
+                  ? html`<wt-button
+                      data-test="confirm-delete-exception"
+                      variant="danger"
+                      ?disabled=${this.busy}
+                      @click=${() => void this.#preview({ kind: "exception_delete", id: editor.id }, () => this.api.deleteException(editor.id), true)}
+                      >${t("prep.delete")}</wt-button
+                    >`
+                  : nothing
+          }
+        </wt-form-actions></wt-modal
+      >`,
+    );
   }
   #previewDialog() {
     const pending = this.pending;

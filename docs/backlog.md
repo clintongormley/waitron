@@ -1332,6 +1332,16 @@ controls, close reports and write replies leave a replacement editor alone. Focu
 `packages/bookings/src/dashboard/booking-form.unsaved.test.ts`, alongside the unchanged Booking
 suites. Calendar filters and immediate booking status actions retain their existing paths. Inline
 seating choices and other page/navigation owners remain Tasks 5–6 work.
+Station Add and Rename now protect the station name and Add's order/timing values through Cancel,
+native Escape and dirty-only unload handling. Rename compares its trimmed submitted name; Add
+keeps its existing numeric conversions and request body. Clean/reverted values close directly.
+Successful writes commit before refresh, while newer delivered input stays dirty. Refused writes
+retain the draft, and pending writes block dismissal. Each opening owns its native dialog and
+controls; disconnect aborts its question and unregisters its scope, and departed successful/refused
+replies leave a reconnected editor alone. Focused cases are in
+`packages/venue-service/src/dashboard/prep-stations-screen.unsaved.test.ts`. Exceptions, hours,
+watchers, department/zone forms and the remaining dashboard/till modal owners still need Task 4
+work; page/history/native reload remain Tasks 5–6.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
