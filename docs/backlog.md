@@ -884,9 +884,6 @@ Still open from W74:
 - **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
   #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
   so a lookup by name finds the first row drawn for that device.
-- **A category holding only routing rules was deleted without the dialog** (raised in #1217's
-  review): fixed by A279 on the owner's 2026-10-06 answer — it now gets the confirmation with the
-  rule count.
 - **The delete dialog stretches to nearly the full screen height**, with empty space below its
   text, at 1280 and 390 wide (seen on the demo stack while checking #1220; not caused by it, and
   not traced further). _2026-10-05: W70a (#1265) changes compact height only; this standard
@@ -895,6 +892,9 @@ Still open from W74:
 **The category Delete dialog counts disabled products and says how many are disabled (A288, owner
 2026-10-06) — DONE (#1295).** Both when it opens and after A278's `category.contents_changed`
 refusal re-reads; a selection with no disabled products keeps the old sentence.
+
+**A category holding only routing rules gets the Delete confirmation (A279, owner 2026-10-06) —
+DONE.** It reverses the 2026-10-01 decision; a category with nothing at all is still deleted at once.
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE (#1066).**
 

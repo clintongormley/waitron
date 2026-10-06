@@ -1137,9 +1137,9 @@ For example, selecting Drinks and Bread shows **2 selected** and lets you move b
 step. Confirm destructive actions in a `wt-modal` with a `danger` button. Keep a refused
 action open and show its message at the bottom of the form, so you can correct the choice.
 For folder deletion, read what every selected folder contains before enabling Delete.
-Folders with no products, subfolders or routing rules are deleted without asking; a folder
-holding only routing rules is confirmed with the rule count; otherwise offer moving their
-contents up as the default, reversible choice.
+When the selection is only folders with no products, subfolders or routing rules, they are
+deleted without asking; when they hold only routing rules, the confirmation gives the rule count and asks
+nothing about contents; otherwise offer moving their contents up as the default, reversible choice.
 
 ### Icon buttons with a tooltip (`iconButtonStyles`, `trackIconTooltip`)
 

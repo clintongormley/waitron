@@ -316,16 +316,18 @@ contents:
   disabled ones included, is moved to the parent of the outermost selected category that holds it.
 
 A category is deleted without confirmation only when it holds no products (disabled ones
-included), no subcategories and no routing rules. One holding only routing rules gets the
-confirmation, which asks nothing about its contents and says how many rules go with it. A
-category's row-menu Delete uses the same path.
+included), no subcategories and no routing rules. When no selected category holds products or
+subcategories, the confirmation asks nothing about contents and says how many routing rules go
+with them, if any. A category's row-menu Delete uses the same path.
 If the summary cannot be read, deletion waits for a successful new attempt rather than asking you
 to approve unknown contents. The dialog lists each category being deleted by its full path, adding
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
 again; if the numbers of subcategories, active products or routing rules (in the subtree, or
 naming the category itself) have changed, it deletes nothing, shows the new counts and asks you to
-confirm again; a change in disabled products alone does not stop it, because those products are
-switched off already. The delete request carries the counts
+confirm again. When the dialog asked what happens to the contents, a change in disabled products
+alone does not stop it, because those products are switched off already; when it asked nothing
+about contents, any change in products, disabled ones included, shows the new counts. The delete
+request carries the counts
 the dashboard read before deleting, the number of all products, disabled ones included, among them,
 and the server compares them again inside the delete itself: if
 they no longer match, nothing is deleted and the dialog shows the new counts with the refusal's own

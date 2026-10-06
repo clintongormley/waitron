@@ -108,7 +108,8 @@ The screen asks which of these to do:
 - **(b) Move the contents up** to the parent folder, or to the top level for a top-level folder.
 
 An empty folder is deleted without asking. _(2026-10-06, A279: a folder holding only routing
-rules now gets the confirmation, with the rule count — owner decision reversing 2026-10-01.)_
+rules now gets the confirmation, with the rule count — owner decision reversing 2026-10-01, which
+is in commit `5ffa5c633c` and the backlog's folders entry.)_
 
 ---
 
