@@ -1688,6 +1688,61 @@ it("deletes only completely summarised empty folders without asking", async () =
   expect(dialog(el)).toBeNull();
   expect(count(el)).toBe("0 selected");
 });
+it.each([
+  ["en-GB", 2, "2 kitchen routing rules name these categories and will be removed."],
+  ["en-GB", 1, "1 kitchen routing rule names these categories and will be removed."],
+  ["es", 2, "2 reglas de envío a cocina nombran estas categorías y se eliminarán."],
+] as const)(
+  "asks before deleting a category whose only contents are routing rules, saying how many go with it and asking nothing about contents (%s, %i rules)",
+  async (locale, rules, sentence) => {
+    setLocale(locale);
+    const el = await mountBrowser();
+    const summary = {
+      id: "f",
+      folders: 0,
+      products: 0,
+      activeProducts: 0,
+      routes: rules,
+      ownRoutes: rules,
+    };
+    vi.mocked(el.api.summariseFolders).mockResolvedValue([summary]);
+    await selectKeys(el, ["folder:f"]);
+    await press(el, "delete");
+    await vi.waitFor(() => expect(dialog(el)?.textContent).toContain(sentence));
+    expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
+    expect(el.shadowRoot!.querySelector("input[name=contents]")).toBeNull();
+    await press(el, "confirm");
+    await vi.waitFor(() =>
+      expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+        { productIds: [], categoryIds: ["f"] },
+        "move_up",
+        [summary],
+      ),
+    );
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+  },
+);
+it("still asks what happens to the contents when a category holding only routing rules is deleted beside one holding a product", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "d", folders: 0, products: 1, activeProducts: 1, routes: 0, ownRoutes: 0 },
+    { id: "f", folders: 0, products: 0, activeProducts: 0, routes: 2, ownRoutes: 2 },
+  ]);
+  await selectKeys(el, ["folder:d", "folder:f"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("fieldset legend")?.textContent).toContain(
+      "What happens to what is inside?",
+    ),
+  );
+  expect(el.shadowRoot!.querySelector("input[value=move_up]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull();
+  expect(el.shadowRoot!.textContent).toContain(
+    "2 kitchen routing rules name these categories and will be removed.",
+  );
+});
 it.each(["network", "missing", "partial"])(
   "keeps deletion disabled on %s summary",
   async (state) => {

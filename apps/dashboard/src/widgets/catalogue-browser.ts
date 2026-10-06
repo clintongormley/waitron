@@ -259,7 +259,9 @@ export class CatalogueBrowser extends LitElement {
       );
       if (
         !selection.productIds.length &&
-        this.summaries.every((summary) => summary.folders === 0 && summary.products === 0)
+        this.summaries.every(
+          (summary) => summary.folders === 0 && summary.products === 0 && summary.routes === 0,
+        )
       ) {
         this.summaryLoading = false;
         await this.#confirm("delete");
@@ -507,30 +509,34 @@ export class CatalogueBrowser extends LitElement {
                 ${this.summaryLoading ? html`<wt-spinner></wt-spinner>` : nothing}
                 ${
                   selection.categoryIds.length && !this.summaryLoading && !this.summaryFailed
-                    ? html`<fieldset .disabled=${this.operationBusy}>
-                          <legend>${t("folders.contents_question")} *</legend>
-                          <label class="radio"
-                            ><input
-                              type="radio"
-                              name="contents"
-                              required
-                              value="move_up"
-                              .checked=${this.contents === "move_up"}
-                              @change=${() => (this.contents = "move_up")}
-                            />${t("folders.contents_move_up")}</label
-                          >
-                          <label class="radio"
-                            ><input
-                              type="radio"
-                              name="contents"
-                              required
-                              value="delete"
-                              .checked=${this.contents === "delete"}
-                              @change=${() => (this.contents = "delete")}
-                            />${t("folders.contents_delete").replace("{categories}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#productCount(totals.products, totals.disabled))}</label
-                          >
-                        </fieldset>
-                        ${routesRemoved ? html`<p>${this.#plural(routesWarning, routesRemoved)}</p>` : nothing}`
+                    ? html`${
+                        totals.folders || totals.products
+                          ? html`<fieldset .disabled=${this.operationBusy}>
+                              <legend>${t("folders.contents_question")} *</legend>
+                              <label class="radio"
+                                ><input
+                                  type="radio"
+                                  name="contents"
+                                  required
+                                  value="move_up"
+                                  .checked=${this.contents === "move_up"}
+                                  @change=${() => (this.contents = "move_up")}
+                                />${t("folders.contents_move_up")}</label
+                              >
+                              <label class="radio"
+                                ><input
+                                  type="radio"
+                                  name="contents"
+                                  required
+                                  value="delete"
+                                  .checked=${this.contents === "delete"}
+                                  @change=${() => (this.contents = "delete")}
+                                />${t("folders.contents_delete").replace("{categories}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#productCount(totals.products, totals.disabled))}</label
+                              >
+                            </fieldset>`
+                          : nothing
+                      }
+                      ${routesRemoved ? html`<p>${this.#plural(routesWarning, routesRemoved)}</p>` : nothing}`
                     : nothing
                 }
               `
