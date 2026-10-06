@@ -1182,8 +1182,14 @@ the pending destination is accepted. Receipt preview choices and address repairs
 through the adapter, and the preview observes only accepted routes while it is installed.
 Account-link cancellation preserves the history index and unrelated state; its form remains
 in place until navigation is approved. Receipt/login page draft registration, child screen/tab
-owners, till/setup shell integrations, other page/setup owners and activated native reload
-remain open.
+owners, till shell integration, other page/setup owners and activated native reload
+remain open. Setup Back now requests the current child scope before leaving; the administrator
+step protects each of its six submitted fields. Next transfers their exact values into the
+wizard draft without asking and cancels any unanswered Back question. Setup's root draft,
+mode changes and the remaining setup forms still need protection. The setup administrator
+checkpoint passed 387 focused browser cases and the unedited 20 fiscal cases; six independent
+deletion controls failed their intended cases beside a passing same-step control. See the dated
+setup entry in the W69 audit for receipts and limits.
 Dashboard voluntary logout and a language change also request the shared warning before their
 API calls. Language changes exclude the retained profile editor and its descendants; picking
 the current language saves its preference without restoring unrelated drafts. Forced expiry

@@ -2040,3 +2040,52 @@ native reload, or protection in all forms. Task 5 still needs till/setup shells 
 screen/tab/context changes before mutation. Task 6 still needs receipt/login and the remaining
 page/setup owners. Tasks 1/4 need final advancing-owner classification; Tasks 2/3 remain complete.
 Neither W69 PR is ready for finish-branch.
+
+
+## Setup administrator child and Back route, 2026-10-06
+
+The setup administrator step now compares the exact six values it patches into the wizard,
+including password whitespace and PIN. Its baseline is captured after seeding, remains detached
+from background root-draft updates, and survives a retained child's disconnect/reconnect.
+Back asks before leaving the child. Keep retains its values; Discard restores its child baseline
+and returns to Mode without modifying the wizard's accepted administrator patch. Native Escape
+on the warning keeps the form and returns focus to Back. Reverted values remove unload handling.
+Next retains its validation and exact patch, commits only the child and advances without asking.
+
+The shell tracks the original Back request until it settles. A child commit aborts that question
+synchronously, while its asynchronous request is still pending; an immediate Next route would
+otherwise receive `busy`. When that same child is now clean, its new route awaits the original
+request before proceeding. Dirty repeated routes cannot replace the original pending request.
+Both captured screen and connected child are checked before applying a deferred transition.
+
+Receipts: Lane E `receipts/w69-setup-admin-20261006`. The initial command used the main checkout
+and found no test file; `red-corrected.log`, run in the feature checkout, loaded 13 cases and
+failed 12. `lifecycle.log` failed the new Next-while-asking case; the temporary diagnostic
+observed `stale` for the aborted Back and `busy` for Next before the route assertion failed.
+`repeated-next-red.log` failed Next after a repeated dirty route. Those cases now pass without
+changing any existing assertion. The final setup shell, administrator and administrator axe
+suites passed 387 cases (`family-final.log`); the unedited fiscal write-path and immutability
+suites passed 20 (`fiscal.log`). Source formatting, changed-file lint, setup types and diff checks
+passed. The first final typecheck still saw unused helpers in the temporary visual file; the
+file was archived outside the product tree and `types-clean.log` passed.
+
+In an independent frozen-installed clone, separately disabling child registration, Back
+interception, edit invalidation, child commit, committed-route waiting and original pending
+identity each failed the intended behavior beside an unchanged passing same-step control.
+Restoring the clone passed all 17 new cases; the three source/test files were byte-compared
+before removing the owned clone. Mutation logs name each failing assertion.
+
+The temporary visual fixture mounted the real setup shell with stubbed initial API reads and
+seeded administrator values. Eight English/Spanish, light/dark, 390/1280 flows exercised native
+Back and Keep, passed 16 axe scans, and produced 16 captures inspected in four sheets. Native
+warning Escape/focus is also a permanent browser case. Screenshot paths outside Vite's allowed
+root were initially refused; the corrected probe captured inside its own scratch subdirectory
+and then archived the captures. The dark fixture's host uses dark tokens; its outer body was
+painted before changing the host theme, so these captures do not establish the deployment
+page's complete dark canvas. No live onboarding, provisioning or certificate operation ran.
+
+This completes the administrator child only. The wizard root must remain dirty after Next
+until provisioning succeeds; that root scope, mode/start-over interception, other setup
+children, till shell and remaining page owners, native reload and final advancing-owner
+classification are still pending. Tasks 1/4/5/6 remain partial; Tasks 2/3 remain complete.
+Neither proposed W69 PR is ready for finish-branch. No existing assertion changed here.

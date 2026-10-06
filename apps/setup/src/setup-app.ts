@@ -614,14 +614,40 @@ export class SetupApp extends LitElement {
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
   }
 
-  /**
-   * Clears each screen's `*Error` message, so a stale refusal or failure does not reappear when the
-   * operator later steps back onto its screen; outcomes that are not errors, such as the
-   * provisioning message the reset screen's Back returns to, are kept. The refusal routing assigns
-   * `this.screen` directly, not through `setup-goto`, so a refusal is not cleared on its way in.
-   */
+  #pendingGoto?: { owner: HTMLElement; finished: Promise<unknown> };
+
   #onGoto(event: CustomEvent<{ screen: Screen }>): void {
     event.stopPropagation();
+    const destination = event.detail.screen;
+    if (destination === this.screen) return;
+    const origin = this.screen;
+    const owner = this.shadowRoot?.querySelector<HTMLElement>(`[data-test=screen-${origin}]`);
+    const navigate = () => {
+      if (!this.isConnected || this.screen !== origin || (owner && !owner.isConnected)) return;
+      const finished = this.leave.coordinator.request({
+        scopes: owner ? [owner] : [],
+        reason: "navigation",
+        proceed: () => {
+          if (!this.isConnected || this.screen !== origin || (owner && !owner.isConnected)) return;
+          this.#goto(destination);
+        },
+      });
+      if (owner && !this.#pendingGoto) {
+        const pending = { owner, finished };
+        this.#pendingGoto = pending;
+        void finished.finally(() => {
+          if (this.#pendingGoto === pending) this.#pendingGoto = undefined;
+        });
+      }
+    };
+    const previous = this.#pendingGoto;
+    // A child commit aborts its question before the coordinator's async request settles.
+    if (owner && previous?.owner === owner && !this.leave.coordinator.isDirty([owner])) {
+      void previous.finished.then(navigate);
+    } else navigate();
+  }
+
+  #goto(destination: Screen): void {
     this.venueError = undefined;
     this.venueInvalidField = undefined;
     this.reviewError = undefined;
@@ -649,7 +675,7 @@ export class SetupApp extends LitElement {
     this.resetCredentialsRejected = false;
     this.resetInvalidField = undefined;
     this.resetError = undefined;
-    this.screen = event.detail.screen;
+    this.screen = destination;
   }
 
   /** The venue→`cert`/`review` decision lives in the shell because the shell owns the merged draft. */
