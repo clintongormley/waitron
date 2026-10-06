@@ -2069,9 +2069,13 @@ The isolated customer-menu renderer now draws frozen hierarchy and read-only pro
 with local variant and modifier choices and ID-addressed focus. Preview now has bounded,
 keyboard-reachable menu/change panes beside each other on desktop and stacked on phones,
 with publication controls outside their scroll regions. Its clash copy uses Price override /
-Precio propio, and included-menu changes name their source menu. The customer renderer is not
-yet connected to those panes; linked controls, screen integration and final validation remain
-pending. The phone overflow entry below remains open until final Preview validation.
+Precio propio, and included-menu changes name their source menu. The panes now use the frozen
+customer renderer with a separate content-language selector. Change controls reveal exact
+fields and repeated occurrences, label live before views, show frozen Home settings, and return
+focus to the selected row. Product moves prefer a new path; relocated sections cross-link their
+old and new places. Screen snapshot freshness, the remaining navigation acceptance cases and
+final validation remain pending. The phone overflow entry below remains open until final Preview
+validation.
 
 **A menu's Preview tab is wider than a phone for a one-word menu name — OPEN (found by W88).** At
 390 px, with a menu named as one word longer than the screen, the page scrolls sideways on the

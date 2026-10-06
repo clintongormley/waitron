@@ -2499,6 +2499,18 @@ browser. The menu editor (`apps/dashboard/src/screens/menus-screen.ts`, W88) is 
 that does this today. Guards: `apps/dashboard/src/screens/menus-screen.heading.test.ts` and
 `menus-screen.heading.a11y.test.ts` beside it.
 
+A menu's Preview shows frozen customer content beside unpublished changes. Choose a content
+language independently of the dashboard language, or select Internal names for staff inspection.
+Keep publication state and actions outside the two scrolling panes. Stack the panes when the host
+has less than 800px available. Each pane has its own accessible name and keyboard focus.
+
+Make a change row a native button. Its separate field and place controls use frozen names as labels
+and stable document IDs as destinations. Focus and highlight the actual value after opening its
+ancestors. Show removed values in the live before document, keeping a return to the proposal.
+Keep Return to selected change visible while the menu pane scrolls, so you can return from a detail
+without searching for its row. Widget checks: `apps/dashboard/src/widgets/menu-preview-navigation.test.ts`;
+publication and accessibility checks remain beside it.
+
 If a tab has an Add or Create action, put it in the `actions` slot for the selected tab. This
 places the action beside the tabs and outside the tab list's accessibility role. At phone width,
 the tabs and a group of actions scroll separately, so the action area stays on screen when the tabs

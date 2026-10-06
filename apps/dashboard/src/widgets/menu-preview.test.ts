@@ -5,7 +5,7 @@ import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { MenuPreviewPanel, documentTree, type PublishResult } from "./menu-preview.js";
-import type { MenuStructureTree } from "./menu-structure-tree.js";
+import type { CustomerMenu } from "./customer-menu.js";
 import {
   cleanupWidgets,
   documentProduct,
@@ -817,14 +817,16 @@ it.each(results)("reports %s", async (_name, result, status, message) => {
   expect(shown.getAttribute("role")).toBe(result.kind === "published" ? "status" : "alert");
 });
 
-function documentView(el: MenuPreviewPanel): MenuStructureTree {
-  return q<MenuStructureTree>(el, '[data-test="document"] dashboard-menu-structure-tree')!;
+function documentView(el: MenuPreviewPanel): CustomerMenu {
+  return q<CustomerMenu>(el, '[data-test="document"] dashboard-customer-menu')!;
 }
 
-/** The whole-menu view's top-level names, as the tree shows them. */
-function topNames(tree: MenuStructureTree): string[] {
+/** The frozen document's root product/section labels, in the selected content view. */
+function topNames(tree: CustomerMenu): string[] {
   return [
-    ...tree.shadowRoot!.querySelectorAll('ul[aria-label] > li > .row [data-test="name"]'),
+    ...tree.shadowRoot!.querySelectorAll(
+      ".menu > [data-change-target] > .members > .product .heading > span[lang], .menu > [data-change-target] > .members > .section > [data-change-target] .heading > button > span:first-of-type, .menu > [data-change-target] > .members > .missing",
+    ),
   ].map(text);
 }
 
@@ -844,11 +846,11 @@ it("shows the whole menu the publish would make live, read-only, under its own h
   expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it will be published");
   const tree = documentView(el);
   await tree.updateComplete;
-  expect(tree.readonly).toBe(true);
-  expect(tree.label).toBe("The menu as it will be published");
-  expect(topNames(tree)).toEqual(["Burger", "Drinks"]);
+  expect(tree.document).toBe(DOCUMENT);
+  expect(tree.view).toEqual({ kind: "customer", language: "es" });
+  expect(topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
   expect(tree.shadowRoot!.querySelector("[data-test^='edit-']")).toBeNull();
-  expect(tree.shadowRoot!.textContent).not.toContain("para clientes");
+  expect(tree.shadowRoot!.textContent).toContain("para clientes");
   expect(tree.shadowRoot!.textContent).not.toContain("COCINA");
 });
 
@@ -864,8 +866,9 @@ it("still shows the whole menu, as it is live, when there is nothing to publish"
   expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it is live");
   const tree = documentView(el);
   await tree.updateComplete;
-  expect(tree.label).toBe("The menu as it is live");
-  expect(topNames(tree)).toEqual(["Burger", "Drinks"]);
+  expect(tree.document).toBe(DOCUMENT);
+  expect(tree.view).toEqual({ kind: "customer", language: "es" });
+  expect(topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
 });
 
 it("shows a never-published menu whole, as its first publish would make it live", async () => {
@@ -876,7 +879,7 @@ it("shows a never-published menu whole, as its first publish would make it live"
   expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it will be published");
   const tree = documentView(el);
   await tree.updateComplete;
-  expect(topNames(tree)).toEqual(["Burger", "Drinks"]);
+  expect(topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
 });
 
 it("names the whole-menu view in Spanish", async () => {

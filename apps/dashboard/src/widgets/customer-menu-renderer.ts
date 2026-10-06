@@ -456,7 +456,7 @@ function detail(input: CustomerMenuRenderInput): TemplateResult | typeof nothing
     field: { kind: "summary" },
   };
   const offer = input.document.offers[base.menuItemId];
-  if (offer === undefined) return nothing;
+  if (offer === undefined) return html`<p class="missing">${input.label("missing_offer")}</p>`;
   const selected = offer.variants.find((v) => v.id === input.selectedVariantId);
   const item = selected ?? offer;
   const itemBase = selected ? { ...base, variantId: selected.id } : base;
@@ -490,7 +490,8 @@ function members(
             </section>`;
           }
           const offer = input.document.offers[member.menuItemId];
-          if (offer === undefined) return nothing;
+          if (offer === undefined)
+            return html`<p class="missing">${input.label("missing_offer")}</p>`;
           const base: ProductTarget = {
             kind: "product",
             sectionIds: path,

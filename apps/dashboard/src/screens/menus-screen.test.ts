@@ -31,7 +31,7 @@ import type {
   SectionMember,
 } from "../api/client.js";
 import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
-import type { MenuStructureTree } from "../widgets/menu-structure-tree.js";
+import type { CustomerMenu } from "../widgets/customer-menu.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -5418,6 +5418,8 @@ describe("publishing", () => {
       hash: "e".repeat(64),
       changes: [
         {
+          id: "stale-refresh-burger",
+          targets: { before: [], after: [] },
           kind: "price_changed",
           productId: "p-burger",
           name: "Burger",
@@ -5571,14 +5573,17 @@ describe("publishing", () => {
     expect(text(inPanel(el, "document")?.querySelector("h2") ?? null)).toBe(
       "The menu as it is live",
     );
-    expect(await wholeMenu(el)).toEqual(["Burger", "Drinks", "Lemonade", "Chips"]);
+    expect(await wholeMenu(el)).toEqual([
+      "Burger para clientes",
+      "Drinks para clientes",
+      "Lemonade para clientes",
+      "Chips para clientes",
+    ]);
   });
 
   /** The names the Preview tab's whole-menu view shows, with every section opened. */
   async function wholeMenu(el: MenusScreen): Promise<string[]> {
-    const tree = inPanel(el, "document")!.querySelector<MenuStructureTree>(
-      "dashboard-menu-structure-tree",
-    )!;
+    const tree = inPanel(el, "document")!.querySelector<CustomerMenu>("dashboard-customer-menu")!;
     await tree.updateComplete;
     for (;;) {
       const closed = tree.shadowRoot!.querySelector<HTMLElement>('[aria-expanded="false"]');
@@ -5586,7 +5591,11 @@ describe("publishing", () => {
       closed.click();
       await tree.updateComplete;
     }
-    return [...tree.shadowRoot!.querySelectorAll('[data-test="name"]')].map(text);
+    return [
+      ...tree.shadowRoot!.querySelectorAll(
+        ".product .heading > span[lang], .section > [data-change-target] .heading > button > span:first-of-type",
+      ),
+    ].map(text);
   }
 
   it("shows the whole menu as the publish would make it live, read-only, from the preview rather than the working structure", async () => {
@@ -5594,11 +5603,15 @@ describe("publishing", () => {
     expect(text(inPanel(el, "document")!.querySelector("h2"))).toBe(
       "The menu as it will be published",
     );
-    const tree = inPanel(el, "document")!.querySelector<MenuStructureTree>(
-      "dashboard-menu-structure-tree",
-    )!;
-    expect(tree.readonly).toBe(true);
-    expect(await wholeMenu(el)).toEqual(["Burger", "Drinks", "Lemonade", "Chips"]);
+    const tree = inPanel(el, "document")!.querySelector<CustomerMenu>("dashboard-customer-menu")!;
+    expect(tree.document).toEqual(lunchDocument());
+    expect(tree.view).toEqual({ kind: "customer", language: "es" });
+    expect(await wholeMenu(el)).toEqual([
+      "Burger para clientes",
+      "Drinks para clientes",
+      "Lemonade para clientes",
+      "Chips para clientes",
+    ]);
     expect(tree.shadowRoot!.textContent).not.toContain("Lager");
     expect(tree.shadowRoot!.textContent).not.toContain("Favourites");
     expect(tree.shadowRoot!.querySelector("[data-test^='edit-']")).toBeNull();
