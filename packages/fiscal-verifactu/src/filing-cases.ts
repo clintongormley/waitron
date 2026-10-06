@@ -182,14 +182,14 @@ export async function openFilingCasesSummary(
 }
 
 /**
- * Every `detenido` record that has no case of its own: the records held behind another one. A
- * held cancellation whose original alta (same `sif_id`, same invoice identity) is `rechazado` or
- * `detenido` names its original's case. Any other held record names the case of the nearest
- * earlier `detenido` record on its chain (`sif_id`): that record's own case, or, when it has none,
- * the case it names in turn. With no earlier `detenido` record, it names the case of the record
- * immediately before it when that one is `rechazado`, the last refusal of the run that held it,
- * and otherwise none. Mirrors the hold rule in `./drain.ts`'s `haltOpenChainClaims`: the two
- * change together.
+ * Every `detenido` record that has no case of its own: the records held behind another record,
+ * or behind a run of refusals with one code. A held cancellation whose original alta (same
+ * `sif_id`, same invoice identity) is `rechazado` or `detenido` names its original's case. Any
+ * other held record names the case of the nearest earlier `detenido` record on its chain
+ * (`sif_id`): that record's own case, or, when it has none, the case it names in turn. With no
+ * earlier `detenido` record, it names the case of the record immediately before it when that one
+ * is `rechazado`, the last refusal of the run that held it, and otherwise none. Mirrors the hold
+ * rule in `./drain.ts`'s `haltOpenChainClaims`: the two change together.
  */
 export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
   const { rows } = await tx.execute<{

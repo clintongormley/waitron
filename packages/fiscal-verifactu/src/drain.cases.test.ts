@@ -123,7 +123,7 @@ async function incidentCodes(): Promise<string[]> {
 
 const cases = () => withTransaction(suite.db, (tx) => listFilingCases(tx));
 
-describe("drain — a rejection is kept and does not hold its chain", () => {
+describe("drain — a lone rejection is kept and does not hold its chain", () => {
   it("applies every line of a reply whose first line is a rejection, and opens a case for the rejected record", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });

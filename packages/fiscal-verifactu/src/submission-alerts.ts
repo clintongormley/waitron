@@ -17,8 +17,8 @@ export const SUBMISSION_DELAYED_ERROR_MS = 24 * 60 * 60 * 1000;
  * {@link SUBMISSION_DELAYED_WARN_MS} to reach AEAT (a stronger alert past
  * {@link SUBMISSION_DELAYED_ERROR_MS}), reports when submission has stopped (`detenido`), reports
  * the filing cases no one has resolved yet, and reports each chain held after a run of refusals
- * with one code (`refusalsRepeated`). A rejected record is not `detenido`, so only the case alert
- * counts it. The module contributes this check through its alerts seat so generic code never
+ * with one code (`refusalsRepeated`). A rejected record is not `detenido`, so the stopped alert
+ * never counts it. The module contributes this check through its alerts seat so generic code never
  * names the fiscal tables.
  */
 export const fiscalSubmissionSource: AlertSource = {
