@@ -1,8 +1,14 @@
+import { Hono } from "hono";
+import { WorkforceBackend, employments } from "@waitron/workforce";
+import { startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { mountWorkforceApi } from "./workforce-api.js";
+import { jobOrigin } from "@waitron/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import type { VenueDetailPatch, VenueDetailWrite } from "./venue-detail-types.js";
-import { recordDailyClose, businessDayStart } from "@waitron/reporting";
-import { createOpenOrder } from "./working-order.js";
+import { recordDailyClose, businessDayStart, computeDailyClose } from "@waitron/reporting";
+import { createOpenOrder, placeOrder } from "./working-order.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { recordTillSale } from "./till-sale.js";
@@ -17,7 +23,12 @@ import {
   sales,
   saleVoids,
   nodes,
+  kitchenStations,
+  diningTables,
 } from "@waitron/db";
+import { BOOKINGS_FLOOR_ANNOTATIONS, bookings } from "@waitron/bookings";
+import { replaceStationHours, stationStates, stationDayStates } from "@waitron/venue-service";
+import { resolveVenueClock } from "./report-api.js";
 import type { ResourceChange } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -312,6 +323,32 @@ describe("venue history locks", () => {
       });
     }
     expect((await read()).details).toEqual(initial.details);
+    const retained = {
+      closes: suite.db.all(sql`select * from daily_closes`),
+      chain: suite.db.all(sql`select * from daily_close_chain`),
+    };
+    const noOp = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { timeZone: "Europe/Madrid", dayCutover: "05:00:00" },
+      }),
+    );
+    expect(noOp.changed).toBe(false);
+    expect(noOp.model.details).toEqual(initial.details);
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { name: "Current empty-close display" },
+      }),
+    );
+    expect(saved.model.details).toEqual({
+      ...initial.details,
+      name: "Current empty-close display",
+    });
+    expect({
+      closes: suite.db.all(sql`select * from daily_closes`),
+      chain: suite.db.all(sql`select * from daily_close_chain`),
+    }).toEqual(retained);
   });
   it("locks province and clock after a real locally recorded sale", async () => {
     await (
@@ -827,4 +864,527 @@ describe("all retained sale rows lock venue clocks", () => {
       expect(noOp.changed).toBe(false);
     },
   );
+});
+
+describe("venue detail consumer reads", () => {
+  it("changes current station days and booking annotations without rewriting their intentions", async () => {
+    const at = new Date("2026-10-02T23:30:00Z");
+    const stationIds = await withTransaction(suite.db, async (tx) => {
+      const rows = await tx
+        .insert(kitchenStations)
+        .values([
+          { locationId: venue.cfg.locationId, name: "Weekly station" },
+          { locationId: venue.cfg.locationId, name: "Old-day override" },
+          { locationId: venue.cfg.locationId, name: "New-day override" },
+        ])
+        .returning({ id: kitchenStations.id });
+      for (const row of rows.slice(0, 3))
+        await replaceStationHours(tx, venue.cfg, row.id, [
+          { weekday: 5, opensAt: "23:00", closesAt: "23:59" },
+        ]);
+      await tx.insert(stationDayStates).values([
+        { stationId: rows[1]!.id, businessDay: "2026-10-02", open: false },
+        { stationId: rows[2]!.id, businessDay: "2026-10-01", open: false },
+      ]);
+      const defaults = await tx.execute<{ id: string }>(
+        sql`select id from kitchen_stations where location_id = ${venue.cfg.locationId} and is_default`,
+      );
+      expect(defaults.rows).toHaveLength(1);
+      return [...rows.map((row) => row.id), defaults.rows[0]!.id];
+    });
+    const [table] = await suite.db
+      .insert(diningTables)
+      .values({
+        locationId: venue.cfg.locationId,
+        label: "Booking clock control",
+      })
+      .returning({ id: diningTables.id });
+    await suite.db.insert(bookings).values([
+      {
+        locationId: venue.cfg.locationId,
+        tableId: table!.id,
+        bookingDate: "2026-10-03",
+        bookingTime: "02:00:00",
+        partySize: 2,
+        contactName: "Saturday guest",
+        createdBy: randomUUID(),
+      },
+      {
+        locationId: venue.cfg.locationId,
+        tableId: table!.id,
+        bookingDate: "2026-10-02",
+        bookingTime: "23:45:00",
+        partySize: 2,
+        contactName: "Friday guest",
+        createdBy: randomUUID(),
+      },
+    ]);
+    const retained = () => ({
+      hours: suite.db.all(sql`select * from station_hours order by id`),
+      overrides: suite.db.all(sql`select * from station_day_states order by id`),
+      bookings: suite.db.all(sql`select * from bookings order by id`),
+    });
+    const before = retained();
+    const readCurrent = () =>
+      withTransaction(suite.db, async (tx) => {
+        const states = await stationStates(tx, venue.cfg, at);
+        const annotations = await BOOKINGS_FLOOR_ANNOTATIONS.annotate(tx, venue.cfg, at, [
+          table!.id,
+        ]);
+        return {
+          open: stationIds.map((id) => states.get(id)!.open),
+          annotation: annotations.get(table!.id),
+        };
+      });
+    expect(await readCurrent()).toEqual({
+      open: [false, false, false, true],
+      annotation: { reservedTime: "02:00" },
+    });
+    const initial = await read();
+    await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { timeZone: "UTC", dayCutover: "23:45" },
+      }),
+    );
+    expect(await readCurrent()).toEqual({
+      open: [true, true, false, true],
+      annotation: { reservedTime: "23:45" },
+    });
+    expect(retained()).toEqual(before);
+    expect((await read()).hasOrderHistory).toBe(false);
+  });
+
+  it("keeps operational reports and the frozen close after allowed corrections and a refused clock edit", async () => {
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    const cfg = await deviceRequestCfg(suite.db, venue.cfg);
+    const clock: TrustedClock = {
+      now: () => ({
+        instant: new Date("2026-10-06T03:15:00Z"),
+        offsetMinutes: 120,
+        confident: true,
+        confidence: "anchored",
+        anchorAgeSeconds: 0,
+      }),
+      anchor: () => {
+        throw Error("No external clock needed");
+      },
+      currentAnchor: () => null,
+    };
+    const backend = new VerifactuBackend({
+      clock,
+      db: suite.db,
+      environment: "preproduction",
+      deploymentEnvironment: "preproduction",
+      resolveClient: () => Promise.reject(Error("No external filing permitted")),
+    });
+    await recordTillSale({ db: suite.db, backend, clock }, cfg, {
+      zoneId: offers.zoneId,
+      lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    const reports = () =>
+      withTransaction(suite.db, async (tx) => {
+        const current = await resolveVenueClock(tx, venue.cfg.nodeId);
+        const previous = await computeDailyClose(tx, {
+          nodeId: venue.cfg.nodeId,
+          businessDay: "2026-10-05",
+          ...current,
+        });
+        const day = await computeDailyClose(tx, {
+          nodeId: venue.cfg.nodeId,
+          businessDay: "2026-10-06",
+          ...current,
+        });
+        return { previous, day };
+      });
+    const before = await reports();
+    expect(before.previous.counts.sales).toBe(0);
+    expect(before.day.counts.sales).toBe(1);
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`select id from persons where role = 'manager' limit 1`,
+    );
+    await withTransaction(suite.db, (tx) =>
+      recordDailyClose(tx, {
+        nodeId: venue.cfg.nodeId,
+        businessDay: "2026-10-06",
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
+        closedBy: rows[0]!.id,
+        cashCounts: [
+          {
+            deviceId: cfg.origin.deviceId,
+            openingFloat: "0.00",
+            payouts: "0.00",
+            countedCash: "1.50",
+          },
+        ],
+      }),
+    );
+    const retained = () => ({
+      closes: suite.db.all(sql`select * from daily_closes`),
+      heads: suite.db.all(sql`select * from daily_close_chain`),
+      fiscal: suite.db.all(sql`select * from registros_facturacion`),
+      series: suite.db.all(sql`select * from invoice_series order by id`),
+    });
+    const history = retained();
+    const initial = await read();
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: {
+          name: "Corrected display",
+          addressLine1: "Corrected street",
+          city: "Alcalá de Henares",
+        },
+      }),
+    );
+    expect(saved.changed).toBe(true);
+    expect(saved.model.details).toEqual({
+      ...initial.details,
+      name: "Corrected display",
+      addressLine1: "Corrected street",
+      city: "Alcalá de Henares",
+    });
+    expect(await reports()).toEqual(before);
+    expect(retained()).toEqual(history);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        writeVenueDetails(tx, venue.cfg, {
+          expected: saved.model.details,
+          changes: { timeZone: "UTC", dayCutover: "06:00", name: "Must not save" },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "venue.detail_locked",
+      params: { field: "timeZone", reason: "sales" },
+    });
+    expect((await read()).details).toEqual(saved.model.details);
+    expect(await reports()).toEqual(before);
+    expect(retained()).toEqual(history);
+  });
+});
+
+describe("complete editable field validation", () => {
+  it.each([
+    "name",
+    "addressLine1",
+    "addressLine2",
+    "postalCode",
+    "city",
+    "province",
+    "timeZone",
+    "dayCutover",
+  ] as const)("does not coerce an array or number submitted as %s", async (field) => {
+    const initial = await read();
+    for (const value of [[initial.details[field]], 123]) {
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          writeVenueDetails(tx, venue.cfg, {
+            expected: initial.details,
+            changes: { [field]: value } as VenueDetailPatch,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "venue.detail_invalid", params: { field, reason: "type" } });
+      expect((await read()).details).toEqual(initial.details);
+    }
+  });
+  it.each([
+    "name",
+    "addressLine1",
+    "city",
+    "postalCode",
+    "province",
+    "timeZone",
+    "dayCutover",
+  ] as const)("refuses clearing required %s without saving a companion field", async (field) => {
+    const initial = await read();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        writeVenueDetails(tx, venue.cfg, {
+          expected: initial.details,
+          changes: { addressLine2: "Must not save", [field]: " " },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "venue.detail_invalid",
+      params: { field, reason: "required" },
+    });
+    expect((await read()).details).toEqual(initial.details);
+  });
+  it.each(["name", "addressLine1", "addressLine2", "city"] as const)(
+    "counts Unicode code points for %s, preserving interior spaces and case",
+    async (field) => {
+      const initial = await read();
+      const accepted = "É  Mixed" + "😀".repeat(192);
+      const saved = await withTransaction(suite.db, (tx) =>
+        writeVenueDetails(tx, venue.cfg, {
+          expected: initial.details,
+          changes: { [field]: `  ${accepted}  ` },
+        }),
+      );
+      expect(saved.model.details[field]).toBe(accepted);
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          writeVenueDetails(tx, venue.cfg, {
+            expected: saved.model.details,
+            changes: { [field]: accepted + "😀" },
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "venue.detail_invalid",
+        params: { field, reason: "length" },
+      });
+      expect((await read()).details).toEqual(saved.model.details);
+    },
+  );
+  it("keeps all field policies and allows current display/address corrections after a real sale", async () => {
+    await (
+      await prepareSale()
+    )();
+    const initial = await read();
+    expect(initial.policy).toEqual({
+      name: { decision: "allow_with_warning", reasons: ["current_details_only"] },
+      addressLine1: { decision: "allow", reasons: [] },
+      addressLine2: { decision: "allow", reasons: [] },
+      city: { decision: "allow_with_warning", reasons: ["holiday_geography"] },
+      postalCode: { decision: "allow_with_warning", reasons: ["current_details_only"] },
+      province: { decision: "refuse", reasons: ["sales"] },
+      timeZone: { decision: "refuse", reasons: ["sales"] },
+      dayCutover: { decision: "refuse", reasons: ["sales"] },
+    });
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: {
+          name: "Current display",
+          addressLine1: "New street",
+          addressLine2: "Upper floor",
+          city: "Alcalá de Henares",
+          postalCode: "28014",
+        },
+      }),
+    );
+    expect(saved.model.details).toEqual({
+      ...initial.details,
+      name: "Current display",
+      addressLine1: "New street",
+      addressLine2: "Upper floor",
+      city: "Alcalá de Henares",
+      postalCode: "28014",
+    });
+    const cleared = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: saved.model.details,
+        changes: { addressLine2: null },
+      }),
+    );
+    expect(cleared.model.details).toEqual({ ...saved.model.details, addressLine2: null });
+    expect(cleared.model.policy).toEqual(initial.policy);
+  });
+  it.each(["modules", "invoiceLocales", "receiptPrintMode", "nodeId"])(
+    "does not accept %s through a crafted details patch",
+    async (key) => {
+      const initial = await read();
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          writeVenueDetails(tx, venue.cfg, {
+            expected: initial.details,
+            changes: { name: "Must not save", [key]: "hidden" },
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "venue.detail_invalid",
+        params: { field: "changes", reason: "unknown_field" },
+      });
+      expect((await read()).details).toEqual(initial.details);
+    },
+  );
+});
+
+describe("workforce facts after venue corrections", () => {
+  it("keeps midnight offset dates, the published roster and chain bytes through an eligible clock edit", async () => {
+    const backend = new WorkforceBackend();
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`select id from persons where role = 'manager' limit 1`,
+    );
+    const personId = rows[0]!.id;
+    await suite.db.insert(employments).values({
+      personId,
+      contractedMinutesPerWeek: 2400,
+      contractType: "full_time",
+      startDate: "2026-01-01",
+      payRate: 1500,
+    });
+    const versionId = await withTransaction(suite.db, (tx) =>
+      backend.createRosterVersion(tx, { locationId: venue.cfg.locationId, period: "2026-10-05" }),
+    );
+    await withTransaction(suite.db, async (tx) => {
+      await backend.addShift(tx, {
+        versionId,
+        personId,
+        locationId: venue.cfg.locationId,
+        startsAt: "2026-10-05T23:30:00Z",
+        startsOffsetMinutes: 120,
+        endsAt: "2026-10-06T00:30:00Z",
+        endsOffsetMinutes: 120,
+        role: "Waiter",
+      });
+      await backend.publishRoster(tx, { versionId, publishedByPersonId: personId });
+      const event = {
+        nodeId: venue.cfg.nodeId,
+        personId,
+        locationId: venue.cfg.locationId,
+        offsetMinutes: 120,
+        origin: jobOrigin("dashboard"),
+      };
+      await backend.clockIn(tx, { ...event, at: "2026-10-05T23:30:00Z" });
+      await backend.clockOut(tx, { ...event, at: "2026-10-06T00:30:00Z" });
+    });
+    const session = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId }),
+    );
+    const app = new Hono();
+    mountWorkforceApi(app, { db: suite.db, cfg: venue.cfg }, () => {});
+    const get = async (path: string) => {
+      const response = await app.request(`/management-api/${path}`, {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+      });
+      expect(response.status).toBe(200);
+      return response.json() as Promise<unknown>;
+    };
+    const readCurrent = async () => ({
+      roster: await get(`roster?locationId=${venue.cfg.locationId}&period=2026-10-05`),
+      comparison: await get(
+        `planned-vs-actual?locationId=${venue.cfg.locationId}&from=2026-10-06&to=2026-10-07`,
+      ),
+      summary: await withTransaction(suite.db, (tx) =>
+        backend.workSummary(
+          tx,
+          { personId, period: { start: "2026-10-06", end: "2026-10-07" } },
+          { workingDaysPerWeek: 5, overtimeModel: "daily-accrual", dailyTargetMinutes: null },
+        ),
+      ),
+    });
+    const retained = () => ({
+      entries: suite.db.all(sql`select * from time_entries order by sequence_no`),
+      chain: suite.db.all(sql`select * from workforce_chains`),
+      shifts: suite.db.all(sql`select * from shifts`),
+      versions: suite.db.all(sql`select * from roster_versions`),
+    });
+    const before = await readCurrent();
+    expect(before.comparison).toEqual([
+      {
+        personId,
+        workDate: "2026-10-06",
+        plannedMinutes: 60,
+        workedMinutes: 60,
+        lateMinutes: 0,
+        noShow: false,
+        unplanned: false,
+      },
+    ]);
+    const history = retained();
+    expect(history.entries).toHaveLength(2);
+    const initial = await read();
+    expect([initial.hasSales, initial.hasOrderHistory, initial.hasDailyClose]).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { timeZone: "UTC", dayCutover: "23:45", name: "Current location label" },
+      }),
+    );
+    expect(await readCurrent()).toEqual(before);
+    expect(retained()).toEqual(history);
+    expect(await get("locations")).toEqual([
+      { id: venue.cfg.locationId, name: "Current location label" },
+    ]);
+  });
+});
+
+describe("open kitchen work during venue corrections", () => {
+  it("refuses the clock while preserving sent line and station assignments on a display correction", async () => {
+    const offers = await withTransaction(suite.db, (tx) =>
+      offerProducts(tx, venue.cfg, { serviceMode: "ticket_then_pay" }),
+    );
+    const cfg = await deviceRequestCfg(suite.db, venue.cfg);
+    const clock: TrustedClock = {
+      now: () => ({
+        instant: new Date("2026-10-06T12:00:00Z"),
+        offsetMinutes: 120,
+        confident: true,
+        confidence: "anchored",
+        anchorAgeSeconds: 0,
+      }),
+      anchor: () => {
+        throw Error("No external clock needed");
+      },
+      currentAnchor: () => null,
+    };
+    const backend = new VerifactuBackend({
+      clock,
+      db: suite.db,
+      environment: "preproduction",
+      deploymentEnvironment: "preproduction",
+      resolveClient: () => Promise.reject(Error("No external filing permitted")),
+    });
+    const id = randomUUID();
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(
+        tx,
+        cfg,
+        id,
+        [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
+        "Kitchen work",
+        { zoneId: offers.zoneId },
+      ),
+    );
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`select id from persons where role = 'manager' limit 1`,
+    );
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, rows[0]!.id);
+    const retained = () => ({
+      orders: suite.db.all(sql`select * from working_orders order by id`),
+      lines: suite.db.all(sql`select * from working_order_lines order by id`),
+      tickets: suite.db.all(sql`select * from ticket_items order by id`),
+      contexts: suite.db.all(sql`select * from order_service_contexts order by working_order_id`),
+    });
+    const before = retained();
+    expect(before.tickets).toHaveLength(1);
+    expect(before.tickets[0]).toMatchObject({
+      station_id: venue.defaultStationId,
+      state: "queued",
+    });
+    const initial = await read();
+    expect([initial.hasSales, initial.hasOrderHistory]).toEqual([false, true]);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        writeVenueDetails(tx, venue.cfg, {
+          expected: initial.details,
+          changes: { name: "Refused together", timeZone: "UTC" },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "venue.detail_locked",
+      params: { field: "timeZone", reason: "orders" },
+    });
+    expect((await read()).details).toEqual(initial.details);
+    expect(retained()).toEqual(before);
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { name: "Current display", addressLine1: "Corrected street" },
+      }),
+    );
+    expect(saved.model.details).toEqual({
+      ...initial.details,
+      name: "Current display",
+      addressLine1: "Corrected street",
+    });
+    expect(retained()).toEqual(before);
+  });
 });

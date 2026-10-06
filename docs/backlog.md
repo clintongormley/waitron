@@ -6418,7 +6418,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   includes corrected details; import keeps its separately created target address and clock.
   Both boot account-email callbacks now read the venue clock on each send; real SMTP checks
   cover invitations, resets and profile email changes, with the shutdown reset check retained.
-  The dashboard panel and remaining downstream consumer/geography controls are still pending.
+  Additional consumer checks exercise saved clocks in current station/booking reads,
+  retained backup/cloud deadlines followed by new-clock scheduling, printer calibration,
+  operational report windows and frozen closes, receipt reprints, and workforce summary/roster
+  reads with midnight offsets. Sent kitchen assignments stay equal through allowed corrections.
+  W111's current address printing is retained separately from filed identity and trading snapshots.
+  The dashboard panel, warning previews and final whole-branch review are still pending.
   This build changes no schema.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
   its build landed as [PR #1269](https://github.com/clintongormley/waitron/pull/1269) on

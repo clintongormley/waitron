@@ -48,6 +48,7 @@ import { CAPABILITY_FLAGS, setProfilePrinterLists } from "@waitron/layouts";
 import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import {
   commandNames,
@@ -475,6 +476,75 @@ beforeAll(() => {
 });
 
 describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () => {
+  it("keeps the filed identity and trading snapshot on reprint after venue corrections", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await suite.db.execute(
+      sql`update departments set name = 'Staff department name', trading_name = 'Guest trading name' where location_id = ${cfg.locationId}`,
+    );
+    await suite.db.execute(
+      sql`update department_sale_policies set print_trading_name = 1 where department_id in (select id from departments where location_id = ${cfg.locationId})`,
+    );
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "never", printerId });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const reprint = () =>
+      app.request(`/api/sales/${orderId}/reprint`, { method: "POST", headers: { cookie } });
+    expect((await reprint()).status).toBe(200);
+    const beforeJob = (await printJobsFor(cfg))[0]!;
+    const beforeText = decodeTicket(new Uint8Array(beforeJob.payload));
+    expect(beforeText).toContain("Deli Recibos SL");
+    expect(beforeText).toContain("Guest trading name");
+    expect(beforeText).not.toContain("Staff department name");
+    expect(beforeText).not.toContain("Sala principal");
+    const retained = () => ({
+      sales: suite.db.all(sql`select * from sales order by id`),
+      fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
+      headers: suite.db.all(sql`select * from sale_receipt_headers order by sale_id`),
+      drawer: suite.db.all(sql`select * from drawer_opens order by id`),
+      series: suite.db.all(sql`select * from invoice_series order by id`),
+      departments: suite.db.all(sql`select * from departments order by id`),
+    });
+    const before = retained();
+    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, cfg));
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, cfg, {
+        expected: initial.details,
+        changes: {
+          name: "New venue display",
+          addressLine1: "New street 17",
+          city: "Alcalá de Henares",
+        },
+      }),
+    );
+    expect(saved.changed).toBe(true);
+    expect((await reprint()).status).toBe(200);
+    const jobs = await printJobsFor(cfg);
+    expect(jobs).toHaveLength(2);
+    const text = decodeTicket(new Uint8Array(jobs[1]!.payload));
+    expect(text).not.toContain("New venue display");
+    expect(beforeText).toContain("Calle Mayor 1");
+    expect(beforeText).toContain("28013 Madrid");
+    expect(text).toContain("New street 17");
+    expect(text).toContain("28013 Alcalá de Henares");
+    expect(text).toContain("Madrid");
+    const oldAddress = ["Calle Mayor 1", "28013 Madrid"];
+    const currentAddress = ["New street 17", "28013 Alcalá de Henares", "Madrid"];
+    expect(
+      printedLines(new Uint8Array(jobs[1]!.payload)).filter(
+        (line) => !currentAddress.includes(line.trim()),
+      ),
+    ).toEqual(
+      printedLines(new Uint8Array(beforeJob.payload)).filter(
+        (line) => !oldAddress.includes(line.trim()),
+      ),
+    );
+    expect(opensDrawer(new Uint8Array(jobs[1]!.payload))).toBe(false);
+    expect(retained()).toEqual(before);
+  });
+
   it("re-enqueues the filed receipt to the device's printer WITHOUT re-filing, bypassing the print mode", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
