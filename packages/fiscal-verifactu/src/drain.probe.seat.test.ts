@@ -141,6 +141,24 @@ describe("drain — the hourly probe's answers from a hand-built client seat (no
     expect(await refusalAlerts(PROBE_AT)).toEqual([]);
   });
 
+  it("a refusal with no code takes the other-code path: incident, case and release", async () => {
+    const { first, second } = await brakeHold();
+    const wire = seat({ EstadoRegistro: "Incorrecto", DescripcionErrorRegistro: "Sin código" });
+
+    await drain(deps(wire.client), PROBE_AT);
+
+    expect(await estadoOf(first)).toEqual({ estado: "rechazado", csv: SEAT_CSV });
+    expect((await estadoOf(second)).estado).toBe("pendiente");
+    expect(await incidentCodes()).toEqual([...RUN_REFUSALS, "fiscal.registro_rechazado"]);
+    const cases = await withTransaction(suite.db, (tx) => listFilingCases(tx));
+    expect(cases.find((c) => c.registroId === first)?.evidence).toEqual({
+      codigo: null,
+      mensaje: "Sin código",
+      csv: SEAT_CSV,
+    });
+    expect(await refusalAlerts(PROBE_AT)).toEqual([]);
+  });
+
   it("an accept settles the probe with its CSV and releases the record behind it", async () => {
     const { first, second } = await brakeHold();
     const wire = seat({ EstadoRegistro: "Correcto" });
