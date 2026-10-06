@@ -18,7 +18,7 @@ import {
   menuStatus,
 } from "@waitron/catalogue";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { resolveMakers, setClaim } from "@waitron/venue-service";
+import { readWeekHours, resolveMakers, setClaim } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
@@ -251,6 +251,28 @@ describe("seedDemoRestaurant", () => {
         join kitchen_stations fallback on fallback.id = f.fallback_station_id
         where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'`);
       expect(fallbacks).toEqual([{ name: "Downstairs bar" }]);
+
+      const { rows: subjects } = await tx.execute<{ kind: string; id: string; name: string }>(sql`
+        select 'department' as kind, id, name from departments where location_id = ${venue.locationId}
+        union all
+        select 'station', id, name from kitchen_stations
+        where location_id = ${venue.locationId} and name = 'Upstairs bar'
+        order by name`);
+      const weeks: Record<string, string[]> = {};
+      for (const subject of subjects)
+        weeks[subject.name] = (
+          await readWeekHours(tx, cfg, { kind: subject.kind as "department", id: subject.id })
+        ).map(({ cell }) =>
+          cell.mode === "periods"
+            ? cell.periods.map((period) => `${period.opensAt}-${period.closesAt}`).join(",")
+            : cell.mode,
+        );
+      // Sunday first.
+      expect(weeks).toEqual({
+        Deli: ["closed", ...Array<string>(6).fill("09:00-18:00")],
+        "Restaurant and bar": Array<string>(7).fill("12:00-01:00"),
+        "Upstairs bar": [...Array<string>(5).fill("closed"), "19:00-21:00", "19:00-21:00"],
+      });
 
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
         select id from floor_zones

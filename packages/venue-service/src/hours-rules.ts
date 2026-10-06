@@ -76,6 +76,25 @@ export function tailOverlaps(earlier: Interval[] | null, later: Interval[] | nul
   );
 }
 
+/** One special date as the clash check sees it: its closure flag and its stored cells. */
+export interface DateState {
+  closeWholeVenue: boolean;
+  cells: Map<string, Interval[] | null>;
+}
+
+/** A subject's hours on one date: the special date's cell or closure, else its standard week. */
+export function effective(
+  date: LocalDate,
+  key: string,
+  dates: Map<LocalDate, DateState>,
+  week: (weekday: number) => Interval[] | null,
+): { intervals: Interval[] | null; fromWeek: boolean } {
+  const special = dates.get(date);
+  if (special?.closeWholeVenue) return { intervals: [], fromWeek: false };
+  if (special?.cells.has(key)) return { intervals: special.cells.get(key)!, fromWeek: false };
+  return { intervals: week(weekdayOf(date)), fromWeek: true };
+}
+
 type CellOf<M extends string> = { mode: M; periods: HourPeriod[] };
 
 function parseCell<M extends string>(

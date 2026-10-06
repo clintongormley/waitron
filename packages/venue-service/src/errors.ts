@@ -32,6 +32,9 @@ declare module "@waitron/shared" {
     "special_date.not_found": { specialDateId: string };
     "special_date.date_taken": { date: string };
     "station.always_open": { stationId: string };
+    /** A configuration import's hours row holds a value a save would refuse; `field` is the table
+     * or `<table>.<column>`. Declared with identical params in `apps/server/src/errors.ts`. */
+    "setup.request_invalid": { field: string };
     // `working_order.not_found` and `station.not_found` are declared in @waitron/db's errors.ts.
   }
 }

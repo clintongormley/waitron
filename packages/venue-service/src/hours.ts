@@ -7,6 +7,7 @@ import {
   addDays,
   calendarTone,
   cellIntervals,
+  effective,
   invalidHours,
   isLocalDate,
   parseDuplicateDates,
@@ -15,6 +16,7 @@ import {
   parseWeek,
   tailOverlaps,
   weekdayOf,
+  type DateState,
   type Interval,
 } from "./hours-rules.js";
 import {
@@ -291,12 +293,6 @@ export async function replaceWeekHours(
     );
 }
 
-/** One special date as the clash check sees it: its closure flag and its stored cells. */
-interface DateState {
-  closeWholeVenue: boolean;
-  cells: Map<string, Interval[] | null>;
-}
-
 /** The special dates, with their cells. */
 async function readDateStates(
   tx: Transaction,
@@ -351,19 +347,6 @@ async function readDateStates(
       ),
     });
   return states;
-}
-
-/** A subject's hours on one date: the special date's cell or closure, else its standard week. */
-function effective(
-  date: LocalDate,
-  key: string,
-  dates: Map<LocalDate, DateState>,
-  week: (weekday: number) => Interval[] | null,
-): { intervals: Interval[] | null; fromWeek: boolean } {
-  const special = dates.get(date);
-  if (special?.closeWholeVenue) return { intervals: [], fromWeek: false };
-  if (special?.cells.has(key)) return { intervals: special.cells.get(key)!, fromWeek: false };
-  return { intervals: week(weekdayOf(date)), fromWeek: true };
 }
 
 async function assertWeekBesideSpecialDates(
