@@ -2775,3 +2775,46 @@ in the lane's local `receipts/w69-settings-20261006-222211/` directory.
 This is a partial W69 checkpoint. Configuration/canvas and contributed explicit-save settings,
 device profiles after W97, settings-container and actual page/till/navigation paths, native reload
 and the final advancing-owner audit remain. Finish-branch and landing are not ready.
+
+
+## 2026-10-06 bill discount limit checkpoint
+
+`AD reasons-screen` now registers the independently saved limit with the shared coordinator.
+The comparison uses the existing `percentBp` parser: 12.50 and 12,50 compare as 1250 basis points,
+blank means uncapped, and invalid text stays distinct. No validation or request-body rule changed.
+Keep retains the draft; Discard restores its baseline without a settings write. The reason modal
+and the limit commit independently so accepting one does not clear the other's changes.
+
+An accepted limit write commits the submitted snapshot before reading settings again. Input
+entered during the write remains dirty against that snapshot. Live reads keep edited input and
+its baseline; a clean limit adopts the new settings. Disconnect releases the limit scope and
+clears its draft, save state and settings. A reconnected page waits for a fresh settings read
+before exposing the field. Older accepted/refused writes cannot refresh or set the new page's
+save/error state in the deferred-reply cases.
+
+Commands and receipts are in Lane E's local `receipts/w69-limit-20261006/`:
+
+- Initial reason unsaved suite: 9 assertion failures and 26 passes before implementation.
+  A separate delayed-reconnect case failed because the stale limit field was still present.
+- `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/reasons-screen.unsaved.test.ts
+src/dashboard/reasons-screen.test.ts src/dashboard/reasons-screen.a11y.test.ts`: 186 passed,
+  recorded in `final-browser.log`.
+- Eight independent installed-candidate mutations each failed its intended assertion beside a
+  passing clean-reason control: registration, accepted baseline, newer input retention, old success,
+  old refusal, disposal, live draft retention and fresh settings on reconnect. `mutation-*.log`
+  names the changed condition and assertion. Restored candidate results and final byte comparison
+  are recorded separately (38 restored tests passed; both source files matched the final driver bytes).
+- Unedited golden huella and immutability suites: 20 passed. Package typecheck and scoped ESLint
+  results are in `types-final.log` and `lint-final.log`.
+- Temporary native input/Keep/Discard/Escape flows: 8 passed, 16 full axe scans and 16 captures.
+  English/Spanish, light/dark and 390/1280px captures were inspected in four contact sheets.
+  The first visual harness used the wrong theme attribute; those light-only captures remain in
+  `incorrect-theme-look/`. The corrected harness pins `data-theme`, checks the computed colour
+  scheme and paints the document canvas from the host's resolved background.
+
+The visual shell uses the real reason screen, coordinator and warning with synthetic API reads.
+Its page-leave action calls the coordinator directly. Actual venue-settings tabs/sidebar/history,
+server settings writes, hover contrast and activated native reload remain unverified. Existing
+behavioral assertions are unchanged; the API fixture's settings return gained its declared type
+so it can represent capped as well as uncapped values. W69 remains partial: configuration/canvas,
+device-profile integration, remaining shell/page routes and the advancing-owner audit are open.

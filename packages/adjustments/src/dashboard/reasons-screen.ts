@@ -232,6 +232,8 @@ export class AdjustmentReasonsScreen extends LitElement {
   #settingsLoaded = false;
   #opener?: HTMLElement;
   #reasonScope?: DraftScope<Draft>;
+  #limitScope?: DraftScope<string>;
+  #limitGeneration = 0;
   #leave?: LeaveCoordinator;
   /** Restoring a draft rerenders; the pending close still needs this editor's same guard. */
   #closeGuard?: (reason: LeaveReason) => Promise<boolean>;
@@ -304,6 +306,17 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#limitGeneration++;
+    this.#limitScope?.dispose();
+    this.#limitScope = undefined;
+    this.settings = undefined;
+    this.limitLoadError = undefined;
+    this.limitDraft = undefined;
+    this.limitSaving = false;
+    this.limitAttempted = false;
+    this.limitRefused = false;
+    this.limitError = undefined;
+    this.limitSaved = false;
     this.#reasonScope?.dispose();
     this.#reasonScope = undefined;
     this.#leave = undefined;
@@ -332,7 +345,27 @@ export class AdjustmentReasonsScreen extends LitElement {
           ),
         },
         (settings) => {
+          const dirty = this.#limitScope?.isDirty();
           this.settings = settings;
+          if (!this.#limitScope) {
+            this.#limitScope = leaveCoordinatorFor(this)?.register({
+              id: {},
+              parent: this,
+              current: () => this.#limitText(),
+              snapshot: (value) => value,
+              equal: (a, b) => this.#sameLimit(a, b),
+              restore: (value) => {
+                this.limitDraft = value;
+                this.limitAttempted = false;
+                this.limitRefused = false;
+                this.limitError = undefined;
+                this.limitSaved = false;
+              },
+            });
+          } else if (!dirty) {
+            this.limitDraft = undefined;
+            this.#limitScope.commit(this.#limitText());
+          }
           this.limitLoadError = undefined;
         },
       );
@@ -625,6 +658,12 @@ export class AdjustmentReasonsScreen extends LitElement {
     return bp === null ? "" : localDecimal(String(bp / 100));
   }
 
+  #sameLimit(a: string, b: string): boolean {
+    const left = percentBp(a);
+    const right = percentBp(b);
+    return left === undefined || right === undefined ? a.trim() === b.trim() : left === right;
+  }
+
   #limitCheck(): string | undefined {
     return percentBp(this.#limitText()) === undefined ? t("adjustments.limit.invalid") : undefined;
   }
@@ -646,10 +685,13 @@ export class AdjustmentReasonsScreen extends LitElement {
       return;
     }
     this.limitSaving = true;
+    const generation = this.#limitGeneration;
+    const submitted = this.#limitText();
     let settings: AdjustmentSettings;
     try {
-      settings = await this.api.saveSettings({ maxBillDiscountBp: percentBp(this.#limitText())! });
+      settings = await this.api.saveSettings({ maxBillDiscountBp: percentBp(submitted)! });
     } catch (error) {
+      if (generation !== this.#limitGeneration || !this.isConnected) return;
       const field = (error as { params?: { field?: unknown } }).params?.field;
       if (codeOf(error) === "management.request_invalid" && field === "maxBillDiscountBp") {
         this.limitRefused = true;
@@ -659,10 +701,13 @@ export class AdjustmentReasonsScreen extends LitElement {
       }
       return;
     } finally {
-      this.limitSaving = false;
+      if (generation === this.#limitGeneration) this.limitSaving = false;
     }
+    if (generation !== this.#limitGeneration || !this.isConnected) return;
+    const unchanged = this.#sameLimit(this.#limitText(), submitted);
     this.settings = settings;
-    this.limitDraft = undefined;
+    if (unchanged) this.limitDraft = undefined;
+    this.#limitScope?.commit(submitted);
     this.limitAttempted = false;
     this.limitSaved = true;
     await this.#loadSettings();
@@ -699,6 +744,7 @@ export class AdjustmentReasonsScreen extends LitElement {
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
           this.limitDraft = event.detail.value;
+          this.#limitScope?.changed();
           this.limitRefused = false;
           this.limitSaved = false;
         }}

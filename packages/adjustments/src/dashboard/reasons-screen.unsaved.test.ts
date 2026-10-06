@@ -2,8 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, applyTokens, setContentLanguages } from "@waitron/ui";
-import { setLocale } from "@waitron/dashboard-kit";
-import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
+import { LiveData, setLocale } from "@waitron/dashboard-kit";
+import type { AdjustmentReason, AdjustmentSettings, AdjustmentsApi } from "./client.js";
 import { AdjustmentReasonsScreen } from "./reasons-screen.js";
 
 const reason: AdjustmentReason = {
@@ -45,7 +45,7 @@ afterEach(() => {
 function fakeApi() {
   const api = {
     listReasons: vi.fn(async () => [reason]),
-    getSettings: vi.fn(async () => ({ maxBillDiscountBp: null })),
+    getSettings: vi.fn(async (): Promise<AdjustmentSettings> => ({ maxBillDiscountBp: null })),
     saveSettings: vi.fn(async (value: unknown) => value),
     createReason: vi.fn(async () => reason),
     updateReason: vi.fn(async () => reason),
@@ -441,5 +441,196 @@ it("late native close reports leave a reopened editor intact", async () => {
   await settle(screen);
   expect(native(current).open).toBe(true);
   expect(value(screen, "name")).toBe("Current edit");
+  expect(unload()).toBe(true);
+});
+
+it("protects an edited bill limit through page leave, Keep and Discard without a settings write", async () => {
+  const { screen, api } = await mount();
+  await field(screen, "maxBillDiscount", "12,50");
+  expect(unload()).toBe(true);
+  let departed = 0;
+  const leave = () =>
+    app.leave.coordinator.request({
+      scopes: [screen],
+      reason: "navigation",
+      proceed() {
+        departed++;
+      },
+    });
+  const first = leave();
+  await choose("keep");
+  await first;
+  expect(departed).toBe(0);
+  expect(value(screen, "maxBillDiscount")).toBe("12,50");
+  const second = leave();
+  await choose("discard");
+  await second;
+  expect(departed).toBe(1);
+  expect(value(screen, "maxBillDiscount")).toBe("");
+  expect(api.saveSettings).not.toHaveBeenCalled();
+  expect(unload()).toBe(false);
+});
+it("a normalized reverted limit is clean but invalid text stays dirty", async () => {
+  const api = fakeApi();
+  api.getSettings.mockResolvedValue({ maxBillDiscountBp: 1250 });
+  const { screen } = await mount(api);
+  expect(unload()).toBe(false);
+  await field(screen, "maxBillDiscount", "20");
+  expect(unload()).toBe(true);
+  await field(screen, "maxBillDiscount", " 012,50 ");
+  expect(unload()).toBe(false);
+  await field(screen, "maxBillDiscount", "bad");
+  expect(unload()).toBe(true);
+});
+it("an empty reverted uncapped limit is clean", async () => {
+  const { screen } = await mount();
+  await field(screen, "maxBillDiscount", "10");
+  expect(unload()).toBe(true);
+  await field(screen, "maxBillDiscount", "  ");
+  expect(unload()).toBe(false);
+});
+it("an accepted limit commits before a failed settings refresh", async () => {
+  const api = fakeApi();
+  const observed: boolean[] = [];
+  api.getSettings
+    .mockImplementationOnce(async () => ({ maxBillDiscountBp: null }))
+    .mockImplementation(async () => {
+      observed.push(unload());
+      throw { code: "connection.failed" };
+    });
+  const { screen } = await mount(api);
+  await field(screen, "maxBillDiscount", "12,50");
+  expect(unload()).toBe(true);
+  await press(screen, "save-limit");
+  await expect.poll(() => observed.length).toBe(1);
+  expect(observed).toEqual([false]);
+  expect(api.saveSettings).toHaveBeenCalledWith({ maxBillDiscountBp: 1250 });
+  expect(value(screen, "maxBillDiscount")).toBe("12.5");
+  expect(screen.shadowRoot!.querySelector('[data-test="limit-alert"]')!.textContent).toContain(
+    "could not be loaded",
+  );
+  expect(unload()).toBe(false);
+});
+it("a refused settings write keeps the limit dirty", async () => {
+  const api = fakeApi();
+  api.saveSettings.mockRejectedValue({ code: "connection.failed" });
+  const { screen } = await mount(api);
+  await field(screen, "maxBillDiscount", "25");
+  await press(screen, "save-limit");
+  expect(value(screen, "maxBillDiscount")).toBe("25");
+  expect(unload()).toBe(true);
+});
+it("an accepted settings write retains newer input against its submitted limit", async () => {
+  const api = fakeApi();
+  const result = deferred<{ maxBillDiscountBp: number }>();
+  api.saveSettings.mockImplementation(() => result.promise);
+  const { screen } = await mount(api);
+  await field(screen, "maxBillDiscount", "10");
+  await press(screen, "save-limit");
+  await field(screen, "maxBillDiscount", "20");
+  result.resolve({ maxBillDiscountBp: 1000 });
+  await expect.poll(() => api.getSettings.mock.calls.length).toBe(2);
+  await settle(screen);
+  expect(value(screen, "maxBillDiscount")).toBe("20");
+  expect(unload()).toBe(true);
+  await field(screen, "maxBillDiscount", "010,00");
+  expect(unload()).toBe(false);
+});
+it("saving a reason leaves the independent limit dirty", async () => {
+  const { screen } = await mount();
+  await field(screen, "maxBillDiscount", "10");
+  await open(screen);
+  await field(screen, "name", "Changed");
+  await press(screen, "save-editor");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(value(screen, "maxBillDiscount")).toBe("10");
+  expect(unload()).toBe(true);
+});
+it("saving a limit leaves the independent reason dirty", async () => {
+  const { screen } = await mount();
+  await open(screen);
+  await field(screen, "name", "Changed");
+  await field(screen, "maxBillDiscount", "10");
+  await press(screen, "save-limit");
+  expect(value(screen, "name")).toBe("Changed");
+  expect(unload()).toBe(true);
+  await press(screen, "cancel-editor");
+  await choose("discard");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(unload()).toBe(false);
+});
+for (const refusal of [false, true]) {
+  it(`a departed ${refusal ? "refused" : "accepted"} limit write cannot alter a reconnected page`, async () => {
+    const api = fakeApi();
+    const result = deferred<{ maxBillDiscountBp: number }>();
+    api.saveSettings.mockImplementation(() => result.promise);
+    const { screen } = await mount(api);
+    await field(screen, "maxBillDiscount", "10");
+    await press(screen, "save-limit");
+    const parent = screen.parentNode!;
+    screen.remove();
+    expect(unload()).toBe(false);
+    parent.appendChild(screen);
+    await settle(screen);
+    expect(value(screen, "maxBillDiscount")).toBe("");
+    await field(screen, "maxBillDiscount", "30");
+    const reads = api.getSettings.mock.calls.length;
+    if (refusal) result.reject({ code: "connection.failed" });
+    else result.resolve({ maxBillDiscountBp: 1000 });
+    await settle(screen);
+    expect(value(screen, "maxBillDiscount")).toBe("30");
+    expect(api.getSettings.mock.calls.length).toBe(reads);
+    expect(screen.shadowRoot!.querySelector('[data-test="limit-saved"]')).toBeNull();
+    expect(screen.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(unload()).toBe(true);
+  });
+}
+
+it("live settings refresh retains an edited limit and its original baseline", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(fakeApi(), { liveData });
+  api.getSettings.mockResolvedValue({ maxBillDiscountBp: 1000 });
+  const { screen } = await mount(api);
+  await field(screen, "maxBillDiscount", "20");
+  api.getSettings.mockResolvedValue({ maxBillDiscountBp: 3000 });
+  liveData.invalidate([{ type: "adjustment_settings" }]);
+  await expect.poll(() => api.getSettings.mock.calls.length).toBe(2);
+  await settle(screen);
+  expect(value(screen, "maxBillDiscount")).toBe("20");
+  await field(screen, "maxBillDiscount", "10");
+  expect(unload()).toBe(false);
+  liveData.clear();
+});
+it("live settings refresh updates a clean limit and its accepted baseline", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(fakeApi(), { liveData });
+  api.getSettings.mockResolvedValue({ maxBillDiscountBp: 1000 });
+  const { screen } = await mount(api);
+  api.getSettings.mockResolvedValue({ maxBillDiscountBp: 3000 });
+  liveData.invalidate([{ type: "adjustment_settings" }]);
+  await expect.poll(() => value(screen, "maxBillDiscount")).toBe("30");
+  expect(unload()).toBe(false);
+  await field(screen, "maxBillDiscount", "20");
+  expect(unload()).toBe(true);
+  await field(screen, "maxBillDiscount", "030,00");
+  expect(unload()).toBe(false);
+  liveData.clear();
+});
+
+it("reconnect waits for fresh settings before exposing a limit draft", async () => {
+  const api = fakeApi();
+  const read = deferred<AdjustmentSettings>();
+  const { screen } = await mount(api);
+  api.getSettings.mockImplementation(() => read.promise);
+  const parent = screen.parentNode!;
+  screen.remove();
+  parent.appendChild(screen);
+  await settle(screen);
+  expect(screen.shadowRoot!.querySelector('[name="maxBillDiscount"]')).toBeNull();
+  expect(unload()).toBe(false);
+  read.resolve({ maxBillDiscountBp: 2500 });
+  await expect.poll(() => value(screen, "maxBillDiscount")).toBe("25");
+  expect(unload()).toBe(false);
+  await field(screen, "maxBillDiscount", "30");
   expect(unload()).toBe(true);
 });

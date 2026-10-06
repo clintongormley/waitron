@@ -1173,6 +1173,15 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+The bill discount limit now has its own protection on the branch. Keep retains your typed limit;
+Discard restores its starting value without writing settings. Saving a reason leaves an edited
+limit unsaved, and saving the limit leaves an edited reason unsaved. An accepted limit write
+commits its submitted value before refresh; newer input stays protected. Live reads retain an
+edited limit and update a clean one. Deferred-reply tests cover old writes after reconnect;
+a reconnected page waits for fresh settings before showing its limit field. The dated audit
+records focused tests, deletion controls and inspected English/Spanish, light/dark, phone/desktop
+captures. Actual settings-container/sidebar/history routes and native reload remain open.
+
 Bucket settings now register their edit/new form on the branch. Cancel asks before removing a
 changed form. The comparison uses the existing trimmed request fields and the exact secret;
 testing the connection leaves the draft unsaved. An accepted settings write commits its captured
