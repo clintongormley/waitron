@@ -1259,8 +1259,13 @@ uses the shared registry through discovery Close and native Escape. A successful
 retains the draft until registration. Registration commits its matching address before refresh;
 an unrelated address or newer edit stays in discovery while calibration opens. Closing the
 nested name editor leaves the address intact. Replacement, disconnect and delayed native close
-are covered by `apps/dashboard/src/screens/printer-address.unsaved.test.ts`. Bluetooth proof,
-printer detail/calibration forms, the other audited modal owners and page/navigation protection
+are covered by `apps/dashboard/src/screens/printer-address.unsaved.test.ts`. Bluetooth pairing
+proof now protects the exact unsubmitted PIN through Cancel, native Escape and discovery Close.
+Discarding the proof leaves an independently edited address intact. Submitted requests retain
+their existing direct dismissal and command result; a successful request commits only its captured
+proof, with newer delivered input still dirty. Replaced proofs and delayed close reports cannot
+clear the current proof. Focused cases are in `apps/dashboard/src/screens/printer-pair.unsaved.test.ts`.
+Printer detail/calibration forms, the other audited modal owners and page/navigation protection
 remain to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)

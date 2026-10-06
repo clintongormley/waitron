@@ -529,6 +529,7 @@ export class PrintersScreen extends LitElement {
   #addressLeave?: LeaveCoordinator;
   readonly #beforeAddPrinterClose = async (reason: LeaveReason): Promise<boolean> =>
     this.submitting ||
+    (this.pairSubmitting && !this.#addressScope?.isDirty() && !this.#printerNameScope?.isDirty()) ||
     !this.#addressScope ||
     (await this.#addressLeave!.request({
       scopes: [this.#addressScope.id],
@@ -712,6 +713,16 @@ export class PrintersScreen extends LitElement {
   @state() private pairErrorKey: string | null = null;
   @state() private pairSubmitting = false;
   #pairEpoch = 0;
+  #pairScope?: DraftScope<string>;
+  #pairLeave?: LeaveCoordinator;
+  readonly #beforePairClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.pairSubmitting ||
+    !this.#pairScope ||
+    (await this.#pairLeave!.request({
+      scopes: [this.#pairScope.id],
+      reason,
+      proceed() {},
+    })) === "proceeded";
   @state() private commands: Record<string, TrackedCommand> = {};
   /** Command key to answerBy for each pairing that succeeded while Add a printer is open. */
   @state() private pairedDevices: Record<string, number> = {};
@@ -1534,12 +1545,33 @@ export class PrintersScreen extends LitElement {
 
   #resetPair(): void {
     this.#pairEpoch++;
+    this.#pairScope?.dispose();
+    this.#pairScope = undefined;
+    this.#pairLeave = undefined;
     this.pairingDevice = null;
     this.pairPin = "";
     this.pairAttempted = false;
     this.pairRefused = false;
     this.pairErrorKey = null;
     this.pairSubmitting = false;
+  }
+
+  #openPair(device: DiscoveredPrinter): void {
+    this.#resetPair();
+    this.pairingDevice = device;
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=pair-printer-modal]");
+    if (modal) modal.open = true;
+    this.#pairLeave = leaveCoordinatorFor(this);
+    this.#pairScope = this.#pairLeave?.register<string>({
+      id: {},
+      parent: this.#addressScope?.id,
+      current: () => this.pairPin,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.pairPin = value;
+      },
+    });
   }
 
   async #pair(device: DiscoveredPrinter): Promise<void> {
@@ -1552,15 +1584,22 @@ export class PrintersScreen extends LitElement {
       return;
     }
     const epoch = this.#pairEpoch;
+    const scope = this.#pairScope;
+    const pin = this.pairPin;
     this.pairSubmitting = true;
     try {
-      const { command } = await this.api.pairBluetooth(
-        device.agentId,
-        device.localKey!,
-        this.pairPin,
-      );
+      const { command } = await this.api.pairBluetooth(device.agentId, device.localKey!, pin);
       if (this.addingPrinter) this.#trackCommand(device.agentId, command, device);
-      if (epoch === this.#pairEpoch) await this.#closeModal("pair-printer-modal");
+      if (epoch === this.#pairEpoch && this.isConnected) {
+        scope?.commit(pin);
+        if (scope?.isDirty()) return;
+        const modal = this.renderRoot.querySelector<WtModal>("[data-test=pair-printer-modal]");
+        if (scope && modal) {
+          modal.closeAfter("saved");
+          await modal.updateComplete;
+          if (epoch === this.#pairEpoch) this.#resetPair();
+        } else await this.#closeModal("pair-printer-modal");
+      }
     } catch (error) {
       if (epoch !== this.#pairEpoch) return;
       if (codeOf(error) === "management.request_invalid" && refusedField(error) === "pin") {
@@ -2791,6 +2830,7 @@ export class PrintersScreen extends LitElement {
 
   #openAddPrinter(): void {
     this.#addPrinterOpening++;
+    this.#resetPair();
     this.#finishPrinterName(this.#printerNameOpening);
     this.#disposeAddressDraft();
     const modal = this.renderRoot.querySelector<WtModal>("[data-test=new-printer-modal]");
@@ -2983,6 +3023,10 @@ export class PrintersScreen extends LitElement {
         await modal.requestClose("cancel");
         return;
       }
+    }
+    if (id === "pair-printer-modal" && this.#pairScope) {
+      await modal.requestClose("cancel");
+      return;
     }
     if (id === "new-printer-modal") this.#endScan();
     // Native close restores focus before wt-close removes the draft and modal from the template.
@@ -3332,6 +3376,7 @@ export class PrintersScreen extends LitElement {
   #renderPairDialog(): TemplateResult | typeof nothing {
     const d = this.pairingDevice;
     if (!d) return nothing;
+    const epoch = this.#pairEpoch;
     const pinInvalid = this.pairAttempted && !BLUETOOTH_PIN.test(this.pairPin);
     const pinError = pinInvalid || this.pairRefused ? t("printers.bluetooth_pin_invalid") : "";
     return html`<wt-modal
@@ -3339,7 +3384,11 @@ export class PrintersScreen extends LitElement {
       data-test="pair-printer-modal"
       heading=${t("printers.bluetooth_pair_title")}
       .open=${true}
-      @wt-close=${() => this.#resetPair()}
+      .beforeClose=${this.#pairScope ? this.#beforePairClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (epoch === this.#pairEpoch) this.#resetPair();
+      }}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=confirm-pair]"))}
     >
       <div class="form-fields">
@@ -3357,8 +3406,10 @@ export class PrintersScreen extends LitElement {
           ?disabled=${this.pairSubmitting}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
+            if (epoch !== this.#pairEpoch) return;
             this.pairPin = event.detail.value;
             this.pairRefused = false;
+            this.#pairScope?.changed();
           }}
         ></wt-input>
       </div>
@@ -3406,6 +3457,7 @@ export class PrintersScreen extends LitElement {
     this.#addPrinterOpening++;
     this.addingPrinter = false;
     this.#finishPrinterName(this.#printerNameOpening);
+    if (!this.pairSubmitting) this.#resetPair();
     this.#disposeAddressDraft();
     this.#endScan();
     this.#stopRenewing();
@@ -3511,9 +3563,7 @@ export class PrintersScreen extends LitElement {
                     variant="primary"
                     data-test=${`pair-${this.#deviceKey(d)}`}
                     ?disabled=${command?.state === "pending"}
-                    @click=${() => {
-                      this.pairingDevice = d;
-                    }}
+                    @click=${() => this.#openPair(d)}
                     >${pairOnly.has(d) ? t("printers.bluetooth_pair_only") : t("printers.bluetooth_pair")}</wt-button
                   >`
             }

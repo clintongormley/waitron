@@ -300,3 +300,22 @@ reverts and invalid input, replacement/disconnect, detached input and delayed na
 Its synthetic unload event checks listener cancellation; native reload remains Task 5.
 The printer inventory remains partial: Bluetooth proof, detail name/connection and calibration
 settings are still pending.
+
+### Bluetooth pairing proof checkpoint (2026-10-06)
+
+The W69 branch now protects the exact pre-submission Bluetooth PIN, including invalid input,
+through Cancel, native Escape and discovery Close. Keep retains the proof and focus; Discard
+removes only that proof when closing its child dialog, leaving an edited manual address intact.
+An exact revert closes directly. Replacement and disconnect cancel the old question, and detached
+input cannot change a reopened proof.
+
+Submitted requests retain direct Cancel/Escape and discovery Close when no other draft is dirty.
+The existing command result still appears after child dismissal; discovery closed before the
+reply still tracks no command. A successful request commits its captured proof independently of
+the address. A newer delivered PIN remains dirty against that committed value; a departed result
+cannot close or mark a replacement proof. Delayed native close reports cannot clear a reopened
+proof or delay successful proof cleanup.
+
+`apps/dashboard/src/screens/printer-pair.unsaved.test.ts` covers these paths alongside the unchanged
+printer suites. Synthetic unload checks test listener cancellation; the native reload prompt remains
+Task 5. Printer detail name/connection, calibration and the remaining modal/page owners are pending.
