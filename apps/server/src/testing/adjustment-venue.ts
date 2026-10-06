@@ -46,7 +46,7 @@ import type { DeviceRequestConfig } from "../till-config.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
-import { deviceRequestCfg } from "./session-device.js";
+import { BASIC_ACTIONS, deviceRequestCfg } from "./session-device.js";
 
 /**
  * A provisioned venue for the adjustment suites: real Veri*Factu filing that never contacts AEAT, a
@@ -396,7 +396,11 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
       .returning({ id: persons.id });
     const [profile] = await tx
       .insert(deviceProfiles)
-      .values({ name: "Counter till", formFactor: "till", capabilities: ["take-cash"] })
+      .values({
+        name: "Counter till",
+        formFactor: "till",
+        capabilities: [...BASIC_ACTIONS, "take-cash"],
+      })
       .returning({ id: deviceProfiles.id });
     const reasonId = {} as Record<keyof typeof REASONS, string>;
     for (const [key, input] of Object.entries(REASONS)) {

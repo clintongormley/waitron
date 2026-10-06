@@ -46,6 +46,7 @@ import { cancelBody, giveAway } from "./testing/cancel-line.js";
 import { revokedDeviceSessionCookie, seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -455,7 +456,11 @@ describe("who may record it", () => {
     const [profile] = await inTx(venue, (tx) =>
       tx
         .insert(deviceProfiles)
-        .values({ name: "Handheld", formFactor: "phone-portrait", capabilities: ["take-cash"] })
+        .values({
+          name: "Handheld",
+          formFactor: "phone-portrait",
+          capabilities: [...BASIC_ACTIONS, "take-cash"],
+        })
         .returning({ id: deviceProfiles.id }),
     );
     const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {
@@ -498,7 +503,7 @@ describe("who may record it", () => {
         .values({
           name: "Handheld origin",
           formFactor: "phone-portrait",
-          capabilities: ["take-cash"],
+          capabilities: [...BASIC_ACTIONS, "take-cash"],
         })
         .returning({ id: deviceProfiles.id }),
     );

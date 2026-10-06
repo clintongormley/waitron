@@ -126,7 +126,7 @@ export function mountAdjustmentsApi(
   // One that leaves the bill exactly paid files its invoice on the requesting device's till.
   app.post("/api/working-orders/:id/adjustments", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBill(c.req.param("id"));

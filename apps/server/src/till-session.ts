@@ -6,8 +6,10 @@ import type { DeviceId } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { authorize, hashSessionToken, sessions, type Permission } from "@waitron/identity";
+import type { ProfileAction } from "@waitron/layouts";
 import {
   deviceBindingColumns,
+  assertProfileAction,
   deviceProfileJoin,
   recordSighting,
   sightingDue,
@@ -63,12 +65,12 @@ export function readSessionToken(c: Context): string | null {
  * and a logged-out session fail as a missing cookie does. A session whose device has been revoked
  * throws `device.unauthorized`. Login and logout deliberately do not call this. With `permission`,
  * the session's person must also hold it (`authorize`, no override), checked in the same
- * transaction.
+ * transaction; with `action`, the device's active profile must permit it (`assertProfileAction`).
  */
 export async function requireSession(
   deps: { db: Database },
   c: Context,
-  options: { permission?: Permission } = {},
+  options: { permission?: Permission; action?: ProfileAction } = {},
 ): Promise<{ personId: string; sessionId: string; deviceId: DeviceId; device: DeviceBinding }> {
   const token = readSessionToken(c);
   if (token === null || !isUuid(token)) throw new AppError("session.required", {});
@@ -94,6 +96,9 @@ export async function requireSession(
     if (sightingDue(found.lastSeenAt, seenAt)) await recordSighting(tx, found.deviceId, seenAt);
     if (options.permission !== undefined) {
       await authorize(tx, { sessionId: found.id, permission: options.permission });
+    }
+    if (options.action !== undefined) {
+      assertProfileAction(toDeviceBinding(found.deviceId, found), options.action);
     }
     return found;
   });

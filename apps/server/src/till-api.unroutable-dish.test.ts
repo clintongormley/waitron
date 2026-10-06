@@ -39,6 +39,7 @@ import {
   unsentDishLines,
   updateOrderLine,
 } from "./working-order.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 // A pay-first order, or an open counter order in a zone that sends before payment, is sent to the
 // kitchen when it is paid. A dish no rule or active default station can take does not refuse the
@@ -60,7 +61,11 @@ let catalogueId: string;
 async function enrolTill(): Promise<string> {
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: ["take-cash"] })
+    .values({
+      name: `Till ${randomUUID()}`,
+      formFactor: "till",
+      capabilities: [...BASIC_ACTIONS, "take-cash"],
+    })
     .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.db, v.cfg, {
     name: `Counter till ${randomUUID()}`,

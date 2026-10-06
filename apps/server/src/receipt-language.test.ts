@@ -35,7 +35,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
-import { seedSessionDevice, deviceRequestCfg } from "./testing/session-device.js";
+import { BASIC_ACTIONS, seedSessionDevice, deviceRequestCfg } from "./testing/session-device.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
@@ -164,7 +164,7 @@ async function venueWith(
       .values({
         name: "Barra",
         formFactor: "till",
-        capabilities: ["open-cash-drawer", "take-cash"],
+        capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
       })
       .returning({ id: deviceProfiles.id });
     return {

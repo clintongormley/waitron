@@ -42,6 +42,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 // Every line sold is priced from a service zone's menu offer. A venue with no zone, and an order
 // with no service context, sell nothing; an order with no lines still opens. The fiscal seat is an
@@ -139,7 +140,7 @@ async function seedVenue(db: Database): Promise<Venue> {
       name: "Card till",
       formFactor: "till",
       canvasId: null,
-      capabilities: ["integrated-card-payment", "take-cash"],
+      capabilities: [...BASIC_ACTIONS, "integrated-card-payment", "take-cash"],
     })
     .returning({ id: deviceProfiles.id });
   const device = await enrolDeviceForTest(db, cfg, { name: "Card till", profileId: profile!.id });

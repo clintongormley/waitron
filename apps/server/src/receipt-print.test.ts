@@ -4,11 +4,13 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import {
+  deviceProfiles,
   devices,
   diningTables,
   drawerOpens,
   nowIso,
   partyTables,
+  kitchenStations,
   printJobs,
   readTenant,
   sales,
@@ -1294,6 +1296,41 @@ describe("every device whose profile allows the drawer opens its receipt printer
       ]);
     },
   );
+
+  it("a kitchen display opens no drawer, even when its stored list names the drawer", async () => {
+    const { cfg, printerId, product } = await sharedDrawer();
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({
+        name: `Display ${randomUUID()}`,
+        formFactor: "kds",
+        capabilities: [...CAPABILITY_FLAGS],
+      })
+      .returning({ id: deviceProfiles.id });
+    const [station] = await suite.db
+      .insert(kitchenStations)
+      .values({ locationId: cfg.locationId, name: `Grill ${randomUUID()}` })
+      .returning({ id: kitchenStations.id });
+    const [device] = await suite.db
+      .insert(devices)
+      .values({
+        locationId: cfg.locationId,
+        label: `Display ${randomUUID()}`,
+        tokenHash: "scrypt$00$00",
+        deviceProfileId: profile!.id,
+        stationId: station!.id,
+        receiptPrinterId: printerId,
+      })
+      .returning({ id: devices.id });
+    const display = { ...cfg, origin: deviceOrigin(device!.id) };
+
+    await sale(display, product, "cash");
+    expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+
+    await sale(cfg, product, "cash");
+    expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([{ printerId, kick: true }]);
+  });
 
   it.each(["ticket_then_pay", "issued"] as const)(
     "collecting a placed %s order in cash opens the drawer only on the till allowed the drawer",

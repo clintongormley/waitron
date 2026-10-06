@@ -13,7 +13,7 @@ import {
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { refundBillPayment, refundProvidersOf } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
-import { assertDeviceCapability, assertTakesCash } from "./device-session.js";
+import { assertDeviceCapability, assertProfileAction, assertTakesCash } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import {
   overridePinAttempts,
@@ -222,6 +222,7 @@ export function mountBillPaymentsApi(
       if (request.entry !== "reader") {
         const saleCfg = sendingCfg(cfg, c, session.device);
         if (request.method === "cash") assertTakesCash(session.device);
+        else assertProfileAction(session.device, "hand-keyed-card-payment");
         return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
       }
       // The guards `/api/pay` runs before a reader is asked, in its order. A card outcome is data,

@@ -706,9 +706,9 @@ declare module "@waitron/shared" {
      */
     "device.forbidden_station": { stationId: string };
     /**
-     * A device whose profile lacks the capability tried an action that needs it
-     * (`assertDeviceCapability`, `device-session.ts`), enforced on the server. `action` names the
-     * refused operation, a symbol the route passes.
+     * A device whose active profile does not permit the action tried it (`assertProfileAction`,
+     * `device-session.ts`). `action` names the refused operation: the profile action, or the
+     * symbol a route that predates the action names passes.
      */
     "device.forbidden_action": { action: string };
     /** A cash payment from a device whose profile does not take cash (`assertTakesCash`). */

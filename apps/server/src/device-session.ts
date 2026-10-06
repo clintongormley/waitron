@@ -5,7 +5,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError, isUuid } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
+import { profileAllows } from "@waitron/layouts";
+import type { CapabilityFlag, FormFactor, ProfileAction } from "@waitron/layouts";
 import { verifySecretAsync } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
@@ -355,27 +356,39 @@ export async function assertDeviceStillProven(
 }
 
 /**
- * The device-capability firewall: a device whose profile does not declare `capability` is refused,
- * fail-closed, with `device.forbidden_action`. `device` is a pre-resolved binding, `null` for no
- * device, which passes; omitted, the request's device cookie is read here.
+ * Refuses `device.forbidden_action` when the device's active profile does not permit `action`
+ * (`profileAllows`: a shared display may only prepare). `label` is the refusal's `action` param,
+ * which the routes that predate the action names keep. `null` (no device) passes.
+ */
+export function assertProfileAction(
+  device: DeviceBinding | null,
+  action: ProfileAction,
+  label: string = action,
+): void {
+  if (device !== null && !profileAllows(device, action)) {
+    throw new AppError("device.forbidden_action", { action: label });
+  }
+}
+
+/**
+ * {@link assertProfileAction} for a route that may not have resolved its device: `device` is a
+ * pre-resolved binding, `null` for no device, which passes; omitted, the request's device cookie is
+ * read here.
  */
 export async function assertDeviceCapability(
   deps: { db: Database; devMode?: boolean },
   c: Context,
-  capability: CapabilityFlag,
+  capability: ProfileAction,
   action: string,
   device?: DeviceBinding | null,
 ): Promise<void> {
   const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
-  if (resolved === null) return;
-  if (!resolved.capabilities.includes(capability)) {
-    throw new AppError("device.forbidden_action", { action });
-  }
+  assertProfileAction(resolved, capability, action);
 }
 
 /** A device whose profile does not take cash is refused a cash payment. No device passes, as in {@link assertDeviceCapability}. */
 export function assertTakesCash(device: DeviceBinding | null): void {
-  if (device !== null && !device.capabilities.includes("take-cash")) {
+  if (device !== null && !profileAllows(device, "take-cash")) {
     throw new AppError("device.cash_not_allowed", {});
   }
 }

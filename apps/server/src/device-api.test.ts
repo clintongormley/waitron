@@ -51,7 +51,7 @@ import { deleteDeviceProfile, setProfilePrinterLists } from "@waitron/layouts";
 import "./errors.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 
 // Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
 // is what makes that legal twice in one file: `useVenueDb` empties every data table after each `it`.
@@ -262,7 +262,11 @@ async function seedProfile(
   // serialises `capabilities`.
   const [row] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Profile ${profileCounter}`, formFactor, capabilities })
+    .values({
+      name: `Profile ${profileCounter}`,
+      formFactor,
+      capabilities: [...BASIC_ACTIONS, ...capabilities],
+    })
     .returning({ id: deviceProfiles.id });
   return row!.id;
 }

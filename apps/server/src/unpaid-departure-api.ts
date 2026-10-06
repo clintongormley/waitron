@@ -45,7 +45,7 @@ export function mountUnpaidDepartureApi(
 ): void {
   app.post("/api/parties/:id/unpaid-departure", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId, sessionId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();

@@ -49,6 +49,7 @@ import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { CAPABILITY_FLAGS, setProfilePrinterLists } from "@waitron/layouts";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -380,7 +381,11 @@ async function enrolTillCookie(
   const n = tillDeviceCounter;
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Counter till profile ${n}`, formFactor: "till", capabilities })
+    .values({
+      name: `Counter till profile ${n}`,
+      formFactor: "till",
+      capabilities: [...BASIC_ACTIONS, ...capabilities],
+    })
     .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${n}`,
@@ -399,7 +404,7 @@ async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
     .values({
       name: `Configured till profile ${n}`,
       formFactor: "till",
-      capabilities: ["open-cash-drawer", "take-cash"],
+      capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
     })
     .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.db, cfg, {
@@ -1164,7 +1169,7 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
       .values({
         name: `Drawer till profile ${n}`,
         formFactor: "till",
-        capabilities: ["open-cash-drawer"],
+        capabilities: [...BASIC_ACTIONS, "open-cash-drawer"],
       })
       .returning({ id: deviceProfiles.id });
     const dev = await enrolDeviceForTest(suite.db, cfg, {
@@ -2290,7 +2295,11 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     const formFactor = opts.formFactor ?? "till";
     const [profile] = await suite.db
       .insert(deviceProfiles)
-      .values({ name: `Printing profile ${n}`, formFactor, capabilities: opts.capabilities })
+      .values({
+        name: `Printing profile ${n}`,
+        formFactor,
+        capabilities: [...BASIC_ACTIONS, ...opts.capabilities],
+      })
       .returning({ id: deviceProfiles.id });
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profile!.id, {

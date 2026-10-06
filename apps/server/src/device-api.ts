@@ -25,6 +25,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import {
+  assertProfileAction,
   parseDeviceCookie,
   readDeviceCookie,
   requireDevice,
@@ -107,6 +108,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,
   "session.required": 401,
   "device.forbidden_station": 403,
+  "device.forbidden_action": 403,
   "device_profile.not_approved": 403,
   "device_profile.not_admitted": 403,
   "device_profile.incompatible": 400,
@@ -416,6 +418,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       if (device.stationId === null) throw new AppError("device.unauthorized", {});
+      assertProfileAction(device, "prepare-orders");
       const stationId = device.stationId;
       const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id");
@@ -428,11 +431,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   );
 
   // ── Bump one of the bound station's items (DEVICE-GUARDED) ────────────────────────────────────────────
-  // The `act-as-kds` capability flag is not enforced here; the route is gated by `requireDevice` and
-  // station ownership.
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      assertProfileAction(device, "prepare-orders");
       const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id");
       // A malformed id names no item exactly as an absent one does — screened to the SAME

@@ -74,6 +74,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createStation } from "./kitchen.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 // `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
 // GENUINE chained fiscal record, including the lost-response pay retry that must replay the ticket
@@ -409,7 +410,7 @@ async function createTillProfile(): Promise<string> {
     .values({
       name: "Counter till",
       formFactor: "till",
-      capabilities: ["integrated-card-payment", "open-cash-drawer", "take-cash"],
+      capabilities: [...BASIC_ACTIONS, "integrated-card-payment", "open-cash-drawer", "take-cash"],
     })
     .returning({ id: deviceProfiles.id });
   return prof!.id;
@@ -424,7 +425,11 @@ async function seedProfileFF(
   profileCounter += 1;
   const [prof] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Profile ${formFactor} ${profileCounter}`, formFactor, capabilities })
+    .values({
+      name: `Profile ${formFactor} ${profileCounter}`,
+      formFactor,
+      capabilities: [...BASIC_ACTIONS, ...capabilities],
+    })
     .returning({ id: deviceProfiles.id });
   return prof!.id;
 }
