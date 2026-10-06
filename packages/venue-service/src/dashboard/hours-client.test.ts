@@ -228,6 +228,36 @@ describe("HoursApi.watchHours", () => {
     expect(request.mock.calls[1]).toEqual([HOURS_PATH, "GET", undefined, { passive: true }]);
     expect(failed).not.toHaveBeenCalled();
   });
+
+  it("without live data applies only the latest read: an earlier one that answers late changes nothing", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const answers: { resolve: (value: HoursModel) => void; reject: (error: unknown) => void }[] =
+      [];
+    const request = vi.fn(
+      () => new Promise<HoursModel>((resolve, reject) => answers.push({ resolve, reject })),
+    );
+    const apply = vi.fn();
+    const failed = vi.fn();
+    const detach = new HoursApi(request as DashboardRequest).watchHours(
+      "2030-10-01",
+      "2030-10-31",
+      apply,
+      failed,
+      vi.fn(),
+    );
+    vi.advanceTimersByTime(60_000);
+    vi.advanceTimersByTime(60_000);
+    expect(request).toHaveBeenCalledTimes(3);
+    answers[1]!.reject({ code: "connection.failed" });
+    await settled();
+    answers[2]!.resolve(model("2030-10-08"));
+    await settled();
+    answers[0]!.resolve(model("2030-10-06"));
+    await settled();
+    expect(apply.mock.calls).toEqual([[model("2030-10-08")]]);
+    expect(failed).not.toHaveBeenCalled();
+    detach();
+  });
 });
 
 describe("HoursApi.rereadWatches", () => {

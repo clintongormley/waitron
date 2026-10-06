@@ -43,10 +43,10 @@ export class HoursApi {
   ): () => void {
     let failing = false;
     let attached = true;
-    const settle = (read: Promise<HoursModel>) =>
+    const settle = (read: Promise<HoursModel>, latest = () => true) =>
       read.then(
         (model) => {
-          if (!attached) return;
+          if (!attached || !latest()) return;
           apply(model);
           if (failing) {
             failing = false;
@@ -54,13 +54,18 @@ export class HoursApi {
           }
         },
         (error: unknown) => {
-          if (!attached) return;
+          if (!attached || !latest()) return;
           failing = true;
           failed(error);
         },
       );
     if (this.liveData === undefined) {
-      const read = () => void settle(this.#read(from, to, true));
+      // A slow read can answer after a later one; only the most recently started read counts.
+      let started = 0;
+      const read = () => {
+        const own = ++started;
+        void settle(this.#read(from, to, true), () => own === started);
+      };
       read();
       const timer = setInterval(read, REFRESH_MS);
       return () => {
