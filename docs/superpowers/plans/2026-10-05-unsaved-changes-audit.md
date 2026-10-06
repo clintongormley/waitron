@@ -2621,3 +2621,43 @@ At phone width the colour-field labels show an ellipsis; recorded separately in 
 W69 remains incomplete: remaining page owners, till shell, tab/context paths, activated native
 reload and an advancing-main owner inventory are still required. Receipts:
 `~/waitron-campaign-e/receipts/w69-status-rows-20261006`.
+
+
+## Floor explicit-row checkpoint, 2026-10-06
+
+On the W69 branch, Add compares its trimmed label. Each explicit row compares its raw label and
+its existing integer capacity value; Save still omits null capacity from its request. A successful
+write commits before refresh. Later Add input remains in place against the empty accepted baseline;
+later row input stays compared with the submitted values. Discard restores local fields without
+issuing any table write. Zone, Enable, Disable and placement actions remain immediate writes.
+Retained Plano/zone view tabs keep the row drafts without a question.
+
+Live reads preserve edited fields and their baselines, while adopting new values for clean fields.
+This retains the original floor regression's assertion that a changed label survives recovery while
+a clean capacity updates. Dirty removed rows remain in the editor; clean rows dispose their scope
+before removal. Disconnect releases Add and row scopes. Older create/save/zone/Enable/Disable/
+placement/clear results cannot refresh or mark the reconnected editor as failed.
+
+Receipts in `~/waitron-campaign-e/receipts/w69-floor-20261006-215614`:
+
+- Both initial new-suite runs reported **31 failed / 2 passed**. The first reconnect fixture waited
+  for hidden config rows while Plano was retained; the corrected fixture opens config before its
+  row assertion. Missing unload protection, draft restoration and write lifetime gates failed
+  before implementation. The first green new/original floor pair ran **85 cases**.
+- The final five-file floor/status family ran **155 cases**. The installed, restored candidate's
+  original/new floor pair ran **92 cases**. No existing assertion changed.
+- Ten independent guard replacements/deletions failed their intended case while the clean-page
+  control passed: Add/row notification, Add/row commit, newer Add retention, live label retention,
+  live baseline retention, row disconnect disposal, old create success and old create refusal.
+  The first old-success control survived because its reply-triggered refresh returned identical
+  data. The final test also counts reads across that reply; deleting the success gate then failed
+  at the extra refresh. Both candidate source/test files matched the feature bytes before removal.
+- Eight native input/Escape/Keep/Discard flows covered EN/ES, asserted light/dark theme roots and
+  measured 390/1280 widths. **16 parked-pointer axe scans passed**, and **16 captures** were inspected
+  in four sheets. The warning and restored controls fit those views.
+
+Dashboard typecheck, scoped ESLint, source Prettier and `git diff --check` passed. Unedited fiscal
+write-path/inmutabilidad suites ran **20 cases**. The visual shell uses the real LeaveController,
+confirmation and floor screen with synthetic API reads/writes. Actual floor API writes,
+sidebar/history/container routes, hover colours and activated native reload remain unverified.
+Other page owners, till routes and the advancing-main inventory keep W69 incomplete.

@@ -1173,6 +1173,14 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Floor Add and explicit-save label/capacity rows now register independently on the branch. Keep
+retains their values; Discard restores only local drafts. Accepted writes commit before refresh,
+and later input remains protected. Live reads retain edited fields while updating clean fields;
+a removed dirty row remains until its draft is discarded. Zone/Enable/Disable/placement writes
+remain immediate, and retained Plano view tabs do not ask. Disconnect releases scopes and ignores
+older replies. Focused tests and visual/deletion receipts are in the W69 audit. Actual floor
+sidebar/history routes and activated native reload remain unverified.
+
 Service-status Add and explicit-save rows now register independently on the branch. A successful
 write commits only its submitted draft before refresh; later input and other rows stay protected.
 Live reads preserve edited rows and adopt clean rows. Disable commits only the saved active state,
