@@ -1653,12 +1653,20 @@ records added after a run's unanswered successor sent with its retry, as built. 
 the run's code, the run is broken and nothing would explain such a hold: the
 `fiscal.refusals_repeated` alert would not show, and when that answer is not a refusal at all
 `heldRecords` would name no case for the held records.
-**Follow-up W41s-3c (a defect W41s-3's review found that predates W41s-3):**
-`resolveLines` in `packages/fiscal-verifactu/src/drain.ts` matches a reply line to a claimed record
-by `RefExterna` alone, without checking the line's invoice identity or a repeated reference. A
-review probe gave invoice B's accepted line invoice A's reference, and the drain marked A
-`aceptado` though AEAT had rejected it; the same probe failed the same way on base `429f18b0b`.
-This is defensive handling of a malformed reply, and its fix is its own fiscal item.
+**Follow-up W41s-3c (done on `fix/w41s-reply-line-identity`, 2026-10-06, awaiting the owner's
+review):** `resolveLines` in `packages/fiscal-verifactu/src/drain.ts` used to match a reply line to
+a claimed record by `RefExterna` alone; a review probe gave invoice B's accepted line invoice A's
+reference and the drain marked A `aceptado` though AEAT had rejected it. Now a line is applied to a
+record only when it is the one line naming that record, by reference or by invoice, and it carries
+both the record's reference and the invoice (issuer NIF, number, date) the record was sent as. Any
+other record of the envío, including one AEAT's reply gave no line for, becomes unknown at once:
+it waits for a later send, its chain's records not yet sent wait behind it, and it raises
+`fiscal.estado_desconocido` with the invoice sent and every line that named it. Before, a record
+with no line sat `enviando` until the five-minute recovery or a restart. **Still open:** a line
+naming no record of the envío by either is ignored and recorded nowhere; and no run against real
+AEAT has shown that a cancellation's reply line names the cancelled invoice under the plain field
+names (the schema and the library's fake do) — if it does not, every cancellation comes back
+unknown and is retried with an alert.
 **Re-examine the hold behind an unknown outcome once the asesor answers — OPEN (waiting on the
 asesor; owner 2026-10-06).** `claimBatch` in `packages/fiscal-verifactu/src/drain.ts` does not send a
 record while an earlier record of its chain is `enviando` or waits for a retry (W41s-2, #1213,
