@@ -4306,8 +4306,6 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     file is a frozen record of the old grants and was not edited.
   - The Hours page fixes its read window (yesterday plus a year) when it opens, so a page left open
     for days keeps the old window until it is reopened.
-  - Cancel and Escape still work while a save is in flight: a late failure after closing is dropped
-    without a message, and a success still lands.
   - For a non-default station with no hours, Hours says "No hours restriction" and Prep stations
     says "Always open" (owner informed).
   - Smaller notes: the calendar's day read repeats the subject precedence `resolveSubjects` holds

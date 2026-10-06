@@ -373,7 +373,10 @@ is in production" below).
 - A default station's special-date cells are dormant, not deleted: a save never removes one because
   the request left it out (no request can carry it), and duplicating a date copies it. It applies
   again if the station stops being the default, so that change is refused with `hours.invalid`
-  when the station's hours would then clash (`assertDemotedStationHours`, `hours.ts`).
+  when, on a special date from the venue's yesterday on (every special date when its clock cannot
+  be read), the hours it kept would clash with the day before or after, or open or close at a
+  minute the clock skips (`assertDemotedStationHours`, `hours.ts`). The refusal names the special
+  date to move or delete.
 - A cell's periods are replaced by deleting and inserting the whole set, so a reordering cannot trip
   the position index midway ("Editing rows one at a time can break a unique index the final state
   satisfies" above).
@@ -992,7 +995,9 @@ argument, `{ createdAt, timeZone }`, which `validateConfigurationBundle`
 Venue-service uses it to leave out a clash between two days already past in the venue's zone when
 the bundle was made, as a save does, so a venue's own export imports again. It reads no day
 cutover: for a venue whose cutover or numeric-offset zone a save cannot read, the save checks every
-pair while the import still leaves past pairs out.
+pair while the import still leaves past pairs out. It also refuses a special-date period that opens
+or closes at a minute the clocks skip in that zone, unless that date and the day after it were both
+past when the bundle was made; a default station's kept cells are not checked.
 
 **Transactions**
 
