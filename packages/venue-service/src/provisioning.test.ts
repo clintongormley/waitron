@@ -7,6 +7,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
+import { readHolidays, readLocalHolidayModel, saveLocalHoliday } from "./holidays.js";
 import { readSpecialDate, readWeekHours, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
@@ -244,5 +245,61 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       date_cells: 1,
       date_periods: 0,
     });
+  });
+
+  it("leaves a fresh Spanish venue's holiday storage empty while its address reads the shipped holidays, and a re-run keeps entries made later", async () => {
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({
+        name: "Holiday Venue",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurante",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00:00",
+        province: "Sevilla",
+        city: "Sevilla",
+      })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(location!.id);
+    const cfg = { locationId };
+    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+    const stored = async () =>
+      (
+        await db.execute(sql`
+          select
+            (select count(*) from holiday_geographies) as geographies,
+            (select count(*) from local_holidays) as entries`)
+      ).rows[0];
+
+    await runSeed();
+    expect(await stored()).toEqual({ geographies: 0, entries: 0 });
+    const fresh = await db.transaction(async (tx) => ({
+      read: await readHolidays(tx, cfg, "2026-01-01", "2026-01-31"),
+      model: await readLocalHolidayModel(tx, cfg),
+    }));
+    expect(fresh.read.facts.map(({ date, scope }) => ({ date, scope }))).toEqual([
+      { date: "2026-01-01", scope: "national" },
+      { date: "2026-01-06", scope: "national" },
+    ]);
+    expect(fresh.read.coverage).toEqual([
+      expect.objectContaining({
+        year: 2026,
+        provinceCode: "41",
+        nationalRegional: "complete",
+        local: "none_entered",
+      }),
+    ]);
+    expect(fresh.model).toMatchObject({ geographies: [], entries: [] });
+
+    const entry = await db.transaction((tx) =>
+      saveLocalHoliday(tx, cfg, null, { date: "2026-06-04", name: "Corpus Christi" }),
+    );
+    const before = await db.transaction((tx) => readLocalHolidayModel(tx, cfg));
+    await runSeed();
+    expect(await db.transaction((tx) => readLocalHolidayModel(tx, cfg))).toEqual(before);
+    expect(before.entries).toEqual([entry]);
+    expect(await stored()).toEqual({ geographies: 1, entries: 1 });
   });
 });

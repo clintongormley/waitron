@@ -1,5 +1,8 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { civilDateOf } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
+import { localHolidayName } from "./holiday-rules.js";
+import { holidayCityKey, type PackLookup } from "./holidays.js";
 import {
   addDays,
   cellIntervals,
@@ -248,6 +251,74 @@ export function validateHoursConfiguration(
   }
 }
 
+/**
+ * Refuses (`setup.request_invalid`, `field` naming the table or `<table>.<column>`) holiday rows the
+ * writers could not have stored, judged by the RECEIVING build's country packs: each geography's
+ * country is a pack's code, its province one of that pack's codes, its city key the city's
+ * normalized form and its area one the pack sources for that province; no two geographies share a
+ * place, since the import moves every one to the one receiving venue. Each entry names a geography
+ * in the bundle, a real date no other entry of that geography holds and a name the writer keeps as
+ * it is; and no geography holds more entries in a civil year than its pack allows, which is none
+ * for a pack without a holiday calendar. Retained geographies are held to the same rules.
+ */
+export function validateHolidayConfiguration(
+  tables: Tables,
+  findPack: PackLookup = getCountryPack,
+): void {
+  const allowance = new Map<unknown, number>();
+  const places = new Set<string>();
+  for (const row of tables.holiday_geographies ?? []) {
+    if (typeof row.id !== "string" || allowance.has(row.id)) refuse("holiday_geographies.id");
+    const pack = typeof row.country === "string" ? findPack(row.country) : undefined;
+    if (pack === undefined || pack.countryCode !== row.country)
+      refuse("holiday_geographies.country");
+    const province = row.province_code;
+    if (!pack.administrativeAreas.some(({ code }) => code === province))
+      refuse("holiday_geographies.province_code");
+    if (typeof row.city !== "string" || row.city.trim() === "") refuse("holiday_geographies.city");
+    if (row.city_key !== holidayCityKey(row.city)) refuse("holiday_geographies.city_key");
+    const place = JSON.stringify([row.country, province, row.city_key]);
+    if (places.has(place)) refuse("holiday_geographies.city_key");
+    places.add(place);
+    const calendar = pack.holidayCalendar;
+    const area = row.area_key ?? null;
+    if (
+      area !== null &&
+      !(calendar?.areasForProvince(province as string) ?? []).some(({ key }) => key === area)
+    )
+      refuse("holiday_geographies.area_key");
+    allowance.set(row.id, calendar?.localEntryLimit ?? 0);
+  }
+
+  const entryIds = new Set<unknown>();
+  const taken = new Set<string>();
+  const perYear = new Map<string, number>();
+  for (const row of tables.local_holidays ?? []) {
+    if (typeof row.id !== "string" || entryIds.has(row.id)) refuse("local_holidays.id");
+    entryIds.add(row.id);
+    const limit = allowance.get(row.geography_id);
+    if (limit === undefined) refuse("local_holidays.geography_id");
+    if (!isLocalDate(row.date)) refuse("local_holidays.date");
+    const day = JSON.stringify([row.geography_id, row.date]);
+    if (taken.has(day)) refuse("local_holidays.date");
+    taken.add(day);
+    if (localHolidayName(row.name) !== row.name) refuse("local_holidays.name");
+    const year = JSON.stringify([row.geography_id, row.date.slice(0, 4)]);
+    const count = (perYear.get(year) ?? 0) + 1;
+    if (count > limit) refuse("local_holidays");
+    perYear.set(year, count);
+  }
+}
+
+/** The module's import check: Hours' rows, then the holiday rows. */
+function validateVenueServiceConfiguration(
+  tables: Tables,
+  bundle?: { readonly createdAt: Date; readonly timeZone: string },
+): void {
+  validateHoursConfiguration(tables, bundle);
+  validateHolidayConfiguration(tables);
+}
+
 export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
@@ -265,6 +336,8 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "special_dates", locationColumns: ["location_id"] },
     { name: "special_date_hours" },
     { name: "special_date_hours_periods" },
+    { name: "holiday_geographies", locationColumns: ["location_id"] },
+    { name: "local_holidays" },
   ],
-  validate: validateHoursConfiguration,
+  validate: validateVenueServiceConfiguration,
 } as const;
