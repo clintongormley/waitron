@@ -208,6 +208,7 @@ const CATALONIA: LanguageLaw = {
 // not distinguish them and keeps both languages enabled everywhere in the region.
 const VALENCIAN_COMMUNITY: LanguageLaw = {
   requiredContentLocales: ["ca-ES", "es-ES"],
+  defaultContentLocale: "ca-ES",
   foreignLanguageNotice: {
     minimumForeign: 1,
     text: {
@@ -222,6 +223,7 @@ const VALENCIAN_COMMUNITY: LanguageLaw = {
 // languages enabled everywhere in the region.
 const GALICIA: LanguageLaw = {
   requiredContentLocales: ["gl-ES", "es-ES"],
+  defaultContentLocale: "gl-ES",
   foreignLanguageNotice: {
     minimumForeign: 2,
     text: {
@@ -231,11 +233,33 @@ const GALICIA: LanguageLaw = {
   },
 };
 
+// The owner's choice, stricter than the law, which asks for at least one official language
+// (docs/compliance/regional-language-rules.md, "Balearic Islands"); docs/backlog.md → "Content
+// languages per region".
+const BALEARIC_ISLANDS: LanguageLaw = {
+  requiredContentLocales: ["ca-ES", "es-ES"],
+  defaultContentLocale: "ca-ES",
+};
+
+// The owner's choice, not a law: service is offered in Spanish everywhere in Spain;
+// docs/backlog.md → "Content languages per region".
+const SPANISH: LanguageLaw = {
+  requiredContentLocales: ["es-ES"],
+  defaultContentLocale: "es-ES",
+};
+
+const BALEARIC_PROVINCE = "07";
+const NAVARRE = "31";
+
 function languageLawFor(code: string): LanguageLaw {
   if (CATALONIA_PROVINCES.has(code)) return CATALONIA;
   if (VALENCIAN_PROVINCES.has(code)) return VALENCIAN_COMMUNITY;
   if (GALICIAN.has(code)) return GALICIA;
-  return {};
+  if (code === BALEARIC_PROVINCE) return BALEARIC_ISLANDS;
+  // The owner left the Basque Country and Navarre unchanged (docs/backlog.md → "Content languages
+  // per region").
+  if (BASQUE.has(code) || code === NAVARRE) return {};
+  return SPANISH;
 }
 
 const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(

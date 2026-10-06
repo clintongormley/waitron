@@ -66,15 +66,16 @@ async function storedUnits() {
 
 describe("catalogue provisioning", () => {
   it.each([
-    // Spain starts from the same three languages whatever the province; the province adds only
-    // the languages Waitron keeps enabled for its region, and a Catalan venue starts with Catalan
-    // as its default. The four Spanish rows vary both inputs the seed could plausibly read —
-    // province AND receipt locale — and the receipt column must never change the result, so do not
-    // level it. See docs/backlog.md → "Product languages are hard-coded at setup".
-    ["ES", "Madrid", "en-GB", "es", ["es", "ca", "en"]],
+    // A venue starts with the languages Waitron keeps enabled for its area plus English. The
+    // Spanish rows vary both inputs the seed could plausibly read — province AND receipt locale —
+    // and the receipt column must never change the result, so do not level it. See
+    // docs/backlog.md → "Product languages are hard-coded at setup".
+    ["ES", "Madrid", "en-GB", "es", ["es", "en"]],
     ["ES", "Barcelona", "es-ES", "ca", ["ca", "es", "en"]],
-    ["ES", "A Coruña", "en-GB", "es", ["es", "ca", "en", "gl"]],
-    ["ES", "Bizkaia", "en-GB", "es", ["es", "ca", "en"]],
+    ["ES", "Valencia", "en-GB", "ca", ["ca", "es", "en"]],
+    ["ES", "Illes Balears", "es-ES", "ca", ["ca", "es", "en"]],
+    ["ES", "A Coruña", "en-GB", "gl", ["gl", "es", "en"]],
+    ["ES", "Bizkaia", "en-GB", "es", ["es", "en"]],
     // Everywhere else still takes its one language from geography.
     ["GB", "London", "es-ES", "en", ["en"]],
     ["XX", "Unknown", "es-ES", "en", ["en"]],

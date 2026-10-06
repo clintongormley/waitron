@@ -158,10 +158,10 @@ describe("regional content languages", () => {
   });
 
   it.each(VALENCIAN_COMMUNITY)(
-    "requires Valencian and Spanish in %s and gives the one-foreign-language notice",
+    "requires Valencian and Spanish in %s, with Catalan the default, and gives the one-foreign-language notice",
     (code) => {
       expect(area(code).requiredContentLocales).toEqual(["ca-ES", "es-ES"]);
-      expect(area(code).defaultContentLocale).toBeUndefined();
+      expect(area(code).defaultContentLocale).toBe("ca-ES");
       const notice = area(code).foreignLanguageNotice!;
       expect(notice.minimumForeign).toBe(1);
       expect(Object.keys(notice.text).sort()).toEqual(["en", "es"]);
@@ -170,10 +170,10 @@ describe("regional content languages", () => {
   );
 
   it.each(GALICIA)(
-    "requires Galician and Spanish in %s and gives the two-foreign-languages notice",
+    "requires Galician and Spanish in %s, with Galician the default, and gives the two-foreign-languages notice",
     (code) => {
       expect(area(code).requiredContentLocales).toEqual(["gl-ES", "es-ES"]);
-      expect(area(code).defaultContentLocale).toBeUndefined();
+      expect(area(code).defaultContentLocale).toBe("gl-ES");
       const notice = area(code).foreignLanguageNotice!;
       expect(notice.minimumForeign).toBe(2);
       expect(Object.keys(notice.text).sort()).toEqual(["en", "es"]);
@@ -181,13 +181,38 @@ describe("regional content languages", () => {
     },
   );
 
-  it("requires nothing anywhere else, the Balearics, the Basque Country and Navarre included", () => {
-    const ruled = new Set([...CATALONIA, ...VALENCIAN_COMMUNITY, ...GALICIA]);
+  it("requires Catalan and Spanish in the Balearic Islands, with Catalan the default", () => {
+    expect(area("07").requiredContentLocales).toEqual(["ca-ES", "es-ES"]);
+    expect(area("07").defaultContentLocale).toBe("ca-ES");
+    expect(area("07").foreignLanguageNotice).toBeUndefined();
+  });
+
+  it("requires nothing in the Basque Country and Navarre", () => {
+    for (const code of ["01", "20", "48", "31"]) {
+      expect(area(code).requiredContentLocales, code).toBeUndefined();
+      expect(area(code).defaultContentLocale, code).toBeUndefined();
+      expect(area(code).foreignLanguageNotice, code).toBeUndefined();
+    }
+  });
+
+  it("requires Spanish, with Spanish the default, everywhere else", () => {
+    const ruled = new Set([
+      ...CATALONIA,
+      ...VALENCIAN_COMMUNITY,
+      ...GALICIA,
+      "07",
+      "01",
+      "20",
+      "48",
+      "31",
+    ]);
     const others = SPAIN.administrativeAreas.filter(({ code }) => !ruled.has(code));
-    expect(others.map(({ code }) => code)).toEqual(expect.arrayContaining(["07", "48", "31"]));
+    expect(others.map(({ code }) => code)).toEqual(
+      expect.arrayContaining(["28", "35", "51", "52"]),
+    );
     for (const other of others) {
-      expect(other.requiredContentLocales, other.code).toBeUndefined();
-      expect(other.defaultContentLocale, other.code).toBeUndefined();
+      expect(other.requiredContentLocales, other.code).toEqual(["es-ES"]);
+      expect(other.defaultContentLocale, other.code).toBe("es-ES");
       expect(other.foreignLanguageNotice, other.code).toBeUndefined();
     }
   });

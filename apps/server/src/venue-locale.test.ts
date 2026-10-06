@@ -84,7 +84,7 @@ describe("readVenueContentLanguageRules", () => {
     });
   });
 
-  it("requires nothing for a Madrid venue", async () => {
+  it("requires Spanish for a Madrid venue", async () => {
     const [madrid] = await suite.db
       .insert(locations)
       .values({
@@ -95,7 +95,7 @@ describe("readVenueContentLanguageRules", () => {
       })
       .returning({ id: locations.id });
     expect(await readVenueContentLanguageRules(suite.db, { locationId: madrid!.id })).toStrictEqual(
-      { required: [], official: SPAIN_OFFICIAL },
+      { required: ["es"], official: SPAIN_OFFICIAL },
     );
   });
 

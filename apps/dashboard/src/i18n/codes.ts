@@ -169,8 +169,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Introduce el texto obligatorio en el idioma predeterminado del sitio.",
   },
   "content.language_required": {
-    en: "This venue's region requires that language, so it cannot be removed.",
-    es: "La región del local exige ese idioma, así que no se puede quitar.",
+    en: "Waitron keeps this language enabled for venues in this region, so it cannot be removed.",
+    es: "Waitron mantiene este idioma activado en los locales de esta región, así que no se puede quitar.",
   },
   "content.default_missing": {
     en: "Some products, units, menu sections, modifiers or images need translating before this can become the default language.",

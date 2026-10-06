@@ -1084,7 +1084,7 @@ describe("missing translations", () => {
       ),
     );
     expect(warning(el, "ca")!.textContent!.trim()).toBe(
-      "Catalan is required in this region, and 2 names are not translated into it yet.",
+      "Catalan stays enabled for venues in this region, and 2 names are not translated into it yet.",
     );
     expect(disclosure(el, "ca")!.heading).toBe("Catalan · Required");
     expect(disclosure(el, "ca")!.summary).toBe("2 missing");

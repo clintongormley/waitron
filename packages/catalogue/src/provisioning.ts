@@ -1,28 +1,10 @@
 import { sql } from "drizzle-orm";
 import { catalogues, locationCatalogues } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
-import {
-  COUNTRY_PACKS,
-  resolveInstalledContentLanguageRules,
-  resolveInstalledCountryLocale,
-  resolveInstalledDefaultContentLanguage,
-} from "@waitron/country-packs";
-import { contentLanguageCode, FALLBACK_LOCALE } from "@waitron/shared";
+import { resolveInstalledStartingContentLanguages } from "@waitron/country-packs";
 import { contentLanguages } from "./schema/menu.js";
 import { createMenuShell } from "./menu-structure.js";
 import { unitSeedStates, units } from "./schema/units.js";
-
-const geographicLocales = [
-  ...new Set([
-    FALLBACK_LOCALE,
-    ...COUNTRY_PACKS.flatMap((pack) => [
-      pack.defaultLocale,
-      ...pack.administrativeAreas.flatMap((area) =>
-        area.defaultLocale === undefined ? [] : [area.defaultLocale],
-      ),
-    ]),
-  ]),
-];
 
 // Full display name shown in the dashboard; the short abbreviation is frozen onto sold lines.
 const UNIT_NAMES = {
@@ -54,38 +36,17 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         where l.id = ${node.locationId}`);
       const country = location.rows[0]?.country;
       const area = location.rows[0]?.province;
-      // docs/backlog.md → "Product languages are hard-coded at setup".
-      const starting =
-        country === "ES"
-          ? ["es", "ca", "en"]
-          : [
-              contentLanguageCode(
-                resolveInstalledCountryLocale(geographicLocales, {
-                  country,
-                  area,
-                  fallback: FALLBACK_LOCALE,
-                }),
-              ),
-            ];
-      const { required } = resolveInstalledContentLanguageRules({ country, area });
-      const withRequired = [
-        ...starting,
-        ...required.filter((language) => !starting.includes(language)),
-      ];
-      // The default has to be one of the languages: `content_languages_default_ck`.
-      const defaultLanguage =
-        resolveInstalledDefaultContentLanguage({ country, area }) ?? withRequired[0]!;
-      const languages = [
-        defaultLanguage,
-        ...withRequired.filter((language) => language !== defaultLanguage),
-      ];
+      const { defaultLanguage, languages } = resolveInstalledStartingContentLanguages({
+        country,
+        area,
+      });
       // Every write below goes through its drizzle table rather than through raw SQL, because
       // `id`, `created_at` and `updated_at` are supplied by `$defaultFn` in JavaScript
       // (`packages/db/src/schema/columns.ts`), so a raw `insert into catalogues (name)` writes a
       // null id and is refused.
       await tx
         .insert(contentLanguages)
-        .values({ defaultLanguage, languages })
+        .values({ defaultLanguage, languages: [...languages] })
         .onConflictDoNothing({ target: contentLanguages.id });
       // The id is stated rather than left out: this table's only column IS the key, and drizzle
       // renders a values object with no columns in it as `insert into … () values ()`, which

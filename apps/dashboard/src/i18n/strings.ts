@@ -402,9 +402,9 @@ export const en = {
   "content_gaps.none": "Nothing missing",
   "content_gaps.complete": "Every name has a {language} translation.",
   "content_gaps.required_warning_one":
-    "{language} is required in this region, and 1 name is not translated into it yet.",
+    "{language} stays enabled for venues in this region, and 1 name is not translated into it yet.",
   "content_gaps.required_warning":
-    "{language} is required in this region, and {count} names are not translated into it yet.",
+    "{language} stays enabled for venues in this region, and {count} names are not translated into it yet.",
   "content_gaps.table": "Missing in {language}",
   "content_gaps.search": "Search names",
   "content_gaps.name": "Name",
@@ -2766,9 +2766,9 @@ export const es: Record<StringKey, string> = {
   "content_gaps.none": "Nada sin traducir",
   "content_gaps.complete": "Todos los nombres están traducidos al {language}.",
   "content_gaps.required_warning_one":
-    "El {language} es obligatorio en esta región y falta 1 nombre por traducir a este idioma.",
+    "El {language} se mantiene activado en los locales de esta región y falta 1 nombre por traducir a este idioma.",
   "content_gaps.required_warning":
-    "El {language} es obligatorio en esta región y faltan {count} nombres por traducir a este idioma.",
+    "El {language} se mantiene activado en los locales de esta región y faltan {count} nombres por traducir a este idioma.",
   "content_gaps.table": "Sin traducir al {language}",
   "content_gaps.search": "Buscar nombres",
   "content_gaps.name": "Nombre",
