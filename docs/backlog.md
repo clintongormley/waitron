@@ -776,7 +776,7 @@ to the thumbnail. `wt-dialog` has no option to close on a backdrop click (it set
 the library closes the preview itself when a click reaches the dialog element at a point outside the
 dialog's box.
 Left OPEN by #1215's review: (1) a portrait photo on a laptop-width screen reached the preview's
-height limit and was drawn centred with plain bands either side — fixed (W78a, PR pending): the
+height limit and was drawn centred with plain bands either side — fixed (W78a, #1280): the
 photo's column is now never wider than the photo drawn at that height, and the list of uses takes
 the rest of the row. The landscape checks at 1280px and 390px and the 390px portrait check pass
 unchanged; where the photo sits above the list on a screen wider than the photo, it now sits at the
