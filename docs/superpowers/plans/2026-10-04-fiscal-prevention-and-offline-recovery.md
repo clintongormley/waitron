@@ -341,6 +341,11 @@ rename the original sale or replace its stored payload.
 
 ## Task 10: outside evidence, deployment checks and clock warnings
 
+**Landing update, 2026-10-06:** W41s-10c landed as [#1264](https://github.com/clintongormley/waitron/pull/1264),
+squash `8e2fc9b095f1d7249c2cfa8771f9f87aa4d3a045`. The three dated implementation
+checkpoints below now have a landed implementation. Other Task 10 work remains queued;
+this landing does not enable public F1 issuance or settle the legal questions.
+
 **Modify:** `packages/fiscal-verifactu/src/reconcile.ts`, server `restart-reset.ts`, `pass.ts`,
 `deployment-guard.ts`, `fiscal-readiness.ts`, `fiscal-readiness-runner.ts`, `membership-fence.ts`;
 stream `pointer.ts`/`supervisor.ts`; till receipt-result handling and durable device evidence.

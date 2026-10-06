@@ -2871,11 +2871,13 @@ measured drift in an alert and till banner, and treats unusable or ambiguous tim
 The banner describes the last comparison; it does not promise current clock accuracy. Readiness
 refusals show the saved AEAT code and message, and acceptance explains the measured limit of name
 checking in W41s-1's protocol receipt. Cash-sale tests cover both warning and unavailable reads.
-**Update, 2026-10-06:** the owner approved landing W41s-10c [#1264](https://github.com/clintongormley/waitron/pull/1264)
-and A231 [#1256](https://github.com/clintongormley/waitron/pull/1256), in that order. W41s-10c
-is rebased over Venue details; the error registry retains both venue-detail errors and the fiscal
-clock warning. Its completed Claude review is retained.
-**Next action:** finish current-head validation and land W41s-10c, then rebase and land A231.
+**Update, 2026-10-06:** W41s-10c landed as [#1264](https://github.com/clintongormley/waitron/pull/1264),
+squash `8e2fc9b095f1d7249c2cfa8771f9f87aa4d3a045`, after the owner approved both fiscal PRs.
+The rebase retains Venue details and the fiscal clock warning. The completed Claude review,
+focused checks, normal push hook and every current-head CI job passed before landing.
+The merge has its own CI run `37425891984`; its result is still pending at this update.
+This dated landing supersedes the implementation checkpoint above.
+**Next action:** read the merge's CI result, then rebase and land the approved A231 [#1256](https://github.com/clintongormley/waitron/pull/1256).
 Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A231p
 and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
