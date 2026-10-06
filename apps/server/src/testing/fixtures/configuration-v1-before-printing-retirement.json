@@ -24,9 +24,7 @@
       "receiptPrintMode": "auto",
       "drawerOpenPolicy": "gated",
       "catalogueId": "1a5e93b0-5666-48c6-939d-b006bdf86d52",
-      "invoiceLocales": [
-        "es-ES"
-      ]
+      "invoiceLocales": ["es-ES"]
     },
     "seriesCode": "F",
     "fullSeriesCode": "FF",
@@ -538,8 +536,5 @@
     ],
     "adjustment_settings": []
   },
-  "reconnect": [
-    "print_agents",
-    "printers"
-  ]
+  "reconnect": ["print_agents", "printers"]
 }
