@@ -1989,11 +1989,14 @@ Left open:
   during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
   its final head.
 - **Done (W92a, #1259, 2026-10-05) — a sold-out painted till tile stays readable.**
-- **Done (A292, 2026-10-06) — W92a's four look points.** A sold-out painted tile's stripe is
+- **Done (A292, #1310, 2026-10-06) — W92a's four look points.** A sold-out painted tile's stripe is
   `--wt-space-1` (4px) with a one-pixel `--wt-color-text` line beside it, so in both themes every
   palette colour's stripe either reaches 3:1 against the tile or is edged by a line that does; the
   dark theme's sold-out tile sits at the page's own level (`--wt-color-surface-sunken`); and the
   labels are centred (products.md, _Colour_).
+- A292's look is the owner's to judge (#1310's "Looks for the owner to judge"; screenshots in lane
+  C's `a292-shots/`): in the dark theme an available plain tile is only about 1.10:1 lighter than a
+  sold-out one, and in the light theme a pale stripe shows mostly through the dark line beside it.
 - The category colour chooser (`category-color-form.ts`) and the product colour dialog
   (`product-color-form.ts`) share most of their code; a review suggested one component. Kept as two
   in W92 because the plan modelled one on the other.
