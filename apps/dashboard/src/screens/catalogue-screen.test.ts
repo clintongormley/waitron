@@ -2978,3 +2978,144 @@ describe("catalogue-screen sticky headings", () => {
     expect(prompt.getBoundingClientRect().height).toBeLessThan(100);
   });
 });
+
+describe("media editor entry", () => {
+  it("opens the existing product editor with focus on its photo control", async () => {
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1", field: "image" });
+    await expect.poll(() => editor(el).open).toBe(true);
+    await expect
+      .poll(() => {
+        const upload = editor(el).shadowRoot!.querySelector("dashboard-image-upload");
+        return upload?.shadowRoot?.activeElement?.getAttribute("data-test");
+      })
+      .toBe("choose-image");
+    expect(editor(el).shadowRoot!.querySelectorAll("dashboard-image-upload")).toHaveLength(1);
+  });
+  it("honours a photo deep link from the Structure menu", async () => {
+    const old = location.href;
+    try {
+      history.replaceState(null, "", "/manage/catalogue/product/p1?field=image");
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+        api: stubApi(),
+      });
+      await expect.poll(() => editor(el).open).toBe(true);
+      await expect
+        .poll(() =>
+          editor(el)
+            .shadowRoot!.querySelector("dashboard-image-upload")
+            ?.shadowRoot?.activeElement?.getAttribute("data-test"),
+        )
+        .toBe("choose-image");
+    } finally {
+      history.replaceState(null, "", old);
+    }
+  });
+});
+
+describe("Products colour picker entry", () => {
+  it("opens the existing colour picker and saves only colour, leaving the product editor closed", async () => {
+    const api = stubApi({ setProductColor: vi.fn().mockResolvedValue(undefined) });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "product-colour", { productId: "p1" });
+    const form = el.shadowRoot!.querySelector<
+      HTMLElementTagNameMap["dashboard-product-color-form"]
+    >("dashboard-product-color-form");
+    expect(form).not.toBeNull();
+    await expect.poll(() => form!.open).toBe(true);
+    expect(editor(el).open).toBe(false);
+    await form!.updateComplete;
+    form!.shadowRoot!.querySelector<HTMLElement>('[data-color="#b12525"]')!.click();
+    await form!.updateComplete;
+    form!.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+    await expect.poll(() => form!.open).toBe(false);
+    expect(api.setProductColor).toHaveBeenCalledExactlyOnceWith("p1", "#b12525");
+    expect(api.updateProductEditor).not.toHaveBeenCalled();
+  });
+});
+
+describe("Products colour picker failures", () => {
+  it.each([
+    { code: "product.invalid", params: { field: "color" }, field: true },
+    { code: "server.internal", field: false },
+  ])(
+    "keeps $code beside the chooser or at the bottom and permits retry",
+    async ({ field, ...error }) => {
+      const api = stubApi({
+        setProductColor: vi.fn().mockRejectedValueOnce(error).mockResolvedValue(undefined),
+      });
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "product-colour", { productId: "p1" });
+      const form = el.shadowRoot!.querySelector<
+        HTMLElementTagNameMap["dashboard-product-color-form"]
+      >("dashboard-product-color-form")!;
+      await form.updateComplete;
+      form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+      await expect
+        .poll(() => form.errors)
+        .toEqual(
+          field ? { color: t("editor.field_rejected") } : { _form: codeMessage("server.internal") },
+        );
+      expect(form.open).toBe(true);
+      await form.updateComplete;
+      expect(form.shadowRoot!.querySelector('[data-test="save"]')!.hasAttribute("disabled")).toBe(
+        false,
+      );
+      if (field)
+        expect(
+          form.shadowRoot!.querySelector('[name="product-color"]')!.getAttribute("aria-invalid"),
+        ).toBe("true");
+      form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+      await expect.poll(() => form.open).toBe(false);
+      expect(api.setProductColor).toHaveBeenCalledTimes(2);
+    },
+  );
+  it("closes a successful picker save before reporting a failed refresh", async () => {
+    const api = stubApi({ setProductColor: vi.fn().mockResolvedValue(undefined) });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    (api.listMadeAt as ReturnType<typeof vi.fn>).mockRejectedValueOnce({ code: "server.internal" });
+    emit(list(el), "product-colour", { productId: "p1" });
+    const form = el.shadowRoot!.querySelector<
+      HTMLElementTagNameMap["dashboard-product-color-form"]
+    >("dashboard-product-color-form")!;
+    await form.updateComplete;
+    form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+    await expect.poll(() => form.open).toBe(false);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector(".error")?.textContent?.trim())
+      .toBe(codeMessage("server.internal"));
+    expect(api.setProductColor).toHaveBeenCalledOnce();
+  });
+  it("cancels a picker without writing colour", async () => {
+    const api = stubApi({ setProductColor: vi.fn() });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "product-colour", { productId: "p1" });
+    const form = el.shadowRoot!.querySelector<
+      HTMLElementTagNameMap["dashboard-product-color-form"]
+    >("dashboard-product-color-form")!;
+    await form.updateComplete;
+    form.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel"]')!.click();
+    await expect.poll(() => form.open).toBe(false);
+    expect(api.setProductColor).not.toHaveBeenCalled();
+  });
+});
+
+it("clears the photo entry target when the product editor closes", async () => {
+  history.replaceState(null, "", "/manage/catalogue/product/p1?field=image");
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  await expect.poll(() => editor(el).open).toBe(true);
+  expect(new URL(location.href).searchParams.get("field")).toBe("image");
+  emit(editor(el), "wt-cancel", {});
+  await expect.poll(() => editor(el).open).toBe(false);
+  expect(new URL(location.href).searchParams.get("field")).toBeNull();
+});

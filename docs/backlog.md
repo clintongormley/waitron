@@ -920,15 +920,27 @@ spans it keeps its scroll position (tested with rows of fractional height at a d
 row). The Products list's
 unused `units` property is gone (it closes W75's leftover).
 
-- The count is hidden with `display: none`, so screen readers most likely do not read it at phone
-  width either (not measured); whether they should is for the owner.
+- **A303, owner 2026-10-06 — DONE:** colour squares and photos share a `--wt-tap-min` box;
+  both trees hide their media slots at ≤440px. Products counts remain in each row's accessible
+  name while visually hidden. Grips and checkboxes sit before the indentation. Select/Seleccionar
+  opens an action bar below Search; Done returns focus to Select. A product's leading slot shows
+  its photo with an own-or-inherited colour ring, or its colour square; it opens Colour… and
+  Change photo…, which opens the existing editor with the photo field focused. Category and
+  section squares still open their colour picker directly.
+- **Products maker-link contrast on a focused row, found during A303:** a whole-widget axe scan
+  after clicking a product media trigger reports the made-at link at 3.87:1 in light theme and
+  3.57:1 in dark theme against the focused row background. Reproduced in
+  `product-list.a11y.test.ts` with a native trigger click. In a frozen-installed throwaway checkout
+  of `0f2fe28f1`, clicking the original Actions trigger produced the same failures in both themes;
+  the two unfocused controls passed. Lane D's `receipts/a303/focus-baseline2.log` retains that
+  experiment, and `colour-focus-a11y-green.log` retains the media-trigger diagnostic. Open-menu
+  scans through the component's `show()` method pass in both themes. Fix the row/link contrast
+  separately; no axe rule is excluded here.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
   not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the bottom
   (left alone; not measured).
-- Products' toggle is named Select and move, not Reorder as the brief said, because a drag there
-  files rows into a category rather than reordering them.
-- In the Structure tree a product's colour square stays after its name, because its photo holds the
-  leading slot.
+- A303 supersedes A294's Select and move label and trailing product colour square with the controls
+  described above.
 - Price overrides and departments-and-zones (`apps/dashboard/src/widgets/menu-prices-table.ts`,
   `packages/venue-service/src/dashboard/venue-operations-screen.ts`) draw no grips, folder icons or
   product counts, so nothing changed there.
@@ -2174,6 +2186,10 @@ In Select and move mode at 375×667 the content column overflows: by 129px befor
 same temporary test; no kept test covers Select and move mode there. Whether
 that is enough rows is the owner's call.
 
+_2026-10-06, A303: Select now has its own action bar below Search, and grips occupy a separate
+leading column. The W80/W83 measurements above describe the earlier layout; the 375×667
+selection measurement has not been retaken._
+
 **Products: Filters and Select at the start of the table's toolbar — DONE (W83, #1193, owner
 2026-10-04); left open:** While the table is at least 768px wide, Filters opens a panel beside the
 rows at their left; narrower, it opens full screen. One existing test assertion changed, for the
@@ -2189,14 +2205,14 @@ the layout existed only at phone width, #1193)_; and a desktop window narrow eno
 not measured. Also left open by W83's review, none started: (1) the table's Customise columns
 button is icon-only beside these two but has neither their look nor a tooltip; (2) the icon button
 and its tooltip are a stylesheet and a handler each caller wires by hand, not a `wt-icon-button`
-component — Select and move is a native `<button>` because `wt-button` does not pass `aria-pressed`
+component — Select is a native `<button>` because `wt-button` does not pass `aria-pressed`
 through, and the Structure tab's Reorder toggle is a second hand-built icon button for the same
 reason (a review probe confirmed `wt-button` drops `aria-pressed` on 2026-10-06);
 (3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
 above the table's 440px narrow-tree width).
 
 **Products at phone width: the toolbar takes two lines, not three — DONE (W85d, #1249, owner
-2026-10-05).** Not covered: Select and move mode's extra controls at the middle widths.
+2026-10-05).** Not covered: Select mode's extra controls at the middle widths.
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
 2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to

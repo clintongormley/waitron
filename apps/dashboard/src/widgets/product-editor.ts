@@ -400,6 +400,7 @@ export class ProductEditor extends LitElement {
   @state() private attempted = false;
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed: ReadonlySet<string> = new Set();
+  @property() initialField = "";
   @state() private imageOpen = false;
   @state() private unitPickerOpen = false;
   /** Which button opened the unit chooser, where focus goes back once it shuts. */
@@ -474,6 +475,7 @@ export class ProductEditor extends LitElement {
       this.showInactive = false;
       this.#pricingStartsOpen = !this.value?.id;
       this.#variantProblems = new Map();
+      if (this.open && this.initialField === "image") this.#focusField = this.initialField;
     }
     if ((changed.has("busy") && !this.busy) || changed.has("fieldErrors")) this.submitted = false;
     // A field error the SERVER reported is surfaced the same way a local one is: its section opens
@@ -526,6 +528,7 @@ export class ProductEditor extends LitElement {
     const upload = this.shadowRoot?.querySelector<LitElement>("dashboard-image-upload");
     if (!upload) return;
     await upload.updateComplete;
+    await this.shadowRoot?.querySelector<LitElement>("wt-modal")?.updateComplete;
     upload.shadowRoot?.querySelector<HTMLElement>("[data-test=choose-image]")?.focus();
   }
 

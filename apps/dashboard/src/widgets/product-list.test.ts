@@ -19,7 +19,8 @@ afterEach(cleanupWidgets);
 afterEach(() => setLocale("es"));
 // The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
 // a choice one test makes would otherwise be restored into the next one.
-beforeEach(() => {
+beforeEach(async () => {
+  await page.viewport(1280, 844);
   sessionStorage.clear();
   localStorage.removeItem("waitron.products.table:columns");
   localStorage.removeItem("waitron.products.table:expanded");
@@ -1447,7 +1448,7 @@ it("keeps touch scrolling on the name cell and starts a drag from its grip", asy
     offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
   );
   expect(getComputedStyle(cell).touchAction).toBe("auto");
-  const grip = cell.querySelector<HTMLElement>(".drag-grip")!;
+  const grip = cell.closest("tr")!.querySelector<HTMLElement>(".drag-grip")!;
   expect(getComputedStyle(grip).touchAction).toBe("none");
   cell.dispatchEvent(
     new PointerEvent("pointerdown", {
@@ -1614,7 +1615,11 @@ describe("the product list at phone width", () => {
           products: phoneProducts(),
         });
         await tableRoot(el);
-        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 3);
+        expectRowMenusOnScreen(
+          el.shadowRoot!.querySelector("wt-data-table")!,
+          3,
+          'wt-row-actions[data-test^="actions-"]',
+        );
       } finally {
         setLocale(before);
         await page.viewport(width, height);
@@ -1821,11 +1826,18 @@ describe("the product list at phone width", () => {
     return {
       edges,
       box: box.getBoundingClientRect(),
-      // With reordering off the row has no grip, so its line starts at the folder frame.
-      grip: (
-        row.querySelector('.drag-grip, [part~="grip-space"]') ??
-        row.querySelector('[part~="folder-frame"]')!
-      ).getBoundingClientRect(),
+      grip:
+        (root.host.hasAttribute("narrow")
+          ? row.querySelector('[part~="name-line"]')
+          : row.querySelector('.drag-grip, [part~="grip-space"]')
+        )?.getBoundingClientRect() ??
+        (root.host.hasAttribute("narrow")
+          ? {
+              left: row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect().left,
+              top: row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect().top,
+              bottom: row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect().top,
+            }
+          : row.querySelector('[part~="folder-frame"]')!.getBoundingClientRect()),
       icon: row.querySelector('[part~="folder-frame"]')!.getBoundingClientRect(),
       error: error.textContent,
       errorOverflows: error.scrollWidth > error.clientWidth,
@@ -1864,8 +1876,6 @@ describe("the product list at phone width", () => {
     "puts a renamed category's name box and its refusal on their own line under the grip or its slot at 390 px ($locale, $categoryId, reordering: $reordering)",
     ({ locale, categoryId, reordering }) =>
       onPhone(locale, 390, async () => {
-        // An asterisk leaves the least room beside the grip or colour-square slot; the count is hidden
-        // at this width, so the `count` part measured below has an empty box.
         const { el, root } = await mountNarrowTree({
           unroutedFolderIds: ["f", "d", "b"],
           reordering,
@@ -1874,7 +1884,7 @@ describe("the product list at phone width", () => {
         const line = await nameBoxLine(root);
         expectOwnLine(line);
         const row = root.querySelector(`tr[data-row-key="folder:${categoryId}"]`)!;
-        for (const after of row.querySelectorAll('[part~="count"], [part~="unrouted-folder"]')) {
+        for (const after of row.querySelectorAll('[part~="unrouted-folder"]')) {
           const rect = after.getBoundingClientRect();
           expect(rect.right).toBeLessThanOrEqual(line.edges.pinned);
           expect(rect.bottom).toBeLessThanOrEqual(line.box.top);
@@ -2017,23 +2027,27 @@ describe("the product list at phone width", () => {
         ...cell.querySelectorAll<HTMLElement>(
           'strong, [part~="count"], [part~="unrouted-folder"], [part~="variant-count"], [part~="variant-name"]',
         ),
-      ].map((element) => {
-        const text = document.createRange();
-        text.selectNodeContents(element);
-        const lines = new Set([...text.getClientRects()].map(({ bottom }) => Math.round(bottom)));
-        const { left, right, bottom, top } = text.getBoundingClientRect();
-        return {
-          key: row.getAttribute("data-row-key")!,
-          text: element.textContent!.trim(),
-          left,
-          right,
-          top,
-          bottom,
-          lines: lines.size,
-          start,
-          pinned,
-        };
-      });
+      ]
+        .filter(
+          (element) => !element.matches('[part~="count"]') || !root.host.hasAttribute("narrow"),
+        )
+        .map((element) => {
+          const text = document.createRange();
+          text.selectNodeContents(element);
+          const lines = new Set([...text.getClientRects()].map(({ bottom }) => Math.round(bottom)));
+          const { left, right, bottom, top } = text.getBoundingClientRect();
+          return {
+            key: row.getAttribute("data-row-key")!,
+            text: element.textContent!.trim(),
+            left,
+            right,
+            top,
+            bottom,
+            lines: lines.size,
+            start,
+            pinned,
+          };
+        });
     });
   }
 
@@ -2086,19 +2100,18 @@ describe("the product list at phone width", () => {
   );
 
   it.each(["en-GB", "es-ES"])(
-    "keeps a long category's swatch, before its wrapped name, before the pinned actions at 390 px (%s)",
+    "hides a long category's swatch and wraps its name before the pinned actions at 390 px (%s)",
     (locale) =>
       onPhone(locale, 390, async () => {
         const { root } = await mountLong();
+        await vi.waitFor(() => expect(root.host.hasAttribute("narrow")).toBe(true));
         const row = root.querySelector('tr[data-row-key="folder:long"]')!;
         const swatch = row
           .querySelector<HTMLElement>('[data-test="color-long"]')!
           .getBoundingClientRect();
-        const start = root.querySelector(".scroll")!.getBoundingClientRect().left;
         const pinned = row.querySelector('td[data-pinned="end"]')!.getBoundingClientRect().left;
         expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
-        expect(swatch.left).toBeGreaterThanOrEqual(start);
-        expect(swatch.right).toBeLessThanOrEqual(pinned);
+        expect(swatch.width).toBe(0);
         const name = (await nameTexts(root)).find(
           ({ key, text }) => key === "folder:long" && text === longCategory.name,
         )!;
@@ -2570,7 +2583,7 @@ describe("the product list as a tree", () => {
         });
         await el.revealCategory("k");
         const table = el.shadowRoot!.querySelector("wt-data-table")!;
-        expectRowMenusOnScreen(table, 5);
+        expectRowMenusOnScreen(table, 5, 'wt-row-actions[data-test^="actions-"]');
         // The table learns its width from a ResizeObserver, which reports after the next layout,
         // and sets `narrow` a frame later.
         await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
@@ -2695,7 +2708,7 @@ describe("the product list as a tree", () => {
     el.nameDraft = { kind: "rename", categoryId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-    const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+    const row = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!;
     expect(row.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.value).toBe("Drinks");
     expect(row.querySelector("strong")).toBeNull();
     expect(row.querySelector(".row-activate")).toBeNull();
@@ -2798,7 +2811,7 @@ describe("the product list as a tree", () => {
     expect(getComputedStyle(chip("f")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(getComputedStyle(chip("f")).borderTopWidth).toBe("1px");
     // Drawn before the name, in the slot a product's photo takes.
-    const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+    const row = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!;
     expect(button("d").getBoundingClientRect().right).toBeLessThanOrEqual(
       row.querySelector("strong")!.getBoundingClientRect().left,
     );
@@ -2868,7 +2881,7 @@ describe("the product list as a tree", () => {
       el.nameColor = "#b12525";
       await el.updateComplete;
       await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+      const row = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!;
       expect(row.querySelector('[data-test="name-box-color"]')).toBe(square().button);
       expect(getComputedStyle(square().chip).backgroundColor).toBe("rgb(177, 37, 37)");
       expect(row.querySelector('[data-test="color-d"]')).toBeNull();
@@ -3203,7 +3216,7 @@ describe("a product's variants in the list", () => {
 
   const nameCell = (root: ShadowRoot, key: string) => cellUnder(root, key, t("product.name"));
 
-  it("draws a small, muted arrow on a product with variants, against its grip", async () => {
+  it("draws a small, muted arrow on a product with variants, at its arrow box's end", async () => {
     const { root } = await mountDeli();
     const arrow = root.querySelector<HTMLElement>('tr[data-row-key="cecina"] .tree-toggle')!;
     const name = nameCell(root, "cecina").querySelector("strong")!;
@@ -3213,13 +3226,14 @@ describe("a product's variants in the list", () => {
       getComputedStyle(nameCell(root, "cecina").querySelector('[data-test="variant-count"]')!)
         .color,
     );
-    const grip = nameCell(root, "cecina").querySelector<HTMLElement>(".drag-grip")!;
+    const grip = nameCell(root, "cecina").closest("tr")!.querySelector<HTMLElement>(".drag-grip")!;
     const glyph = document.createRange();
     glyph.selectNodeContents(arrow);
-    // The arrow is drawn at the end of its box, against the grip, not in the middle of it.
-    expect(grip.getBoundingClientRect().left - glyph.getBoundingClientRect().right).toBeLessThan(
-      grip.getBoundingClientRect().width / 2,
+    // The arrow stays at its box's trailing edge; the grip is in the preceding column.
+    expect(arrow.getBoundingClientRect().right - glyph.getBoundingClientRect().right).toBeLessThan(
+      arrow.getBoundingClientRect().width / 2,
     );
+    expect(grip.getBoundingClientRect().right).toBeLessThan(arrow.getBoundingClientRect().left);
   });
 
   it.each([
@@ -3516,10 +3530,10 @@ describe("the Products tree's Name column", () => {
     text.selectNodeContents(name);
     return {
       level: Number(row.getAttribute("aria-level")),
-      grip: box(cell.querySelector('.drag-grip, [part="grip-space"]')),
+      grip: box(row.querySelector('.drag-grip, [part="grip-space"]')),
       media: box(
         cell.querySelector(
-          '[part="folder-frame"], [part="thumb-frame"], [part="thumb-placeholder"]',
+          '[part="folder-frame"], [part~="thumb-frame"], [part~="thumb-placeholder"]',
         ),
       ),
       name: box({ getBoundingClientRect: () => text.getBoundingClientRect() } as Element)!,
@@ -3620,7 +3634,7 @@ describe("the Products tree's Name column", () => {
 
     const PRODUCTS = new Set(["cola", "salad", "chop", "loin", "ribs", "bread"]);
 
-    it("draws no photo or placeholder, so a product's name starts right after its grip, and keeps each category's leading slot", async () => {
+    it("draws no photo, placeholder or category slot, so names start after their arrows", async () => {
       const { root } = await mountPhone();
       const photos = [
         ...root.querySelectorAll<HTMLElement>('[part~="thumb-frame"], [part~="thumb-placeholder"]'),
@@ -3629,13 +3643,19 @@ describe("the Products tree's Name column", () => {
       for (const photo of photos) expect(photo.getBoundingClientRect().width).toBe(0);
       for (const key of PRODUCTS) {
         const grip = root.querySelector(`tr[data-row-key="${key}"] .drag-grip`)!;
-        expect(pieces(root, key).name.left - grip.getBoundingClientRect().right, key).toBe(0);
+        expect(grip.closest("td")).toBe(grip.closest("tr")!.querySelector("td"));
+        const cell = grip.closest("tr")!.querySelector(".tree-cell")!;
+        const arrow = cell.querySelector(".tree-spacer, .tree-toggle, .tree-arrow")!;
+        expect(pieces(root, key).name.left, key).toBeCloseTo(
+          arrow.getBoundingClientRect().right,
+          0,
+        );
       }
       for (const key of ["root", "folder:d", "folder:f", "folder:m", "folder:g"]) {
         const row = key === "root" ? ROOT_KEY : key;
         expect(pieces(root, row).media!, key).not.toBeNull();
         const folder = root.querySelector(`tr[data-row-key="${row}"] [part~="folder-frame"]`)!;
-        expect(folder.getBoundingClientRect().width, key).toBeGreaterThan(0);
+        expect(folder.getBoundingClientRect().width, key).toBe(0);
       }
     });
 
@@ -3644,18 +3664,15 @@ describe("the Products tree's Name column", () => {
         [true, false].map((reordering) => ({ selecting, reordering })),
       ),
     )(
-      "still steps every name in evenly per level, a product's starting one folder slot before a category's (selecting: $selecting, reordering: $reordering)",
+      "steps category and product names in evenly per level without media slots (selecting: $selecting, reordering: $reordering)",
       async ({ selecting, reordering }) => {
         const { root } = await mountPhone({ selecting, reordering });
         const all = ROWS.map((key) => ({ key, ...pieces(root, key === "root" ? ROOT_KEY : key) }));
         const step = all.find(({ key }) => key === "folder:d")!.name.left - all[0]!.name.left;
         expect(step).toBeGreaterThan(0);
-        const folder = getComputedStyle(root.querySelector('[part~="folder-frame"]')!);
-        const slot = parseFloat(folder.width) + parseFloat(folder.marginInlineEnd);
-        expect(slot).toBeGreaterThan(0);
+        expect(root.querySelector('[part~="folder-frame"]')!.getBoundingClientRect().width).toBe(0);
         for (const row of all) {
-          const expected =
-            all[0]!.name.left + (row.level - 1) * step - (PRODUCTS.has(row.key) ? slot : 0);
+          const expected = all[0]!.name.left + (row.level - 1) * step;
           expect(row.name.left, row.key).toBeCloseTo(expected, 0);
         }
       },
@@ -3827,7 +3844,7 @@ describe("the Products tree's Name column", () => {
       JSON.stringify(["reporting-category", "price", "made-at"]),
     );
     const { root } = await mountDeep();
-    const headings = [...root.querySelectorAll("thead th")].map((th) =>
+    const headings = [...root.querySelectorAll("thead th:not(.select)")].map((th) =>
       th.textContent!.replace(/[▲▼]/g, "").trim(),
     );
     expect(headings[1]).toBe(t("product.price"));
@@ -4347,7 +4364,7 @@ describe("a category row's leading slot", () => {
       el.nameDraft = { kind: "rename", categoryId: "d" };
       await el.updateComplete;
       await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+      const row = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!;
       const squares = row.querySelectorAll('[part~="color-swatch"]');
       expect(squares).toHaveLength(1);
       expect(squares[0]!.closest('[data-test="name-box-color"]')).not.toBeNull();
@@ -4363,7 +4380,7 @@ describe("a category whose name wraps", () => {
       [true, false].map((reordering) => ({ locale, reordering })),
     ),
   )(
-    "keeps its grip and swatch beside the name's first line at 390 px ($locale, reordering: $reordering)",
+    "keeps its grip beside the name's first line and hides its swatch at 390 px ($locale, reordering: $reordering)",
     async ({ locale, reordering }) => {
       const restore = {
         width: window.innerWidth,
@@ -4395,7 +4412,10 @@ describe("a category whose name wraps", () => {
         const whole = text.getBoundingClientRect();
         const wholeMiddle = whole.top + whole.height / 2;
         expect(new Set(lines.map(({ bottom }) => Math.round(bottom))).size).toBeGreaterThan(1);
-        for (const part of [...(reordering ? [".drag-grip"] : []), '[data-test="color-long"]']) {
+        expect(row.querySelector('[data-test="color-long"]')!.getBoundingClientRect().width).toBe(
+          0,
+        );
+        for (const part of reordering ? [".drag-grip"] : []) {
           const box = row.querySelector(part)!.getBoundingClientRect();
           const middle = box.top + box.height / 2;
           expect(Math.abs(middle - firstMiddle), part).toBeLessThanOrEqual(3);
@@ -4411,7 +4431,7 @@ describe("a category whose name wraps", () => {
 
 describe("a category's count", () => {
   it.each(["en-GB", "es-ES"].flatMap((locale) => [390, 1280].map((width) => ({ locale, width }))))(
-    "is hidden on a phone and shown on a wide screen ($locale, $width px)",
+    "is visually hidden on a phone, still names its row, and is shown on a wide screen ($locale, $width px)",
     async ({ locale, width }) => {
       const restore = {
         width: window.innerWidth,
@@ -4428,11 +4448,26 @@ describe("a category's count", () => {
         expect(counts.map((count) => count.dataset.test)).toEqual(
           expect.arrayContaining(["count-root", "count-d", "count-b", "count-f"]),
         );
+        await expect
+          .element(root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!, {
+            timeout: 1000,
+          })
+          .toHaveAccessibleName(
+            locale === "en-GB"
+              ? /Drinks.*1 category, 1 product/
+              : /Drinks.*1 categoría, 1 producto/,
+          );
         for (const count of counts) {
           const test = count.dataset.test;
           expect(count.textContent!.trim(), test).not.toBe("");
-          if (width === 390) expect(getComputedStyle(count).display, test).toBe("none");
-          else expect(count.getBoundingClientRect().width, test).toBeGreaterThan(0);
+          if (width === 390) {
+            expect(getComputedStyle(count).display, test).not.toBe("none");
+            expect(getComputedStyle(count).clipPath, test).toBe("inset(50%)");
+            expect(count.getBoundingClientRect().width, test).toBe(1);
+          } else {
+            expect(getComputedStyle(count).clipPath, test).toBe("none");
+            expect(count.getBoundingClientRect().width, test).toBeGreaterThan(1);
+          }
         }
       } finally {
         setLocale(restore.locale);
@@ -4440,4 +4475,119 @@ describe("a category's count", () => {
       }
     },
   );
+});
+
+describe("A303 tree media slots", () => {
+  it.each([1280, 440, 390])(
+    "uses equal category and product boxes, hiding both at %i px only when narrow",
+    async (width) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        const { el, table } = await mountTree({
+          reordering: false,
+          products: [product({ id: "cola", primaryCategoryId: "d", image: "cola.webp" })],
+        });
+        el.style.width = `${width}px`;
+        await openRow(el, "folder:d");
+        await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(width <= 440));
+        const root = await tableRoot(el);
+        const chip = root.querySelector<HTMLElement>(
+          '[data-test="color-d"] [part~="color-swatch"]',
+        )!;
+        const photo = root.querySelector<HTMLElement>('[part~="thumb-frame"]')!;
+        const slot = chip.closest<HTMLElement>('[part~="folder-frame"]')!;
+        if (width <= 440) {
+          expect(slot.getBoundingClientRect().width).toBe(0);
+          expect(photo.getBoundingClientRect().width).toBe(0);
+        } else {
+          const a = chip.getBoundingClientRect(),
+            b = photo.getBoundingClientRect();
+          expect(a.width).toBeGreaterThan(0);
+          expect(a.width).toBe(b.width);
+          expect(a.height).toBe(b.height);
+        }
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
+});
+
+it.each([390, 1280])(
+  "aligns tree grips and selection boxes at every depth at %s px",
+  async (width) => {
+    await page.viewport(width, 844);
+    const { table, root } = await mountTree({ selecting: true });
+    table.setExpanded("folder:d", true);
+    table.setExpanded("folder:b", true);
+    await table.updateComplete;
+    const controls = ["folder:d", "folder:b", "cola", "lager"].map((key) => {
+      const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
+      return {
+        grip: row.querySelector<HTMLElement>(".drag-grip")!,
+        box: row.querySelector<HTMLElement>('input[type="checkbox"]')!,
+      };
+    });
+    expect(controls[0]!.grip).not.toBeNull();
+    for (const { grip, box } of controls) {
+      expect(grip.getBoundingClientRect().left).toBeCloseTo(
+        controls[0]!.grip.getBoundingClientRect().left,
+        0,
+      );
+      expect(box.getBoundingClientRect().left).toBeCloseTo(
+        controls[0]!.box.getBoundingClientRect().left,
+        0,
+      );
+      expect(grip.closest("td")).toBe(box.closest("td"));
+      expect(grip.closest("td")).toBe(grip.closest("tr")!.querySelector("td"));
+    }
+  },
+);
+
+describe("product media actions", () => {
+  it("paints the leading photo ring with inherited colour and sends separate colour/photo actions", async () => {
+    const { el, root } = await mountTree({
+      products: [product({ id: "cola", name: "Cola", primaryCategoryId: "d", image: "cola.webp" })],
+      categories: [{ ...drinks, color: "#256bb1" }],
+    });
+    await openRow(el, "folder:d");
+    const media = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="color-cola"]',
+    );
+    expect(media).not.toBeNull();
+    await media!.updateComplete;
+    const frame = media!.querySelector<HTMLElement>('[data-test="thumb"]')!;
+    expect(getComputedStyle(frame).borderTopColor).toBe("rgb(37, 107, 177)");
+    expect(parseFloat(getComputedStyle(frame).borderTopWidth)).toBeGreaterThan(1);
+    const name = media!.parentElement!.querySelector("strong")!;
+    expect(media!.getBoundingClientRect().right).toBeLessThanOrEqual(
+      name.getBoundingClientRect().left,
+    );
+    const sent: unknown[] = [];
+    for (const type of ["edit-product", "product-colour"])
+      el.addEventListener(type, (e) => sent.push([type, (e as CustomEvent).detail]));
+    await userEvent.click(media!.shadowRoot!.querySelector("button")!);
+    expect(sent).toEqual([]);
+    media!.querySelector<HTMLElement>('[data-test="media-colour"]')!.click();
+    expect(sent).toEqual([["product-colour", { productId: "cola" }]]);
+    await userEvent.click(media!.shadowRoot!.querySelector("button")!);
+    media!.querySelector<HTMLElement>('[data-test="media-photo"]')!.click();
+    expect(sent).toEqual([
+      ["product-colour", { productId: "cola" }],
+      ["edit-product", { productId: "cola", field: "image" }],
+    ]);
+  });
+  it("fills a product without a photo with its own colour and hides the whole menu at phone width", async () => {
+    const { el, root } = await mountTree({
+      products: [product({ id: "plain", name: "Plain", color: "#b12525" })],
+    });
+    const media = root.querySelector<HTMLElement>('[data-test="color-plain"]');
+    expect(media).not.toBeNull();
+    const frame = media!.querySelector<HTMLElement>('[data-test="thumb-placeholder"]')!;
+    expect(getComputedStyle(frame).backgroundColor).toBe("rgb(177, 37, 37)");
+    await page.viewport(390, 844);
+    await expect.poll(() => media!.getBoundingClientRect().width).toBe(0);
+    expect((await tableRoot(el)).querySelector('[data-test="edit-plain"]')).not.toBeNull();
+  });
 });

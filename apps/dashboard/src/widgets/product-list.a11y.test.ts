@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
+import { currentLocale, setLocale } from "../i18n/t.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./product-list.js";
@@ -163,6 +165,36 @@ beforeEach(() => {
 });
 
 describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme) => {
+  it("keeps a visually hidden phone count in the row's accessible name", async () => {
+    const before = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      locale: currentLocale(),
+    };
+    try {
+      setLocale("en-GB");
+      await page.viewport(390, 844);
+      const { el, host } = await mountWidget<ProductList>(
+        "dashboard-product-list",
+        {
+          products: [products[0]!],
+          categories: [{ id: "cat-1", name: "Comida", parentId: null, color: null }],
+          reordering: false,
+        },
+        theme,
+      );
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+      const row = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:cat-1"]')!;
+      await expect.element(row, { timeout: 1000 }).toHaveAccessibleName(/Comida.*1 product/);
+      await expectNoA11yViolations(host);
+    } finally {
+      setLocale(before.locale);
+      await page.viewport(before.width, before.height);
+    }
+  });
+
   it("renders accessibly", async () => {
     const { host } = await mountWidget<ProductList>("dashboard-product-list", { products }, theme);
     await expectNoA11yViolations(host);
@@ -320,4 +352,35 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
     at(over, "pointercancel");
   });
+});
+
+describe.each(["light", "dark"] as const)("product media menu a11y (%s)", (theme) => {
+  it.each([null, "soup.webp"])(
+    "names the closed and open colour/photo controls with image %s",
+    async (image) => {
+      await page.viewport(1280, 844);
+      const { el, host } = await mountWidget<ProductList>(
+        "dashboard-product-list",
+        {
+          products: [
+            { ...products[0]!, primaryCategoryId: null, image, color: "#b12525", variants: [] },
+          ],
+        },
+        theme,
+      );
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      const media =
+        table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+          '[data-test="color-p1"]',
+        )!;
+      await media.updateComplete;
+      await expectNoA11yViolations(host);
+      media.show();
+      expect(media.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      expect(media.querySelector('[data-test="media-colour"]')!.textContent).toContain("…");
+      expect(media.querySelector('[data-test="media-photo"]')!.textContent).toContain("…");
+      await expectNoA11yViolations(host);
+    },
+  );
 });

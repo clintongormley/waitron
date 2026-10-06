@@ -400,7 +400,7 @@ it("draws no grip on mount, and a drag there moves nothing while its release ope
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
 });
-it("Select and move shows a grip and a checkbox on every category and product row, and a drag then moves", async () => {
+it("Select shows a grip and a checkbox on every category and product row, and a drag then moves", async () => {
   const el = await mountBrowser();
   await press(el, "select");
   const root = (await tableOf(el)).shadowRoot!;
@@ -419,7 +419,7 @@ it("Select and move shows a grip and a checkbox on every category and product ro
     ),
   );
 });
-it("Done hides the grips and checkboxes, a drag moves nothing again, and focus returns to Select and move", async () => {
+it("Done hides the grips and checkboxes, a drag moves nothing again, and focus returns to Select", async () => {
   const el = await mountBrowser();
   await press(el, "select");
   expect((await grips(el)).length).toBeGreaterThan(0);
@@ -501,7 +501,7 @@ it("finds a folder under a captured touch pointer", async () => {
   const el = await mountBrowser();
   await press(el, "select");
   const from = await nameCell(el, "bread");
-  const grip = from.querySelector(".drag-grip")!;
+  const grip = from.closest("tr")!.querySelector(".drag-grip")!;
   const to = await nameCell(el, "folder:f");
   capturedTouch(grip, "pointerdown", grip);
   capturedTouch(grip, "pointermove", to);
@@ -798,7 +798,7 @@ it("a drop on the category the dragged row is already in moves nothing and is ne
   expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
 });
 
-it("in Select and move mode, dragging a selected row moves every selected row, from two categories, in one drop", async () => {
+it("in Select mode, dragging a selected row moves every selected row, from two categories, in one drop", async () => {
   const el = await mountBrowser();
   await toggleCategory(el, "d");
   await toggleCategory(el, "f");
@@ -826,7 +826,7 @@ it("in Select and move mode, dragging a selected row moves every selected row, f
   await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
 });
 
-it("in Select and move mode, a drop where the drag started moves nothing, even with rows selected from two categories", async () => {
+it("in Select mode, a drop where the drag started moves nothing, even with rows selected from two categories", async () => {
   const el = await mountBrowser();
   await toggleCategory(el, "d");
   await toggleCategory(el, "f");
@@ -3268,18 +3268,18 @@ it("draws Filters, Select, search, Expand all and Customise on one toolbar line,
   }
 });
 
-it("Select and move is an icon button named Select and move, with a tooltip, pressed while selecting", async () => {
+it("Select is an icon button named Select, with a tooltip, pressed while selecting", async () => {
   const el = await mountBrowser();
   const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
   expect(select.localName).toBe("button");
   expect(select.getAttribute("type")).toBe("button");
   expect(select.getAttribute("slot")).toBe("toolbar-start");
-  expect(select.getAttribute("aria-label")).toBe("Select and move");
+  expect(select.getAttribute("aria-label")).toBe("Select");
   const icon = select.querySelector<HTMLElement>('wt-icon[name="select-rows"]')!;
   await (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(icon.shadowRoot!.querySelector("path")).not.toBeNull();
   const tooltip = select.querySelector<HTMLElement>(".icon-tooltip")!;
-  expect(tooltip.textContent!.trim()).toBe("Select and move");
+  expect(tooltip.textContent!.trim()).toBe("Select");
   expect(tooltip.getAttribute("aria-hidden")).toBe("true");
   expect(getComputedStyle(tooltip).display).toBe("none");
   await userEvent.hover(select);
@@ -3301,7 +3301,7 @@ it("names Select in Spanish", async () => {
   expect(select.querySelector(".icon-tooltip")!.textContent!.trim()).toBe(es["folders.select"]);
 });
 
-it("pressing Select again leaves Select and move mode and clears the selection, as Done does", async () => {
+it("pressing Select again leaves Select mode and clears the selection, as Done does", async () => {
   const el = await mountBrowser();
   await selectKeys(el, ["bread"]);
   expect(count(el)).toBe("1 selected");
@@ -3489,7 +3489,7 @@ it("keeps Filters, Select, search, Expand all and Customise on one line in a Spa
   }
 });
 
-it("at phone width fits Select and move mode's controls and the table's own on two toolbar lines", async () => {
+it("at phone width fits Select mode's controls and the table's own on two toolbar lines", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3545,7 +3545,7 @@ it("draws the Select tooltip over the sticky headings", async () => {
   }
 });
 
-it("a click on the Select tooltip, where it lies over the sticky headings, leaves Select and move mode off; a click on its icon turns it on", async () => {
+it("a click on the Select tooltip, where it lies over the sticky headings, leaves Select mode off; a click on its icon turns it on", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3633,18 +3633,37 @@ it("Expand all leaves a product's variants closed, and still reads Collapse all"
   expect(button().textContent!.trim()).toBe("Collapse all");
 });
 
-it("puts Select and move mode's count, Move to…, Delete and Done at the toolbar's end", async () => {
-  const el = await mountBrowser();
-  await press(el, "select");
-  const end = (await tableOf(el)).shadowRoot!.querySelector(".table-end")!;
-  for (const test of ["selected-count", "move", "delete", "cancel-selection"]) {
-    const control = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!;
-    expect(
-      control.closest('[slot="toolbar-end"]')!.assignedSlot!.assignedSlot!.closest(".table-end"),
-      test,
-    ).toBe(end);
-  }
-});
+it.each([390, 1280])(
+  "puts selection actions in a separate bar below Search at %s px",
+  async (width) => {
+    const { page } = await import("vitest/browser");
+    await page.viewport(width, 844);
+    const el = await mountBrowser();
+    await press(el, "select");
+    const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="catalogue-search"]')!;
+    const bar = el.shadowRoot!.querySelector<HTMLElement>('[data-test="selection-bar"]');
+    expect(bar).not.toBeNull();
+    expect(bar!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      search.getBoundingClientRect().bottom,
+    );
+    for (const test of ["selected-count", "move", "delete", "cancel-selection"])
+      expect(
+        el
+          .shadowRoot!.querySelector(`[data-test="${test}"]`)!
+          .closest('[data-test="selection-bar"]'),
+      ).toBe(bar);
+    expect(count(el)).toBe("0 selected");
+    const box = (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>(
+      '[data-test="select-bread"]',
+    )!;
+    box.click();
+    await el.updateComplete;
+    expect(count(el)).toBe("1 selected");
+    await press(el, "cancel-selection");
+    expect(el.shadowRoot!.querySelector('[data-test="selection-bar"]')).toBeNull();
+    expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector('[data-test="select"]'));
+  },
+);
 
 it.each([false, true])(
   "hands stickyHeader (%s) to the Products table, which fills a bounded column only when it is set",

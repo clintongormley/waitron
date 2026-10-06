@@ -25,6 +25,7 @@ import {
   type DragGhost,
   type DropGap,
 } from "./tree-drag.js";
+import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import type {
@@ -124,21 +125,19 @@ export class MenuStructureTable extends LitElement {
         flex: none;
         justify-content: center;
         width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        align-items: center;
         margin-inline-end: var(--wt-space-3);
       }
-      /* The table's arrow, the grip while reordering, and the swatch slot come before the menu's name. */
       wt-data-table::part(tree-heading) {
         margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
       }
-      :host([reordering]) wt-data-table::part(tree-heading) {
-        margin-inline-start: calc(
-          var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
-        );
-      }
-      /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
-         would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
+      /* Keep wrapped names on their first-line baseline beside the media slot. */
       wt-data-table::part(product-cell) {
         display: block;
+      }
+      wt-data-table[narrow]::part(tree-heading) {
+        margin-inline-start: var(--tree-arrow-width);
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -174,6 +173,7 @@ export class MenuStructureTable extends LitElement {
       }
       wt-data-table::part(thumb-frame),
       wt-data-table::part(thumb-placeholder) {
+        box-sizing: border-box;
         display: inline-block;
         vertical-align: middle;
         margin-inline-end: var(--wt-space-3);
@@ -183,6 +183,13 @@ export class MenuStructureTable extends LitElement {
         border-radius: var(--wt-radius-md);
         overflow: hidden;
         background: var(--wt-color-surface);
+      }
+      wt-data-table[narrow]::part(swatch-button),
+      wt-data-table[narrow]::part(swatch-box),
+      wt-data-table[narrow]::part(folder-frame),
+      wt-data-table[narrow]::part(thumb-frame),
+      wt-data-table[narrow]::part(thumb-placeholder) {
+        display: none;
       }
       wt-data-table::part(thumbnail) {
         display: block;
@@ -251,6 +258,7 @@ export class MenuStructureTable extends LitElement {
         border: 0;
       }
     `,
+    productMediaStyles,
   ];
 
   @property({ attribute: false }) nodes: MenuStructureNode[] = [];
@@ -592,7 +600,7 @@ export class MenuStructureTable extends LitElement {
     for (let depth = segments.length; depth >= 0; depth--) {
       const candidate = depth === 0 ? ROOT_KEY : segments.slice(0, depth).join("/");
       const menu = root.querySelector<HTMLElement>(
-        `tr[data-row-key="${CSS.escape(candidate)}"] wt-row-actions`,
+        `tr[data-row-key="${CSS.escape(candidate)}"] wt-row-actions[data-test^="actions-"]`,
       );
       if (menu) {
         menu.focus();
@@ -700,7 +708,7 @@ export class MenuStructureTable extends LitElement {
   /** The Device Home Page's and the menu's rows: no grip, a blank slot, and a note when empty. */
   #topCell(row: HomeRow | RootRow, empty: string | null, emptyTest: string) {
     return html`<span part="folder-cell"
-      >${this.reordering ? gripSpace : nothing}${folderFrame()}<span part="name-stack folder-stack"
+      >${folderFrame()}<span part="name-stack folder-stack"
         >${this.#nameSpan(row)}${
           empty === null ? nothing : html`<span part="note" data-test=${emptyTest}>${empty}</span>`
         }</span
@@ -723,10 +731,9 @@ export class MenuStructureTable extends LitElement {
       );
     if (row.kind === "shortcut")
       return html`<span part="product-cell"
-        >${this.#grip(row)}<span part="name-stack">${this.#nameSpan(row)}</span></span
+        ><span part="name-stack">${this.#nameSpan(row)}</span></span
       >`;
     const { node, key } = row;
-    const grip = this.#grip(row);
     const stack = html`<span
       part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
       >${this.#nameSpan(row)}${
@@ -738,43 +745,29 @@ export class MenuStructureTable extends LitElement {
       }</span
     >`;
     if (node.ref.kind === "section")
-      return html`<span part="folder-cell">${grip}${folderFrame(this.#swatch(row))}${stack}</span>`;
-    const image = this.#productById.get(node.ref.productId)?.image ?? null;
-    return html`<span part="product-cell"
-      >${grip}${
-        image === null
-          ? html`<span
-              part="thumb-placeholder"
-              data-test="thumb-placeholder"
-              aria-hidden="true"
-            ></span>`
-          : html`<span part="thumb-frame" data-test="thumb"
-              ><img part="thumbnail" src=${`/media/${image}`} alt="" draggable="false"
-            /></span>`
-      }${stack}${this.#swatch(row)}</span
-    >`;
+      return html`<span part="folder-cell">${folderFrame(this.#swatch(row))}${stack}</span>`;
+    return html`<span part="product-cell">${this.#swatch(row)}${stack}</span>`;
   }
 
-  /** A section's goes in its leading slot; a product's after its name, as its photo has that slot. */
   #swatch(row: MemberRow) {
     const { node, key, name } = row;
-    let color: string | null;
-    let send: () => void;
-    let editable: boolean;
-    if (node.ref.kind === "section") {
-      const detail = { sectionId: node.ref.sectionId, path: row.path };
-      color = node.color ?? null;
-      send = () => this.#send("wt-member-edit", detail);
-      editable = this.#ownedSection(row);
-    } else {
+    if (node.ref.kind === "product") {
       const productId = node.ref.productId;
       const product = this.#productById.get(productId);
-      color = product?.color ?? categoryColor(product?.categoryId ?? null, this.#categoryById);
-      send = () => this.#send("wt-product-color", { productId });
-      editable = !row.readOnly && product !== undefined;
+      return productMedia({
+        key,
+        productId,
+        name,
+        image: product?.image ?? null,
+        color: product?.color ?? categoryColor(product?.categoryId ?? null, this.#categoryById),
+        editable: !row.readOnly && product !== undefined,
+        busy: this.busy,
+        colour: () => this.#send("wt-product-color", { productId }),
+      });
     }
-    const chip = swatchChip(color);
-    if (!editable)
+    const sectionId = node.ref.sectionId;
+    const chip = swatchChip(node.color ?? null);
+    if (!this.#ownedSection(row))
       return html`<span part="swatch-box" data-test=${`color-${key}`} aria-hidden="true"
         >${chip}</span
       >`;
@@ -784,7 +777,7 @@ export class MenuStructureTable extends LitElement {
       data-test=${`color-${key}`}
       aria-label=${t("folders.edit_color").replace("{name}", name)}
       ?disabled=${this.busy}
-      @click=${send}
+      @click=${() => this.#send("wt-member-edit", { sectionId, path: row.path })}
     >
       ${chip}
     </button>`;
@@ -909,6 +902,9 @@ export class MenuStructureTable extends LitElement {
         expandAllLabel=${t("folders.expand_all")}
         collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
+        .rowControls=${this.reordering ? (row: Row) => (row.kind === "member" || row.kind === "shortcut" ? this.#grip(row) : gripSpace) : undefined}
+        rowControlsLabel=${t("folders.drag")}
+        rowControlsAlign="center"
         .rowCollapsible=${(row: Row) => row.kind !== "root"}
         .rowActivation=${(row: Row) =>
           row.kind === "home" || (row.kind === "member" && row.node.ref.kind === "section")

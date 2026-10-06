@@ -6984,3 +6984,79 @@ test("the leading Filters button's tooltip stays shown while the pointer moves f
     expect(hit === null || !trigger.contains(hit)).toBe(true);
   });
 });
+
+for (const tree of [false, true])
+  for (const selectable of [false, true]) {
+    test(`keeps row controls in the leading column with selection ${selectable} and tree ${tree}`, async () => {
+      const el = await table({
+        rowControls: (row) => html`<button data-controls=${row.id}>Move ${row.name}</button>`,
+        rowControlsLabel: "Move row",
+        rowControlsAlign: tree ? "center" : "baseline",
+        selectable,
+        rowSelectable: (row) => row.id === "b",
+        rowParent: tree ? (row) => (row.id === "b" ? "a" : null) : undefined,
+      });
+      const root = el.shadowRoot!;
+      expect(root.querySelector("thead th")!.textContent!.trim()).toBe("Move row");
+      for (const id of ["a", "b"]) {
+        const row = root.querySelector(`tr[data-row-key="${id}"]`)!;
+        const first = row.querySelector("td")!;
+        expect(first.querySelector(`[data-controls="${id}"]`)).not.toBeNull();
+        expect(first.querySelector('input[type="checkbox"]') !== null).toBe(
+          selectable && id === "b",
+        );
+        expect(row.querySelector(".tree-cell")?.contains(first)).not.toBe(true);
+      }
+      if (selectable) {
+        const changed = vi.fn();
+        el.addEventListener("wt-selection-change", changed);
+        root.querySelector<HTMLInputElement>('[data-test="select-b"]')!.click();
+        expect(changed.mock.calls[0]![0].detail).toEqual({ selected: ["b"] });
+      }
+    });
+  }
+
+for (const tree of [false, true]) {
+  test.each(["baseline", "center"] as const)(
+    `paints %s row controls with tree ${tree}`,
+    async (align) => {
+      const el = await table({
+        rowControls: (row) => html`<button>Move ${row.name}</button>`,
+        rowControlsAlign: align,
+        rowParent: tree ? () => null : undefined,
+      });
+      const native = el.shadowRoot!.querySelector("table")!;
+      expect(native.hasAttribute("data-center-controls")).toBe(align === "center");
+      for (const cell of native.querySelectorAll("tbody tr td:first-child")) {
+        expect(getComputedStyle(cell).verticalAlign).toBe(
+          align === "center" ? "middle" : "baseline",
+        );
+        expect(getComputedStyle(cell.querySelector(".row-controls")!).display).toBe(
+          align === "center" ? "flex" : "contents",
+        );
+      }
+    },
+  );
+  test(`locks filtered widths including the row-control column with tree ${tree}`, async () => {
+    await page.viewport(1280, 844);
+    const el = await tableS({
+      columns: withStatus,
+      rowControls: (row) => html`<button>Move ${row.name}</button>`,
+      rowParent: tree ? () => null : undefined,
+    });
+    const root = el.shadowRoot!;
+    const widths = [...root.querySelectorAll("thead th")].map(
+      (cell) => cell.getBoundingClientRect().width,
+    );
+    expect(widths).toHaveLength(3);
+    await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+    await el.updateComplete;
+    const native = root.querySelector("table")!;
+    expect(native.hasAttribute("data-locked-columns")).toBe(true);
+    const cols = [...native.querySelectorAll<HTMLTableColElement>("colgroup col")];
+    expect(cols).toHaveLength(3);
+    for (let i = 0; i < cols.length; i++)
+      expect(parseFloat(cols[i]!.style.width)).toBeCloseTo(widths[i]!, 1);
+    expect(rowKeysS(el)).toEqual(["1"]);
+  });
+}

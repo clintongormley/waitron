@@ -13,6 +13,23 @@ afterEach(cleanup);
 type Row = { id: string; name: string; status: string };
 
 describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (theme) => {
+  test.each([false, true])("leading row controls with selection %s", async (selectable) => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [{ key: "name", label: "Name", cell: (row) => row.name }];
+    el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+    el.rowKey = (row) => row.id;
+    el.rowControls = (row) => html`<button>Move ${row.name}</button>`;
+    el.rowControlsLabel = "Move row";
+    el.rowControlsAlign = "center";
+    el.selectable = selectable;
+    el.selectionLabel = (row) => `Select ${row.name}`;
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   test("search field while focused", async () => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',

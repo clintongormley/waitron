@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -10,6 +10,9 @@ import { t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
+beforeEach(async () => {
+  await page.viewport(1280, 844);
+});
 
 /** The three names read differently (docs/developers/products.md), so a row showing the
  * customer-facing or kitchen name where the staff name belongs fails. */
@@ -523,7 +526,7 @@ it("keeps every row's menu on a phone's screen", async () => {
     });
     // Nine rows fit in the phone's height, so each menu can be found where it is drawn.
     expect(shown(el)).toHaveLength(9);
-    expectRowMenusOnScreen(table(el), 9);
+    expectRowMenusOnScreen(table(el), 9, 'wt-row-actions[data-test^="actions-"]');
   } finally {
     await page.viewport(width, height);
   }
@@ -635,8 +638,8 @@ it("keeps a blank grip slot on the menu's row, so its name starts where the Prod
   const gap = parseFloat(tokens.getPropertyValue("--wt-space-3"));
   expect(tap).toBeGreaterThan(0);
   const start = tr.querySelector(".tree-cell")!.getBoundingClientRect().left;
-  // The table's arrow, the grip, the leading slot, then the gap before the name.
-  expect(pieces(el, "root").name.left - start).toBeCloseTo(3 * tap + gap, 0);
+  // The control column precedes the name cell; its arrow and media slot stay inside it.
+  expect(pieces(el, "root").name.left - start).toBeCloseTo(2 * tap + gap, 0);
 });
 
 // The name and any note under it (an included menu's "read only here") are centred as one.
@@ -1391,7 +1394,8 @@ describe("colour swatches", () => {
     expect(getComputedStyle(chipOf(el, "m-drinks/m-lemonade")).backgroundColor).toBe(
       "rgb(37, 107, 177)",
     );
-    expect(chipOf(el, "m-burger").getAttribute("part")).toBe("color-swatch empty");
+    expect(chipOf(el, "m-burger").part.contains("color-swatch")).toBe(true);
+    expect(chipOf(el, "m-burger").part.contains("empty")).toBe(true);
     expect(getComputedStyle(chipOf(el, "m-burger")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(getComputedStyle(chipOf(el, "m-burger")).borderTopWidth).toBe("1px");
 
@@ -1417,16 +1421,17 @@ describe("colour swatches", () => {
       expect(getComputedStyle(chip).position, key).toBe("static");
       expect(getComputedStyle(chip).backgroundColor, key).toBe("rgba(0, 0, 0, 0)");
       expect(chip.hasAttribute("style"), key).toBe(false);
-      expect(chip.getAttribute("part"), key).toBe("color-swatch empty");
+      expect(chip.part.contains("color-swatch"), key).toBe(true);
+      expect(chip.part.contains("empty"), key).toBe(true);
     }
   });
 
-  it("draws a product's swatch after its name and a section's before it", async () => {
+  it("draws product and section media before their names", async () => {
     const el = await mountColoured();
     const nameOf = (key: string) =>
       row(el, key)!.querySelector('[part~="name-stack"]')!.getBoundingClientRect();
-    expect(swatchOf(el, "m-burger").getBoundingClientRect().left).toBeGreaterThanOrEqual(
-      nameOf("m-burger").right,
+    expect(swatchOf(el, "m-burger").getBoundingClientRect().right).toBeLessThanOrEqual(
+      nameOf("m-burger").left,
     );
     expect(swatchOf(el, "m-drinks").getBoundingClientRect().right).toBeLessThanOrEqual(
       nameOf("m-drinks").left,
@@ -1480,12 +1485,14 @@ describe("colour swatches", () => {
     await toggle(el, "m-drinks");
     const sent = sentEvents(el);
     const swatch = swatchOf(el, "m-drinks/m-lemonade");
-    expect(swatch.tagName).toBe("BUTTON");
-    expect(swatch.getAttribute("part")).toBe("swatch-button");
-    expect(swatch.getAttribute("aria-label")).toBe(
-      t("folders.edit_color").replace("{name}", "Lemonade"),
+    expect(swatch.tagName).toBe("WT-ROW-ACTIONS");
+    await (swatch as HTMLElementTagNameMap["wt-row-actions"]).updateComplete;
+    expect(swatch.getAttribute("label")).toBe(
+      t("product.media_actions").replace("{name}", "Lemonade"),
     );
-    await userEvent.click(swatch);
+    await userEvent.click(swatch.shadowRoot!.querySelector("button")!);
+    expect(sent).toEqual([]);
+    swatch.querySelector<HTMLElement>('[data-test="media-colour"]')!.click();
     await settle(el);
     expect(sent).toEqual([["wt-product-color", { productId: "p-lemonade" }]]);
     expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
@@ -1562,7 +1569,8 @@ describe("colour swatches", () => {
     const swatch = swatchOf(el, "m-gone");
     expect(swatch.tagName).not.toBe("BUTTON");
     expect(swatch.querySelector("button")).toBeNull();
-    expect(chipOf(el, "m-gone").getAttribute("part")).toBe("color-swatch empty");
+    expect(chipOf(el, "m-gone").part.contains("color-swatch")).toBe(true);
+    expect(chipOf(el, "m-gone").part.contains("empty")).toBe(true);
     swatch.click();
     expect(sent).toEqual([]);
   });
@@ -1572,7 +1580,8 @@ describe("colour swatches", () => {
     const sent = sentEvents(el);
     for (const key of ["m-burger", "m-drinks"]) {
       const swatch = swatchOf(el, key) as HTMLButtonElement;
-      expect(swatch.disabled, key).toBe(true);
+      const trigger = swatch.shadowRoot?.querySelector("button") ?? swatch;
+      expect((trigger as HTMLButtonElement).disabled, key).toBe(true);
       swatch.click();
     }
     expect(sent).toEqual([]);
@@ -1822,5 +1831,88 @@ describe("the Device Home Page row", () => {
     await settle(el);
     expect(events).toEqual([]);
     expect(shown(el).slice(0, 4)).toEqual(["home", ...SHORTCUT_KEYS]);
+  });
+});
+
+describe("A303 tree media slots", () => {
+  it.each([1280, 440, 390])(
+    "uses equal section and product boxes, hiding both at %i px only when narrow",
+    async (width) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        const el = await mount({ reordering: false });
+        el.style.width = `${width}px`;
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(width <= 440));
+        const chip = row(el, "m-drinks")!.querySelector<HTMLElement>('[part~="color-swatch"]')!;
+        const photo = row(el, "m-burger")!.querySelector<HTMLElement>('[part~="thumb-frame"]')!;
+        const slot = chip.closest<HTMLElement>('[part~="folder-frame"]')!;
+        if (width <= 440) {
+          expect(slot.getBoundingClientRect().width).toBe(0);
+          expect(photo.getBoundingClientRect().width).toBe(0);
+          const media = table.shadowRoot!.querySelectorAll('[part~="product-media"]');
+          expect(media.length).toBeGreaterThan(0);
+          for (const button of media) expect(button.getBoundingClientRect().width).toBe(0);
+          for (const swatch of table.shadowRoot!.querySelectorAll(
+            '[part~="swatch-button"], [part~="swatch-box"]',
+          )) {
+            expect(swatch.getBoundingClientRect().width).toBe(0);
+          }
+        } else {
+          const a = chip.getBoundingClientRect(),
+            b = photo.getBoundingClientRect();
+          expect(a.width).toBeGreaterThan(0);
+          expect(a.width).toBe(b.width);
+          expect(a.height).toBe(b.height);
+        }
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
+});
+
+it.each([390, 1280])(
+  "aligns Structure grips in the first column at every depth at %s px",
+  async (width) => {
+    await page.viewport(width, 844);
+    const el = await mountDeep();
+    const grips = all<HTMLElement>(el, '[part~="drag-grip"]');
+    expect(grips.length).toBeGreaterThan(3);
+    for (const grip of grips) {
+      expect(grip.getBoundingClientRect().left).toBeCloseTo(
+        grips[0]!.getBoundingClientRect().left,
+        0,
+      );
+      expect(grip.closest("td")).toBe(grip.closest("tr")!.querySelector("td"));
+    }
+  },
+);
+
+describe("Structure product media", () => {
+  it("uses a leading inherited photo ring and links to the product editor's photo field", async () => {
+    const el = await mount({
+      products: [{ ...products[2]!, categoryId: "c1" }],
+      categories: [{ id: "c1", parentId: null, name: "Food", color: "#256bb1" }],
+    });
+    const media = row(el, "m-burger")!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="color-m-burger"]',
+    );
+    expect(media).not.toBeNull();
+    expect(media!.tagName).toBe("WT-ROW-ACTIONS");
+    await media!.updateComplete;
+    const frame = media!.querySelector<HTMLElement>('[data-test="thumb"]')!;
+    expect(getComputedStyle(frame).borderTopColor).toBe("rgb(37, 107, 177)");
+    expect(parseFloat(getComputedStyle(frame).borderTopWidth)).toBeGreaterThan(1);
+    expect(media!.querySelector("a")!.getAttribute("href")).toBe(
+      "/manage/catalogue/product/p-burger?field=image",
+    );
+    await userEvent.click(media!.shadowRoot!.querySelector("button")!);
+    const photoLink = media!.querySelector<HTMLAnchorElement>("a")!;
+    photoLink.focus();
+    expect(table(el).shadowRoot!.activeElement).toBe(photoLink);
+    await userEvent.keyboard("{Escape}");
+    expect(media!.shadowRoot!.activeElement).toBe(media!.shadowRoot!.querySelector("button"));
   });
 });

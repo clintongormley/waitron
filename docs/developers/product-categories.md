@@ -271,7 +271,8 @@ reaches no device until the menu is published" in `apps/server/src/till-api.sell
 
 ## Moving and deleting
 
-Use **Select and move**, tick products and categories, and choose **Move to…**. Pick a destination category or
+Use **Select**, tick products and categories, and choose **Move to…** in the action bar below Search.
+The bar shows how many you selected. Pick a destination category or
 **All products (top level)**. The destination list shows the categories as a tree after
 **All products (top level)**, each category's children indented under it and each level sorted by
 name the way the tables sort text (numbers by value, case ignored); a chosen destination, and each
@@ -279,7 +280,7 @@ match while searching, shows the full path ("Dinner › Mains"). A selected cate
 descendants are excluded as destinations, and the server also refuses such a move with `category.parent_cycle`. Anything
 selected inside a selected category moves with that category rather than being filed beside it.
 
-On a pointer device you can also drag rows, but only in **Select and move**, which shows each row's
+On a pointer device you can also drag rows, but only in **Select**, which shows each row's
 grip; outside it nothing can be dragged. Drag a product or a category (dragging a selected row
 carries every selected row with it) onto a category, onto a product (to file beside it) or onto **All products** (to file in no
 category). The row stays in place, faded, while a copy follows the pointer; the target shows a bar
@@ -292,7 +293,7 @@ drag: keyboard users, and touch users who prefer it, use the same selection acti
 Searching or changing a filter clears the selection, so actions do not reach items you have hidden.
 Opening or closing a category keeps it, so a selection can span categories; a selected row inside a
 closed category is still selected. **Done** clears it, hides the grips and restores the ordinary
-toolbar, and so does pressing **Select and move** again. It reads Done rather than Cancel because a
+toolbar and returns focus to **Select**, and so does pressing **Select** again. It reads Done rather than Cancel because a
 drag made in the mode is saved as soon as it is dropped. A Delete you already
 requested keeps its captured selection, including while the category summary is being read.
 

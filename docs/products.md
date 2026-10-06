@@ -48,7 +48,7 @@ category's full path on the first line under the window's title, such as
 **Drinks › Alcoholic drinks › Cocktails**, or **Uncategorised** when the product is in none. Choose
 **Change** after the path to pick another: the list starts with **Uncategorised** and then shows
 every category as an indented tree, each subcategory under its parent. You can also move the product
-to another category on the Products screen, by turning on **Select and move** and dragging it, or
+to another category on the Products screen, by turning on **Select** and dragging it, or
 with **Move to…**. The main category also plays a part in choosing the kitchen station a dish goes
 to, as described below.
 

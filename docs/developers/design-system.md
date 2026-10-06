@@ -849,14 +849,15 @@ name is drawn bold and underlined with `aria-current="true"`. A product's ⋮ ho
 "Read-only here" under it, and its ⋮ holds a link to that menu's own Structure tab and "Remove from
 this menu". The rows inside an included menu open and close for browsing but have no grip, no ⋮ and
 a muted name; in Reorder mode each keeps an unseen grip-sized space. Only an owned row has a grip.
-Every row but a shortcut's draws the Products tree's slots before its name (below): the table's
-arrow, in Reorder mode the grip or its space, and a slot a product photo wide. That slot holds a
-section's colour square, a product's photo, or nothing on the Device Home Page's and the menu's
-rows. So names at one level start at one x, and the Name heading, which moves with the mode, sits
-over the menu's name. No row draws a folder icon, though the picture that follows the pointer while
-you drag a section keeps one. A product's colour square comes after its name,
-because its photo has the leading slot. At phone width the Products tree drops the photo; the
-Structure tree does not.
+In Reorder mode, put every grip in one leading column before the tree arrow and indentation.
+Reserve that column on the menu's, Home's and read-only rows. Keep the arrow and media slot inside
+the indented name column, so names at one level and the Name heading stay aligned. The media slot
+holds a section's colour square, a product's colour square or photo, or nothing on the Home and
+menu rows. A photo has a ring in the product's own colour, falling back to its category's inherited
+colour. The product slot opens Colour… and Change photo…; the latter opens the existing product
+editor with its photo field focused. Section squares still open their colour picker directly. Hide
+media in both trees when the tree's box is at most 440px wide; the product editor remains available
+through the row's Actions menu.
 
 The grips show only in Reorder mode, so a menu is not rearranged by a stray drag while you browse
 it. The tab's toolbar starts with a Reorder icon button (a grip mark, Reordenar in Spanish; "Icon
@@ -910,7 +911,7 @@ A width change across 768px while it is open moves it to the other form, still o
 choices. It stays open when a choice in it hides every row (beside the no-matches message from
 768px wide), so the choice can be changed back, and focus stays on the filter used, as it does when a choice brings rows back;
 the default Filters popover keeps focus on the filter the same way. Only the Products table sets
-`leadingFilters`. On that screen the catalogue browser puts its Select and move button next (Selection mode, below), and wherever its own width is 40rem or less (a container query, so a narrow list in a wide
+`leadingFilters`. On that screen the catalogue browser puts its Select button next (Selection mode, below), and wherever its own width is 40rem or less (a container query, so a narrow list in a wide
 window counts) moves its search to a line of its own under the buttons (CSS `order`, with `flex-basis: 100%`), so the buttons and the table's Expand all and Customise
 share one line; Tab still reaches the search before Expand all. Guards: the leading cases in
 `packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`, and the toolbar,
@@ -1001,25 +1002,34 @@ so a screen can restyle its arrow (colour, size, where it sits in the button); i
 phone width its start margin and start padding, belong to the table (above). The Products list
 makes it small and muted. In tree mode the
 heading over the tree's column is wrapped in `part="tree-heading"`, so a screen can line it up with
-what its rows draw there.
+what its rows draw there. Supply `rowControls` to render controls in the leading column shared with
+selection checkboxes, outside tree indentation. Name that column with `rowControlsLabel`. Keep
+its default baseline alignment for Products' wrapped names; Structure uses
+`rowControlsAlign="center"` for its name-and-note stacks. Put a full-width lower toolbar in the
+`toolbar-bottom` slot; Products forwards that slot for its selection bar.
 
-On the All products row, each category row, a category being added and each product row, the
-Products tree draws tap-target slots before the name. First comes the table's arrow (or its blank
-space; narrower at phone width, as above). In Select and move (Selection mode, below) a drag grip
-comes next, blank on All products and on a category being added; outside that mode no row draws a
-grip or its space, and nothing can be dragged. Last comes a slot a product photo wide: on a category
-row it holds the category's colour square, centred; on a product row, the product's photo, or its
-empty placeholder frame when it has none; on All products and on a category being added or renamed
-it is blank. No row draws a folder icon, though the picture that follows the pointer while you drag
+In Select mode, put selection checkboxes and drag grips together in the leading column, before
+the tree arrow and indentation. Leave a blank grip on All products and a category being added;
+outside that mode, draw no grip or its space and allow no drag. In the name column, first comes
+the table's arrow or its blank space, narrower at phone width as above.
+Last comes a slot a product photo wide: on a category
+row it holds the category's colour square, centred; on a product row, the product's photo with a
+colour ring, or a filled colour square when it has no photo. Both use the product's own colour,
+falling back to its category's inherited colour; without either colour the frame is empty. Clicking
+the product slot opens Colour… and Change photo… (Color… and Cambiar foto… in Spanish); Change
+photo… opens the existing editor with its photo field focused. Category squares still open their
+colour picker directly. On All products and on a category being added or renamed the slot is blank. No row draws a folder icon, though the picture that follows the pointer while you drag
 a category keeps one. Then come `--wt-space-3` and the name. So on those rows names step in by the
 table's indent per level whether the row is a category or a product, and the Name heading, which
-moves with the mode, sits over the All products name. The exception is phone width (while the table
-carries `narrow`): a product row draws no photo or placeholder, so its name starts right after its
-grip (outside the mode, right after the arrow), one slot before a category's at its level, because
-a category keeps its colour square's slot (W85e, owner 2026-10-05). At phone width the table also
-hides a category's count, and All products', so the name keeps that room. A category's cell is laid
-out as a product's is, so when its name wraps, its grip and colour square stay beside the name's
-first line. A
+moves with the mode, sits over the All products name. A colour square and a product's photo or
+placeholder each occupy a `--wt-tap-min` square, including their border. This keeps the square's
+colour action at the minimum tap size and gives photos the same visual size. At phone width, when
+the table carries `narrow` (its box is 440px wide or less), both trees hide the category or section
+slot and the product photo or placeholder, so names at the same level start together. The Products
+tree visually hides each category's count, including All products', with the shared visually hidden
+pattern. The text remains in the row's accessible name, so screen readers retain the contents count
+while the visible name gets more room. A category's cell is laid out as a product's is, so when its
+name wraps, keep its grip and wider-layout colour square beside the name's first line. A
 variant's row draws no grip and no photo slot; its name is indented to start under its product's
 name, at phone width too. Each name, with what follows it on its row (a category's count and the asterisk that marks a
 category with no active station; a product's variant count), takes
@@ -1030,9 +1040,9 @@ or renames one is capped at the same room, though never below `--wt-tap-min`. Th
 while the table does not carry `narrow`: while a category is being renamed, its count and asterisk
 follow the name box and are not capped. At phone width (while the table carries `narrow`) the name
 box of a category being renamed or added goes on a line of its own under the row's first slot
-instead (the grip in Select and move, otherwise the blank colour-square slot), taking the room from
-that slot's start to the pinned cell. The grip, the blank slot and a renamed category's asterisk
-stay on the line above, and the asterisk wraps in what they leave of that room; the count is hidden
+instead, starting in the name column after the tree arrow,
+taking the room from there to the pinned cell. Keep the grip in its leading column and a renamed category's asterisk on
+the line above, and the asterisk wraps in what they leave of that room; the count is hidden
 at that width (above). The name box carries its own colour square in `wt-input`'s `end` slot, inside the box at
 its trailing end, so every fit above holds for the box with its square. That square is not a Tab
 stop, so Tab still leaves the box.
@@ -1193,20 +1203,19 @@ action cannot apply to rows you have just hidden. Cancel clears the selection an
 selection mode, restoring the ordinary toolbar. It does not cancel a Delete you have
 already requested.
 
-On Products the button is named Select and move (Seleccionar y mover in Spanish), because the mode
-does both: it shows the checkboxes, and it shows the drag grips (the Products tree, above). A row
-can be dragged only while it is on. A drag there files rows into a category; it does not change
-the order they are listed in, which the table's sort decides. Select and move is an icon button (a checklist mark) at the toolbar's
-start, after Filters and before the search, pressed (`aria-pressed`) while selecting; pressing it
-again clears the selection and leaves the mode. The count, Move to…, Delete and **Done** go to the
-toolbar's end, and each wraps on its own with the table's buttons, so at 390px those four and the
-table's Expand all and Customise fit on two lines; Filters, Select and move and the search are not
-part of that measurement. There is no separate selection header.
+On Products, name the mode button Select (Seleccionar in Spanish). The mode shows selection
+checkboxes and drag grips; a drag files rows into a category and keeps the table's name sort.
+Put the checklist icon button after Filters and before Search. Show its pressed state while
+selecting. Pressing it again clears the selection and leaves the mode.
+
+While selecting, show a separate bar directly below Search, above the table body. Put the live
+selected count, Move to…, Disable or Delete as the selection allows, and Done in that bar. Let
+its controls wrap at phone width. Keep the table's Expand all and Customise in the search toolbar.
 
 Products leaves the mode by **Done** rather than Cancel, the one exception to the rule above. A drag
 made in the mode is saved as soon as it is dropped (`#drop`,
 `apps/dashboard/src/widgets/catalogue-browser.ts`), so Cancel would promise an undo it cannot give.
-Done clears the selection, leaves the mode and puts focus back on Select and move, since Done
+Done clears the selection, leaves the mode and puts focus back on Select, since Done
 itself disappears.
 
 For example, selecting Drinks and Bread shows **2 selected** and lets you move both in one
@@ -1219,7 +1228,7 @@ nothing about contents; otherwise offer moving their contents up as the default,
 
 ### Icon buttons with a tooltip (`iconButtonStyles`, `trackIconTooltip`)
 
-The `leadingFilters` Filters button, the Products Select and move button and the Structure tab's
+The `leadingFilters` Filters button, the Products Select button and the Structure tab's
 Reorder button each take the `icon-button` class from `iconButtonStyles` (`packages/ui/src/icon-button.ts`, exported by `@waitron/ui`): at
 least `--wt-tap-min` each way, with the toolbar's border and surface, and pressed —
 `--wt-color-primary` border, `--wt-color-surface-lifted` fill, `--wt-color-primary-text` icon —

@@ -1,7 +1,12 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, type DataTableColumn, type WtDataTable } from "@waitron/ui";
+import {
+  baseStyles,
+  visuallyHiddenStyles,
+  type DataTableColumn,
+  type WtDataTable,
+} from "@waitron/ui";
 import { formatMoney, resolveContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -17,6 +22,8 @@ import {
 } from "../i18n/domain.js";
 import { categoryPathSearchText, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
+import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
+import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
   holdPageCursor,
@@ -141,23 +148,20 @@ export class ProductList extends LitElement {
       wt-data-table::part(tree-heading) {
         margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
       }
-      :host([reordering]) wt-data-table::part(tree-heading) {
-        margin-inline-start: calc(
-          var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
-        );
-      }
-      /* On a phone a product's photo gives its slot to the name; a category keeps its swatch slot. */
+      wt-data-table[narrow]::part(folder-frame),
       wt-data-table[narrow]::part(thumb-frame),
       wt-data-table[narrow]::part(thumb-placeholder) {
         display: none;
       }
-      /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
-         would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
+      /* Keep wrapped names on their first-line baseline beside the media slot. */
       wt-data-table::part(product-cell) {
         display: block;
       }
       wt-data-table::part(drop-target) {
         border-inline-start: var(--wt-selected-ring);
+      }
+      wt-data-table[narrow]::part(tree-heading) {
+        margin-inline-start: var(--tree-arrow-width);
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -181,8 +185,17 @@ export class ProductList extends LitElement {
         vertical-align: middle;
         width: var(--wt-tap-min);
       }
+      wt-data-table::part(name-line) {
+        display: none;
+      }
+      wt-data-table[narrow]::part(name-line) {
+        display: inline-block;
+        width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+      }
       wt-data-table::part(thumb-frame),
       wt-data-table::part(thumb-placeholder) {
+        box-sizing: border-box;
         display: inline-block;
         vertical-align: middle;
         margin-inline-end: var(--wt-space-3);
@@ -227,9 +240,9 @@ export class ProductList extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      /* On a phone a category's name keeps the room. */
       wt-data-table[narrow]::part(count) {
-        display: none;
+        ${visuallyHiddenStyles}
+        clip-path: inset(50%);
       }
       /* A column flex box takes its first item's baseline, so the row still lines up by the name. */
       wt-data-table::part(folder-name),
@@ -246,14 +259,8 @@ export class ProductList extends LitElement {
       wt-data-table::part(variant-name) {
         padding-inline-start: calc(var(--wt-tap-min) + var(--wt-space-3));
       }
-      :host([reordering]) wt-data-table::part(variant-name) {
-        padding-inline-start: calc(2 * var(--wt-tap-min) + var(--wt-space-3));
-      }
       wt-data-table[narrow]::part(variant-name) {
         padding-inline-start: 0;
-      }
-      :host([reordering]) wt-data-table[narrow]::part(variant-name) {
-        padding-inline-start: var(--wt-tap-min);
       }
       wt-data-table::part(price-unit) {
         color: var(--wt-color-text-muted);
@@ -312,6 +319,7 @@ export class ProductList extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
     `,
+    productMediaStyles,
   ];
 
   /** Fills a bounded flex column, with the table's rows scrolling under its headings. */
@@ -355,6 +363,7 @@ export class ProductList extends LitElement {
   #emptyChecked = false;
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, { categories: number; products: number }>();
+  #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   #categorySearchTexts: ReadonlyMap<string, string> = new Map();
   #dragged: string[] = [];
   #pointerDrag: { pointerId: number; key: string; x: number; y: number; active: boolean } | null =
@@ -611,13 +620,15 @@ export class ProductList extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
-    if (changed.has("categories"))
+    if (changed.has("categories")) {
+      this.#categoryById = new Map(this.categories.map((category) => [category.id, category]));
       this.#categorySearchTexts = new Map(
         this.categories.map((category) => [
           category.id,
           categoryPathSearchText(category, this.categories),
         ]),
       );
+    }
     if (changed.has("nameDraft")) {
       const draft = this.nameDraft;
       this.#nameSent = false;
@@ -971,21 +982,17 @@ export class ProductList extends LitElement {
           variant
             ? html`<span part="variant-name">${variant.name}</span>`
             : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
-                ${this.#grip(product.name)}${
-                  product.image === null
-                    ? html`<span
-                        part="thumb-placeholder"
-                        data-test="thumb-placeholder"
-                        aria-hidden="true"
-                      ></span>`
-                    : html`<span part="thumb-frame" data-test="thumb"
-                        ><img
-                          part="thumbnail"
-                          src=${`/media/${product.image}`}
-                          alt=""
-                          draggable="false"
-                      /></span>`
-                }<span part="name-stack"
+                ${productMedia({
+                  key: product.id,
+                  name: product.name,
+                  image: product.image,
+                  color:
+                    product.color ?? categoryColor(product.primaryCategoryId, this.#categoryById),
+                  busy: false,
+                  colour: () => this.#send("product-colour", { productId: product.id }),
+                  photo: () =>
+                    this.#send("edit-product", { productId: product.id, field: "image" }),
+                })}<span part="name-stack"
                   ><strong>${product.name}</strong>${this.#variantCount(product)}</span
                 >
               </span>`,
@@ -1184,8 +1191,14 @@ export class ProductList extends LitElement {
       : nothing;
   }
 
-  #gripSpace() {
-    return this.reordering ? html`<span part="grip-space"></span>` : nothing;
+  #nameLine() {
+    return this.reordering ? html`<span part="name-line" aria-hidden="true"></span>` : nothing;
+  }
+
+  #rowControls(row: ListRow) {
+    if (row.kind === "folder") return this.#grip(row.folder.name);
+    if (row.kind === "product" && row.variant === null) return this.#grip(row.product.name);
+    return html`<span part="grip-space"></span>`;
   }
 
   #columns(): DataTableColumn<ListRow>[] {
@@ -1200,13 +1213,13 @@ export class ProductList extends LitElement {
         if (row.kind === "draft")
           return column.key === "name"
             ? html`<span part="folder-cell naming"
-                >${this.#gripSpace()}${folderFrame()}${this.#nameBox()}</span
+                >${this.#nameLine()}${folderFrame()}${this.#nameBox()}</span
               >`
             : nothing;
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
-              >${this.#gripSpace()}${folderFrame()}<span part="folder-name"
+              >${folderFrame()}<span part="folder-name"
                 ><span
                   ><strong>${t("folders.all_products")}</strong
                   ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
@@ -1239,9 +1252,11 @@ export class ProductList extends LitElement {
                 : nothing
             }`;
           return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
-            >${this.#grip(folder.name)}${
+            >${
               this.#renaming(folder.id)
-                ? html`${folderFrame()}${this.#nameBox()}<span part="name-after">${after}</span>`
+                ? html`${this.#nameLine()}${folderFrame()}${this.#nameBox()}<span part="name-after"
+                      >${after}</span
+                    >`
                 : html`${folderFrame(
                       html`<button
                         part="swatch-button"
@@ -1410,6 +1425,8 @@ export class ProductList extends LitElement {
         collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
         .searchTerm=${this.search}
+        .rowControls=${this.reordering ? (row: ListRow) => this.#rowControls(row) : undefined}
+        rowControlsLabel=${t("folders.drag")}
         .selectable=${this.selecting}
         .selected=${this.selected}
         .rowSelectable=${(row: ListRow) =>
@@ -1451,7 +1468,8 @@ export class ProductList extends LitElement {
         @pointerdown=${this.#pointerDown}
         @wt-expand-change=${this.#expandChange}
         ><slot name="toolbar-start" slot="toolbar-start"></slot
-        ><slot name="toolbar-end" slot="toolbar-end"></slot></wt-data-table
+        ><slot name="toolbar-end" slot="toolbar-end"></slot
+        ><slot name="toolbar-bottom" slot="toolbar-bottom"></slot></wt-data-table
       >${dragGhost(this.ghost)}`;
   }
 }
