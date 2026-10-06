@@ -6193,18 +6193,20 @@ bump it when a fixed version is published, and run the certificate suites in tho
   shows as untracked. (d) Zones and adjustment reasons offer Enable (W110d, #1273); departments
   and floor tables do too (W110e). A department is enabled through `active` on
   `PATCH /management-api/venue-service/departments/:departmentId`, from its policy-tree row and
-  the departments tab; floor tables through `active` on `PATCH /management-api/tables/:id`, and
+  the departments tab; floor tables through `active` on `PATCH /management-api/tables/:id`, which
+  refuses `table.zone_inactive` while the table's zone, or that zone's department, is disabled;
   the floor screen reads `GET /management-api/tables?includeDisabled=true`, keeping disabled
-  tables off the plan. W110e also put a space between a disabled zone's name and its "Disabled"
-  word in the policy tree. Found along the way, each left as it is: enabling a zone or a
-  department leaves what disabling switched off as it is — a department's zones stay disabled, a
-  zone's tables stay disabled, and its routing exceptions, watcher zones and till starting zones
-  stay gone; `PATCH /management-api/zones/:id` sets `active: true` on a zone whose department is
-  disabled, with no refusal (read in `updateZone`, `apps/server/src/tables.ts`, not run), though
-  the screen does not offer Enable there; `PATCH /management-api/tables/:id` likewise enables a
-  table whose zone is disabled (read, not run), which the floor screen then shows under "No zone"
-  on the plan; creating a department with a name another department has answers 500
-  `server.internal`, because there is no `department.name_taken` code (run on W110d's branch: a
+  tables off the plan, and offers no Enable on a table whose zone is disabled. W110e also put a
+  space between a disabled zone's name and its "Disabled" word in the policy tree. Found along
+  the way, each left as it is: enabling a zone or a department leaves what disabling switched off
+  as it is — a department's zones stay disabled, a zone's tables stay disabled, and its routing
+  exceptions, watcher zones and till starting zones stay gone; `PATCH /management-api/zones/:id`
+  sets `active: true` on a zone whose department is disabled, with no refusal (`updateZone`,
+  `apps/server/src/tables.ts`; run on W110e's branch: 204), though the screen does not offer
+  Enable there; `PATCH /management-api/tables/:id` with a `zoneId` and no `active` moves an
+  active table into a disabled zone and leaves it active (run on W110e's branch: 204), though the
+  floor screen offers only active zones; creating a department with a name another department has
+  answers 500 `server.internal`, because there is no `department.name_taken` code (run on W110d's branch: a
   second `POST /management-api/venue-service/departments` with the same name); and an active
   zone with no department has its "Unconfigured" word drawn the same way the disabled word was,
   with no space before it (read in `venue-operations-screen.ts`, not seen). (e) a test gap,

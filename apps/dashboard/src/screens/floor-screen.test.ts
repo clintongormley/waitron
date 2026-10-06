@@ -432,6 +432,43 @@ describe("floor-screen — enabling a disabled table", () => {
     expect(api.listTables).toHaveBeenCalledTimes(1);
   });
 
+  it("offers no Enable on a disabled table whose zone is disabled; a zoneless or active-zone one keeps it", async () => {
+    const api = stubApi({}, ZONES, [
+      { ...TWO_TABLES[1]!, id: "t5", label: "8", zoneId: "z-disabled", active: false },
+      { ...TWO_TABLES[0]!, id: "t6", label: "9", active: false },
+      { ...TWO_TABLES[1]!, id: "t7", label: "10", active: false },
+    ]);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=table-status-t5]")!.textContent!.trim()).toBe("Deshabilitada");
+    expect(q(el, "[data-test=table-enable-t5]")).toBeNull();
+    expect(q(el, "[data-test=table-deactivate-t5]")).toBeNull();
+    expect(q(el, "[data-test=table-enable-t6]")).not.toBeNull();
+    expect(q(el, "[data-test=table-enable-t7]")).not.toBeNull();
+  });
+
+  it("shows the server's refusal to enable a table in a disabled zone or department in words, in both languages", async () => {
+    const generic = {
+      es: codeMessage("test.unmapped", "es"),
+      en: codeMessage("test.unmapped", "en"),
+    };
+    expect(codeMessage("table.zone_inactive", "es")).not.toBe(generic.es);
+    expect(codeMessage("table.zone_inactive", "en")).not.toBe(generic.en);
+    const api = stubApi(
+      { updateTable: vi.fn().mockRejectedValue({ code: "table.zone_inactive" }) },
+      ZONES,
+      MIXED,
+    );
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    q(el, "[data-test=table-enable-t2]")!.click();
+    await flush(el);
+    expect(q(el, "[role=alert]")!.textContent).toContain(
+      codeMessage("table.zone_inactive", "es-ES"),
+    );
+    expect(q(el, "[data-test=table-enable-t2]")).not.toBeNull();
+  });
+
   it("leaves a disabled table off the plan's canvas and tray", async () => {
     const api = stubApi({}, ZONES, [
       ...MIXED,

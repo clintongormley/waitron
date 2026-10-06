@@ -375,13 +375,18 @@ export class FloorScreen extends LitElement {
               : html`<span class="disabled-group"
                   ><span class="disabled" data-test="table-status-${tbl.id}"
                     >${t("floor.table_disabled")}</span
-                  ><wt-button
-                    variant="secondary"
-                    size="sm"
-                    data-test="table-enable-${tbl.id}"
-                    @click=${() => void this.#enableTable(tbl.id)}
-                    >${t("action.enable")}</wt-button
-                  ></span
+                  >${
+                    // `zones` holds active zones only, and the server refuses a table in any other.
+                    tbl.zoneId === null || this.zones.some((zone) => zone.id === tbl.zoneId)
+                      ? html`<wt-button
+                          variant="secondary"
+                          size="sm"
+                          data-test="table-enable-${tbl.id}"
+                          @click=${() => void this.#enableTable(tbl.id)}
+                          >${t("action.enable")}</wt-button
+                        >`
+                      : nothing
+                  }</span
                 >`
           }
         </div>
