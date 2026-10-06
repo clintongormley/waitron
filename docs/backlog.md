@@ -1173,6 +1173,13 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+The new catalogue colour entry now identifies its product and commits an accepted colour before
+refreshing on the branch. Replacement and reconnect release the old opening; departed write
+results leave the replacement draft and its busy gate alone. Native Cancel/Escape retain a refused
+draft through Keep and close only after Discard. The dated audit records route tests, independent
+guard deletions and EN/ES, both-theme, phone/desktop captures. Configuration exemptions,
+device-profile integration and the remaining navigation/advancing-owner audit keep W69 incomplete.
+
 Local holiday Add/Edit now uses the shared protection on the branch. Cancel and native Escape
 retain the entry until you choose Discard; trimmed reverts and accepted saves stay clean. Hours
 keeps the Dates tab and its local entry visible while navigation is being decided. Refusals retain

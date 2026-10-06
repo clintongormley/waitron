@@ -3191,3 +3191,229 @@ it("clears the photo entry target when the product editor closes", async () => {
   await expect.poll(() => editor(el).open).toBe(false);
   expect(new URL(location.href).searchParams.get("field")).toBeNull();
 });
+
+describe("W69 catalogue colour lifecycle", () => {
+  function deferredWrite() {
+    let resolve!: () => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<void>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    return { promise, resolve, reject };
+  }
+  async function mountColour(overrides: Partial<DashboardApi> = {}) {
+    const { el: host } = await mountWidget<PlacementLeaveHost>("placement-leave-test-host", {});
+    const coordinator = host.leave.coordinator;
+    const register = (event: Event) => {
+      (event as CustomEvent<{ accept(value: typeof coordinator): void }>).detail.accept(
+        coordinator,
+      );
+    };
+    document.addEventListener("wt-leave-coordinator", register);
+    onTestFinished(() => document.removeEventListener("wt-leave-coordinator", register));
+    const second = { ...products[0]!, id: "p2", name: "Lemonade", color: "#256bb1" };
+    const api = stubApi({
+      listProducts: vi.fn().mockResolvedValue([...products, second]),
+      ...overrides,
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "product-colour", { productId: "p1" });
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("dashboard-product-color-form")!;
+    await form.updateComplete;
+    await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+    return { host, coordinator, api, el, form };
+  }
+  async function pick(form: HTMLElementTagNameMap["dashboard-product-color-form"], color: string) {
+    form.shadowRoot!.querySelector<HTMLElement>(`[data-color="${color}"]`)!.click();
+    await form.updateComplete;
+  }
+  function save(form: HTMLElementTagNameMap["dashboard-product-color-form"]) {
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  }
+  async function replace(el: CatalogueScreen) {
+    emit(list(el), "product-colour", { productId: "p2" });
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("dashboard-product-color-form")!.updateComplete;
+  }
+  async function question(host: PlacementLeaveHost) {
+    const warning = host.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => warning.open).toBe(true);
+    await warning.updateComplete;
+    return warning;
+  }
+
+  it("replacing a colour target cancels its question and starts from the replacement colour", async () => {
+    const { host, coordinator, el, form } = await mountColour();
+    await pick(form, "#b12525");
+    const request = coordinator.request({ scopes: [form], reason: "navigation", proceed() {} });
+    await question(host);
+    await replace(el);
+    await expect.poll(() => host.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(await request).toBe("stale");
+    expect(
+      form.shadowRoot!.querySelector('[data-color="#256bb1"]')!.getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(coordinator.isDirty([form])).toBe(false);
+    expect(host.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  });
+
+  it("commits and closes the accepted colour before a refused refresh starts", async () => {
+    const { coordinator, api, form } = await mountColour({
+      setProductColor: vi.fn().mockResolvedValue(undefined),
+    });
+    await pick(form, "#b12525");
+    let refreshState: { dirty: boolean; open: boolean } | undefined;
+    vi.mocked(api.listMadeAt).mockImplementationOnce(async () => {
+      refreshState = { dirty: coordinator.isDirty([form]), open: form.open };
+      throw { code: "connection.failed" };
+    });
+    save(form);
+    await expect.poll(() => refreshState).toEqual({ dirty: false, open: false });
+    expect(api.setProductColor).toHaveBeenCalledExactlyOnceWith("p1", "#b12525");
+  });
+
+  for (const outcome of ["success", "refusal"] as const) {
+    it(`a departed colour write's ${outcome} cannot close or refuse a replacement draft`, async () => {
+      const write = deferredWrite();
+      const { coordinator, api, el, form } = await mountColour({
+        setProductColor: vi.fn(() => write.promise),
+      });
+      await pick(form, "#b12525");
+      save(form);
+      await expect.poll(() => form.busy).toBe(true);
+      await replace(el);
+      await pick(form, "#b12525");
+      if (outcome === "success") write.resolve();
+      else write.reject({ code: "product.invalid", params: { field: "color" } });
+      await flush(el);
+      expect(form.open).toBe(true);
+      expect(form.errors).toEqual({});
+      expect(form.busy).toBe(false);
+      expect(
+        form.shadowRoot!.querySelector('[data-color="#b12525"]')!.getAttribute("aria-checked"),
+      ).toBe("true");
+      expect(coordinator.isDirty([form])).toBe(true);
+      await pick(form, "#256bb1");
+      expect(coordinator.isDirty([form])).toBe(false);
+      expect(api.setProductColor).toHaveBeenCalledExactlyOnceWith("p1", "#b12525");
+    });
+  }
+
+  it("disconnect clears the colour opening and a departed write cannot affect a later connection", async () => {
+    const write = deferredWrite();
+    const { el, form } = await mountColour({ setProductColor: vi.fn(() => write.promise) });
+    await pick(form, "#b12525");
+    save(form);
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await flush(el);
+    expect(form.open).toBe(false);
+    await replace(el);
+    await pick(form, "#b12525");
+    write.resolve();
+    await flush(el);
+    expect(form.open).toBe(true);
+    expect(form.errors).toEqual({});
+    expect(form.busy).toBe(false);
+  });
+
+  for (const route of ["cancel", "escape"] as const) {
+    it(`the catalogue colour ${route} keeps a refused draft until Discard`, async () => {
+      const { host, coordinator, api, form } = await mountColour({
+        setProductColor: vi
+          .fn()
+          .mockRejectedValue({ code: "product.invalid", params: { field: "color" } }),
+      });
+      await pick(form, "#b12525");
+      save(form);
+      await expect.poll(() => form.errors.color).toBe(t("editor.field_rejected"));
+      await form.updateComplete;
+      if (route === "cancel")
+        form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+      else {
+        form.shadowRoot!.querySelector<HTMLElement>('[data-color="#b12525"]')!.focus();
+        await userEvent.keyboard("{Escape}");
+      }
+      const warning = await question(host);
+      expect(
+        form.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open,
+      ).toBe(true);
+      warning.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
+      await expect.poll(() => warning.open).toBe(false);
+      await closeReportsDelivered();
+      expect(form.open).toBe(true);
+      expect(
+        form.shadowRoot!.querySelector('[data-color="#b12525"]')!.getAttribute("aria-checked"),
+      ).toBe("true");
+      form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+      await question(host);
+      warning.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+      await expect.poll(() => form.open).toBe(false);
+      expect(coordinator.isDirty([form])).toBe(false);
+      expect(api.setProductColor).toHaveBeenCalledExactlyOnceWith("p1", "#b12525");
+    });
+  }
+
+  it("a successful write invalidates the pending page question before its answer can leave", async () => {
+    const write = deferredWrite();
+    const { host, coordinator, form } = await mountColour({
+      setProductColor: vi.fn(() => write.promise),
+    });
+    await pick(form, "#b12525");
+    save(form);
+    const proceeded = vi.fn();
+    const request = coordinator.request({
+      scopes: [form],
+      reason: "navigation",
+      proceed: proceeded,
+    });
+    const warning = await question(host);
+    const oldDiscard = warning.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!;
+    write.resolve();
+    await expect.poll(() => warning.open).toBe(false);
+    expect(await request).toBe("stale");
+    oldDiscard.click();
+    await closeReportsDelivered();
+    expect(form.open).toBe(false);
+    expect(coordinator.isDirty([form])).toBe(false);
+    expect(proceeded).not.toHaveBeenCalled();
+  });
+
+  it("an old write finishing cannot release the busy gate of a replacement write", async () => {
+    const oldWrite = deferredWrite();
+    const newWrite = deferredWrite();
+    const { api, el, form } = await mountColour({
+      setProductColor: vi
+        .fn()
+        .mockImplementationOnce(() => oldWrite.promise)
+        .mockImplementationOnce(() => newWrite.promise),
+    });
+    await pick(form, "#b12525");
+    save(form);
+    await replace(el);
+    await pick(form, "#b12525");
+    save(form);
+    await expect.poll(() => form.busy).toBe(true);
+    oldWrite.resolve();
+    await flush(el);
+    expect(form.busy).toBe(true);
+    expect(form.open).toBe(true);
+    save(form);
+    expect(api.setProductColor).toHaveBeenCalledTimes(2);
+    newWrite.resolve();
+    await expect.poll(() => form.open).toBe(false);
+  });
+
+  it("a clean colour entry cancels directly without a write or warning", async () => {
+    const { host, coordinator, api, form } = await mountColour({ setProductColor: vi.fn() });
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    await expect.poll(() => form.open).toBe(false);
+    expect(host.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(coordinator.isDirty([form])).toBe(false);
+    expect(api.setProductColor).not.toHaveBeenCalled();
+  });
+});

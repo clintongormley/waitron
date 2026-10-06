@@ -3106,3 +3106,45 @@ Configuration exemptions, device-profile integration after W97, remaining actual
 route matrices and the final advancing-owner inventory remain open. Inspect A303's newly added
 catalogue colour route's successful-write boundary during that inventory. Tasks 2/3 stay complete;
 Tasks 1/4/5/6 stay partial. W69 is not ready for finish-branch or landing.
+
+
+## 2026-10-07: advancing catalogue colour route checkpoint
+
+A303 added the catalogue row's product-colour entry after the original inventory. The form was
+already protected on this branch; its containing catalogue route now passes the product identity
+and calls `closeSaved` after the colour write succeeds, before starting the product refresh.
+Replacing the target invalidates its question and establishes the replacement colour baseline.
+Disconnect clears this opening. A departed success or refusal cannot close, refuse or release the
+busy gate of a replacement opening. The colour write and its existing payload remain unchanged.
+
+The new route cases are appended to `apps/dashboard/src/screens/catalogue-screen.test.ts` under
+“W69 catalogue colour lifecycle”. Initial RED reported five failures and one clean-control pass:
+missing target identity, dirty state at the refresh boundary, departed success, departed refusal
+and retained opening on reconnect. The first identity test timed out awaiting its uncancelled
+request; it now polls the visible warning before awaiting the outcome. The installed identity
+mutation fails that warning assertion. No existing assertion changed. The new API fixture supplies
+a second product with a distinct name and colour; it does not alter the original fixtures.
+
+Final local receipts are in Lane E `receipts/w69-catalogue-colour-20261007/`:
+
+- The catalogue screen/accessibility, product-colour form/accessibility and catalogue unsaved-form
+  command reports 184 passes in five suites. This includes native Escape and Cancel through
+  Keep/Discard after a real route's refused write, accepted-save invalidation and the replacement
+  write's busy gate. The late-course-close suite deliberately logs its unhandled marker; the
+  retained family log reports every suite passing.
+- In an independently cloned, frozen-installed candidate, six guard deletions each report one
+  failed case and one passing clean control: product identity, successful-save commit, accepted
+  result generation, refused result generation, busy-release generation and disconnect cleanup.
+  The restored ten-case route group passes; its source matches the feature file byte for byte.
+- Eight temporary native Escape/Keep/Discard flows cover EN/ES, light/dark and measured 390/1280
+  widths. Sixteen scoped axe scans pass; sixteen captures were inspected in four contact sheets.
+  The fixture mounts the real catalogue screen and form beside the shared confirmation host with
+  synthetic API responses. This is not a full DashboardApp, server-persistence, hovered-colour or
+  activated browser-unload measurement.
+- Dashboard typecheck, focused ESLint, source formatting and diff checks pass. Root guard results
+  are retained separately in `root.log`.
+
+This reconciles the colour route called out by the preceding checkpoint. Configuration exemptions,
+device-profile integration after W97, other actual dashboard/till/context/history routes and the
+complete advancing-owner inventory remain open. Tasks 2/3 remain complete; Tasks 1/4/5/6 remain
+partial. W69 remains in progress, without a PR, push, finish-branch or landing at this checkpoint.
