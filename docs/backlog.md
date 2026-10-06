@@ -7223,7 +7223,7 @@ characters. Left open:
 - **The `ci` step passes only when every needed job succeeded or was skipped, and prints each
   result (A274, owner 2026-10-06) — DONE (#1283).**
 - **A job GitHub never acquired a runner for may still let `ci` pass (A274 follow-up) — DONE
-  (A276).** `ci` now also reads each needed job's conclusion from GitHub's jobs API, which recorded
+  (A276, #1286).** `ci` now also reads each needed job's conclusion from GitHub's jobs API, which recorded
   the 2026-10-05 never-acquired job as `cancelled` (the `gh api` read of run 37368759185 is in the
   section linked below). Shown on GitHub for a failed, a timed-out and a
   hand-cancelled never-run job; GitHub's own "not acquired" cancellation could not be produced on
