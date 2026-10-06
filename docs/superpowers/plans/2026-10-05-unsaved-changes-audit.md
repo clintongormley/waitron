@@ -1,5 +1,31 @@
 # W69 editable-form inventory
 
+## 2026-10-06 receipt appearance checkpoint
+
+Receipt header/footer, phone/email, address switch and logo register one appearance scope under
+the page. Comparison uses the existing trimmed/omitted request body, retaining invalid contacts;
+Discard restores the shown loaded values. A fulfilled appearance write commits its captured body
+before the independent location write settles, without clearing later input. Disconnect disposes
+that scope and resets its merge history; a reconnected page takes the loaded appearance again.
+An accepted live snapshot updates a clean scope, keeping automatic reads exempt. Live snapshots
+do not replace an edited scope's baseline. Language and operation-description scopes remain open.
+
+The initial suite reported eleven failures and two passes before implementation. The reconnect
+and clean-live-read cases then failed before their fixes. The final six receipt suites ran 169
+cases; dashboard types, changed-source lint and source formatting passed. Existing assertions
+were unchanged. Seven installed disposable-clone mutations each failed its intended case beside
+a passing clean-page control. Removing the identity condition alone survived because the write
+still targeted its disposed captured scope; targeting the replacement scope instead failed.
+The restored candidate ran eighteen cases and both files matched the feature files before removal.
+Exact commands/output: Lane E `receipts/w69-receipt-trim-20261006/`.
+
+Eight native header-input Keep/Discard flows in EN/ES, light/dark and 390/1280 widths passed
+sixteen axe scans. Sixteen captures were inspected in four contact sheets. The receipts use a
+minimal real LeaveController shell with synthetic API replies; they do not establish receipt-page
+sidebar/history integration, actual receipt writes, hovered colours or activated native reload.
+Phone captures show the form and warning but clip the preview below it. Other W69 owners and
+the final advancing-owner inventory remain open; W69 is not ready for finish-branch.
+
 ## 2026-10-06 My schedule page checkpoint
 
 Cover and time-off requests register separate child scopes under the schedule screen. Each scope

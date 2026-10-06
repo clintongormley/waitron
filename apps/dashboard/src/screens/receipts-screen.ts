@@ -3,6 +3,8 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { isValidTelephone, resolveContentText, type ContentLanguages } from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter, navigationGuardFor } from "@waitron/ui";
+import { leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
+import { sameValue } from "../widgets/product-editor-model.js";
 import { observeNavigation } from "@waitron/ui/src/navigation-guard.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -204,7 +206,31 @@ export class ReceiptsScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
 
-  readonly #draft = new DraftRows<Trim & { id: string }>();
+  #trimScope?: DraftScope<{ shown: Trim; body: ReceiptConfig }>;
+  #trimConnection = 0;
+
+  #trimSnapshot(): { shown: Trim; body: ReceiptConfig } {
+    return { shown: this.#shown(), body: this.#trim() };
+  }
+
+  #registerTrim(): void {
+    if (this.#trimScope) return;
+    this.#trimScope = leaveCoordinatorFor(this)?.register({
+      id: {},
+      parent: this,
+      current: () => this.#trimSnapshot(),
+      snapshot: (value) => ({ shown: { ...value.shown }, body: { ...value.body } }),
+      equal: (a, b) => sameValue(a.body, b.body),
+      restore: (value) => {
+        for (const field of TEXT_FIELDS) this[field] = value.shown[field];
+        this.printAddress = value.shown.printAddress;
+        this.logo = value.shown.logo;
+        this.#schedulePreview();
+      },
+    });
+  }
+
+  #draft = new DraftRows<Trim & { id: string }>();
   readonly #receiptQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -302,6 +328,12 @@ export class ReceiptsScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#trimConnection++;
+    this.#trimScope?.dispose();
+    this.#trimScope = undefined;
+    this.#draft = new DraftRows<Trim & { id: string }>();
+    this.receiptLoaded = false;
+    this.saving = false;
     super.disconnectedCallback();
     clearTimeout(this.#previewTimer);
     this.#previewAgain = false;
@@ -416,6 +448,7 @@ export class ReceiptsScreen extends LitElement {
   async #loadReceipt(): Promise<void> {
     try {
       await this.#receiptQueries.watch("getReceipt", [], ({ receipt, venueAddress }) => {
+        const wasClean = this.#trimScope !== undefined && !this.#trimScope.isDirty();
         const [merged] = this.#draft.merge(
           [{ id: "receipt", ...this.#shown() }],
           [
@@ -440,6 +473,7 @@ export class ReceiptsScreen extends LitElement {
         this.receiptLoadError = null;
         if (!this.receiptLoaded) {
           this.receiptLoaded = true;
+          this.#registerTrim();
           this.#previewActive = true;
           void this.#sendPreview();
         } else if (moved) {
@@ -447,6 +481,8 @@ export class ReceiptsScreen extends LitElement {
           this.#previewRequested = null;
           this.#schedulePreview();
         } else if (changed) this.#schedulePreview();
+        this.#registerTrim();
+        if (wasClean) this.#trimScope?.commit(this.#trimSnapshot());
       });
     } catch (error) {
       this.receiptLoadError = codeOf(error);
@@ -569,6 +605,7 @@ export class ReceiptsScreen extends LitElement {
     delete refusals[field];
     this.trimRefusals = refusals;
     this.saved = false;
+    this.#trimScope?.changed();
     this.#previewActive = true;
   }
 
@@ -678,6 +715,7 @@ export class ReceiptsScreen extends LitElement {
 
   async #save(): Promise<void> {
     if (this.saving) return;
+    const trimConnection = this.#trimConnection;
     this.saved = false;
     this.saveFailed = false;
     this.errorKey = null;
@@ -700,10 +738,17 @@ export class ReceiptsScreen extends LitElement {
       await focusFirstInvalid(this.#form());
       return;
     }
+    if (trimConnection !== this.#trimConnection) return;
+    const submittedTrim = this.#trimSnapshot();
+    const trimScope = this.#trimScope;
     const [trim, location] = await Promise.allSettled([
-      this.api.putReceipt(this.#trim()),
+      this.api.putReceipt(submittedTrim.body).then(() => {
+        if (trimConnection === this.#trimConnection && trimScope === this.#trimScope)
+          trimScope?.commit(submittedTrim);
+      }),
       this.api.putLocationSettings(this.description),
     ]);
+    if (trimConnection !== this.#trimConnection) return;
     this.saving = false;
     if (trim.status === "rejected") this.#receiptRefused(trim.reason);
     if (location.status === "rejected") this.#locationRefused(location.reason);

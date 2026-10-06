@@ -1173,6 +1173,12 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Receipt appearance now has its own scope on the branch: header, footer, phone, email, address
+switch and logo compare their existing submitted body. Accepted appearance writes commit before
+the separate location write finishes; a refused part and newer input remain protected. Clean live
+reads stay exempt and edited baselines survive live reads. Receipt language and operation-description
+scopes remain open, along with the remaining page/till/tab/context owners and native reload.
+
 My schedule now registers cover and time-off requests independently on the branch. Each submitted
 request clears only its own draft before refreshing lists; failed writes and newer input remain
 protected. The new native-input shell cases exercise sidebar, logout, language change, history Back
@@ -1186,7 +1192,7 @@ new tabs, downloads and other origins/apps. Accepted-route observers can normali
 the pending destination is accepted. Receipt preview choices and address repairs now write
 through the adapter, and the preview observes only accepted routes while it is installed.
 Account-link cancellation preserves the history index and unrelated state; its form remains
-in place until navigation is approved. Receipt/login page draft registration, child screen/tab
+in place until navigation is approved. Receipt-language, operation-description and login draft registration, child screen/tab
 owners, till shell integration, other page/setup owners and activated native reload
 remain open. Setup Back now requests the current child scope before leaving; the administrator
 step protects each of its six submitted fields. Next transfers their exact values into the
