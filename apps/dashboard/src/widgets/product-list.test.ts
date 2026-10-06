@@ -19,7 +19,8 @@ afterEach(cleanupWidgets);
 afterEach(() => setLocale("es"));
 // The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
 // a choice one test makes would otherwise be restored into the next one.
-beforeEach(() => {
+beforeEach(async () => {
+  await page.viewport(1280, 844);
   sessionStorage.clear();
   localStorage.removeItem("waitron.products.table:columns");
   localStorage.removeItem("waitron.products.table:expanded");
@@ -1821,11 +1822,15 @@ describe("the product list at phone width", () => {
     return {
       edges,
       box: box.getBoundingClientRect(),
-      // With reordering off the row has no grip, so its line starts at the folder frame.
-      grip: (
-        row.querySelector('.drag-grip, [part~="grip-space"]') ??
-        row.querySelector('[part~="folder-frame"]')!
-      ).getBoundingClientRect(),
+      grip:
+        row.querySelector('.drag-grip, [part~="grip-space"]')?.getBoundingClientRect() ??
+        (root.host.hasAttribute("narrow")
+          ? {
+              left: row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect().left,
+              top: row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect().top,
+              bottom: row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect().top,
+            }
+          : row.querySelector('[part~="folder-frame"]')!.getBoundingClientRect()),
       icon: row.querySelector('[part~="folder-frame"]')!.getBoundingClientRect(),
       error: error.textContent,
       errorOverflows: error.scrollWidth > error.clientWidth,
@@ -1864,8 +1869,6 @@ describe("the product list at phone width", () => {
     "puts a renamed category's name box and its refusal on their own line under the grip or its slot at 390 px ($locale, $categoryId, reordering: $reordering)",
     ({ locale, categoryId, reordering }) =>
       onPhone(locale, 390, async () => {
-        // An asterisk leaves the least room beside the grip or colour-square slot; the count is hidden
-        // at this width, so the `count` part measured below has an empty box.
         const { el, root } = await mountNarrowTree({
           unroutedFolderIds: ["f", "d", "b"],
           reordering,
@@ -1874,7 +1877,7 @@ describe("the product list at phone width", () => {
         const line = await nameBoxLine(root);
         expectOwnLine(line);
         const row = root.querySelector(`tr[data-row-key="folder:${categoryId}"]`)!;
-        for (const after of row.querySelectorAll('[part~="count"], [part~="unrouted-folder"]')) {
+        for (const after of row.querySelectorAll('[part~="unrouted-folder"]')) {
           const rect = after.getBoundingClientRect();
           expect(rect.right).toBeLessThanOrEqual(line.edges.pinned);
           expect(rect.bottom).toBeLessThanOrEqual(line.box.top);
@@ -2017,23 +2020,27 @@ describe("the product list at phone width", () => {
         ...cell.querySelectorAll<HTMLElement>(
           'strong, [part~="count"], [part~="unrouted-folder"], [part~="variant-count"], [part~="variant-name"]',
         ),
-      ].map((element) => {
-        const text = document.createRange();
-        text.selectNodeContents(element);
-        const lines = new Set([...text.getClientRects()].map(({ bottom }) => Math.round(bottom)));
-        const { left, right, bottom, top } = text.getBoundingClientRect();
-        return {
-          key: row.getAttribute("data-row-key")!,
-          text: element.textContent!.trim(),
-          left,
-          right,
-          top,
-          bottom,
-          lines: lines.size,
-          start,
-          pinned,
-        };
-      });
+      ]
+        .filter(
+          (element) => !element.matches('[part~="count"]') || !root.host.hasAttribute("narrow"),
+        )
+        .map((element) => {
+          const text = document.createRange();
+          text.selectNodeContents(element);
+          const lines = new Set([...text.getClientRects()].map(({ bottom }) => Math.round(bottom)));
+          const { left, right, bottom, top } = text.getBoundingClientRect();
+          return {
+            key: row.getAttribute("data-row-key")!,
+            text: element.textContent!.trim(),
+            left,
+            right,
+            top,
+            bottom,
+            lines: lines.size,
+            start,
+            pinned,
+          };
+        });
     });
   }
 
@@ -2086,19 +2093,18 @@ describe("the product list at phone width", () => {
   );
 
   it.each(["en-GB", "es-ES"])(
-    "keeps a long category's swatch, before its wrapped name, before the pinned actions at 390 px (%s)",
+    "hides a long category's swatch and wraps its name before the pinned actions at 390 px (%s)",
     (locale) =>
       onPhone(locale, 390, async () => {
         const { root } = await mountLong();
+        await vi.waitFor(() => expect(root.host.hasAttribute("narrow")).toBe(true));
         const row = root.querySelector('tr[data-row-key="folder:long"]')!;
         const swatch = row
           .querySelector<HTMLElement>('[data-test="color-long"]')!
           .getBoundingClientRect();
-        const start = root.querySelector(".scroll")!.getBoundingClientRect().left;
         const pinned = row.querySelector('td[data-pinned="end"]')!.getBoundingClientRect().left;
         expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
-        expect(swatch.left).toBeGreaterThanOrEqual(start);
-        expect(swatch.right).toBeLessThanOrEqual(pinned);
+        expect(swatch.width).toBe(0);
         const name = (await nameTexts(root)).find(
           ({ key, text }) => key === "folder:long" && text === longCategory.name,
         )!;
@@ -2695,7 +2701,7 @@ describe("the product list as a tree", () => {
     el.nameDraft = { kind: "rename", categoryId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-    const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+    const row = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!;
     expect(row.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.value).toBe("Drinks");
     expect(row.querySelector("strong")).toBeNull();
     expect(row.querySelector(".row-activate")).toBeNull();
@@ -2798,7 +2804,7 @@ describe("the product list as a tree", () => {
     expect(getComputedStyle(chip("f")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(getComputedStyle(chip("f")).borderTopWidth).toBe("1px");
     // Drawn before the name, in the slot a product's photo takes.
-    const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+    const row = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!;
     expect(button("d").getBoundingClientRect().right).toBeLessThanOrEqual(
       row.querySelector("strong")!.getBoundingClientRect().left,
     );
@@ -2868,7 +2874,7 @@ describe("the product list as a tree", () => {
       el.nameColor = "#b12525";
       await el.updateComplete;
       await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+      const row = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!;
       expect(row.querySelector('[data-test="name-box-color"]')).toBe(square().button);
       expect(getComputedStyle(square().chip).backgroundColor).toBe("rgb(177, 37, 37)");
       expect(row.querySelector('[data-test="color-d"]')).toBeNull();
@@ -3620,7 +3626,7 @@ describe("the Products tree's Name column", () => {
 
     const PRODUCTS = new Set(["cola", "salad", "chop", "loin", "ribs", "bread"]);
 
-    it("draws no photo or placeholder, so a product's name starts right after its grip, and keeps each category's leading slot", async () => {
+    it("draws no photo, placeholder or category slot, so names start right after their grips", async () => {
       const { root } = await mountPhone();
       const photos = [
         ...root.querySelectorAll<HTMLElement>('[part~="thumb-frame"], [part~="thumb-placeholder"]'),
@@ -3635,7 +3641,7 @@ describe("the Products tree's Name column", () => {
         const row = key === "root" ? ROOT_KEY : key;
         expect(pieces(root, row).media!, key).not.toBeNull();
         const folder = root.querySelector(`tr[data-row-key="${row}"] [part~="folder-frame"]`)!;
-        expect(folder.getBoundingClientRect().width, key).toBeGreaterThan(0);
+        expect(folder.getBoundingClientRect().width, key).toBe(0);
       }
     });
 
@@ -3644,18 +3650,15 @@ describe("the Products tree's Name column", () => {
         [true, false].map((reordering) => ({ selecting, reordering })),
       ),
     )(
-      "still steps every name in evenly per level, a product's starting one folder slot before a category's (selecting: $selecting, reordering: $reordering)",
+      "steps category and product names in evenly per level without media slots (selecting: $selecting, reordering: $reordering)",
       async ({ selecting, reordering }) => {
         const { root } = await mountPhone({ selecting, reordering });
         const all = ROWS.map((key) => ({ key, ...pieces(root, key === "root" ? ROOT_KEY : key) }));
         const step = all.find(({ key }) => key === "folder:d")!.name.left - all[0]!.name.left;
         expect(step).toBeGreaterThan(0);
-        const folder = getComputedStyle(root.querySelector('[part~="folder-frame"]')!);
-        const slot = parseFloat(folder.width) + parseFloat(folder.marginInlineEnd);
-        expect(slot).toBeGreaterThan(0);
+        expect(root.querySelector('[part~="folder-frame"]')!.getBoundingClientRect().width).toBe(0);
         for (const row of all) {
-          const expected =
-            all[0]!.name.left + (row.level - 1) * step - (PRODUCTS.has(row.key) ? slot : 0);
+          const expected = all[0]!.name.left + (row.level - 1) * step;
           expect(row.name.left, row.key).toBeCloseTo(expected, 0);
         }
       },
@@ -4347,7 +4350,7 @@ describe("a category row's leading slot", () => {
       el.nameDraft = { kind: "rename", categoryId: "d" };
       await el.updateComplete;
       await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+      const row = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!;
       const squares = row.querySelectorAll('[part~="color-swatch"]');
       expect(squares).toHaveLength(1);
       expect(squares[0]!.closest('[data-test="name-box-color"]')).not.toBeNull();
@@ -4363,7 +4366,7 @@ describe("a category whose name wraps", () => {
       [true, false].map((reordering) => ({ locale, reordering })),
     ),
   )(
-    "keeps its grip and swatch beside the name's first line at 390 px ($locale, reordering: $reordering)",
+    "keeps its grip beside the name's first line and hides its swatch at 390 px ($locale, reordering: $reordering)",
     async ({ locale, reordering }) => {
       const restore = {
         width: window.innerWidth,
@@ -4395,7 +4398,10 @@ describe("a category whose name wraps", () => {
         const whole = text.getBoundingClientRect();
         const wholeMiddle = whole.top + whole.height / 2;
         expect(new Set(lines.map(({ bottom }) => Math.round(bottom))).size).toBeGreaterThan(1);
-        for (const part of [...(reordering ? [".drag-grip"] : []), '[data-test="color-long"]']) {
+        expect(row.querySelector('[data-test="color-long"]')!.getBoundingClientRect().width).toBe(
+          0,
+        );
+        for (const part of reordering ? [".drag-grip"] : []) {
           const box = row.querySelector(part)!.getBoundingClientRect();
           const middle = box.top + box.height / 2;
           expect(Math.abs(middle - firstMiddle), part).toBeLessThanOrEqual(3);
@@ -4411,7 +4417,7 @@ describe("a category whose name wraps", () => {
 
 describe("a category's count", () => {
   it.each(["en-GB", "es-ES"].flatMap((locale) => [390, 1280].map((width) => ({ locale, width }))))(
-    "is hidden on a phone and shown on a wide screen ($locale, $width px)",
+    "is visually hidden on a phone, still names its row, and is shown on a wide screen ($locale, $width px)",
     async ({ locale, width }) => {
       const restore = {
         width: window.innerWidth,
@@ -4428,15 +4434,67 @@ describe("a category's count", () => {
         expect(counts.map((count) => count.dataset.test)).toEqual(
           expect.arrayContaining(["count-root", "count-d", "count-b", "count-f"]),
         );
+        await expect
+          .element(root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!, {
+            timeout: 1000,
+          })
+          .toHaveAccessibleName(
+            locale === "en-GB"
+              ? /Drinks.*1 category, 1 product/
+              : /Drinks.*1 categoría, 1 producto/,
+          );
         for (const count of counts) {
           const test = count.dataset.test;
           expect(count.textContent!.trim(), test).not.toBe("");
-          if (width === 390) expect(getComputedStyle(count).display, test).toBe("none");
-          else expect(count.getBoundingClientRect().width, test).toBeGreaterThan(0);
+          if (width === 390) {
+            expect(getComputedStyle(count).display, test).not.toBe("none");
+            expect(getComputedStyle(count).clipPath, test).toBe("inset(50%)");
+            expect(count.getBoundingClientRect().width, test).toBe(1);
+          } else {
+            expect(getComputedStyle(count).clipPath, test).toBe("none");
+            expect(count.getBoundingClientRect().width, test).toBeGreaterThan(1);
+          }
         }
       } finally {
         setLocale(restore.locale);
         await page.viewport(restore.width, restore.height);
+      }
+    },
+  );
+});
+
+describe("A303 tree media slots", () => {
+  it.each([1280, 440, 390])(
+    "uses equal category and product boxes, hiding both at %i px only when narrow",
+    async (width) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        const { el, table } = await mountTree({
+          reordering: false,
+          products: [product({ id: "cola", primaryCategoryId: "d", image: "cola.webp" })],
+        });
+        el.style.width = `${width}px`;
+        await openRow(el, "folder:d");
+        await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(width <= 440));
+        const root = await tableRoot(el);
+        const chip = root.querySelector<HTMLElement>(
+          '[data-test="color-d"] [part~="color-swatch"]',
+        )!;
+        const photo = root.querySelector<HTMLElement>('[part~="thumb-frame"]')!;
+        const slot = chip.closest<HTMLElement>('[part~="folder-frame"]')!;
+        if (width <= 440) {
+          expect(slot.getBoundingClientRect().width).toBe(0);
+          expect(photo.getBoundingClientRect().width).toBe(0);
+        } else {
+          const a = chip.getBoundingClientRect(),
+            b = photo.getBoundingClientRect();
+          expect(a.width).toBeGreaterThan(0);
+          expect(a.width).toBe(b.width);
+          expect(a.height).toBe(b.height);
+        }
+      } finally {
+        await page.viewport(before.width, before.height);
       }
     },
   );

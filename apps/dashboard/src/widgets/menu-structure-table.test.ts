@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -10,6 +10,9 @@ import { t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
+beforeEach(async () => {
+  await page.viewport(1280, 844);
+});
 
 /** The three names read differently (docs/developers/products.md), so a row showing the
  * customer-facing or kitchen name where the staff name belongs fails. */
@@ -1823,4 +1826,40 @@ describe("the Device Home Page row", () => {
     expect(events).toEqual([]);
     expect(shown(el).slice(0, 4)).toEqual(["home", ...SHORTCUT_KEYS]);
   });
+});
+
+describe("A303 tree media slots", () => {
+  it.each([1280, 440, 390])(
+    "uses equal section and product boxes, hiding both at %i px only when narrow",
+    async (width) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        const el = await mount({ reordering: false });
+        el.style.width = `${width}px`;
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(width <= 440));
+        const chip = row(el, "m-drinks")!.querySelector<HTMLElement>('[part~="color-swatch"]')!;
+        const photo = row(el, "m-burger")!.querySelector<HTMLElement>('[part~="thumb-frame"]')!;
+        const slot = chip.closest<HTMLElement>('[part~="folder-frame"]')!;
+        if (width <= 440) {
+          expect(slot.getBoundingClientRect().width).toBe(0);
+          expect(photo.getBoundingClientRect().width).toBe(0);
+          for (const swatch of table.shadowRoot!.querySelectorAll(
+            '[part~="swatch-button"], [part~="swatch-box"]',
+          )) {
+            expect(swatch.getBoundingClientRect().width).toBe(0);
+          }
+        } else {
+          const a = chip.getBoundingClientRect(),
+            b = photo.getBoundingClientRect();
+          expect(a.width).toBeGreaterThan(0);
+          expect(a.width).toBe(b.width);
+          expect(a.height).toBe(b.height);
+        }
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
 });

@@ -140,6 +140,12 @@ export class MenuStructureTable extends LitElement {
       wt-data-table::part(product-cell) {
         display: block;
       }
+      wt-data-table[narrow]::part(tree-heading) {
+        margin-inline-start: var(--tree-arrow-width);
+      }
+      :host([reordering]) wt-data-table[narrow]::part(tree-heading) {
+        margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min));
+      }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
         align-items: center;
@@ -174,6 +180,7 @@ export class MenuStructureTable extends LitElement {
       }
       wt-data-table::part(thumb-frame),
       wt-data-table::part(thumb-placeholder) {
+        box-sizing: border-box;
         display: inline-block;
         vertical-align: middle;
         margin-inline-end: var(--wt-space-3);
@@ -183,6 +190,13 @@ export class MenuStructureTable extends LitElement {
         border-radius: var(--wt-radius-md);
         overflow: hidden;
         background: var(--wt-color-surface);
+      }
+      wt-data-table[narrow]::part(swatch-button),
+      wt-data-table[narrow]::part(swatch-box),
+      wt-data-table[narrow]::part(folder-frame),
+      wt-data-table[narrow]::part(thumb-frame),
+      wt-data-table[narrow]::part(thumb-placeholder) {
+        display: none;
       }
       wt-data-table::part(thumbnail) {
         display: block;

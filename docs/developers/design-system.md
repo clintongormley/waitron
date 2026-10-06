@@ -1008,13 +1008,15 @@ empty placeholder frame when it has none; on All products and on a category bein
 it is blank. No row draws a folder icon, though the picture that follows the pointer while you drag
 a category keeps one. Then come `--wt-space-3` and the name. So on those rows names step in by the
 table's indent per level whether the row is a category or a product, and the Name heading, which
-moves with the mode, sits over the All products name. The exception is phone width (while the table
-carries `narrow`): a product row draws no photo or placeholder, so its name starts right after its
-grip (outside the mode, right after the arrow), one slot before a category's at its level, because
-a category keeps its colour square's slot (W85e, owner 2026-10-05). At phone width the table also
-hides a category's count, and All products', so the name keeps that room. A category's cell is laid
-out as a product's is, so when its name wraps, its grip and colour square stay beside the name's
-first line. A
+moves with the mode, sits over the All products name. A colour square and a product's photo or
+placeholder each occupy a `--wt-tap-min` square, including their border. This keeps the square's
+colour action at the minimum tap size and gives photos the same visual size. At phone width, when
+the table carries `narrow` (its box is 440px wide or less), both trees hide the category or section
+slot and the product photo or placeholder, so names at the same level start together. The Products
+tree visually hides each category's count, including All products', with the shared visually hidden
+pattern. The text remains in the row's accessible name, so screen readers retain the contents count
+while the visible name gets more room. A category's cell is laid out as a product's is, so when its
+name wraps, its grip and, at wider widths, colour square stay beside the name's first line. A
 variant's row draws no grip and no photo slot; its name is indented to start under its product's
 name, at phone width too. Each name, with what follows it on its row (a category's count and the asterisk that marks a
 category with no active station; a product's variant count), takes
@@ -1025,9 +1027,9 @@ or renames one is capped at the same room, though never below `--wt-tap-min`. Th
 while the table does not carry `narrow`: while a category is being renamed, its count and asterisk
 follow the name box and are not capped. At phone width (while the table carries `narrow`) the name
 box of a category being renamed or added goes on a line of its own under the row's first slot
-instead (the grip in Select and move, otherwise the blank colour-square slot), taking the room from
-that slot's start to the pinned cell. The grip, the blank slot and a renamed category's asterisk
-stay on the line above, and the asterisk wraps in what they leave of that room; the count is hidden
+instead (the grip in Select and move, otherwise the start of the name cell after the tree arrow),
+taking the room from there to the pinned cell. The grip and a renamed category's asterisk stay on
+the line above, and the asterisk wraps in what they leave of that room; the count is hidden
 at that width (above). The name box carries its own colour square in `wt-input`'s `end` slot, inside the box at
 its trailing end, so every fit above holds for the box with its square. That square is not a Tab
 stop, so Tab still leaves the box.

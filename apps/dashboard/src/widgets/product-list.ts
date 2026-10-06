@@ -1,7 +1,12 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, type DataTableColumn, type WtDataTable } from "@waitron/ui";
+import {
+  baseStyles,
+  visuallyHiddenStyles,
+  type DataTableColumn,
+  type WtDataTable,
+} from "@waitron/ui";
 import { formatMoney, resolveContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -146,7 +151,7 @@ export class ProductList extends LitElement {
           var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
         );
       }
-      /* On a phone a product's photo gives its slot to the name; a category keeps its swatch slot. */
+      wt-data-table[narrow]::part(folder-frame),
       wt-data-table[narrow]::part(thumb-frame),
       wt-data-table[narrow]::part(thumb-placeholder) {
         display: none;
@@ -158,6 +163,12 @@ export class ProductList extends LitElement {
       }
       wt-data-table::part(drop-target) {
         border-inline-start: var(--wt-selected-ring);
+      }
+      wt-data-table[narrow]::part(tree-heading) {
+        margin-inline-start: var(--tree-arrow-width);
+      }
+      :host([reordering]) wt-data-table[narrow]::part(tree-heading) {
+        margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min));
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -183,6 +194,7 @@ export class ProductList extends LitElement {
       }
       wt-data-table::part(thumb-frame),
       wt-data-table::part(thumb-placeholder) {
+        box-sizing: border-box;
         display: inline-block;
         vertical-align: middle;
         margin-inline-end: var(--wt-space-3);
@@ -227,9 +239,9 @@ export class ProductList extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      /* On a phone a category's name keeps the room. */
       wt-data-table[narrow]::part(count) {
-        display: none;
+        ${visuallyHiddenStyles}
+        clip-path: inset(50%);
       }
       /* A column flex box takes its first item's baseline, so the row still lines up by the name. */
       wt-data-table::part(folder-name),

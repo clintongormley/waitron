@@ -25,8 +25,9 @@ export const swatchPartStyles = css`
     opacity: var(--wt-opacity-disabled);
   }
   wt-data-table::part(color-swatch) {
-    width: var(--wt-space-5);
-    height: var(--wt-space-5);
+    box-sizing: border-box;
+    width: var(--wt-tap-min);
+    height: var(--wt-tap-min);
     border: 1px solid var(--wt-color-border);
     border-radius: var(--wt-radius-sm);
   }

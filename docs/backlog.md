@@ -920,8 +920,13 @@ spans it keeps its scroll position (tested with rows of fractional height at a d
 row). The Products list's
 unused `units` property is gone (it closes W75's leftover).
 
-- The count is hidden with `display: none`, so screen readers most likely do not read it at phone
-  width either (not measured); whether they should is for the owner.
+- **A303, owner 2026-10-06, in progress:** one `--wt-tap-min` box for colour squares and photos;
+  both trees hide their media slots at ≤440px. The Products count is visually hidden there but
+  remains in the row's accessible name. Slot and count browser checks added; the count check's
+  phone and desktop controls replace the old hidden-box measurement. Still to implement: the
+  unindented grip column, selection bar below Search, Select wording, and leading product slot
+  with a colour/photo menu and the photo's colour ring. Visual and whole-item finish checks remain
+  pending.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
   not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the bottom
   (left alone; not measured).
