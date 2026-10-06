@@ -641,6 +641,67 @@ describe("station status by calendar date", () => {
   });
 });
 
+describe("next change at a midnight the clocks move", () => {
+  // Santiago changes its clocks at midnight; the changes are read from the runtime's zone data.
+  const zone = "America/Santiago";
+  const forward = clockChangeAfter(zone, "2027-08-01T00:00:00Z", "forward");
+  const backward = clockChangeAfter(zone, "2027-03-01T00:00:00Z", "backward");
+  const minute = 60_000;
+  const previousDate = (date: string) =>
+    new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+
+  async function closedStationNextChange(closedDate: string, at: Date) {
+    let result: { status: unknown; next: unknown } | undefined;
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await tx.update(locations).set({ timeZone: zone }).where(eq(locations.id, f.cfg.locationId));
+      await saveDate(tx, f.cfg, closedDate, [], true);
+      const row = (await routingModel(tx, f.cfg, at)).stationTimes.find(
+        (times) => times.stationId === f.upstairs,
+      );
+      result = { status: row?.status, next: row?.nextTransition };
+    });
+    return result!;
+  }
+
+  it("reports the first minute that exists when the clocks skip midnight", async () => {
+    // Midnight is skipped: the clock goes from 23:59 straight to 01:00 on the next date.
+    expect([forward.before, forward.after]).toEqual(["23:59", "01:00"]);
+    const closedDate = previousDate(forward.date);
+    expect(
+      await closedStationNextChange(closedDate, new Date(forward.instant.getTime() - 120 * minute)),
+    ).toEqual({
+      status: outOfHours,
+      next: { weekday: weekdayOf(forward.date), timeOfDay: "01:00", daysAhead: 1 },
+    });
+  });
+
+  it("reports the one midnight that follows the hour the clocks repeat", async () => {
+    // At midnight the clock goes back to 23:00 on the same date, so 23:00 to 23:59 happens twice
+    // and the next date's midnight comes once, an hour later than it would have.
+    expect([backward.before, backward.after]).toEqual(["23:59", "23:00"]);
+    const nextDate = new Date(Date.parse(`${backward.date}T00:00:00Z`) + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    // 23:30 on the first pass through the repeated hour.
+    const at = new Date(backward.instant.getTime() - 30 * minute);
+    expect(await closedStationNextChange(backward.date, at)).toEqual({
+      status: outOfHours,
+      next: { weekday: weekdayOf(nextDate), timeOfDay: "00:00", daysAhead: 1 },
+    });
+    // And the second pass through 23:30 gives the same answer.
+    expect(
+      await closedStationNextChange(
+        backward.date,
+        new Date(backward.instant.getTime() + 30 * minute),
+      ),
+    ).toEqual({
+      status: outOfHours,
+      next: { weekday: weekdayOf(nextDate), timeOfDay: "00:00", daysAhead: 1 },
+    });
+  });
+});
+
 describe("station status across a clock change", () => {
   const zone = "Europe/Madrid";
   const forward = clockChangeAfter(zone, "2027-01-01T00:00:00Z", "forward");

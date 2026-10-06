@@ -949,6 +949,15 @@ function nextChangeFinder(
       );
     return occurrences.get(key)!;
   };
+  const moments = new Map<number, VenueLocalMoment>();
+  const momentAt = (instant: number) => {
+    let moment = moments.get(instant);
+    if (moment === undefined) {
+      moment = venueLocalMoment(new Date(instant), clock)!;
+      moments.set(instant, moment);
+    }
+    return moment;
+  };
   return (stationId) => {
     const current = stationStatus(rules, stationId, now);
     if (current.why !== "in_hours" && current.why !== "out_of_hours" && current.why !== "no_hours")
@@ -968,7 +977,7 @@ function nextChangeFinder(
       }
     }
     for (const instant of [...candidates].filter((i) => i > at.getTime()).sort((a, b) => a - b)) {
-      const moment = venueLocalMoment(new Date(instant), clock)!;
+      const moment = momentAt(instant);
       if (moment.civilDate > last) break;
       if (stationStatus(rules, stationId, moment).open !== current.open)
         return {
