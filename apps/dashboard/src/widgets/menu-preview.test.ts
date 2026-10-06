@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { MenuPreviewPanel, documentTree, type PublishResult } from "./menu-preview.js";
-import type { MenuStructureTree } from "./menu-structure-tree.js";
+import type { CustomerMenu } from "./customer-menu.js";
 import {
   cleanupWidgets,
   documentProduct,
@@ -44,6 +45,7 @@ const DOCUMENT = menuDocument(
 
 function preview(changes: MenuChange[], warnings: MenuPreview["warnings"] = []): MenuPreview {
   return {
+    live: null,
     clashes: [],
     hash: NEW_HASH,
     changes,
@@ -82,6 +84,8 @@ it("words every kind of change, each with where it came from", async () => {
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-40",
+        targets: { before: [], after: [] },
         kind: "product_added",
         productId: "p-lemonade",
         name: "Lemonade",
@@ -89,6 +93,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-39",
+        targets: { before: [], after: [] },
         kind: "price_changed",
         productId: "p-burger",
         name: "Burger",
@@ -98,6 +104,8 @@ it("words every kind of change, each with where it came from", async () => {
         alsoOn: ["Dinner Menu"],
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-38",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-lemonade",
         name: "Lemonade",
@@ -106,6 +114,8 @@ it("words every kind of change, each with where it came from", async () => {
         alsoOn: ["Dinner Menu"],
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-37",
+        targets: { before: [], after: [] },
         kind: "section_changed",
         sectionId: "s-drinks",
         name: "Drinks",
@@ -113,6 +123,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "included_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-36",
+        targets: { before: [], after: [] },
         kind: "product_removed",
         productId: "p-lager",
         name: "Lager",
@@ -121,6 +133,8 @@ it("words every kind of change, each with where it came from", async () => {
         alsoOn: ["Dinner Menu", "Terrace Menu"],
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-35",
+        targets: { before: [], after: [] },
         kind: "product_added",
         productId: "p-chips",
         name: "Chips",
@@ -128,6 +142,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-34",
+        targets: { before: [], after: [] },
         kind: "product_moved",
         productId: "p-soup",
         name: "Soup",
@@ -136,6 +152,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-33",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-cola",
         name: "Cola",
@@ -143,13 +161,18 @@ it("words every kind of change, each with where it came from", async () => {
         source: "shared_product",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-32",
+        targets: { before: [], after: [] },
         kind: "section_added",
         sectionId: "s-desserts",
+        parentSectionIds: [],
         name: "Desserts",
         under: [],
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-31",
+        targets: { before: [], after: [] },
         kind: "product_removed",
         productId: "p-bread",
         name: "Bread",
@@ -157,31 +180,71 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-30",
+        targets: { before: [], after: [] },
         kind: "section_removed",
         sectionId: "s-specials",
+        parentSectionIds: [],
         name: "Specials",
         under: [],
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-29",
+        targets: { before: [], after: [] },
         kind: "section_removed",
         sectionId: "s-beer",
+        parentSectionIds: ["s-drinks"],
         name: "Beer",
         under: ["Drinks"],
         source: "included_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-28",
+        targets: { before: [], after: [] },
         kind: "section_changed",
         sectionId: "s-mains",
         name: "Mains",
         fields: ["names", "image", "color"],
         source: "included_menu",
       },
-      { kind: "order_changed", list: [], source: "this_menu" },
-      { kind: "order_changed", list: ["Drinks"], source: "included_menu" },
-      { kind: "home_shortcuts_changed", source: "this_menu" },
-      { kind: "home_display_changed", device: "till", source: "this_menu" },
-      { kind: "menu_renamed", from: "Midday Menu", to: "Lunch Menu", source: "this_menu" },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-27",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-26",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: "s-drinks",
+        list: ["Drinks"],
+        source: "included_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-25",
+        targets: { before: [], after: [] },
+        kind: "home_shortcuts_changed",
+        source: "this_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-24",
+        targets: { before: [], after: [] },
+        kind: "home_display_changed",
+        device: "till",
+        source: "this_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-23",
+        targets: { before: [], after: [] },
+        kind: "menu_renamed",
+        from: "Midday Menu",
+        to: "Lunch Menu",
+        source: "this_menu",
+      },
     ]),
   });
   expect(items(el, "changes")).toEqual([
@@ -211,6 +274,8 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-22",
+        targets: { before: [], after: [] },
         kind: "product_moved",
         productId: "p-soup",
         name: "Soup",
@@ -218,8 +283,17 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
         to: [[], ["Mains", "Hot"]],
         source: "this_menu",
       },
-      { kind: "order_changed", list: [], source: "this_menu" },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-21",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-20",
+        targets: { before: [], after: [] },
         kind: "price_changed",
         productId: "p-burger",
         name: "Burger",
@@ -228,8 +302,19 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
         source: "shared_product",
         alsoOn: ["Dinner Menu", "Terrace Menu"],
       },
-      { kind: "home_shortcuts_changed", source: "this_menu" },
-      { kind: "home_display_changed", device: "handheld", source: "this_menu" },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-19",
+        targets: { before: [], after: [] },
+        kind: "home_shortcuts_changed",
+        source: "this_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-18",
+        targets: { before: [], after: [] },
+        kind: "home_display_changed",
+        device: "handheld",
+        source: "this_menu",
+      },
     ]),
   });
   expect(items(el, "changes").map((line) => line.replace(/\s/g, " "))).toEqual([
@@ -245,6 +330,8 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-17",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-lemonade",
         name: "Lemonade",
@@ -253,6 +340,8 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
         alsoOn: ["Dinner Menu"],
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-16",
+        targets: { before: [], after: [] },
         kind: "product_deleted",
         productId: "p-extra-lemon",
         name: "Extra lemon",
@@ -279,6 +368,8 @@ it("names an extra's list and old and new units in both languages", async () => 
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-15",
+        targets: { before: [], after: [] },
         kind: "extra_unit_changed",
         productId: "p-ham",
         name: "Jamón",
@@ -306,6 +397,8 @@ it("names an extra's list and old and new portions with their units in both lang
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-14",
+        targets: { before: [], after: [] },
         kind: "extra_portion_changed",
         productId: "p-ham",
         name: "Jamón",
@@ -333,6 +426,8 @@ it("names an extra's change to no quantity limit in both languages", async () =>
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-13",
+        targets: { before: [], after: [] },
         kind: "extra_max_quantity_changed",
         productId: "p-ham",
         name: "Jamón",
@@ -358,6 +453,8 @@ it("names an extra's change to no quantity limit in both languages", async () =>
 /** A dish's VAT change, a variant's own (named in the variants too), and an extra's. */
 const VAT_CHANGES: MenuChange[] = [
   {
+    id: "fixture-src/widgets/menu-preview.test.ts-12",
+    targets: { before: [], after: [] },
     kind: "product_changed",
     productId: "p-lemonade",
     name: "Lemonade",
@@ -366,6 +463,8 @@ const VAT_CHANGES: MenuChange[] = [
     alsoOn: ["Dinner Menu"],
   },
   {
+    id: "fixture-src/widgets/menu-preview.test.ts-11",
+    targets: { before: [], after: [] },
     kind: "product_changed",
     productId: "p-burger",
     name: "Burger",
@@ -373,6 +472,8 @@ const VAT_CHANGES: MenuChange[] = [
     source: "shared_product",
   },
   {
+    id: "fixture-src/widgets/menu-preview.test.ts-10",
+    targets: { before: [], after: [] },
     kind: "product_changed",
     productId: "p-cheese",
     name: "Cheese",
@@ -408,6 +509,8 @@ it.each([
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-9",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-lemonade",
         name: "Lemonade",
@@ -427,6 +530,8 @@ it.each([
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-8",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-bacon",
         name: "Bacon",
@@ -442,6 +547,8 @@ it("shows the live version and when it was published, apart from the pending cha
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-7",
+        targets: { before: [], after: [] },
         kind: "product_added",
         productId: "p-lemonade",
         name: "Lemonade",
@@ -465,6 +572,8 @@ it("says a menu never published has no live version, and offers to publish it", 
     status: { state: "unpublished", clashes: 0 },
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-6",
+        targets: { before: [], after: [] },
         kind: "product_added",
         productId: "p-burger",
         name: "Burger",
@@ -479,7 +588,16 @@ it("says a menu never published has no live version, and offers to publish it", 
 
 it("names the one menu on the publish button, and asks to publish the hash it previewed", async () => {
   const el = await mount({
-    preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),
+    preview: preview([
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-5",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
+    ]),
   });
   const asked: unknown[] = [];
   el.addEventListener("wt-menu-publish", (event) => asked.push((event as CustomEvent).detail));
@@ -527,7 +645,16 @@ it("judges whether there is anything to publish by the state read with the previ
 
 it("keeps the click that asks for a publish or a retry from reaching the page around it", async () => {
   const { el, host } = await mountIn({
-    preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),
+    preview: preview([
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-4",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
+    ]),
   });
   const clicks: EventTarget[] = [];
   host.addEventListener("click", (event) => clicks.push(event.target!));
@@ -610,7 +737,16 @@ it.each(["en-GB", "es-ES"])(
 
 it("holds the publish button while a publish is out, saying what it is doing", async () => {
   const el = await mount({
-    preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),
+    preview: preview([
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-2",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
+    ]),
     publishing: true,
   });
   const button = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!;
@@ -681,29 +817,40 @@ it.each(results)("reports %s", async (_name, result, status, message) => {
   expect(shown.getAttribute("role")).toBe(result.kind === "published" ? "status" : "alert");
 });
 
-function documentView(el: MenuPreviewPanel): MenuStructureTree {
-  return q<MenuStructureTree>(el, '[data-test="document"] dashboard-menu-structure-tree')!;
+function documentView(el: MenuPreviewPanel): CustomerMenu {
+  return q<CustomerMenu>(el, '[data-test="document"] dashboard-customer-menu')!;
 }
 
-/** The whole-menu view's top-level names, as the tree shows them. */
-function topNames(tree: MenuStructureTree): string[] {
+/** The frozen document's root product/section labels, in the selected content view. */
+function topNames(tree: CustomerMenu): string[] {
   return [
-    ...tree.shadowRoot!.querySelectorAll('ul[aria-label] > li > .row [data-test="name"]'),
+    ...tree.shadowRoot!.querySelectorAll(
+      ".menu > [data-change-target] > .members > .product .heading > span[lang], .menu > [data-change-target] > .members > .section > [data-change-target] .heading > button > span:first-of-type, .menu > [data-change-target] > .members > .missing",
+    ),
   ].map(text);
 }
 
 it("shows the whole menu the publish would make live, read-only, under its own heading", async () => {
   const el = await mount({
-    preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),
+    preview: preview([
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-1",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
+    ]),
   });
   expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it will be published");
   const tree = documentView(el);
   await tree.updateComplete;
-  expect(tree.readonly).toBe(true);
-  expect(tree.label).toBe("The menu as it will be published");
-  expect(topNames(tree)).toEqual(["Burger", "Drinks"]);
+  expect(tree.document).toBe(DOCUMENT);
+  expect(tree.view).toEqual({ kind: "customer", language: "es" });
+  expect(topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
   expect(tree.shadowRoot!.querySelector("[data-test^='edit-']")).toBeNull();
-  expect(tree.shadowRoot!.textContent).not.toContain("para clientes");
+  expect(tree.shadowRoot!.textContent).toContain("para clientes");
   expect(tree.shadowRoot!.textContent).not.toContain("COCINA");
 });
 
@@ -719,8 +866,9 @@ it("still shows the whole menu, as it is live, when there is nothing to publish"
   expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it is live");
   const tree = documentView(el);
   await tree.updateComplete;
-  expect(tree.label).toBe("The menu as it is live");
-  expect(topNames(tree)).toEqual(["Burger", "Drinks"]);
+  expect(tree.document).toBe(DOCUMENT);
+  expect(tree.view).toEqual({ kind: "customer", language: "es" });
+  expect(topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
 });
 
 it("shows a never-published menu whole, as its first publish would make it live", async () => {
@@ -731,7 +879,7 @@ it("shows a never-published menu whole, as its first publish would make it live"
   expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it will be published");
   const tree = documentView(el);
   await tree.updateComplete;
-  expect(topNames(tree)).toEqual(["Burger", "Drinks"]);
+  expect(topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
 });
 
 it("names the whole-menu view in Spanish", async () => {
@@ -851,3 +999,156 @@ function capture(el: HTMLElement, type: string): unknown[] {
   el.addEventListener(type, (event) => seen.push((event as CustomEvent).detail));
   return seen;
 }
+
+it.each([
+  ["en", "Price override", "Menu price"],
+  ["es-ES", "Precio propio", "Precio de la carta"],
+])(
+  "names a publication clash with today's override wording in %s",
+  async (locale, wanted, retired) => {
+    setLocale(locale);
+    const value = preview([]);
+    value.clashes = [
+      {
+        productId: "p-burger",
+        variantId: null,
+        field: "price",
+        candidates: [
+          { place: { kind: "own_sections" }, value: "12.00" as never, source: { kind: "product" } },
+          {
+            place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+            value: "14.00" as never,
+            source: { kind: "own" },
+          },
+        ],
+      },
+    ];
+    const el = await mount({ preview: value });
+    expect(text(q(el, '[data-test="clashes"]'))).toContain(wanted);
+    expect(text(q(el, '[data-test="clashes"]'))).not.toContain(retired);
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!.disabled).toBe(true);
+  },
+);
+
+it.each([
+  ["en", "included menu", "also on Dinner"],
+  ["es-ES", "carta incluida", "también en Dinner"],
+])(
+  "identifies an included menu by name and preserves affected menus in %s",
+  async (locale, source, also) => {
+    setLocale(locale);
+    const el = await mount({
+      preview: preview([
+        {
+          id: "included-source",
+          targets: { before: [], after: [] },
+          kind: "section_changed",
+          sectionId: "s-drinks",
+          name: "Drinks",
+          fields: ["image"],
+          source: "included_menu",
+          includedMenu: { id: "included", name: "Bar {source}" },
+          alsoOn: ["Dinner"],
+        },
+      ]),
+    });
+    const words = text(q(el, '[data-test="changes"] .source'));
+    expect(words).toContain(source);
+    expect(words).toContain("Bar {source}");
+    expect(words).toContain(also);
+  },
+);
+
+it.each([
+  [390, "en", "light"],
+  [390, "es-ES", "dark"],
+  [1280, "en", "dark"],
+  [1280, "es-ES", "light"],
+] as const)(
+  "places the menu and changes in bounded panes at %i px (%s, %s)",
+  async (width, locale, theme) => {
+    await page.viewport(width, 850);
+    try {
+      setLocale(locale);
+      const { el, host } = await mountWidget<MenuPreviewPanel>(
+        "dashboard-menu-preview",
+        {
+          menuName: "Lunch",
+          status: changedStatus,
+          preview: preview([
+            {
+              id: "layout",
+              targets: { before: [], after: [] },
+              kind: "menu_renamed",
+              from: "Old lunch",
+              to: "Lunch",
+              source: "this_menu",
+            },
+          ]),
+        },
+        theme,
+      );
+      host.style.width = "100%";
+      await el.updateComplete;
+      const documentPane = q(el, '[data-test="document-pane"]');
+      const changesPane = q(el, '[data-test="changes-pane"]');
+      expect(documentPane).not.toBeNull();
+      expect(changesPane).not.toBeNull();
+      const left = documentPane!.getBoundingClientRect();
+      const right = changesPane!.getBoundingClientRect();
+      if (width === 390) {
+        expect(right.top).toBeGreaterThanOrEqual(left.bottom);
+        expect(Math.abs(right.left - left.left)).toBeLessThan(1);
+      } else {
+        expect(right.left).toBeGreaterThanOrEqual(left.right);
+        expect(Math.abs(right.top - left.top)).toBeLessThan(1);
+      }
+      expect(documentPane!.contains(q(el, '[data-test="document"]'))).toBe(true);
+      expect(changesPane!.contains(q(el, '[data-test="changes"]'))).toBe(true);
+      const publish = q(el, '[data-test="publish"]')!;
+      expect(documentPane!.contains(publish)).toBe(false);
+      expect(changesPane!.contains(publish)).toBe(false);
+      expect(publish.getBoundingClientRect().bottom).toBeLessThanOrEqual(left.top);
+      expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+      expect(getComputedStyle(documentPane!).overflowY).toBe("auto");
+      expect(getComputedStyle(changesPane!).overflowY).toBe("auto");
+    } finally {
+      await page.viewport(414, 850);
+    }
+  },
+);
+
+it("makes overflowing pane regions keyboard reachable without scrolling the publication action", async () => {
+  await page.viewport(1280, 850);
+  try {
+    const document = menuDocument(
+      Array.from({ length: 40 }, (_, i) => documentProduct(`mi-${i}`, `p-${i}`)),
+      Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`p-${i}`, `Frozen dish ${i}`])),
+    );
+    const changes: MenuChange[] = Array.from({ length: 40 }, (_, i) => ({
+      id: `change-${i}`,
+      targets: { before: [], after: [] },
+      kind: "menu_renamed",
+      from: `Long old title ${i}`,
+      to: `Long new title ${i}`,
+      source: "this_menu",
+    }));
+    const el = await mount({ preview: { ...preview(changes), document } });
+    const publish = q(el, '[data-test="publish"]')!;
+    const actionTop = publish.getBoundingClientRect().top;
+    for (const name of ["document", "changes"]) {
+      const pane = q(el, `[data-test="${name}-pane"]`)!;
+      expect(pane.scrollHeight).toBeGreaterThan(pane.clientHeight);
+      expect(pane.tabIndex).toBe(0);
+      expect(pane.getAttribute("role")).toBe("region");
+      expect(pane.getAttribute("aria-labelledby")).toBe(`${name}-heading`);
+      pane.focus();
+      expect(el.shadowRoot!.activeElement).toBe(pane);
+      pane.scrollTop = pane.scrollHeight;
+      expect(pane.scrollTop).toBeGreaterThan(0);
+      expect(publish.getBoundingClientRect().top).toBe(actionTop);
+    }
+  } finally {
+    await page.viewport(414, 850);
+  }
+});

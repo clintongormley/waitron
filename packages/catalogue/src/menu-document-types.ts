@@ -136,10 +136,55 @@ export interface LiveOffer extends Omit<MenuOffer, "ordering" | "combined">, Pub
   offeredModifiers: LiveOfferedModifier[];
 }
 
+export type MenuField =
+  | { kind: "summary" }
+  | { kind: "name"; audience: "staff" | "customer" | "kitchen"; language?: string }
+  | { kind: "description"; language: string }
+  | {
+      kind:
+        | "price"
+        | "override"
+        | "image"
+        | "color"
+        | "unit"
+        | "allergens"
+        | "diet"
+        | "vat"
+        | "ordering";
+    }
+  | { kind: "variants" | "extras" | "options" }
+  | { kind: "portion" | "maxQuantity" | "limits" | "default" | "members" };
+
+export type MenuTarget =
+  | { kind: "title"; menuId: string }
+  | { kind: "list"; sectionIds: string[] }
+  | { kind: "section"; sectionIds: string[]; field: MenuField }
+  | {
+      kind: "product";
+      sectionIds: string[];
+      menuItemId: string;
+      productId: string;
+      variantId?: string;
+      listId?: string;
+      extraProductId?: string;
+      optionLabelId?: string;
+      field: MenuField;
+    }
+  | {
+      kind: "home";
+      device: "handheld" | "till";
+      field: "shortcuts" | "columns" | "tiles" | "order";
+    };
+
+export interface MenuOccurrence {
+  target: MenuTarget;
+  ancestorSectionIds: string[];
+}
+
 /** Where a change came from (spec §11.1). */
 export type MenuChangeSource = "this_menu" | "shared_product" | "included_menu";
 
-export type MenuChange = {
+export type MenuChangeBody = {
   source: MenuChangeSource;
   includedMenu?: { id: string; name: string };
   /** The other published menus the same shared change flags, by name. */
@@ -186,15 +231,21 @@ export type MenuChange = {
   | {
       kind: "section_added" | "section_removed";
       sectionId: string;
+      parentSectionIds: string[];
       name: string;
       under: string[];
     }
   | { kind: "section_changed"; sectionId: string; name: string; fields: SectionChangeField[] }
-  | { kind: "order_changed"; list: string[] }
+  | { kind: "order_changed"; listSectionId: string | null; list: string[] }
   | { kind: "home_shortcuts_changed" }
   | { kind: "home_display_changed"; device: HomeDevice }
   | { kind: "menu_renamed"; from: string; to: string }
 );
+
+export type MenuChange = MenuChangeBody & {
+  id: string;
+  targets: { before: MenuTarget[]; after: MenuTarget[] };
+};
 
 export type ProductChangeField =
   | "names"
@@ -242,6 +293,7 @@ export interface MenuPreview {
   status: MenuStatus;
   /** What the publish would make live. */
   document: MenuDocument;
+  live: { versionId: string; document: MenuDocument } | null;
 }
 
 /** The version a publish made live. */

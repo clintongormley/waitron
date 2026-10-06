@@ -1,3 +1,4 @@
+import { navigateMenuChanges } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
 import { eq, inArray, type SQL } from "drizzle-orm";
 import { catalogues, categories, products, type Transaction } from "@waitron/db";
@@ -27,6 +28,7 @@ import type {
   LiveOffer,
   LiveOfferedModifier,
   MenuChange,
+  MenuChangeBody,
   MenuChangeSource,
   MenuDocument,
   MenuUnavailable,
@@ -572,7 +574,7 @@ export async function applyLiveFields(
 }
 
 export interface DiffEntry {
-  change: MenuChange;
+  change: MenuChangeBody;
   section?: string;
 }
 
@@ -596,12 +598,10 @@ function shapeOf(document: MenuDocument): Shape {
   const walk = (members: readonly DocumentMember[], path: string[]): void => {
     for (const member of members) {
       if (member.kind !== "section") continue;
+      if (path.includes(member.sectionId)) continue;
       const known = sections.get(member.sectionId);
-      if (known !== undefined) {
-        known.parents.push(path);
-        continue;
-      }
-      sections.set(member.sectionId, { node: member, parents: [path] });
+      if (known !== undefined) known.parents.push(path);
+      else sections.set(member.sectionId, { node: member, parents: [path] });
       walk(member.members, [...path, member.sectionId]);
     }
   };
@@ -640,7 +640,7 @@ export function removedExtraOnlyProducts(
 }
 
 const same = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
-const pathKey = (path: readonly string[]): string => path.join("/");
+const pathKey = (path: readonly string[]): string => JSON.stringify(path);
 const memberKey = (member: DocumentMember): string =>
   member.kind === "product" ? `p:${member.productId}` : `s:${member.sectionId}`;
 
@@ -794,7 +794,7 @@ export function diffEntries(
   const next = shapeOf(proposed);
   const prev = shapeOf(live ?? { ...proposed, root: { members: [] }, offers: {} });
   const entries: DiffEntry[] = [];
-  const push = (change: MenuChange, section?: string): void => {
+  const push = (change: MenuChangeBody, section?: string): void => {
     if (
       change.source === "included_menu" &&
       change.includedMenu === undefined &&
@@ -810,7 +810,7 @@ export function diffEntries(
         next,
         prev,
       ).includedMenu;
-    const publicChange = { ...change } as MenuChange & { section?: string };
+    const publicChange = { ...change } as MenuChangeBody & { section?: string };
     delete publicChange.section;
     entries.push(
       section === undefined ? { change: publicChange } : { change: publicChange, section },
@@ -829,6 +829,7 @@ export function diffEntries(
           {
             kind: "section_removed",
             sectionId,
+            parentSectionIds: [...parent],
             name: node.internalName,
             under: namesOf(prev, parent),
             source,
@@ -846,6 +847,7 @@ export function diffEntries(
           {
             kind: "section_added",
             sectionId,
+            parentSectionIds: [...parent],
             name: node.internalName,
             under: namesOf(next, parent),
             source,
@@ -1054,11 +1056,17 @@ export function diffEntries(
     const after = listKeys(next, list)!;
     const common = (keys: string[], other: string[]) => keys.filter((key) => other.includes(key));
     if (same(common(before, after), common(after, before))) continue;
-    if (list === null) push({ kind: "order_changed", list: [], source: "this_menu" });
+    if (list === null)
+      push({ kind: "order_changed", listSectionId: null, list: [], source: "this_menu" });
     else {
       const path = [...next.sections.get(list)!.parents[0]!, list];
       push(
-        { kind: "order_changed", list: namesOf(next, path), ...listSource(path, next, prev) },
+        {
+          kind: "order_changed",
+          listSectionId: list,
+          list: namesOf(next, path),
+          ...listSource(path, next, prev),
+        },
         list,
       );
     }
@@ -1077,5 +1085,9 @@ export function diffEntries(
 
 /** What publishing `proposed` would change from `live`; null is a menu never published. */
 export function diffMenuDocuments(live: MenuDocument | null, proposed: MenuDocument): MenuChange[] {
-  return diffEntries(live, proposed).map((entry) => entry.change);
+  return navigateMenuChanges(
+    live,
+    proposed,
+    diffEntries(live, proposed).map((entry) => entry.change),
+  );
 }

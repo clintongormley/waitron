@@ -175,7 +175,7 @@ export class DeviceHomePreview extends LitElement {
         align-items: center;
         min-width: 0;
         text-align: center;
-        overflow-wrap: break-word;
+        overflow-wrap: anywhere;
       }
 
       .label > * {

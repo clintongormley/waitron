@@ -1,3 +1,4 @@
+import { navigateMenuChanges } from "./menu-navigation.js";
 import { and, eq, inArray, max, sql, type SQL } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -16,7 +17,7 @@ import {
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
 import { menusContaining, reachableProducts } from "./section-graph.js";
 import type {
-  MenuChange,
+  MenuChangeBody,
   MenuDocument,
   MenuPreview,
   MenuStatus,
@@ -243,7 +244,7 @@ function changeSubject({ change, section }: DiffEntry): string {
   }
 }
 
-function fieldsOf(change: MenuChange): readonly string[] | undefined {
+function fieldsOf(change: MenuChangeBody): readonly string[] | undefined {
   return change.kind === "product_changed" || change.kind === "section_changed"
     ? change.fields
     : undefined;
@@ -393,13 +394,18 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   return {
     hash,
     clashes: mine.clashes,
-    changes: entries.map(({ change }) => change),
+    changes: navigateMenuChanges(
+      ownDocument,
+      mine.document,
+      entries.map(({ change }) => change),
+    ),
     warnings: [
       ...(await shortcutWarnings(tx, mine.omittedShortcuts, sectionNames)),
       ...precisionWarnings,
     ],
     status: statusOf(hash, own, mine.clashes.length),
     document: mine.document,
+    live: ownDocument === null ? null : { versionId: own!.versionId, document: ownDocument },
   };
 }
 

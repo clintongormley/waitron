@@ -1,3 +1,4 @@
+import type { MenuChange, MenuChangeBody } from "./menu-document-types.js";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
@@ -757,10 +758,11 @@ describe("diffMenuDocuments", () => {
   it("lists everything as added against no live version", async () => {
     const f = await menusFixture(fx.db);
     const changes = diffMenuDocuments(null, await build(f.lunch));
-    expect(changes).toEqual([
+    expect(changeBodies(changes)).toEqual([
       {
         kind: "section_added",
         sectionId: f.drinks,
+        parentSectionIds: [],
         name: "Drinks",
         under: [],
         source: "this_menu",
@@ -768,6 +770,7 @@ describe("diffMenuDocuments", () => {
       {
         kind: "section_added",
         sectionId: f.beer,
+        parentSectionIds: [f.drinks],
         name: "Beer",
         under: ["Drinks"],
         source: "included_menu",
@@ -805,8 +808,8 @@ describe("diffMenuDocuments", () => {
     await app(async (tx) =>
       moveMember(tx, f.lunchRoot, await memberOf(f.lunchRoot, { productId: f.soup }), 0),
     );
-    expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
-      { kind: "order_changed", list: [], source: "this_menu" },
+    expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
     ]);
   });
 
@@ -816,9 +819,10 @@ describe("diffMenuDocuments", () => {
     await app(async (tx) =>
       moveMember(tx, f.drinks, await memberOf(f.drinks, { sectionId: f.beer }), 0),
     );
-    expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
       {
         kind: "order_changed",
+        listSectionId: f.drinks,
         list: ["Drinks"],
         source: "included_menu",
         includedMenu: { id: f.drinksMenu, name: "Drinks" },
@@ -834,7 +838,7 @@ describe("diffMenuDocuments", () => {
       await addMember(tx, f.drinks, product(f.soup));
       await removeMember(tx, f.beer, await memberOf(f.beer, { productId: f.lager }));
     });
-    expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
       {
         kind: "product_removed",
         productId: f.lager,
@@ -859,10 +863,11 @@ describe("diffMenuDocuments", () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.lunch);
     await app(async (tx) => deleteSection(tx, f.beer));
-    expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
       {
         kind: "section_removed",
         sectionId: f.beer,
+        parentSectionIds: [f.drinks],
         name: "Beer",
         under: ["Drinks"],
         source: "included_menu",
@@ -887,7 +892,7 @@ describe("diffMenuDocuments", () => {
       await tx.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.drinks));
       await updateSection(tx, f.beer, { names: { en: "Cold beers" } });
     });
-    expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
       {
         kind: "section_changed",
         sectionId: f.drinks,
@@ -917,7 +922,7 @@ describe("diffMenuDocuments", () => {
       });
       await updateProduct(tx, f.lemonade, { unitPrice: "3.20" });
     });
-    expect(diffMenuDocuments(lunch, await build(f.lunch))).toEqual([
+    expect(changeBodies(diffMenuDocuments(lunch, await build(f.lunch)))).toEqual([
       {
         kind: "price_changed",
         productId: f.lemonade,
@@ -927,7 +932,7 @@ describe("diffMenuDocuments", () => {
         source: "this_menu",
       },
     ]);
-    expect(diffMenuDocuments(dinner, await build(f.dinner))).toEqual([
+    expect(changeBodies(diffMenuDocuments(dinner, await build(f.dinner)))).toEqual([
       {
         kind: "price_changed",
         productId: f.lemonade,
@@ -946,7 +951,7 @@ describe("diffMenuDocuments", () => {
     await app(async (tx) =>
       updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: "2.60" }),
     );
-    expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
       {
         kind: "price_changed",
         productId: f.lemonade,
@@ -985,8 +990,15 @@ describe("diffMenuDocuments", () => {
       .select({ menuId: sections.ownerMenuId })
       .from(sections)
       .where(eq(sections.id, f.beer));
-    expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
-      { kind: "section_added", sectionId: f.beer, name: "Beer", under: [], source: "this_menu" },
+    expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
+      {
+        kind: "section_added",
+        sectionId: f.beer,
+        parentSectionIds: [],
+        name: "Beer",
+        under: [],
+        source: "this_menu",
+      },
       {
         kind: "product_moved",
         productId: f.lemonade,
@@ -1019,7 +1031,7 @@ describe("diffMenuDocuments", () => {
       await updateProduct(tx, f.extraLemon, { allergens: { sulphites: { presence: "contains" } } });
       await tx.insert(extraListItems).values({ listId: f.extrasList, productId: f.lager, sort: 1 });
     });
-    expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
       {
         kind: "product_changed",
         productId: f.lemonade,
@@ -1056,7 +1068,7 @@ describe("diffMenuDocuments", () => {
       await updateProduct(tx, f.extraLemon, { unitId: unit.id });
     });
 
-    expect(diffMenuDocuments(live, await build(f.dinner))).toContainEqual({
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toContainEqual({
       kind: "extra_unit_changed",
       productId: f.extraLemon,
       name: "Extra lemon",
@@ -1100,8 +1112,10 @@ describe("diffMenuDocuments", () => {
       );
 
     expect(
-      diffMenuDocuments(live, await build(f.lunch)).filter(
-        (change) => change.kind === "extra_portion_changed",
+      changeBodies(
+        diffMenuDocuments(live, await build(f.lunch)).filter(
+          (change) => change.kind === "extra_portion_changed",
+        ),
       ),
     ).toEqual([
       {
@@ -1137,7 +1151,7 @@ describe("diffMenuDocuments", () => {
         and(eq(extraListItems.listId, f.extrasList), eq(extraListItems.productId, f.extraLemon)),
       );
     const unlimited = await build(f.dinner);
-    expect(diffMenuDocuments(limited, unlimited)).toEqual([
+    expect(changeBodies(diffMenuDocuments(limited, unlimited))).toEqual([
       {
         kind: "extra_max_quantity_changed",
         productId: f.extraLemon,
@@ -1149,7 +1163,7 @@ describe("diffMenuDocuments", () => {
         source: "shared_product",
       },
     ]);
-    expect(diffMenuDocuments(unlimited, limited)).toEqual([
+    expect(changeBodies(diffMenuDocuments(unlimited, limited))).toEqual([
       {
         kind: "extra_max_quantity_changed",
         productId: f.extraLemon,
@@ -1266,7 +1280,7 @@ describe("diffMenuDocuments", () => {
         { variantId: f.large, price: "4.00" },
       ]);
     });
-    expect(diffMenuDocuments(live, await build(f.dinner))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
       {
         kind: "product_changed",
         productId: f.lemonade,
@@ -1292,7 +1306,7 @@ describe("diffMenuDocuments", () => {
     expect(proposed.offers[await app((tx) => offerOf(tx, f.dinner, f.burger))]!.ordering).toBe(
       "staff_only",
     );
-    expect(diffMenuDocuments(live, proposed)).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, proposed))).toEqual([
       {
         kind: "product_changed",
         productId: f.burger,
@@ -1337,7 +1351,7 @@ describe("diffMenuDocuments", () => {
         .set({ name: "Lots of ice" })
         .where(eq(optionLabels.id, WITH_ICE));
     });
-    expect(diffMenuDocuments(live, await build(f.dinner))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
       {
         kind: "product_changed",
         productId: f.lemonade,
@@ -1359,7 +1373,7 @@ describe("diffMenuDocuments", () => {
         dietOverride: { vegan: "no" },
       }),
     );
-    expect(diffMenuDocuments(live, await build(f.dinner))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
       {
         kind: "product_changed",
         productId: f.lemonade,
@@ -1383,7 +1397,7 @@ describe("diffMenuDocuments", () => {
         .set({ price: 45 })
         .where(eq(extraListItems.productId, f.extraLemon));
     });
-    expect(diffMenuDocuments(live, await build(f.dinner))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
       {
         kind: "product_changed",
         productId: f.lemonade,
@@ -1406,7 +1420,7 @@ describe("diffMenuDocuments", () => {
     const live = await build(f.dinner);
     await app((tx) => updateProduct(tx, f.lemonade, { vatClass: "general" }));
     const dish = await build(f.dinner);
-    expect(diffMenuDocuments(live, dish)).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, dish))).toEqual([
       {
         kind: "product_changed",
         productId: f.lemonade,
@@ -1419,7 +1433,7 @@ describe("diffMenuDocuments", () => {
       await updateProduct(tx, f.large, { vatClass: "zero" });
       await updateProduct(tx, f.extraLemon, { vatClass: "general" });
     });
-    expect(diffMenuDocuments(dish, await build(f.dinner))).toEqual([
+    expect(changeBodies(diffMenuDocuments(dish, await build(f.dinner)))).toEqual([
       {
         kind: "product_changed",
         productId: f.lemonade,
@@ -1455,7 +1469,7 @@ describe("diffMenuDocuments", () => {
       await updateProduct(tx, f.lemonade, { image: "cloudy.jpg" });
       await updateProduct(tx, f.extraLemon, { image: "lemon.jpg" });
     });
-    expect(diffMenuDocuments(live, await build(f.dinner))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
       {
         kind: "product_changed",
         productId: f.lemonade,
@@ -1486,7 +1500,7 @@ describe("diffMenuDocuments", () => {
     await addTile(await homeSection(f.lunch), { productId: f.soup });
     await app((tx) => setHomeDisplay(tx, f.lunch, "handheld", { tiles: "thumbnails" }));
     await app((tx) => updateMenuDetails(tx, f.lunch, { name: "Midday Menu" }));
-    expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
       { kind: "menu_renamed", from: "Lunch Menu", to: "Midday Menu", source: "this_menu" },
       { kind: "home_shortcuts_changed", source: "this_menu" },
       { kind: "home_display_changed", device: "handheld", source: "this_menu" },
@@ -1500,9 +1514,20 @@ describe("diffMenuDocuments", () => {
     const home = diffMenuDocuments(null, await build(f.lunch)).filter(({ kind }) =>
       kind.startsWith("home_"),
     );
-    expect(home).toEqual([
+    expect(changeBodies(home)).toEqual([
       { kind: "home_shortcuts_changed", source: "this_menu" },
       { kind: "home_display_changed", device: "till", source: "this_menu" },
     ]);
   });
 });
+
+function changeBodies(changes: readonly MenuChange[]): MenuChangeBody[] {
+  return changes.map((change) => {
+    expect(change.id).toEqual(expect.any(String));
+    expect(change.targets).toEqual({ before: expect.any(Array), after: expect.any(Array) });
+    const body: MenuChangeBody & Partial<Pick<MenuChange, "id" | "targets">> = { ...change };
+    delete body.id;
+    delete body.targets;
+    return body;
+  });
+}

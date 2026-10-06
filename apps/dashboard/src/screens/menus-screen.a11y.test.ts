@@ -10,7 +10,7 @@ import {
   mountWidget,
 } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
-import type { MenuStructureTree } from "../widgets/menu-structure-tree.js";
+import type { CustomerMenu } from "../widgets/customer-menu.js";
 import type {
   DashboardApi,
   MenuHome,
@@ -144,10 +144,13 @@ function api(state: State): DashboardApi {
       hash: "a".repeat(64),
     }),
     getMenuPreview: vi.fn().mockResolvedValue({
+      live: null,
       clashes: [],
       hash: "b".repeat(64),
       changes: [
         {
+          id: "fixture-src/screens/menus-screen.a11y.test.ts-1",
+          targets: { before: [], after: [] },
           kind: "product_changed",
           productId: "p-lager",
           name: "Lager",
@@ -364,12 +367,14 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await vi.waitFor(() => {
       if (!panel.shadowRoot!.querySelector('[data-test="changes"]')) throw new Error("preview");
     });
-    const tree = panel.shadowRoot!.querySelector<MenuStructureTree>(
-      '[data-test="document"] dashboard-menu-structure-tree',
+    const menu = panel.shadowRoot!.querySelector<CustomerMenu>(
+      '[data-test="document"] dashboard-customer-menu',
     )!;
-    await tree.updateComplete;
-    tree.shadowRoot!.querySelector<HTMLElement>('[aria-expanded="false"]')!.click();
-    await tree.updateComplete;
+    await menu.updateComplete;
+    const section = menu.shadowRoot!.querySelector<HTMLButtonElement>('[aria-expanded="false"]')!;
+    section.click();
+    await menu.updateComplete;
+    expect(section.getAttribute("aria-expanded")).toBe("true");
     await expectNoA11yViolations(host);
   });
 
