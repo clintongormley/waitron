@@ -43,6 +43,7 @@ import type {
   JoinRequestRow,
   PairingModeState,
   Printer,
+  ProfileKitchenLists,
   ReaderRow,
   Station,
   Watcher,
@@ -58,6 +59,8 @@ const FIELD_BY_CODE: Record<string, EditField> = {
   "device.name_taken": "name",
   "device.station_required": "binding",
   "watcher.not_found": "binding",
+  "station.not_allowed": "binding",
+  "watcher.not_allowed": "binding",
   "device_profile.not_found": "profile",
   "device_profile.incompatible": "approved",
 };
@@ -303,6 +306,7 @@ export class DevicesScreen extends LitElement {
   @state() private devices: DeviceRow[] = [];
   @state() private stations: Station[] = [];
   @state() private watchers: Watcher[] = [];
+  @state() private kitchenLists: ({ profileId: string } & ProfileKitchenLists)[] = [];
   @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
   @state() private pairing: PairingModeState | undefined;
@@ -407,6 +411,9 @@ export class DevicesScreen extends LitElement {
         }),
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.deviceProfiles = value;
+        }),
+        this.#queries.watch("listProfileKitchenLists", [], (value) => {
+          this.kitchenLists = value;
         }),
         this.#queries.watch("listPrinters", [], (value) => {
           this.printers = value;
@@ -580,7 +587,8 @@ export class DevicesScreen extends LitElement {
     }
   }
 
-  /** A returning device starts from its own row; a profile, station or watcher since gone starts empty. */
+  /** A returning device starts from its own row; a profile, station or watcher since gone, or one
+   * its profile no longer lists, starts empty. */
   #toSettings(request: JoinRequestRow): void {
     const back = request.returning ?? null;
     const profileId =
@@ -592,7 +600,10 @@ export class DevicesScreen extends LitElement {
     this.pairStep = "settings";
     this.pairName = waitingName(request);
     this.chosenProfileId = profileId;
-    this.chosenBinding = back === null ? "" : this.#activeBinding(back);
+    const binding = back === null ? "" : this.#activeBinding(back);
+    this.chosenBinding = this.#bindingOptions(profileId).some((option) => option.value === binding)
+      ? binding
+      : "";
     this.formAttempted = false;
     this.fieldRefusal = null;
     this.pairError = null;
@@ -912,9 +923,13 @@ export class DevicesScreen extends LitElement {
 
   #onEditProfile(profileId: string): void {
     const profile = this.deviceProfiles.find((p) => p.id === profileId);
+    const offered = this.#bindingOptions(profileId, this.editHeld).some(
+      (option) => option.value === this.editForm.binding,
+    );
     this.#setEdit(
       {
         profileId,
+        binding: offered ? this.editForm.binding : "",
         receiptPrinterId: this.#firstSwitchedOn(profile?.receiptPrinterIds ?? []),
         paymentSlipPrinterId: this.#firstSwitchedOn(profile?.paymentSlipPrinterIds ?? []),
       },
@@ -1015,7 +1030,9 @@ export class DevicesScreen extends LitElement {
     this.editError = null;
     this.editRefusal = null;
     const savedBinding = this.#editBindingShown() ? form.binding : "";
-    const picked = this.#bindingOptions().find((option) => option.value === savedBinding);
+    const picked = this.#bindingOptions(form.profileId, this.editHeld).find(
+      (option) => option.value === savedBinding,
+    );
     const sent = {
       name: form.name.trim(),
       profileId: form.profileId,
@@ -1354,6 +1371,7 @@ export class DevicesScreen extends LitElement {
     disabled = false,
     held: HeldBinding | null = null,
   ): TemplateResult {
+    const bindingOptions = this.#bindingOptions(values.profileId, held);
     return html`<wt-input
         data-test=${`${prefix}-name`}
         name="name"
@@ -1399,10 +1417,14 @@ export class DevicesScreen extends LitElement {
               required
               label=${t("devices.shows")}
               search="auto"
-              placeholder=${t("devices.join_pick_binding")}
+              placeholder=${
+                bindingOptions.length === 0
+                  ? t("devices.binding_none_listed")
+                  : t("devices.join_pick_binding")
+              }
               searchPlaceholder=${t("categories.combobox_search")}
               noResultsLabel=${t("categories.combobox_no_results")}
-              .options=${this.#bindingOptions(held)}
+              .options=${bindingOptions}
               .value=${values.binding}
               ?disabled=${disabled}
               .error=${errors.binding}
@@ -1413,19 +1435,29 @@ export class DevicesScreen extends LitElement {
       }`;
   }
 
-  /** The switched-on stations and watchers, plus `held` in its group, marked, when it is not one. */
+  /**
+   * The switched-on stations and watchers `profileId` lists, plus `held` in its group, marked, when
+   * the profile lists it and it is switched off.
+   */
   #bindingOptions(
+    profileId: string,
     held: HeldBinding | null = null,
   ): { value: string; label: string; group: string }[] {
+    const lists = this.kitchenLists.find((entry) => entry.profileId === profileId);
+    const listed = new Set([
+      ...(lists?.stationIds ?? []).map((id) => `station:${id}`),
+      ...(lists?.watcherIds ?? []).map((id) => `watcher:${id}`),
+    ]);
+    if (held !== null && !listed.has(held.value)) held = null;
     const stationOptions = this.stations
-      .filter((station) => station.active)
+      .filter((station) => station.active && listed.has(`station:${station.id}`))
       .map((station) => ({
         value: `station:${station.id}`,
         label: station.name,
         group: t("devices.stations_group"),
       }));
     const watcherOptions = this.watchers
-      .filter((watcher) => watcher.active)
+      .filter((watcher) => watcher.active && listed.has(`watcher:${watcher.id}`))
       .map((watcher) => ({
         value: `watcher:${watcher.id}`,
         label: watcher.name,

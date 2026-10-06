@@ -27,7 +27,10 @@ import type {
   DeviceProfile,
   DashboardApi,
   Printer,
+  ProfileKitchenLists,
   ProfilePrinterLists,
+  Station,
+  Watcher,
 } from "../api/client.js";
 
 type PrinterListKey = keyof ProfilePrinterLists;
@@ -46,6 +49,42 @@ const PRINTER_LISTS = [
 ] as const satisfies readonly { key: PrinterListKey; test: string; heading: StringKey }[];
 
 const NO_PRINTER_LISTS: ProfilePrinterLists = { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
+
+const NO_KITCHEN_LISTS: ProfileKitchenLists = { stationIds: [], watcherIds: [] };
+
+type KitchenListKey = keyof ProfileKitchenLists;
+
+/** A kitchen display's two lists: what its screens may be set to show. */
+const KITCHEN_LISTS = [
+  {
+    key: "stationIds",
+    test: "profile-stations",
+    item: "profile-station",
+    heading: "device_profiles.stations",
+    inUse: "device_profile.station_in_use",
+    inUseSentence: "device_profiles.station_in_use",
+  },
+  {
+    key: "watcherIds",
+    test: "profile-watchers",
+    item: "profile-watcher",
+    heading: "device_profiles.watchers",
+    inUse: "device_profile.watcher_in_use",
+    inUseSentence: "device_profiles.watcher_in_use",
+  },
+] as const satisfies readonly {
+  key: KitchenListKey;
+  test: string;
+  item: string;
+  heading: StringKey;
+  inUse: string;
+  inUseSentence: StringKey;
+}[];
+
+/** The same ids, in any order. */
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id) => b.includes(id));
+}
 
 @customElement("dashboard-device-profiles-screen")
 export class DeviceProfilesScreen extends LitElement {
@@ -137,6 +176,10 @@ export class DeviceProfilesScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
+      .field-error {
+        color: var(--wt-color-danger);
+        margin: var(--wt-space-2) 0 0;
+      }
     `,
   ];
 
@@ -158,6 +201,12 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private printers: Printer[] = [];
 
+  @state() private stations: Station[] = [];
+
+  @state() private watchers: Watcher[] = [];
+
+  @state() private kitchenLists: ({ profileId: string } & ProfileKitchenLists)[] = [];
+
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
@@ -170,6 +219,11 @@ export class DeviceProfilesScreen extends LitElement {
   // In whole MINUTES (`null` = never); the wire value is SECONDS.
   @state() private draftInactivityMinutes: number | null = null;
   @state() private draftPrinterLists: ProfilePrinterLists = NO_PRINTER_LISTS;
+  @state() private draftKitchenLists: ProfileKitchenLists = NO_KITCHEN_LISTS;
+  /** The lists the edited profile held when opened, so a save that leaves them alone omits them. */
+  #loadedKitchenLists: ProfileKitchenLists = NO_KITCHEN_LISTS;
+  /** A refusal naming the screen that still shows an entry the save took off, under its list. */
+  @state() private listRefusal: { key: KitchenListKey; sentence: string } | null = null;
 
   @state() private saving = false;
 
@@ -193,6 +247,15 @@ export class DeviceProfilesScreen extends LitElement {
         this.#queries.watch("listPrinters", [], (value) => {
           this.printers = value;
         }),
+        this.#queries.watch("listStations", [], (value) => {
+          this.stations = value;
+        }),
+        this.#queries.watch("listWatchers", [], (value) => {
+          this.watchers = value;
+        }),
+        this.#queries.watch("listProfileKitchenLists", [], (value) => {
+          this.kitchenLists = value;
+        }),
       ]);
     } catch (error) {
       this.#showReadError(error);
@@ -212,6 +275,7 @@ export class DeviceProfilesScreen extends LitElement {
   /** Reloads only the PROFILES: no profile write changes the canvas or printer set. */
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     this.#showError(null);
+    this.listRefusal = null;
     let written = false;
     try {
       await action();
@@ -219,8 +283,21 @@ export class DeviceProfilesScreen extends LitElement {
       this.profiles = await this.api.listDeviceProfiles();
     } catch (error) {
       if (written) this.#showReadError(error);
-      else this.#showError(codeOf(error));
+      else if (!this.#refuseList(error)) this.#showError(codeOf(error));
     }
+  }
+
+  /** Puts an in-use refusal under the list it names, naming the screen; false for any other. */
+  #refuseList(error: unknown): boolean {
+    const code = codeOf(error);
+    const list = KITCHEN_LISTS.find((entry) => entry.inUse === code);
+    const params = (error as { params?: { deviceName?: unknown } } | null)?.params;
+    if (list === undefined || typeof params?.deviceName !== "string") return false;
+    this.listRefusal = {
+      key: list.key,
+      sentence: t(list.inUseSentence).replace("{device}", params.deviceName),
+    };
+    return true;
   }
 
   #canvasLabel(canvasId: string | null): string {
@@ -246,6 +323,9 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftFormFactor = FORM_FACTORS[0];
     this.draftInactivityMinutes = null;
     this.draftPrinterLists = NO_PRINTER_LISTS;
+    this.draftKitchenLists = NO_KITCHEN_LISTS;
+    this.#loadedKitchenLists = NO_KITCHEN_LISTS;
+    this.listRefusal = null;
   }
 
   #openCreate(): void {
@@ -273,6 +353,13 @@ export class DeviceProfilesScreen extends LitElement {
         receiptPrinterIds: profile.receiptPrinterIds,
         paymentSlipPrinterIds: profile.paymentSlipPrinterIds,
       };
+      const stored = this.kitchenLists.find((entry) => entry.profileId === id);
+      this.#loadedKitchenLists = {
+        stationIds: stored?.stationIds ?? [],
+        watcherIds: stored?.watcherIds ?? [],
+      };
+      this.draftKitchenLists = this.#loadedKitchenLists;
+      this.listRefusal = null;
       this.mode = "editor";
     } catch (error) {
       this.#showReadError(error);
@@ -326,6 +413,36 @@ export class DeviceProfilesScreen extends LitElement {
     };
   }
 
+  #onKitchenToggle(
+    event: CustomEvent<{ checked: boolean }>,
+    key: KitchenListKey,
+    id: string,
+  ): void {
+    event.stopPropagation();
+    const others = this.draftKitchenLists[key].filter((listed) => listed !== id);
+    this.draftKitchenLists = {
+      ...this.draftKitchenLists,
+      [key]: event.detail.checked ? [...others, id] : others,
+    };
+    if (this.listRefusal?.key === key) this.listRefusal = null;
+  }
+
+  /**
+   * A kitchen display's lists, when this save should send them: on an edit only when they changed,
+   * so a save that leaves them alone cannot be refused over a screen they do not touch.
+   */
+  #kitchenListsToSend(formFactor: FormFactor, editing: boolean): ProfileKitchenLists | undefined {
+    if (formFactor !== "kds") return undefined;
+    const draft = this.draftKitchenLists;
+    const loaded = this.#loadedKitchenLists;
+    const changed =
+      !sameIds(draft.stationIds, loaded.stationIds) ||
+      !sameIds(draft.watcherIds, loaded.watcherIds);
+    if (editing ? !changed : draft.stationIds.length + draft.watcherIds.length === 0)
+      return undefined;
+    return { stationIds: [...draft.stationIds], watcherIds: [...draft.watcherIds] };
+  }
+
   /** Swaps with the neighbour on screen, so an id the printer list has not delivered is passed
    * over rather than swapped with unseen. */
   #movePrinter(key: PrinterListKey, drawn: readonly string[], printerId: string, by: -1 | 1): void {
@@ -362,6 +479,8 @@ export class DeviceProfilesScreen extends LitElement {
         ? null
         : this.draftInactivityMinutes * 60;
     const printerLists = this.draftPrinterLists;
+    const kitchenLists = this.#kitchenListsToSend(formFactor, id !== null);
+    const kitchenArg = kitchenLists === undefined ? [] : ([kitchenLists] as const);
     this.saving = true;
     try {
       await this.#mutate(async () => {
@@ -374,6 +493,7 @@ export class DeviceProfilesScreen extends LitElement {
             formFactor,
             inactivityTimeoutSeconds,
             printerLists,
+            ...kitchenArg,
           );
         else
           await this.api.createDeviceProfile(
@@ -383,6 +503,7 @@ export class DeviceProfilesScreen extends LitElement {
             formFactor,
             inactivityTimeoutSeconds,
             printerLists,
+            ...kitchenArg,
           );
         this.#clearDraft();
         this.mode = "list";
@@ -394,8 +515,24 @@ export class DeviceProfilesScreen extends LitElement {
 
   // ── Duplicate ────────────────────────────────────────────────────────────────────────────────────
 
+  /** A kitchen display's copy lists the switched-on stations and watchers the original lists. */
   #duplicate(profile: DeviceProfile): void {
     const name = `${profile.name}${t("device_profiles.copy_suffix")}`;
+    const stored = this.kitchenLists.find((entry) => entry.profileId === profile.id);
+    const on = (all: { id: string; active: boolean }[], ids: readonly string[]) =>
+      all.filter((entry) => entry.active && ids.includes(entry.id)).map((entry) => entry.id);
+    const kitchenLists =
+      profile.formFactor === "kds" && stored !== undefined
+        ? {
+            stationIds: on(this.stations, stored.stationIds),
+            watcherIds: on(this.watchers, stored.watcherIds),
+          }
+        : undefined;
+    const kitchenArg =
+      kitchenLists === undefined ||
+      kitchenLists.stationIds.length + kitchenLists.watcherIds.length === 0
+        ? []
+        : ([kitchenLists] as const);
     void this.#mutate(() =>
       this.api.createDeviceProfile(
         name,
@@ -407,6 +544,7 @@ export class DeviceProfilesScreen extends LitElement {
           receiptPrinterIds: profile.receiptPrinterIds,
           paymentSlipPrinterIds: profile.paymentSlipPrinterIds,
         },
+        ...kitchenArg,
       ),
     );
   }
@@ -593,6 +731,71 @@ export class DeviceProfilesScreen extends LitElement {
     return html`${lists.map(({ list, choices }) => this.#renderPrinterList(list, choices))}`;
   }
 
+  /** The list's own entries first, switched-off ones included and marked so a save keeps them;
+   * then every other one that is switched on. */
+  #kitchenChoices(key: KitchenListKey): { id: string; label: string; listed: boolean }[] {
+    const all: { id: string; name: string; active: boolean }[] =
+      key === "stationIds" ? this.stations : this.watchers;
+    const mark =
+      key === "stationIds"
+        ? t("devices.station_disabled_mark")
+        : t("devices.watcher_disabled_mark");
+    const listed = this.draftKitchenLists[key];
+    return [
+      ...all
+        .filter((entry) => listed.includes(entry.id))
+        .sort((a, b) => Number(b.active) - Number(a.active))
+        .map((entry) => ({
+          id: entry.id,
+          label: entry.active ? entry.name : `${entry.name} (${mark})`,
+          listed: true,
+        })),
+      ...all
+        .filter((entry) => entry.active && !listed.includes(entry.id))
+        .map((entry) => ({ id: entry.id, label: entry.name, listed: false })),
+    ];
+  }
+
+  #renderKitchenLists(): TemplateResult {
+    const lists = KITCHEN_LISTS.map((list) => ({ list, choices: this.#kitchenChoices(list.key) }));
+    if (lists.every(({ choices }) => choices.length === 0))
+      return html`<p class="field" data-test="no-kitchen-choices">
+        ${t("device_profiles.no_kitchen_choices")}
+      </p>`;
+    return html`${lists.map(({ list, choices }) => {
+      const refusal = this.listRefusal?.key === list.key ? this.listRefusal.sentence : null;
+      return html`<div
+        class="field"
+        role="group"
+        aria-labelledby="${list.test}-heading"
+        aria-describedby=${refusal === null ? nothing : `${list.test}-error`}
+        data-test=${list.test}
+      >
+        <span class="panel-subtitle" id="${list.test}-heading">${t(list.heading)}</span>
+        <div class="toggles">
+          ${choices.map(
+            (choice) =>
+              html`<wt-switch
+                data-test="${list.item}-${choice.id}"
+                name="${list.key}"
+                label=${choice.label}
+                .checked=${choice.listed}
+                @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
+                  this.#onKitchenToggle(e, list.key, choice.id)}
+              ></wt-switch>`,
+          )}
+        </div>
+        ${
+          refusal === null
+            ? nothing
+            : html`<p class="field-error" id="${list.test}-error" data-test="${list.test}-error">
+                ${refusal}
+              </p>`
+        }
+      </div>`;
+    })}`;
+  }
+
   #renderEditor(): TemplateResult {
     return html`
       <div class="editor" data-test="editor-form" data-editing-id=${this.editingId ?? nothing}>
@@ -660,6 +863,7 @@ export class DeviceProfilesScreen extends LitElement {
           </div>
         </div>
         ${this.#renderPrinterLists()}
+        ${this.draftFormFactor === "kds" ? this.#renderKitchenLists() : nothing}
         <div class="form-actions">
           <wt-button variant="secondary" data-test="profile-cancel" @click=${() => this.#cancel()}
             >${t("device_profiles.cancel")}</wt-button
@@ -674,9 +878,11 @@ export class DeviceProfilesScreen extends LitElement {
         </div>
       </div>
       ${
-        this.errorKey
-          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
-          : nothing
+        this.listRefusal !== null
+          ? html`<p class="error" role="alert">${t("form.fix_fields")}</p>`
+          : this.errorKey
+            ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
+            : nothing
       }
     `;
   }

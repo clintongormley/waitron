@@ -639,6 +639,12 @@ export interface DeviceProfile {
   paymentSlipPrinterIds: string[];
 }
 
+/** The stations and watchers a kitchen screen on the profile may show; an empty list permits none. */
+export interface ProfileKitchenLists {
+  stationIds: string[];
+  watcherIds: string[];
+}
+
 /** In list order: a device joining the profile starts on the first printer in each that it can use. */
 export type ProfilePrinterLists = Pick<
   DeviceProfile,
@@ -2701,6 +2707,14 @@ export class DashboardApi {
     return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "GET");
   }
 
+  /** Every live profile's station and watcher lists, switched-off entries included. */
+  listProfileKitchenLists(): Promise<({ profileId: string } & ProfileKitchenLists)[]> {
+    return this.#request<{ lists: ({ profileId: string } & ProfileKitchenLists)[] }>(
+      "/management-api/device-profile-kitchen-lists",
+      "GET",
+    ).then((r) => r.lists);
+  }
+
   createDeviceProfile(
     name: string,
     canvasId: string | null,
@@ -2708,6 +2722,8 @@ export class DashboardApi {
     formFactor: FormFactor,
     inactivityTimeoutSeconds: number | null,
     printerLists: ProfilePrinterLists,
+    /** Absent leaves the profile with none. */
+    kitchenLists?: ProfileKitchenLists,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>("/management-api/device-profiles", "POST", {
       name,
@@ -2717,6 +2733,7 @@ export class DashboardApi {
       inactivityTimeoutSeconds,
       receiptPrinterIds: printerLists.receiptPrinterIds,
       paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
+      ...kitchenLists,
     });
   }
 
@@ -2728,6 +2745,8 @@ export class DashboardApi {
     formFactor: FormFactor,
     inactivityTimeoutSeconds: number | null,
     printerLists: ProfilePrinterLists,
+    /** Absent leaves the stored lists as they are. */
+    kitchenLists?: ProfileKitchenLists,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "PUT", {
       name,
@@ -2737,6 +2756,7 @@ export class DashboardApi {
       inactivityTimeoutSeconds,
       receiptPrinterIds: printerLists.receiptPrinterIds,
       paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
+      ...kitchenLists,
     });
   }
 

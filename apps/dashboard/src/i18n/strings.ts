@@ -980,6 +980,7 @@ export const en = {
   "devices.station_disabled_mark": "Disabled",
   "devices.watcher_disabled_mark": "Disabled",
   "devices.join_pick_binding": "Choose what it shows",
+  "devices.binding_none_listed": "This profile lists none yet",
   "devices.device_profile": "Device profile",
   "devices.profile_deleted": "Profile deleted",
   "devices.receipt_printer_now": "Receipt printer",
@@ -1777,6 +1778,13 @@ export const en = {
   "device_profiles.receipt_printers": "Receipt printers",
   "device_profiles.payment_slip_printers": "Payment slip printers",
   "device_profiles.no_printers": "Add a printer first.",
+  "device_profiles.stations": "Stations its screens can show",
+  "device_profiles.watchers": "Watchers its screens can show",
+  "device_profiles.no_kitchen_choices": "Add a prep station or a watcher first.",
+  "device_profiles.station_in_use":
+    "{device} shows this station. Choose another station for it on Devices first.",
+  "device_profiles.watcher_in_use":
+    "{device} shows this watcher. Choose another for it on Devices first.",
   "device_profiles.move_up": "Move up",
   "device_profiles.move_down": "Move down",
   // The `till` form factor is the cash register, the owner's chosen word.
@@ -3291,6 +3299,7 @@ export const es: Record<StringKey, string> = {
   "devices.station_disabled_mark": "Deshabilitada",
   "devices.watcher_disabled_mark": "Deshabilitado",
   "devices.join_pick_binding": "Elige qué muestra",
+  "devices.binding_none_listed": "Este perfil aún no incluye ninguno",
   "devices.device_profile": "Perfil de dispositivo",
   "devices.profile_deleted": "Perfil eliminado",
   "devices.receipt_printer_now": "Impresora de tickets",
@@ -4092,6 +4101,13 @@ export const es: Record<StringKey, string> = {
   "device_profiles.receipt_printers": "Impresoras de tickets",
   "device_profiles.payment_slip_printers": "Impresoras de justificantes de pago",
   "device_profiles.no_printers": "Añade primero una impresora.",
+  "device_profiles.stations": "Estaciones que pueden mostrar sus pantallas",
+  "device_profiles.watchers": "Puntos de seguimiento que pueden mostrar sus pantallas",
+  "device_profiles.no_kitchen_choices": "Añade primero una estación o un punto de seguimiento.",
+  "device_profiles.station_in_use":
+    "{device} muestra esta estación. Primero elige otra para ese dispositivo en Dispositivos.",
+  "device_profiles.watcher_in_use":
+    "{device} muestra este punto de seguimiento. Primero elige otro para ese dispositivo en Dispositivos.",
   "device_profiles.move_up": "Subir",
   "device_profiles.move_down": "Bajar",
   "device_profiles.form_factor": "Formato",

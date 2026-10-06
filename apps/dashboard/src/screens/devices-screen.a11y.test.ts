@@ -183,6 +183,13 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     listStations: vi.fn().mockResolvedValue(stations),
     listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
+    listProfileKitchenLists: vi.fn().mockResolvedValue([
+      {
+        profileId: "dp3",
+        stationIds: stations.map((station) => station.id),
+        watcherIds: watchers.map((watcher) => watcher.id),
+      },
+    ]),
     listPrinters: vi.fn().mockResolvedValue(printers),
     pairingMode: vi.fn().mockResolvedValue({
       open: false,
@@ -463,6 +470,42 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       await vi.waitFor(() =>
         expect(deep(el.shadowRoot!, "[data-test=being-paired-r2]")).not.toBeNull(),
       );
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it.each([390, 1280])(
+    "renders Pair for a kitchen profile that lists nothing yet accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        { api: stubApi({ listProfileKitchenLists: vi.fn().mockResolvedValue([]) }) },
+        theme,
+      );
+      await flush(el);
+      await openAdd(el);
+      await openPair(el);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=pair-profile]")).not.toBeNull(),
+      );
+      await chooseOption(el.shadowRoot!.querySelector("[data-test=pair-profile]")!, "dp3");
+      await flush(el);
+      expect(
+        (
+          el.shadowRoot!.querySelector("[data-test=pair-binding]") as HTMLElement & {
+            placeholder: string;
+          }
+        ).placeholder,
+      ).toBe(t("devices.binding_none_listed"));
+      const pairDialog = el
+        .shadowRoot!.querySelector("[data-test=pair-modal]")!
+        .shadowRoot!.querySelector("dialog")!;
+      expect(pairDialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      const pairBody = pairDialog.querySelector<HTMLElement>(".body")!;
+      expect(pairBody.scrollWidth).toBeLessThanOrEqual(pairBody.clientWidth);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);
     },

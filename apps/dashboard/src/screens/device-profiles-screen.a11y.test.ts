@@ -1,8 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
-import type { Canvas, DeviceProfile, DashboardApi, Printer } from "../api/client.js";
+import type {
+  Canvas,
+  DeviceProfile,
+  DashboardApi,
+  Printer,
+  Station,
+  Watcher,
+} from "../api/client.js";
 
 /**
  * Scanned in LIST and EDITOR mode. The `api` stub must resolve `listDeviceProfiles`, `listCanvases`,
@@ -51,7 +59,10 @@ const venuePrinters = [
   printer("pr-old", "Vieja", false),
 ];
 
-function stubApi(printers: Printer[] = venuePrinters): DashboardApi {
+function stubApi(
+  printers: Printer[] = venuePrinters,
+  overrides: Partial<DashboardApi> = {},
+): DashboardApi {
   return {
     listPrinters: vi.fn().mockResolvedValue(printers),
     listDeviceProfiles: vi.fn().mockResolvedValue(profiles),
@@ -60,6 +71,10 @@ function stubApi(printers: Printer[] = venuePrinters): DashboardApi {
     updateDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
     listCanvases: vi.fn().mockResolvedValue(canvases),
+    listStations: vi.fn().mockResolvedValue([]),
+    listWatchers: vi.fn().mockResolvedValue([]),
+    listProfileKitchenLists: vi.fn().mockResolvedValue([]),
+    ...overrides,
   } as unknown as DashboardApi;
 }
 
@@ -99,6 +114,84 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     expect(el.shadowRoot!.querySelector("[data-test=payment-slip-printers-pr-old]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  it.each([390, 1280])(
+    "renders a kitchen display's station and watcher lists, and a refusal under them, accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const kitchen: DeviceProfile = {
+        ...profiles[0]!,
+        id: "p2",
+        name: "Kitchen",
+        formFactor: "kds",
+        capabilities: [],
+        receiptPrinterIds: [],
+        paymentSlipPrinterIds: [],
+      };
+      const station = (id: string, name: string, active = true): Station => ({
+        id,
+        name,
+        displayOrder: 0,
+        isDefault: false,
+        active,
+        showsRestOfOrder: false,
+        warmAfterMinutes: 5,
+        overdueAfterMinutes: 10,
+        forgottenAfterMinutes: 15,
+      });
+      const watcher: Watcher = {
+        id: "w1",
+        name: "Pass",
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+        displayOrder: 0,
+        active: true,
+        printerIds: [],
+      };
+      const api = stubApi(venuePrinters, {
+        listDeviceProfiles: vi.fn().mockResolvedValue([...profiles, kitchen]),
+        getDeviceProfile: vi.fn().mockResolvedValue(kitchen),
+        listStations: vi
+          .fn()
+          .mockResolvedValue([
+            station("s1", "Grill"),
+            station("s2", "Cold"),
+            station("s-off", "Old grill", false),
+          ]),
+        listWatchers: vi.fn().mockResolvedValue([watcher]),
+        listProfileKitchenLists: vi
+          .fn()
+          .mockResolvedValue([{ profileId: "p2", stationIds: ["s1", "s-off"], watcherIds: [] }]),
+        updateDeviceProfile: vi.fn().mockRejectedValue({
+          code: "device_profile.station_in_use",
+          params: { stationId: "s1", deviceId: "d1", deviceName: "Grill screen" },
+        }),
+      });
+      const { el, host } = await mountWidget<DeviceProfilesScreen>(
+        "dashboard-device-profiles-screen",
+        { api },
+        theme,
+      );
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=profile-station-s-off]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      el.shadowRoot!.querySelector("[data-test=profile-station-s1]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=profile-stations-error]")).not.toBeNull();
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
 
   it("renders the line asking for a printer first accessibly", async () => {
     const { el, host } = await mountWidget<DeviceProfilesScreen>(

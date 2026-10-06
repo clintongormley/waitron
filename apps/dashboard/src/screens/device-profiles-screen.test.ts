@@ -4,7 +4,14 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
-import type { Canvas, DeviceProfile, DashboardApi, Printer } from "../api/client.js";
+import type {
+  Canvas,
+  DeviceProfile,
+  DashboardApi,
+  Printer,
+  Station,
+  Watcher,
+} from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
@@ -49,6 +56,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
     listCanvases: vi.fn().mockResolvedValue(canvases),
     listPrinters: vi.fn().mockResolvedValue([]),
+    listStations: vi.fn().mockResolvedValue([]),
+    listWatchers: vi.fn().mockResolvedValue([]),
+    listProfileKitchenLists: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -1052,5 +1062,181 @@ describe("device-profiles-screen printer lists", () => {
     await el.updateComplete;
     expect(switchedOn(el, "receipt-printers")).toEqual([]);
     expect(switchedOn(el, "payment-slip-printers")).toEqual([]);
+  });
+});
+
+describe("device-profiles-screen station and watcher lists", () => {
+  const station = (id: string, name: string, active = true): Station => ({
+    id,
+    name,
+    displayOrder: 0,
+    isDefault: false,
+    active,
+    showsRestOfOrder: false,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+  const watcher = (id: string, name: string): Watcher => ({
+    id,
+    name,
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: false,
+    displayOrder: 0,
+    active: true,
+    printerIds: [],
+  });
+  const kitchen = profiles[1]!;
+
+  async function editKitchen(overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi({
+      getDeviceProfile: vi.fn().mockResolvedValue(kitchen),
+      listStations: vi
+        .fn()
+        .mockResolvedValue([
+          station("s1", "Grill"),
+          station("s2", "Cold"),
+          station("s3", "Pastry"),
+          station("s-off", "Old grill", false),
+        ]),
+      listWatchers: vi.fn().mockResolvedValue([watcher("w1", "Pass"), watcher("w2", "Bar pass")]),
+      listProfileKitchenLists: vi
+        .fn()
+        .mockResolvedValue([{ profileId: "p2", stationIds: ["s1", "s-off"], watcherIds: ["w1"] }]),
+      ...overrides,
+    });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
+    await flush(el);
+    return { api, el };
+  }
+
+  type Switch = HTMLElement & { checked: boolean; label: string };
+  const switchesIn = (el: DeviceProfilesScreen, group: string) => [
+    ...el.shadowRoot!.querySelectorAll<Switch>(`[data-test=${group}] wt-switch`),
+  ];
+  const shown = (el: DeviceProfilesScreen, group: string) =>
+    switchesIn(el, group).map((s) => [s.label, s.checked]);
+
+  async function save(el: DeviceProfilesScreen) {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+  }
+
+  it("shows a kitchen display's listed stations and watchers switched on, and the others off", async () => {
+    const { el } = await editKitchen();
+    expect(shown(el, "profile-stations")).toEqual([
+      ["Grill", true],
+      [`Old grill (${t("devices.station_disabled_mark")})`, true],
+      ["Cold", false],
+      ["Pastry", false],
+    ]);
+    expect(shown(el, "profile-watchers")).toEqual([
+      ["Pass", true],
+      ["Bar pass", false],
+    ]);
+  });
+
+  it("draws no station or watcher list for a profile that is not a kitchen display", async () => {
+    const el = await mount(
+      stubApi({ listStations: vi.fn().mockResolvedValue([station("s1", "Grill")]) }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=profile-stations]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=profile-watchers]")).toBeNull();
+  });
+
+  it("saves the lists it changed, keeping a listed station switched off since", async () => {
+    const { api, el } = await editKitchen();
+    toggle(el, "profile-station-s2", true);
+    toggle(el, "profile-watcher-w1", false);
+    await el.updateComplete;
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
+      stationIds: ["s1", "s-off", "s2"],
+      watcherIds: [],
+    });
+  });
+
+  it("sends no lists when they are unchanged", async () => {
+    const { api, el } = await editKitchen();
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]).toHaveLength(7);
+  });
+
+  it("creates a kitchen display with the stations and watchers chosen", async () => {
+    const api = stubApi({
+      listStations: vi.fn().mockResolvedValue([station("s1", "Grill")]),
+      listWatchers: vi.fn().mockResolvedValue([watcher("w1", "Pass")]),
+    });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    change(el, "profile-name", "Kitchen 2");
+    selectFormFactor(el, "kds");
+    await flush(el);
+    toggle(el, "profile-station-s1", true);
+    toggle(el, "profile-watcher-w1", true);
+    await el.updateComplete;
+    await save(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+      stationIds: ["s1"],
+      watcherIds: ["w1"],
+    });
+  });
+
+  it("copies a kitchen display's switched-on stations and watchers when it is duplicated", async () => {
+    const { api, el } = await editKitchen();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p2]")!.click();
+    await flush(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+      stationIds: ["s1"],
+      watcherIds: ["w1"],
+    });
+  });
+
+  it("names the screen that still shows a station the save took off, under the stations, and keeps the draft", async () => {
+    const { el } = await editKitchen({
+      updateDeviceProfile: vi.fn().mockRejectedValue({
+        code: "device_profile.station_in_use",
+        params: { stationId: "s1", deviceId: "d1", deviceName: "Grill screen" },
+      }),
+    });
+    toggle(el, "profile-station-s1", false);
+    await el.updateComplete;
+    await save(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=profile-stations-error]")?.textContent?.trim(),
+    ).toBe(t("device_profiles.station_in_use").replace("{device}", "Grill screen"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+      t("form.fix_fields"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeTruthy();
+    expect(shown(el, "profile-stations")).toContainEqual(["Grill", false]);
+
+    toggle(el, "profile-station-s1", true);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=profile-stations-error]")).toBeNull();
+  });
+
+  it("names the screen that still shows a watcher the save took off, under the watchers", async () => {
+    const { el } = await editKitchen({
+      updateDeviceProfile: vi.fn().mockRejectedValue({
+        code: "device_profile.watcher_in_use",
+        params: { watcherId: "w1", deviceId: "d2", deviceName: "Pass screen" },
+      }),
+    });
+    toggle(el, "profile-watcher-w1", false);
+    await el.updateComplete;
+    await save(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=profile-watchers-error]")?.textContent?.trim(),
+    ).toBe(t("device_profiles.watcher_in_use").replace("{device}", "Pass screen"));
   });
 });

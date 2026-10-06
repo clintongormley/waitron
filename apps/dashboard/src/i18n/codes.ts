@@ -525,6 +525,26 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That profile is for another kind of device. Untick it",
     es: "Ese perfil es para otro tipo de dispositivo. Desmárcalo",
   },
+  "station.not_allowed": {
+    en: "This device's profile does not list that station. Choose one it lists",
+    es: "El perfil de este dispositivo no incluye esa estación. Elige una de las que incluye",
+  },
+  "watcher.not_allowed": {
+    en: "This device's profile does not list that watcher. Choose one it lists",
+    es: "El perfil de este dispositivo no incluye ese punto de seguimiento. Elige uno de los que incluye",
+  },
+  "device_profile.station_in_use": {
+    en: "A kitchen screen on this profile still shows that station. Choose another station for it on Devices first",
+    es: "Una pantalla de cocina con este perfil todavía muestra esa estación. Elige otra para ella en Dispositivos primero",
+  },
+  "device_profile.watcher_in_use": {
+    en: "A kitchen screen on this profile still shows that watcher. Choose another for it on Devices first",
+    es: "Una pantalla de cocina con este perfil todavía muestra ese punto de seguimiento. Elige otro para ella en Dispositivos primero",
+  },
+  "device_profile.access_invalid": {
+    en: "Something this profile names is no longer available. Check its choices and save again",
+    es: "Algo que nombra este perfil ya no está disponible. Revisa sus opciones y vuelve a guardar",
+  },
   "device.binding_invalid": {
     en: "This profile cannot use that printer, or it has been disabled. Choose another",
     es: "Este perfil no puede usar esa impresora, o la impresora se ha deshabilitado. Elige otra",

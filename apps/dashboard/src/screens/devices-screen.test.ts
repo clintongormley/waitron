@@ -235,6 +235,13 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStations: vi.fn().mockResolvedValue(stations),
     listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
+    listProfileKitchenLists: vi.fn().mockResolvedValue(
+      ["dp3", "pk"].map((profileId) => ({
+        profileId,
+        stationIds: ["s1", "s2", "s-off"],
+        watcherIds: ["w1", "w-off"],
+      })),
+    ),
     listPrinters: vi.fn().mockResolvedValue(printers),
     pairingMode: vi.fn().mockResolvedValue(SHUT),
     takePairingHold: vi.fn().mockResolvedValue({ holdId: "h1", openUntil: TAKEN_UNTIL }),
@@ -1383,6 +1390,34 @@ describe("the Edit dialog", () => {
       "k1",
       expect.objectContaining({ stationId: "s2", watcherId: null }),
     );
+  });
+
+  it("offers a kitchen screen only what its profile lists, and empties Shows on a profile that does not list its choice", async () => {
+    const api = editApi({
+      listDeviceProfiles: vi
+        .fn()
+        .mockResolvedValue([
+          ...editProfiles,
+          { ...editProfiles[2]!, id: "pk2", name: "Bar screen" },
+        ]),
+      listProfileKitchenLists: vi.fn().mockResolvedValue([
+        { profileId: "pk", stationIds: ["s1"], watcherIds: ["w1"] },
+        { profileId: "pk2", stationIds: ["s2"], watcherIds: [] },
+      ]),
+    });
+    const el = await openEdit(api, "k1");
+    expect(field(el, "edit-binding").options).toEqual([
+      { value: "station:s1", label: "Cocina", group: t("devices.stations_group") },
+      { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
+    ]);
+    expect(field(el, "edit-binding").value).toBe("station:s1");
+
+    await chooseOption(field(el, "edit-profile"), "pk2");
+    await el.updateComplete;
+    expect(field(el, "edit-binding").options).toEqual([
+      { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
+    ]);
+    expect(field(el, "edit-binding").value).toBe("");
   });
 
   it("marks a held station as disabled and a held watcher as disabled, in English and Spanish", async () => {
@@ -3066,6 +3101,62 @@ describe("add a device", () => {
     expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
   });
 
+  it("offers a kitchen profile only the stations and watchers it lists, and says when it lists none", async () => {
+    const api = stubApi({
+      listDeviceProfiles: vi
+        .fn()
+        .mockResolvedValue([
+          ...deviceProfiles,
+          { ...deviceProfiles[2]!, id: "dp4", name: "Empty" },
+        ]),
+      listProfileKitchenLists: vi
+        .fn()
+        .mockResolvedValue([{ profileId: "dp3", stationIds: ["s2"], watcherIds: ["w1"] }]),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
+    await el.updateComplete;
+    const binding = () =>
+      q(el, "[data-test=pair-binding]") as HTMLElement & {
+        options: unknown[];
+        placeholder: string;
+      };
+    expect(binding().options).toEqual([
+      { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
+      { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
+    ]);
+    expect(binding().placeholder).toBe(t("devices.join_pick_binding"));
+
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp4");
+    await el.updateComplete;
+    expect(binding().options).toEqual([]);
+    expect(binding().placeholder).toBe(t("devices.binding_none_listed"));
+  });
+
+  it("a refusal that the profile does not list the station goes under Shows", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi
+        .fn()
+        .mockRejectedValue({ code: "station.not_allowed", params: { stationId: "s1" } }),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
+    await el.updateComplete;
+    await chooseOption(q(el, "[data-test=pair-binding]")!, "station:s1");
+    await el.updateComplete;
+
+    q(el, "[data-test=pair-submit]")!.click();
+
+    await vi.waitFor(() =>
+      expect((q(el, "[data-test=pair-binding]") as Field).error).toBe(
+        codeMessage("station.not_allowed"),
+      ),
+    );
+    expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
+  });
+
   it("puts a request-invalid refusal under the field its params name", async () => {
     const api = stubApi({
       acceptDeviceJoinRequest: vi
@@ -3720,6 +3811,18 @@ describe("add a device", () => {
       vi.mocked(api.listStations).mockResolvedValue([
         { ...stations[0]!, active: false },
         stations[1]!,
+      ]);
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
+      expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("");
+    });
+
+    it("whose station its profile no longer lists opens with Shows empty", async () => {
+      const api = waiting();
+      vi.mocked(api.listProfileKitchenLists).mockResolvedValue([
+        { profileId: "dp3", stationIds: ["s2"], watcherIds: [] },
       ]);
       const el = await openAdd(api);
       await toEnableSettings(el);

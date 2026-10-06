@@ -230,6 +230,11 @@ export const QUERY_DEPENDENCIES = {
   getExtraList: ["extra_lists", "extra_list_items"],
   listDeviceProfiles: ["device_profiles", "device_profile_printers", "devices", "canvases"],
   getDeviceProfile: ["device_profiles", "device_profile_printers", "canvases"],
+  listProfileKitchenLists: [
+    "device_profiles",
+    "device_profile_stations",
+    "device_profile_watchers",
+  ],
   listDevices: [
     "devices",
     "watchers",
