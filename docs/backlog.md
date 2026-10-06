@@ -1870,31 +1870,15 @@ Left open:
   that product's own colour while it is open. I believe this predates the last review round; not
   checked against earlier commits.
 
-**Each menu has one Device Home Page, shown two ways — DONE (W93, 2026-10-06).** A menu no longer
-has named home layouts. Its one Device Home Page is the first row of the menu's Structure tab. That
-row's ⋮ adds a product shortcut or a section shortcut, each chosen from a dropdown of what the menu
-reaches, included menus' too, and each shortcut can be removed, or moved by its grip, by dragging or
-with the arrow keys. A shortcut whose target has left the menu reads "Missing: <name>" and can only
-be removed. The Home page tab now sets how the page looks on each kind of device: choose Handheld or
-Till, then the number of columns on a slider (2 to 6 for a handheld, starting at 3; 6 to 10 for a
-till, starting at 6), Colours or Thumbnails, and whether the Device Home Page or the menu comes
-first after search. Each choice saves as it is made. Under the controls a preview draws the draft
-menu as that device would, and its search, which finds this menu's products only, says that a
-device may also show results from other menus. A device profile no longer picks a layout: the
-profile screen's home page section is gone, and a device uses the Handheld display when its form
-factor is a phone or a tablet and the Till display otherwise. On the till, search is followed by
-the two blocks in the menu's order, with a divider naming the second; a grid shows the menu's
-column count, fewer on a narrow screen; and in Thumbnails a tile shows its image, else its colour.
-A till canvas card that sets no column count of its own now follows the menu's setting. The
-shortcuts and both displays are published with the menu, so a change reaches a device only when
-the menu is published, and the Preview tab names the change ("Device Home Page shortcuts changed",
-or a device's display). The till's warning about a removed layout is gone with the layouts. How it
-works: [product-categories.md](developers/product-categories.md), _Device Home Page routes_;
+**Each menu has one Device Home Page, shown two ways — DONE (W93, 2026-10-06).** A menu's one
+Device Home Page is the first row of its Structure tab, and the Home page tab sets a Handheld and a
+Till display for it; named home layouts and the device profile's layout choice are gone. A till
+canvas card that sets no column count of its own follows the menu's setting, and a configuration
+import refuses a display setting a save would refuse (`setup.request_invalid`, naming the column).
+How it works: [product-categories.md](developers/product-categories.md), _Device Home Page routes_;
 [products.md](developers/products.md), _On the till_; and
 [design-system.md](developers/design-system.md), the Structure tab and the Device Home Page
-drawing. The one addition beyond the owner's item: a configuration import refuses a display
-setting a save would refuse (`setup.request_invalid`, naming the column), because the till draws
-it and the database has no check of its own on those columns.
+drawing.
 **Upgrading:** one migration, catalogue `0026_device_home_page.sql`, drops the
 `device_profile_home_layouts` table (each profile's layout choices) and adds six columns to
 `menu_details`, each required with a default, with no table rebuild, so a venue migrates in place.
@@ -1904,16 +1888,10 @@ served it and it reads as changed; its preview opens and it publishes. A venue t
 named layouts keeps their sections, which the menu no longer reads; a reset clears them. Export a
 configuration bundle again after upgrading: one exported before W93 records an older catalogue
 schema version, which the import refuses (`validateConfigurationBundle`,
-`apps/server/src/configuration-transfer.ts`; read, not run). The test checks this change rewrote
-or deleted are listed in the PR's "Changed test checks" and in the plan
-(`docs/superpowers/plans/2026-10-05-w93-device-home-page.md`, _Changed test checks_).
-**Looked at (2026-10-06):** on the demo venue, reset rather than republished (the last item
-below): the Structure tab's Device Home Page row and its add-shortcut picker, the Home page tab's
-controls and preview, and the till's home at a phone's width and on the counter at 1280 px. The
-look led to four fixes, each with a test: the Handheld preview is as wide as a phone's menu, so it
-shows the columns a phone shows; a setting just chosen stays showing while its save is out; a
-refused choice's message is in the slider's small type; and a refused shortcut names the Device
-Home Page, as the Structure tab does.
+`apps/server/src/configuration-transfer.ts`; read, not run).
+**Looked at (2026-10-06):** on the demo venue, reset rather than republished (the upgrade-path
+item below): the Structure tab's Device Home Page row and its add-shortcut picker, the Home page tab's
+controls and preview, and the till's home at a phone's width and on the counter at 1280 px.
 Left open:
 - The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
   the menu shares the screen with the order: from 720 px wide the table order screen gives it three
@@ -2452,7 +2430,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 - **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
   `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
-  not `wt-data-table`, so `pinned` does not reach them; `member-list-editor.ts` and
+  not `wt-data-table`, so `pinned` does not reach them; `member-list-editor.ts` (drawn by nothing
+  since W93) and
   `product-editor.ts` also contain both a `<table>` and a row menu (found by grep, not read). None
   has a phone-width case and none was measured.
 - Read-back gaps: the print-mode and
