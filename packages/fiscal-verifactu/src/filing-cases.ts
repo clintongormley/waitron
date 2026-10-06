@@ -129,13 +129,15 @@ export async function recordCaseEvent(
 
 /** Every case in the order it was opened, with its events in the order they were recorded. */
 export async function listFilingCases(tx: Transaction): Promise<FilingCaseReport[]> {
+  // By `rowid`, not `opened_at`/`recorded_at` (the caller's clock): SQLite gives a new row a `rowid`
+  // one larger than the table's largest. `VACUUM` may change the rowids of a table with no INTEGER
+  // PRIMARY KEY, as here; measured (node:sqlite, SQLite 3.53.4, Node v26.7.0, 2026-10-06), `VACUUM`
+  // and `VACUUM INTO` kept them, and a drizzle-style table rebuild renumbered them in order.
   const cases = await tx
     .select({ filingCase: filingCases, estado: envios.estado })
     .from(filingCases)
     .leftJoin(envios, eq(envios.registroId, filingCases.registroId))
     .orderBy(sql`${filingCases}.rowid`);
-  // Insertion order, not `recorded_at`, which is the caller's clock: SQLite gives a new row a
-  // `rowid` one above the table's largest.
   const events = await tx
     .select()
     .from(filingCaseEvents)

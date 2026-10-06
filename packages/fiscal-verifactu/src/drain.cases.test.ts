@@ -587,7 +587,7 @@ describe("drain — a claim that rolls back reports nothing it wrote", () => {
     const aeat = fakeAeat();
     // Refused for its environment, which raises an incident inside the claim's transaction.
     await seedPendingEnvios(suite.db, { count: 1, entorno: "preproduction" });
-    // Sorts after the refused chain, so its claim stamp is written after that incident.
+    // A sendable row, whose claim stamp the trigger below refuses.
     await seedIndependentChain(suite.db, {
       sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
       secuencia: 1,

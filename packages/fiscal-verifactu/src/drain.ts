@@ -976,8 +976,9 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
  * `resolveLines` makes Route B's consulta before this transaction opens; a failed one leaves this
  * record unknown, as missing evidence does.
  *
- * A conflict opens a case and holds this chain's records not yet sent (`haltSuccessors`); why a
- * conflict holds and a rejection does not: design §7.1,
+ * A conflict opens a case and holds this chain's records not yet sent (`haltSuccessors`): no probe
+ * has sent a successor after one (design §5, "Implemented, 2026-10-06"). Why a rejection holds
+ * nothing: design §7.1. Design:
  * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md.
  */
 async function handleDuplicate(
