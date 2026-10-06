@@ -39,7 +39,6 @@ import type { ExtraSelection } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { systemClock } from "./till-backend.js";
-import type { OrderFlow } from "./till-config.js";
 import {
   collectOrder,
   payWorkingOrder,
@@ -60,6 +59,7 @@ import {
   updateHeldOrder,
 } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
@@ -105,7 +105,7 @@ function nextNif(): string {
 const sessionOf = (tx: Transaction) =>
   (tx as unknown as { session: { prepareQuery: (query: { sql: string }) => unknown } }).session;
 
-async function setupVenue(orderFlow: OrderFlow = "prepay") {
+async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
   const venue = await applyVenue(
     planVenue(
       {
@@ -146,7 +146,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    orderFlow,
+    orderFlow: "prepay",
   });
 
   const products = await withTransaction(suite.db, async (tx) => {
@@ -207,7 +207,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     };
   });
   const { counter, tables } = await withTransaction(suite.db, async (tx) => ({
-    counter: await offerProducts(tx, cfg),
+    counter: await offerProducts(tx, cfg, { paidWhen }),
     tables: await offerProducts(tx, cfg, { zone: "tables" }),
   }));
   return { cfg, products, counter, tables };
@@ -513,11 +513,12 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     expect(tender).toEqual({ amount: 300, tip: 50 });
   });
 
-  it("invoice-first: an order placed before the change keeps 10% when collected after it, and collect re-prices nothing; one parked before and placed after files 10% too", async () => {
-    const v = await setupVenue("invoice_first");
+  it("an explicitly issued unpaid bill keeps 10% when collected after a VAT change without re-pricing; a second issued bill retains its parked VAT too", async () => {
+    const v = await setupVenue("ticket_then_pay");
     const before = await park(v, one(v, v.products.cana));
     const after = await park(v, one(v, v.products.cana));
     await placeOrder(deps(), v.cfg, before, OPERATOR);
+    await issueOrderInvoice(deps(), v.cfg, before, OPERATOR);
     const placed = await filed(before);
     const storedAtPlacing = await stored(before);
     await setVat(v.products.cana, "general");
@@ -535,6 +536,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
       spy.restore();
     }
     await placeOrder(deps(), v.cfg, after, OPERATOR);
+    await issueOrderInvoice(deps(), v.cfg, after, OPERATOR);
 
     expect(placed).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
     expect(await filed(before)).toEqual(placed);

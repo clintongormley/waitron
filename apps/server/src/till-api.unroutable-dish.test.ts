@@ -961,9 +961,13 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     expect(stored).toMatchObject({ makeAt: chosen, note: "extra cold" });
   });
 
-  it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
-    "asks for a counter pay dish in %s before taking money",
-    async (mode) => {
+  it.each([
+    { mode: "prepay", sends: true },
+    { mode: "ticket_then_pay", sends: true },
+    { mode: "table_tab", sends: false },
+  ] as const)(
+    "checks unsent dishes on pay for $mode only when payment sends them",
+    async ({ mode, sends }) => {
       const made = await strandedDish(`Question ${mode}`);
       await inTx(v, (tx) =>
         offerProducts(tx, v.cfg, {
@@ -986,8 +990,13 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         sends: boolean;
         deadEnds: { key: string; name: string; why: string }[];
       };
-      expect(answer.sends).toBe(true);
-      expect(answer.deadEnds).toMatchObject([{ key: "0", name: made.name, why: "switched_off" }]);
+      expect(answer.sends).toBe(sends);
+      if (sends) {
+        expect(answer.deadEnds).toHaveLength(1);
+        expect(answer.deadEnds).toMatchObject([{ key: "0", name: made.name, why: "switched_off" }]);
+      } else {
+        expect(answer.deadEnds).toEqual([]);
+      }
     },
   );
 

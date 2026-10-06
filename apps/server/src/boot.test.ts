@@ -3748,7 +3748,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           vatClass: "general",
         });
         await assignCatalogueToLocation(tx, brandLocationId(cfg.locationId), catalogue.id);
-        const offers = await offerProducts(tx, { locationId: cfg.locationId, orderFlow: "prepay" });
+        const offers = await offerProducts(tx, { locationId: cfg.locationId });
         return offers.offerFor(water.id);
       });
 

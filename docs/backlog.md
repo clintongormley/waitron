@@ -6697,8 +6697,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   populated-upgrade reset fixture passes locally. Management routes now refuse the retired style,
   department/zone selectors offer current styles only, and public till boot and placement responses
   omit retired metadata. Placement retains the simplified-invoice-limit refusal without filing.
-  Shared server/till type and fixture retirement, remaining consumer and prose audits,
-  whole-branch review and CI are still pending.
+  The offer fixture now sets zone payment timing explicitly and does not read the retired till
+  setting. Issued-bill VAT fixtures retain their amounts and rates through explicit unpaid issuance.
+  A261-2c is awaiting approval of the precise placement/filing test replacement under the owner's
+  controversial-test rule. Shared server/till type and fixture retirement, remaining consumer and
+  prose audits, whole-branch review and CI are still pending.
   The Numbered collection choice applies to `prepay` and `ticket_then_pay` quick sales.
   A261-2f explains the quick-sale-only scope in English and Spanish on the department and
   zone Order number cells and editors. Filled choices use the shared help button; table-tab

@@ -15,6 +15,7 @@ import {
   createDepartment,
   createException,
   setClaim,
+  setZoneSalePolicyOverride,
   listDepartments,
   zoneServicePolicies,
 } from "@waitron/venue-service";
@@ -35,13 +36,14 @@ export interface OfferProductsOptions {
   /** `"counter"` (default) is the venue's counter-default zone, created if the venue has none;
    *  `"tables"` is a zone of its own for dining tables. */
   zone?: "counter" | "tables" | { zoneId: string };
-  /** Defaults to `cfg.orderFlow`, or `"table_tab"` for `zone: "tables"`. */
+  /** Defaults to `"prepay"`, or `"table_tab"` for `zone: "tables"`. */
   serviceMode?: ServiceMode;
+  paidWhen?: "prepay" | "ticket_then_pay";
   /** Defaults to every top-level product of the location's accessible catalogues. */
   productIds?: readonly string[];
 }
 
-type Cfg = Pick<TillConfig, "locationId" | "orderFlow">;
+type Cfg = Pick<TillConfig, "locationId">;
 
 const MENU_NAME = "Test offers";
 const COUNTER_ZONE = "Test counter";
@@ -60,8 +62,11 @@ export async function offerProducts(
   options: OfferProductsOptions = {},
 ): Promise<ZoneOffers> {
   const zone = options.zone ?? "counter";
-  const serviceMode = options.serviceMode ?? (zone === "tables" ? "table_tab" : cfg.orderFlow);
+  const serviceMode = options.serviceMode ?? (zone === "tables" ? "table_tab" : "prepay");
   const zoneId = await resolveZone(tx, cfg, zone, serviceMode);
+  if (options.paidWhen !== undefined) {
+    await setZoneSalePolicyOverride(tx, cfg, zoneId, "paidWhen", options.paidWhen);
+  }
 
   const menuId = await ownMenu(tx);
   const [policy] = await tx
