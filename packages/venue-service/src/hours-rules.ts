@@ -10,7 +10,6 @@ import {
   type LocalDate,
   type SpecialDateInput,
   type WeekCell,
-  type WeekDay,
 } from "./hours-types.js";
 import "./errors.js";
 
@@ -167,10 +166,6 @@ export function parseWeek(value: unknown): ParsedWeek {
     if (tailOverlaps(cellIntervals(cells[(weekday + 6) % 7]!), cellIntervals(cells[weekday]!)))
       invalidHours(`days.${indexOf[weekday]}.cell`);
   return { cells, indexOf };
-}
-
-export function weekDays(week: ParsedWeek): WeekDay[] {
-  return week.cells.map((cell, weekday) => ({ weekday, cell }));
 }
 
 /** A special date's own fields and cells, structurally; ownership and clashes are the writer's. */

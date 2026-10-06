@@ -303,6 +303,31 @@ describe("the standard week", () => {
     ["a week that is not a list", () => ({ days: null }), "days"],
     ["a missing day", () => ({ days: week().slice(0, 6) }), "days"],
     [
+      "a subject that is not an object",
+      () => ({ subject: null as never, days: week() }),
+      "subject",
+    ],
+    [
+      "a subject id that is not text",
+      () => ({ subject: { kind: "station", id: 7 } as never, days: week() }),
+      "subject",
+    ],
+    [
+      "a day that is not an object",
+      () => ({ days: week().map((day, i) => (i === 0 ? null : day)) }),
+      "days.0",
+    ],
+    [
+      "a cell that is not an object",
+      () => ({ days: week().map((day, i) => (i === 0 ? { ...day, cell: "closed" } : day)) }),
+      "days.0.cell",
+    ],
+    [
+      "a period that is not an object",
+      () => ({ days: week({ 3: { mode: "periods", periods: ["09:00-10:00"] } as never }) }),
+      "days.2.cell.periods.0",
+    ],
+    [
       "a weekday given twice",
       () => ({ days: week().map((day, index) => (index === 6 ? { ...day, weekday: 1 } : day)) }),
       "days.6.weekday",
@@ -432,8 +457,9 @@ describe("the standard week", () => {
       await save(f, f.restaurant, prior);
       const before = await storedWeek(f.restaurant);
 
-      const { subject, days } = make(f);
-      await expect(save(f, subject ?? f.restaurant, days)).rejects.toMatchObject({
+      const request = make(f);
+      const subject = "subject" in request ? (request.subject as HoursSubject) : f.restaurant;
+      await expect(save(f, subject, request.days)).rejects.toMatchObject({
         code: "hours.invalid",
         params: { field },
       });
@@ -535,6 +561,35 @@ describe("special dates", () => {
     });
   });
 
+  it("edits a kept cell in place, replacing its periods and keeping the ids it is sent", async () => {
+    const f = await fixture();
+    const lunch = period("12:00", "15:00");
+    const first = await saveDate(
+      f,
+      null,
+      specialInput({ cells: [{ subject: f.bar, cell: { mode: "periods", periods: [lunch] } }] }),
+    );
+    const [cellBefore] = await withTransaction(db, (tx) =>
+      tx.select().from(specialDateHours).where(eq(specialDateHours.specialDateId, first.id)),
+    );
+    const longer = { ...lunch, closesAt: "16:00" };
+    const evening = period("19:00", "23:00");
+    await saveDate(
+      f,
+      first.id,
+      specialInput({
+        cells: [{ subject: f.bar, cell: { mode: "periods", periods: [evening, longer] } }],
+      }),
+    );
+    const [cellAfter] = await withTransaction(db, (tx) =>
+      tx.select().from(specialDateHours).where(eq(specialDateHours.specialDateId, first.id)),
+    );
+    expect(cellAfter!.id).toBe(cellBefore!.id);
+    expect((await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, first.id))).cells).toEqual(
+      [{ subject: f.bar, cell: { mode: "periods", periods: [evening, longer] } }],
+    );
+  });
+
   it("refuses a date another special date already holds, and an id it does not know", async () => {
     const f = await fixture();
     await saveDate(f, null, specialInput());
@@ -567,6 +622,12 @@ describe("special dates", () => {
   });
 
   const refusals: [string, (f: Fixture) => unknown, string][] = [
+    ["a request that is not an object", () => null, "input"],
+    [
+      "a cell entry that is not an object",
+      () => specialInput({ cells: [null as never] }),
+      "cells.0",
+    ],
     ["an impossible date", () => specialInput({ date: "2026-02-30" }), "date"],
     ["a date in another shape", () => specialInput({ date: "2026-2-3" }), "date"],
     ["a blank name", () => specialInput({ name: "  " }), "name"],
@@ -725,6 +786,89 @@ describe("hours either side of a special date", () => {
         ],
       }),
     );
+  });
+
+  it("refuses a special date that opens inside the previous day's standard tail", async () => {
+    const f = await fixture();
+    await save(f, f.restaurant, week({ 4: periods(period("22:00", "03:00")) }));
+    await expect(
+      saveDate(
+        f,
+        null,
+        specialInput({
+          cells: [
+            {
+              subject: f.restaurant,
+              cell: { mode: "periods", periods: [period("01:00", "05:00")] },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "cells.0.cell", date: "2026-10-08", subjectId: f.restaurant.id },
+    });
+  });
+
+  it("refuses moving a special date off a day whose standard hours would then clash", async () => {
+    const f = await fixture();
+    await save(f, f.restaurant, week({ 6: periods(period("01:00", "05:00")) }));
+    // Saturday 10 October is Closed as a special date, so Friday's late special hours can run into it.
+    const saturday = await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2026-10-10",
+        cells: [{ subject: f.restaurant, cell: { mode: "closed", periods: [] } }],
+      }),
+    );
+    await saveDate(f, null, lateFriday(f));
+
+    await expect(
+      saveDate(f, saturday.id, specialInput({ date: "2026-10-20" })),
+    ).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "date", date: "2026-10-10", subjectId: f.restaurant.id },
+    });
+    expect((await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, saturday.id))).date).toBe(
+      "2026-10-10",
+    );
+  });
+
+  it("checks every special date, past ones included, when the venue's clock cannot be read", async () => {
+    const f = await fixture();
+    await saveDate(f, null, { ...lateFriday(f), date: "2026-09-21" });
+    await withTransaction(db, (tx) =>
+      tx.update(locations).set({ timeZone: "Mars/Base" }).where(eq(locations.id, f.cfg.locationId)),
+    );
+    await expect(
+      save(f, f.restaurant, week({ 2: periods(period("01:00", "05:00")) })),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { date: "2026-09-21" } });
+  });
+
+  it("saves a past special date whose tail would clash, but still checks its own periods", async () => {
+    const f = await fixture();
+    await save(f, f.restaurant, week({ 6: periods(period("01:00", "05:00")) }));
+    // Friday 25 September is in the past at AT; Saturday 26 September opens at 01:00.
+    await saveDate(f, null, { ...lateFriday(f), date: "2026-09-25" });
+    await expect(
+      saveDate(
+        f,
+        null,
+        specialInput({
+          date: "2026-09-18",
+          cells: [
+            {
+              subject: f.restaurant,
+              cell: {
+                mode: "periods",
+                periods: [period("10:00", "13:00"), period("12:00", "14:00")],
+              },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "cells.0.cell.periods.1" } });
   });
 
   it("refuses reopening a whole-venue closure whose inherited hours overlap the next special date", async () => {

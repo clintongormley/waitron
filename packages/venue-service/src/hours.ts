@@ -105,8 +105,8 @@ async function periodsByCell(
   return byCell;
 }
 
-function cellOf(mode: StoredMode, periods: HourPeriod[] | undefined): WeekCell & DateCell {
-  return mode === "periods" ? { mode, periods: periods ?? [] } : { mode, periods: [] };
+function cellOf(mode: StoredMode, periods: HourPeriod[]): WeekCell & DateCell {
+  return mode === "periods" ? { mode, periods } : { mode, periods: [] };
 }
 
 /**
@@ -199,7 +199,7 @@ export async function readWeekHours(
       cell:
         cell === undefined
           ? { mode: "not_set", periods: [] }
-          : cellOf(cell.mode, periods.get(cell.id)),
+          : cellOf(cell.mode, periods.get(cell.id) ?? []),
     };
   });
 }
@@ -307,7 +307,7 @@ async function readDateStates(
           .filter((cell) => cell.specialDateId === date.id)
           .map((cell) => [
             keyOf(subjectOfRow(cell)),
-            cellIntervals(cellOf(cell.mode, periods.get(cell.id))),
+            cellIntervals(cellOf(cell.mode, periods.get(cell.id) ?? [])),
           ]),
       ),
     });
@@ -393,7 +393,7 @@ export async function readSpecialDate(
     cells: cells
       .map((cell) => ({
         subject: subjectOfRow(cell),
-        cell: cellOf(cell.mode, periods.get(cell.id)),
+        cell: cellOf(cell.mode, periods.get(cell.id) ?? []),
       }))
       .sort((a, b) => (a.subject.id < b.subject.id ? -1 : 1)),
   };
@@ -445,7 +445,7 @@ async function weekIntervalsBySubject(
   for (const cell of cells) {
     const key = keyOf(subjectOfRow(cell));
     const week = weeks.get(key) ?? Array<Interval[] | null>(7).fill(null);
-    week[cell.weekday] = cellIntervals(cellOf(cell.mode, periods.get(cell.id)));
+    week[cell.weekday] = cellIntervals(cellOf(cell.mode, periods.get(cell.id) ?? []));
     weeks.set(key, week);
   }
   return weeks;
