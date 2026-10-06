@@ -8,6 +8,7 @@ import { assertSafeIdentifier } from "../testing/identifiers.js";
 import { CORE_CHANGE_SOURCES } from "../classification.js";
 import { installChangeFeed } from "../change-feed.js";
 import { runMigrations } from "../migrate.js";
+import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedDevice, seedTenant } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
@@ -18,22 +19,29 @@ import { stationPrinters } from "./station-printers.js";
 import { locations } from "./tenants.js";
 import { watchers, watcherStations } from "./watchers.js";
 
+async function migrateThroughTiming(db: Database, includeTiming: boolean): Promise<void> {
+  const staged = mkdtempSync(join(tmpdir(), "wt-timing-upgrade-"));
+  try {
+    cpSync(CORE_MIGRATIONS.migrationsFolder, staged, { recursive: true });
+    const path = join(staged, "meta", "_journal.json");
+    const journal = JSON.parse(readFileSync(path, "utf8")) as { entries: { tag: string }[] };
+    const timingIndex = journal.entries.findIndex(({ tag }) =>
+      tag.endsWith("_kitchen_timing_inheritance"),
+    );
+    expect(timingIndex).toBeGreaterThanOrEqual(0);
+    journal.entries = journal.entries.slice(0, timingIndex + 1);
+    expect(journal.entries.at(-1)?.tag).toMatch(/_kitchen_timing_inheritance$/);
+    if (!includeTiming) journal.entries.pop();
+    writeFileSync(path, JSON.stringify(journal));
+    await runMigrations(db, { ...CORE_MIGRATIONS, migrationsFolder: staged });
+  } finally {
+    rmSync(staged, { recursive: true, force: true });
+  }
+}
+
 const suite = useVenueDb({
   migrations: [],
-  setup: async (db) => {
-    const staged = mkdtempSync(join(tmpdir(), "wt-timing-upgrade-"));
-    try {
-      cpSync(CORE_MIGRATIONS.migrationsFolder, staged, { recursive: true });
-      const path = join(staged, "meta", "_journal.json");
-      const journal = JSON.parse(readFileSync(path, "utf8")) as { entries: { tag: string }[] };
-      expect(journal.entries.at(-1)?.tag).toMatch(/_kitchen_timing_inheritance$/);
-      journal.entries.pop();
-      writeFileSync(path, JSON.stringify(journal));
-      await runMigrations(db, { ...CORE_MIGRATIONS, migrationsFolder: staged });
-    } finally {
-      rmSync(staged, { recursive: true, force: true });
-    }
-  },
+  setup: (db) => migrateThroughTiming(db, false),
 });
 
 it("adds timing storage without rewriting populated stations, mappings, keys or triggers", async () => {
@@ -95,7 +103,7 @@ it("adds timing storage without rewriting populated stations, mappings, keys or 
     ]),
   );
 
-  await runMigrations(db, CORE_MIGRATIONS);
+  await migrateThroughTiming(db, true);
 
   expect(
     Object.fromEntries(
