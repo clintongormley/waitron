@@ -293,7 +293,7 @@ describe("/management-api/watchers", () => {
       });
     }
   });
-  it("requires a management session with venue configuration permission", async () => {
+  it("refuses a staff session the watcher list and a new watcher (403), and the list to no session (401)", async () => {
     expect((await req("/watchers", { method: "GET" })).status).toBe(401);
     expect((await req("/watchers", { method: "GET" }, staffCookie)).status).toBe(403);
     expect(

@@ -1499,8 +1499,6 @@ export function mountManagementApi(
   );
 
   // ── Zones and tables ──
-  // Unlike the status verbs, the zone, table, station and course verbs do not authorize, so these
-  // routes gate through `withVenueAuth`.
   app.post("/management-api/zones", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
