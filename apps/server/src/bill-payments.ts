@@ -1242,15 +1242,27 @@ export async function takeReaderBillPayment(
     if (begun.kind === "replay") return begun.result;
     const { payment } = begun;
 
-    const result: PaymentResult = await deps.provider.collect({
-      origin: cfg.origin,
-      workingOrderId: brandWorkingOrderId(workingOrderId),
-      amount: centsToDecimal(payment.applied + payment.tip),
-      ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
-      ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
-      simulationOutcome: req.simulationOutcome,
-      billPaymentId: payment.id,
-    });
+    let result: PaymentResult;
+    try {
+      result = await deps.provider.collect({
+        origin: cfg.origin,
+        workingOrderId: brandWorkingOrderId(workingOrderId),
+        amount: centsToDecimal(payment.applied + payment.tip),
+        ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
+        ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
+        simulationOutcome: req.simulationOutcome,
+        billPaymentId: payment.id,
+      });
+    } catch (error) {
+      // `insertAttempting` raises this before the provider writes a row or calls the network, so
+      // nothing was charged and the reservation can go now rather than at the loop's next pass.
+      if (error instanceof AppError && error.code === "device.profile_changed") {
+        await withTransaction(deps.db, (tx) =>
+          failBillPayment(tx, payment.id, deps.clock.now().instant),
+        );
+      }
+      throw error;
+    }
 
     return await withTransaction(deps.db, async (tx) => {
       if (result.state === "captured") {

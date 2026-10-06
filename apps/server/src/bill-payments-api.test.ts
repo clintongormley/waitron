@@ -3955,7 +3955,7 @@ describe("a payment no card provider stands behind", () => {
 });
 
 describe("a reader payment on a device that changes profile while it is starting", () => {
-  it("refuses device.profile_changed and writes no card payment", async () => {
+  async function readerOnStripe() {
     const [profile] = await inTx((tx) =>
       tx
         .select({ id: deviceProfiles.id })
@@ -3986,13 +3986,20 @@ describe("a reader payment on a device that changes profile while it is starting
         .returning({ id: cardReaders.id }),
     );
     const client = new FakeStripe();
-    // Moves the device once the route has made its checks, before `collect` writes its row.
+    const moveTo = (profileId: string) =>
+      suite.db
+        .update(devices)
+        .set({ deviceProfileId: profileId })
+        .where(eq(devices.id, device.deviceId));
+    let moveOnNextCollect = false;
+    // Moves the device, when asked, once the route has made its checks and before `collect` writes
+    // its row.
     class MovingProvider extends StripeTerminalProvider {
       override async collect(params: CollectParams): Promise<PaymentResult> {
-        await suite.db
-          .update(devices)
-          .set({ deviceProfileId: movedTo!.id })
-          .where(eq(devices.id, device.deviceId));
+        if (moveOnNextCollect) {
+          moveOnNextCollect = false;
+          await moveTo(movedTo!.id);
+        }
         return super.collect(params);
       }
     }
@@ -4016,24 +4023,48 @@ describe("a reader payment on a device that changes profile while it is starting
       quiet,
     );
     const billId = await bill120();
-
-    const res = await app.request(`/api/working-orders/${billId}/payments`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+    const pay = (amount: string) =>
+      app.request(`/api/working-orders/${billId}/payments`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+        },
+        body: JSON.stringify({
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount,
+          method: "card",
+          entry: "reader",
+          readerId: reader!.id,
+          applied: amount,
+          tip: "0.00",
+        }),
+      });
+    return {
+      billId,
+      client,
+      pay,
+      moveOnNextCollect: () => {
+        moveOnNextCollect = true;
       },
-      body: JSON.stringify({
-        submissionId: randomUUID(),
-        kind: "contribution",
-        amount: "30.00",
-        method: "card",
-        entry: "reader",
-        readerId: reader!.id,
-        applied: "30.00",
-        tip: "0.00",
-      }),
-    });
+      moveBack: () => moveTo(profile!.id),
+    };
+  }
+
+  const billPaymentStates = (billId: string) =>
+    inTx((tx) =>
+      tx
+        .select({ state: billPayments.state })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, billId)),
+    );
+
+  it("refuses device.profile_changed and writes no card payment", async () => {
+    const { billId, client, pay, moveOnNextCollect } = await readerOnStripe();
+    moveOnNextCollect();
+
+    const res = await pay("30.00");
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "device.profile_changed" } });
@@ -4041,6 +4072,45 @@ describe("a reader payment on a device that changes profile while it is starting
     expect(
       await inTx((tx) => tx.select().from(payments).where(eq(payments.workingOrderId, billId))),
     ).toEqual([]);
+  });
+
+  it("fails the refused bill payment at once, so nothing stays reserved and the whole bill can be paid", async () => {
+    const { billId, pay, moveOnNextCollect, moveBack } = await readerOnStripe();
+    moveOnNextCollect();
+
+    expect((await pay("30.00")).status).toBe(409);
+
+    expect(await billPaymentStates(billId)).toEqual([{ state: "failed" }]);
+    expect((await balance(billId)).json).toMatchObject({
+      reserved: "0.00",
+      outstanding: "120.00",
+    });
+    await moveBack();
+    const retry = await pay("120.00");
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({ outcome: "received" });
+  });
+
+  it("charges the card and receives the bill payment when the device stays on its profile", async () => {
+    const { billId, client, pay } = await readerOnStripe();
+
+    const res = await pay("30.00");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      outcome: "received",
+      balance: { received: "30.00", reserved: "0.00" },
+    });
+    expect(client.lastCreateIntent).toBeDefined();
+    expect(await billPaymentStates(billId)).toEqual([{ state: "received" }]);
+    expect(
+      await inTx((tx) =>
+        tx
+          .select({ state: payments.state })
+          .from(payments)
+          .where(eq(payments.workingOrderId, billId)),
+      ),
+    ).toEqual([{ state: "captured" }]);
   });
 });
 
