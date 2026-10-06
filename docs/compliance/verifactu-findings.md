@@ -1103,6 +1103,12 @@ paper without prior express, revocable consent, and paper can never be charged f
 the receipt instead" flow is opt-in only. Today this is moot — grep receipt: there is **no** electronic
 receipt path in `apps/server/src` or `packages/printing/src`; every receipt is ESC/POS on paper.
 
+**Source update, 2026-10-06:** A261 step 8 removes the unused location receipt column.
+The current receipt policy is declared in `packages/venue-service/src/schema/service.ts` and read
+by `packages/venue-service/src/operations.ts`; [the retirement plan](../superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
+records the release. Q22 remains unanswered; the earlier source references below describe the
+implementation when this question was written.
+
 **Scope update, 2026-10-05:** A261 step 2 moves the receipt choice to each department, with an
 optional zone override. A sale without a zone uses automatic printing. The delivery concern below
 still applies to **On request** and **Never**. See the [step 2 plan](../superpowers/plans/2026-10-04-departments-and-zones.md).

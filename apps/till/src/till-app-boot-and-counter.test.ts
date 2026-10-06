@@ -84,7 +84,6 @@ const till = {
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
-  receiptPrintMode: "auto" as "auto" | "on_request" | "never",
   bumpMode: "line" as const,
   fireControl: "waiter" as const,
   courses: [] as { id: string; name: string; displayOrder: number }[],
@@ -908,8 +907,8 @@ describe("till-app receipt issuance", () => {
     );
   });
 
-  async function ticketAfterSale(tillInfo: Record<string, unknown>): Promise<TillTicketView> {
-    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(tillInfo) });
+  async function ticketAfterSale(catalogue: ZoneOfferCatalogue): Promise<TillTicketView> {
+    const { el } = await mountApp({ listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue) });
     const c = await toCounter(el);
     c.store.addProduct(c.products[0]!, "1");
     await el.updateComplete;
@@ -918,15 +917,13 @@ describe("till-app receipt issuance", () => {
     return ticket(el)!;
   }
 
-  it("uses automatic printing when zone offers omit the receipt choice, even if boot says otherwise", async () => {
-    const legacyTill: Record<string, unknown> = { ...till };
-    delete legacyTill.receiptPrintMode;
-
-    expect((await ticketAfterSale(legacyTill)).originalReceiptAvailable).toBe(false);
+  it("uses automatic printing when zone offers omit the receipt choice, with or without a zone chooser", async () => {
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    catalogue.zones = [zone("zone-counter", "prepay")];
+    expect((await ticketAfterSale(catalogue)).originalReceiptAvailable).toBe(false);
     cleanupWidgets();
-    expect(
-      (await ticketAfterSale({ ...till, receiptPrintMode: "on_request" })).originalReceiptAvailable,
-    ).toBe(false);
+    delete catalogue.zones;
+    expect((await ticketAfterSale(catalogue)).originalReceiptAvailable).toBe(false);
   });
 
   it("takes pay timing from the zone context when no zone chooser is supplied", async () => {
@@ -944,11 +941,10 @@ describe("till-app receipt issuance", () => {
     expect(c.orderFlow).toBe("ticket_then_pay");
   });
 
-  it("offers the original receipt according to the selected zone, even when boot says auto", async () => {
+  it("offers the original receipt according to the selected zone", async () => {
     const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
     catalogue.context.receiptPrintMode = "on_request";
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "auto" }),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
     });
     const c = await toCounter(el);
@@ -966,7 +962,6 @@ describe("till-app receipt issuance", () => {
     const deli = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-deli");
     deli.context.receiptPrintMode = "auto";
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(initial),
       listZoneOffers: vi.fn().mockResolvedValue(deli),
     });
@@ -986,7 +981,6 @@ describe("till-app receipt issuance", () => {
     const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
     catalogue.context.receiptPrintMode = "on_request";
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       printReceipt,
     });

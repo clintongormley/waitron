@@ -154,7 +154,10 @@ describe("staged configuration import", () => {
     });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: { code: "setup.configuration_outdated", params: {} },
+      error:
+        _label === "future version"
+          ? { code: "setup.request_invalid", params: { field: "version" } }
+          : { code: "setup.configuration_outdated", params: {} },
     });
     expect((await readdir(stateDir)).sort()).toEqual([
       "configuration-import.artifact",

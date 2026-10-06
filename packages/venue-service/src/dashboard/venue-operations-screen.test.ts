@@ -3944,3 +3944,43 @@ describe("the venue tables at phone width", () => {
     },
   );
 });
+
+it.each([
+  ["en", "Search", "No results"],
+  ["es", "Buscar", "Sin resultados"],
+])(
+  "localizes the receipt picker's native search and empty result in %s",
+  async (locale, search, empty) => {
+    setLocale(locale);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        salePolicies: {
+          departments: [
+            {
+              departmentId: "d1",
+              paidWhen: "prepay",
+              collectionNumber: "none",
+              receiptPrintMode: "on_request",
+              printTradingName: true,
+            },
+          ],
+          zones: [],
+        },
+      }),
+    } as unknown as VenueServiceApi);
+    find(el, '[data-test="edit-receipt"]')!.click();
+    await settle(el);
+    const box = find(el, 'wt-combobox[name="receiptPrintMode"]')! as HTMLElement & {
+      updateComplete: Promise<boolean>;
+    };
+    box.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    await box.updateComplete;
+    const input = box.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    expect(input.placeholder).toBe(search);
+    input.value = "no receipt option has this name";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await box.updateComplete;
+    expect(box.shadowRoot!.textContent).toContain(empty);
+  },
+);

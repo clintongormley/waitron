@@ -2624,7 +2624,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     "explains how to replace an incompatible configuration export (%s)",
     async (locale, sentence) => {
       try {
-        for (const field of ["module:core", "modules"]) {
+        for (const field of ["version", "module:core", "modules"]) {
           const el = await mountSetupApp(
             stubApi({
               stageConfiguration: vi.fn().mockRejectedValue({

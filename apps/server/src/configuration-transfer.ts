@@ -453,6 +453,9 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
+  if (typeof value.version === "number" && value.version > 2) {
+    throw new AppError("setup.request_invalid", { field: "version" });
+  }
   if (value.version !== 2) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const location = isRecord(venue) ? venue.location : undefined;

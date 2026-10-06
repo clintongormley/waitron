@@ -1257,7 +1257,7 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
   });
 });
 
-describe("POST /api/drawer/open — legacy open policy cannot bypass authorization", () => {
+describe("POST /api/drawer/open — manual opens always require authorization", () => {
   it.each([
     ["no override", "absent", 403, "authorization.not_permitted"],
     ["valid staff PIN", "staff", 403, "authorization.not_permitted"],
@@ -2220,7 +2220,7 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
     expect(await watchedOrder()).toEqual([]);
   });
 
-  it("checks a staff override outside the write lock even while the legacy policy is open", async () => {
+  it("checks a staff override outside the write lock before refusing the open", async () => {
     const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill();
 
     watchDerivations("0000", anotherWriter);
