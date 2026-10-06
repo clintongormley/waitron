@@ -1197,7 +1197,11 @@ describe("the Edit dialog", () => {
       { value: "station:s1", label: "Cocina", group: t("devices.stations_group") },
       { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
       { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
-      { value: "watcher:w-off", label: "Old pass (Deshabilitado)", group: t("devices.watchers_group") },
+      {
+        value: "watcher:w-off",
+        label: "Old pass (Deshabilitado)",
+        group: t("devices.watchers_group"),
+      },
     ]);
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
