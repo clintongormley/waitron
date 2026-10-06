@@ -648,12 +648,23 @@ it("lines each row's grip, folder or photo and name up on one middle", async () 
   }
 });
 
-it("puts the Name heading over the menu's name", async () => {
-  const el = await mountDeep();
-  const heading = inTable(el, 'thead [part~="tree-heading"]')!;
-  expect(heading.textContent!.trim()).toBe(t("members.name"));
-  expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(el, "root").name.left, 0);
-});
+it.each([1280, 390])(
+  "puts the Name heading over the menu's name, also at phone width, where the tree's arrow slot narrows (%ipx)",
+  async (width) => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 844);
+      const el = await mountDeep();
+      for (let i = 0; i < 3; i += 1) await new Promise(requestAnimationFrame);
+      expect(table(el).hasAttribute("narrow")).toBe(width === 390);
+      const heading = inTable(el, 'thead [part~="tree-heading"]')!;
+      expect(heading.textContent!.trim()).toBe(t("members.name"));
+      expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(el, "root").name.left, 0);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
 
 function grip(el: MenuStructureTable, key: string): HTMLButtonElement {
   return inTable<HTMLButtonElement>(el, `[data-test="drag-${CSS.escape(key)}"]`)!;

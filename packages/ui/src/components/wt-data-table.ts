@@ -583,6 +583,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
+      /* A screen lines its own slots and headings up with this. At phone width the arrow takes a
+         cell padding's width less, which a toggle button's tap target reaches back over (below). */
+      :host {
+        --tree-arrow-width: var(--wt-tap-min);
+      }
+
+      :host([narrow]) {
+        --tree-arrow-width: calc(var(--wt-tap-min) - var(--wt-space-3));
+      }
+
       .tree-toggle {
         width: var(--wt-tap-min);
         height: var(--wt-tap-min);
@@ -595,21 +605,31 @@ export class WtDataTable<Row = unknown> extends LitElement {
         cursor: pointer;
       }
 
+      :host([narrow]) .tree-toggle {
+        margin-inline-start: calc(var(--tree-arrow-width) - var(--wt-tap-min));
+        padding-inline-start: calc(var(--wt-tap-min) - var(--tree-arrow-width));
+      }
+
       .tree-toggle:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
 
+      /* A top-level toggle can sit against the scrolling box's edge, which clips an outward ring. */
+      :host([narrow]) .tree-toggle:focus-visible {
+        outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
       .tree-spacer {
         display: inline-block;
-        width: var(--wt-tap-min);
+        width: var(--tree-arrow-width);
       }
 
       .tree-arrow {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: var(--wt-tap-min);
+        width: var(--tree-arrow-width);
         height: var(--wt-tap-min);
         font-size: var(--wt-font-size-xl);
         line-height: 1;

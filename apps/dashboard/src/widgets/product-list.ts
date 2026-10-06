@@ -132,7 +132,14 @@ export class ProductList extends LitElement {
         margin-inline-end: var(--wt-space-3);
       }
       wt-data-table::part(tree-heading) {
-        margin-inline-start: calc(3 * var(--wt-tap-min) + var(--wt-space-3));
+        margin-inline-start: calc(
+          var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
+        );
+      }
+      /* On a phone a product's photo gives its slot to the name; a category keeps its folder. */
+      wt-data-table[narrow]::part(thumb-frame),
+      wt-data-table[narrow]::part(thumb-placeholder) {
+        display: none;
       }
       /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
          would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
@@ -224,6 +231,9 @@ export class ProductList extends LitElement {
       /* The table draws a variant at its product's indent; this is the product's grip and photo. */
       wt-data-table::part(variant-name) {
         padding-inline-start: calc(2 * var(--wt-tap-min) + var(--wt-space-3));
+      }
+      wt-data-table[narrow]::part(variant-name) {
+        padding-inline-start: var(--wt-tap-min);
       }
       wt-data-table::part(price-unit) {
         color: var(--wt-color-text-muted);
@@ -334,11 +344,14 @@ export class ProductList extends LitElement {
   @state() private ghost: DragGhost | null = null;
 
   readonly #tableResize = new ResizeObserver(() => this.#scheduleFit());
+  /** `narrow` moves the names without resizing the table or updating it. */
+  readonly #tableNarrow = new MutationObserver(() => this.#scheduleFit());
   #fitFrame = 0;
 
   override disconnectedCallback(): void {
     if (this.#pointerDrag) this.#finishDrag();
     this.#tableResize.disconnect();
+    this.#tableNarrow.disconnect();
     cancelAnimationFrame(this.#fitFrame);
     this.#fitFrame = 0;
     super.disconnectedCallback();
@@ -346,11 +359,11 @@ export class ProductList extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.hasUpdated) this.#tableResize.observe(this.#table()!);
+    if (this.hasUpdated) this.#watchTable();
   }
 
   protected override firstUpdated(): void {
-    this.#tableResize.observe(this.#table()!);
+    this.#watchTable();
     this.#table()!.addController({
       hostUpdated: () => {
         this.#scheduleFit();
@@ -693,8 +706,14 @@ export class ProductList extends LitElement {
     >`;
   }
 
-  /** Re-measured a frame after the table resizes or updates, never inside the resize observer's
-   * callback, which the names' new heights would re-trigger. */
+  #watchTable(): void {
+    const table = this.#table()!;
+    this.#tableResize.observe(table);
+    this.#tableNarrow.observe(table, { attributes: true, attributeFilter: ["narrow"] });
+  }
+
+  /** Re-measured a frame after the table resizes, updates or its `narrow` changes, never inside the
+   * resize observer's callback, which the names' new heights would re-trigger. */
   #scheduleFit(): void {
     if (this.#fitFrame) return;
     this.#fitFrame = requestAnimationFrame(() => {

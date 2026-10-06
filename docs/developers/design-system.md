@@ -734,7 +734,13 @@ the branch's own collapsed state. With `searchOpensPath`, as the Products tree s
 while a search is typed, even one that matches itself, and what passes the filters under a match
 stays reachable, closed as the person left it. With filters alone, only a row kept solely to hold a
 match's place is held open. A tree whose box is 440px wide or less indents each level
-`--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels. A CSS condition cannot
+`--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels, and its arrow slot is
+one cell padding (`--wt-space-3`) narrower than `--wt-tap-min`. A branch's toggle button stays
+`--wt-tap-min` wide by reaching back over the 12 px before it, which on every row is inside its own cell, so it takes no more of the row than the other slots and its tap target stays
+whole; its focus ring is then drawn inside the button, because a top-level
+one can sit against the scrolling box's edge. The table publishes
+the arrow slot's width as `--tree-arrow-width`, which a screen reads to line up its Name heading
+or its own slots (W85e, owner 2026-10-05). A CSS condition cannot
 read a token, so the table watches a tree's box in code and, a frame after each change to the box's
 width, sets a `narrow` attribute on itself if the box is that narrow and removes it if not; a flat
 table is not watched and carries no `narrow`. A screen may style its cells on
@@ -758,7 +764,7 @@ this menu". The rows inside an included menu open and close for browsing but hav
 a muted name; each keeps an unseen grip-sized space. Only an owned row has a grip. Every row draws
 the Products tree's three slots before its name (below): the table's arrow, the grip or its space,
 and a folder or the product's photo, so names at one level start at one x and the Name heading sits
-over the menu's name. ArrowUp and ArrowDown on a grip move the member one place within its own list and announce
+over the menu's name. At phone width the Products tree drops the photo; the Structure tree does not. ArrowUp and ArrowDown on a grip move the member one place within its own list and announce
 it; a pointer drag starts from the grip only, and offers only places among the member's siblings,
 with Products' ghost and gap (the shared `apps/dashboard/src/widgets/tree-drag.ts`). When a window
 opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is being saved or read, or to
@@ -890,18 +896,24 @@ still puts it a level down. The Products list draws a product's variants this wa
 in the order the product holds them whatever sorts the table, through `rowKeepsChildOrder`;
 `sortedSiblings` answers that order too. The toggle
 button a branch row draws when its `rowActivation` is not `"toggle"` carries `part="tree-toggle"`,
-so a screen can size and colour it; the Products list makes it small and muted. In tree mode the
+so a screen can restyle its arrow (colour, size, where it sits in the button); its width, and at
+phone width its start margin and start padding, belong to the table (above). The Products list
+makes it small and muted. In tree mode the
 heading over the tree's column is wrapped in `part="tree-heading"`, so a screen can line it up with
 what its rows draw there.
 
 On the All products row, each category row, a category being added and each product row, the
-Products tree draws three tap-target slots before the name: the table's arrow (or its blank space),
+Products tree draws three tap-target slots before the name: the table's arrow (or its blank space;
+narrower at phone width, as above),
 a drag grip (blank on All products and on a category being added), and a folder icon centred in its
 slot — on a product row, the product's photo, or its empty placeholder frame when it has none — then
 `--wt-space-3` and the name. So on those rows names step in by the table's indent per level whether
-the row is a category or a product, and the Name heading sits over the All products name. A
+the row is a category or a product, and the Name heading sits over the All products name. The
+exception is phone width (while the table carries `narrow`): a product row draws no photo or
+placeholder, so its name starts right after its grip, one folder slot before a category's at its
+level; categories keep the folder icon (W85e, owner 2026-10-05). A
 variant's row draws no grip and no photo slot; its name is indented to start under its product's
-name. Each name, with what follows it on its row (a category's count, the asterisk that marks a
+name, at phone width too. Each name, with what follows it on its row (a category's count, the asterisk that marks a
 category with no active station and the swatch of its colour; a product's variant count), takes
 only the room between its own start and the row's pinned Actions cell, measured as if the table
 were unscrolled, and wraps inside it, a single long word included; a name that fits stays on one

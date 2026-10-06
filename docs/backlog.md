@@ -3213,7 +3213,8 @@ against the other states.
 
 **The Menus Structure tree: a folder's name starts left of a product's at the same level — DONE
 (W88, found 2026-10-05 by W88's look).** Every row of the tree, the menu's own row included, now
-draws the Products tree's three slots before its name: the table's arrow, a grip or a blank space
+draws the Products tree's three slots before its name _(2026-10-06: at phone width the Products tree's product
+rows draw no photo slot; this tree's keep theirs, W85e)_: the table's arrow, a grip or a blank space
 of the same width, and a folder icon in a photo-wide frame or the product's photo, or an empty
 frame of the same size when it has none. Names at one level start at one place, and the Name heading
 sits over the menu's name through the table's `tree-heading` part. W88 was branched before W84
@@ -3323,7 +3324,7 @@ Left open:
   test, and the two should agree.
 - At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
   swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
-  on the W92 branch, not on `main`).
+  on the W92 branch, not on `main`) _(2026-10-06: W85e gives it 12 px more; it still clips)_.
 - A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2135, added by #1087
   before W92) prints "[Unhandled rejection] Error: marker" in passing runs; the noise should go.
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
@@ -3485,7 +3486,8 @@ Select mode's extra controls at the middle widths.
 2026-10-04).** The All products row, category rows, a category being added and product rows of the
 Products tree draw the same slots before the name — the arrow, a drag grip (a blank one on All
 products and on a category being added) and a folder icon, or a product's photo or its empty
-placeholder frame, one tap target each — so on those rows names step in by the table's indent per
+placeholder frame, one tap target each _(2026-10-06: at phone width a product row draws no photo
+slot, W85e)_ — so on those rows names step in by the table's indent per
 level whether the row is a category or a product, and the Name heading sits over the All products
 name (`wt-data-table` gained a `tree-heading` part for this). A variant's row draws no grip and no
 photo slot; its name is indented to start under its product's name. Before, at one level a
@@ -3545,11 +3547,21 @@ by the owner the same day as two items:
   selection turned on. Not covered: while a category is being renamed, its count and
   asterisk follow the name box and are not capped _(2026-10-05: since W72g only at desktop width;
   at phone width they sit on the line above the box and wrap in what the grip and folder icon leave
-  of the room before the pinned column)_. Open point for the owner: at 390 px in the demo
-  venue a name gets about 46 px, so most words break part-way ("Croqu" / "etas"); giving names
-  more room at phone width (for example narrower leading slots) is asked in the campaign's
-  questions file. Wrapping was chosen over an ellipsis because a phone cannot show a cut name's
-  full text.
+  of the room before the pinned column)_. Wrapping was chosen over an ellipsis because a phone
+  cannot show a cut name's full text. The open point (a name got about 46 px at 390 px, so most
+  words broke part-way) was answered "maybe (b) and (c)" by the owner (b: drop the product photo at phone
+  width; c: narrow the tree's leading slots), and **W85e** (2026-10-06) did (b) and narrowed
+  the arrow slot of (c): at phone width (the table's `narrow`) a product row draws no photo, and every tree's
+  arrow slot is one cell padding (12 px) narrower, a toggle button keeping its 44 px tap target by
+  reaching back over the 12 px before it, which on every row is inside its own cell. Measured in the demo venue at 390 px: a product's
+  name room went from 55 to 123 px (English) and 46 to 114 px (Spanish), a category's up 12 px;
+  laptop width unchanged. Categories keep their folder icon, so at phone width a product's name
+  starts one folder slot before a sibling category's. The grip and the 8 px indent step were
+  left as they were: the grip is a tap target, and a narrower step barely tells levels apart.
+  At phone width a product's name also fills the room its photo gave up (the list re-fits names
+  whenever the table's `narrow` changes), and a narrow toggle's focus ring is drawn inside the button so the
+  scrolling box does not clip a top-level one. The Structure tree gains the same 12 px; its long
+  names still clip at 390 px (W92's open point above).
 - Fixed in W85c (#1245, 2026-10-05): in the product editor's variant table the Unit button sat 4 px
   (`--wt-space-1`) after the word Price, which read as no gap. The two now have a `--wt-space-2`
   (8 px) gap between them (`.price-heading`, `apps/dashboard/src/widgets/variant-table.ts`),

@@ -1243,6 +1243,92 @@ test("a phone-width tree indents each level half as far, and no deeper than four
   expect(["a", "b", "e", "f"].map(indent)).toEqual(["0px", "16px", "64px", "80px"]);
 });
 
+test("a phone-width tree's arrow slot is a cell padding narrower, and a toggle button keeps a whole tap target inside its own cell", async () => {
+  const rows: TreeRow[] = [
+    { id: "food", parent: null, name: "Food" },
+    { id: "eggs", parent: "food", name: "Eggs" },
+    { id: "yolk", parent: "eggs", name: "Yolk" },
+    { id: "drinks", parent: null, name: "Drinks" },
+    { id: "wine", parent: "drinks", name: "Wine" },
+    { id: "tea", parent: null, name: "Tea" },
+  ];
+  // Food and Eggs draw a toggle button, Drinks only the arrow picture (its whole row toggles), Tea
+  // a blank.
+  const el = await treeTable({
+    rows,
+    rowActivation: (row) => (row.id === "drinks" ? "toggle" : "click"),
+  });
+  host.style.setProperty("--wt-tap-min", "52px");
+  host.style.setProperty("--wt-space-2", "8px");
+  host.style.setProperty("--wt-space-3", "12px");
+  const slot = (key: string) => {
+    const row = el.shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!;
+    return {
+      cell: row.querySelector("td")!.getBoundingClientRect(),
+      box: row.querySelector(".tree-toggle, .tree-arrow, .tree-spacer")!.getBoundingClientRect(),
+    };
+  };
+  el.style.width = "360px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
+  const [button, arrow, blank] = ["food", "drinks", "tea"].map(slot);
+  expect(arrow!.box.width).toBe(40);
+  expect(blank!.box.width).toBe(40);
+  expect(button!.box.width).toBe(52);
+  expect(button!.box.height).toBeGreaterThanOrEqual(52);
+  expect(button!.box.left).toBeGreaterThanOrEqual(button!.cell.left);
+  // Every row's name starts after the same 40 px slot, the button's included.
+  expect(button!.box.right).toBe(blank!.box.right);
+  expect(arrow!.box.right).toBe(blank!.box.right);
+  // A level down, the button reaches back into its indent and stays inside its own cell.
+  const nested = slot("eggs");
+  expect(nested.box.width).toBe(52);
+  expect(nested.box.height).toBeGreaterThanOrEqual(52);
+  expect(nested.box.left).toBeGreaterThanOrEqual(nested.cell.left);
+  expect(nested.box.right - button!.box.right).toBe(8);
+  el.style.width = "600px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  const [wideButton, wideArrow, wideBlank] = ["food", "drinks", "tea"].map(slot);
+  expect([wideButton!.box.width, wideArrow!.box.width, wideBlank!.box.width]).toEqual([52, 52, 52]);
+  expect(wideButton!.box.left).toBe(wideBlank!.box.left);
+});
+
+test.each(["ltr", "rtl"])(
+  "a phone-width tree draws a top-level toggle's keyboard focus ring inside the scrolling box (%s)",
+  async (dir) => {
+    const el = await treeTable();
+    host.dir = dir;
+    el.style.width = "360px";
+    await frames();
+    expect(el.hasAttribute("narrow")).toBe(true);
+    const root = el.shadowRoot!;
+    const toggle = root.querySelector<HTMLButtonElement>('tr[data-row-key="food"] .tree-toggle')!;
+    toggle.focus();
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(root.activeElement).not.toBe(toggle);
+    await userEvent.keyboard("{Tab}");
+    expect(root.activeElement).toBe(toggle);
+    expect(toggle.matches(":focus-visible")).toBe(true);
+    const style = getComputedStyle(toggle);
+    expect(style.outlineStyle).toBe("solid");
+    // An outline is drawn its offset away from the border box, and is its width thick.
+    const reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+    const box = toggle.getBoundingClientRect();
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    const clip = scroll.getBoundingClientRect();
+    const clipLeft = clip.left + scroll.clientLeft;
+    const clipRight = clipLeft + scroll.clientWidth;
+    // The precondition: the toggle touches the scrolling box's edge.
+    expect(dir === "ltr" ? box.left : box.right).toBeCloseTo(
+      dir === "ltr" ? clipLeft : clipRight,
+      0,
+    );
+    expect(box.left - reach).toBeGreaterThanOrEqual(clipLeft);
+    expect(box.right + reach).toBeLessThanOrEqual(clipRight);
+  },
+);
+
 test("a row that joins its parent is indented as its parent is, at either width, and is still a level down", async () => {
   const ids = ["a", "b", "c", "d", "e", "f"];
   const deep: TreeRow[] = ids.map((id, index) => ({
@@ -1314,7 +1400,7 @@ test("a row that joins its parent sits on the band colour, pinned cell too, and 
     expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
 });
 
-test("a branch's toggle button is exposed as a part, so a screen can size and colour it", async () => {
+test("a branch's toggle button is exposed as a part, so a screen can style it", async () => {
   const el = await treeTable();
   const toggle = el.shadowRoot!.querySelector('tr[data-row-key="food"] button.tree-toggle')!;
   expect(toggle.part.contains("tree-toggle")).toBe(true);

@@ -3236,6 +3236,9 @@ describe("a product's variants in the list", () => {
         await page.viewport(width, 844);
         const { table, root } = await mountDeli();
         await openVariants(root, table, "cecina");
+        // The table turns narrow a frame after it resizes.
+        for (let i = 0; i < 3; i += 1) await new Promise(requestAnimationFrame);
+        expect(table.hasAttribute("narrow")).toBe(width === 390);
         expect(rowKeys(root)).toEqual([
           "folder:deli",
           "cecina",
@@ -3457,18 +3460,20 @@ describe("the Products tree's Name column", () => {
       variants: [{ ...bunVariant, id: "s250", name: "Solomillo 250g", unitPrice: "12.00" }],
     });
 
+  const deepProducts = () => [
+    product({ id: "cola", name: "Cola", primaryCategoryId: "d" }),
+    product({ id: "salad", name: "Salad", primaryCategoryId: "f", image: "salad.png" }),
+    product({ id: "chop", name: "Chop", primaryCategoryId: "m" }),
+    solomillo(),
+    product({ id: "ribs", name: "Ribs", primaryCategoryId: "g" }),
+    product({ id: "bread", name: "Bread", primaryCategoryId: null }),
+  ];
+
   async function mountDeep(props: Partial<ProductList> = {}) {
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       categories: [drinks, food, meat, deep],
-      products: [
-        product({ id: "cola", name: "Cola", primaryCategoryId: "d" }),
-        product({ id: "salad", name: "Salad", primaryCategoryId: "f", image: "salad.png" }),
-        product({ id: "chop", name: "Chop", primaryCategoryId: "m" }),
-        solomillo(),
-        product({ id: "ribs", name: "Ribs", primaryCategoryId: "g" }),
-        product({ id: "bread", name: "Bread", primaryCategoryId: null }),
-      ],
+      products: deepProducts(),
       ...props,
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -3561,6 +3566,120 @@ describe("the Products tree's Name column", () => {
       expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(root, ROOT_KEY).name.left, 0);
     },
   );
+
+  it("keeps a product's photo at laptop width", async () => {
+    const restore = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(1280, 844);
+      const { table, root } = await mountDeep();
+      for (let i = 0; i < 3; i += 1) await new Promise(requestAnimationFrame);
+      expect(table.hasAttribute("narrow")).toBe(false);
+      const photo = root.querySelector<HTMLElement>(
+        'tr[data-row-key="loin"] [part~="thumb-frame"]',
+      )!;
+      expect(photo.getBoundingClientRect().width).toBeGreaterThan(0);
+    } finally {
+      await page.viewport(restore.width, restore.height);
+    }
+  });
+
+  describe("at phone width", () => {
+    let restore: { width: number; height: number };
+    beforeEach(async () => {
+      restore = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(390, 844);
+    });
+    afterEach(async () => {
+      await page.viewport(restore.width, restore.height);
+    });
+
+    /** The table sets `narrow` a frame after it resizes; three frames cover that and the layout. */
+    async function mountPhone(props: Partial<ProductList> = {}) {
+      const mounted = await mountDeep(props);
+      for (let i = 0; i < 3; i += 1) await new Promise(requestAnimationFrame);
+      expect(mounted.table.hasAttribute("narrow")).toBe(true);
+      return mounted;
+    }
+
+    const PRODUCTS = new Set(["cola", "salad", "chop", "loin", "ribs", "bread"]);
+
+    it("draws no photo or placeholder, so a product's name starts right after its grip, and keeps each category's folder", async () => {
+      const { root } = await mountPhone();
+      const photos = [
+        ...root.querySelectorAll<HTMLElement>('[part~="thumb-frame"], [part~="thumb-placeholder"]'),
+      ];
+      expect(photos.length).toBe(PRODUCTS.size);
+      for (const photo of photos) expect(photo.getBoundingClientRect().width).toBe(0);
+      for (const key of PRODUCTS) {
+        const grip = root.querySelector(`tr[data-row-key="${key}"] .drag-grip`)!;
+        expect(pieces(root, key).name.left - grip.getBoundingClientRect().right, key).toBe(0);
+      }
+      for (const key of ["root", "folder:d", "folder:f", "folder:m", "folder:g"]) {
+        const row = key === "root" ? ROOT_KEY : key;
+        expect(pieces(root, row).media!, key).not.toBeNull();
+        const folder = root.querySelector(`tr[data-row-key="${row}"] [part~="folder-frame"]`)!;
+        expect(folder.getBoundingClientRect().width, key).toBeGreaterThan(0);
+      }
+    });
+
+    it.each([false, true])(
+      "still steps every name in evenly per level, a product's starting one folder slot before a category's (selecting: %s)",
+      async (selecting) => {
+        const { root } = await mountPhone({ selecting });
+        const all = ROWS.map((key) => ({ key, ...pieces(root, key === "root" ? ROOT_KEY : key) }));
+        const step = all.find(({ key }) => key === "folder:d")!.name.left - all[0]!.name.left;
+        expect(step).toBeGreaterThan(0);
+        const folder = getComputedStyle(root.querySelector('[part~="folder-frame"]')!);
+        const slot = parseFloat(folder.width) + parseFloat(folder.marginInlineEnd);
+        expect(slot).toBeGreaterThan(0);
+        for (const row of all) {
+          const expected =
+            all[0]!.name.left + (row.level - 1) * step - (PRODUCTS.has(row.key) ? slot : 0);
+          expect(row.name.left, row.key).toBeCloseTo(expected, 0);
+        }
+      },
+    );
+
+    it("lets a long name use the room the photo gave up, up to its row's pinned actions", async () => {
+      const long = product({
+        id: "croquetas",
+        name: "Croquetas caseras de jamón ibérico de bellota",
+        primaryCategoryId: "m",
+        image: "croquetas.png",
+      });
+      const { root } = await mountPhone({ products: [...deepProducts(), long] });
+      // The names are fitted a frame after the table turns narrow.
+      for (let i = 0; i < 2; i += 1) await new Promise(requestAnimationFrame);
+      const name = root.querySelector<HTMLElement>(
+        'tr[data-row-key="croquetas"] [part~="name-stack"]',
+      )!;
+      const cell = name.closest("td")!;
+      const pinned = cell
+        .closest("tr")!
+        .querySelector('td[data-pinned="end"]')!
+        .getBoundingClientRect().left;
+      expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
+      const room =
+        pinned -
+        name.getBoundingClientRect().left -
+        parseFloat(getComputedStyle(cell).paddingInlineEnd);
+      expect(Math.abs(parseFloat(getComputedStyle(name).maxInlineSize) - room)).toBeLessThanOrEqual(
+        1,
+      );
+    });
+
+    it.each([false, true])(
+      "puts the Name heading over the first name in the column (selecting: %s)",
+      async (selecting) => {
+        const { root } = await mountPhone({ selecting });
+        const heading = root.querySelector<HTMLElement>('thead th button[data-sort="name"]')!;
+        expect(heading.getBoundingClientRect().left).toBeCloseTo(
+          pieces(root, ROOT_KEY).name.left,
+          0,
+        );
+      },
+    );
+  });
 
   it("shows no Main category column and offers none in Customise", async () => {
     const { root } = await mountDeep();
