@@ -2543,14 +2543,16 @@ specification has not been checked for it.
 
 **Proposed interim treatment (owner, 2026-10-06):** pair line N with record N, and apply it only
 when it also names that record (our reference and the invoice's issuer, number and date) and
-names no other operation. Any other record's outcome is unknown: it is sent again unless
-sending on its chain is on hold, an alert is raised, and the line it was compared with is kept in
-the alert's details, which `GET /management-api/alerts` returns (`readOpenAlerts`, `apps/server/src/alerts.ts`); the
-dashboard's sentence does not show it. When the reply's line count differs from the records sent, every record
-of that envío is unknown and the whole reply is kept once. A reordered reply can therefore never
-make an invoice wrongly taken as accepted. A record whose line is still at its position is applied
-as usual; if AEAT moved lines in every reply with more than one line, though, the records whose
-lines it moved would never be confirmed and would be sent again and again, holding their chain.
+names no other operation. Any other record's outcome is unknown: it is sent again unless an
+earlier record on its chain is on hold, an alert is raised, and the line it was compared with is
+kept in the alert's details, which `GET /management-api/alerts` returns (`readOpenAlerts`,
+`apps/server/src/alerts.ts`); the dashboard's sentence does not show it. When the reply's line
+count differs from the records sent, every record of that envío is unknown and the whole reply is
+kept once in an alert, unless an alert for a mismatched reply is already open for the sale of the
+envío's first record. A reordered reply can therefore never make an invoice wrongly taken as
+accepted. A record whose line is still at its position is applied as usual; a record whose line
+AEAT moved in every reply it was sent in, though, would never be confirmed and would be sent again
+and again while the later records of its chain wait behind it.
 
 **Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; corrected 2026-10-07).** In
 all six replies with more than one line, including both 1,000-record envíos, each record sent was

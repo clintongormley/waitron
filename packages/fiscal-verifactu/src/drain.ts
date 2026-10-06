@@ -785,9 +785,10 @@ async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
 }
 
 /**
- * Applies every matched line with its own outcome, whatever an earlier line of the same reply did (design
- * §7.1, docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md), and
- * marks each unmatched row unknown (`resolveLines`). This reply is never returned again.
+ * Applies every matched line with its own outcome, whatever an earlier line of the same reply did
+ * (design §7.1,
+ * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md), and marks
+ * each unmatched row unknown (`resolveLines`). This reply is never returned again.
  */
 async function persistResponse(
   tx: Transaction,

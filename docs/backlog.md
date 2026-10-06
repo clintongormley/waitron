@@ -1625,8 +1625,9 @@ rejection on its own no longer holds the later records of its chain (D2, on
 [§7.1's receipts](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1));
 only rejection code 1161 was tested, and it was triggered artificially. A conflict with AEAT's
 copy, or a held cancellation, holds the later records of its chain that have not been sent. A
-record sent in the conflict's own envío is not held when the reply is applied; one whose outcome is
-still unknown is held at its next claim like any later record of that chain, and is not sent again.
+record sent in the conflict's own envío is not held when the reply is applied; a record of the
+conflict's envío that comes after it on the chain and whose outcome is still unknown is held at its
+next claim like any later record of that chain, and is not sent again.
 A cancellation whose original was rejected or is held is itself held and never sent. When the
 lookup that follows a duplicate answer fails, only that record's outcome becomes unknown. Each
 record that needs a person's decision gets a filing case, kept in tables whose rows cannot be
@@ -1675,11 +1676,12 @@ record ids and its CSV. The dashboard's sentence does not show those lines; `rea
 params. **Still open:** nothing we hold says AEAT answers in the order sent — the saved preproduction
 replies were stored in the order sent by the probe itself, whatever order AEAT used — and the
 question is with the asesor as [Q43](compliance/asesor-questions.md). A line AEAT moves away from
-its record's position is never applied, so that record stays unknown and is retried, while records
-whose line is still at their position are applied as usual. If AEAT moved lines in every reply with
-more than one line, the records whose lines it moved would never be confirmed: Route B's lookup
-never runs for them, each retry sends them again in the same chain order, and the chain stays held —
-loud (an alert per record) and never a wrong acceptance. One option for the owner, not built: after a mismatch, send
+its record's position is never applied, so that record stays unknown and is retried unless an
+earlier record on its chain is on hold, while records whose line is still at their position are
+applied as usual. A record whose line AEAT moved in every reply it was sent in would never be
+confirmed: Route B's lookup never runs for it, each retry sends it again in the same chain order
+while the later records of its chain wait behind it — loud (an alert per record) and never a wrong
+acceptance. One option for the owner, not built: after a mismatch, send
 each unknown record again in an envío of its own. An incident is not stored while one with the same
 code for the same sale is open, so while a `fiscal.respuesta_descuadrada` is open for a sale, a later
 mismatched reply to an envío whose first record belongs to the same sale (that record again, or the
