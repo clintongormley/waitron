@@ -284,3 +284,19 @@ reopening prevents an old report from closing the new name editor.
 `apps/dashboard/src/screens/printer-name.unsaved.test.ts` covers these paths. Synthetic unload
 checks establish listener cancellation, not a native reload prompt. The printer row remains
 partial: manual address entry, detail name/connection, calibration and pairing proof are pending.
+
+### Manual network address checkpoint (2026-10-06)
+
+Your manual printer address stays in discovery until you discard it or register that address.
+Close and native Escape use the shared question; closing a nested naming editor affects only
+its name. An address check submits the existing normalized host/port without committing that
+draft. Registration commits its matching address before refresh. An unrelated address or a
+newer delivered edit stays in discovery while the registered printer's calibration opens.
+Closing discovery during submitted registration retains the earlier immediate close and
+reload without reopening calibration.
+
+`apps/dashboard/src/screens/printer-address.unsaved.test.ts` covers these paths, normalized
+reverts and invalid input, replacement/disconnect, detached input and delayed native close.
+Its synthetic unload event checks listener cancellation; native reload remains Task 5.
+The printer inventory remains partial: Bluetooth proof, detail name/connection and calibration
+settings are still pending.

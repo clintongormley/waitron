@@ -1254,7 +1254,12 @@ and closing discovery retain it until Discard; Keep restores focus and a reverte
 directly. Registration commits the submitted name before refresh, preserving a newer delivered
 value. In-flight Cancel/Escape and the completed calibration result keep their existing behavior.
 Successful registration and reopening also handle delayed native close reports. Focused cases are
-in `apps/dashboard/src/screens/printer-name.unsaved.test.ts`. Manual address entry, Bluetooth proof,
+in `apps/dashboard/src/screens/printer-name.unsaved.test.ts`. Manual network address entry now
+uses the shared registry through discovery Close and native Escape. A successful address check
+retains the draft until registration. Registration commits its matching address before refresh;
+an unrelated address or newer edit stays in discovery while calibration opens. Closing the
+nested name editor leaves the address intact. Replacement, disconnect and delayed native close
+are covered by `apps/dashboard/src/screens/printer-address.unsaved.test.ts`. Bluetooth proof,
 printer detail/calibration forms, the other audited modal owners and page/navigation protection
 remain to be wired. Keep automatic saves on their existing paths.
 

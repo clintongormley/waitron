@@ -525,6 +525,33 @@ export class PrintersScreen extends LitElement {
   @state() private addingAgent = false;
   @state() private addingPrinter = false;
   #addPrinterOpening = 0;
+  #addressScope?: DraftScope<{ host: string; port: string }>;
+  #addressLeave?: LeaveCoordinator;
+  readonly #beforeAddPrinterClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.submitting ||
+    !this.#addressScope ||
+    (await this.#addressLeave!.request({
+      scopes: [this.#addressScope.id],
+      reason,
+      proceed() {},
+    })) === "proceeded";
+
+  #addressValues(): { host: string; port: string } {
+    const port = Number(this.probePort);
+    return {
+      host: this.probeHost.trim(),
+      port:
+        /^\d+$/.test(this.probePort) && Number.isInteger(port) && port >= 1 && port <= 65535
+          ? String(port)
+          : this.probePort,
+    };
+  }
+
+  #disposeAddressDraft(): void {
+    this.#addressScope?.dispose();
+    this.#addressScope = undefined;
+    this.#addressLeave = undefined;
+  }
   @state() private namingPrinter: DiscoveredPrinter | null = null;
   #printerNameScope?: DraftScope<string>;
   #printerNameLeave?: LeaveCoordinator;
@@ -554,6 +581,7 @@ export class PrintersScreen extends LitElement {
     this.#printerNameLeave = leaveCoordinatorFor(this);
     this.#printerNameScope = this.#printerNameLeave?.register<string>({
       id: {},
+      parent: this.#addressScope?.id,
       current: () => this.discoveredNames[key]!.trim(),
       snapshot: (value) => value,
       equal: (a, b) => a === b,
@@ -793,6 +821,7 @@ export class PrintersScreen extends LitElement {
   override disconnectedCallback(): void {
     this.#disposeAgentDraft();
     this.#disposePrinterNameDraft();
+    this.#disposeAddressDraft();
     this.editingAgent = null;
     const readding = this.#readdingId;
     this.#readdingId = undefined;
@@ -1226,6 +1255,12 @@ export class PrintersScreen extends LitElement {
     const opening = this.#printerNameOpening;
     const addOpening = this.#addPrinterOpening;
     const scope = this.#printerNameScope;
+    const addressScope = this.#addressScope;
+    const address = this.#addressValues();
+    const registersAddress =
+      device.transport === "network_tcp" &&
+      device.host === address.host &&
+      String(device.port ?? 9100) === address.port;
     const active = () => this.isConnected && opening === this.#printerNameOpening;
     this.submitting = true;
     this.errorKey = null;
@@ -1253,6 +1288,7 @@ export class PrintersScreen extends LitElement {
         }));
       }
       if (!this.isConnected) return;
+      if (addOpening === this.#addPrinterOpening && registersAddress) addressScope?.commit(address);
       if (active()) scope?.commit(name);
       else if (
         scope &&
@@ -1285,10 +1321,12 @@ export class PrintersScreen extends LitElement {
         nameModal?.closeAfter("saved");
         if (nameModal) await nameModal.updateComplete;
         this.#finishPrinterName(opening);
-        const addModal = this.renderRoot.querySelector<WtModal>("[data-test=new-printer-modal]");
-        addModal?.closeAfter("saved");
-        if (addModal) await addModal.updateComplete;
-        this.#finishAddPrinter(addOpening);
+        if (!addressScope?.isDirty()) {
+          const addModal = this.renderRoot.querySelector<WtModal>("[data-test=new-printer-modal]");
+          addModal?.closeAfter("saved");
+          if (addModal) await addModal.updateComplete;
+          this.#finishAddPrinter(addOpening);
+        }
       } else {
         await this.#closeModal("name-printer-modal");
         await this.#closeModal("new-printer-modal");
@@ -2754,6 +2792,7 @@ export class PrintersScreen extends LitElement {
   #openAddPrinter(): void {
     this.#addPrinterOpening++;
     this.#finishPrinterName(this.#printerNameOpening);
+    this.#disposeAddressDraft();
     const modal = this.renderRoot.querySelector<WtModal>("[data-test=new-printer-modal]");
     if (modal) modal.open = true;
     this.formAttempted = false;
@@ -2768,6 +2807,17 @@ export class PrintersScreen extends LitElement {
     this.discoveredNames = {};
     this.addedPrinterName = null;
     this.showAllBluetooth = false;
+    this.#addressLeave = leaveCoordinatorFor(this);
+    this.#addressScope = this.#addressLeave?.register({
+      id: {},
+      current: () => this.#addressValues(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => a.host === b.host && a.port === b.port,
+      restore: (value) => {
+        this.probeHost = value.host;
+        this.probePort = value.port;
+      },
+    });
     void this.#scan();
   }
 
@@ -2929,7 +2979,7 @@ export class PrintersScreen extends LitElement {
       }
     }
     if (id === "name-printer-modal" || id === "new-printer-modal") {
-      if (this.#printerNameScope) {
+      if (id === "new-printer-modal" ? this.#addressScope : this.#printerNameScope) {
         await modal.requestClose("cancel");
         return;
       }
@@ -3356,6 +3406,7 @@ export class PrintersScreen extends LitElement {
     this.#addPrinterOpening++;
     this.addingPrinter = false;
     this.#finishPrinterName(this.#printerNameOpening);
+    this.#disposeAddressDraft();
     this.#endScan();
     this.#stopRenewing();
     // An unpairing's failure goes unless a printer row shows it; a success stays, to keep Unpair
@@ -3485,7 +3536,7 @@ export class PrintersScreen extends LitElement {
       data-test="new-printer-modal"
       heading=${t("printers.add_printer")}
       .open=${true}
-      .beforeClose=${this.#printerNameScope ? this.#beforePrinterNameClose : undefined}
+      .beforeClose=${this.#addressScope ? this.#beforeAddPrinterClose : this.#printerNameScope ? this.#beforePrinterNameClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.#finishAddPrinter(opening);
@@ -3512,7 +3563,10 @@ export class PrintersScreen extends LitElement {
             .error=${probeErrors.host ?? ""}
             ?disabled=${this.probeStatus === "pending"}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              if (opening !== this.#addPrinterOpening) return;
               this.probeHost = event.detail.value;
+              this.#addressScope?.changed();
               const refused = { ...this.probeRefused };
               delete refused.host;
               this.probeRefused = refused;
@@ -3528,7 +3582,10 @@ export class PrintersScreen extends LitElement {
             .error=${probeErrors.port ?? ""}
             ?disabled=${this.probeStatus === "pending"}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              if (opening !== this.#addPrinterOpening) return;
               this.probePort = event.detail.value;
+              this.#addressScope?.changed();
               const refused = { ...this.probeRefused };
               delete refused.port;
               this.probeRefused = refused;
