@@ -1226,6 +1226,95 @@ describe("venue operations screen", () => {
     ).toBeNull();
   });
 
+  it.each(
+    (["en", "es"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).flatMap((theme) =>
+        [390, 1280].map((width) => ({ locale, theme, width })),
+      ),
+    ),
+  )(
+    "explains quick-sale-only numbering on the $locale $theme $width department and zone controls",
+    async ({ locale, theme, width }) => {
+      const originalWidth = window.innerWidth;
+      const originalHeight = window.innerHeight;
+      await page.viewport(width, 844);
+      try {
+        setLocale(locale);
+        const explanation =
+          locale === "en"
+            ? "Quick sales only: orders on a table tab are not numbered."
+            : "Solo ventas rápidas: los pedidos de una cuenta de mesa no se numeran.";
+        const label = locale === "en" ? "About order numbers" : "Acerca de los números de pedido";
+        const el = await mount({
+          load: vi.fn().mockResolvedValue({
+            ...model,
+            departments: [model.departments[0]],
+            salePolicies: {
+              departments: [
+                {
+                  departmentId: "d1",
+                  paidWhen: "prepay",
+                  collectionNumber: "numbered",
+                  receiptPrintMode: "auto",
+                  printTradingName: true,
+                },
+              ],
+              zones: [
+                {
+                  zoneId: "z1",
+                  paidWhen: null,
+                  collectionNumber: null,
+                  receiptPrintMode: null,
+                  effective: {
+                    paidWhen: "prepay",
+                    collectionNumber: "numbered",
+                    receiptPrintMode: "auto",
+                    printTradingName: true,
+                  },
+                },
+              ],
+            },
+          }),
+        } as unknown as VenueServiceApi);
+        const host = el.parentElement!;
+        host.setAttribute("data-theme", theme);
+        host.style.background = "var(--wt-color-bg)";
+        const root = table(el, "policy-tree").shadowRoot!;
+        const cells = [
+          ...root.querySelectorAll<HTMLButtonElement>('[data-test="edit-collection"]'),
+        ];
+        expect(cells).toHaveLength(2);
+        for (const cell of cells) {
+          const help = cell.parentElement!.querySelector("wt-help-tooltip");
+          expect(help).not.toBeNull();
+          await userEvent.click(help!.shadowRoot!.querySelector("button")!);
+          expect(
+            help!.shadowRoot!.querySelector('[role="tooltip"]')!.matches(":popover-open"),
+          ).toBe(true);
+          expect(help!.textContent?.trim()).toBe(explanation);
+          expect(help!.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(label);
+          await userEvent.keyboard("{Escape}");
+          cell.click();
+          await settle(el);
+          const box = root.querySelector('wt-combobox[name="collectionNumber"]')!;
+          const editorHelp = box.querySelector('wt-help-tooltip[slot="help"]');
+          expect(editorHelp).not.toBeNull();
+          await userEvent.click(editorHelp!.shadowRoot!.querySelector("button")!);
+          expect(
+            editorHelp!.shadowRoot!.querySelector('[role="tooltip"]')!.matches(":popover-open"),
+          ).toBe(true);
+          expect(editorHelp!.textContent?.trim()).toBe(explanation);
+          const popup = editorHelp!.shadowRoot!.querySelector<HTMLElement>('[role="tooltip"]')!;
+          expect(popup.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+          expect(popup.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+          await userEvent.keyboard("{Escape}");
+        }
+      } finally {
+        await page.viewport(originalWidth, originalHeight);
+      }
+    },
+  );
+
   it("changes a department collection number and lets a zone inherit it", async () => {
     let departmentCollection: "none" | "numbered" = "none";
     let zoneCollection: "none" | "numbered" | null = "numbered";
