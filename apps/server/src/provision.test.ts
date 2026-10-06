@@ -102,15 +102,9 @@ function ownerDb(): Database {
 }
 
 describe("provisionVenue", () => {
-  // `parseProvisionPayload` (setup-api.ts) hands provisioning Demo and Prepare as preproduction and
-  // Live, outside dev mode, as production.
-  it.each([
-    ["Demo", "preproduction"],
-    ["Prepare", "preproduction"],
-    ["Live", "production"],
-  ] as const)(
-    "names the default department, and its trading name, after the location in %s",
-    async (_mode, environment) => {
+  it.each(["preproduction", "production"] as const)(
+    "names the default department, and its trading name, after the location when provisioning under %s",
+    async (environment) => {
       const db = ownerDb();
       const venue = venueRequest(nextNif());
       venue.location.name = "Bar Pepe";

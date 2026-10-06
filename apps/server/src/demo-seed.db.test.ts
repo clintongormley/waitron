@@ -1,6 +1,6 @@
 /**
- * The wizard's Demo path on a real database: the server's `provisionVenue` with the venue the
- * wizard sends in Demo, then `seedInstalledDemo`, which the setup route runs next.
+ * The wizard's Demo path on a real database: the server's `provisionVenue` with a Demo-shaped
+ * venue, then `seedInstalledDemo`, which the setup route runs next.
  */
 
 import { mkdtemp, rm } from "node:fs/promises";

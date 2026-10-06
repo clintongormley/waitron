@@ -384,7 +384,7 @@ it("shows the fixed demo identity's note and full location details for review", 
   });
   const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
   expect(text(el, "[data-test=demo-defaults]")).toBe(
-    "The legal name and tax ID below are Waitron's fixed demo values. They are made up and belong to no real company. Waitron also supplied the other business and invoice defaults below. Demo does not submit invoices to the tax agency.",
+    "The legal name and tax ID below are Waitron's fixed demo values. They are made up. Waitron also supplied the other business and invoice defaults below. Demo does not submit invoices to the tax agency.",
   );
   expect(text(el, "[data-test=summary-operationDescription]")).toBe("Venta en establecimiento");
   expect(q(el, "[data-test=summary-tillName]")).toBeNull();
@@ -418,7 +418,7 @@ describe("setup-review-screen in Spanish", () => {
     draft.mode = "demo";
     const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
     expect(text(el, "[data-test=demo-defaults]")).toBe(
-      "La razón social y el número de identificación fiscal de abajo son los valores fijos de demostración de Waitron. Son inventados y no pertenecen a ninguna empresa real. Waitron también ha puesto los demás valores del negocio y de factura de abajo. La demostración no envía facturas a la Agencia Tributaria.",
+      "La razón social y el número de identificación fiscal de abajo son los valores fijos de demostración de Waitron. Son inventados. Waitron también ha puesto los demás valores del negocio y de factura de abajo. La demostración no envía facturas a la Agencia Tributaria.",
     );
   });
 

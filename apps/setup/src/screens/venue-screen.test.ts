@@ -902,6 +902,42 @@ it("keeps a location name the Demo draft already holds rather than the demo loca
   });
   expect((q(el, "[data-test=name]") as HTMLInputElement).value).toBe("Bar Pepe");
 });
+it("explains the Demo location name with a ? rather than a hint the filled-in field would never show", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: { mode: "demo" },
+  });
+  const name = q(el, "[data-test=name]")!;
+  expect(name.getAttribute("hint")).toBe("");
+  const help = name.querySelector("wt-help-tooltip[slot=help]")!;
+  expect(help.getAttribute("aria-label")).toBe("Help with location name");
+  expect(help.textContent!.trim()).toBe(
+    "The name you use for this location. You can keep the suggested name or change it.",
+  );
+});
+it("explains the Demo location name's ? in Spanish", async () => {
+  setLocale("es-ES");
+  try {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "demo" },
+    });
+    const help = q(el, "[data-test=name] wt-help-tooltip[slot=help]")!;
+    expect(help.getAttribute("aria-label")).toBe("Ayuda sobre el nombre del local");
+    expect(help.textContent!.trim()).toBe(
+      "El nombre que usas para este local. Puedes mantener el nombre propuesto o cambiarlo.",
+    );
+  } finally {
+    setLocale("en-GB");
+  }
+});
+it.each(["prepare", "live"] as const)(
+  "keeps the location name's hint and no ? in %s, where the field starts empty",
+  async (mode) => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { draft: { mode } });
+    const name = q(el, "[data-test=name]")!;
+    expect(name.getAttribute("hint")).toBe("The name you use for this location");
+    expect(name.querySelector("wt-help-tooltip")).toBeNull();
+  },
+);
 it("sends the current country's demo identity in Demo, not a tax ID or legal name the draft held", async () => {
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo", venue: { taxId: "B12345674", legalName: "Otra Empresa SL" } },

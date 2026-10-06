@@ -3081,9 +3081,11 @@ business: legal name Waitron Demo S.L., tax ID `B00000000`, location Casa Delgad
 departments trading as Bar Casa Delgado and Deli Delgado, in English and Spanish alike. The values
 live in the country pack (`CountryDemoIdentity`, `packages/country/src/country.ts`, filled in by
 `packages/country-es`); the random tax ID draw is gone. In Demo the wizard's location name starts
-as Casa Delgado and can be changed; the legal name is no longer copied from it, and a refusal of
-the legal name shows above Next. The summary's Demo note says the legal name and tax ID are
-Waitron's fixed demo values. The departments' internal names still follow the seed language.
+as Casa Delgado and can be changed, and is explained by a "?" rather than a hint that would not
+show in the filled-in field (Prepare and Live keep the hint); the legal name is no longer copied
+from it, and a refusal of the legal name shows above Next. The summary's Demo note says the legal
+name and tax ID are Waitron's fixed demo values. The departments' internal names still follow the
+seed language.
 Screenshots: `~/waitron-campaign-c/w108-shots/`.
 Left open:
 - *A Demo for a country whose pack has no demo values is not refused at the setup route.* The demo
@@ -3093,11 +3095,6 @@ Left open:
   id, postcode and province when the country has no rules for them" in
   `apps/server/src/setup-api.country-pack.test.ts` red, because it sends a Demo for a United
   Kingdom pack with no demo values; that test was left unchanged for the owner to decide.
-- *The Demo location name starts filled in but keeps its hint* ("The name you use for this
-  location"), which then shows only when the field is emptied. The forms rule gives a field that
-  starts filled in a "?" explanation instead; the field shares one hint across all three modes.
-- *The note says the demo tax ID belongs to no real company*; that was the owner's wording and was
-  not checked against any register.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
@@ -9336,7 +9333,9 @@ Live A2 work is under *A2* in Track A. What constrains the next change to the wi
   which passes Spain's own check as a company's: it is safe only because a demo box files nothing.
   Prepare and Live start with an empty tax ID and legal name, and leaving Demo for either clears both
   from the draft (`#onPatch`, `apps/setup/src/setup-app.ts`). The location name is not on that list,
-  so a Demo's "Casa Delgado" stays in the draft when the operator switches to Prepare or Live.
+  so a Demo's "Casa Delgado" stays in the draft when the operator switches to Prepare or Live. There
+  the location-name field starts filled in but takes its hint, which the filled value hides, and no
+  "?", because `#field` (`apps/setup/src/screens/venue-screen.ts`) chooses the "?" by Demo mode alone.
 - **Default both series codes to values that survive a cold restore.** A cold restore appends
   `-<installation number>` and `stripOwnSuffixes` would then re-number a trailing `-<digits>`, so
   default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**

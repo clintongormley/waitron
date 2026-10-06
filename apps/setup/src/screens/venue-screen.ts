@@ -100,7 +100,8 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
 
 type HintedField =
   "taxId" | "legalName" | "name" | "addressLine1" | "addressLine2" | "postalCode" | "city";
-type HelpedField = Exclude<TextField, HintedField>;
+/** Demo starts the location name filled in, so there it takes a "?" rather than its hint. */
+type HelpedField = Exclude<TextField, HintedField> | "name";
 
 /** A short explanation shown in the empty field. */
 const FIELD_HINT: Record<HintedField, StringKey> = {
@@ -116,6 +117,7 @@ const FIELD_HINT: Record<HintedField, StringKey> = {
 /** An explanation too long for a hint, or for a field that starts filled in, so a hint would never show. */
 const FIELD_HELP: Record<HelpedField, StringKey> = {
   country: "venue.help.country",
+  name: "venue.help.name",
   operationDescription: "venue.help.operation_description",
   province: "venue.help.province",
   dayCutover: "venue.help.day_cutover",
@@ -566,6 +568,8 @@ export class SetupVenueScreen extends LitElement {
 
   #field(label: string, key: TextField, type = "text"): TemplateResult {
     const error = this.#errors.get(key) ?? "";
+    const demoName = this.#demo && key === "name";
+    const help = !hasHint(key) ? this.#help(key) : demoName ? this.#help("name") : nothing;
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
@@ -574,13 +578,13 @@ export class SetupVenueScreen extends LitElement {
       autocomplete=${FIELD_AUTOCOMPLETE[key]}
       data-test=${key}
       type=${type}
-      hint=${hasHint(key) ? t(FIELD_HINT[key]) : ""}
+      hint=${hasHint(key) && !demoName ? t(FIELD_HINT[key]) : ""}
       ?invalid=${error !== ""}
       ?required=${key !== "addressLine2"}
       error=${error}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
-      >${hasHint(key) ? nothing : this.#help(key)}</wt-input
+      >${help}</wt-input
     >`;
   }
 

@@ -273,7 +273,7 @@ describe("validateSpanishPhone", () => {
 });
 
 describe("demo company identity", () => {
-  it("is Waitron's fixed demo identity, the same whatever language the demo is seeded in", () => {
+  it("is Waitron's fixed demo identity", () => {
     expect(SPAIN.demo).toEqual({
       legalName: "Waitron Demo S.L.",
       taxId: "B00000000",

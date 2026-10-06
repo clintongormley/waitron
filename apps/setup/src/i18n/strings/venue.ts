@@ -60,6 +60,8 @@ export const venueEn = {
   "venue.hint.tax_id": "Of the business that issues the invoices",
   "venue.hint.legal_name": "As on the business's tax documents",
   "venue.hint.name": "The name you use for this location",
+  "venue.help.name":
+    "The name you use for this location. You can keep the suggested name or change it.",
   "venue.help.operation_description":
     "This text describes the sale on every record sent to the tax agency. Keep the suggested wording for ordinary shop sales. The receipt language does not translate this text. You can change it in the dashboard for future records.",
   "venue.hint.address_line1": "Street and building number",
@@ -94,7 +96,7 @@ export const venueEn = {
   "review.heading": "Review and provision",
   "review.intro": "Check the details below, then provision this server.",
   "review.demo_defaults":
-    "The legal name and tax ID below are Waitron's fixed demo values. They are made up and belong to no real company. Waitron also supplied the other business and invoice defaults below. Demo does not submit invoices to the tax agency.",
+    "The legal name and tax ID below are Waitron's fixed demo values. They are made up. Waitron also supplied the other business and invoice defaults below. Demo does not submit invoices to the tax agency.",
   "review.country": "Country",
   "review.tax_id": "Tax ID",
   "review.legal_name": "Legal name",
@@ -241,6 +243,8 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.hint.tax_id": "Del negocio que emite las facturas",
   "venue.hint.legal_name": "Como en sus documentos fiscales",
   "venue.hint.name": "El nombre que usas para este local",
+  "venue.help.name":
+    "El nombre que usas para este local. Puedes mantener el nombre propuesto o cambiarlo.",
   "venue.help.operation_description":
     "Este texto describe la venta en cada registro que se envía a la Agencia Tributaria. Mantén el texto propuesto para las ventas habituales en tienda. El idioma del recibo no traduce este texto. Puedes cambiarlo en el panel de control para los registros futuros.",
   "venue.hint.address_line1": "Calle y número",
@@ -277,7 +281,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "review.heading": "Revisar y configurar",
   "review.intro": "Comprueba los datos de abajo y configura este servidor.",
   "review.demo_defaults":
-    "La razón social y el número de identificación fiscal de abajo son los valores fijos de demostración de Waitron. Son inventados y no pertenecen a ninguna empresa real. Waitron también ha puesto los demás valores del negocio y de factura de abajo. La demostración no envía facturas a la Agencia Tributaria.",
+    "La razón social y el número de identificación fiscal de abajo son los valores fijos de demostración de Waitron. Son inventados. Waitron también ha puesto los demás valores del negocio y de factura de abajo. La demostración no envía facturas a la Agencia Tributaria.",
   "review.country": "País",
   "review.tax_id": "Número de identificación fiscal",
   "review.legal_name": "Razón social",
