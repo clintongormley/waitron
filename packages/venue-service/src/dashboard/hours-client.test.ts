@@ -158,6 +158,22 @@ describe("HoursApi.watchHours", () => {
     expect(apply).toHaveBeenCalledTimes(3);
   });
 
+  it("gives a second watcher of an already loaded range that model at once, without another read", async () => {
+    const liveData = new LiveData();
+    const request = vi.fn(async () => model("2030-10-06"));
+    const api = new HoursApi(request as DashboardRequest, liveData);
+    const first = vi.fn();
+    const detachFirst = api.watchHours("2030-10-01", "2030-10-31", first, vi.fn(), vi.fn());
+    await vi.waitFor(() => expect(first).toHaveBeenCalledTimes(1));
+    const second = vi.fn();
+    const detachSecond = api.watchHours("2030-10-01", "2030-10-31", second, vi.fn(), vi.fn());
+    await vi.waitFor(() => expect(second).toHaveBeenCalledWith(model("2030-10-06")));
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledTimes(1);
+    detachFirst();
+    detachSecond();
+  });
+
   it("re-reads on a timer with no row written, so today's date and labels move on", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     const liveData = new LiveData();

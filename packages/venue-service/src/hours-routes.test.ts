@@ -793,14 +793,19 @@ describe("Hours when the venue's clock changes", () => {
     const fx = await fixture();
     /** Thursday 15 October 2026 02:30 in Madrid. */
     const at = new Date("2026-10-15T00:30:00Z");
-    await withTransaction(db, async (tx) => {
-      const allDay = Object.fromEntries(
-        [0, 1, 2, 3, 4, 5, 6].map((weekday) => [weekday, { mode: "all_day", periods: [] }]),
-      ) as Record<number, WeekCell>;
-      await replaceWeekHours(tx, fx.cfg, fx.bar, week(allDay), new Date("2026-10-01T10:00:00Z"));
-      // Before the 06:00 cutover this closure belongs to the business day of the 14th.
-      await setStationToday(tx, fx.cfg, fx.bar.id, "closed", at);
-    });
+    await withTransaction(db, (tx) =>
+      replaceWeekHours(
+        tx,
+        fx.cfg,
+        fx.bar,
+        week({ 3: closed, 4: { mode: "all_day", periods: [] } }),
+        new Date("2026-10-01T10:00:00Z"),
+      ),
+    );
+    // The bar is Closed on Wednesday and open all Thursday. Before the 06:00 cutover the business
+    // day is still Wednesday the 14th, but Thursday the 15th owns the hours.
+    expect(await barStatus(fx, at)).toEqual({ open: true, why: "in_hours" });
+    await withTransaction(db, (tx) => setStationToday(tx, fx.cfg, fx.bar.id, "closed", at));
     const before = await model(fx, at);
     expect(before.civilDate).toBe("2026-10-15");
     expect(await barStatus(fx, at)).toEqual({ open: false, why: "closed_by_hand" });

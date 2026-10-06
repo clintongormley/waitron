@@ -68,6 +68,15 @@ export class HoursApi {
         clearInterval(timer);
       };
     }
+    const changed = (): void => {
+      const snapshot = observed.snapshot;
+      if (snapshot.loading || snapshot.status === "pending") return;
+      void settle(
+        snapshot.status === "error"
+          ? Promise.reject(snapshot.error)
+          : Promise.resolve(snapshot.value as HoursModel),
+      );
+    };
     const observed = this.liveData.observe(
       {
         key: `venue-service:hours:${from}:${to}`,
@@ -75,16 +84,11 @@ export class HoursApi {
         refreshMs: REFRESH_MS,
         read: () => this.#read(from, to, true),
       },
-      () => {
-        const snapshot = observed.snapshot;
-        if (snapshot.loading || snapshot.status === "pending") return;
-        void settle(
-          snapshot.status === "error"
-            ? Promise.reject(snapshot.error)
-            : Promise.resolve(snapshot.value as HoursModel),
-        );
-      },
+      changed,
     );
+    // Observing never calls back by itself: a range another watcher has already read is current
+    // and starts no read, so its model is handed over here.
+    changed();
     return () => {
       attached = false;
       observed.unsubscribe();
