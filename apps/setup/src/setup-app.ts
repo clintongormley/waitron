@@ -490,6 +490,8 @@ export class SetupApp extends LitElement {
 
   override disconnectedCallback(): void {
     ++this.#rootGeneration;
+    ++this.#cloudRecoveryAttempt;
+    this.cloudRecoveryBusy = false;
     this.#rootScope?.dispose();
     this.#rootScope = undefined;
     super.disconnectedCallback();
@@ -546,6 +548,7 @@ export class SetupApp extends LitElement {
   @state() private cloudRecoveryError?: Message;
   @state() private cloudInvalidField?: CloudField;
   @state() private cloudRecoveryBusy = false;
+  #cloudRecoveryAttempt = 0;
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the Cloud path. */
   @state() private cloudLiveSince?: string;
   @state() private cloudLiveUnknown = false;
@@ -767,6 +770,8 @@ export class SetupApp extends LitElement {
   }
 
   #goto(destination: Screen): void {
+    ++this.#cloudRecoveryAttempt;
+    this.cloudRecoveryBusy = false;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
     this.reviewError = undefined;
@@ -1072,7 +1077,18 @@ export class SetupApp extends LitElement {
     }>,
   ): Promise<void> {
     event.stopPropagation();
-    if (this.cloudRecoveryBusy) return;
+    if (this.cloudRecoveryBusy || !this.isConnected || this.screen !== "cloud-restore") return;
+    const attempt = ++this.#cloudRecoveryAttempt;
+    const generation = this.#rootGeneration;
+    const owner = this.shadowRoot?.querySelector("setup-cloud-restore-screen");
+    let phase: Screen = "cloud-restore";
+    const ownsBusy = () => attempt === this.#cloudRecoveryAttempt;
+    const current = () =>
+      this.isConnected &&
+      generation === this.#rootGeneration &&
+      ownsBusy() &&
+      this.screen === phase &&
+      (phase === "provisioning" || Boolean(owner?.isConnected));
     this.cloudRecoveryBusy = true;
     this.cloudRecoveryError = undefined;
     this.cloudInvalidField = undefined;
@@ -1080,17 +1096,20 @@ export class SetupApp extends LitElement {
       const { action, pointId, oldBoxGone } = event.detail;
       if (action === "restore") {
         if (!pointId || pointId !== this.cloudRecoveryView?.point?.id) throw new Error();
-        this.screen = "provisioning";
+        phase = "provisioning";
+        this.screen = phase;
         await this.api.restoreFromCloud(pointId, oldBoxGone === true);
-        if (this.isConnected) this.screen = "done";
+        if (current()) this.screen = "done";
       } else {
         const shown = this.cloudRecoveryView?.point?.id;
-        this.cloudRecoveryView =
+        const view =
           action === "start"
             ? await this.api.startCloudRecovery()
             : action === "start-again"
               ? await this.api.startCloudRecoveryAgain()
               : await this.api.cloudRecoveryStatus();
+        if (!current()) return;
+        this.cloudRecoveryView = view;
         // The server answered the old-server question for the snapshot it was sent, not for another.
         if (this.cloudRecoveryView.point?.id !== shown) {
           this.cloudLiveSince = undefined;
@@ -1098,7 +1117,7 @@ export class SetupApp extends LitElement {
         }
       }
     } catch (error) {
-      if (this.isConnected) {
+      if (current()) {
         const { code, params } = (error ?? {}) as {
           code?: unknown;
           params?: { lastChangeAt?: unknown };
@@ -1126,7 +1145,7 @@ export class SetupApp extends LitElement {
         this.screen = "cloud-restore";
       }
     } finally {
-      this.cloudRecoveryBusy = false;
+      if (ownsBusy()) this.cloudRecoveryBusy = false;
     }
   }
 

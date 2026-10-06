@@ -2434,3 +2434,39 @@ request/venue-clearing assertions remain. Include it in the eventual PR's Change
 Cloud restore, remaining page/till routes, final advancing-owner classification and activated
 native reload remain open. Tasks 2/3 stay complete and Tasks 1/4/5/6 partial. W69 is not ready
 for finish-branch or landing.
+
+
+## 2026-10-06 Cloud restore checkpoint
+
+`cloud-restore-screen` authors no recovery key, source selector or other staged value: its
+acknowledge and old-box controls are safety confirmations. The new shell case ticks both,
+then uses Back without a discard question; a separately edited root draft stays dirty and
+retains its email. The rendered Restore submits the same point id and old-box flag directly.
+No Cloud dirty scope was added, and the existing screen assertions were retained.
+
+The shell now invalidates its pending Cloud attempt on navigation and disconnect. Read replies
+are accepted only for the retained Cloud form and current attempt; restore replies require the
+current provisioning phase. Older completions cannot release a newer attempt's busy state.
+`pnpm --filter @waitron/setup exec vitest run src/setup-app-cloud.unsaved-changes.test.ts`
+first reported eight failures and two passes, including a reconnected restore changing the screen
+to Done and replacement Cloud forms staying busy. The implemented run reported ten passes.
+The focused family command in Lane E's `receipts/w69-setup-cloud-20261006/family.log`
+reported 545 passes across ten suites; it includes `setup-app.test.ts`, the eight setup
+unsaved-change suites and `cloud-restore-screen.test.ts`. Setup typecheck and scoped ESLint
+passed. Golden huella and `inmutabilidad` remained unedited and reported 20 passes.
+
+Four separate guard removals in a disposable clone with a frozen dependency install each
+produced the intended failing case: accepting a departed read, accepting a reconnected restore
+success, accepting its refusal and clearing a newer request's busy state. Each clone mutation
+still passed the acknowledged-Restore control. Restoring both files byte for byte produced 32
+passes across the new shell and existing Cloud screen suites; the owned clone was removed.
+Exact logs and control outcomes are in that same receipt directory.
+
+Eight native checkbox/Back flows cover EN/ES, light/dark and 390/1280 widths. They reported 16
+axe scans and preserve the exemption. Captures show the approved Cloud form and archive form
+after Back. Initial discovery and Cloud replies are synthetic; real Cloud adoption/restore,
+restart, hover colours and activated native reload remain unverified.
+
+This completes the Cloud acknowledgement/exempt-owner stage only. Remaining page/till/tab/context
+routes, final advancing-owner classification and activated native reload remain open. Tasks 2/3
+stay complete and Tasks 1/4/5/6 partial; W69 is not ready for finish-branch or landing.

@@ -1225,7 +1225,11 @@ reconnected wizard or newer archive attempt in the new browser cases. Bucket res
 its exact kit text and environment before Back, retaining the root draft on Discard. File reads
 cannot replace newer kit text or discarded values in the new browser cases; accepted Restore
 submits directly and refusals stay dirty. Late bucket replies cannot replace a departed form,
-reconnected wizard or newer pending bucket attempt. Cloud restore still needs work.
+reconnected wizard or newer pending bucket attempt. Cloud restore has only safety
+acknowledgements, which remain exempt: Back leaves directly and retains the root draft. Its new
+browser cases reject departed and reconnected read/restore replies and prevent an older reply
+from clearing a newer request's busy state. This checks the shell with synthetic API replies,
+not an actual Cloud restore or restart.
 See the dated setup entries in the W69 audit for commands and limits; activated native reload
 has not been verified.
 Dashboard voluntary logout and a language change also request the shared warning before their
