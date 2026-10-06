@@ -2650,6 +2650,35 @@ describe("a device's approved profiles and switching its active one", () => {
       expect(await openSessionsOn(t.deviceId)).toEqual([manager.personId]);
     });
 
+    it("moving onto a kitchen-screen profile ends every session on the device, though that profile admits every role", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const other = await till(app, venue, "Barra");
+      const kitchen = await seedProfile("kds");
+      await withTransaction(suite.db, (tx) =>
+        listOnProfile(tx, kitchen, { stationId: venue.defaultStationId }),
+      );
+      const staff = await signIn(t.deviceId, "staff");
+      await signIn(t.deviceId, "manager");
+      const elsewhere = await signIn(other.deviceId, "staff");
+
+      const moved = await manage(app, venue, t.deviceId, {
+        profileId: kitchen,
+        stationId: venue.defaultStationId,
+      });
+
+      expect(moved.status).toBe(204);
+      expect(await openSessionsOn(t.deviceId)).toEqual([]);
+      expect(await openSessionsOn(other.deviceId)).toEqual([elsewhere.personId]);
+      const after = await send(app, "PUT", "/api/device/printers", {
+        cookie: staff.cookie,
+        body: { receiptPrinterId: null },
+      });
+      expect(after.status).toBe(401);
+      expect(await after.json()).toMatchObject({ error: { code: "session.required" } });
+    });
+
     it("lists neither a retired alternative nor one whose form factor no longer matches", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
@@ -2922,11 +2951,11 @@ describe("a device's approved profiles and switching its active one", () => {
       expect((await switchTo(app, me.cookie, s.to)).status).toBe(200);
     });
 
-    it("refuses switching a screen moved onto a kitchen profile, with someone still signed in, to one that does not list its station", async () => {
+    it("a screen moved onto a kitchen profile keeps no session to switch with, and one written there anyway cannot switch to a profile not listing its station", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const t = await till(app, venue);
-      const me = await signIn(t.deviceId);
+      const before = await signIn(t.deviceId);
       const [listing, other] = [await seedProfile("kds"), await seedProfile("kds")];
       await withTransaction(suite.db, (tx) =>
         listOnProfile(tx, listing, { stationId: venue.defaultStationId }),
@@ -2937,9 +2966,13 @@ describe("a device's approved profiles and switching its active one", () => {
         approvedProfileIds: [other],
       });
       expect(moved.status).toBe(204);
-      // A kitchen profile with no role set admits every role, so the move left the session open.
-      expect(await openSessionsOn(t.deviceId)).toEqual([me.personId]);
+      expect(await openSessionsOn(t.deviceId)).toEqual([]);
+      const ended = await switchTo(app, before.cookie, other);
+      expect(ended.status).toBe(401);
+      expect(await ended.json()).toMatchObject({ error: { code: "session.required" } });
 
+      // Written straight through identity, past the sign-in route that refuses a kitchen screen.
+      const me = await signIn(t.deviceId);
       const res = await switchTo(app, me.cookie, other);
       expect({ status: res.status, body: await res.json() }).toEqual({
         status: 400,
