@@ -4,7 +4,8 @@ import {
   devices,
   diningTables,
   floorZones,
-  isUniqueViolation,
+  refusalOn,
+  UNIQUE_VIOLATION,
   kitchenStations,
   parties,
   partyTables,
@@ -517,7 +518,13 @@ export async function createServiceZone(
       .returning({ id: floorZones.id });
     zoneId = zone!.id;
   } catch (error) {
-    if (isUniqueViolation(error)) throw new AppError("zone.name_taken", { name: input.name });
+    if (
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_zones",
+        columns: ["location_id", "name"],
+      })
+    )
+      throw new AppError("zone.name_taken", { name: input.name });
     throw error;
   }
   await configureZone(tx, cfg, { zoneId, departmentId: input.departmentId });

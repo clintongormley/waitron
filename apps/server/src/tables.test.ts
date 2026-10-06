@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_TIME_ZONE,
   diningTables,
@@ -309,6 +309,49 @@ describe("zone CRUD", () => {
     await expect(
       asApp(cfg, (tx) => updateZone(tx, cfg, missing, { name: "X" })),
     ).rejects.toMatchObject({ code: "zone.not_found", params: { zoneId: missing } });
+  });
+
+  it("createZone keeps a primary-key clash as an internal database error", async () => {
+    const cfg = await setupVenue();
+    const existing = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    const generateId = vi.spyOn(floorZones.id, "defaultFn").mockReturnValue(existing.id);
+    try {
+      await expect(
+        asApp(cfg, (tx) => createZone(tx, cfg, { name: "Garden" })),
+      ).rejects.toMatchObject({
+        errcode: 1555,
+        message: "UNIQUE constraint failed: floor_zones.id",
+      });
+    } finally {
+      generateId.mockRestore();
+    }
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([
+      { id: existing.id, name: "Terrace", displayOrder: 0, active: true },
+    ]);
+  });
+
+  it("updateZone does not translate a primary-key clash from another write in its trigger", async () => {
+    const cfg = await setupVenue();
+    const existing = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    await db.execute(sql`create trigger test_zone_key_clash before update on floor_zones
+      when new.name = 'Trigger collision'
+      begin
+        insert into floor_zones (id, location_id, name, created_at)
+        values (old.id, old.location_id, 'Another zone', old.created_at);
+      end`);
+    try {
+      await expect(
+        asApp(cfg, (tx) => updateZone(tx, cfg, existing.id, { name: "Trigger collision" })),
+      ).rejects.toMatchObject({
+        errcode: 1555,
+        message: "UNIQUE constraint failed: floor_zones.id",
+      });
+    } finally {
+      await db.execute(sql`drop trigger test_zone_key_clash`);
+    }
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([
+      { id: existing.id, name: "Terrace", displayOrder: 0, active: true },
+    ]);
   });
 
   it("updateZone surfaces a name collision as zone.name_taken", async () => {

@@ -60,6 +60,7 @@ import {
   copyWorkingLineContext,
   configureZone,
   createDepartment,
+  createServiceZone,
   deactivateDepartment,
   departmentRemovalImpact,
   deactivateServiceZone,
@@ -929,6 +930,48 @@ describe("routing outcomes and menu readiness", () => {
         (await listZoneOffers(tx, cfg, zoneId)).offers.map((row) => [row.id, row.available]),
       ).toEqual([[offer.id, true]]);
     });
+  });
+});
+
+describe("service zone name refusals", () => {
+  it("keeps a primary-key clash as an internal database error", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Zone key collision")) };
+    const department = await scoped((tx) =>
+      createDepartment(tx, cfg, { name: "Restaurant", defaultServiceMode: "prepay" }),
+    );
+    const existing = await scoped((tx) =>
+      createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
+    );
+    const generateId = vi.spyOn(floorZones.id, "defaultFn").mockReturnValue(existing.id);
+    try {
+      await expect(
+        scoped((tx) => createServiceZone(tx, cfg, { name: "Garden", departmentId: department.id })),
+      ).rejects.toMatchObject({
+        errcode: 1555,
+        message: "UNIQUE constraint failed: floor_zones.id",
+      });
+    } finally {
+      generateId.mockRestore();
+    }
+    expect(await scoped((tx) => listServiceZones(tx, cfg))).toEqual([
+      expect.objectContaining({ id: existing.id, name: "Terrace", departmentId: department.id }),
+    ]);
+  });
+
+  it("reports a duplicate zone name and leaves its original assignment intact", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Zone name collision")) };
+    const department = await scoped((tx) =>
+      createDepartment(tx, cfg, { name: "Restaurant", defaultServiceMode: "prepay" }),
+    );
+    const existing = await scoped((tx) =>
+      createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
+    );
+    await expect(
+      scoped((tx) => createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id })),
+    ).rejects.toMatchObject({ code: "zone.name_taken", params: { name: "Terrace" } });
+    expect(await scoped((tx) => listServiceZones(tx, cfg))).toEqual([
+      expect.objectContaining({ id: existing.id, name: "Terrace", departmentId: department.id }),
+    ]);
   });
 });
 
