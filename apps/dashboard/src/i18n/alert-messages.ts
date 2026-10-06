@@ -106,8 +106,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La hora de este equipo ha retrocedido: ha cambiado {wallClockDeltaSeconds} segundos. Revisa su fecha y hora.",
   },
   "fiscal.registro_rechazado": {
-    en: "The tax agency (AEAT) rejected an invoice record: {mensaje} (code {codigo}). Later records on the same chain are on hold. Contact support.",
-    es: "La AEAT ha rechazado un registro de facturación: {mensaje} (código {codigo}). Los registros posteriores de la misma cadena están en espera. Contacta con soporte.",
+    en: "The tax agency (AEAT) rejected an invoice record: {mensaje} (code {codigo}). Contact support.",
+    es: "La AEAT ha rechazado un registro de facturación: {mensaje} (código {codigo}). Contacta con soporte.",
   },
   "fiscal.aceptado_con_errores": {
     en: "The tax agency (AEAT) accepted an invoice record but reported a problem: {mensaje} (code {codigo}).",
@@ -160,6 +160,10 @@ export const ALERT_MESSAGES: Readonly<
   "fiscal.submission_stopped": {
     en: "{count} fiscal record(s) have stopped submitting and need attention.",
     es: "{count} registro(s) fiscal(es) han detenido su envío y requieren atención.",
+  },
+  "fiscal.filing_cases_open": {
+    en: "{count} fiscal record(s) were rejected by the tax agency or conflict with the record it holds, and need someone to decide what to do. Contact support.",
+    es: "{count} registro(s) fiscal(es) han sido rechazados por la Agencia Tributaria o no coinciden con el registro que tiene, y alguien tiene que decidir qué hacer. Contacta con soporte.",
   },
   "fiscal.awaiting_certificate": {
     en: "Fiscal records are waiting because no valid tax certificate is installed. Upload the certificate to resume submitting.",

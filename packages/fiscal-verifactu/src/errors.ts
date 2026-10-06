@@ -119,8 +119,9 @@ declare module "@waitron/shared" {
     /**
      * `./drain.ts`'s `handleDuplicate` (error 3000): AEAT's own copy of this identity is `Anulada`,
      * and the record is a sale, or a cancellation whose fingerprint differs from the one AEAT
-     * holds or for which AEAT returns no record. Halts the record and its chain's successors. No
-     * `codigo`/`mensaje` params: they would only ever repeat 3000.
+     * holds or for which AEAT returns no record. Holds the record and its chain's later records not
+     * yet sent, and opens a filing case. No `codigo`/`mensaje` params: they would only ever repeat
+     * 3000.
      */
     "fiscal.duplicado_anulado": { registroId: string };
 
@@ -237,6 +238,12 @@ declare module "@waitron/shared" {
      * and need a human — a halted chain never drains itself. Never thrown.
      */
     "fiscal.submission_stopped": { count: number };
+
+    /**
+     * The same ongoing check: `count` filing cases (./filing-cases.ts) have no resolution yet. Never
+     * thrown.
+     */
+    "fiscal.filing_cases_open": { count: number };
 
     /**
      * An ongoing-alert code raised by `apps/server/src/alert-sources.ts`, not by this package; it
