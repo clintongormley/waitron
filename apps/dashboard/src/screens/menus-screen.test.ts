@@ -5861,6 +5861,40 @@ describe("the Device Home Page row", () => {
     await vi.waitFor(() => expect(rowOf(el, "home")).not.toBeNull());
     expect(q(el, '[data-test="home-row-error"]')).toBeNull();
   });
+
+  it("sends one add, and none for an empty choice, when the picker reports another choice while an add is out", async () => {
+    const added = deferred<SectionMember>();
+    const client = api({ addHomeShortcut: vi.fn(() => added.promise) });
+    const el = await mountRow(client);
+    const choice = await openPicker(el, "product");
+    emit(choice, "wt-change", { value: "" });
+    await el.updateComplete;
+    expect(client.addHomeShortcut).not.toHaveBeenCalled();
+    await chooseOption(choice, "p-lager");
+    emit(choice, "wt-change", { value: "p-lemonade" });
+    await el.updateComplete;
+    added.resolve(productMember("t-new", 3, "p-lager"));
+    await vi.waitFor(() => expect(modal(el, "add-shortcut").open).toBe(false));
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.addHomeShortcut).toHaveBeenCalledExactlyOnceWith("menu-lunch", {
+      kind: "product",
+      productId: "p-lager",
+    });
+  });
+
+  it("reads the home no more after a shortcut add once the person has gone to a tab that does not show it", async () => {
+    const added = deferred<SectionMember>();
+    const client = api({ addHomeShortcut: vi.fn(() => added.promise) });
+    const el = await mountRow(client);
+    await chooseOption(await openPicker(el, "product"), "p-lager");
+    await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalled());
+    await chooseTab(el, "prices");
+    const reads = client.getMenuHome.mock.calls.length;
+    added.resolve(productMember("t-new", 3, "p-lager"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(client.getMenuHome.mock.calls.length).toBe(reads);
+  });
 });
 
 describe("the Home page tab", () => {
@@ -6304,6 +6338,89 @@ describe("the Home page tab", () => {
     lunchRead.resolve(menuHome());
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(slider(el).value).toBe(5);
+  });
+
+  /** Goes from Lunch's Home page tab to Dinner's, whose Handheld shows five columns. */
+  async function goToDinnerHome(el: MenusScreen, client: Api): Promise<void> {
+    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/home");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(client.getMenuHome).toHaveBeenCalledWith("menu-dinner"));
+    await vi.waitFor(() => expect(slider(el)?.value).toBe(5));
+  }
+
+  function dinnerAtFive(): Api {
+    const dinner = emptyHome();
+    dinner.handheld = { ...dinner.handheld, columns: 5 };
+    return api({
+      getMenuHome: vi.fn(async (id: string) => (id === "menu-lunch" ? menuHome() : dinner)),
+    });
+  }
+
+  it("sends no second setting while one is still being saved, even when a control reports a change", async () => {
+    const out = deferred<void>();
+    const client = api();
+    const el = await mountHome(client);
+    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
+    await slide(el, 5);
+    emit(slider(el), "wt-change", { value: 6 });
+    await el.updateComplete;
+    out.resolve();
+    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
+    expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "handheld", {
+      columns: 5,
+    });
+  });
+
+  it("drops a refused setting quietly once the person has gone to another menu", async () => {
+    const out = deferred<void>();
+    const client = dinnerAtFive();
+    const el = await mountHome(client);
+    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
+    await choose(el, "home-order", "menu_first");
+    await goToDinnerHome(el, client);
+    out.reject({
+      code: "menu.home_display_invalid",
+      params: { device: "handheld", field: "order" },
+    });
+    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
+    await el.updateComplete;
+    expect(q(el, '[data-test="home-error"]')).toBeNull();
+    expect(q(el, '[data-test="home-order-error"]')).toBeNull();
+    expect(radio(el, "home-order", "home_first").checked).toBe(true);
+  });
+
+  it("keeps a setting saved after the person went to another menu off that menu's controls, and reads only that menu's home", async () => {
+    const out = deferred<void>();
+    const client = dinnerAtFive();
+    const el = await mountHome(client);
+    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
+    await slide(el, 6);
+    await goToDinnerHome(el, client);
+    const lunchReads = () =>
+      client.getMenuHome.mock.calls.filter(([id]) => id === "menu-lunch").length;
+    const before = lunchReads();
+    out.resolve();
+    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await slider(el).updateComplete;
+    expect(slider(el).value).toBe(5);
+    expect(lunchReads()).toBe(before);
+    expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "handheld", {
+      columns: 6,
+    });
+  });
+
+  it("reads the preview no second time when the person goes from the Preview tab to the Home page tab", async () => {
+    const client = api();
+    const el = await mount(client, PREVIEW_PATH);
+    await vi.waitFor(() => expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch"));
+    await vi.waitFor(() => expect(q(el, "dashboard-menu-preview")).not.toBeNull());
+    const reads = client.getMenuPreview.mock.calls.length;
+    await chooseTab(el, "home");
+    await vi.waitFor(() => expect(preview(el)).not.toBeNull());
+    expect(preview(el)!.document).toEqual(lunchDocument());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.getMenuPreview.mock.calls.length).toBe(reads);
   });
 });
 

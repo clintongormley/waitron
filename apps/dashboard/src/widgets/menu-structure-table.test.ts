@@ -1539,6 +1539,24 @@ describe("the Device Home Page row", () => {
     expect(shown(el)).toEqual(["home", ...SHORTCUT_KEYS, "root", "m-burger", "m-drinks", "m-fav"]);
   });
 
+  it("names a missing shortcut by the name it was kept under, else by its target's name", async () => {
+    const shortcuts = home().shortcuts;
+    const el = await mount({
+      home: {
+        ...home(),
+        shortcuts: [
+          { ...shortcuts[0]!, reachable: false, missingName: null },
+          { ...shortcuts[1]!, reachable: false, missingName: "Dinner Menu › Drinks" },
+        ],
+      },
+    });
+    await openHome(el);
+    expect(["home/t-burger", "home/t-drinks"].map((key) => nameOf(el, key))).toEqual([
+      t("home.missing").replace("{name}", "Burger"),
+      t("home.missing").replace("{name}", "Dinner Menu › Drinks"),
+    ]);
+  });
+
   it("offers only the two adds on the Device Home Page row", async () => {
     const el = await mount({ home: home() });
     const adds = sentAs(el, "wt-shortcut-add");

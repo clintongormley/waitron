@@ -501,6 +501,66 @@ describe("dashboard-device-home-preview", () => {
     expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
   });
 
+  describe("a section inside a section", () => {
+    const beer = () => documentSection("s-beer", "Beer", [documentProduct("mi-beer", "p-beer")]);
+    const water = () =>
+      documentSection("s-water", "Water", [documentProduct("mi-water", "p-water")]);
+    const lemonade = () => documentProduct("mi-lemonade", "p-lemonade");
+
+    /** Drinks holds the Beer and Water sections; Lemonade sits beside it. */
+    const nested = () =>
+      lunch(SHORTCUTS, [documentSection("s-drinks", "Drinks", [beer(), water()]), lemonade()]);
+
+    /** Opens Drinks, then Beer inside it. */
+    async function openBeer(el: DeviceHomePreview): Promise<void> {
+      await click(el, tile(el, "structure", "Drinks para clientes"));
+      await click(el, tile(el, "section", "Beer para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Drinks para clientes › Beer para clientes");
+      expect(names(tiles(el, "section"))).toEqual(["Beer"]);
+    }
+
+    it("opens it behind a breadcrumb naming each level, and goes back to the outer section from it", async () => {
+      const { el } = await mount({ document: nested() });
+      await openBeer(el);
+      const crumbs = [...root(el).querySelectorAll<HTMLElement>("nav.breadcrumb li wt-button")];
+      expect(crumbs.map((crumb) => crumb.textContent!.trim())).toEqual([
+        "Home",
+        "Drinks para clientes",
+      ]);
+      await click(el, crumbs[1]!);
+      expect(regions(el)).toEqual(["search", "section"]);
+      expect(breadcrumb(el)).toBe("Home › Drinks para clientes");
+      expect(names(tiles(el, "section"))).toEqual(["Beer para clientes", "Water para clientes"]);
+    });
+
+    it("goes home when a new document moves the open section out from under the one it was opened in", async () => {
+      const { el } = await mount({ document: nested() });
+      await openBeer(el);
+      el.document = lunch(SHORTCUTS, [
+        documentSection("s-drinks", "Drinks", [water()]),
+        beer(),
+        lemonade(),
+      ]);
+      await el.updateComplete;
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+    });
+
+    it("goes home when a new document leaves the open section with nothing the device shows", async () => {
+      const { el } = await mount({ document: nested() });
+      await openBeer(el);
+      // Chips is not sold separately, so Beer holds nothing a device would show.
+      el.document = lunch(SHORTCUTS, [
+        documentSection("s-drinks", "Drinks", [
+          documentSection("s-beer", "Beer", [documentProduct("mi-chips", "p-chips")]),
+          water(),
+        ]),
+        lemonade(),
+      ]);
+      await el.updateComplete;
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+    });
+  });
+
   it("lets no event from its search reach the page around it", async () => {
     const { el, host } = await mount();
     const heard: string[] = [];
