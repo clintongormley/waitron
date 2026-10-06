@@ -3685,7 +3685,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   It must first prove the token the previous ask issued, a scrypt check, so sharing a millisecond is
   unlikely, but nothing in the code rules it out.
   W105i's open point (#1260: a shift session already open when its device was moved onto a
-  kitchen-screen profile stayed open) is DONE by A298 (owner 2026-10-06, answer "a"): the move ends
+  kitchen-screen profile stayed open) is DONE by A298 (#1318; owner 2026-10-06, answer "a"): the move ends
   every session on the device in the same transaction, as Disable does.
   Left OPEN by W106 (battery, #1240): (a) the relative-time words (W106a, #1272, `wt-relative-time`)
   show the exact time in the BROWSER's time zone: the relative-time widget receives no venue time
