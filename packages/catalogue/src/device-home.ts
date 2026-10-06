@@ -27,7 +27,7 @@ export const HOME_COLUMN_RANGE: Readonly<Record<HomeDevice, { min: number; max: 
   till: { min: 6, max: 10 },
 };
 
-/** The first key of `patch` holding a value `device` cannot take, or null. An absent key is not
+/** A key of `patch` holding a value `device` cannot take, or null. An absent key is not
  * checked. The columns have no CHECK, so this is the whole of the range's enforcement. */
 export function homeDisplayProblem(
   device: HomeDevice,

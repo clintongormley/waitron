@@ -1211,7 +1211,10 @@ declare global {
     `["search", "structure"]`, no `.divider`, and the structure region still has an accessible name
     ("Full menu").
   - "draws no divider when the menu shows nothing but shortcuts do": a structure of only products
-    with no offer; regions `["search", "shortcuts"]`, no `.divider`.
+    with no offer; regions `["search", "shortcuts"]`, no `.divider`. Not written (2026-10-06):
+    the Task 5 reviewer traced `indexDocument` and found no way for the till to draw a shortcut
+    without also drawing a full-menu block, so this screen state could not be set up; Task 1's
+    `arrangeHome` unit test pins that shortcuts alone draw no divider.
   - **Review focus 4:** "clamps the columns on a narrow screen, keeping the reading order":
     Handheld 6 at 300 px wide shows 2 tracks (the existing `:467-479` arithmetic: two 104 px
     minimums and a 12 px gap) and the same reading order as at 1280 px; Till 10 at 1280 px shows 10

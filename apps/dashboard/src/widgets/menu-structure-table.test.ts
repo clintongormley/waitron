@@ -1629,6 +1629,18 @@ describe("the Device Home Page row", () => {
     expect(memberMoves).toEqual([]);
   });
 
+  it("keeps a moved shortcut's place when only the menu's nodes are refreshed", async () => {
+    const el = await mount({ home: home() });
+    await openHome(el);
+    await press(el, "home/t-burger", "ArrowDown");
+    const moved = ["home", "home/t-drinks", "home/t-burger", "home/t-chips"];
+    expect(shown(el).slice(0, 4)).toEqual(moved);
+
+    el.nodes = lunchNodes();
+    await settle(el);
+    expect(shown(el).slice(0, 4)).toEqual(moved);
+  });
+
   it("disables the grips and actions while busy", async () => {
     const el = await mount({ home: home(), busy: true });
     await openHome(el);

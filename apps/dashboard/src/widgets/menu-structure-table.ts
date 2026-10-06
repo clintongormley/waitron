@@ -77,7 +77,6 @@ interface ShortcutRow {
   name: string;
 }
 
-/** A row its grip moves within its own list. */
 type MovableRow = MemberRow | ShortcutRow;
 
 type Row = HomeRow | RootRow | MemberRow | ShortcutRow;

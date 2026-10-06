@@ -112,11 +112,11 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Each published menu's live version and its document. A version in an earlier document format,
- * which holds no VAT classes, is left out, as a menu with no live version is. A version's row is never
- * changed once written (`menu_versions` is `appendOnly()`), so each handle keeps the parsed documents
- * it has read, frozen, and reads a document again only when it is not kept or its row's content hash
- * differs from the kept one.
+ * Each published menu's live version and its document. A version in an earlier document format is
+ * left out, as a menu with no live version is. A version's row is never changed once written
+ * (`menu_versions` is `appendOnly()`), so each handle keeps the parsed documents it has read,
+ * frozen, and reads a document again only when it is not kept or its row's content hash differs
+ * from the kept one.
  */
 export async function readLiveDocuments(
   tx: Transaction,
