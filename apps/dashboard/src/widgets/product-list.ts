@@ -228,6 +228,10 @@ export class ProductList extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      /* On a phone a category's name keeps the room. */
+      wt-data-table[narrow]::part(count) {
+        display: none;
+      }
       /* A column flex box takes its first item's baseline, so the row still lines up by the name. */
       wt-data-table::part(folder-name),
       wt-data-table::part(name-stack) {

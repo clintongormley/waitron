@@ -4410,3 +4410,36 @@ describe("a category whose name wraps", () => {
     },
   );
 });
+
+describe("a category's count", () => {
+  it.each(["en-GB", "es-ES"].flatMap((locale) => [390, 1280].map((width) => ({ locale, width }))))(
+    "is hidden on a phone and shown on a wide screen ($locale, $width px)",
+    async ({ locale, width }) => {
+      const restore = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        locale: currentLocale(),
+      };
+      try {
+        setLocale(locale);
+        await page.viewport(width, 844);
+        const { el, root } = await mountTree();
+        await openRow(el, "folder:d");
+        await vi.waitFor(() => expect(root.host.hasAttribute("narrow")).toBe(width === 390));
+        const counts = [...root.querySelectorAll<HTMLElement>('[part~="count"]')];
+        expect(counts.map((count) => count.dataset.test)).toEqual(
+          expect.arrayContaining(["count-root", "count-d", "count-b", "count-f"]),
+        );
+        for (const count of counts) {
+          const test = count.dataset.test;
+          expect(count.textContent!.trim(), test).not.toBe("");
+          if (width === 390) expect(getComputedStyle(count).display, test).toBe("none");
+          else expect(count.getBoundingClientRect().width, test).toBeGreaterThan(0);
+        }
+      } finally {
+        setLocale(restore.locale);
+        await page.viewport(restore.width, restore.height);
+      }
+    },
+  );
+});
