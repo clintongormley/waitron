@@ -761,6 +761,7 @@ describe("diffMenuDocuments", () => {
       {
         kind: "section_added",
         sectionId: f.drinks,
+        parentSectionIds: [],
         name: "Drinks",
         under: [],
         source: "this_menu",
@@ -768,6 +769,7 @@ describe("diffMenuDocuments", () => {
       {
         kind: "section_added",
         sectionId: f.beer,
+        parentSectionIds: [f.drinks],
         name: "Beer",
         under: ["Drinks"],
         source: "included_menu",
@@ -806,7 +808,7 @@ describe("diffMenuDocuments", () => {
       moveMember(tx, f.lunchRoot, await memberOf(f.lunchRoot, { productId: f.soup }), 0),
     );
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
-      { kind: "order_changed", list: [], source: "this_menu" },
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
     ]);
   });
 
@@ -819,6 +821,7 @@ describe("diffMenuDocuments", () => {
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
       {
         kind: "order_changed",
+        listSectionId: f.drinks,
         list: ["Drinks"],
         source: "included_menu",
         includedMenu: { id: f.drinksMenu, name: "Drinks" },
@@ -863,6 +866,7 @@ describe("diffMenuDocuments", () => {
       {
         kind: "section_removed",
         sectionId: f.beer,
+        parentSectionIds: [f.drinks],
         name: "Beer",
         under: ["Drinks"],
         source: "included_menu",
@@ -986,7 +990,14 @@ describe("diffMenuDocuments", () => {
       .from(sections)
       .where(eq(sections.id, f.beer));
     expect(diffMenuDocuments(live, await build(f.lunch))).toEqual([
-      { kind: "section_added", sectionId: f.beer, name: "Beer", under: [], source: "this_menu" },
+      {
+        kind: "section_added",
+        sectionId: f.beer,
+        parentSectionIds: [],
+        name: "Beer",
+        under: [],
+        source: "this_menu",
+      },
       {
         kind: "product_moved",
         productId: f.lemonade,

@@ -231,11 +231,12 @@ export type MenuChange = {
   | {
       kind: "section_added" | "section_removed";
       sectionId: string;
+      parentSectionIds: string[];
       name: string;
       under: string[];
     }
   | { kind: "section_changed"; sectionId: string; name: string; fields: SectionChangeField[] }
-  | { kind: "order_changed"; list: string[] }
+  | { kind: "order_changed"; listSectionId: string | null; list: string[] }
   | { kind: "home_shortcuts_changed" }
   | { kind: "home_display_changed"; device: HomeDevice }
   | { kind: "menu_renamed"; from: string; to: string }

@@ -2060,7 +2060,8 @@ The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
 [implementation plan](superpowers/plans/2026-10-06-w95-menu-preview.md) define a customer-language
 hierarchy, product inspection and linked before/after changes, with explicit translation
 fallbacks. Implementation is in progress: the preview envelope now carries the frozen live
-document, and the occurrence index preserves repeated nested paths. Linked change enrichment
+document, the occurrence index preserves repeated nested paths, and section/list changes carry
+ID paths independent of their displayed names. Linked change enrichment
 and the renderer remain pending. It includes W89's obsolete Preview clash label and
 the phone overflow below; neither is marked fixed by the planning work.
 

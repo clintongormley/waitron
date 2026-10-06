@@ -1446,8 +1446,22 @@ describe("previewMenu", () => {
       alsoOn: ["Dinner Menu"],
     };
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
-      { kind: "section_removed", sectionId: f.beer, name: "Beer", under: ["Drinks"], ...also },
-      { kind: "section_added", sectionId: wine, name: "Wine", under: ["Drinks"], ...also },
+      {
+        kind: "section_removed",
+        sectionId: f.beer,
+        parentSectionIds: [f.drinks],
+        name: "Beer",
+        under: ["Drinks"],
+        ...also,
+      },
+      {
+        kind: "section_added",
+        sectionId: wine,
+        parentSectionIds: [f.drinks],
+        name: "Wine",
+        under: ["Drinks"],
+        ...also,
+      },
       {
         kind: "product_removed",
         productId: f.lager,
@@ -1461,7 +1475,7 @@ describe("previewMenu", () => {
     await publish(f.dinner);
     await app(async (tx) => moveMember(tx, f.drinks, await memberOf(f.drinks, f.lemonade), 5));
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
-      { kind: "order_changed", list: ["Drinks"], ...also },
+      { kind: "order_changed", listSectionId: f.drinks, list: ["Drinks"], ...also },
     ]);
   });
 
@@ -1495,7 +1509,7 @@ describe("previewMenu", () => {
     await app(async (tx) => moveMember(tx, f.lunchRoot, await memberOf(f.lunchRoot, f.soup), 0));
     const diffs = vi.spyOn(menuDocument, "diffEntries");
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
-      { kind: "order_changed", list: [], source: "this_menu" },
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
     ]);
     expect(diffs).toHaveBeenCalledOnce();
   });
@@ -1584,7 +1598,7 @@ describe("previewMenu", () => {
     await publish(f.lunch);
     await app(async (tx) => moveMember(tx, f.lunchRoot, await memberOf(f.lunchRoot, f.soup), 0));
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
-      { kind: "order_changed", list: [], source: "this_menu" },
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
     ]);
   });
 

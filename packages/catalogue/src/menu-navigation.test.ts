@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DocumentMember, MenuDocument } from "./menu-document-types.js";
+import { diffMenuDocuments } from "./menu-document.js";
 import { indexMenuOccurrences, menuTargetKey } from "./menu-navigation.js";
 
 function section(id: string, members: DocumentMember[] = []): DocumentMember {
@@ -240,6 +241,174 @@ describe("menuTargetKey", () => {
       '["home","till","columns"]',
       '["home","handheld","columns"]',
       '["home","till","tiles"]',
+    ]);
+  });
+});
+
+describe("diff identity paths", () => {
+  it("records every added descendant beneath repeated included roots using ID paths", () => {
+    const drinks = section("drinks", [section("beer")]);
+    expect(
+      diffMenuDocuments(document([]), document([drinks, section("favourites", [drinks])])),
+    ).toEqual([
+      {
+        kind: "section_added",
+        sectionId: "drinks",
+        parentSectionIds: [],
+        name: "Same staff heading",
+        under: [],
+        source: "this_menu",
+      },
+      {
+        kind: "section_added",
+        sectionId: "drinks",
+        parentSectionIds: ["favourites"],
+        name: "Same staff heading",
+        under: ["Same staff heading"],
+        source: "this_menu",
+      },
+      {
+        kind: "section_added",
+        sectionId: "beer",
+        parentSectionIds: ["drinks"],
+        name: "Same staff heading",
+        under: ["Same staff heading"],
+        source: "this_menu",
+      },
+      {
+        kind: "section_added",
+        sectionId: "beer",
+        parentSectionIds: ["favourites", "drinks"],
+        name: "Same staff heading",
+        under: ["Same staff heading", "Same staff heading"],
+        source: "this_menu",
+      },
+      {
+        kind: "section_added",
+        sectionId: "favourites",
+        parentSectionIds: [],
+        name: "Same staff heading",
+        under: [],
+        source: "this_menu",
+      },
+    ]);
+  });
+
+  it("keeps removed occurrences distinct even when both parents have identical names", () => {
+    const live = document([section("a", [section("child")]), section("b", [section("child")])]);
+    const proposed = document([section("a"), section("b")]);
+    expect(diffMenuDocuments(live, proposed)).toEqual([
+      {
+        kind: "section_removed",
+        sectionId: "child",
+        parentSectionIds: ["a"],
+        name: "Same staff heading",
+        under: ["Same staff heading"],
+        source: "this_menu",
+      },
+      {
+        kind: "section_removed",
+        sectionId: "child",
+        parentSectionIds: ["b"],
+        name: "Same staff heading",
+        under: ["Same staff heading"],
+        source: "this_menu",
+      },
+    ]);
+  });
+
+  it("identifies root and nested reorder lists independently of their names", () => {
+    const live = document([section("a", [section("x"), section("y")]), section("b")]);
+    const proposed = document([section("b"), section("a", [section("y"), section("x")])]);
+    expect(diffMenuDocuments(live, proposed)).toEqual([
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
+      {
+        kind: "order_changed",
+        listSectionId: "a",
+        list: ["Same staff heading"],
+        source: "this_menu",
+      },
+    ]);
+  });
+});
+
+describe("diff path comparisons", () => {
+  it("does not merge different ID paths that contain separators", () => {
+    const live = document([
+      section("a/b", [section("c", [section("child")])]),
+      section("a", [section("b/c")]),
+    ]);
+    const proposed = document([
+      section("a/b", [section("c")]),
+      section("a", [section("b/c", [section("child")])]),
+    ]);
+    expect(diffMenuDocuments(live, proposed)).toEqual([
+      {
+        kind: "section_removed",
+        sectionId: "child",
+        parentSectionIds: ["a/b", "c"],
+        name: "Same staff heading",
+        under: ["Same staff heading", "Same staff heading"],
+        source: "this_menu",
+      },
+      {
+        kind: "section_added",
+        sectionId: "child",
+        parentSectionIds: ["a", "b/c"],
+        name: "Same staff heading",
+        under: ["Same staff heading", "Same staff heading"],
+        source: "this_menu",
+      },
+    ]);
+  });
+});
+
+describe("diff cyclic paths", () => {
+  it("cuts a current-path cycle without losing another occurrence of its descendants", () => {
+    const loop = section("loop", [section("child")]);
+    if (loop.kind !== "section") throw new Error("fixture is a section");
+    loop.members.push(section("loop", [section("hidden")]));
+    expect(diffMenuDocuments(document([]), document([loop, section("other", [loop])]))).toEqual([
+      {
+        kind: "section_added",
+        sectionId: "loop",
+        parentSectionIds: [],
+        name: "Same staff heading",
+        under: [],
+        source: "this_menu",
+      },
+      {
+        kind: "section_added",
+        sectionId: "loop",
+        parentSectionIds: ["other"],
+        name: "Same staff heading",
+        under: ["Same staff heading"],
+        source: "this_menu",
+      },
+      {
+        kind: "section_added",
+        sectionId: "child",
+        parentSectionIds: ["loop"],
+        name: "Same staff heading",
+        under: ["Same staff heading"],
+        source: "this_menu",
+      },
+      {
+        kind: "section_added",
+        sectionId: "child",
+        parentSectionIds: ["other", "loop"],
+        name: "Same staff heading",
+        under: ["Same staff heading", "Same staff heading"],
+        source: "this_menu",
+      },
+      {
+        kind: "section_added",
+        sectionId: "other",
+        parentSectionIds: [],
+        name: "Same staff heading",
+        under: [],
+        source: "this_menu",
+      },
     ]);
   });
 });

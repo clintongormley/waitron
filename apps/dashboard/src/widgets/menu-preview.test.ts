@@ -146,6 +146,7 @@ it("words every kind of change, each with where it came from", async () => {
       {
         kind: "section_added",
         sectionId: "s-desserts",
+        parentSectionIds: [],
         name: "Desserts",
         under: [],
         source: "this_menu",
@@ -160,6 +161,7 @@ it("words every kind of change, each with where it came from", async () => {
       {
         kind: "section_removed",
         sectionId: "s-specials",
+        parentSectionIds: [],
         name: "Specials",
         under: [],
         source: "this_menu",
@@ -167,6 +169,7 @@ it("words every kind of change, each with where it came from", async () => {
       {
         kind: "section_removed",
         sectionId: "s-beer",
+        parentSectionIds: ["s-drinks"],
         name: "Beer",
         under: ["Drinks"],
         source: "included_menu",
@@ -178,8 +181,13 @@ it("words every kind of change, each with where it came from", async () => {
         fields: ["names", "image", "color"],
         source: "included_menu",
       },
-      { kind: "order_changed", list: [], source: "this_menu" },
-      { kind: "order_changed", list: ["Drinks"], source: "included_menu" },
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
+      {
+        kind: "order_changed",
+        listSectionId: "s-drinks",
+        list: ["Drinks"],
+        source: "included_menu",
+      },
       { kind: "home_shortcuts_changed", source: "this_menu" },
       { kind: "home_display_changed", device: "till", source: "this_menu" },
       { kind: "menu_renamed", from: "Midday Menu", to: "Lunch Menu", source: "this_menu" },
@@ -219,7 +227,7 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
         to: [[], ["Mains", "Hot"]],
         source: "this_menu",
       },
-      { kind: "order_changed", list: [], source: "this_menu" },
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
       {
         kind: "price_changed",
         productId: "p-burger",
@@ -480,7 +488,9 @@ it("says a menu never published has no live version, and offers to publish it", 
 
 it("names the one menu on the publish button, and asks to publish the hash it previewed", async () => {
   const el = await mount({
-    preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),
+    preview: preview([
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
+    ]),
   });
   const asked: unknown[] = [];
   el.addEventListener("wt-menu-publish", (event) => asked.push((event as CustomEvent).detail));
@@ -528,7 +538,9 @@ it("judges whether there is anything to publish by the state read with the previ
 
 it("keeps the click that asks for a publish or a retry from reaching the page around it", async () => {
   const { el, host } = await mountIn({
-    preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),
+    preview: preview([
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
+    ]),
   });
   const clicks: EventTarget[] = [];
   host.addEventListener("click", (event) => clicks.push(event.target!));
@@ -611,7 +623,9 @@ it.each(["en-GB", "es-ES"])(
 
 it("holds the publish button while a publish is out, saying what it is doing", async () => {
   const el = await mount({
-    preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),
+    preview: preview([
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
+    ]),
     publishing: true,
   });
   const button = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!;
@@ -695,7 +709,9 @@ function topNames(tree: MenuStructureTree): string[] {
 
 it("shows the whole menu the publish would make live, read-only, under its own heading", async () => {
   const el = await mount({
-    preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),
+    preview: preview([
+      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
+    ]),
   });
   expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it will be published");
   const tree = documentView(el);
