@@ -1885,9 +1885,10 @@ Left open:
 Planned in `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`: setup's side and the
 pack as **Task 6** (`feat/content-languages-by-region`, built after Task 1 and before Task 3), the
 demo's side in Tasks 3 and 4. Cases the decisions leave open, built with the plan's default unless
-the owner says otherwise (plan, "Open points"): a Spanish venue with no province requires nothing;
-the Basque Country and Navarre keep no rule; receipts outside Catalonia stay free, Spanish by
-default.
+the owner says otherwise (plan, "Open points"): a Spanish venue with no known province requires
+nothing (setup cannot create one; the owner's reason for Spanish leans towards requiring it there
+too); receipts outside Catalonia stay free, Spanish by default. The new rules reach existing
+venues at their next start; only their stored language list waits for a reset.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A

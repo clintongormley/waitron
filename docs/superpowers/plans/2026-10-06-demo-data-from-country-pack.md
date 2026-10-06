@@ -363,7 +363,9 @@ check.
    require Spanish on printed menus"_; Catalan and Spanish in Catalonia and the Valencian Community
    (unchanged), with _"'Valenciano' is Catalan (`ca`) for now"_; **Spanish and Catalan in the
    Balearic Islands**, _"Stricter than the law … the owner's choice"_; Galician and Spanish in
-   Galicia (unchanged); the Basque Country and Navarre _"no change"_. Built in Task 6. **Replaces**
+   Galicia (unchanged); the Basque Country and Navarre _"no change"_ — named by the owner, so
+   "every area not named" does not reach them, and they keep no language rule (were one supported,
+   the function would still start it with Spanish and English). Built in Task 6. **Replaces**
    this plan's earlier Balearic row ("the pack requires no language, so the demo carries none"),
    which applied the earlier answer's _"only where the area requires it"_ to a pack that then
    required nothing there. That wording still holds; the Balearic Islands now require Catalan.
@@ -398,10 +400,10 @@ overrule it:
   (`packages/provisioning/src/venue-plan.ts:194`; read, not run); two boot cases rely on it
   (`apps/server/src/boot.test.ts:3352-3387`: one saves a French-only list and expects the
   missing-text refusal, which a required Spanish would turn into `content.language_required`; the
-  other pins `required: []`). Default: leave it so.
-- **The Basque Country and Navarre** keep no language rule (the owner's _"no change"_), though the
-  words _"every area not named below"_ could be read to cover them. No venue can be set up there.
-  Default: no rule; were one supported, the function would still start it with Spanish and English.
+  other pins `required: []`). Default: leave it so, since setup cannot create such a venue. The
+  owner's reason for requiring Spanish (_"service must be offered in Spanish"_) leans the other way:
+  it applies to a Spanish venue whatever its province, so the owner may prefer Spanish required
+  there too — a country-level rule, which would change those two boot cases.
 - **Receipts in the Valencian Community, the Balearic Islands and Galicia** stay free to choose with
   Spanish the default (`packages/country-es/src/spain.test.ts:226-235`), while their content
   default becomes the regional language. The decisions do not mention receipts outside Catalonia.
@@ -423,10 +425,16 @@ overrule it:
   existing public seat (`fiscalSlot`, `FiscalContribution.makeBackend`). No task
   touches `computeHuella`, the chain, numbering, issuance, `registros_facturacion`, any fiscal
   module's package or `recordSale`'s builder.
-- No migration in any task. Existing venues — demo or real — change only when reset (pre-live rule,
-  CLAUDE.md §3): Task 6 changes the languages a venue STARTS with, which only setup's provisioning
-  seed writes, and the seed never overwrites a saved row (`onConflictDoNothing`,
-  `packages/catalogue/src/provisioning.ts:86-89`).
+- No migration in any task. An existing venue's STORED content-language row changes only when the
+  venue is reset (pre-live rule, CLAUDE.md §3): Task 6 changes the languages a venue starts with,
+  which only setup's provisioning seed writes, and the seed never overwrites a saved row
+  (`onConflictDoNothing`, `packages/catalogue/src/provisioning.ts:86-89`). The required-language
+  RULES are another matter: the server reads them from the pack at every start
+  (`readVenueContentLanguageRules`, `apps/server/src/boot.ts:1390-1392`), so Task 6's rules apply
+  to every venue from its first start on the new version — an existing Madrid venue sees Spanish
+  marked **Required**, and the next save on its Content languages page puts back a required
+  language its row lacks (the screen adds every missing required language to a save,
+  `apps/dashboard/src/screens/content-languages-screen.test.ts:192-227`).
 - A country pack stays browser-safe: plain values only, no import beyond `@waitron/country`
   (CLAUDE.md §3).
 - Content-language codes are bare (`ca`, never `ca-ES`) wherever content is stored
@@ -473,7 +481,8 @@ overrule it:
    and English; a Galician venue with Galician (the default), Spanish and English and no Catalan;
    the Valencian Community and the Balearic Islands with Catalan (the default), Spanish and
    English; Catalonia unchanged; English required nowhere. Pinned in Task 6. A venue already set
-   up keeps its row (the existing case at `packages/catalogue/src/provisioning.test.ts:95-101`).
+   up keeps its stored row (the existing case at `packages/catalogue/src/provisioning.test.ts:95-101`)
+   but takes the new required-language rules at its next start.
 
 ---
 
@@ -659,16 +668,20 @@ own pair, as it does today. It is placed here, before the demo's language work, 
 4 can take the demo's languages from the function it adds instead of building a rule of their own.
 
 **What it must NOT change:**
-- No migration, and no venue already set up: the provisioning seed never overwrites a saved row
+- No migration, and no venue's stored row: the provisioning seed never overwrites a saved row
   (`onConflictDoNothing`, `packages/catalogue/src/provisioning.ts:86-89`; pinned by "preserves
   authored languages and reuses the initial menu on another seed",
-  `packages/catalogue/src/provisioning.test.ts:95-101`). Existing venues change only when reset
-  (CLAUDE.md §3, pre-live rule).
+  `packages/catalogue/src/provisioning.test.ts:95-101`). The stored row changes only when the venue
+  is reset (CLAUDE.md §3, pre-live rule). The new required-language rules, though, reach every
+  venue from its first start on the new version, because the server reads them from the pack at
+  start (`apps/server/src/boot.ts:1390-1392`): an existing Madrid venue sees Spanish marked
+  **Required**, and its next Content languages save puts back a required language its row lacks
+  (Global Constraints).
 - Receipt languages (`invoiceLocales`, `fixedReceiptLocale`), the areas' display languages
   (`defaultLocale`, pinned at `packages/country-es/src/spain.test.ts:82-102`) and the two
   foreign-language notices stay exactly as they are.
-- No screen code: the Content languages page already marks a required language and hides its
-  **Remove** from the rules it is given.
+- No screen logic: the Content languages page already marks a required language and hides its
+  **Remove** from the rules it is given. Only the wording of three messages changes (Files).
 - The Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`) still
   copies the saved row without the required-language check; that stays open in the backlog.
 - `docs/compliance/regional-language-rules.md` stays as it is: it describes the law and states no
@@ -698,13 +711,35 @@ own pair, as it does today. It is placed here, before the demo's language work, 
   — the sentence "A venue in Spain starts with Spanish, Catalan and English: in Catalonia Catalan is
   the default, elsewhere Spanish, and a venue in Galicia also gets Galician. A venue anywhere else
   starts with one language, worked out from where it is." becomes, for example: "A new venue starts
-  with the languages its region requires, plus English. In Spain every region requires Spanish;
-  Catalonia, the Valencian Community and the Balearic Islands also require Catalan, and Galicia
-  Galician, and there that language is the default. Elsewhere in Spain Spanish is the default. A
-  venue in another country starts with its country's language and English."
+  with the languages Waitron keeps enabled for its region, plus English. In Spain Waitron keeps
+  Spanish enabled in every region, and Catalan as well in Catalonia, the Valencian Community and
+  the Balearic Islands, and Galician in Galicia; there that regional language is the default.
+  Elsewhere in Spain Spanish is the default. A venue in another country starts with its country's
+  language and English." And `:21-22`, "Some regions have rules about the languages a menu uses. A
+  language your venue's region requires is marked **Required**", becomes, for example: "Waitron
+  keeps some languages enabled for every venue in a region — the ones a regional law asks for, and
+  Spanish everywhere in Spain. Such a language is marked **Required**". In Madrid the requirement
+  is the owner's choice, not a law, so no text may say the region requires it.
+- Modify: `apps/dashboard/src/i18n/codes.ts:172-173` (`content.language_required`) — "This venue's
+  region requires that language, so it cannot be removed." / "La región del local exige ese
+  idioma, así que no se puede quitar." become, for example, "Waitron keeps this language enabled
+  for venues in this region, so it cannot be removed." / "Waitron mantiene este idioma activado en
+  los locales de esta región, así que no se puede quitar."
+- Modify: `apps/dashboard/src/i18n/strings.ts:404-407` and `:2700-2703`
+  (`content_gaps.required_warning_one` and `content_gaps.required_warning`) — "{language} is
+  required in this region, and …" / "El {language} es obligatorio en esta región y …" become, for
+  example, "{language} stays enabled for venues in this region, and …" / "El {language} se mantiene
+  activado en los locales de esta región y …", the rest of each sentence unchanged.
+- Modify: the comment on `requiredContentLocales`, `packages/country/src/country.ts:29` ("Locales
+  Waitron keeps enabled for a venue in this area, following its language rules.") — drop
+  "following its language rules", which reads as a law; the pack's own comments say where each
+  list comes from.
 - Test: `packages/country-es/src/spain.test.ts`, `packages/country-packs/src/registry.test.ts`,
-  `packages/catalogue/src/provisioning.test.ts`, `apps/server/src/venue-locale.test.ts` (listed
-  changes, table at the end, plus new cases).
+  `packages/catalogue/src/provisioning.test.ts`, `apps/server/src/venue-locale.test.ts`,
+  `apps/dashboard/src/i18n/codes.test.ts`, `apps/dashboard/src/screens/content-languages-screen.test.ts`
+  (listed changes, table at the end, plus new cases). Run the two dashboard files with
+  `pnpm --filter @waitron/dashboard exec vitest run src/i18n/codes.test.ts src/screens/content-languages-screen.test.ts`
+  (a browser-mode package: check free memory first, CLAUDE.md §2).
 
 **Interfaces:**
 - Produces (Tasks 3, 4 and 2 consume it):
@@ -861,8 +896,9 @@ it("requires Spanish, with Spanish the default, everywhere else", () => {
   languages page in both themes and at phone width. Madrid: Spanish (default, **Required**, no
   **Remove**) and English. Balearic Islands: Catalan (default, Required), Spanish (Required) and
   English. Prepare rather than Demo, because until Task 4 the demo seed still replaces setup's row.
-- [ ] **Step 7: Commit, backlog** — A9's "Product languages are hard-coded at setup" closes (the
-  Prepare-to-Live configuration copy that skips the check stays open, in a line of its own), and
+- [ ] **Step 7: Commit, backlog** — A9's "Product languages are hard-coded at setup" closes, except
+  the two writers that still skip the required-language check, kept in a line of their own: the
+  demo seed until Task 4, and the Prepare-to-Live configuration copy, which stays open; and
   the "Content languages per region" entry (A2) notes that setup's half is built —
   **`finish-branch`**.
   The change reaches three packages and what the server's content-language rules answer for every
@@ -1415,6 +1451,8 @@ number it added elsewhere) reads `947948aa2`; the files it cites were unchanged 
 | 6 | `packages/country-packs/src/registry.test.ts:109-115` | "requires nothing for a Madrid venue or a Spanish venue with no province" splits: Madrid → `{ required: ["es"], official }`; no province stays `{ required: [], official }` | assertion change — decision 9 |
 | 6 | `packages/country-packs/src/registry.test.ts:125-134` | "gives Catalan as a new Barcelona venue's default content language and nothing elsewhere": Valencia → `"ca"` and Madrid → `"es"` move out of the `toBeUndefined()` loop; `XX` and no country stay undefined; the title says the regional language where one is required, Spanish elsewhere in Spain | assertion change — decision 12 |
 | 6 | `packages/catalogue/src/provisioning.test.ts:68-80` | rows: Madrid `["es", "ca", "en"]` → `["es", "en"]`; A Coruña default `es` and `["es", "ca", "en", "gl"]` → default `gl` and `["gl", "es", "en"]`; Bizkaia `["es", "ca", "en"]` → `["es", "en"]`; Barcelona, United Kingdom and `XX` unchanged; new rows Valencia and Illes Balears (default `ca`, `["ca", "es", "en"]`); the comment at `:69-73`, which points at the backlog entry Task 6 closes, says the list is the area's required languages plus English | assertion change — decisions 9, 10 and 12 |
+| 6 | `apps/dashboard/src/i18n/codes.test.ts:384-391` | "says a required content language cannot be removed, in both languages": both expected sentences follow the new `content.language_required` wording | assertion change — decision 9 (the requirement is not always a law) |
+| 6 | `apps/dashboard/src/screens/content-languages-screen.test.ts:1077-1092` | "writes the required-language warning in English when the UI is in English": "Catalan is required in this region, and 2 names …" follows the new `content_gaps.required_warning` wording (the cases at `:817` and `:887` build their expectation through `t(…)` and need no change) | assertion change — decision 9 |
 | 6 | `apps/server/src/venue-locale.test.ts:87-100` | "requires nothing for a Madrid venue" → "requires Spanish for a Madrid venue", `{ required: ["es"], official }` | assertion change — decision 9 |
 | 4 | `apps/server/scripts/demo-seed/seed-catalogue.test.ts:286-289` | content languages `{ defaultLanguage: "en", languages: ["en", "es"] }` → `{ defaultLanguage: "es", languages: ["es", "en"] }` (the Madrid test venue: its required Spanish plus English, Spanish the default) | assertion change — decisions 10 to 12 (and 2 and 3 before them) |
 | 5 | `apps/server/src/demo-seed.test.ts:10-12` | the `venueWithLocales` helper also sets `admin.locale` to its first receipt language, so the existing cases keep their values | fixture grows |
@@ -1490,6 +1528,14 @@ still reachable (a Spanish venue with no province requires nothing), so it stays
   (decision 9); Valencian as a language of its own stays in the parked C125 work.
 - **A venue set up before Task 6 keeps the languages it started with** until it is reset: no
   migration, and the provisioning seed never overwrites a saved row (pre-live rule, CLAUDE.md §3).
+  The new required-language rules reach it at its first start on the new version all the same
+  (Global Constraints), so its Content languages page can show a required language its row lacks
+  until the next save there puts it back.
+- **A country's per-area display language no longer picks its venues' starting content language.**
+  Task 6 deletes `geographicLocales` (`packages/catalogue/src/provisioning.ts:15-25`), through which
+  a non-Spanish pack's area `defaultLocale` could choose the first language; the new function uses
+  the area's `defaultContentLocale`, else the pack's `defaultLocale`. Nothing changes today: the
+  only non-Spanish pack, the United Kingdom's, has no areas.
 - **The Prepare-to-Live configuration copy still skips the required-language check**
   (`packages/catalogue/src/configuration-transfer.ts`), as before; it stays in the backlog when
   Task 6 closes the rest of "Product languages are hard-coded at setup".
@@ -1535,6 +1581,9 @@ still reachable (a Spanish venue with no province requires nothing), so it stays
   rows of Tasks 3 and 4. Why Task 6 is its own task rather than part of Task 3 or 4: it changes real
   venues, it touches no demo file, and the demo's rule then has nothing to decide. It was written
   by reading the code at `947948aa2` and grepping for the tests named in the table; nothing was
-  run, so every "Expected" in Task 6 is a prediction its first run checks. The amendment was not
-  re-read by a fresh-context reviewer before it was committed; that read is owed before Task 6
-  starts (the watcher note of 17:23 asks for one).
+  run, so every "Expected" in Task 6 is a prediction its first run checks. A fresh-context
+  reviewer then read it (reading only) and found one claim wider than the code — existing venues
+  were said to change only on reset, true of the stored row but not of the required-language
+  rules, which the server reads at every start — plus wording that called Waitron's own choice a
+  regional requirement, two open points that needed restating, an incomplete list of writers that
+  skip the check, and a missing known limit; all were corrected in the next commit.
