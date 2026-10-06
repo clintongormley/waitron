@@ -1326,3 +1326,52 @@ Synthetic unload events check registration/cancellation, not a browser-native re
 
 Task 4 remains partial: bill payment and other audited modal owners are still open. Tasks 5–6
 remain open. Neither W69 PR is ready for finishing.
+
+## Bill payment entry checkpoint — 2026-10-06
+
+On the W69 branch, Close and native Escape protect the payment entry's normalized active request
+values: selected item/unit pairs, contribution/share, cash, card tip/reference and reader choice.
+Keep preserves raw fields and returns focus; Discard restores only local values before closing.
+Back from cash confirmation covers its separate staged tip, retaining the payment entry. Clean
+or reverted entry and a tip-free Back remain exempt. Busy transitions abort outstanding answers;
+refusal and balance refresh retain the draft. Disconnect unregisters scopes, and reconnect keeps
+the original entry baseline. Successful payment clears its entry synchronously in the actual
+app's answer handler, before the following table read. Submission bodies and money checks remain
+unchanged in the focused suites; no fiscal source or golden assertion changed in this checkpoint.
+
+Observed RED: the first widget run failed all eight cases at missing question/dirty-state
+assertions. The actual app's acceptance probe later printed `[true]` for dirty state at its first
+following table read, rather than `[false]`. After the synchronous acceptance boundary, that probe
+passed. Its first green attempt had a wrong new request expectation (it included the bill ID and
+omitted applied/tip amounts); the existing `sent()` helper returns only the request body, so the
+new assertion was corrected without changing production requests.
+
+Focused verification commands:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/bill-pay-dialog.unsaved.test.ts src/widgets/bill-pay-dialog.test.ts src/widgets/bill-pay-dialog.a11y.test.ts src/till-app-bill-payments.test.ts src/till-app.test.ts
+pnpm --filter @waitron/till exec vitest run src/widgets/bill-pay-dialog.unsaved.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/till typecheck
+```
+
+The five-suite run passed 903 tests before the final untouched-form control was added; the final
+widget run passed 13. Both unedited fiscal suites passed 20 tests. Seven separate deletions in an
+independently installed copy each produced one intended failure and one passing untouched-Close
+control: Close, Escape, input notification, tip Back, busy invalidation, reconnect baseline and
+host acceptance. Restoring that copy passed eight selected cases (112 explicitly skipped).
+
+The temporary visual probe passed eight EN/ES, light/dark, 390/1280 flows, with 16 axe scans and
+16 inspected captures of the entry and warning. Artifacts are retained in Lane E's local
+`receipts/w69-bill-pay-20261006`; the probe and its captures were removed from source. Till types,
+changed-file lint and formatting passed after removal of the temporary probe. Initial import,
+probe-unused-helper and request-fixture failures remain in the receipts, not counted as passes.
+
+Changed existing check: `bill-pay-dialog.test.ts`, “closes from its Close button,” retains exactly
+one close event, now waiting for the native close report. The synchronous manually dispatched
+close-event assertion remains unchanged. This is the approved design's request-close route.
+
+Task 4 remains partial. Ingredient entry, Units reassignment and other remaining audited modal
+owners, and Tasks 5–6 pages/history/navigation/native reload, remain open. Existing shift and
+purchase hooks remain on the branch; their host coverage still belongs to the final audit. Neither
+proposed W69 PR is ready.

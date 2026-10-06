@@ -1194,8 +1194,12 @@ Escape on the branch. Keep retains the inputs; Discard changes only local entry.
 result selection remain exempt. Collection success releases the draft before the following
 station read, including when that read fails. Focused widget and real till-app checks cover these
 boundaries, busy input, reconnect and stale answers.
-Bill payment and remaining modal owners, followed by page/history/navigation work,
-still keep W69 incomplete.
+Bill payment now protects edited cash, item/unit choices, contribution/share and card entry
+through Close/native Escape on the branch. Back from confirmation protects its staged tip while
+retaining payment entry. Clean/reverted entry stays exempt, and acceptance clears its scope before
+the following table read. Focused widget and actual till-app tests cover these boundaries,
+refusal, busy transitions, reconnect and stale answers. Remaining modal owners, followed by
+page/history/navigation work, still keep W69 incomplete.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
 redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue

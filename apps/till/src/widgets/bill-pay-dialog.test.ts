@@ -682,7 +682,7 @@ describe("till-bill-pay-dialog: refusals and answers", () => {
     const el = await mount();
     const closed = capture(el, "bill-pay-close");
     await click(el, "[data-pay-close]");
-    expect(closed).toHaveLength(1);
+    await expect.poll(() => closed).toHaveLength(1);
   });
 });
 

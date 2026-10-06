@@ -715,6 +715,48 @@ describe("till-app: the three ways to pay part of a bill", () => {
       previewBillPayment.mock.invocationCallOrder[0]!,
     );
   });
+  it("accepted bill payment retires dirty entry before the following table read", async () => {
+    let accepted = false;
+    const dirtyAtRead: boolean[] = [];
+    const { el } = await mountApp({
+      previewBillPayment: vi.fn().mockResolvedValue(cash("40.00", "10.00")),
+      takeBillPayment: vi.fn(async () => {
+        accepted = true;
+        return takenOf(
+          { applied: "40.00", change: "10.00" },
+          { received: "40.00", outstanding: "80.00" },
+        );
+      }),
+      getTablesState: vi.fn(async () => {
+        if (accepted) {
+          const event = new Event("beforeunload", { cancelable: true });
+          window.dispatchEvent(event);
+          dirtyAtRead.push(event.defaultPrevented);
+        }
+        return [mesa()];
+      }),
+    });
+    await openTable(el);
+    await openDialog(el, "items");
+    await press(el, 'input[name="line"][value="1"]');
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect.poll(() => dirtyAtRead.length).toBeGreaterThan(0);
+    expect(dirtyAtRead).toEqual([false]);
+    expect(sent()).toEqual([
+      {
+        kind: "items",
+        lines: [{ lineNo: 1 }],
+        method: "cash",
+        tendered: "50",
+        applied: "40.00",
+        tip: "0.00",
+        submissionId: expect.any(String),
+      },
+    ]);
+  });
+
   it("pays for chosen items, then a contribution, then an equal share, showing the balance after each", async () => {
     const paidPaella = [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }];
     const answers = [

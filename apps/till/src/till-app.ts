@@ -95,6 +95,7 @@ import "./widgets/make-now.js";
 import "./widgets/dead-ends-dialog.js";
 import type { DeadEndsDecision } from "./widgets/dead-ends-dialog.js";
 import type {
+  TillBillPayDialog,
   PayLine,
   PayRefusal,
   PayRequest,
@@ -7344,6 +7345,7 @@ export class TillApp extends LitElement {
       };
       return;
     }
+    this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
     if (result.invoice !== undefined) {
       this.#closeBillPaying();
       this.result = result.invoice;
