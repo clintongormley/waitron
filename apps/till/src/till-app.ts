@@ -521,6 +521,7 @@ function lineWriteError(error: unknown): CounterError {
  * the generic "try again" would send the operator round the same refusal. */
 const ACTIONABLE_REFUSALS = new Set([
   "device.forbidden_action",
+  "device.profile_changed",
   "order.payment_in_flight",
   "product.unavailable",
   "product.not_sold_separately",
