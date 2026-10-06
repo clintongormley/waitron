@@ -524,7 +524,58 @@ export class PrintersScreen extends LitElement {
   @state() private loading = true;
   @state() private addingAgent = false;
   @state() private addingPrinter = false;
+  #addPrinterOpening = 0;
   @state() private namingPrinter: DiscoveredPrinter | null = null;
+  #printerNameScope?: DraftScope<string>;
+  #printerNameLeave?: LeaveCoordinator;
+  #printerNameOpening = 0;
+  readonly #beforePrinterNameClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.submitting ||
+    !this.#printerNameScope ||
+    (await this.#printerNameLeave!.request({
+      scopes: [this.#printerNameScope.id],
+      reason,
+      proceed() {},
+    })) === "proceeded";
+
+  #namePrinter(device: DiscoveredPrinter): void {
+    this.#disposePrinterNameDraft();
+    this.namingPrinter = device;
+    this.formAttempted = false;
+    this.errorKey = null;
+    const key = this.#deviceKey(device);
+    const name =
+      this.discoveredNames[key] ??
+      this.#disabledPrinter(device)?.name ??
+      this.#discoveredLabel(device);
+    this.discoveredNames = { ...this.discoveredNames, [key]: name };
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=name-printer-modal]");
+    if (modal) modal.open = true;
+    this.#printerNameLeave = leaveCoordinatorFor(this);
+    this.#printerNameScope = this.#printerNameLeave?.register<string>({
+      id: {},
+      current: () => this.discoveredNames[key]!.trim(),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.discoveredNames = { ...this.discoveredNames, [key]: value };
+      },
+    });
+  }
+
+  #finishPrinterName(opening: number): void {
+    if (opening !== this.#printerNameOpening) return;
+    this.#disposePrinterNameDraft();
+    this.namingPrinter = null;
+    this.formAttempted = false;
+  }
+
+  #disposePrinterNameDraft(): void {
+    this.#printerNameOpening++;
+    this.#printerNameScope?.dispose();
+    this.#printerNameScope = undefined;
+    this.#printerNameLeave = undefined;
+  }
   @state() private discoveredNames: Record<string, string> = {};
   @state() private calibrationStep = 1;
   @state() private statusOpen = true;
@@ -741,6 +792,7 @@ export class PrintersScreen extends LitElement {
 
   override disconnectedCallback(): void {
     this.#disposeAgentDraft();
+    this.#disposePrinterNameDraft();
     this.editingAgent = null;
     const readding = this.#readdingId;
     this.#readdingId = undefined;
@@ -1171,6 +1223,10 @@ export class PrintersScreen extends LitElement {
       this.#focusFirstInvalid("[data-test=name-printer-modal]");
       return;
     }
+    const opening = this.#printerNameOpening;
+    const addOpening = this.#addPrinterOpening;
+    const scope = this.#printerNameScope;
+    const active = () => this.isConnected && opening === this.#printerNameOpening;
     this.submitting = true;
     this.errorKey = null;
     try {
@@ -1196,6 +1252,17 @@ export class PrintersScreen extends LitElement {
           localKey: device.localKey,
         }));
       }
+      if (!this.isConnected) return;
+      if (active()) scope?.commit(name);
+      else if (
+        scope &&
+        (this.namingPrinter !== null ||
+          addOpening !== this.#addPrinterOpening ||
+          !this.addingPrinter)
+      ) {
+        await this.#load();
+        return;
+      }
       this.addedPrinterName = name;
       this.#registeredDevices.add(this.#deviceKey(device));
       if (
@@ -1209,8 +1276,23 @@ export class PrintersScreen extends LitElement {
           ? { ...candidate, alreadyRegistered: true }
           : candidate,
       );
-      await this.#closeModal("name-printer-modal");
-      await this.#closeModal("new-printer-modal");
+      if (scope?.isDirty()) {
+        await this.#load();
+        return;
+      }
+      if (scope) {
+        const nameModal = this.renderRoot.querySelector<WtModal>("[data-test=name-printer-modal]");
+        nameModal?.closeAfter("saved");
+        if (nameModal) await nameModal.updateComplete;
+        this.#finishPrinterName(opening);
+        const addModal = this.renderRoot.querySelector<WtModal>("[data-test=new-printer-modal]");
+        addModal?.closeAfter("saved");
+        if (addModal) await addModal.updateComplete;
+        this.#finishAddPrinter(addOpening);
+      } else {
+        await this.#closeModal("name-printer-modal");
+        await this.#closeModal("new-printer-modal");
+      }
       this.#openPrinter(
         disabled
           ? { ...disabled, name, active: true }
@@ -1235,7 +1317,7 @@ export class PrintersScreen extends LitElement {
       if (disabled) this.#readdingId = disabled.id;
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (active()) this.errorKey = codeOf(error);
     } finally {
       this.submitting = false;
     }
@@ -1340,7 +1422,7 @@ export class PrintersScreen extends LitElement {
       return false;
     this.formAttempted = false;
     this.errorKey = null;
-    this.namingPrinter = device;
+    this.#namePrinter(device);
     return true;
   }
 
@@ -2670,6 +2752,10 @@ export class PrintersScreen extends LitElement {
   }
 
   #openAddPrinter(): void {
+    this.#addPrinterOpening++;
+    this.#finishPrinterName(this.#printerNameOpening);
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=new-printer-modal]");
+    if (modal) modal.open = true;
     this.formAttempted = false;
     this.errorKey = null;
     this.addingPrinter = true;
@@ -2838,6 +2924,12 @@ export class PrintersScreen extends LitElement {
     if (id === "edit-agent-modal") {
       if (this.submitting) return;
       if (this.#agentScope) {
+        await modal.requestClose("cancel");
+        return;
+      }
+    }
+    if (id === "name-printer-modal" || id === "new-printer-modal") {
+      if (this.#printerNameScope) {
         await modal.requestClose("cancel");
         return;
       }
@@ -3127,6 +3219,7 @@ export class PrintersScreen extends LitElement {
   #renderPrinterName(): TemplateResult | typeof nothing {
     const d = this.namingPrinter;
     if (!d) return nothing;
+    const opening = this.#printerNameOpening;
     const key = this.#deviceKey(d);
     const name =
       this.discoveredNames[key] ?? this.#disabledPrinter(d)?.name ?? this.#discoveredLabel(d);
@@ -3136,9 +3229,9 @@ export class PrintersScreen extends LitElement {
       data-test="name-printer-modal"
       heading=${t("printers.add_printer")}
       .open=${true}
+      .beforeClose=${this.#printerNameScope ? this.#beforePrinterNameClose : undefined}
       @wt-close=${() => {
-        this.namingPrinter = null;
-        this.formAttempted = false;
+        this.#finishPrinterName(opening);
       }}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=confirm-add-printer]"))}
     >
@@ -3158,7 +3251,9 @@ export class PrintersScreen extends LitElement {
           ?disabled=${this.submitting}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
+            if (opening !== this.#printerNameOpening) return;
             this.discoveredNames = { ...this.discoveredNames, [key]: event.detail.value };
+            this.#printerNameScope?.changed();
           }}
         ></wt-input>
       </div>
@@ -3176,7 +3271,7 @@ export class PrintersScreen extends LitElement {
           variant="primary"
           data-test="confirm-add-printer"
           ?loading=${this.submitting}
-          ?disabled=${nameError !== ""}
+          ?disabled=${this.submitting || nameError !== ""}
           @click=${() => void this.#registerDiscovered(d)}
           >${this.#disabledPrinter(d) ? t("printers.enable") : t("action.add")}</wt-button
         >
@@ -3256,8 +3351,29 @@ export class PrintersScreen extends LitElement {
     >`;
   }
 
+  #finishAddPrinter(opening: number): void {
+    if (opening !== this.#addPrinterOpening) return;
+    this.#addPrinterOpening++;
+    this.addingPrinter = false;
+    this.#finishPrinterName(this.#printerNameOpening);
+    this.#endScan();
+    this.#stopRenewing();
+    // An unpairing's failure goes unless a printer row shows it; a success stays, to keep Unpair
+    // hidden while the agent's report lags.
+    const onPrinterRow = new Set([...this.#printerCommands.values()].map(([key]) => key));
+    this.commands = Object.fromEntries(
+      Object.entries(this.commands).filter(
+        ([key, command]) =>
+          command.kind === "forget" && (onPrinterRow.has(key) || !isProblem(command)),
+      ),
+    );
+    this.pairedDevices = {};
+    this.#settleCommandPoll();
+  }
+
   #renderNewPrinter(): TemplateResult | typeof nothing {
     if (!this.addingPrinter) return nothing;
+    const opening = this.#addPrinterOpening;
     const pairOnly = new Set(this.discovered.filter((d) => this.#canPairOnly(d)));
     const addable = this.discovered.filter((d) => pairOnly.has(d) || this.#canAdd(d));
     // A device registered to a switched-on printer is a printer, whatever the scan decoded.
@@ -3320,9 +3436,7 @@ export class PrintersScreen extends LitElement {
             ?disabled=${this.submitting}
             @click=${() => {
               if (this.submitting) return;
-              this.formAttempted = false;
-              this.errorKey = null;
-              this.namingPrinter = d;
+              this.#namePrinter(d);
             }}
             >${this.#disabledPrinter(d) ? t("printers.enable") : t("action.add")}</wt-button
           >`;
@@ -3371,22 +3485,10 @@ export class PrintersScreen extends LitElement {
       data-test="new-printer-modal"
       heading=${t("printers.add_printer")}
       .open=${true}
-      @wt-close=${() => {
-        this.addingPrinter = false;
-        this.namingPrinter = null;
-        this.#endScan();
-        this.#stopRenewing();
-        // An unpairing's failure goes unless a printer row shows it; a success stays, to keep Unpair
-        // hidden while the agent's report lags.
-        const onPrinterRow = new Set([...this.#printerCommands.values()].map(([key]) => key));
-        this.commands = Object.fromEntries(
-          Object.entries(this.commands).filter(
-            ([key, command]) =>
-              command.kind === "forget" && (onPrinterRow.has(key) || !isProblem(command)),
-          ),
-        );
-        this.pairedDevices = {};
-        this.#settleCommandPoll();
+      .beforeClose=${this.#printerNameScope ? this.#beforePrinterNameClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.#finishAddPrinter(opening);
       }}
     >
       ${this.addedPrinterName ? html`<p role="status" data-test="printer-added">${t("printers.added").replace("{name}", this.addedPrinterName)}</p>` : nothing}

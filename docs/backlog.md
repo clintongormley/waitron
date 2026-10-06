@@ -1249,8 +1249,14 @@ input stays dirty, and a departed write cannot close or mark a replacement edito
 removes its scope and outstanding question. Reopening survives an earlier native close report,
 and successful saves finish before that delayed report arrives. Focused cases are in
 `apps/dashboard/src/screens/printer-agent.unsaved.test.ts`, alongside the unchanged printer suites.
-Other audited modal owners and page/navigation protection remain
-to be wired. Keep automatic saves on their existing paths.
+Discovered-printer naming now protects the trimmed name before submission. Cancel, native Escape
+and closing discovery retain it until Discard; Keep restores focus and a reverted name closes
+directly. Registration commits the submitted name before refresh, preserving a newer delivered
+value. In-flight Cancel/Escape and the completed calibration result keep their existing behavior.
+Successful registration and reopening also handle delayed native close reports. Focused cases are
+in `apps/dashboard/src/screens/printer-name.unsaved.test.ts`. Manual address entry, Bluetooth proof,
+printer detail/calibration forms, the other audited modal owners and page/navigation protection
+remain to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

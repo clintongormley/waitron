@@ -266,3 +266,21 @@ that delayed event.
 unchanged printer behavior/accessibility suites. Synthetic beforeunload cancellation checks the
 listener, not the browser's native reload prompt, which remains Task 5. The printer row above is
 still partial: printer naming, connection, calibration and pairing proof remain to be wired.
+
+
+### Discovered-printer naming checkpoint (2026-10-06)
+
+On the W69 branch, your edited printer name is protected before submission through Cancel, native
+Escape and discovery close. Keep retains the name and focus; Discard restores its opening value.
+The trimmed name is compared independently of scan reports. Registration commits its submitted
+name before refresh, while newer delivered input stays dirty. Replacing the named device or
+removing the screen releases the old scope and question. A disconnected result performs no reads
+or calibration reopening.
+
+In-flight Cancel/Escape retain their existing immediate close and completed calibration result,
+as required by the design's in-flight-work rule. No warning delays the submitted registration.
+Successful registration clears the discovery owner without waiting for a native close report;
+reopening prevents an old report from closing the new name editor.
+`apps/dashboard/src/screens/printer-name.unsaved.test.ts` covers these paths. Synthetic unload
+checks establish listener cancellation, not a native reload prompt. The printer row remains
+partial: manual address entry, detail name/connection, calibration and pairing proof are pending.
