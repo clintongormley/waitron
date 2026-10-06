@@ -26,6 +26,7 @@ import {
   readSaleReceiptHeader,
   resolveZoneContext,
   menuState,
+  orderInZones,
 } from "./operations.js";
 import {
   acknowledgeKitchenNotice,
@@ -64,6 +65,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readProfileServiceAccess,
   readProfileZones,
   assertProfileZone,
+  orderInZones,
   recordOrderContext: recordOrderServiceContext,
   retargetOrderContext: retargetOrderServiceContext,
   recordLineContexts: recordWorkingLineContexts,

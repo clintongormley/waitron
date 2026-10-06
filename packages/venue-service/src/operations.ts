@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import {
   catalogues,
   devices,
@@ -1016,6 +1016,22 @@ export async function findOrderServiceContext(
       ),
     );
   return row === undefined ? null : { ...row, serviceMode: row.serviceMode as ServiceMode };
+}
+
+/**
+ * A WHERE condition that holds for an order whose recorded zone is one of `zoneIds`, or that has no
+ * recorded zone at this location. `orderId` is the outer query's order id, table-qualified.
+ */
+export function orderInZones(cfg: VenueScope, orderId: SQL, zoneIds: readonly string[]): SQL {
+  const outside =
+    zoneIds.length === 0
+      ? sql``
+      : sql` and osc.zone_id not in (${sql.join(
+          zoneIds.map((zoneId) => sql`${zoneId}`),
+          sql`, `,
+        )})`;
+  return sql`not exists (select 1 from order_service_contexts osc
+    where osc.working_order_id = ${orderId} and osc.location_id = ${cfg.locationId}${outside})`;
 }
 
 /** Each named order's frozen service mode, read at once; an order with no context is absent. */

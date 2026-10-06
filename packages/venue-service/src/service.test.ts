@@ -19,6 +19,7 @@ describe("VENUE_SERVICE", () => {
       "listStationNotices",
       "listZoneOffers",
       "menuState",
+      "orderInZones",
       "readClearingWorkflow",
       "readEditSentLines",
       "readKitchenTicketGrouping",

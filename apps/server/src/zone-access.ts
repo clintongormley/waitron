@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { diningTables } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database, SQL, Transaction } from "@waitron/db";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { partyZone } from "./parties.js";
@@ -65,11 +65,8 @@ export async function checkZones(
 }
 
 /**
- * {@link assertSubjectZones} for a route whose work runs in a helper that opens its own transaction
- * (`parkOrder`, `recordTillSale`, `placeOrder`, `takeBillPayment` and the like), so it cannot share
- * that transaction. It reads outside any transaction, on the read connection, so it takes no turn
- * in the write queue; and a subject moved to another zone between this read and the helper's
- * transaction is acted on where it was checked.
+ * {@link assertSubjectZones} for a route whose work runs in a helper that opens its own transaction.
+ * It reads committed rows outside the transaction that acts, and takes no turn in the write queue.
  */
 export async function gateZones(
   deps: { db: Database; cfg: TillConfig },
@@ -93,33 +90,31 @@ export function inScope(scope: ZoneScope, zoneId: string | null | undefined): bo
   return scope === null || zoneId === null || zoneId === undefined || scope.has(zoneId);
 }
 
-/** Of a list of order ids, the ones the profile may see; none to filter when it has no department. */
-export type OrderFilter = (orderIds: readonly string[]) => Promise<ReadonlySet<string>>;
+/** A WHERE condition on an order id for the orders the profile may see; none when it has no department. */
+export type OrderZoneCondition = (orderId: SQL) => SQL;
 
-export async function orderFilter(
+export async function orderZoneCondition(
   tx: Transaction,
   cfg: TillConfig,
   profileId: string,
-): Promise<OrderFilter | undefined> {
+): Promise<OrderZoneCondition | undefined> {
   const scope = await readZoneScope(tx, cfg, profileId);
   if (scope === null) return undefined;
-  return async (orderIds) => {
-    const zones = await VENUE_SERVICE.findOrderZones(tx, cfg, orderIds);
-    return new Set(orderIds.filter((id) => inScope(scope, zones.get(id))));
-  };
+  return (orderId) => VENUE_SERVICE.orderInZones(cfg, orderId, [...scope]);
 }
 
-/**
- * The orders the session's profile may see: those in its zones, and those in none. Read outside any
- * transaction, like {@link gateZones}, because the list it filters was read by a helper of its own.
- */
+/** The orders the session's profile may see: those in its zones, and those in none. Read as {@link gateZones} reads. */
 export async function visibleOrders<T extends { id: string }>(
   deps: { db: Database; cfg: TillConfig },
   session: { device: { deviceProfileId: string } },
   orders: readonly T[],
 ): Promise<T[]> {
-  const visible = await orderFilter(deps.db, deps.cfg, session.device.deviceProfileId);
-  if (visible === undefined) return [...orders];
-  const shown = await visible(orders.map((order) => order.id));
-  return orders.filter((order) => shown.has(order.id));
+  const scope = await readZoneScope(deps.db, deps.cfg, session.device.deviceProfileId);
+  if (scope === null) return [...orders];
+  const zones = await VENUE_SERVICE.findOrderZones(
+    deps.db,
+    deps.cfg,
+    orders.map((order) => order.id),
+  );
+  return orders.filter((order) => inScope(scope, zones.get(order.id)));
 }

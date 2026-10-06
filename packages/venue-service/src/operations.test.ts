@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
@@ -41,6 +41,7 @@ import {
   watcherZones,
   withTransaction,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
@@ -89,6 +90,7 @@ import {
   clearDeviceDefaultZone,
   listDeviceDefaultZones,
   menuState,
+  orderInZones,
 } from "./operations.js";
 
 const suite = useVenueDb({
@@ -2650,6 +2652,41 @@ describe("findOrderServiceZones", () => {
       expect(await findOrderServiceZones(tx, venue.cfg, [])).toEqual(new Map());
       expect(prepared).not.toHaveBeenCalled();
       expect(await findOrderServiceZones(tx, elsewhere, [order])).toEqual(new Map());
+    });
+  });
+});
+
+describe("orderInZones", () => {
+  it("keeps orders in the named zones and orders with no zone, and leaves out the rest", async () => {
+    const venue = await seedSellingVenue();
+    const elsewhere = { locationId: brandLocationId(await seedLocation("Elsewhere in zones")) };
+    await scoped(async (tx) => {
+      const dining = await openOrder(tx, venue, 1);
+      const bar = await openOrder(tx, venue, 2);
+      const none = await openOrder(tx, venue, 3);
+      await recordOrderServiceContext(tx, venue.cfg, dining, venue.diningZone);
+      await recordOrderServiceContext(tx, venue.cfg, bar, venue.barZone);
+      const shown = async (cfg: typeof venue.cfg, zoneIds: string[]) =>
+        (
+          await tx
+            .select({ id: workingOrders.id })
+            .from(workingOrders)
+            .where(
+              and(
+                inArray(workingOrders.id, [dining, bar, none]),
+                orderInZones(cfg, sql`"working_orders"."id"`, zoneIds),
+              ),
+            )
+        )
+          .map((row) => row.id)
+          .sort();
+      expect(await shown(venue.cfg, [venue.diningZone])).toEqual([dining, none].sort());
+      expect(await shown(venue.cfg, [venue.diningZone, venue.barZone])).toEqual(
+        [dining, bar, none].sort(),
+      );
+      expect(await shown(venue.cfg, [])).toEqual([none]);
+      // A context recorded at another location is no zone of this one.
+      expect(await shown(elsewhere, [])).toEqual([dining, bar, none].sort());
     });
   });
 });

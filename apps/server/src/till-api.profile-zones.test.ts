@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   deviceProfiles,
@@ -9,8 +9,12 @@ import {
   tenants,
   workingOrders,
   type Transaction,
+  withTransaction,
 } from "@waitron/db";
 import { completeBillPayment } from "./bill-payments.js";
+import { lookUpBills } from "./bill-lookup-api.js";
+import { lookUpInvoices } from "./invoice-lookup-api.js";
+import { orderZoneCondition } from "./zone-access.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addProductToMenu, createCatalogue, createProduct } from "@waitron/catalogue";
@@ -146,6 +150,10 @@ const suite = useVenueDb({
 });
 
 const noopLog: Logger = () => {};
+
+/** What the lookup routes hand their lookup for a session on `profileId`. */
+const lookupScope = (tx: Transaction, profileId: string) =>
+  orderZoneCondition(tx, v.cfg, profileId);
 
 interface Fixtures {
   /** Restaurant: the provisioned department, with the counter, tables and bar zones. */
@@ -1285,5 +1293,29 @@ describe("the bill and invoice lookups", () => {
     }
     const answer = await send(restaurant, "GET", "/api/bills/lookup?q=Crowded");
     expect(ids(answer.body, "bills")).toEqual([restBill]);
+  });
+
+  it("reads one page, however many Deli bills and invoices the Restaurant's lookup hides", async () => {
+    const reads = (lookUp: (tx: Transaction) => Promise<unknown>) =>
+      withTransaction(suite.db, async (tx) => {
+        const spies = [
+          vi.spyOn(tx, "select"),
+          vi.spyOn(tx, "selectDistinct"),
+          vi.spyOn(tx, "execute"),
+        ];
+        try {
+          await lookUp(tx);
+          return spies.reduce((count, spy) => count + spy.mock.calls.length, 0);
+        } finally {
+          for (const spy of spies) spy.mockRestore();
+        }
+      });
+    const restaurantOnly = (tx: Transaction) => lookupScope(tx, restaurantProfile);
+    expect(await reads(async (tx) => lookUpBills(tx, "Crowded", await restaurantOnly(tx)))).toBe(
+      await reads(async (tx) => lookUpBills(tx, "Crowded Sala", await restaurantOnly(tx))),
+    );
+    expect(await reads(async (tx) => lookUpInvoices(tx, "Packed", await restaurantOnly(tx)))).toBe(
+      await reads(async (tx) => lookUpInvoices(tx, "Packed Sala", await restaurantOnly(tx))),
+    );
   });
 });

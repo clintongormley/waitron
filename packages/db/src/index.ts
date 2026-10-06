@@ -24,6 +24,8 @@ export type {
   VenueHolderKind,
   VenueLock,
 } from "./client.js";
+// For a contract that hands a query fragment across a package boundary.
+export type { SQL } from "drizzle-orm";
 export { runMigrations } from "./migrate.js";
 export { assertKitchenTimingPresent } from "./kitchen-timing-readiness.js";
 export { tableExists } from "./table-exists.js";

@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import type { Decimal, LocationId } from "@waitron/shared";
 import type { ChangeSource } from "@waitron/shared";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database, SQL, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
 import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
 import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
@@ -480,6 +480,10 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, ServiceMode>>;
+  /** A condition, for a query's WHERE, that holds for an order whose recorded zone is one of
+   *  `zoneIds` or that has no recorded zone. `orderId` is the outer query's order id, written
+   *  table-qualified. */
+  orderInZones(cfg: { locationId: LocationId }, orderId: SQL, zoneIds: readonly string[]): SQL;
   /** Each named order's recorded service zone in one read; an order with no context is absent. */
   findOrderZones(
     tx: Transaction,
