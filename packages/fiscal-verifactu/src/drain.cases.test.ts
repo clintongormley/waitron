@@ -1342,4 +1342,187 @@ describe("drain — a reply line is applied only when its reference and its invo
     expect(result.recordsAccepted).toBe(1);
     expect(await incidentCodes()).toEqual([]);
   });
+
+  /** A line naming no record of any envío: neither its reference nor its invoice is ours. */
+  const strayLine: RespuestaLinea = {
+    IDFactura: {
+      IDEmisorFactura: "B99999999",
+      NumSerieFactura: "STRAY/1",
+      FechaExpedicionFactura: "01-07-2026",
+    },
+    Operacion: { TipoOperacion: "Alta" },
+    RefExterna: "not-ours",
+    EstadoRegistro: "Incorrecto",
+    CodigoErrorRegistro: 1100,
+    DescripcionErrorRegistro: "Campo obligatorio ausente",
+  } as RespuestaLinea;
+
+  /** `strayLine` as the incidents' params spell a reply line. */
+  const strayParams = {
+    refExterna: "not-ours",
+    tipoOperacion: "Alta",
+    idEmisorFactura: "B99999999",
+    numSerieFactura: "STRAY/1",
+    fechaExpedicionFactura: "01-07-2026",
+    estado: "Incorrecto",
+    codigo: 1100,
+    mensaje: "Campo obligatorio ausente",
+  };
+
+  /** AEAT's reply, after `rewrite`, gains `strayLine` at its end. */
+  function withStrayLine(
+    client: VerifactuClient,
+    rewrite: (linea: RespuestaLinea) => RespuestaLinea = (linea) => linea,
+  ): VerifactuClient {
+    return {
+      submit: async (cabecera, registros) => {
+        const respuesta = await client.submit(cabecera, registros);
+        return {
+          ...respuesta,
+          RespuestaLinea: [...respuesta.RespuestaLinea.map(rewrite), strayLine],
+        };
+      },
+      consultar: (...args) => client.consultar(...args),
+    };
+  }
+
+  async function incidentsCoded(
+    code: string,
+  ): Promise<{ sale_id: string | null; params: Record<string, unknown> }[]> {
+    const { rows } = await suite.db.execute<{ sale_id: string | null; params: string }>(sql`
+      select sale_id, params from incidents where code = ${code}
+    `);
+    return rows.map((row) => ({
+      sale_id: row.sale_id,
+      params: JSON.parse(row.params) as Record<string, unknown>,
+    }));
+  }
+
+  async function saleOf(registroId: string): Promise<string> {
+    const { rows } = await suite.db.execute<{ sale_id: string }>(sql`
+      select sale_id from registros_facturacion where id = ${registroId}
+    `);
+    return rows[0]!.sale_id;
+  }
+
+  it("puts a line naming no record of the envío on the unknown record's incident", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [mismatched, matched] = seeded.registroIds;
+    const client = withStrayLine(aeat.client(), (linea) =>
+      linea.RefExterna === mismatched
+        ? { ...linea, IDFactura: { ...linea.IDFactura, NumSerieFactura: "OTHER/1" } }
+        : linea,
+    );
+
+    const result = await drain(deps(client), FIRST);
+
+    expect(await envioOf(mismatched!)).toMatchObject({ estado: "pendiente", incidencia: true });
+    expect(await envioOf(matched!)).toMatchObject({ estado: "aceptado", incidencia: false });
+    expect(result.recordsAccepted).toBe(1);
+    expect(await unknownParamsOf(mismatched!)).toEqual([
+      {
+        registroId: mismatched,
+        estado: null,
+        codigo: null,
+        mensaje: null,
+        csv: expect.any(String),
+        operacionEnviada: "Alta",
+        identidadEnviada: asParams(idOf(seeded.facturaKeys[0]!)),
+        lineasRespuesta: [
+          {
+            refExterna: mismatched,
+            tipoOperacion: "Alta",
+            ...asParams({ ...idOf(seeded.facturaKeys[0]!), NumSerieFactura: "OTHER/1" }),
+            estado: "Correcto",
+            codigo: null,
+            mensaje: null,
+          },
+        ],
+        lineasSinRegistro: [strayParams],
+      },
+    ]);
+    expect(await incidentCodes()).toEqual(["fiscal.estado_desconocido"]);
+  });
+
+  it("puts a line naming no record on every unknown record's incident, whatever made it unknown", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const client = withStrayLine(aeat.client(), (linea) => ({
+      ...linea,
+      EstadoRegistro: undefined,
+    }));
+
+    await drain(deps(client), FIRST);
+
+    for (const id of seeded.registroIds) {
+      expect(await unknownParamsOf(id)).toEqual([
+        {
+          registroId: id,
+          estado: null,
+          codigo: null,
+          mensaje: null,
+          csv: expect.any(String),
+          lineasSinRegistro: [strayParams],
+        },
+      ]);
+    }
+    expect(await incidentCodes()).toEqual([
+      "fiscal.estado_desconocido",
+      "fiscal.estado_desconocido",
+    ]);
+  });
+
+  it("keeps a line naming no record in a fiscal.linea_sin_registro incident when every record was applied", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+
+    const result = await drain(deps(withStrayLine(aeat.client())), FIRST);
+
+    for (const id of seeded.registroIds) {
+      expect(await envioOf(id)).toMatchObject({ estado: "aceptado", incidencia: false });
+    }
+    expect(result.recordsAccepted).toBe(2);
+    expect(await incidentsCoded("fiscal.linea_sin_registro")).toEqual([
+      {
+        sale_id: await saleOf(seeded.registroIds[0]!),
+        params: {
+          registroIds: seeded.registroIds,
+          csv: expect.any(String),
+          lineasSinRegistro: [strayParams],
+        },
+      },
+    ]);
+    expect(await incidentCodes()).toEqual(["fiscal.linea_sin_registro"]);
+    expect(result.incidentsRaised).toBe(1);
+    expect(await cases()).toEqual([]);
+  });
+
+  it("keeps a line naming no record in a fiscal.linea_sin_registro incident when the unknown record's incident is already open", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [unknown] = seeded.registroIds;
+    const noStatus = (linea: RespuestaLinea) => ({ ...linea, EstadoRegistro: undefined });
+    await drain(deps(rewritingLines(aeat.client(), noStatus)), FIRST);
+    expect(await unknownParamsOf(unknown!)).toHaveLength(1);
+
+    await drain(
+      deps(withStrayLine(aeat.client(), noStatus)),
+      new Date(FIRST.getTime() + backoffMs(1)),
+    );
+
+    expect(await unknownParamsOf(unknown!)).toEqual([
+      expect.not.objectContaining({ lineasSinRegistro: expect.anything() }),
+    ]);
+    expect(await incidentsCoded("fiscal.linea_sin_registro")).toEqual([
+      {
+        sale_id: await saleOf(unknown!),
+        params: {
+          registroIds: [unknown],
+          csv: null,
+          lineasSinRegistro: [strayParams],
+        },
+      },
+    ]);
+  });
 });

@@ -117,6 +117,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The tax agency (AEAT) answered for an invoice record without a status Waitron recognises, said it already holds a record for this invoice and Waitron could not confirm it is this one, or gave no answer Waitron could be sure belongs to this record, so it is not known whether AEAT kept it. Waitron will send it again. AEAT's message, if any: {mensaje} (code {codigo}).",
     es: "La AEAT ha respondido sobre un registro de facturación sin un estado que Waitron reconozca, ha dicho que ya tiene un registro para esta factura y Waitron no ha podido confirmar que sea este, o no ha dado ninguna respuesta que Waitron pueda asegurar que corresponde a este registro, así que no se sabe si la AEAT lo ha guardado. Waitron lo volverá a enviar. Mensaje de la AEAT, si lo hay: {mensaje} (código {codigo}).",
   },
+  "fiscal.linea_sin_registro": {
+    en: "The tax agency (AEAT) answered a submission with a line that names none of the invoice records Waitron sent in it, so Waitron did not apply that line. Contact support.",
+    es: "La AEAT ha respondido a un envío con una línea que no corresponde a ninguno de los registros de facturación que Waitron envió en él, así que Waitron no ha aplicado esa línea. Contacta con soporte.",
+  },
   "fiscal.duplicado_anulado": {
     en: "The tax agency (AEAT) already holds this invoice record as cancelled. Sending on this chain is on hold. Contact support.",
     es: "La AEAT ya tiene este registro de facturación como anulado. El envío de esta cadena está en espera. Contacta con soporte.",

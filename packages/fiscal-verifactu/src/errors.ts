@@ -12,6 +12,15 @@ interface FacturaParams {
   fechaExpedicionFactura: string;
 }
 
+/** One line of AEAT's reply as it arrived, with its raw operation text (`null` when it has none). */
+interface LineaParams extends FacturaParams {
+  refExterna: string | null;
+  tipoOperacion: string | null;
+  estado: string | null;
+  codigo: number | null;
+  mensaje: string | null;
+}
+
 /** This package's codes, added to the shared registry by declaration merging (see the design note
  * atop packages/shared/src/errors.ts). */
 declare module "@waitron/shared" {
@@ -126,6 +135,8 @@ declare module "@waitron/shared" {
      * was sent as, and every reply line naming its reference or that invoice (empty when none did),
      * each with its raw operation text (`null` when it carries none); `estado`, `codigo` and
      * `mensaje` are then `null`, since such a line may describe another record.
+     * `lineasSinRegistro`, whatever the cause, is present only when the same reply held lines
+     * naming no record of the envío by reference or by invoice: those lines, in AEAT's order.
      */
     "fiscal.estado_desconocido": {
       registroId: string;
@@ -136,13 +147,22 @@ declare module "@waitron/shared" {
       lookupFailed?: boolean;
       operacionEnviada?: "Alta" | "Anulacion";
       identidadEnviada?: FacturaParams;
-      lineasRespuesta?: (FacturaParams & {
-        refExterna: string | null;
-        tipoOperacion: string | null;
-        estado: string | null;
-        codigo: number | null;
-        mensaje: string | null;
-      })[];
+      lineasRespuesta?: LineaParams[];
+      lineasSinRegistro?: LineaParams[];
+    };
+
+    /**
+     * `./drain.ts`'s `persistResponse`: AEAT's reply to an envío held lines naming none of its
+     * records by reference or by invoice, and no `fiscal.estado_desconocido` stored for that reply
+     * carries them — every record was applied, or each such incident was not stored because one
+     * for the same sale and code was still open. A warning raised on the sale of the envío's first
+     * record; `registroIds` are the envío's records in the order sent, `csv` is the envío's, and
+     * `lineasSinRegistro` are those lines, none of which was applied.
+     */
+    "fiscal.linea_sin_registro": {
+      registroIds: string[];
+      csv: string | null;
+      lineasSinRegistro: LineaParams[];
     };
 
     /**

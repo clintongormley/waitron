@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { recordIncident } from "@waitron/core";
+import { recordIncidentOnce } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
 import { emptyDrainResult, type DrainResult } from "@waitron/fiscal";
 import { AppError, isAppError, jobOrigin } from "@waitron/shared";
@@ -662,6 +662,8 @@ interface UnmatchedRow {
 interface ResolvedReply {
   lines: ResolvedLine[];
   unmatched: UnmatchedRow[];
+  /** The lines naming no claimed row by reference or by invoice, in AEAT's order. */
+  sinRegistro: RespuestaLinea[];
 }
 
 type Operacion = "Alta" | "Anulacion";
@@ -735,6 +737,7 @@ async function resolveLines(
 
   const matchedRow = new Map<RespuestaLinea, DueRow>();
   const unmatched: UnmatchedRow[] = [];
+  const named = new Set<number>();
   batch.forEach((row, i) => {
     const operacionEnviada = operacionOf(registros[i]!);
     const identidadEnviada = sentIdentityOf(registros[i]!);
@@ -742,6 +745,7 @@ async function resolveLines(
       ...(byRef.get(row.id) ?? []),
       ...(byFactura.get(facturaKey(identidadEnviada)) ?? []),
     ]);
+    for (const at of positions) named.add(at);
     const candidates = [...positions].sort((a, b) => a - b).map((at) => reply[at]!);
     const [only] = candidates;
     const tipo = only?.Operacion?.TipoOperacion;
@@ -779,7 +783,8 @@ async function resolveLines(
         linea.CodigoErrorRegistro === 3000 && resolved === "accepted_with_errors",
     });
   }
-  return { lines, unmatched };
+  const sinRegistro = reply.filter((_linea, at) => !named.has(at));
+  return { lines, unmatched, sinRegistro };
 }
 
 async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
@@ -793,36 +798,67 @@ async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
 /**
  * Applies every matched line with its own outcome, whatever an earlier line of the same reply did
  * (design §7.1, docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md),
- * and marks each unmatched row unknown (`resolveLines`). This reply is never returned again.
+ * and marks each unmatched row unknown (`resolveLines`). This reply is never returned again, so a
+ * line naming no row rides on every `fiscal.estado_desconocido` this reply stores, or, when it
+ * stores none, on one `fiscal.linea_sin_registro`.
  */
 async function persistResponse(
   tx: Transaction,
   batch: DueRow[],
-  { lines, unmatched }: ResolvedReply,
+  { lines, unmatched, sinRegistro }: ResolvedReply,
   csv: string | null,
   now: Date,
   result: CommittedCounts,
 ): Promise<void> {
   const sentIds = batch.map((row) => row.id);
+  const reply: EnvioReply = { csv, lineasSinRegistro: sinRegistro.map(lineaParams), kept: false };
 
   for (const line of lines) {
-    await applyOutcome(tx, line, csv, now, result, sentIds);
+    await applyOutcome(tx, line, reply, now, result, sentIds);
   }
   for (const { row, operacionEnviada, identidadEnviada, candidates } of unmatched) {
-    await awaitReadableAnswer(tx, row, csv, now, result, {
+    await awaitReadableAnswer(tx, row, reply, now, result, {
       estado: null,
       codigo: null,
       mensaje: null,
       operacionEnviada,
       identidadEnviada: facturaParams(identidadEnviada),
-      lineasRespuesta: candidates.map((linea) => ({
-        refExterna: linea.RefExterna ?? null,
-        tipoOperacion: linea.Operacion?.TipoOperacion ?? null,
-        ...facturaParams(linea.IDFactura),
-        ...answerOf(linea),
-      })),
+      lineasRespuesta: candidates.map(lineaParams),
     });
   }
+  if (reply.lineasSinRegistro.length > 0 && !reply.kept) {
+    await raiseIncident(
+      tx,
+      batch[0]!,
+      "warning",
+      new AppError("fiscal.linea_sin_registro", {
+        registroIds: sentIds,
+        csv,
+        lineasSinRegistro: reply.lineasSinRegistro,
+      }),
+      now,
+      result,
+    );
+  }
+}
+
+/**
+ * One envío's reply, as the rows it answers are written. `kept` turns true once a stored
+ * `fiscal.estado_desconocido` carries `lineasSinRegistro`.
+ */
+interface EnvioReply {
+  csv: string | null;
+  lineasSinRegistro: LineaParams[];
+  kept: boolean;
+}
+
+function lineaParams(linea: RespuestaLinea): LineaParams {
+  return {
+    refExterna: linea.RefExterna ?? null,
+    tipoOperacion: linea.Operacion?.TipoOperacion ?? null,
+    ...facturaParams(linea.IDFactura),
+    ...answerOf(linea),
+  };
 }
 
 /** Routes one resolved line to its estado transition + side effects. `sentIds` is the envío's
@@ -830,11 +866,12 @@ async function persistResponse(
 async function applyOutcome(
   tx: Transaction,
   { row, linea, efectivo, lookup, duplicateAcceptedWithErrors }: ResolvedLine,
-  csv: string | null,
+  reply: EnvioReply,
   now: Date,
   result: CommittedCounts,
   sentIds: string[],
 ): Promise<void> {
+  const { csv } = reply;
   switch (efectivo) {
     case "accepted":
       // CSV is written in the SAME transaction as the response: AEAT never returns it again.
@@ -880,7 +917,7 @@ async function applyOutcome(
       return;
     }
     case "status_unknown":
-      await awaitReadableAnswer(tx, row, csv, now, result, answerOf(linea));
+      await awaitReadableAnswer(tx, row, reply, now, result, answerOf(linea));
       return;
     // duplicate_annulled / duplicate_unknown — error 3000; see `handleDuplicate`.
     default:
@@ -891,7 +928,7 @@ async function applyOutcome(
         efectivo,
         lookup,
         duplicateAcceptedWithErrors,
-        csv,
+        reply,
         now,
         result,
         sentIds,
@@ -920,8 +957,12 @@ async function openCase(
   });
 }
 
-type UnknownAnswer = Omit<ErrorParams["fiscal.estado_desconocido"], "registroId" | "csv">;
+type UnknownAnswer = Omit<
+  ErrorParams["fiscal.estado_desconocido"],
+  "registroId" | "csv" | "lineasSinRegistro"
+>;
 type FacturaParams = NonNullable<UnknownAnswer["identidadEnviada"]>;
+type LineaParams = ErrorParams["fiscal.linea_sin_registro"]["lineasSinRegistro"][number];
 
 function answerOf(linea: RespuestaLinea): Pick<UnknownAnswer, "estado" | "codigo" | "mensaje"> {
   return {
@@ -939,7 +980,7 @@ function answerOf(linea: RespuestaLinea): Pick<UnknownAnswer, "estado" | "codigo
 async function awaitReadableAnswer(
   tx: Transaction,
   row: DueRow,
-  csv: string | null,
+  reply: EnvioReply,
   now: Date,
   result: CommittedCounts,
   answer: UnknownAnswer,
@@ -950,14 +991,21 @@ async function awaitReadableAnswer(
     where registro_id = ${row.id}
   `);
   bumpNextDue(result, next);
-  await raiseIncident(
+  const { csv, lineasSinRegistro } = reply;
+  const stored = await raiseIncident(
     tx,
     row,
     "warning",
-    new AppError("fiscal.estado_desconocido", { registroId: row.id, csv, ...answer }),
+    new AppError("fiscal.estado_desconocido", {
+      registroId: row.id,
+      csv,
+      ...answer,
+      ...(lineasSinRegistro.length > 0 ? { lineasSinRegistro } : {}),
+    }),
     now,
     result,
   );
+  if (stored && lineasSinRegistro.length > 0) reply.kept = true;
 }
 
 /**
@@ -1028,7 +1076,8 @@ async function haltSuccessors(
 
 /**
  * Raises a structured fiscal incident on THIS transaction, so an incident can never commit while
- * the estado update it describes rolls back.
+ * the estado update it describes rolls back. `false` when nothing was stored because an open
+ * filing incident with the same code for the same sale already exists (`recordIncidentOnce`).
  */
 async function raiseIncident(
   tx: Transaction,
@@ -1037,8 +1086,8 @@ async function raiseIncident(
   error: AppError,
   now: Date,
   result: CommittedCounts,
-): Promise<void> {
-  await recordIncident(tx, {
+): Promise<boolean> {
+  const stored = await recordIncidentOnce(tx, {
     origin: jobOrigin("fiscal_filing"),
     saleId: row.sale_id as SaleId,
     error,
@@ -1046,6 +1095,7 @@ async function raiseIncident(
     detectedAt: now,
   });
   result.incidentsRaised += 1;
+  return stored;
 }
 
 /**
@@ -1134,15 +1184,16 @@ async function handleDuplicate(
   efectivo: EstadoEfectivo,
   lookup: Lookup | null,
   duplicateAcceptedWithErrors: boolean,
-  csv: string | null,
+  reply: EnvioReply,
   now: Date,
   result: CommittedCounts,
   sentIds: string[],
 ): Promise<void> {
+  const { csv } = reply;
   const annulled = efectivo === "duplicate_annulled";
   if (lookup !== null) {
     if ("failed" in lookup) {
-      await awaitReadableAnswer(tx, row, csv, now, result, {
+      await awaitReadableAnswer(tx, row, reply, now, result, {
         ...answerOf(linea),
         lookupFailed: true,
       });
@@ -1174,7 +1225,7 @@ async function handleDuplicate(
       return;
     }
     if (lookup.matched === null) {
-      await awaitReadableAnswer(tx, row, csv, now, result, {
+      await awaitReadableAnswer(tx, row, reply, now, result, {
         ...answerOf(linea),
         lookupFailed: false,
       });
