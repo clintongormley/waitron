@@ -231,7 +231,7 @@ at its own price. When the shown menu has no match but another menu has, its gro
 products match in this menu"; when no menu has one, there are no groups, only "No products match
 in any menu". A device served one menu sees one list with no group headings. The group sections
 carry no accessible name, because two menus may share one. The dashboard's preview searches its
-one menu only and says so under its search.
+one menu only and says so above its search field.
 
 ### Structure
 
