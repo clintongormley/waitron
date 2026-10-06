@@ -1005,16 +1005,18 @@ export class ProductList extends LitElement {
           if (row.variant) return nothing;
           const id = row.product.id;
           const maker = this.madeAt[id];
-          const name = maker?.noPreparation
+          // The read lists every active product, so a missing entry is unknown, not unrouted.
+          if (maker === undefined) return nothing;
+          const name = maker.noPreparation
             ? t("product.no_preparation")
-            : maker?.noReplacement
+            : maker.noReplacement
               ? t("product.no_replacement").replace(
                   "{name}",
                   maker.stationName ?? t("product.nowhere"),
                 )
-              : (maker?.stationName ?? t("product.nowhere"));
+              : (maker.stationName ?? t("product.nowhere"));
           return html`<a part="maker-link" href=${`/manage/prep-stations/test/${id}`}
-            >${name}${maker?.variesByZone ? html` · ${t("product.varies_by_zone")}` : nothing}</a
+            >${name}${maker.variesByZone ? html` · ${t("product.varies_by_zone")}` : nothing}</a
           >`;
         },
       },
