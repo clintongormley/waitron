@@ -775,7 +775,9 @@ export class MenuPricesTable extends LitElement {
 
   #resolveActions(line: Line) {
     const price = this.#priceSetting(line);
-    if (price.state !== "clash") return nothing;
+    const draft = this.drafts.get(keyOf(line));
+    if (price.state !== "clash" || (draft !== undefined && this.#holds(line, draft)))
+      return nothing;
     return html`<wt-row-actions
       part="resolve"
       align="end"

@@ -2088,6 +2088,56 @@ function variantClashRow(): MenuPriceRow {
     },
   } as MenuPriceRow;
 }
+it.each(["product", "size"])(
+  "hides Resolve while a valid unsaved price fills a clashing %s row",
+  async (kind) => {
+    const el = await mount({ rows: [kind === "product" ? clashRow(lager) : variantClashRow()] });
+    const key = kind === "product" ? "mi-lager" : "mi-lemonade:v-small";
+    if (kind === "size") {
+      toggleOf(el, "mi-lemonade")!.click();
+      await table(el).updateComplete;
+    }
+    const actions = () => row(el, key)!.querySelector("wt-row-actions");
+    const heard = priceSaves(el);
+    expect(actions()).not.toBeNull();
+    await typeIn(el, key, "2.80");
+    await table(el).updateComplete;
+    expect(actions()).toBeNull();
+    expect(clashMarker(el, key)).toBe("");
+    expect(override(el, key).value).toBe("2.80");
+    expect(heard).not.toHaveBeenCalled();
+
+    for (const value of ["", "-1", "abc"]) {
+      await typeIn(el, key, value);
+      await table(el).updateComplete;
+      expect(actions()).not.toBeNull();
+      expect(clashMarker(el, key)).toBe(t("menu_prices.clash"));
+      await typeIn(el, key, "2.80");
+      await table(el).updateComplete;
+      expect(actions()).toBeNull();
+    }
+    await press(el, key, "Escape");
+    await table(el).updateComplete;
+    expect(actions()).not.toBeNull();
+    expect(clashMarker(el, key)).toBe(t("menu_prices.clash"));
+    expect(override(el, key).value).toBe("");
+    expect(heard).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["", "-1", "abc"])(
+  "keeps Resolve available when a clashing row's draft is %j",
+  async (value) => {
+    const el = await mount({ rows: [clashRow(lager)] });
+    const heard = priceSaves(el);
+    await typeIn(el, "mi-lager", value);
+    await table(el).updateComplete;
+    expect(row(el, "mi-lager")!.querySelector("wt-row-actions")).not.toBeNull();
+    expect(clashMarker(el, "mi-lager")).toBe(t("menu_prices.clash"));
+    expect(heard).not.toHaveBeenCalled();
+  },
+);
+
 it("offers one labelled price override field per product and per size, the inherited price as a blank one's placeholder", async () => {
   setLocale("en-GB");
   try {

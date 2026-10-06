@@ -126,6 +126,23 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("accessible clash row with an unsaved valid price and no Resolve menu", async () => {
+    const { el, host } = await mount(theme, {
+      rows: [{ ...rows[0]!, combined: { ...rows[0]!.combined, price: clash } }],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const field = table.shadowRoot!.querySelector("wt-price-input")!;
+    field.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "2.80" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(field.value).toBe("2.80");
+    expect(table.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("accessible fields, one refused and one saving", async () => {
     const { el, host } = await mount(theme, {
       refusals: { "mi-lemonade": "Refused" },
