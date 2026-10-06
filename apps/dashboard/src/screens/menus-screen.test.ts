@@ -3889,7 +3889,7 @@ describe("the Structure tree", () => {
     await toggleRow(el, "m-drinks/m-beer");
     expect(window.innerWidth).toBe(390);
     expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-    const menus = allInStructure(el, "wt-row-actions");
+    const menus = allInStructure(el, 'wt-row-actions[data-test^="actions-"]');
     expect(menus.map((menu) => menu.closest("tr")!.dataset.rowKey)).toEqual([
       "home",
       "root",
@@ -3925,7 +3925,7 @@ describe("the Structure tree", () => {
     await toggleRow(el, "m-drinks/m-beer");
     expect(window.innerWidth).toBe(390);
     expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-    const menus = allInStructure(el, "wt-row-actions");
+    const menus = allInStructure(el, 'wt-row-actions[data-test^="actions-"]');
     expect(menus.map((menu) => menu.closest("tr")!.dataset.rowKey)).toEqual([
       "home",
       "home/t-burger",
