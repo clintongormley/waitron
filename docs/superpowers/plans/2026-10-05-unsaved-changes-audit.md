@@ -1467,3 +1467,55 @@ these as next candidates, not verified runtime failures. Reconcile their advanci
 TDD, preserve A278's current deletion-count contract, and classify every other discovery hit.
 Tasks 1/4 remain partial; page/history/navigation and native reload are still pending. Neither
 proposed W69 PR is ready for finish-branch.
+
+
+## Catalogue operation checkpoint — 2026-10-06
+
+Move destination and delete disposition now register with the shared coordinator on the W69
+branch. Cancel and native Escape ask before discarding changed choices. Keep retains the raw
+choice and returns focus; Discard resets only local operation values, retaining the browsing
+selection and issuing no move/delete request. Untouched/reverted choices close directly.
+Successful requests release their operation scope, while refused requests and changed deletion
+counts retain the staged choice. The existing A278 all-products count remains in the exact
+submitted deletion body. Selection IDs are captured by the existing operation opening path and
+are not editable inside this dialog; the dirty reader compares its staged destination/disposition.
+
+Busy submission invalidates an outstanding question without accepting the choice, and busy controls
+cannot change it. Disconnect aborts the question and unregisters unload protection; reconnect
+retains the initial operation defaults. Child reports and detached Cancel/Confirm/input/close
+controls cannot close, change or submit a replacement operation. In the delayed Cancel test,
+waiting for the native close report exposed the replacement closing after the initial immediate
+check had passed. The final test keeps that wait.
+
+Commands run:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/widgets/catalogue-browser.unsaved.test.ts src/widgets/catalogue-browser.test.ts src/widgets/catalogue-browser.a11y.test.ts src/screens/catalogue-screen.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/dashboard typecheck
+pnpm exec eslint apps/dashboard/src/widgets/catalogue-browser.ts apps/dashboard/src/widgets/catalogue-browser.unsaved.test.ts
+```
+
+The initial suite observed eight missing-behavior failures with four controls passing. The first
+follow-up exposed a detached destination changing the replacement. A later run caught two radio
+handlers referring to an event they had not accepted as an argument; the handlers were corrected,
+with all existing assertions retained. Further expected failures exposed a detached close report
+and, after awaiting native reports, a detached Cancel closing the replacement. The final four-suite
+run passed 330 browser tests, including 18 new cases. The two unedited fiscal suites passed 20.
+Dashboard, till and UI typechecks and scoped lint passed. The family output includes Lit warnings
+and the catalogue screen suite's deliberately rejected marker (`catalogue-screen.test.ts:2320`).
+
+In an independently installed disposable checkout, eleven separate removals each failed their
+intended case alongside a passing untouched/reverted move control: native close interception,
+Cancel, both choice notifications, busy-answer invalidation, disconnect disposal, child close,
+and detached input/Cancel/report/Confirm controls. Restoring that checkout passed all 18 cases.
+Sixteen temporary visual flows covered both operations in EN/ES, light/dark and 390/1280 widths,
+with 32 axe scans. All 32 editor/warning captures were inspected in eight contact sheets. The
+harness, images and logs are retained outside source in Lane E's local
+`receipts/w69-catalogue-20261006`. Synthetic unload events check registration/cancellation only.
+No existing test assertion changed.
+
+Rebase onto `53659aa27965e188a567986c0630fcad9a8a3944` retained 56 equal patches in `git range-diff`;
+the frozen install passed. Tasks 1/4 remain partial: canvas Create/Duplicate name dialogs and the
+remaining modal classification still precede Tasks 5–6 page/history/navigation/native reload.
+Neither proposed W69 PR is ready for finish-branch.

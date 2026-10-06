@@ -1207,7 +1207,12 @@ protects product selection and target through Cancel/native Escape. Keep retains
 resets local choices without a reassignment or deletion request. Search/reverts remain exempt,
 and accepted reassignment clears protection before a later close. The real Units owner tests
 cover native selection, refusal, busy controls, stale answers, disconnect/reconnect and ancestor
-leave requests. The remaining modal owners, followed by page/history/navigation work, still keep
+leave requests. Catalogue move/delete choices now use the same warning on Cancel/native Escape.
+Keep retains the destination or disposition; Discard closes without a move/delete request, keeping
+the browsing selection. Refusals and changed deletion counts retain the staged choice; successful
+writes retire the scope. Focused real-browser tests cover reverts, busy answers, reconnect,
+child close reports and detached controls acting on a replacement dialog. Canvas Create/Duplicate
+name dialogs and the remaining modal audit, followed by page/history/navigation work, still keep
 W69 incomplete.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
