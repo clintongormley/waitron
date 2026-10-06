@@ -39,8 +39,9 @@ What each one is used for:
 The test "ships exactly the annex's rows, region by region, with its notes applied" turns the
 archived annex into one line per marked cell (key, date, name, scope, mark, region, area rule) plus
 one per note holiday, and turns `../es-2026.ts` into the same lines. The two lists must be equal.
-Another test pins the annex at 36 dated rows and 2 notes, so a reader that drops rows fails. Changing a region, a date, a name or the
-Arán rule in the shipped data made it fail.
+Another test pins the annex at 36 dated rows and 2 notes, so a reader that drops rows fails. A
+third, "notices a wrong region, an altered date and a dropped territorial note", changes a region,
+a date and the Arán rule in a copy of the shipped data and expects the comparison to notice each.
 
 Deliberate territorial choices:
 
@@ -59,8 +60,5 @@ BOE-A-2025-21667. A read for 2027 reports `missing_year`.
 
 ## Updating for a new year
 
-1. Fetch the new resolution's XML from `https://www.boe.es/diario_boe/xml.php?id=<id>` with `curl`
-   into this folder, and record its `shasum -a 256`.
-2. Transcribe its annex and notes by hand into a new `es-<year>.ts`, with a new data version, and
-   add the source to `../sources.ts`.
-3. Point the comparison test at the new year and run it; read every difference against the page.
+Follow the runbook in
+[`docs/developers/public-holidays.md`](../../../../../docs/developers/public-holidays.md#the-yearly-data-update).

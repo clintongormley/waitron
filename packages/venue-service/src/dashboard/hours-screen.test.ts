@@ -1646,7 +1646,7 @@ describe("Hours: special dates", () => {
     await menuAction(el, rowOf(el, "Fiesta"), "duplicate-date");
     expect(modal(el)!.getAttribute("heading")).toBe("Duplicate Fiesta Nacional");
     expect(text(el.shadowRoot!.querySelector('[data-test="duplicate-note"]'))).toBe(
-      "Copies the name, the colour and every cell to each date.",
+      "Copies the colour and every cell to each date. A date that is a public holiday, local ones included, takes the holiday's name; any other date keeps this name.",
     );
     expect(field(el, "name")).toBeNull();
     expect(field(el, "colour")).toBeNull();

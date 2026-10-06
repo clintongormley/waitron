@@ -40,8 +40,8 @@ declare module "@waitron/shared" {
      * absent only when the refused input carried no real date. */
     "holiday.local_limit": { limit: number; year?: number };
     "holiday.geography_current": { geographyId: string };
-    /** A configuration import's hours row holds a value a save would refuse; `field` is the table
-     * or `<table>.<column>`. */
+    /** A configuration import's hours or holiday row holds a value a save would refuse; `field` is
+     * the table or `<table>.<column>`. */
     "setup.request_invalid": { field: string };
     // `working_order.not_found` and `station.not_found` are declared in @waitron/db's errors.ts.
   }

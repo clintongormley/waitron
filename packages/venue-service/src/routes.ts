@@ -401,7 +401,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    // A copy takes everything but its date from the source, so the request carries dates only.
     app.post("/management-api/venue-service/special-dates/:id/duplicate", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);

@@ -25,9 +25,9 @@ decides whether the venue closes.
   `README.md` says where each was fetched and what it is used for.
 - **A venue's local holidays** are in two venue-service tables (migration
   `packages/venue-service/drizzle/0023_public_holidays.sql`). `holiday_geographies` holds one row
-  per address the venue has entered holidays for, keyed by country, province code and a normalized
-  city, with the city as it was spelled and the territorial area chosen there. `local_holidays`
-  holds the entries, each a date and a name.
+  for each address the venue has entered holidays or chosen an area for, keyed by country, province
+  code and a normalized city, with the city as it was spelled and the territorial area chosen there.
+  `local_holidays` holds the entries, each a date and a name.
 - **The reader and writers** are in `packages/venue-service/src/holidays.ts`, and the routes under
   `/management-api/venue-service/` in `routes.ts` beside it. Reading needs `venue.view`; every
   write needs `venue_service.manage`.
@@ -63,9 +63,11 @@ puts each state into words for the manager (the `hours.calendar.coverage.*` stri
 | `unknown_region`      | The province is missing or not recognised, so no official holiday is shown.     |
 | `unsupported_country` | The country's pack has no holiday data.                                         |
 
-`local` is `owner_entered` or `none_entered` for a resolved address, `address_unresolved` when the
-city or province is missing, and `unsupported_country` without holiday data. "None entered" means
-only that nobody entered any; it does not say the town has none.
+`local` is `address_unresolved` whenever the address does not resolve: no installed pack for the
+country, a missing or unrecognised province, or a missing city. Only for a resolved address is it
+`unsupported_country`, when the pack has no holiday data, and otherwise `owner_entered` or
+`none_entered`. "None entered" means only that nobody entered any; it does not say the town has
+none.
 
 ## The local allowance
 

@@ -43,10 +43,10 @@ const yearOf = (date: LocalDate) => Number(date.slice(0, 4));
 /** The limit sentence for `year`, or for any year when the refusal named none. */
 function limitSentence(limit: number, year?: number): string {
   if (year === undefined)
-    return format(limit === 1 ? "holiday.local_limit_any_one" : "holiday.local_limit_any", {
+    return format(limit === 1 ? "holidays.local_limit_any_one" : "holidays.local_limit_any", {
       limit: String(limit),
     });
-  return format(limit === 1 ? "holiday.local_limit_one" : "holiday.local_limit", {
+  return format(limit === 1 ? "holidays.local_limit_one" : "holidays.local_limit", {
     limit: String(limit),
     year: String(year),
   });
@@ -206,7 +206,7 @@ export class LocalHolidaysEditor extends LitElement {
     const limit = this.model?.localEntryLimit ?? 0;
     if (editor.date === "") errors.holidayDate = t("hours.date_required");
     else if (others.some((entry) => entry.date === editor.date))
-      errors.holidayDate = format("holiday.date_taken", { date: formatDate(editor.date) });
+      errors.holidayDate = format("holidays.date_taken", { date: formatDate(editor.date) });
     else if (others.filter((entry) => yearOf(entry.date) === yearOf(editor.date)).length >= limit)
       errors.holidayDate = limitSentence(limit, yearOf(editor.date));
     if (editor.name.trim() === "") errors.holidayName = t("hours.name_required");
@@ -279,16 +279,16 @@ export class LocalHolidaysEditor extends LitElement {
       this.refused = { [name]: sentence };
       void this.#focusInvalid();
     };
-    if (code === "holiday.not_found") this.bottomRefusal = t("holiday.not_found");
+    if (code === "holiday.not_found") this.bottomRefusal = t("holidays.not_found");
     else if (code === "holiday_geography.not_found")
-      this.bottomRefusal = t("holiday_geography.not_found");
+      this.bottomRefusal = t("holidays.geography_not_found");
     else if (code === "holiday.geography_current")
-      this.bottomRefusal = t("holiday.geography_current");
+      this.bottomRefusal = t("holidays.geography_current");
     else if (editor.kind !== "entry") this.bottomRefusal = t("hours.save_error");
     else if (code === "holiday.date_taken")
       field(
         "holidayDate",
-        format("holiday.date_taken", { date: formatDate(params.date ?? editor.date) }),
+        format("holidays.date_taken", { date: formatDate(params.date ?? editor.date) }),
       );
     else if (code === "holiday.local_limit") {
       const limit = params.limit ?? 0;

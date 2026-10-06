@@ -2484,9 +2484,21 @@ column is shown.
   Delete for a special date or Make this a special date for an ordinary one; a viewer gets no
   actions.
 
+Under the Special dates table sits the Local holidays section (`local-holidays-editor.ts`), with
+its own `h2`. A line names the venue's city and yearly allowance, or says why none can be entered
+yet. Where the province's official list needs an area, a dropdown chooses it (a viewer reads the
+choice as text). Then come the year's count against the allowance, Add a local holiday, and a
+`wt-data-table` of the current address's entries whose row menu holds Edit and Remove. Last, each
+earlier address still stored gets a line naming its city, with a Remove button. In the Calendar,
+the date panel lists each holiday on the chosen date under its heading, with its kind (national,
+regional or local) and its source: the official source, linked where it has an address, or
+"Entered by you for" the city. Two lines follow, on how complete that year's official holidays are
+and on its local holidays. Above the month grid, a line names each year shown whose official
+holidays are not known to be complete.
+
 In the week grid and the date panel a period stays on one line, so hours wrap only between
 periods. The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
-Delete and Clear schedule are `compact`.
+Delete and Clear schedule are `compact`, as are the local holiday dialogs.
 
 Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
 each panel leaves it out because its tab already names the panel through `aria-labelledby`.

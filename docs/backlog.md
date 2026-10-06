@@ -4438,11 +4438,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       Arán" are Spanish data labels shown untranslated in English; the database does not count local
       holidays, so only the writer and the import hold the yearly allowance; the local-holidays editor
       decides "not available" from an allowance of 0 and the calendar from an unsupported country,
-      which differ only for a country shipping an allowance of 0 (none does); `renameSpecialDate`
+      which differ only for a country shipping an allowance of 0 (none does); and `renameSpecialDate`
       checks the name before the date's id, so a blank name for another venue's date answers
-      `hours.invalid` rather than not found; `packages/country-es/src/holidays.test.ts` switches Node
-      types on for the whole package; and the Local holidays section is not yet described in
-      [design-system.md](developers/design-system.md).
+      `hours.invalid` rather than not found.
     [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) was approved on
     2026-10-05; the grid and row-first cell storage are not implemented. Its Prep stations dependency
     is landed; follow the lane queue for the build. Approved decisions cover the No category group,
