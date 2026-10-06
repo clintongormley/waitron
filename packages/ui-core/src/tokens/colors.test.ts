@@ -143,6 +143,25 @@ test("the lifted surface stands apart from every other surface and keeps text re
   }
 });
 
+describe.each(["light", "dark"] as const)("sunken surface (%s)", (theme) => {
+  test("text reads at 4.5:1 or more on it", () => {
+    const el = mount(theme);
+    expect(
+      ratio(token(el, "--wt-color-text"), token(el, "--wt-color-surface-sunken")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("the OS preference gives it the same value as the explicit theme", async () => {
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    const explicit = mount(theme);
+    const fromTheme = token(explicit, "--wt-color-surface-sunken");
+    expect(fromTheme).not.toBe("");
+    explicit.remove();
+    await commands.emulateColorScheme(theme);
+    expect(token(mount(), "--wt-color-surface-sunken")).toBe(fromTheme);
+  });
+});
+
 const FIELD_TOKENS = [
   "--wt-color-field-fill",
   "--wt-color-field-line",

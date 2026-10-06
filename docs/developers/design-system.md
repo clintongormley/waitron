@@ -109,8 +109,8 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 ### Colour
 
 `--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-surface-lifted`,
-`--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`, `--wt-color-on-primary`,
-`--wt-color-primary-text`, `--wt-color-danger`,
+`--wt-color-surface-sunken`, `--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`,
+`--wt-color-on-primary`, `--wt-color-primary-text`, `--wt-color-danger`,
 `--wt-color-on-danger`, `--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
 `--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-field-fill`,
 `--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
@@ -130,6 +130,11 @@ Colours are semantic, not literal. There is no `--wt-color-blue`. The one named 
 calendar palette below, because there the colour's name is what the operator picks. `--wt-color-scrim` was added
 after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need a similar
 overlay/veil colour elsewhere, reuse it rather than inventing a new one.
+
+`--wt-color-surface-sunken` is the fill of a sold-out till tile: `#d6d9e0`, the value of
+`--wt-color-border`, in the light theme, and `#101216`, the value of `--wt-color-bg`, in the dark,
+so in the dark theme a sold-out tile sits at the page's own level, below an available tile's
+`--wt-color-surface`.
 
 `--wt-color-surface-lifted` is the background of something picked up and moving, or of a row being
 pointed at or focused — for example a table row while a pointer drags it
@@ -231,13 +236,13 @@ different idiom from the one the floor plan and service statuses
 already use for a data colour — a neutral chip with the colour shown only as a border and a dot —
 which was tried for categories and declined: a pale colour nearly disappears as a border in the
 theme where it's already pale (light colours in light mode, dark colours in dark mode). A painted
-sold-out till tile uses that border idiom on purpose, without the dot. Every sold-out till tile,
-painted or not, is grey (`--wt-color-border`) with `--wt-color-text` labels in place of
-`wt-button`'s disabled fade, and a painted one keeps its colour only as a stripe on its start edge
-([products.md](products.md), _Colour_). That stripe is faint for a pale colour in the light theme
-and a dark colour in the dark theme, which is accepted because the tile's name and "Sold out" carry
-the meaning. Reach for the filled-background idiom only for a
-colour that is itself the data, never as a shortcut around a `--wt-color-*` token.
+sold-out till tile borrows that idiom's neutral tile, without the dot. Every sold-out till tile,
+painted or not, is filled `--wt-color-surface-sunken` with `--wt-color-text` labels in place of
+`wt-button`'s disabled fade, and a painted one keeps its colour only on its left edge, as an inset
+stripe `--wt-space-1` wide edged on the tile's side by a one-pixel `--wt-color-text` line, which
+reaches 3:1 against both the fill and the stripe wherever the stripe alone does not
+([products.md](products.md), _Colour_, has the measurements). Reach for the filled-background idiom only for a colour that is itself the data,
+never as a shortcut around a `--wt-color-*` token.
 
 **A menu's Device Home Page, on the till and in the dashboard's preview.** Both draw it from one
 set of rules (`packages/catalogue/src/device-home.ts`): the till in its menu browser

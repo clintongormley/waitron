@@ -207,13 +207,17 @@ export class TillMenuBrowser extends LitElement {
          outside wt-button wins over wt-button's own. */
       .tile[data-sold-out]::part(button) {
         opacity: 1;
-        background: var(--wt-color-border);
+        background: var(--wt-color-surface-sunken);
         border-color: var(--wt-color-border);
         color: var(--wt-color-text);
       }
 
+      /* Inset shadows take no layout width, so the labels stay centred. The text-coloured line
+         under the stripe keeps a stripe close to the tile's own fill visible. */
       .tile[data-sold-out][data-painted]::part(button) {
-        border-inline-start: var(--wt-space-2) solid var(--tile-fill);
+        box-shadow:
+          inset var(--wt-space-1) 0 0 var(--tile-fill),
+          inset calc(var(--wt-space-1) + 1px) 0 0 var(--wt-color-text);
       }
 
       .tile[data-sold-out] .price,
