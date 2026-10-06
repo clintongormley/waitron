@@ -1900,6 +1900,13 @@ the owner says otherwise (plan, "Open points"): a Spanish venue with no known pr
 nothing (setup cannot create one; the owner's reason for Spanish leans towards requiring it there
 too); receipts outside Catalonia stay free, Spanish by default. The new rules reach existing
 venues at their next start; only their stored language list waits for a reset.
+**Setup's side and the pack's rules are BUILT (W109-6, Task 6):** Spain's pack requires Spanish in
+every area it does not otherwise name and Spanish + Catalan in the Balearic Islands, defaults to
+the regional language in the Valencian Community, the Balearic Islands and Galicia, and a new venue
+starts with `resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`):
+its default, its area's required languages, then English. The dashboard's required-language
+messages now say Waitron keeps the language enabled for the region, not that the region requires
+it. The demo's side is still Tasks 3 and 4.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
@@ -4342,18 +4349,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 
 ### A9. Product depth — after the primary works
 
-- **Product languages are hard-coded at setup** (owner, 2026-09-13). The hard-code is in
-  `packages/catalogue/src/provisioning.ts` and names this entry: every Spanish venue starts with
-  `["es", "ca", "en"]` plus its region's required languages, so a venue in Galicia also gets
-  Catalan. **Fix decided by the owner 2026-10-06 (~17:23): a new venue starts with its region's
-  required languages plus English, the regional language the default where one is required**
-  (entry "Content languages per region", A2). Planned as Task 6 of
-  `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`
-  (`feat/content-languages-by-region`); this entry closes when it lands, except the two writers
-  that skip the required-language check (`content.language_required`): the demo seed
-  (`apps/server/scripts/demo-seed/seed-catalogue.ts`), fixed by that plan's Task 4, and the
-  Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`), which
-  copies the saved row as it is and stays open.
+- **Product languages are hard-coded at setup** (owner, 2026-09-13) — **DONE (W109-6, Task 6 of
+  `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`).** A new venue starts with
+  its region's required languages plus English, the regional language the default where one is
+  required (owner, 2026-10-06 ~17:23; entry "Content languages per region", A2); the fixed
+  `["es", "ca", "en"]` is gone from `packages/catalogue/src/provisioning.ts`.
+- **Two writers still skip the required-language check (`content.language_required`) — OPEN.**
+  The demo seed (`apps/server/scripts/demo-seed/seed-catalogue.ts`) replaces setup's row with its
+  own pair, fixed by the demo-data plan's Task 4 (W109-4); the Prepare-to-Live configuration copy
+  (`packages/catalogue/src/configuration-transfer.ts`) copies the saved row as it is, unplanned.
 - **A visible list of missing translations (C122, owner 2026-10-01) — DONE (#1006).** The
   Content languages page's **Missing translations** section lists, per enabled language, what has
   no customer-facing name in it.
