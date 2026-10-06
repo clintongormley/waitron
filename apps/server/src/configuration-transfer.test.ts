@@ -3693,11 +3693,14 @@ describe("public holidays in a configuration transfer", () => {
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    expect(journal.entries.at(-1)!.tag).toBe("0023_public_holidays");
+    const holidayMigration = journal.entries.findIndex(
+      (entry) => entry.tag === "0023_public_holidays",
+    );
+    expect(holidayMigration).toBeGreaterThan(0);
     expect(versions["venue-service"]).toBe(journal.entries.length);
     const older: ConfigurationBundle = {
       ...transferred,
-      modules: { ...transferred.modules, "venue-service": versions["venue-service"]! - 1 },
+      modules: { ...transferred.modules, "venue-service": holidayMigration },
     };
     expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
       expect.objectContaining({
