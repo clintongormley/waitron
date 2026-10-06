@@ -359,6 +359,8 @@ describe("dashboard-device-home-preview", () => {
       expect(image(section)!.getAttribute("src")).toBe("/media/drinks.webp");
       expect(section.hasAttribute("data-painted")).toBe(false);
       expect(section.querySelector(".kind")!.textContent!.trim()).toBe("Section");
+      // The thumbnail takes the folder icon's place.
+      expect(section.querySelector("wt-icon")).toBeNull();
     });
 
     it("draws a product with neither image nor colour neutral in Thumbnails mode, name and price shown", async () => {
@@ -480,5 +482,26 @@ describe("dashboard-device-home-preview", () => {
     el.document = lunch(SHORTCUTS, [documentProduct("mi-lemonade", "p-lemonade")]);
     await el.updateComplete;
     expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+  });
+
+  it("stays home when the document that dropped the open section is replaced by one holding it again", async () => {
+    const original = lunch();
+    const { el } = await mount({ document: original });
+    await click(el, tile(el, "structure", "Drinks para clientes"));
+    el.document = lunch(SHORTCUTS, [documentProduct("mi-lemonade", "p-lemonade")]);
+    await el.updateComplete;
+    el.document = original;
+    await el.updateComplete;
+    expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+  });
+
+  it("lets no event from its search reach the page around it", async () => {
+    const { el, host } = await mount();
+    const heard: string[] = [];
+    for (const type of ["wt-change", "wt-input", "input", "change"])
+      host.addEventListener(type, () => heard.push(type));
+    await search(el, "lemo");
+    expect(names(tiles(el, "results"))).toEqual(["Lemonade"]);
+    expect(heard).toEqual([]);
   });
 });

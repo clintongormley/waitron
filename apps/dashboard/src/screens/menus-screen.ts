@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ref } from "lit/directives/ref.js";
 import { ifDefined } from "lit/directives/if-defined.js";
+import { live } from "lit/directives/live.js";
 import {
   baseStyles,
   focusFirstInvalid,
@@ -1539,7 +1540,8 @@ export class MenusScreen extends LitElement {
   }
 
   /** Saves one display setting of the device shown. A refusal naming a control of that device goes
-   * under it; any other is said above the controls. */
+   * under it; any other is said above the controls. A saved value is kept in the home shown, so it
+   * still shows when the read that follows fails. */
   async #saveDisplay(patch: Partial<HomeDisplay>): Promise<void> {
     const menuId = this.menuId;
     if (menuId === null || this.homeSaving) return;
@@ -2180,7 +2182,7 @@ export class MenusScreen extends LitElement {
         label=${t("home.columns")}
         .min=${range.min}
         .max=${range.max}
-        .value=${display.columns}
+        .value=${live(display.columns)}
         .disabled=${this.homeSaving}
         error=${this.homeFieldErrors.columns ?? ""}
         @wt-change=${(event: CustomEvent<{ value: number }>) => {
@@ -2217,7 +2219,9 @@ export class MenusScreen extends LitElement {
       </section>`;
   }
 
-  /** One display setting as a group of radios, its refusal beneath it. */
+  /** One display setting as a group of radios, its refusal beneath it. These radios and the slider
+   * bind through `live`: a refused change leaves the saved value unchanged, and without it the
+   * refused choice would stay showing. */
   #homeChoice(
     field: "tiles" | "order",
     legend: string,
@@ -2237,7 +2241,7 @@ export class MenusScreen extends LitElement {
                 type="radio"
                 name=${`home-${field}`}
                 value=${option.value}
-                .checked=${option.value === value}
+                .checked=${live(option.value === value)}
                 .disabled=${this.homeSaving}
                 aria-invalid=${ifDefined(error ? "true" : undefined)}
                 @change=${() => change(option.value)}
