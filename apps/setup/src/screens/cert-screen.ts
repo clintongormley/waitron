@@ -1,6 +1,12 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
+import {
+  focusFirstInvalid,
+  submitOnEnter,
+  baseStyles,
+  leaveCoordinatorFor,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -21,6 +27,16 @@ const CERT_KINDS: ReadonlyArray<{ value: AeatCertDraft["certKind"]; label: Strin
   { value: "sello", label: "cert.kind.sello" },
   { value: "representante", label: "cert.kind.representante" },
 ];
+
+interface CertificateForm {
+  pfxBase64: string;
+  fileName: string;
+  passphrase: string;
+  certKind: AeatCertDraft["certKind"];
+  selectedFile: File | null;
+  pendingFile: File | null;
+  fileReadFailed: boolean;
+}
 
 /** Everything after the first comma of the data URL is the base64 payload: the base64 alphabet has
  * no comma. */
@@ -99,6 +115,68 @@ export class SetupCertScreen extends LitElement {
   @state() private fileReadFailed = false;
 
   #seeded = false;
+  #baseline?: CertificateForm;
+  #scope?: DraftScope<CertificateForm>;
+  #selectedFile: File | null = null;
+  #pendingFile: File | null = null;
+  #fileGeneration = 0;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#registerScope();
+  }
+
+  override disconnectedCallback(): void {
+    ++this.#fileGeneration;
+    this.#pendingFile = null;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    super.disconnectedCallback();
+  }
+
+  #current(): CertificateForm {
+    return {
+      pfxBase64: this.pfxBase64,
+      fileName: this.fileName,
+      passphrase: this.passphrase,
+      certKind: this.certKind,
+      selectedFile: this.#selectedFile,
+      pendingFile: this.#pendingFile,
+      fileReadFailed: this.fileReadFailed,
+    };
+  }
+
+  #registerScope(): void {
+    if (!this.isConnected || !this.#baseline || this.#scope) return;
+    this.#scope = leaveCoordinatorFor(this)?.register({
+      id: this,
+      current: () => this.#current(),
+      snapshot: (form) => ({ ...form }),
+      equal: (a, b) =>
+        a.pfxBase64 === b.pfxBase64 &&
+        a.passphrase === b.passphrase &&
+        a.certKind === b.certKind &&
+        a.pendingFile === b.pendingFile &&
+        a.fileReadFailed === b.fileReadFailed &&
+        (a.pfxBase64 !== "" || a.selectedFile === b.selectedFile),
+      restore: (form) => {
+        ++this.#fileGeneration;
+        this.pfxBase64 = form.pfxBase64;
+        this.fileName = form.fileName;
+        this.passphrase = form.passphrase;
+        this.certKind = form.certKind;
+        this.#selectedFile = form.selectedFile;
+        this.#pendingFile = form.pendingFile;
+        this.fileReadFailed = form.fileReadFailed;
+        this.attempted = false;
+        const files = new DataTransfer();
+        if (form.selectedFile) files.items.add(form.selectedFile);
+        const input = this.shadowRoot?.querySelector<HTMLInputElement>("[data-test=pfx]");
+        if (input) input.files = files.files;
+      },
+    });
+    this.#scope?.commit(this.#baseline);
+  }
 
   constructor() {
     super();
@@ -106,13 +184,17 @@ export class SetupCertScreen extends LitElement {
   }
 
   override willUpdate(): void {
-    if (this.#seeded) return;
-    this.#seeded = true;
-    this.#seedFromDraft();
+    if (!this.#seeded) {
+      this.#seeded = true;
+      this.#seedFromDraft();
+    }
+    this.#baseline ??= this.#current();
   }
 
-  /** A file input cannot be re-populated programmatically, so a returning operator's file comes back
-   * as the base64 an earlier Next saved in the draft. */
+  override updated(): void {
+    this.#registerScope();
+  }
+
   #seedFromDraft(): void {
     const cert = this.draft.aeatCert;
     if (cert === undefined) return;
@@ -124,33 +206,45 @@ export class SetupCertScreen extends LitElement {
   async #onFileChange(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
+    const generation = ++this.#fileGeneration;
+    this.#selectedFile = file ?? null;
+    this.#pendingFile = file ?? null;
+    this.pfxBase64 = "";
     if (!file) {
-      this.pfxBase64 = "";
       this.fileName = "";
       this.fileReadFailed = false;
+      this.#scope?.changed();
       return;
     }
     this.fileReadFailed = false;
     this.fileName = file.name;
+    this.#scope?.changed();
     try {
-      this.pfxBase64 = await readFileAsBase64(file);
+      const base64 = await readFileAsBase64(file);
+      if (!this.isConnected || generation !== this.#fileGeneration) return;
+      this.#pendingFile = null;
+      this.pfxBase64 = base64;
+      this.#scope?.changed();
     } catch {
-      // The @change binding discards this handler's promise, so a read failure caught nowhere else
-      // would escape as an unhandled rejection.
+      if (!this.isConnected || generation !== this.#fileGeneration) return;
+      this.#pendingFile = null;
       this.pfxBase64 = "";
       this.fileName = "";
       this.fileReadFailed = true;
+      this.#scope?.changed();
     }
   }
 
   #onPassphrase(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.passphrase = event.detail.value;
+    this.#scope?.changed();
   }
 
   #onCertKind(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.certKind = event.detail.value as AeatCertDraft["certKind"];
+    this.#scope?.changed();
   }
 
   #errors(): Partial<Record<"pfx" | "passphrase", string>> {
@@ -169,13 +263,16 @@ export class SetupCertScreen extends LitElement {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
+    const submitted = this.#current();
     dispatchSetupPatch(this, {
       aeatCert: {
-        pfxBase64: this.pfxBase64,
-        passphrase: this.passphrase,
-        certKind: this.certKind,
+        pfxBase64: submitted.pfxBase64,
+        passphrase: submitted.passphrase,
+        certKind: submitted.certKind,
       },
     });
+    this.#baseline = submitted;
+    this.#scope?.commit(this.#baseline);
     dispatchSetupGoto(this, "fiscal-test");
   }
 

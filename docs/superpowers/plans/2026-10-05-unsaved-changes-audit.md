@@ -2261,3 +2261,44 @@ the intended assertion beside a passing same-step control. After restoring the s
 final candidate passed 29 cases, and both changed source/test files were byte-compared with
 the feature worktree before its owned candidate directory was removed. The visual flows
 passed 16 axe scans; their 16 captures were inspected in four sheets and one original.
+
+## Setup certificate child, 2026-10-06
+
+The certificate step registers its exact passphrase, certificate kind and PFX payload with the
+shared leave coordinator. A pending or unreadable selection compares File identity until bytes
+are available; loaded certificates compare bytes rather than filenames. Back protects only this
+child, while Next commits the captured submitted child before requesting navigation. A newer
+input delivered during the patch stays dirty. Discard restores the native file selection as well
+as the payload; disconnect and replacement invalidate pending file reads and leave answers.
+A selected first file whose read was interrupted remains dirty after reconnect.
+
+Receipts: Lane E `receipts/w69-setup-cert-20261006`. The initial real-shell browser suite failed
+nine of ten cases on missing unload/Back protection or on submitting the previous certificate
+while its replacement was reading. The first green attempt passed 41 cases and failed the new
+reconnect fixture: it appended the child outside the shell's event-listening container. Reconnecting
+the shell in its original host, as the venue suite does, passed all 42. A further submitted-snapshot
+case failed before capturing values before the patch; the later first-file reconnect case failed
+before retaining File identity when no bytes are available. No existing assertion changed.
+
+The six final setup suites passed 475 cases (`family-final2.log`); the unchanged fiscal write-path
+and immutability suites passed 20 (`fiscal.log`). Setup types and changed-file lint passed.
+Seven independent frozen-installed candidate deletions each failed their intended case beside
+an unchanged passing Back control (`deletions-final.json`). The initial disposal mutation survived
+a whole-shell reconnect case; the new child-only removal case caught it. The restored candidate
+passed 49 cases and its two source/test files matched the feature tree before cleanup. A second
+frozen-installed candidate's pending-identity deletion failed the new reconnect case beside the
+unchanged passing Back control; restoring it passed 50 cases and both files were byte-compared
+before cleanup. Source formatting and diff checks are recorded with the checkpoint.
+
+Eight temporary real-shell EN/ES, light/dark, 390/1280 flows passed 16 axe scans and captured
+16 images, inspected in four sheets. Native warning Escape and Keep retained the typed passphrase;
+the permanent native Escape case checks focus returns to Back. Captures use stubbed initial API
+reads and synthetic certificate values. Phone captures contain blank canvas above or below the
+scrolled form; they do not establish the deployment page's complete canvas. Hovered danger and
+primary colours, live onboarding, actual certificate/fiscal operations and activated browser
+reload are not verified by these flows. The earlier shared hover findings remain open.
+
+This finishes the certificate child stage only. Connect/reset/restore/bucket/cloud setup children,
+till shell and page/tab/context routes, receipt/login and other page owners, activated native
+reload and final advancing-owner classification remain open. Tasks 2/3 stay complete and Tasks
+1/4/5/6 stay partial; neither W69 PR is ready for finish-branch.
