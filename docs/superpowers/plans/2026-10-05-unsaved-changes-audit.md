@@ -2000,3 +2000,43 @@ Tasks 1/4 still need the final advancing-owner classification. Tasks 5/6 still n
 and login history writers, child tab/context interception before mutation, till/setup shells,
 remaining page/setup owners and activated native reload. Neither proposed W69 PR is ready for
 finish-branch at this checkpoint.
+
+
+## Direct receipt and login history consumers, 2026-10-06
+
+Receipt preview department choices and invalid-department repairs now use the installed
+navigation adapter. The preview subscribes to accepted routes rather than independently
+restoring on raw `popstate`; standalone rendering retains its existing native-history behavior.
+The new cases check choice indexing, repair without an extra history entry, accepted-route
+preview restoration, and the retained preview while the adapter asks about Back.
+
+Account-link cancellation replaces its address through that adapter, preserving its namespace
+and unrelated history state. It waits for approval before clearing the account form. Keep retains
+the staged password and token address; Discard returns to the email screen. Its deferred reset
+checks the connected element and captured account-action identity.
+
+Receipts: Lane E `receipts/w69-direct-history-20261006`. Initial four cases failed on accepted
+address/preview mismatches; two later cases failed because cancellation cleared the password
+form before a decision. The first dirty-case run loaded no tests because the fixture imported
+ui-core directly from a package without that dependency; the corrected fixture uses the existing
+navigation leave seat. An overly broad import edit briefly placed a function in LoginScreen's
+stylesheet list; the retained diagnostic and unchanged control run exposed it, and the edit was
+corrected. The new clean-login case polls its asynchronous form reset without changing any
+existing assertion.
+
+The final four receipt/login/dashboard shell suites passed 338 browser cases. Dashboard types,
+changed-file lint, source formatting and diff checks passed. The unedited fiscal write-path and
+immutability suites passed 20 cases. In a separate frozen-installed candidate, bypassing the
+receipt choice or repair adapter and removing its accepted-route subscription each failed one
+new case beside the unchanged passing Back case. Clearing the login form before approval failed
+both answer cases beside the unchanged passing standalone cancellation case. Restoring that
+candidate passed eight selected cases; all four changed source/test files matched the feature
+checkout before the owned candidate was removed.
+
+These route-owner checks use a controlled navigation decision, not a registered receipt/login
+page draft or the full application warning renderer. They do not establish every intermediate
+preview paint during traversal, same-page preview exemptions with registered drafts, activated
+native reload, or protection in all forms. Task 5 still needs till/setup shells and child
+screen/tab/context changes before mutation. Task 6 still needs receipt/login and the remaining
+page/setup owners. Tasks 1/4 need final advancing-owner classification; Tasks 2/3 remain complete.
+Neither W69 PR is ready for finish-branch.

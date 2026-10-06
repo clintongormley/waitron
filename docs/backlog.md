@@ -1178,8 +1178,12 @@ requests route decisions before sidebar navigation, Account settings transitions
 links and ordinary same-app anchors. Its profile cases exercise indexed Back/Forward, Keep,
 Discard, forced expiry and retained main-page drafts. Link controls preserve modified clicks,
 new tabs, downloads and other origins/apps. Accepted-route observers can normalize a URL after
-the pending destination is accepted. Direct receipt/login history calls, child screen/tab owners,
-the till/setup shell integrations, page/setup owners and activated native reload remain open.
+the pending destination is accepted. Receipt preview choices and address repairs now write
+through the adapter, and the preview observes only accepted routes while it is installed.
+Account-link cancellation preserves the history index and unrelated state; its form remains
+in place until navigation is approved. Receipt/login page draft registration, child screen/tab
+owners, till/setup shell integrations, other page/setup owners and activated native reload
+remain open.
 Dashboard voluntary logout and a language change also request the shared warning before their
 API calls. Language changes exclude the retained profile editor and its descendants; picking
 the current language saves its preference without restoring unrelated drafts. Forced expiry

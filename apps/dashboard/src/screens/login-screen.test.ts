@@ -5,6 +5,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { DashboardApi } from "../api/client.js";
+import { NavigationGuard } from "@waitron/ui";
 import { LoginScreen } from "./login-screen.js";
 
 // Keep the real WebAuthn library; stub only the hardware boundary so an earlier
@@ -3861,3 +3862,90 @@ describe("login-screen: the chosen email is a read-only field", () => {
     },
   );
 });
+
+it("account-link cancellation preserves the accepted history index and publishes the login address", async () => {
+  const original = location.href;
+  history.replaceState(
+    { marker: "retained" },
+    "",
+    "/manage/account?token=token-1&purpose=invitation",
+  );
+  const guard = new NavigationGuard(window, {
+    isDirty: () => false,
+    request: async (proceed) => {
+      await proceed();
+      return "proceeded";
+    },
+  });
+  const index = history.state.__wtNavigation;
+  const length = history.length;
+  try {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ inspectAccountAction: vi.fn(never) }),
+    });
+    click(el, "cancel-account-action");
+    await el.updateComplete;
+    expect(new URL(guard.href).pathname).toBe("/manage/");
+    expect(new URL(guard.href).search).toBe("");
+    expect(history.state).toEqual({ marker: "retained", __wtNavigation: index });
+    expect(history.length).toBe(length);
+    await expect.poll(() => field(el, "email")).not.toBeNull();
+  } finally {
+    cleanupWidgets();
+    guard.dispose();
+    history.replaceState(null, "", original);
+  }
+});
+
+it.each(["keep", "discard"] as const)(
+  "account-link cancellation waits for %s before clearing its form",
+  async (decision) => {
+    const original = location.href;
+    history.replaceState(
+      { marker: "retained" },
+      "",
+      "/manage/account?token=token-1&purpose=invitation",
+    );
+    let answer!: (decision: "keep" | "discard") => void;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => true,
+      request: (proceed) =>
+        new Promise((resolve) => {
+          answer = async (choice) => {
+            if (choice === "discard") {
+              await proceed();
+              resolve("proceeded");
+            } else resolve("kept");
+          };
+        }),
+    });
+    try {
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      await flush(el);
+      input(el, "new-password", "changed password");
+      click(el, "cancel-account-action");
+      await el.updateComplete;
+      await expect.poll(() => typeof answer).toBe("function");
+      expect(el.shadowRoot!.querySelector('wt-input[name="new-password"]')).not.toBeNull();
+      expect(field(el, "new-password").value).toBe("changed password");
+      expect(location.search).toContain("token=token-1");
+      answer(decision);
+      await expect.poll(() => guard.write(guard.href)).toBe("proceeded");
+      await el.updateComplete;
+      if (decision === "keep") {
+        expect(field(el, "new-password").value).toBe("changed password");
+        expect(location.search).toContain("token=token-1");
+      } else {
+        await expect
+          .poll(() => el.shadowRoot!.querySelector('wt-input[name="email"]'))
+          .not.toBeNull();
+        expect(location.pathname + location.search).toBe("/manage/");
+        expect(el.shadowRoot!.querySelector('wt-input[name="new-password"]')).toBeNull();
+      }
+    } finally {
+      guard.dispose();
+      cleanupWidgets();
+      history.replaceState(null, "", original);
+    }
+  },
+);

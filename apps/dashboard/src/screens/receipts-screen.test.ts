@@ -10,7 +10,7 @@ import type {
   ReceiptPreview,
 } from "../api/client.js";
 import { RECEIPT_PREVIEW_QUIET_MS, ReceiptsScreen } from "./receipts-screen.js";
-import type { WtInput } from "@waitron/ui";
+import { NavigationGuard, type WtInput } from "@waitron/ui";
 
 /** A stand-in for the server's drawing: one text block a line, with the trim marked. */
 function fakePreview(config: ReceiptConfig): ReceiptPreview {
@@ -1024,4 +1024,123 @@ describe("the Receipts page's paper width", () => {
       expect(widthSelect(el)).toBeNull();
     },
   );
+});
+
+describe("receipt preview accepted history", () => {
+  it("indexes preview choices so Back returns through the accepted adapter", async () => {
+    const original = location.href;
+    history.replaceState(
+      { marker: "retained" },
+      "",
+      "/manage/venue-settings/view/receipts?departmentId=deli&dev=1",
+    );
+    const guard = new NavigationGuard(window, {
+      isDirty: () => false,
+      request: async (proceed) => {
+        await proceed();
+        return "proceeded";
+      },
+    });
+    try {
+      const { el } = await mount(
+        stubApi({
+          getVenueDepartments: async () => [
+            { id: "deli", name: "Deli", active: true },
+            { id: "bar", name: "Bar", active: true },
+          ],
+        }),
+      );
+      const selector = q<HTMLElement & { value: string }>(
+        el,
+        "wt-combobox[name=previewDepartment]",
+      )!;
+      await chooseOption(selector, "bar");
+      expect(new URL(guard.href).searchParams.get("departmentId")).toBe("bar");
+      expect(history.state).toMatchObject({ marker: "retained", __wtNavigation: { index: 1 } });
+      expect(location.search).toContain("dev=1");
+      history.back();
+      await expect.poll(() => selector.value).toBe("deli");
+      expect(new URL(guard.href).searchParams.get("departmentId")).toBe("deli");
+    } finally {
+      cleanupWidgets();
+      guard.dispose();
+      history.replaceState(null, "", original);
+    }
+  });
+
+  it("publishes preview repairs through the adapter without adding an entry", async () => {
+    const original = location.href;
+    history.replaceState(
+      { marker: "retained" },
+      "",
+      "/manage/venue-settings/view/receipts?departmentId=removed",
+    );
+    const guard = new NavigationGuard(window, {
+      isDirty: () => false,
+      request: async (proceed) => {
+        await proceed();
+        return "proceeded";
+      },
+    });
+    const length = history.length;
+    try {
+      await mount(
+        stubApi({
+          getVenueDepartments: async () => [
+            { id: "deli", name: "Deli", active: true },
+            { id: "bar", name: "Bar", active: true },
+          ],
+        }),
+      );
+      expect(new URL(guard.href).searchParams.get("departmentId")).toBe("deli");
+      expect(history.length).toBe(length);
+      expect(history.state).toMatchObject({ marker: "retained", __wtNavigation: { index: 0 } });
+    } finally {
+      cleanupWidgets();
+      guard.dispose();
+      history.replaceState(null, "", original);
+    }
+  });
+
+  it("does not restore a traversed preview until the history adapter accepts it", async () => {
+    const original = location.href;
+    history.replaceState(null, "", "/manage/venue-settings/view/receipts?departmentId=deli");
+    let dirty = false;
+    let keep!: () => void;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => dirty,
+      request: () =>
+        new Promise((resolve) => {
+          keep = () => resolve("kept");
+        }),
+    });
+    try {
+      const { el } = await mount(
+        stubApi({
+          getVenueDepartments: async () => [
+            { id: "deli", name: "Deli", active: true },
+            { id: "bar", name: "Bar", active: true },
+          ],
+        }),
+      );
+      await guard.write("/manage/venue-settings/view/receipts?departmentId=bar");
+      const selector = q<HTMLElement & { value: string }>(
+        el,
+        "wt-combobox[name=previewDepartment]",
+      )!;
+      await expect.poll(() => selector.value).toBe("bar");
+      dirty = true;
+      history.back();
+      await expect.poll(() => typeof keep).toBe("function");
+      expect(selector.value).toBe("bar");
+      expect(new URL(guard.href).searchParams.get("departmentId")).toBe("bar");
+      keep();
+      await expect.poll(() => guard.write(guard.href)).toBe("proceeded");
+      expect(selector.value).toBe("bar");
+    } finally {
+      cleanupWidgets();
+      guard.dispose();
+      history.replaceState(null, "", original);
+    }
+  });
 });

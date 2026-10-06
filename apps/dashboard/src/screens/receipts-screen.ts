@@ -2,7 +2,8 @@ import { DraftRows, QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { isValidTelephone, resolveContentText, type ContentLanguages } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, navigationGuardFor } from "@waitron/ui";
+import { observeNavigation } from "@waitron/ui/src/navigation-guard.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
@@ -290,24 +291,28 @@ export class ReceiptsScreen extends LitElement {
   #previewRequested: string | null = null;
   #previewActive = false;
 
+  #stopNavigation?: () => void;
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
     void this.#loadDepartments();
     void this.#loadContentLanguages();
-    window.addEventListener("popstate", this.#restorePreviewDepartment);
+    this.#stopNavigation = observeNavigation(window, this.#restorePreviewDepartment);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     clearTimeout(this.#previewTimer);
     this.#previewAgain = false;
-    window.removeEventListener("popstate", this.#restorePreviewDepartment);
+    this.#stopNavigation?.();
+    this.#stopNavigation = undefined;
   }
 
   readonly #restorePreviewDepartment = (): void => {
     if (!this.#departmentsLoaded) return;
-    const url = new URL(location.href);
+    const guard = navigationGuardFor(window);
+    const url = new URL(guard?.href ?? location.href);
     if (url.pathname !== "/manage/venue-settings/view/receipts") return;
     const requested = url.searchParams.get("departmentId");
     const selected =
@@ -318,7 +323,8 @@ export class ReceiptsScreen extends LitElement {
         : null;
     if (selected !== null && selected !== requested) {
       url.searchParams.set("departmentId", selected);
-      history.replaceState(history.state, "", url);
+      if (guard) void guard.write(url, true);
+      else history.replaceState(history.state, "", url);
     }
     if (selected !== this.previewDepartmentId) {
       this.previewDepartmentId = selected;
@@ -340,10 +346,14 @@ export class ReceiptsScreen extends LitElement {
 
   #choosePreviewDepartment(departmentId: string): void {
     if (!this.departments.some((department) => department.id === departmentId)) return;
-    const url = new URL(location.href);
+    const guard = navigationGuardFor(window);
+    const url = new URL(guard?.href ?? location.href);
     url.searchParams.set("departmentId", departmentId);
-    history.pushState(history.state, "", url);
-    this.#restorePreviewDepartment();
+    if (guard) void guard.write(url);
+    else {
+      history.pushState(history.state, "", url);
+      this.#restorePreviewDepartment();
+    }
   }
 
   async #load(): Promise<void> {

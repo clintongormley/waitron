@@ -17,6 +17,7 @@ import {
   formMessageStyles,
   submitOnEnter,
   baseStyles,
+  navigationGuardFor,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -534,14 +535,27 @@ export class LoginScreen extends LitElement {
   }
 
   #cancelAccountAction(): void {
-    this.token = null;
-    this.actionPurpose = null;
-    this.actionValidated = false;
-    this.actionResent = false;
+    const token = this.token;
+    const purpose = this.actionPurpose;
+    const reset = () => {
+      if (!this.isConnected || this.token !== token || this.actionPurpose !== purpose) return;
+      this.token = null;
+      this.actionPurpose = null;
+      this.actionValidated = false;
+      this.actionResent = false;
+      this.#resetLoginForm();
+    };
     if (new URLSearchParams(window.location.search).has("token")) {
-      history.replaceState(null, "", "/manage/");
+      const guard = navigationGuardFor(window);
+      if (guard) {
+        void guard.write("/manage/", true).then((outcome) => {
+          if (outcome === "proceeded") reset();
+        });
+        return;
+      }
+      history.replaceState(history.state, "", "/manage/");
     }
-    this.#resetLoginForm();
+    reset();
   }
 
   async #inspectAccountAction(): Promise<void> {
