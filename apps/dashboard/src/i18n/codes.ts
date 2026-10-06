@@ -370,10 +370,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   // Client-side pseudo-codes live here, not in `t()`, so one editor banner resolves them and the
   // server's codes through the same `codeMessage` call.
-  "device_profiles.err_no_name": {
-    en: "Enter a name for this device profile",
-    es: "Introduce un nombre para este perfil de dispositivo",
-  },
   "canvas_editor.err_no_name": {
     en: "Enter a name for this canvas",
     es: "Introduce un nombre para este lienzo",
@@ -544,6 +540,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "device_profile.access_invalid": {
     en: "Something this profile names is no longer available. Check its choices and save again",
     es: "Algo que nombra este perfil ya no está disponible. Revisa sus opciones y vuelve a guardar",
+  },
+  "device_profile.admission_invalid": {
+    en: "Check who can sign in on this profile and save again",
+    es: "Revisa quién puede iniciar sesión con este perfil y vuelve a guardar",
   },
   "device.binding_invalid": {
     en: "This profile cannot use that printer, or it has been disabled. Choose another",

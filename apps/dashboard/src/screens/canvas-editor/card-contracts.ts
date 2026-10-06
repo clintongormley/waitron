@@ -33,6 +33,31 @@ export const CAPABILITY_FLAGS = [
 ] as const;
 export type CapabilityFlag = (typeof CAPABILITY_FLAGS)[number];
 
+export const PROFILE_ACTIONS = [
+  "take-orders",
+  "take-cash",
+  "integrated-card-payment",
+  "hand-keyed-card-payment",
+  "prepare-orders",
+  "hand-over-orders",
+  "print-receipt",
+  "open-cash-drawer",
+] as const satisfies readonly CapabilityFlag[];
+
+export const PROFILE_SCREENS = [
+  "act-as-kds",
+  "show-station",
+  "show-expo",
+  "show-schedule",
+] as const satisfies readonly CapabilityFlag[];
+
+/** The screens a profile may start on. */
+export const NAVIGATION_SCREENS = [
+  "show-station",
+  "show-expo",
+  "show-schedule",
+] as const satisfies readonly CapabilityFlag[];
+
 export const FORM_FACTORS = ["till", "phone-portrait", "tablet-landscape", "kds"] as const;
 export type FormFactor = (typeof FORM_FACTORS)[number];
 

@@ -1794,6 +1794,54 @@ export const en = {
   "device_profiles.form_factor.tablet-landscape": "Handheld tablet",
   "device_profiles.form_factor.kds": "Kitchen display",
   "device_profiles.inactivity_timeout_label": "Auto-logout after (minutes)",
+  "device_profiles.where_heading": "Where it serves",
+  "device_profiles.department": "Department",
+  "device_profiles.department_hint": "Orders taken on this profile belong to this department",
+  "device_profiles.every_zone": "Every zone in this department",
+  "device_profiles.every_zone_hint":
+    "Serves every zone of {department}, including zones added later.",
+  "device_profiles.zones": "Zones it serves",
+  "device_profiles.starting_zone": "Starting zone",
+  "device_profiles.starting_zone_hint": "Where a device opens for each new person",
+  "device_profiles.who_heading": "Who can sign in",
+  "device_profiles.roles": "Roles that can sign in",
+  "device_profiles.admitted_people": "Can sign in now: {names}",
+  "device_profiles.admitted_nobody": "Nobody can sign in on this profile now.",
+  "device_profiles.people": "Rules for one person",
+  "device_profiles.people_none": "None specified",
+  "device_profiles.person_follows_role": "Follows their role",
+  "device_profiles.person_allowed": "Can always sign in",
+  "device_profiles.person_refused": "Can never sign in",
+  "device_profiles.actions": "What it can do",
+  "device_profiles.actions_hint":
+    "A device on this profile can do only what is switched on here. A new profile starts with nothing switched on.",
+  "device_profiles.shared_display_actions_hint":
+    "A kitchen display has nobody signed in, so it can only prepare orders.",
+  "device_profiles.screens": "Screens it shows",
+  "device_profiles.starting_screen": "Opens on",
+  "device_profiles.starting_screen_first_tab": "The layout's first tab",
+  "device_profiles.screen.show-station": "Kitchen",
+  "device_profiles.screen.show-expo": "Pass",
+  "device_profiles.screen.show-schedule": "My schedule",
+  "device_profiles.department_disabled_mark": "Disabled",
+  "device_profiles.kitchen_lists_hint":
+    "Each kitchen screen on this profile shows one of these. Choose which on Devices.",
+  "device_profiles.err_department_required": "Choose the department this profile orders for",
+  "device_profiles.err_department":
+    "Check the department: it may have been switched off. Choose another.",
+  "device_profiles.err_zones_required":
+    "Choose at least one zone, or switch on Every zone in this department",
+  "device_profiles.err_zones": "Check the zones: each must be switched on and in this department.",
+  "device_profiles.err_starting_zone_required": "Choose the zone a device starts in",
+  "device_profiles.err_starting_zone":
+    "Check the starting zone: it must be one of the zones this profile serves.",
+  "device_profiles.err_roles_required": "Choose at least one role that can sign in",
+  "device_profiles.err_people":
+    "Check the rules for one person: someone on the list no longer exists.",
+  "device_profiles.err_shared_display_action":
+    "A kitchen display can only prepare orders. Switch the other actions off.",
+  "device_profiles.err_starting_screen":
+    "Choose a screen this profile shows, or the layout's first tab.",
   "payments.title": "Card payments",
   "payments.providers_heading": "Providers",
   "payments.readers_heading": "Card readers",
@@ -4116,6 +4164,55 @@ export const es: Record<StringKey, string> = {
   "device_profiles.form_factor.tablet-landscape": "Tableta de mano",
   "device_profiles.form_factor.kds": "Pantalla de cocina",
   "device_profiles.inactivity_timeout_label": "Cierre de sesión automático (minutos)",
+  "device_profiles.where_heading": "Dónde sirve",
+  "device_profiles.department": "Departamento",
+  "device_profiles.department_hint": "Los pedidos tomados con este perfil son de este departamento",
+  "device_profiles.every_zone": "Todas las zonas de este departamento",
+  "device_profiles.every_zone_hint":
+    "Sirve todas las zonas de {department}, también las que se añadan más adelante.",
+  "device_profiles.zones": "Zonas que sirve",
+  "device_profiles.starting_zone": "Zona inicial",
+  "device_profiles.starting_zone_hint": "Dónde se abre un dispositivo para cada persona nueva",
+  "device_profiles.who_heading": "Quién puede iniciar sesión",
+  "device_profiles.roles": "Roles que pueden iniciar sesión",
+  "device_profiles.admitted_people": "Pueden iniciar sesión ahora: {names}",
+  "device_profiles.admitted_nobody": "Ahora nadie puede iniciar sesión con este perfil.",
+  "device_profiles.people": "Reglas para una persona",
+  "device_profiles.people_none": "Sin especificar",
+  "device_profiles.person_follows_role": "Según su rol",
+  "device_profiles.person_allowed": "Siempre puede iniciar sesión",
+  "device_profiles.person_refused": "Nunca puede iniciar sesión",
+  "device_profiles.actions": "Qué puede hacer",
+  "device_profiles.actions_hint":
+    "Un dispositivo con este perfil solo puede hacer lo que esté activado aquí. Un perfil nuevo empieza sin nada activado.",
+  "device_profiles.shared_display_actions_hint":
+    "En una pantalla de cocina no inicia sesión nadie, así que solo puede preparar pedidos.",
+  "device_profiles.screens": "Pantallas que muestra",
+  "device_profiles.starting_screen": "Se abre en",
+  "device_profiles.starting_screen_first_tab": "La primera pestaña del diseño",
+  "device_profiles.screen.show-station": "Cocina",
+  "device_profiles.screen.show-expo": "Pase",
+  "device_profiles.screen.show-schedule": "Mi horario",
+  "device_profiles.department_disabled_mark": "Deshabilitado",
+  "device_profiles.kitchen_lists_hint":
+    "Cada pantalla de cocina con este perfil muestra una de estas. Elige cuál en Dispositivos.",
+  "device_profiles.err_department_required": "Elige el departamento para el que pide este perfil",
+  "device_profiles.err_department":
+    "Revisa el departamento: puede que se haya desactivado. Elige otro.",
+  "device_profiles.err_zones_required":
+    "Elige al menos una zona, o activa Todas las zonas de este departamento",
+  "device_profiles.err_zones":
+    "Revisa las zonas: cada una debe estar activada y ser de este departamento.",
+  "device_profiles.err_starting_zone_required": "Elige la zona en la que empieza un dispositivo",
+  "device_profiles.err_starting_zone":
+    "Revisa la zona inicial: debe ser una de las zonas que sirve este perfil.",
+  "device_profiles.err_roles_required": "Elige al menos un rol que pueda iniciar sesión",
+  "device_profiles.err_people":
+    "Revisa las reglas para una persona: alguien de la lista ya no existe.",
+  "device_profiles.err_shared_display_action":
+    "Una pantalla de cocina solo puede preparar pedidos. Desactiva las demás acciones.",
+  "device_profiles.err_starting_screen":
+    "Elige una pantalla que muestre este perfil, o la primera pestaña del diseño.",
   "payments.title": "Pagos con tarjeta",
   "payments.providers_heading": "Proveedores",
   "payments.readers_heading": "Lectores de tarjetas",

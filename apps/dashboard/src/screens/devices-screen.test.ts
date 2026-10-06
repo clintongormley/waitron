@@ -139,6 +139,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: "dep-1",
+    allowedZoneIds: null,
+    startingZoneId: "zone-1",
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
   {
     id: "dp2",
@@ -149,6 +155,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: "dep-1",
+    allowedZoneIds: null,
+    startingZoneId: "zone-1",
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
   {
     id: "dp3",
@@ -159,6 +171,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: null,
+    allowedZoneIds: null,
+    startingZoneId: null,
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
 ];
 
@@ -2109,6 +2127,25 @@ describe("the Edit dialog", () => {
       q(el, '[data-test=edit-approved-profiles] input[value="pd"]')!.click();
       await flush(el);
       expect(q(el, "[data-test=edit-approved-error]")).toBeNull();
+    });
+
+    it("an approved profile that no longer exists shows under the approvals, not the profile", async () => {
+      const api = approvalApi({
+        updateDevice: vi.fn().mockRejectedValue({
+          code: "device_profile.not_found",
+          params: { field: "approvedProfileIds" },
+        }),
+      });
+      const el = await openEdit(api);
+      await save(el);
+      await vi.waitFor(() =>
+        expect(text(el, "[data-test=edit-approved-error]")).toBe(
+          codeMessage("device_profile.not_found"),
+        ),
+      );
+      expect(q(el, "[data-test=edit-profile]")!.getAttribute("aria-invalid")).not.toBe("true");
+      expect((q(el, "[data-test=edit-profile]") as unknown as { error: string }).error).toBe("");
+      expect(await bottom(el)).toBe(t("form.fix_fields"));
     });
 
     it("a payment in progress is said at the bottom", async () => {

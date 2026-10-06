@@ -628,15 +628,46 @@ export interface Canvas {
 
 export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";
 
-export interface DeviceProfile {
+/** One person's own rule on a profile: `admitted` false keeps them out whatever their role. */
+export interface PersonException {
+  personId: string;
+  admitted: boolean;
+}
+
+/** Where a profile serves; `allowedZoneIds` null is every zone of the department. */
+export interface ProfileServiceScope {
+  departmentId: string | null;
+  allowedZoneIds: string[] | null;
+  startingZoneId: string | null;
+}
+
+export interface DeviceProfile extends ProfileServiceScope {
   id: string;
   name: string;
   canvasId: string | null;
   capabilities: string[];
   formFactor: FormFactor;
   inactivityTimeoutSeconds: number | null;
+  /** `null` opens the till on its canvas's first tab. */
+  startingScreen: string | null;
   receiptPrinterIds: string[];
   paymentSlipPrinterIds: string[];
+  /** Never empty: every role when the profile narrows nothing. */
+  admittedRoles: PersonRole[];
+  personExceptions: PersonException[];
+}
+
+/** What a profile save may also carry; each part left out stays as stored on an edit. */
+export type ProfileSaveExtras = Partial<
+  ProfileKitchenLists &
+    ProfileServiceScope &
+    Pick<DeviceProfile, "startingScreen" | "admittedRoles" | "personExceptions">
+>;
+
+/** The departments and their zones a profile can be given, switched-off ones included. */
+export interface ProfileScopeChoices {
+  departments: { id: string; name: string; active: boolean }[];
+  zones: { id: string; name: string; departmentId: string; active: boolean }[];
 }
 
 /** The stations and watchers a kitchen screen on the profile may show; an empty list permits none. */
@@ -2360,6 +2391,19 @@ export class DashboardApi {
     return this.#request("/management-api/receipt", "GET");
   }
 
+  async getProfileScopeChoices(): Promise<ProfileScopeChoices> {
+    const venue = await this.#request<ProfileScopeChoices>("/management-api/venue-service", "GET");
+    return {
+      departments: venue.departments.map(({ id, name, active }) => ({ id, name, active })),
+      zones: venue.zones.map(({ id, name, departmentId, active }) => ({
+        id,
+        name,
+        departmentId,
+        active,
+      })),
+    };
+  }
+
   async getVenueDepartments(): Promise<{ id: string; name: string; active: boolean }[]> {
     const venue = await this.#request<{
       departments: { id: string; name: string; active: boolean }[];
@@ -2722,8 +2766,8 @@ export class DashboardApi {
     formFactor: FormFactor,
     inactivityTimeoutSeconds: number | null,
     printerLists: ProfilePrinterLists,
-    /** Absent leaves the profile with none. */
-    kitchenLists?: ProfileKitchenLists,
+    /** A part left out takes the server's default: no lists, every role, no starting screen. */
+    extras?: ProfileSaveExtras,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>("/management-api/device-profiles", "POST", {
       name,
@@ -2733,7 +2777,7 @@ export class DashboardApi {
       inactivityTimeoutSeconds,
       receiptPrinterIds: printerLists.receiptPrinterIds,
       paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
-      ...kitchenLists,
+      ...extras,
     });
   }
 
@@ -2745,8 +2789,8 @@ export class DashboardApi {
     formFactor: FormFactor,
     inactivityTimeoutSeconds: number | null,
     printerLists: ProfilePrinterLists,
-    /** Absent leaves the stored lists as they are. */
-    kitchenLists?: ProfileKitchenLists,
+    /** A part left out stays as stored. */
+    extras?: ProfileSaveExtras,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "PUT", {
       name,
@@ -2756,7 +2800,7 @@ export class DashboardApi {
       inactivityTimeoutSeconds,
       receiptPrinterIds: printerLists.receiptPrinterIds,
       paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
-      ...kitchenLists,
+      ...extras,
     });
   }
 

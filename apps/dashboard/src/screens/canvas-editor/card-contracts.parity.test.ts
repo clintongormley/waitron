@@ -9,6 +9,9 @@ import {
   CARD_TYPES as SRC_TYPES,
   CAPABILITY_FLAGS as SRC_CAPS,
   FORM_FACTORS as SRC_FF,
+  NAVIGATION_SCREENS as SRC_NAVIGATION,
+  PROFILE_ACTIONS as SRC_ACTIONS,
+  PROFILE_SCREENS as SRC_SCREENS,
 } from "@waitron/layouts/src/canvas.js";
 import {
   MAX_TAB_TITLE_LENGTH as SRC_TITLE,
@@ -23,6 +26,9 @@ import {
   FORM_FACTORS,
   GRID_MAX_COLUMNS,
   MAX_TAB_TITLE_LENGTH,
+  NAVIGATION_SCREENS,
+  PROFILE_ACTIONS,
+  PROFILE_SCREENS,
   SALE_CRITICAL_CARDS,
   SELLING_FORM_FACTORS,
 } from "./card-contracts.js";
@@ -36,6 +42,12 @@ describe("card-contracts mirror parity", () => {
     expect(MAX_TAB_TITLE_LENGTH).toBe(SRC_TITLE);
     expect([...SALE_CRITICAL_CARDS]).toEqual([...SRC_SALE]);
     expect([...SELLING_FORM_FACTORS]).toEqual([...SRC_SELLING]);
+  });
+
+  it("mirrors a profile's actions, screens and the screens it may start on", () => {
+    expect([...PROFILE_ACTIONS]).toEqual([...SRC_ACTIONS]);
+    expect([...PROFILE_SCREENS]).toEqual([...SRC_SCREENS]);
+    expect([...NAVIGATION_SCREENS]).toEqual([...SRC_NAVIGATION]);
   });
 
   it("mirrors each card's contract fields (spans, states, permission, capability, saleCritical, config keys)", () => {

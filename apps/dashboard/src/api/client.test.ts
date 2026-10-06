@@ -2318,6 +2318,72 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     });
   });
 
+  it("sends a profile's scope, sign-in rule and starting screen beside its lists, only as given", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "p1" }));
+    const api = new DashboardApi("", fetchImpl);
+    const printers = { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
+    await api.createDeviceProfile(
+      "Terrace",
+      null,
+      ["take-orders"],
+      "phone-portrait",
+      null,
+      printers,
+      {
+        departmentId: "d1",
+        allowedZoneIds: ["z2"],
+        startingZoneId: "z2",
+        admittedRoles: ["staff"],
+        personExceptions: [{ personId: "pe1", admitted: false }],
+        startingScreen: "show-schedule",
+      },
+    );
+    await api.updateDeviceProfile("p1", "Terrace", null, [], "phone-portrait", null, printers, {
+      startingScreen: null,
+    });
+    const bodies = (fetchImpl.mock.calls as unknown as [string, RequestInit][]).map(([, init]) =>
+      JSON.parse(init.body as string),
+    );
+    expect(bodies).toEqual([
+      {
+        name: "Terrace",
+        canvasId: null,
+        capabilities: ["take-orders"],
+        formFactor: "phone-portrait",
+        inactivityTimeoutSeconds: null,
+        receiptPrinterIds: [],
+        paymentSlipPrinterIds: [],
+        departmentId: "d1",
+        allowedZoneIds: ["z2"],
+        startingZoneId: "z2",
+        admittedRoles: ["staff"],
+        personExceptions: [{ personId: "pe1", admitted: false }],
+        startingScreen: "show-schedule",
+      },
+      {
+        name: "Terrace",
+        canvasId: null,
+        capabilities: [],
+        formFactor: "phone-portrait",
+        inactivityTimeoutSeconds: null,
+        receiptPrinterIds: [],
+        paymentSlipPrinterIds: [],
+        startingScreen: null,
+      },
+    ]);
+  });
+
+  it("reads the departments and zones a profile can serve from the venue service", async () => {
+    const departments = [{ id: "d1", name: "Restaurant", active: true }];
+    const zones = [{ id: "z1", name: "Terrace", departmentId: "d1", active: false }];
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ departments, zones, readiness: [], salePolicies: [] }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getProfileScopeChoices()).toEqual({ departments, zones });
+    expect(fetchImpl.mock.calls[0]![0]).toBe("/management-api/venue-service");
+  });
+
   it("updateDevice PATCHes the whole edit to the device's route (204)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

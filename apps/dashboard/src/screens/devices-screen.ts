@@ -72,6 +72,7 @@ const FIELD_BY_PARAM: Record<string, EditField> = {
   watcherId: "binding",
   receiptPrinterId: "receipt",
   paymentSlipPrinterId: "slip",
+  approvedProfileIds: "approved",
 };
 
 /** The field a refusal is about, when it is one of `shown` (CLAUDE.md §3: by what the error carries). */
@@ -83,7 +84,9 @@ function refusedField(
   const code = codeOf(error);
   const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
   let field: EditField | undefined;
-  if (code === "management.request_invalid" || code === "device.binding_invalid")
+  // An unknown approved profile names its field; an unknown active profile names none.
+  const named = code === "device_profile.not_found" && typeof params.field === "string";
+  if (code === "management.request_invalid" || code === "device.binding_invalid" || named)
     field = typeof params.field === "string" ? FIELD_BY_PARAM[params.field] : undefined;
   // A made-here station refused the same way names no field the form marks.
   else if (code === "station.not_found")

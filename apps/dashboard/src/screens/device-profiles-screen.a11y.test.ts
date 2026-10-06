@@ -7,7 +7,9 @@ import type {
   Canvas,
   DeviceProfile,
   DashboardApi,
+  PersonSummary,
   Printer,
+  ProfileScopeChoices,
   Station,
   Watcher,
 } from "../api/client.js";
@@ -28,6 +30,32 @@ const profiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: ["pr2", "pr1"],
     paymentSlipPrinterIds: ["pr-old"],
+    startingScreen: null,
+    departmentId: "d1",
+    allowedZoneIds: null,
+    startingZoneId: "z1",
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
+  },
+];
+
+const scopeChoices: ProfileScopeChoices = {
+  departments: [{ id: "d1", name: "Restaurante", active: true }],
+  zones: [
+    { id: "z1", name: "Comedor", departmentId: "d1", active: true },
+    { id: "z2", name: "Terraza", departmentId: "d1", active: true },
+  ],
+};
+
+const staff: PersonSummary[] = [
+  {
+    personId: "pe-ana",
+    displayName: "Ana",
+    role: "staff",
+    status: "active",
+    hasPassword: true,
+    hasTotp: false,
+    email: null,
   },
 ];
 
@@ -74,6 +102,8 @@ function stubApi(
     listStations: vi.fn().mockResolvedValue([]),
     listWatchers: vi.fn().mockResolvedValue([]),
     listProfileKitchenLists: vi.fn().mockResolvedValue([]),
+    getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
+    listStaff: vi.fn().mockResolvedValue(staff),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -187,6 +217,53 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=profile-stations-error]")).not.toBeNull();
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it.each([390, 1280])(
+    "renders where a profile serves, who signs in and its field errors accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<DeviceProfilesScreen>(
+        "dashboard-device-profiles-screen",
+        {
+          api: stubApi(venuePrinters, {
+            updateDeviceProfile: vi.fn().mockRejectedValue({
+              code: "device_profile.access_invalid",
+              params: { field: "startingZoneId", reason: "unavailable" },
+            }),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+      await flush(el);
+      const toggle = (test: string, checked: boolean) =>
+        el
+          .shadowRoot!.querySelector(`[data-test=${test}]`)!
+          .dispatchEvent(
+            new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+          );
+      toggle("profile-every-zone", false);
+      toggle("cap-show-schedule", true);
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "[data-test=profile-people]",
+      )!.open = true;
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=profile-zone-z2]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+      await flush(el);
+      for (const role of ["staff", "supervisor", "manager", "admin"])
+        toggle(`profile-role-${role}`, false);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=profile-roles-error]")).not.toBeNull();
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);

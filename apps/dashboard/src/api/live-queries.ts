@@ -228,8 +228,27 @@ export const QUERY_DEPENDENCIES = {
   getOptionList: ["option_lists", "option_labels"],
   listExtraLists: ["extra_lists", "extra_list_items", "product_modifiers"],
   getExtraList: ["extra_lists", "extra_list_items"],
-  listDeviceProfiles: ["device_profiles", "device_profile_printers", "devices", "canvases"],
-  getDeviceProfile: ["device_profiles", "device_profile_printers", "canvases"],
+  listDeviceProfiles: [
+    "device_profiles",
+    "device_profile_printers",
+    "devices",
+    "canvases",
+    "device_profile_service_access",
+    "device_profile_zones",
+    "device_profile_admission_roles",
+    "device_profile_admission_persons",
+  ],
+  getDeviceProfile: [
+    "device_profiles",
+    "device_profile_printers",
+    "canvases",
+    "device_profile_service_access",
+    "device_profile_zones",
+    "device_profile_admission_roles",
+    "device_profile_admission_persons",
+  ],
+  // `listDepartments` and `listServiceZones` (packages/venue-service/src/operations.ts).
+  getProfileScopeChoices: ["departments", "floor_zones", "zone_service_policies"],
   // `readProfileKitchenLists` (packages/venue-service/src/profile-access.ts) also filters and orders
   // by the station and watcher rows.
   listProfileKitchenLists: [

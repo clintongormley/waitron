@@ -115,6 +115,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: "dep-1",
+    allowedZoneIds: null,
+    startingZoneId: "zone-1",
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
   {
     id: "dp2",
@@ -125,6 +131,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: "dep-1",
+    allowedZoneIds: null,
+    startingZoneId: "zone-1",
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
   {
     id: "dp3",
@@ -135,6 +147,12 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    startingScreen: null,
+    departmentId: null,
+    allowedZoneIds: null,
+    startingZoneId: null,
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
   },
 ];
 
