@@ -1355,9 +1355,10 @@ preview/write replies. Focused cases are in
 `packages/venue-service/src/dashboard/prep-exceptions.unsaved.test.ts`. Watchers, department/zone
 forms, other station-action drafts and the remaining dashboard/till modal owners still need Task 4
 work; page/history/native reload remain Tasks 5–6. The existing station keyboard-reorder focus
-check failed in a filtered run and in the preceding checkpoint's installed measurement checkout;
-its cause remains unverified. The dated W69 audit records the reproduction for follow-up before
-branch finishing.
+check failed in a filtered run and in the preceding checkpoint's installed measurement checkout.
+The 2026-10-06 follow-up reproduced it with Routing selected: the Today fixture inherited the
+preceding test's URL, leaving the Stations handle hidden. The fixture now opens Stations explicitly;
+the original focus, order and routing assertions remain. The dated W69 audit records the commands.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

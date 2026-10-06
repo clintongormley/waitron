@@ -557,3 +557,26 @@ pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations
 The single-case selection passed in both checkouts. The broader family
 passed before the close-report guard addition; the cause of the filtered focus failure remains
 unverified. Preserve the assertion and investigate it before branch finishing.
+
+## 2026-10-06 Stations focus fixture follow-up
+
+The filtered reproduction below failed the same retained-focus assertion, with 52 passing tests.
+Its screenshot showed Routing selected. `mountToday` did not set a URL, while the screen's URL
+controller reads the retained `view` selection. The reorder handle was in the hidden Stations panel.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.test.ts -t 'exception|preview|claim|assignment|routing'
+```
+
+The fixture now explicitly starts at `/manage/prep-stations/view/stations`. The original focus,
+station order and unchanged routing assertions remain. With that one-line fixture change, the
+following selection passed 74 tests; one completely filtered file was skipped. This receipt concerns
+test initialization, not a production focus change.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.test.ts src/dashboard/prep-stations-screen.settings.test.ts src/dashboard/prep-exceptions.unsaved.test.ts -t 'exception|preview|claim|assignment|routing'
+```
+
+The subsequent unfiltered selection of prep-station, hours and exception suites passed 443 tests
+across six matched files in 184.34 seconds. The requested `station-hours-form.a11y.test.ts` path
+matched no file, so this run supplies no result for a separate hours accessibility suite.

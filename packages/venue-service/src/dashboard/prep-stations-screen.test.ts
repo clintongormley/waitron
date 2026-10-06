@@ -3584,6 +3584,7 @@ async function mountToday(
   overrides: Partial<PrepStationsApi> = {},
   theme?: "light" | "dark",
 ) {
+  history.replaceState(null, "", "/manage/prep-stations/view/stations");
   const a = api({
     load: vi.fn().mockResolvedValue(next),
     readStationHealth: vi.fn().mockResolvedValue({
