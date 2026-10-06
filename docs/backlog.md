@@ -1429,7 +1429,12 @@ The till modifier picker now protects edited variants, extras quantities, option
 notes through Cancel and native Escape on the branch. Keep retains the selections; Discard resets
 this picker without adding or changing a basket line. Add/Save commits the local selection at its
 existing parent handoff. Reverted values, preselected defaults and an unchanged reopened line close
-directly. The real menu and basket cases are in `modifier-picker.unsaved.test.ts`; station choice,
+directly. The real menu and basket cases are in `modifier-picker.unsaved.test.ts`. Station choice
+now protects its destination through Cancel/native Escape, retaining it on Keep and restoring the
+opening choice on Discard without changing basket lines or submitting a station move. Make at
+commits at the local basket handoff; a refused Move keeps its destination unsaved. Background
+option removal updates unload protection for the existing null fallback. Focused cases are in
+`station-choice-dialog.unsaved.test.ts` and the counter-adjustment shell suite;
 payment and other modal owners, plus page/navigation work, remain open.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)

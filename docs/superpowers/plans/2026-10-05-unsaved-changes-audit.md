@@ -985,3 +985,36 @@ failure screenshots were archived outside the repository; the disposable candida
 Station choice and the remaining audited modal owners still need Task 4 work. Page/history and
 inline owners remain Tasks 5–6. This checkpoint completes the modifier-picker family; neither
 proposed W69 PR is ready.
+
+
+## 2026-10-06 station-choice dialog checkpoint
+
+The preceding modifier checkpoint's station-choice pending note is superseded by this addition.
+Make at and Move use the shared registry for their actual stationId, including the null rules
+choice. Cancel and native Escape retain the destination on Keep. Discard resets only that local
+selection and closes once, with no station command or basket change. Reverts close directly.
+Make at commits at its existing local basket handoff. Move keeps an uncommitted destination
+after a refused write; its existing successful path removes the dialog before refreshing.
+The opening selection stays captured across current-station updates and offered ordering.
+When the option list removes the selected station, its existing null fallback now notifies the
+registry. Disconnect aborts the question; reconnect retains the baseline, and departed controls
+cannot submit or change a reconnected draft. No existing assertion was changed.
+
+Focused command:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/station-choice-dialog.unsaved.test.ts src/widgets/station-choice-dialog.test.ts src/widgets/station-choice-dialog.a11y.test.ts src/till-app-counter-adjustments.test.ts src/till-app-table-service.test.ts
+```
+
+The initial new-suite run failed all ten cases at warning, dirty-unload or retained-selection
+assertions. An additional option-removal case failed at unload protection before its notification
+was implemented. The new counter-shell fixture initially lacked its move API stub; supplying that
+stub retained all basket assertions. The final five-suite run passed 189 browser cases. Six installed deletion controls each failed
+one intended assertion; restoring that disposable candidate passed all 14 new widget cases.
+The unedited golden write-path and immutability suites passed 20 cases. Logs are retained in the
+lane's station-choice receipts. Eight temporary visual flows passed with
+16 axe scans; all 16 editor/warning captures were inspected in EN/ES, both themes and 390/1280
+widths. The visual probe and captures stay outside product source.
+
+The other audited modal owners and inline/page/history/native-reload work remain pending.
+This is a coherent Task 4 family checkpoint; neither proposed W69 PR is ready.

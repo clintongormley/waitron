@@ -1615,3 +1615,42 @@ describe("till-app: the basket's lock while the order is loaded again", () => {
     }
   });
 });
+
+it("station-choice Keep and Discard leave the counter basket and server writes alone", async () => {
+  const moveDishStation = vi.fn();
+  const el = await retrieved({
+    listStations: vi.fn().mockResolvedValue(stations),
+    moveDishStation,
+  });
+  const store = counter(el).store;
+  const before = store.lines.map((line) => ({ ...line }));
+  const movesBefore = moveDishStation.mock.calls.length;
+  inBasket(el, '[data-make-at="1"]')!.click();
+  await flush(el);
+  const form = el.shadowRoot!.querySelector<HTMLElement>("till-station-choice-dialog")!;
+  const field =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!;
+  await field.updateComplete;
+  field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+  await field.updateComplete;
+  const option = Array.from(field.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")).find(
+    (o) => o.textContent?.trim() === "Bar",
+  )!;
+  option.click();
+  await flush(el);
+  form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+  await flush(el);
+  const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBe(form);
+  expect(field.value).toBe("bar");
+  expect(store.lines).toEqual(before);
+  form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+  await flush(el);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await expect.poll(() => el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
+  expect(store.lines).toEqual(before);
+  expect(moveDishStation.mock.calls.length).toBe(movesBefore);
+});

@@ -1,9 +1,10 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { customElement, property, state } from "lit/decorators.js";
+import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import type { Station } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -45,6 +46,69 @@ export class TillStationChoiceDialog extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property() refusal: string | null = null;
 
+  @state() private active = true;
+  #scope?: DraftScope<string | null>;
+  #leave?: LeaveCoordinator;
+  #baseline?: { stationId: string | null };
+  #observedChoice: string | null = null;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override willUpdate(): void {
+    if (!this.active) return;
+    if (this.#scope) {
+      const choice = this.#choice();
+      if (choice !== this.#observedChoice) {
+        this.#observedChoice = choice;
+        this.#scope.changed();
+      }
+      return;
+    }
+    this.#leave = leaveCoordinatorFor(this);
+    if (!this.#leave) return;
+    this.#baseline ??= { stationId: this.#choice() };
+    if (this.selected === undefined) this.selected = this.#baseline.stationId;
+    this.#scope = this.#leave.register<string | null>({
+      id: this,
+      current: () => this.#choice(),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => (this.selected = value),
+    });
+    this.#scope.commit(this.#baseline.stationId);
+    this.#observedChoice = this.#choice();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #cancel(): void {
+    if (!this.isConnected || !this.active) return;
+    if (this.#scope) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+      return;
+    }
+    this.#emit("close");
+  }
+
+  #closed(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#emit("close");
+  }
+
   #choice(): string | null {
     if (this.selected !== undefined)
       return this.selected !== null && this.stations.some((station) => station.id === this.selected)
@@ -60,12 +124,17 @@ export class TillStationChoiceDialog extends LitElement {
   }
 
   #submit(): void {
+    if (!this.isConnected || !this.active) return;
     const choice = this.#choice();
     if (
       this.busy ||
       (this.mode === "move" && (choice === null || choice === this.currentStationId))
     )
       return;
+    if (this.mode === "make-at") {
+      this.#baseline = { stationId: choice };
+      this.#scope?.commit(choice);
+    }
     this.#emit("station-chosen", { stationId: choice });
   }
 
@@ -100,9 +169,10 @@ export class TillStationChoiceDialog extends LitElement {
     return html`
       <wt-dialog
         ${trackDialog()}
-        .open=${true}
+        .open=${this.active}
+        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
         .heading=${`${label}: ${this.dishName}`}
-        @wt-close=${() => this.#emit("close")}
+        @wt-close=${(event: Event) => this.#closed(event)}
       >
         <div class="body" data-body>
           <wt-combobox
@@ -113,7 +183,10 @@ export class TillStationChoiceDialog extends LitElement {
             .value=${choice ?? NO_STATION}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
               event.stopPropagation();
+              if (!this.isConnected || !this.active) return;
               this.selected = event.detail.value === NO_STATION ? null : event.detail.value;
+              this.#observedChoice = this.#choice();
+              this.#scope?.changed();
             }}
           ></wt-combobox>
           ${
@@ -122,12 +195,7 @@ export class TillStationChoiceDialog extends LitElement {
               : html`<p class="refusal" role="alert">${this.#refusal()}</p>`
           }
         </div>
-        <wt-button
-          slot="footer"
-          data-cancel
-          variant="secondary"
-          @click=${() => this.#emit("close")}
-        >
+        <wt-button slot="footer" data-cancel variant="secondary" @click=${() => this.#cancel()}>
           ${t("action.cancel")}
         </wt-button>
         <wt-button
