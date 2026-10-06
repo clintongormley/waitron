@@ -241,6 +241,14 @@ export const QUERY_DEPENDENCIES = {
   listStations: ["kitchen_stations"],
   listWatchers: ["watchers", "watcher_stations", "watcher_zones", "watcher_printers"],
   listCourses: ["kitchen_courses"],
+  // Each row's `inUse` reads the tables `COURSE_REFERENCES` names (apps/server/src/kitchen.ts).
+  listCoursesWithDisabled: [
+    "kitchen_courses",
+    "products",
+    "order_draft_lines",
+    "working_order_lines",
+    "ticket_items",
+  ],
   listTables: ["dining_tables", "floor_zones", "working_orders", "table_service_statuses"],
   listZones: ["floor_zones"],
   getFireControl: ["locations"],

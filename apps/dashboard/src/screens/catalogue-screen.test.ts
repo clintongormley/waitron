@@ -741,7 +741,9 @@ describe("catalogue-screen", () => {
     const api = stubApi({
       listCourses: vi
         .fn()
-        .mockResolvedValue([{ id: "k1", name: "Starters", displayOrder: 0, active: true }]),
+        .mockResolvedValue([
+          { id: "k1", name: "Starters", displayOrder: 0, active: true, inUse: false },
+        ]),
     });
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
@@ -1841,30 +1843,39 @@ describe("catalogue-screen", () => {
 
   describe("the courses window", () => {
     const venueCourses: Course[] = [
-      { id: "k1", name: "Entrantes", displayOrder: 0, active: true },
-      { id: "k2", name: "Principales", displayOrder: 1, active: true },
+      { id: "k1", name: "Entrantes", displayOrder: 0, active: true, inUse: false },
+      { id: "k2", name: "Principales", displayOrder: 1, active: true, inUse: false },
     ];
     const slowly = <T>(value: T): Promise<T> =>
       new Promise((resolve) => setTimeout(() => resolve(value), 100));
     /** The server's courses, which the window's writes change. A slow create is answered after a
      * delay, as over a real network. */
-    function courseApi(overrides: Partial<DashboardApi> = {}, slowCreate = false) {
-      let rows = venueCourses.map((course) => ({ ...course }));
+    function courseApi(
+      overrides: Partial<DashboardApi> = {},
+      slowCreate = false,
+      initial: Course[] = venueCourses,
+    ) {
+      let rows = initial.map((course) => ({ ...course }));
+      const read = (all: boolean) =>
+        Promise.resolve(
+          rows.filter((course) => all || course.active).map((course) => ({ ...course })),
+        );
       return stubApi({
-        listCourses: vi.fn(() => Promise.resolve(rows.map((course) => ({ ...course })))),
+        listCourses: vi.fn(() => read(false)),
+        listCoursesWithDisabled: vi.fn(() => read(true)),
         createCourse: vi.fn(
           async ({ name, displayOrder }: { name: string; displayOrder: number }) => {
             if (slowCreate) await slowly(null);
-            rows = [...rows, { id: "k-new", name, displayOrder, active: true }];
+            rows = [...rows, { id: "k-new", name, displayOrder, active: true, inUse: false }];
             return { id: "k-new" };
           },
         ),
         updateCourse: vi.fn().mockResolvedValue(undefined),
-        deactivateCourse: vi.fn((id: string) => {
+        removeCourse: vi.fn((id: string) => {
           rows = rows.filter((course) => course.id !== id);
           return Promise.resolve();
         }),
-        moveCourse: vi.fn(() => Promise.resolve(rows)),
+        moveCourse: vi.fn(() => read(false)),
         ...overrides,
       });
     }
@@ -1979,7 +1990,15 @@ describe("catalogue-screen", () => {
     it("closes once when Done is pressed again while it waits", async () => {
       let answer!: () => void;
       let added = false;
-      const postres: Course = { id: "k-new", name: "Postres", displayOrder: 2, active: true };
+      const postres: Course = {
+        id: "k-new",
+        name: "Postres",
+        displayOrder: 2,
+        active: true,
+        inUse: false,
+      };
+      const courses = () =>
+        Promise.resolve([...venueCourses, ...(added ? [postres] : [])].map((c) => ({ ...c })));
       const api = courseApi({
         createCourse: vi.fn(
           () =>
@@ -1990,13 +2009,13 @@ describe("catalogue-screen", () => {
               };
             }),
         ),
-        listCourses: vi.fn(() =>
-          Promise.resolve([...venueCourses, ...(added ? [postres] : [])].map((c) => ({ ...c }))),
-        ),
+        listCourses: vi.fn(courses),
+        listCoursesWithDisabled: vi.fn(courses),
       });
       const el = await openCourses(api, "k1");
       await typeNewCourse(el, "Postres");
       const reads = vi.mocked(api.listCourses).mock.calls.length;
+      const listReads = vi.mocked(api.listCoursesWithDisabled).mock.calls.length;
       const doneButton = el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!;
       await userEvent.click(doneButton);
       await userEvent.click(doneButton);
@@ -2007,7 +2026,8 @@ describe("catalogue-screen", () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
       await flush(el);
       // The list's own read after the add, then the window's one on closing.
-      expect(api.listCourses).toHaveBeenCalledTimes(reads + 2);
+      expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(listReads + 1);
+      expect(api.listCourses).toHaveBeenCalledTimes(reads + 1);
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
       expect(await shownCourse(el)).toBe("Postres");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
@@ -2017,7 +2037,7 @@ describe("catalogue-screen", () => {
       let answerRemoval!: () => void;
       const api = courseApi(
         {
-          deactivateCourse: vi.fn(() => new Promise<void>((resolve) => (answerRemoval = resolve))),
+          removeCourse: vi.fn(() => new Promise<void>((resolve) => (answerRemoval = resolve))),
         },
         true,
       );
@@ -2028,7 +2048,7 @@ describe("catalogue-screen", () => {
       await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
       await new Promise((resolve) => setTimeout(resolve, 300));
       await flush(el);
-      expect(vi.mocked(api.deactivateCourse).mock.calls).toEqual([["k2"]]);
+      expect(vi.mocked(api.removeCourse).mock.calls).toEqual([["k2"]]);
       expect([coursesWindow(el).open, editor(el).currentValue.courseId]).toEqual([true, "k1"]);
       answerRemoval();
       await vi.waitFor(() => expect(coursesWindow(el).open).toBe(false));
@@ -2099,6 +2119,29 @@ describe("catalogue-screen", () => {
       answer({ id: "k-new" });
       await flush(el);
       expect(editor(el).currentValue.courseId).toBe("k1");
+    });
+
+    it("offers only active courses in the product's course box, though the window lists a disabled one", async () => {
+      const brunch: Course = {
+        id: "k3",
+        name: "Brunch",
+        displayOrder: 2,
+        active: false,
+        inUse: true,
+      };
+      const api = courseApi({}, false, [...venueCourses, brunch]);
+      const el = await openCourses(api, "k1");
+      expect(inList(el, '[data-test="status-k3"]')).not.toBeNull();
+      await done(el);
+      expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2"]);
+      const box = courseBox(el) as unknown as LitElement;
+      await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+      await box.updateComplete;
+      const options = [...box.shadowRoot!.querySelectorAll("li[role=option]")].map((option) =>
+        option.textContent!.trim(),
+      );
+      expect(options).toContain("Principales");
+      expect(options).not.toContain("Brunch");
     });
 
     it("clears the product's course when the window removed it", async () => {
@@ -2232,7 +2275,10 @@ describe("catalogue-screen", () => {
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
       expect(editor(el).currentValue.courseId).toBe("k2");
-      answer([...venueCourses, { id: "k-new", name: "Postres", displayOrder: 2, active: true }]);
+      answer([
+        ...venueCourses,
+        { id: "k-new", name: "Postres", displayOrder: 2, active: true, inUse: false },
+      ]);
       await flush(el);
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
       expect(editor(el).currentValue.courseId).toBe("k2");

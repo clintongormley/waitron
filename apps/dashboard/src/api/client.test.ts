@@ -1817,7 +1817,7 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
   // ── Kitchen courses + fire control ─────────────────────────────────────────────────────────────
 
   it("listCourses GETs /management-api/courses with credentials", async () => {
-    const rows = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true }];
+    const rows = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true, inUse: false }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listCourses()).toEqual(rows);
@@ -1826,6 +1826,20 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
       credentials: "include",
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it("listCoursesWithDisabled GETs the courses with the disabled ones too", async () => {
+    const rows = [
+      { id: "k1", name: "Entrantes", displayOrder: 0, active: true, inUse: true },
+      { id: "k2", name: "Brunch", displayOrder: 1, active: false, inUse: false },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listCoursesWithDisabled()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(
+      "/management-api/courses?includeDisabled=true",
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
+    );
   });
 
   it("createCourse POSTs { name } and returns the id (201)", async () => {
@@ -1866,13 +1880,25 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  it("deactivateCourse DELETEs the course and resolves undefined on an empty 204", async () => {
+  it("removeCourse DELETEs the course and resolves undefined on an empty 204", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.deactivateCourse("k1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/courses/k1", {
+    await expect(api.removeCourse("k1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/courses/k1", {
       method: "DELETE",
       credentials: "include",
+    });
+  });
+
+  it("enableCourse PATCHes { active: true } to the course and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.enableCourse("k1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/courses/k1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ active: true }),
     });
   });
 

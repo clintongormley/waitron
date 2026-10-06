@@ -11,19 +11,30 @@ afterEach(async () => {
 });
 
 const COURSES: Course[] = [
-  { id: "c1", name: "Starters", displayOrder: 0, active: true },
-  { id: "c2", name: "Mains", displayOrder: 1, active: true },
+  { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false },
+  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true },
+];
+const WITH_DISABLED: Course[] = [
+  ...COURSES,
+  { id: "d1", name: "Brunch", displayOrder: 2, active: false, inUse: false },
 ];
 
 function stubApi(state: State): DashboardApi {
   return {
-    listCourses:
+    listCoursesWithDisabled:
       state === "load failed"
         ? vi.fn().mockRejectedValue({ code: "connection.failed" })
-        : vi.fn().mockResolvedValue(state === "empty" ? [] : COURSES.map((c) => ({ ...c }))),
+        : vi.fn().mockResolvedValue(
+            state === "empty"
+              ? []
+              : (state.includes("disabled course") ? WITH_DISABLED : COURSES).map((c) => ({
+                  ...c,
+                })),
+          ),
     createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
     updateCourse: vi.fn().mockResolvedValue(undefined),
-    deactivateCourse: vi.fn().mockResolvedValue(undefined),
+    removeCourse: vi.fn().mockResolvedValue(undefined),
+    enableCourse: vi.fn().mockResolvedValue(undefined),
     moveCourse: vi.fn().mockResolvedValue(COURSES),
   } as unknown as DashboardApi;
 }
@@ -35,6 +46,8 @@ const states = [
   "renaming, refused blank",
   "adding",
   "menu open at phone width",
+  "with a disabled course",
+  "disabled course's menu open at phone width",
 ] as const;
 type State = (typeof states)[number];
 
@@ -45,7 +58,7 @@ async function settle(el: CourseList): Promise<void> {
 
 describe.each(["light", "dark"] as const)("course list (%s)", (theme) => {
   it.each(states)("renders %s accessibly", async (state) => {
-    if (state === "menu open at phone width") await page.viewport(390, 900);
+    if (state.includes("at phone width")) await page.viewport(390, 900);
     const { el, host } = await mountWidget<CourseList>(
       "dashboard-course-list",
       { api: stubApi(state) },
@@ -73,6 +86,12 @@ describe.each(["light", "dark"] as const)("course list (%s)", (theme) => {
     if (state === "menu open at phone width") {
       (q('tr[data-course="c2"] wt-row-actions') as unknown as WtRowActions).show();
       await settle(el);
+    }
+    if (state.includes("disabled course")) expect(q('[data-test="status-d1"]')).not.toBeNull();
+    if (state === "disabled course's menu open at phone width") {
+      (q('tr[data-course="d1"] wt-row-actions') as unknown as WtRowActions).show();
+      await settle(el);
+      expect(q('[data-test="enable-d1"]')).not.toBeNull();
     }
     await expectNoA11yViolations(host);
   });

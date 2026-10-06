@@ -529,6 +529,8 @@ export interface Course {
   name: string;
   displayOrder: number;
   active: boolean;
+  /** Something names it, so removing it disables it rather than deleting it. */
+  inUse: boolean;
 }
 
 export interface DeviceRow {
@@ -2426,6 +2428,10 @@ export class DashboardApi {
     return this.#request<Course[]>("/management-api/courses", "GET");
   }
 
+  listCoursesWithDisabled(): Promise<Course[]> {
+    return this.#request<Course[]>("/management-api/courses?includeDisabled=true", "GET");
+  }
+
   createCourse(input: { name: string; displayOrder?: number }): Promise<{ id: string }> {
     return this.#request<{ id: string }>("/management-api/courses", "POST", input);
   }
@@ -2437,8 +2443,13 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/courses/${id}`, "PATCH", patch);
   }
 
-  deactivateCourse(id: string): Promise<void> {
+  /** The server deletes the course when nothing names it, and disables it otherwise. */
+  removeCourse(id: string): Promise<void> {
     return this.#request<void>(`/management-api/courses/${id}`, "DELETE");
+  }
+
+  enableCourse(id: string): Promise<void> {
+    return this.updateCourse(id, { active: true });
   }
 
   moveCourse(id: string, to: number): Promise<Course[]> {

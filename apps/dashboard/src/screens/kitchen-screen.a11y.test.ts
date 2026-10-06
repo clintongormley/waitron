@@ -30,8 +30,8 @@ const STATIONS: Station[] = [
 ];
 
 const COURSES: Course[] = [
-  { id: "c1", name: "Entrantes", displayOrder: 0, active: true },
-  { id: "c2", name: "Postres", displayOrder: 1, active: true },
+  { id: "c1", name: "Entrantes", displayOrder: 0, active: true, inUse: false },
+  { id: "c2", name: "Postres", displayOrder: 1, active: true, inUse: false },
 ];
 
 function stubApi(stations: Station[], courses: Course[] = COURSES): DashboardApi {
@@ -43,10 +43,10 @@ function stubApi(stations: Station[], courses: Course[] = COURSES): DashboardApi
     setDefaultStation: vi.fn().mockResolvedValue(undefined),
     setBumpMode: vi.fn().mockResolvedValue(undefined),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
-    listCourses: vi.fn().mockResolvedValue(courses.map((c) => ({ ...c }))),
+    listCoursesWithDisabled: vi.fn().mockResolvedValue(courses.map((c) => ({ ...c }))),
     createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
     updateCourse: vi.fn().mockResolvedValue(undefined),
-    deactivateCourse: vi.fn().mockResolvedValue(undefined),
+    removeCourse: vi.fn().mockResolvedValue(undefined),
     getKitchenTimingDefaults: vi.fn().mockResolvedValue({
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
