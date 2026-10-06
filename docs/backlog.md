@@ -1638,7 +1638,7 @@ records added after a run's unanswered successor sent with its retry, as built. 
 the run's code, the run is broken and nothing would explain such a hold: the
 `fiscal.refusals_repeated` alert would not show, and when that answer is not a refusal at all
 `heldRecords` would name no case for the held records.
-**W41s-3d (built 2026-10-06, pending owner review; PR to come):** while the brake holds a chain,
+**W41s-3d (built 2026-10-06, pending owner review; #1309):** while the brake holds a chain,
 the drain sends its first held record once an hour after the chain's last send (`claimProbes` and
 `BRAKE_PROBE_INTERVAL_MS` in `packages/fiscal-verifactu/src/drain.ts`); the record stays held while
 it is out. If AEAT accepts it, or refuses it with a different code, the chain's held records go back
