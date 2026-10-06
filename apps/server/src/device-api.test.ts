@@ -1782,7 +1782,12 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
-    const { deviceId, jar } = await enrolTill(app, venue, "Caja hw");
+    const { deviceId, jar, profileId } = await enrolTill(app, venue, "Caja hw");
+    const [profile] = await suite.db
+      .select({ name: deviceProfiles.name })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, profileId));
+    const profileName = profile!.name;
     await suite.db.execute(sql`
       update devices
          set receipt_printer_id = ${printerId}
@@ -1800,6 +1805,8 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       paymentSlipPrinterId: null,
       // The printer is stored on the device but is on none of its profile's lists.
       printerChoices: { receipt: [], paymentSlip: [] },
+      profileId,
+      approvedProfiles: [{ id: profileId, name: profileName }],
     });
   });
 
@@ -2549,8 +2556,8 @@ describe("a device's approved profiles and switching its active one", () => {
     });
   });
 
-  describe("GET /api/device/profiles", () => {
-    it("names the device's approved profiles and which is active", async () => {
+  describe("GET /api/device/me", () => {
+    it("names the device's approved profiles, its active one first", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const t = await till(app, venue);
@@ -2560,22 +2567,15 @@ describe("a device's approved profiles and switching its active one", () => {
         .select({ id: deviceProfiles.id, name: deviceProfiles.name })
         .from(deviceProfiles);
       const nameOf = (id: string) => names.find((row) => row.id === id)!.name;
-      const res = await send(app, "GET", "/api/device/profiles", { cookie: t.jar });
+      const res = await send(app, "GET", "/api/device/me", { cookie: t.jar });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
-        activeProfileId: t.profileId,
-        profiles: [
+      expect(await res.json()).toMatchObject({
+        profileId: t.profileId,
+        approvedProfiles: [
           { id: t.profileId, name: nameOf(t.profileId) },
           { id: a, name: nameOf(a) },
         ],
       });
-    });
-
-    it("401s a request with no device", async () => {
-      const venue = await setupVenue(suite.db);
-      const res = await send(mountApp(venue.cfg), "GET", "/api/device/profiles", { cookie: null });
-      expect(res.status).toBe(401);
-      expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     });
   });
 
@@ -2698,10 +2698,10 @@ describe("a device's approved profiles and switching its active one", () => {
       const app = mountApp(venue.cfg);
       const s = await switchable(app, venue);
       const me = await signIn(s.deviceId);
-      const offered = await send(app, "GET", "/api/device/profiles", { cookie: s.jar });
-      expect(((await offered.json()) as { profiles: { id: string }[] }).profiles).toContainEqual(
-        expect.objectContaining({ id: s.to }),
-      );
+      const offered = await send(app, "GET", "/api/device/me", { cookie: s.jar });
+      expect(
+        ((await offered.json()) as { approvedProfiles: { id: string }[] }).approvedProfiles,
+      ).toContainEqual(expect.objectContaining({ id: s.to }));
       await approve(app, venue, s.deviceId, []);
       const res = await switchTo(app, me.cookie, s.to);
       expect(res.status).toBe(403);

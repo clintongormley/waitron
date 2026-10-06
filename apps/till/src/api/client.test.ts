@@ -2656,6 +2656,27 @@ describe("TillApi", () => {
     expect(r).toEqual(stored);
   });
 
+  it("switchDeviceProfile POSTs the profile to /api/device/active-profile and returns what was stored", async () => {
+    const stored = {
+      activeProfileId: "pr-bar",
+      receiptPrinterId: "P1",
+      paymentSlipPrinterId: null,
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(stored));
+
+    const r = await new TillApi("", fetchStub).switchDeviceProfile("pr-bar");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/active-profile",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({ profileId: "pr-bar" }),
+      }),
+    );
+    expect(r).toEqual(stored);
+  });
+
   it("deviceAdvance POSTs { to } to the device ticket-item advance route (empty 204 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 

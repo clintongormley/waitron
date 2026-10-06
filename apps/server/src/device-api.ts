@@ -250,6 +250,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       const choices = await printerChoices(deps.db, device.deviceProfileId, device.locationId);
+      const approvedProfiles = await readApprovedProfiles(deps.db, device.deviceId);
       // Non-secret config only: the reader's credentials never ride this response.
       return c.json({
         deviceId: device.deviceId,
@@ -261,6 +262,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         receiptPrinterId: device.receiptPrinterId,
         paymentSlipPrinterId: device.paymentSlipPrinterId,
         printerChoices: choices,
+        profileId: device.deviceProfileId,
+        // The profiles a signed-in person may switch the device to, its active one first.
+        approvedProfiles,
       });
     }),
   );
@@ -300,17 +304,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         return row!;
       });
       return c.json(stored, 200);
-    }),
-  );
-
-  // ── The profiles this device may switch between (DEVICE-GUARDED) ─────────────────────────────
-  app.get("/api/device/profiles", (c) =>
-    run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      const profiles = await withTransaction(deps.db, (tx) =>
-        readApprovedProfiles(tx, device.deviceId),
-      );
-      return c.json({ activeProfileId: profiles[0]?.id ?? device.deviceProfileId, profiles });
     }),
   );
 

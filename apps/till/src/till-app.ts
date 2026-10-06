@@ -127,6 +127,7 @@ import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/tab-shell.js";
 import "./widgets/find-bill-dialog.js";
 import "./widgets/printers-dialog.js";
+import "./widgets/profile-dialog.js";
 import type { PrinterSlot } from "./widgets/printers-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 import "./widgets/card-grid.js";
@@ -214,7 +215,12 @@ import type { BasketRefusal, OrderLine } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
-import type { DevDeviceList, DeviceIdentity, DevicePrintersChange } from "./api/client.js";
+import type {
+  DevDeviceList,
+  DeviceIdentity,
+  DevicePrintersChange,
+  ProfileChoice,
+} from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
 import type {
@@ -1517,6 +1523,14 @@ export class TillApp extends LitElement {
   };
   @state() private printersOpen = false;
   @state() private printersError: { code: string; field?: string } | null = null;
+  /** The profiles the device may be switched to, the active one first, as the server last said. */
+  @state() private approvedProfiles: ProfileChoice[] = [];
+  @state() private activeProfileId = "";
+  @state() private profileOpen = false;
+  @state() private profileError: { code: string } | null = null;
+  @state() private profileBusy = false;
+  /** A switch was asked for while an order is in progress on this device. */
+  @state() private profileOrderOpen = false;
   /** Printer switches are sent one at a time, each once the one before has answered or been cut
    * off, so each answer is newer than the one before. A switch with no answer within
    * `TABLE_REQUEST_LIMIT_MS` is cut off, so it cannot hold back the picks after it; a cut-off
@@ -1855,10 +1869,17 @@ export class TillApp extends LitElement {
   }
 
   async #onLoggedIn(event: Event): Promise<void> {
-    const { personId, displayName, permissions, locale } = (event as CustomEvent<LoggedInDetail>)
-      .detail;
+    const { locale, ...signedIn } = (event as CustomEvent<LoggedInDetail>).detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
     this.#preLoginChoice = undefined;
+    await this.#enterSignedIn(signedIn);
+  }
+
+  async #enterSignedIn({
+    personId,
+    displayName,
+    permissions,
+  }: Omit<LoggedInDetail, "locale">): Promise<void> {
     this.#loginPending = true;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
@@ -3763,6 +3784,70 @@ export class TillApp extends LitElement {
   #holdIdentity(identity: DeviceIdentity): void {
     this.#printersReads++;
     this.#heldIdentity = identity;
+    this.approvedProfiles = identity.approvedProfiles ?? [];
+    this.activeProfileId = identity.profileId ?? "";
+  }
+
+  /** Reads the device again first, so approvals changed since boot are what is offered. */
+  async #onOpenProfile(): Promise<void> {
+    const session = this.#operatorSession;
+    await this.#readPrinters();
+    if (session !== this.#operatorSession) return;
+    this.profileError = null;
+    this.profileOrderOpen = false;
+    this.profileBusy = false;
+    this.profileOpen = true;
+  }
+
+  /** The counter basket is this browser's alone, so the server cannot see it to refuse the switch. */
+  async #onProfileSwitch(event: CustomEvent<{ profileId: string }>): Promise<void> {
+    if (this.profileBusy) return;
+    const { profileId } = event.detail;
+    if (profileId === this.activeProfileId) {
+      this.profileOpen = false;
+      return;
+    }
+    if (this.#store.lines.length > 0) {
+      this.profileOrderOpen = true;
+      return;
+    }
+    const session = this.#operatorSession;
+    this.profileOrderOpen = false;
+    this.profileBusy = true;
+    try {
+      await this.api.switchDeviceProfile(profileId);
+    } catch (error) {
+      if (session !== this.#operatorSession) return;
+      const code = (error as { code?: unknown } | null)?.code;
+      this.profileError = { code: typeof code === "string" ? code : "server.internal" };
+      this.profileBusy = false;
+      return;
+    }
+    this.profileBusy = false;
+    this.profileOpen = false;
+    if (session !== this.#operatorSession) return;
+    await this.#enterSwitchedProfile(session);
+  }
+
+  /** The new profile's setup, and browsing begun again from its starting zone and default menu. */
+  async #enterSwitchedProfile(session: number): Promise<void> {
+    try {
+      const till = await this.api.getTill();
+      if (session !== this.#operatorSession) return;
+      this.canvas = till.canvas;
+      this.capabilities = till.capabilities;
+      this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
+    } catch {
+      if (session === this.#operatorSession) this.errorKey = "boot.error";
+      return;
+    }
+    await this.#readPrinters();
+    if (session !== this.#operatorSession) return;
+    await this.#enterSignedIn({
+      personId: this.operatorPersonId,
+      displayName: this.operatorName,
+      permissions: this.permissions,
+    });
   }
 
   #onPrintersChange(event: CustomEvent<DevicePrintersChange>): Promise<void> {
@@ -6814,6 +6899,7 @@ export class TillApp extends LitElement {
     this.#closeCancelCrediting();
     this.findingBill = false;
     this.printersOpen = false;
+    this.profileOpen = false;
     this.invoiceRecipientBill = undefined;
     this.invoiceRecipientOpen = false;
     this.invoiceRecipientRefusal = "";
@@ -7846,6 +7932,7 @@ export class TillApp extends LitElement {
         @back-to-counter=${() => this.#onBackToCounter()}
         @open-allergens=${() => this.#onOpenAllergens()}
         @open-printers=${() => void this.#onOpenPrinters()}
+        @open-profile=${() => void this.#onOpenProfile()}
         @close-allergens=${() => this.#onCloseAllergens()}
         @logout=${() => void this.#onLogout()}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
@@ -7899,6 +7986,23 @@ export class TillApp extends LitElement {
                   void this.#onPrintersChange(event)}
                 @close=${() => (this.printersOpen = false)}
               ></till-printers-dialog>`
+            : nothing
+        }
+        ${
+          this.profileOpen
+            ? html`<till-profile-dialog
+                .open=${true}
+                .profiles=${this.approvedProfiles}
+                .activeProfileId=${this.activeProfileId}
+                .error=${this.profileError}
+                .orderOpen=${this.profileOrderOpen}
+                .busy=${this.profileBusy}
+                @profile-switch=${(event: CustomEvent<{ profileId: string }>) =>
+                  void this.#onProfileSwitch(event)}
+                @close=${() => {
+                  if (!this.profileBusy) this.profileOpen = false;
+                }}
+              ></till-profile-dialog>`
             : nothing
         }
         ${
@@ -8056,6 +8160,7 @@ export class TillApp extends LitElement {
                       .operatorName=${this.operatorName}
                       .affordances=${this.#affordanceList}
                       .kiosk=${this.deviceMode}
+                      .canSwitchProfile=${this.approvedProfiles.length > 1}
                       .loadLocales=${this.#loadLocales}
                       @tab-select=${(e: CustomEvent<{ key: string }>) => {
                         this.#onTabSelect(e.detail.key);

@@ -390,6 +390,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That printer is not available to this device. Choose another",
     es: "Esa impresora no está disponible para este dispositivo. Elige otra",
   },
+  "device_profile.not_approved": {
+    en: "This device can no longer switch to that profile. Choose another",
+    es: "Este dispositivo ya no puede cambiar a ese perfil. Elige otro",
+  },
+  "device_profile.not_admitted": {
+    en: "You can't sign in on that profile. Choose another",
+    es: "No puedes iniciar sesión con ese perfil. Elige otro",
+  },
+  "device.payment_in_progress": {
+    en: "A card payment on this device is still in progress. Switch once it finishes or is cancelled",
+    es: "Hay un pago con tarjeta en curso en este dispositivo. Cambia cuando termine o se cancele",
+  },
   "device.cash_not_allowed": {
     en: "This device does not take cash. Take cash at a till.",
     es: "Este dispositivo no cobra en efectivo. Cobra en efectivo en una caja.",

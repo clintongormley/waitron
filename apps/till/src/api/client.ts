@@ -1368,6 +1368,22 @@ export interface DeviceIdentity {
   paymentSlipPrinterId: string | null;
   /** The switched-on printers the device's profile lists for each kind of printing, in list order. */
   printerChoices: { receipt: PrinterChoice[]; paymentSlip: PrinterChoice[] };
+  /** The device's active profile. A server too old to send it offers no switch. */
+  profileId?: string;
+  /** The profiles a signed-in person may switch the device to, the active one first. */
+  approvedProfiles?: ProfileChoice[];
+}
+
+export interface ProfileChoice {
+  id: string;
+  name: string;
+}
+
+/** `POST /api/device/active-profile` success: the device's profile and printers as stored. */
+export interface DeviceProfileSwitched {
+  activeProfileId: string;
+  receiptPrinterId: string | null;
+  paymentSlipPrinterId: string | null;
 }
 
 export interface PrinterChoice {
@@ -2376,6 +2392,18 @@ export class TillApi {
    */
   getDeviceIdentity(): Promise<DeviceIdentity> {
     return this.#request<DeviceIdentity>("/api/device/me", "GET");
+  }
+
+  /**
+   * Switch the session's device to another approved profile → `POST /api/device/active-profile`. The
+   * server refuses a profile the device is not approved for (`device_profile.not_approved`), one the
+   * signed-in person may not use (`device_profile.not_admitted`), and a switch during a card payment
+   * the device started (`device.payment_in_progress`).
+   */
+  switchDeviceProfile(profileId: string): Promise<DeviceProfileSwitched> {
+    return this.#request<DeviceProfileSwitched>("/api/device/active-profile", "POST", {
+      profileId,
+    });
   }
 
   /**

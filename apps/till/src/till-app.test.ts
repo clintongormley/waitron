@@ -29,6 +29,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillPrintersDialog } from "./widgets/printers-dialog.js";
+import type { TillProfileDialog } from "./widgets/profile-dialog.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
@@ -14196,4 +14197,144 @@ it("ignores a clock reply from a signed-out operator after another operator sign
   await flush(el);
   expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")).toBeNull();
   expect(counter(el)).not.toBeNull();
+});
+
+describe("switching the device's profile from the header", () => {
+  const COUNTER = { id: "pr-counter", name: "Counter till" };
+  const BAR = { id: "pr-bar", name: "Bar till" };
+  const identity = {
+    deviceId: "till-dev",
+    name: "Till 1",
+    formFactor: "till",
+    stationId: null,
+    receiptPrinterId: null,
+    paymentSlipPrinterId: null,
+    printerChoices: { receipt: [], paymentSlip: [] },
+    profileId: COUNTER.id,
+    approvedProfiles: [COUNTER, BAR],
+  };
+  const foodMenu = { id: "cat-food", name: "Comida", isDefault: true };
+  const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
+  const twoMenus = vi.fn().mockResolvedValue({
+    menus: [foodMenu, drinksMenu],
+    products: [
+      { ...cafe, catalogueId: "cat-food", catalogueName: "Comida" },
+      {
+        ...cafe,
+        id: "cerveza",
+        menuItemId: "menu-item-cerveza",
+        name: "Cerveza",
+        catalogueId: "cat-drinks",
+        catalogueName: "Bebidas",
+      },
+    ],
+  });
+  const profileDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillProfileDialog>("till-profile-dialog");
+  const profileButton = (el: TillApp) =>
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>("wt-button.profile");
+
+  async function openProfile(overrides: Record<string, unknown> = {}) {
+    const { el } = await mountApp({
+      getDeviceIdentity: vi.fn().mockResolvedValue(identity),
+      switchDeviceProfile: vi.fn().mockResolvedValue({
+        activeProfileId: BAR.id,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      }),
+      ...overrides,
+    });
+    const c = await toCounter(el);
+    profileButton(el)!.click();
+    await flush(el);
+    return { el, c };
+  }
+
+  it("offers no Profile button on a device approved for one profile", async () => {
+    const { el } = await mountApp({
+      getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity, approvedProfiles: [COUNTER] }),
+    });
+    await toCounter(el);
+    expect(profileButton(el)).toBeNull();
+  });
+
+  it("opens on the approved profiles, read again, with the active one chosen", async () => {
+    const getDeviceIdentity = vi.fn().mockResolvedValue(identity);
+    const { el } = await openProfile({ getDeviceIdentity });
+    const dialog = profileDialog(el)!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.profiles).toEqual([COUNTER, BAR]);
+    expect(dialog.activeProfileId).toBe(COUNTER.id);
+    expect(dialog.error).toBeNull();
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses to switch while an order is in progress, sending nothing until it is cleared", async () => {
+    const switchDeviceProfile = vi.fn().mockResolvedValue({
+      activeProfileId: BAR.id,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+    });
+    const { el, c } = await openProfile({ switchDeviceProfile });
+    c.store.addProduct(cafe, "1");
+    await flush(el);
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    expect(switchDeviceProfile).not.toHaveBeenCalled();
+    expect(profileDialog(el)!.orderOpen).toBe(true);
+    expect(c.store.lines).toHaveLength(1);
+
+    c.store.clear();
+    await flush(el);
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    expect(switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+  });
+
+  it("a switch reads the till's setup again and starts again from the zone's default menu, still signed in", async () => {
+    const switchedTabs = till.canvas.tabs.map((tab) => ({ ...tab, title: `${tab.title} (bar)` }));
+    const getTill = vi
+      .fn()
+      .mockResolvedValueOnce(till)
+      .mockResolvedValue({ ...till, canvas: { ...till.canvas, tabs: switchedTabs } });
+    const { el } = await openProfile({ listProducts: twoMenus, getTill });
+    emit(counter(el)!, "menu-selected", { id: "cat-drinks" });
+    await flush(el);
+    expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+    const zoneReads = vi.mocked(currentApi.listDefaultZoneOffers).mock.calls.length;
+
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    await flush(el);
+
+    expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+    expect(profileDialog(el)).toBeNull();
+    expect(getTill).toHaveBeenCalledTimes(2);
+    expect((shell(el) as HTMLElement & { tabs: { title: string }[] }).tabs).toEqual(switchedTabs);
+    expect(vi.mocked(currentApi.listDefaultZoneOffers).mock.calls.length).toBe(zoneReads + 1);
+    expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
+    expect(counter(el)).not.toBeNull();
+    expect(lock(el)).toBeNull();
+  });
+
+  it("a refused switch keeps the dialog open with the refusal and reads nothing again", async () => {
+    const getTill = vi.fn().mockResolvedValue(till);
+    const { el } = await openProfile({
+      getTill,
+      switchDeviceProfile: vi.fn().mockRejectedValue({ code: "device_profile.not_admitted" }),
+    });
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    expect(profileDialog(el)!.error).toEqual({ code: "device_profile.not_admitted" });
+    expect(profileDialog(el)!.busy).toBe(false);
+    expect(getTill).toHaveBeenCalledTimes(1);
+  });
+
+  it("choosing the active profile closes the dialog without a request", async () => {
+    const { el } = await openProfile();
+    emit(profileDialog(el)!, "profile-switch", { profileId: COUNTER.id });
+    await flush(el);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+    expect(profileDialog(el)).toBeNull();
+  });
 });
