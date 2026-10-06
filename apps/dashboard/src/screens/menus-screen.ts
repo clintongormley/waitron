@@ -8,6 +8,8 @@ import {
   baseStyles,
   iconButtonStyles,
   trackIconTooltip,
+  leaveCoordinatorFor,
+  type LeaveReason,
   focusFirstInvalid,
   setContentLanguages,
   currentContentLanguages,
@@ -1484,9 +1486,21 @@ export class MenusScreen extends LitElement {
     this.busy = false;
   }
 
+  readonly #beforeProductsClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.busy) return false;
+    const picker = this.shadowRoot!.querySelector("dashboard-section-add-products");
+    const leave = leaveCoordinatorFor(this);
+    return (
+      !picker ||
+      !leave ||
+      (await leave.request({ scopes: [picker], reason, proceed() {} })) === "proceeded"
+    );
+  };
+
   #addProducts(productIds: string[]): void {
     if (this.addingProducts === null || this.busy || this.#closeLostList()) return;
     const target = this.addingProducts;
+    const picker = this.shadowRoot!.querySelector("dashboard-section-add-products");
     const { listId } = target;
     this.busy = true;
     this.addProductsError = null;
@@ -1499,6 +1513,10 @@ export class MenusScreen extends LitElement {
         this.busy = false;
         return;
       }
+      picker?.commitSaved(productIds);
+      this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+        '[data-test="add-products"]',
+      )!.closeAfter("saved");
       this.addingProducts = null;
       await this.#refresh();
       this.#reportSavedToLost(target);
@@ -2667,10 +2685,12 @@ export class MenusScreen extends LitElement {
       size="standard"
       data-test="add-products"
       .open=${target !== null}
+      .beforeClose=${leaveCoordinatorFor(this) ? this.#beforeProductsClose : undefined}
       heading=${t("sections.add_products_heading").replace("{name}", target?.name ?? "")}
       @keydown=${this.#guardEscape}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
+        if (event.target !== event.currentTarget) return;
         if (!this.busy) this.addingProducts = null;
         this.#windowClosed();
       }}
@@ -2700,7 +2720,11 @@ export class MenusScreen extends LitElement {
                   data-test="add-products-cancel"
                   .disabled=${this.busy}
                   @click=${() => {
-                    this.addingProducts = null;
+                    if (leaveCoordinatorFor(this))
+                      void this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+                        '[data-test="add-products"]',
+                      )!.requestClose("cancel");
+                    else this.addingProducts = null;
                   }}
                   >${t("action.cancel")}</wt-button
                 ></dashboard-section-add-products

@@ -1,7 +1,8 @@
+import { LeaveController } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { LitElement } from "lit";
+import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type {
   CatalogueSummary,
   CategorySummary,
@@ -29,6 +30,14 @@ import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { CatalogueScreen } from "./catalogue-screen.js";
 import { ROOT_KEY } from "../widgets/product-list.js";
+
+class PlacementLeaveHost extends LitElement {
+  readonly leave = new LeaveController(this);
+  override render() {
+    return html`${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
+  }
+}
+customElements.define("placement-leave-test-host", PlacementLeaveHost);
 
 const catalogues: CatalogueSummary[] = [
   { id: "cat-a", name: "Comida", active: true, version: 1 },
@@ -2696,6 +2705,69 @@ describe("catalogue-screen", () => {
     }
     const control = (el: CatalogueScreen, test: string) =>
       step(el).shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!;
+
+    for (const partial of [false, true]) {
+      it(`W69 placement ${partial ? "partial" : "complete"} success commits accepted destinations before closing`, async () => {
+        const { el: leaveHost } = await mountWidget<PlacementLeaveHost>(
+          "placement-leave-test-host",
+          {},
+        );
+        const leave = leaveHost.leave.coordinator;
+        const register = (event: Event) => {
+          (event as CustomEvent<{ accept: (value: typeof leave) => void }>).detail.accept(leave);
+        };
+        document.addEventListener("wt-leave-coordinator", register);
+        onTestFinished(() => {
+          document.removeEventListener("wt-leave-coordinator", register);
+          leaveHost.leave.forceReset();
+        });
+        const api = stubApi({
+          addSectionProducts: vi
+            .fn()
+            .mockImplementation((id: string) =>
+              partial && id === "s-drinks"
+                ? Promise.reject({ code: "server.internal" })
+                : Promise.resolve({ added: 1 }),
+            ),
+        });
+        const el = await create(api);
+        await choose(el, ["cat-a", "root-a"], ["cat-a", "s-drinks"]);
+        expect(leave.isDirty()).toBe(true);
+        const picker = step(el);
+        let committed: { ids: string[]; open: boolean; dirty: boolean } | undefined;
+        const original = (picker as AddToMenus & { commitAdded?: (ids: string[]) => void })
+          .commitAdded;
+        if (original)
+          vi.spyOn(
+            picker as AddToMenus & { commitAdded: (ids: string[]) => void },
+            "commitAdded",
+          ).mockImplementation((ids) => {
+            original.call(picker, ids);
+            committed = { ids, open: picker.open, dirty: leave.isDirty([picker]) };
+          });
+        control(el, "add-to-menus").click();
+        await flush(el);
+        await flush(el);
+        expect(committed).toEqual({
+          ids: partial ? ["root-a"] : ["root-a", "s-drinks"],
+          open: true,
+          dirty: partial,
+        });
+        expect(picker.open).toBe(partial);
+        if (partial) {
+          expect(place(el, "cat-a", "root-a").checked).toBe(false);
+          expect(place(el, "cat-a", "s-drinks").checked).toBe(true);
+          control(el, "skip").click();
+          await leaveHost.updateComplete;
+          const q = leaveHost.shadowRoot!.querySelector("wt-unsaved-changes")!;
+          await q.updateComplete;
+          expect(q.open).toBe(true);
+          q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+          await closeReportsDelivered();
+          expect(picker.open).toBe(true);
+        } else expect(leave.isDirty()).toBe(false);
+      });
+    }
 
     it("follows a saved create with the step, naming the product and each section by staff and internal names", async () => {
       const api = stubApi();

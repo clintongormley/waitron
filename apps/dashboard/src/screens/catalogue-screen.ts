@@ -544,6 +544,9 @@ export class CatalogueScreen extends LitElement {
     );
     this.placementBusy = false;
     if (this.placing !== placing) return;
+    this.shadowRoot!.querySelector("dashboard-add-to-menus")!.commitAdded(
+      sectionIds.filter((_id, index) => settled[index]!.status === "fulfilled"),
+    );
     if (failures.length) this.placementFailures = failures;
     else this.#closePlacement();
   }

@@ -1203,8 +1203,12 @@ image selection. Cancel and native Escape retain the draft until Discard; revert
 Menu and section writes commit their submitted values before closing and refreshing. A section
 leave request also sees edited image names through its picker ancestry. The new focused cases
 are in `section-details-form.unsaved.test.ts` and `menu-details.unsaved.test.ts` under
-`apps/dashboard/src/`. Other audited modal owners and page/navigation
-protection remain to be wired. Keep automatic saves on their existing paths.
+`apps/dashboard/src/`. Add-to-menus and section Add products now protect their selected IDs too.
+Search and category filters remain exempt; hidden selections stay in the submitted choice.
+Accepted placements clear only their successful destinations, leaving refused ones unsaved.
+Section additions commit before closing and refreshing. Focused cases are in
+`menu-selections.unsaved.test.ts` and the Catalogue/Menu screen suites. Other audited modal
+owners and page/navigation protection remain to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

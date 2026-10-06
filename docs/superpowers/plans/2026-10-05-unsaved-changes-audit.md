@@ -14,6 +14,13 @@ selection is an automatic-save exemption, reconciled below against the current s
 modal rows and all page/navigation rows below remain pending; shared APIs alone do not complete
 them. Follow the [W69 backlog entry](../../backlog.md) for the current rollout boundary.
 
+2026-10-06 selection-owner checkpoint: Add-to-menus and section Add products now register their
+selected ID sets on the W69 branch. Search and category filters stay exempt, with hidden selections
+retained. Section additions commit before close/refresh; partial placement clears only successful
+destinations. `apps/dashboard/src/widgets/menu-selections.unsaved.test.ts` and the Catalogue/Menu
+screen suites exercise the close and write boundaries. Replacement, layout and the remaining
+modal/page owners are still pending.
+
 ## How to reproduce discovery
 
 Run each command separately and inspect its exit status. The broad search deliberately includes helpers before classifying their owners.

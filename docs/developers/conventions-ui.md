@@ -713,3 +713,11 @@ ancestry so a scoped leave can see staged image-name edits. Focused browser case
 `apps/dashboard/src/widgets/section-details-form.unsaved.test.ts` and
 `apps/dashboard/src/screens/menu-details.unsaved.test.ts`. Other modal owners and page navigation
 remain part of the rollout.
+
+On the W69 branch, Add-to-menus and section Add products register their selected ID sets.
+Search/category filters do not author a write and stay exempt. Section additions commit before
+closing and refreshing; each accepted placement is removed from its pending destinations, so a
+partial refusal retains only the failed choices. Keep the placement dialog's own close event
+available to its screen's focus return; nested close events cannot dismiss that owner. Cases:
+`apps/dashboard/src/widgets/menu-selections.unsaved.test.ts` and the existing Catalogue/Menu
+screen suites. Other audited owners remain pending.

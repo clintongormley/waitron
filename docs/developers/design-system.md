@@ -1494,7 +1494,10 @@ and nested option-label forms are wired. Image Upload/Edit and enclosing picker 
 the registry: snapshots copy translated names and preserve the selected File by identity, while
 the picker contributes a clean parent scope for its staged child. Menu and section metadata
 forms also register their submitted details, with a Section parent for nested image edits. Their
-writes commit before the following refresh. The remaining form owners stay tracked in the W69
+writes commit before the following refresh. Add-to-menus and section Add products compare selected
+ID membership independently of offered order or search filters. A successful placement removes
+only accepted destinations from the pending choice; a refused destination still asks before
+closing. The remaining form owners stay tracked in the W69
 backlog entry. Page navigation is a separate part of that
 rollout. The coordinator's dirty-only unload registration
 requests the browser's own warning; the [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md)

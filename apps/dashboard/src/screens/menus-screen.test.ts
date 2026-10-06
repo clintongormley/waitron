@@ -1,3 +1,5 @@
+import { LitElement, html } from "lit";
+import { LeaveController } from "@waitron/ui";
 import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
@@ -41,6 +43,27 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
+
+class MenuProductsLeaveHost extends LitElement {
+  readonly leave = new LeaveController(this);
+  override render() {
+    return html`${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
+  }
+}
+customElements.define("menu-products-leave-test-host", MenuProductsLeaveHost);
+async function placementLeaveHost() {
+  const { el: host } = await mountWidget<MenuProductsLeaveHost>(
+    "menu-products-leave-test-host",
+    {},
+  );
+  const register = (event: Event) =>
+    (
+      event as CustomEvent<{ accept: (leave: typeof host.leave.coordinator) => void }>
+    ).detail.accept(host.leave.coordinator);
+  document.addEventListener("wt-leave-coordinator", register);
+  onTestFinished(() => document.removeEventListener("wt-leave-coordinator", register));
+  return host;
+}
 
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());
@@ -8405,3 +8428,89 @@ it("keeps a reconnected menu's snapshot when the departed initial read answers l
   await el.updateComplete;
   expect(structure(el).nodes).toEqual([]);
 });
+
+for (const route of ["cancel", "escape"] as const) {
+  it(`W69 Menu Add products ${route} asks before discarding chosen products`, async () => {
+    const host = await placementLeaveHost();
+    const el = await mountLunch(api());
+    await editDrinks(el);
+    await rowAction(el, "m-drinks", "open-add-products");
+    const picker = inModal<SectionAddProducts>(
+      el,
+      "add-products",
+      "dashboard-section-add-products",
+    );
+    await picker.updateComplete;
+    picker.shadowRoot!.querySelector<HTMLInputElement>('input[value="p-chips"]')!.click();
+    await picker.updateComplete;
+    if (route === "cancel")
+      picker.querySelector<HTMLElement>("[data-test=add-products-cancel]")!.click();
+    else await userEvent.keyboard("{Escape}");
+    await host.updateComplete;
+    const q = host.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await q.updateComplete;
+    await q.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+    expect(q.open).toBe(true);
+    expect(modal(el, "add-products").shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => q.open).toBe(false);
+    expect(
+      picker.shadowRoot!.querySelector<HTMLInputElement>('input[value="p-chips"]')!.checked,
+    ).toBe(true);
+    picker.querySelector<HTMLElement>("[data-test=add-products-cancel]")!.click();
+    await host.updateComplete;
+    await q.updateComplete;
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => modal(el, "add-products").open).toBe(false);
+    expect(host.leave.coordinator.isDirty()).toBe(false);
+  });
+}
+for (const succeeds of [true, false]) {
+  it(`W69 Menu Add products ${succeeds ? "commits before close and failed refresh" : "keeps a refused choice dirty"}`, async () => {
+    const host = await placementLeaveHost();
+    const client = api();
+    client.addSectionProducts.mockImplementation(async () => {
+      if (!succeeds) throw { code: "menu_section.membership_invalid" };
+      client.getMenuStructure.mockRejectedValue({ code: "connection.failed" });
+      return { added: 1 };
+    });
+    const el = await mountLunch(client);
+    await editDrinks(el);
+    await rowAction(el, "m-drinks", "open-add-products");
+    const picker = inModal<SectionAddProducts>(
+      el,
+      "add-products",
+      "dashboard-section-add-products",
+    );
+    await picker.updateComplete;
+    picker.shadowRoot!.querySelector<HTMLInputElement>('input[value="p-chips"]')!.click();
+    await picker.updateComplete;
+    const saved = picker.commitSaved.bind(picker);
+    let atCommit: unknown;
+    vi.spyOn(picker, "commitSaved").mockImplementation((ids) => {
+      saved(ids);
+      atCommit = {
+        ids,
+        open: modal(el, "add-products").open,
+        dirty: host.leave.coordinator.isDirty([picker]),
+      };
+    });
+    picker.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
+    await vi.waitFor(() =>
+      expect(client.addSectionProducts).toHaveBeenCalledExactlyOnceWith("s-drinks", ["p-chips"]),
+    );
+    if (succeeds) {
+      await expect.poll(() => atCommit).toEqual({ ids: ["p-chips"], open: true, dirty: false });
+      await expect.poll(() => modal(el, "add-products").open).toBe(false);
+      expect(host.leave.coordinator.isDirty()).toBe(false);
+    } else {
+      await expect.poll(() => picker.busy).toBe(false);
+      expect(atCommit).toBeUndefined();
+      picker.querySelector<HTMLElement>("[data-test=add-products-cancel]")!.click();
+      await host.updateComplete;
+      const q = host.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      await q.updateComplete;
+      expect(q.open).toBe(true);
+    }
+  });
+}
