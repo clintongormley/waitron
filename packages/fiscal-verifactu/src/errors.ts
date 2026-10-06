@@ -151,11 +151,12 @@ declare module "@waitron/shared" {
 
     /**
      * `./drain.ts`'s `persistResponse`: AEAT answered an envío with a different number of lines
-     * than records sent, so no line was applied and each record is `fiscal.estado_desconocido`. A
-     * warning raised on the sale of the envío's first record; `registroIds` are the envío's
+     * than records sent, so no line was applied and each record is `fiscal.estado_desconocido`.
+     * Constructed, never thrown. A warning raised on the sale of the envío's first record; `registroIds` are the envío's
      * records in the order sent, `csv` is the envío's, and `lineasRespuesta` the reply's lines in
      * AEAT's order. While one is open for that sale, `incidents_open_dedup` stores no other, so a
-     * later mismatched reply to an envío starting with the same record keeps none of its lines.
+     * later mismatched reply to an envío whose first record belongs to the same sale (that record
+     * again, or the sale's cancellation) keeps none of its lines.
      */
     "fiscal.respuesta_descuadrada": {
       registroIds: string[];

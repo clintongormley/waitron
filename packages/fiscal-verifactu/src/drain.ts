@@ -668,8 +668,8 @@ interface ResolvedReply {
  * Pairs line i of the reply with row i of the envío. No document we hold promises that AEAT
  * answers in the order sent, so a line is applied only when it carries its row's `RefExterna`,
  * names the invoice the row was sent as, and names no other `TipoOperacion`; any other row is
- * unmatched, and so is every row when the reply's line count differs from the envío's. A reply in
- * another order can then only leave records unknown, never apply a line to a record it does not
+ * unmatched, and so is every row when the reply's line count differs from the envío's. A line in
+ * another position can then only leave records unknown, never be applied to a record it does not
  * name.
  * Route B's lookups run one at a time; a lookup's failure is kept rather than thrown, so it leaves
  * only its own record unknown (`handleDuplicate`).
@@ -786,7 +786,7 @@ async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
 }
 
 /**
- * Applies every line with its own outcome, whatever an earlier line of the same reply did (design
+ * Applies every matched line with its own outcome, whatever an earlier line of the same reply did (design
  * §7.1, docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md), and
  * marks each unmatched row unknown (`resolveLines`). This reply is never returned again.
  */

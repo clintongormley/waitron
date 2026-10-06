@@ -1619,7 +1619,8 @@ landed with public F1 disabled. **Next action:** continue the approved dependent
 keeping each task's fiscal and adviser gates.
 **Update, 2026-10-06 (W41s-3, landed):** Task 3 landed as
 [#1289](https://github.com/clintongormley/waitron/pull/1289), with the owner's approval of its
-nine changed filing checks and of the landing. Every line of AEAT's reply is kept. A
+nine changed filing checks and of the landing. Every line of AEAT's reply is kept (but see W41s-3c
+below). A
 rejection on its own no longer holds the later records of its chain (D2, on
 [§7.1's receipts](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1));
 only rejection code 1161 was tested, and it was triggered artificially. A conflict with AEAT's
@@ -1673,13 +1674,16 @@ record ids and its CSV. The dashboard's sentence does not show those lines; `rea
 (`apps/server/src/alerts.ts`), behind `GET /management-api/alerts`, returns them in the alert's
 params. **Still open:** nothing we hold says AEAT answers in the order sent — the saved preproduction
 replies were stored in the order sent by the probe itself, whatever order AEAT used — and the
-question is with the asesor as [Q43](compliance/asesor-questions.md). If AEAT does reorder, a
-multi-record envío is never confirmed: no line is applied, Route B's lookup never runs, the retry
-sends the same records again in the same chain order, and the chain stays held — loud (an alert per
-record) and never a wrong acceptance. One option for the owner, not built: after a mismatch, send
+question is with the asesor as [Q43](compliance/asesor-questions.md). A line AEAT moves away from
+its record's position is never applied, so that record stays unknown and is retried, while records
+whose line is still at their position are applied as usual. If AEAT moved lines in every reply with
+more than one line, the records whose lines it moved would never be confirmed: Route B's lookup
+never runs for them, each retry sends them again in the same chain order, and the chain stays held —
+loud (an alert per record) and never a wrong acceptance. One option for the owner, not built: after a mismatch, send
 each unknown record again in an envío of its own. An incident is not stored while one with the same
 code for the same sale is open, so while a `fiscal.respuesta_descuadrada` is open for a sale, a later
-mismatched reply to an envío starting with the same record keeps none of its lines. And no run
+mismatched reply to an envío whose first record belongs to the same sale (that record again, or the
+sale's cancellation) keeps none of its lines. And no run
 against real AEAT has shown that a cancellation's reply line names the cancelled invoice (the schema
 types the line's `IDFactura` with the plain field names, and the library's fake echoes the cancelled
 invoice there). If AEAT named a different invoice on that line, the cancellation would come back
