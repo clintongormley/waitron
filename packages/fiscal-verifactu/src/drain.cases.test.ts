@@ -118,6 +118,15 @@ async function incidentCodes(): Promise<string[]> {
 
 const cases = () => withTransaction(suite.db, (tx) => listFilingCases(tx));
 
+/** `fiscal.estado_desconocido`'s params that ./errors.ts says are present only when the reply
+ * gave no line that can be trusted to be the record's. */
+const POSITIONAL_ONLY_PARAMS = [
+  "operacionEnviada",
+  "identidadEnviada",
+  "lineaRespuesta",
+  "lineasEnRespuesta",
+] as const;
+
 describe("drain — a lone rejection is kept and does not hold its chain", () => {
   it("applies every line of a reply whose first line is a rejection, and opens a case for the rejected record", async () => {
     const aeat = fakeAeat();
@@ -460,7 +469,7 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       expect((await envioOf(unreadable)).estado).not.toBe("detenido");
     });
 
-    it("sends again, at its retry, a record the run's reply had no line for", async () => {
+    it("sends again, at its retry, a record whose line in the reply carries another reference", async () => {
       const aeat = fakeAeat();
       const seeded = await seedPendingEnvios(suite.db, { count: 4 });
       for (const key of seeded.facturaKeys.slice(0, 3)) aeat.reject(key, 1100, "Rechazo 1100");
@@ -526,7 +535,7 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       expect(afterRetry.recordsHalted).toBe(1);
     });
 
-    it("sends the records appended after a missing answer together with its retry", async () => {
+    it("sends the records appended after an answer whose line carries another reference together with its retry", async () => {
       const { real, fourth, appended } = await runThenUnanswered(misnaming);
       expect(await envioOf(fourth)).toMatchObject({ estado: "pendiente", incidencia: true });
       const wire = recording(real);
@@ -773,12 +782,16 @@ describe("drain — a duplicate whose lookup fails", () => {
     `);
     expect(unknown).toHaveLength(1);
     expect(unknown[0]!.severity).toBe("warning");
-    expect(JSON.parse(unknown[0]!.params)).toMatchObject({
+    const unknownParams = JSON.parse(unknown[0]!.params) as Record<string, unknown>;
+    expect(unknownParams).toMatchObject({
       registroId: duplicate,
       codigo: 3000,
       csv,
       lookupFailed: true,
     });
+    for (const positionalOnly of POSITIONAL_ONLY_PARAMS) {
+      expect(unknownParams).not.toHaveProperty(positionalOnly);
+    }
     expect(result.recordsAccepted).toBe(1);
     expect(result.nextDueAt).toEqual(retryAt);
 
@@ -832,6 +845,9 @@ describe("drain — an unknown outcome says whether a duplicate lookup failed", 
     const params = await unknownParams();
     expect(params).toHaveLength(1);
     expect(params[0]).not.toHaveProperty("lookupFailed");
+    for (const positionalOnly of POSITIONAL_ONLY_PARAMS) {
+      expect(params[0]).not.toHaveProperty(positionalOnly);
+    }
   });
 
   it("says lookupFailed false when the lookup answered without the record", async () => {
@@ -852,7 +868,11 @@ describe("drain — an unknown outcome says whether a duplicate lookup failed", 
     await drain(deps(lookupFindsNothing), SECOND);
 
     expect((await envioOf(duplicate!)).estado).toBe("pendiente");
-    expect(await unknownParams()).toEqual([expect.objectContaining({ lookupFailed: false })]);
+    const params = await unknownParams();
+    expect(params).toEqual([expect.objectContaining({ lookupFailed: false })]);
+    for (const positionalOnly of POSITIONAL_ONLY_PARAMS) {
+      expect(params[0]).not.toHaveProperty(positionalOnly);
+    }
   });
 });
 
@@ -1047,12 +1067,17 @@ describe("drain — reply lines are paired with the records sent by position", (
 
   async function incidentsCoded(
     code: string,
-  ): Promise<{ sale_id: string | null; params: Record<string, unknown> }[]> {
-    const { rows } = await suite.db.execute<{ sale_id: string | null; params: string }>(sql`
-      select sale_id, params from incidents where code = ${code}
+  ): Promise<{ sale_id: string | null; severity: string; params: Record<string, unknown> }[]> {
+    const { rows } = await suite.db.execute<{
+      sale_id: string | null;
+      severity: string;
+      params: string;
+    }>(sql`
+      select sale_id, severity, params from incidents where code = ${code}
     `);
     return rows.map((row) => ({
       sale_id: row.sale_id,
+      severity: row.severity,
       params: JSON.parse(row.params) as Record<string, unknown>,
     }));
   }
@@ -1172,6 +1197,42 @@ describe("drain — reply lines are paired with the records sent by position", (
     }
   });
 
+  it("applies only the line still at its record's position when AEAT swapped the first two of three, and sends the other two again at their retry", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    const [first, second, third] = seeded.registroIds;
+    const real = aeat.client();
+    const partlyReordered = reshaping(real, ([a, b, c]) => [b!, a!, c!]);
+
+    const result = await drain(deps(partlyReordered.client), FIRST);
+
+    const [secondLine, firstLine, thirdLine] = partlyReordered.delivered;
+    expect([firstLine!.RefExterna, secondLine!.RefExterna, thirdLine!.RefExterna]).toEqual([
+      first,
+      second,
+      third,
+    ]);
+    for (const [id, other] of [
+      [first!, secondLine!],
+      [second!, firstLine!],
+    ] as const) {
+      expect(await envioOf(id)).toMatchObject({ estado: "pendiente", incidencia: true });
+      expect(await ackOf(id)).toBeUndefined();
+      expect(await unknownParamsOf(id)).toEqual([
+        expect.objectContaining({ lineaRespuesta: lineParams(other) }),
+      ]);
+    }
+    expect(await envioOf(third!)).toMatchObject({ estado: "aceptado", incidencia: false });
+    expect(await ackOf(third!)).toBe("accepted");
+    expect(result.recordsAccepted).toBe(1);
+    expect(await incidentsCoded("fiscal.respuesta_descuadrada")).toEqual([]);
+    const wire = recording(real);
+
+    await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
+
+    expect(wire.sent).toEqual([[first, second]]);
+  });
+
   it.each([
     ["one line fewer than the records sent", 3, (lines: RespuestaLinea[]) => lines.slice(0, 2)],
     [
@@ -1221,6 +1282,7 @@ describe("drain — reply lines are paired with the records sent by position", (
       expect(await incidentsCoded("fiscal.respuesta_descuadrada")).toEqual([
         {
           sale_id: await saleOf(seeded.registroIds[0]!),
+          severity: "warning",
           params: {
             registroIds: seeded.registroIds,
             csv: expect.any(String),

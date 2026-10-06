@@ -2543,9 +2543,9 @@ specification has not been checked for it.
 
 **Proposed interim treatment (owner, 2026-10-06):** pair line N with record N, and apply it only
 when it also names that record (our reference and the invoice's issuer, number and date) and
-names no other operation. Any other record's outcome is unknown: it is sent again, an alert is
-raised, and the line it was compared with is kept in the alert's details, which
-`GET /management-api/alerts` returns (`readOpenAlerts`, `apps/server/src/alerts.ts`); the
+names no other operation. Any other record's outcome is unknown: it is sent again unless
+sending on its chain is on hold, an alert is raised, and the line it was compared with is kept in
+the alert's details, which `GET /management-api/alerts` returns (`readOpenAlerts`, `apps/server/src/alerts.ts`); the
 dashboard's sentence does not show it. When the reply's line count differs from the records sent, every record
 of that envío is unknown and the whole reply is kept once. A reordered reply can therefore never
 make an invoice wrongly taken as accepted. A record whose line is still at its position is applied
