@@ -1198,8 +1198,12 @@ Bill payment now protects edited cash, item/unit choices, contribution/share and
 through Close/native Escape on the branch. Back from confirmation protects its staged tip while
 retaining payment entry. Clean/reverted entry stays exempt, and acceptance clears its scope before
 the following table read. Focused widget and actual till-app tests cover these boundaries,
-refusal, busy transitions, reconnect and stale answers. Remaining modal owners, followed by
-page/history/navigation work, still keep W69 incomplete.
+refusal, busy transitions, reconnect and stale answers. Ingredient Add/Edit now asks before native
+Escape drops name, active status, allergen declaration or dietary origin. Keep retains the values;
+Discard closes once, while reverts remove unload protection. Successful ingredient writes release
+the scope before the Recipes refresh; refusal retains it. Focused widget and Recipes tests cover
+these boundaries, busy/stale answers, reconnect and same-identity reads. Units reassignment and the
+remaining modal owners, followed by page/history/navigation work, still keep W69 incomplete.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
 redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue

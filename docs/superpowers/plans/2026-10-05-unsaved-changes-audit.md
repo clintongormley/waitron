@@ -1389,3 +1389,38 @@ After that timing correction, the eight-suite combined run passed all 631 tests.
 dashboard typechecks and the frozen install passed on the rebased tree. The corrected test's
 formatting/lint and `git diff --check` also passed. These receipts verify this checkpoint, not the
 remaining modal owners, page navigation or required CI.
+
+
+## Ingredient modal checkpoint — 2026-10-06
+
+`ingredient-form` now registers name, active status, allergen declaration and dietary origin with
+the shared coordinator. Native Escape retains them until Keep or Discard. Same-id reads preserve
+the draft and detached baselines; reconnect registers against the retained baseline. Successful
+create/edit commits the submitted value and closes before the Recipes refresh. Refused writes
+retain the edited form, and starting a write invalidates a pending discard question. No request
+body or existing test assertion changed.
+
+Commands run at this checkpoint:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/widgets/ingredient-form.unsaved.test.ts src/widgets/ingredient-form.test.ts src/screens/recipe-screen.test.ts src/widgets/allergen-picker.test.ts src/widgets/dietary-origin-picker.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+```
+
+The first expected red run failed ten assertions with one clean/revert control passing; the later
+busy-answer and detached-controls red run failed two with thirteen passing. Eight separate
+deletions in an independently installed candidate each failed its intended case while the
+untouched Escape control passed: close interception, busy invalidation, both write-success
+boundaries and each field's unload notification. The restored candidate passed fifteen tests.
+The final focused family also checks all field reverts, invalid raw names and Keep focus.
+Both unedited fiscal suites passed twenty tests.
+
+The temporary visual probe passed eight EN/ES, light/dark, 390/1280 flows with sixteen axe scans.
+All sixteen final editor/warning captures were inspected. Earlier attempts used a forbidden
+screenshot path and then omitted the requested theme from the mounting helper; neither is the
+final visual receipt. The corrected probe asserts the theme and translated heading. Artifacts
+and command output are retained locally in `receipts/w69-ingredient-20261006`; the probe and
+captures are removed from source.
+
+Tasks 1/4 remain partial. Units reassignment and the other remaining audited modal owners, followed
+by Tasks 5–6 pages/history/navigation/native reload, still keep both proposed PRs unfinished.

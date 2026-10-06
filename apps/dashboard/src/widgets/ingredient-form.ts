@@ -1,6 +1,8 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
+import { sameValue } from "./product-editor-model.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -42,12 +44,6 @@ export function ingredientRefusalErrors(error: unknown): IngredientFormErrors {
   return { _form: codeMessage(code) };
 }
 
-/**
- * The form does NOT call the API and does NOT close itself on confirm — the screen closes it on a
- * successful create/update, so a rejected write leaves the entered values in place. On PATCH
- * `allergens: null` is legal and clears the declaration back to PENDING, so the edit patch always
- * carries the current value, null included.
- */
 @customElement("dashboard-ingredient-form")
 export class IngredientForm extends LitElement {
   static override styles = [
@@ -83,21 +79,96 @@ export class IngredientForm extends LitElement {
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
 
+  #scope?: DraftScope<IngredientPatch>;
+  #leave?: LeaveCoordinator;
+  #baseline?: IngredientPatch;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.isConnected &&
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #current(): IngredientPatch {
+    return {
+      name: this.name,
+      active: this.active,
+      allergens: this.allergens,
+      dietaryOrigin: this.dietaryOrigin,
+    };
+  }
+
+  #restore(value: IngredientPatch): void {
+    this.name = value.name ?? "";
+    this.active = value.active ?? true;
+    this.allergens = structuredClone(value.allergens ?? null);
+    this.seedAllergens = this.allergens;
+    this.dietaryOrigin = value.dietaryOrigin ?? null;
+    this.seedOrigin = this.dietaryOrigin;
+  }
+
+  closeSaved(submitted: IngredientInput | IngredientPatch): void {
+    this.#baseline = {
+      name: submitted.name ?? this.name,
+      active: "active" in submitted ? submitted.active : true,
+      allergens: submitted.allergens ?? null,
+      dietaryOrigin: submitted.dietaryOrigin ?? null,
+    };
+    this.#scope?.commit(this.#baseline);
+    this.open = false;
+    this.shadowRoot!.querySelector("wt-dialog")!.closeAfter("saved");
+  }
+
   /** Allergens are seeded into BOTH the live value (`allergens`, what a save emits) and the picker's
    * `declaration` seed (`seedAllergens`); the picker does not emit on seed, so the form must seed its
    * own live copy too, or an untouched edit would re-save the wrong value. */
   override willUpdate(changed: PropertyValues): void {
-    const reopened = changed.has("ingredient") || (changed.has("open") && this.open);
+    const previous = changed.get("ingredient") as Ingredient | null | undefined;
+    const reopened =
+      (changed.has("open") && this.open) ||
+      (changed.has("ingredient") && this.ingredient?.id !== previous?.id);
     if (changed.has("fieldErrors") || reopened) this.dismissed = new Set();
-    if (!reopened) return;
-    const ing = this.ingredient;
-    this.name = ing?.name ?? "";
-    this.active = ing?.active ?? true;
-    this.allergens = ing?.allergens ?? null;
-    this.seedAllergens = ing?.allergens ?? null;
-    this.dietaryOrigin = ing?.dietaryOrigin ?? null;
-    this.seedOrigin = ing?.dietaryOrigin ?? null;
-    this.attempted = false;
+    if (reopened) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      const ing = this.ingredient;
+      this.#restore({
+        name: ing?.name ?? "",
+        active: ing?.active ?? true,
+        allergens: ing?.allergens ?? null,
+        dietaryOrigin: ing?.dietaryOrigin ?? null,
+      });
+      this.attempted = false;
+      this.#baseline = structuredClone(this.#current());
+    }
+    if (changed.has("busy") && this.busy && this.#baseline) this.#scope?.commit(this.#baseline);
+    if (!this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+      this.#baseline = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#baseline ??= structuredClone(this.#current());
+      this.#scope = this.#leave?.register<IngredientPatch>({
+        id: this,
+        current: () => this.#current(),
+        snapshot: (value) => structuredClone(value),
+        equal: sameValue,
+        restore: (value) => this.#restore(value),
+      });
+      this.#scope?.commit(this.#baseline);
+    }
   }
 
   protected override updated(changed: PropertyValues): void {
@@ -107,23 +178,31 @@ export class IngredientForm extends LitElement {
 
   #onNameChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    if (!this.isConnected || !this.open || this.busy) return;
     this.name = event.detail.value;
+    this.#scope?.changed();
     this.dismissed = new Set([...this.dismissed, "name"]);
   }
 
   #onActiveChange(event: CustomEvent<{ checked: boolean }>): void {
     event.stopPropagation();
+    if (!this.isConnected || !this.open || this.busy) return;
     this.active = event.detail.checked;
+    this.#scope?.changed();
   }
 
   #onAllergensChanged(event: CustomEvent<{ value: AllergenDeclaration }>): void {
     event.stopPropagation();
+    if (!this.isConnected || !this.open || this.busy) return;
     this.allergens = event.detail.value;
+    this.#scope?.changed();
   }
 
   #onOriginChanged(event: CustomEvent<{ origin: DietaryOrigin | null }>): void {
     event.stopPropagation();
+    if (!this.isConnected || !this.open || this.busy) return;
     this.dietaryOrigin = event.detail.origin;
+    this.#scope?.changed();
   }
 
   #nameError(): string {
@@ -136,7 +215,7 @@ export class IngredientForm extends LitElement {
 
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy) return;
+    if (!this.isConnected || !this.open || this.busy) return;
     this.attempted = true;
     this.dismissed = new Set([...this.dismissed, ...Object.keys(this.fieldErrors)]);
     if (this.#nameError() !== "") {
@@ -173,8 +252,6 @@ export class IngredientForm extends LitElement {
     );
   }
 
-  /** Deliberately does not `stopPropagation`: the composed `wt-close` must bubble on to the screen
-   * (the owner of the open state). */
   #onClose(): void {
     this.open = false;
   }
@@ -190,6 +267,8 @@ export class IngredientForm extends LitElement {
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}
         heading=${this.ingredient ? t("ingredient.edit") : t("ingredient.new")}
         .open=${this.open}
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
         @wt-close=${() => this.#onClose()}
       >
         <wt-input

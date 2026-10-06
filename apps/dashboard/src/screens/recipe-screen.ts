@@ -167,6 +167,7 @@ export class RecipeScreen extends LitElement {
         this.formErrors = ingredientRefusalErrors(error);
         return;
       }
+      this.shadowRoot!.querySelector("dashboard-ingredient-form")!.closeSaved(event.detail);
       await this.#afterWrite();
     } finally {
       this.busy = false;
@@ -197,6 +198,7 @@ export class RecipeScreen extends LitElement {
         this.formErrors = ingredientRefusalErrors(error);
         return;
       }
+      this.shadowRoot!.querySelector("dashboard-ingredient-form")!.closeSaved(event.detail.patch);
       await this.#afterWrite();
     } finally {
       this.busy = false;
