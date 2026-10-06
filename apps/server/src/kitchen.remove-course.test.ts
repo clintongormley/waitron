@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, getTableName, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
@@ -7,10 +7,12 @@ import {
   orderDraftLines,
   products,
   ticketItems,
+  withTransaction,
   workingOrderLines,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { referenceQuery } from "./in-use.js";
 import {
   COURSE_REFERENCES,
   coursesInUse,
@@ -168,6 +170,24 @@ describe("removing a course", () => {
       found: new Set([used]),
       queries: COURSE_REFERENCES.length,
     });
+  });
+
+  it("finds each of a course's references through an index rather than a scan", async () => {
+    for (const reference of COURSE_REFERENCES) {
+      const table = getTableName(reference.table);
+      const plan = await withTransaction(suite.db, (tx) =>
+        tx.execute<{ detail: string }>(
+          sql`explain query plan ${referenceQuery(tx, reference, [randomUUID(), randomUUID()]).getSQL()}`,
+        ),
+      );
+      const details = plan.rows.map((row) => row.detail).join("\n");
+      expect(details, table).toMatch(
+        new RegExp(
+          `SEARCH ${table} USING (COVERING )?INDEX \\S+ \\(${reference.column.name}=\\?\\)`,
+        ),
+      );
+      expect(details, table).not.toMatch(new RegExp(`SCAN ${table}\\b`));
+    }
   });
 
   it("deletes a disabled course once nothing refers to it any more", async () => {

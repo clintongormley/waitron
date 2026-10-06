@@ -136,11 +136,11 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     expect(isRefusal(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
-  it("wires all three course columns with a foreign key to kitchen_courses", async () => {
+  it("wires all four course columns with a foreign key to kitchen_courses", async () => {
     // The behavioural case above covers products.course_id only; this catches a copy-paste error
-    // in the other two, such as a course FK pointing at kitchen_stations. SQLite stores no name for
-    // a foreign key, so each is found by table and column.
-    for (const table of ["products", "working_order_lines", "ticket_items"]) {
+    // in the others, such as a course FK pointing at kitchen_stations. SQLite stores no name for a
+    // foreign key, so each is found by table and column.
+    for (const table of ["products", "order_draft_lines", "working_order_lines", "ticket_items"]) {
       const keys = suite.db.all<{ table: string; from: string; to: string }>(
         sql.raw(`select "table", "from", "to" from pragma_foreign_key_list('${table}')`),
       );
@@ -148,21 +148,6 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       expect(course, `${table}.course_id must have exactly one foreign key`).toHaveLength(1);
       expect(course[0]!.table).toBe("kitchen_courses");
       expect(course[0]!.to).toBe("id");
-    }
-  });
-
-  it("finds a course's references through an index on each course_id column", async () => {
-    for (const table of ["products", "order_draft_lines", "working_order_lines", "ticket_items"]) {
-      const plan = suite.db.all<{ detail: string }>(
-        sql.raw(
-          `explain query plan select distinct "course_id" from "${table}" where "course_id" in ('a', 'b')`,
-        ),
-      );
-      expect(plan.map((step) => step.detail).join("\n"), table).toMatch(
-        new RegExp(
-          `SEARCH ${table} USING (COVERING )?INDEX ${table}_course_idx \\(course_id=\\?\\)`,
-        ),
-      );
     }
   });
 });
