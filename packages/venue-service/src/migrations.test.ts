@@ -35,6 +35,10 @@ const TABLES = [
   "zone_service_policies",
   "zone_menus",
   "device_zone_defaults",
+  "device_profile_service_access",
+  "device_profile_zones",
+  "device_profile_stations",
+  "device_profile_watchers",
   "station_claims",
   "station_fallbacks",
   "station_day_states",
@@ -178,6 +182,35 @@ describe("the venue-service migration set carries no tenant column", () => {
       device_zone_defaults: {
         primaryKey: ["device_id"],
         foreignKeys: ["(device_id) -> devices(id)", "(zone_id) -> floor_zones(id)"],
+      },
+      device_profile_service_access: {
+        primaryKey: ["device_profile_id"],
+        foreignKeys: [
+          "(department_id) -> departments(id)",
+          "(device_profile_id) -> device_profiles(id) on delete cascade",
+          "(starting_zone_id) -> floor_zones(id)",
+        ],
+      },
+      device_profile_zones: {
+        primaryKey: ["device_profile_id", "zone_id"],
+        foreignKeys: [
+          "(device_profile_id) -> device_profile_service_access(device_profile_id) on delete cascade",
+          "(zone_id) -> floor_zones(id)",
+        ],
+      },
+      device_profile_stations: {
+        primaryKey: ["device_profile_id", "station_id"],
+        foreignKeys: [
+          "(device_profile_id) -> device_profiles(id) on delete cascade",
+          "(station_id) -> kitchen_stations(id)",
+        ],
+      },
+      device_profile_watchers: {
+        primaryKey: ["device_profile_id", "watcher_id"],
+        foreignKeys: [
+          "(device_profile_id) -> device_profiles(id) on delete cascade",
+          "(watcher_id) -> watchers(id)",
+        ],
       },
       station_claims: {
         primaryKey: ["id"],

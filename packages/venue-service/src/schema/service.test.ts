@@ -4,6 +4,10 @@ import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import {
   departmentSalePolicies,
   departments,
+  deviceProfileServiceAccess,
+  deviceProfileStations,
+  deviceProfileWatchers,
+  deviceProfileZones,
   deviceZoneDefaults,
   orderServiceContexts,
   saleReceiptHeaders,
@@ -102,6 +106,42 @@ const EXPECTED: Record<
     indexes: [],
     uniqueConstraints: [],
     primaryKeys: ["device_zone_defaults_pk"],
+  },
+  device_profile_service_access: {
+    table: deviceProfileServiceAccess,
+    foreignKeys: [
+      "device_profile_service_access_profile_fk",
+      "device_profile_service_access_department_fk",
+      "device_profile_service_access_starting_zone_fk",
+    ],
+    checks: [],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: ["device_profile_service_access_pk"],
+  },
+  device_profile_zones: {
+    table: deviceProfileZones,
+    foreignKeys: ["device_profile_zones_access_fk", "device_profile_zones_zone_fk"],
+    checks: [],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: ["device_profile_zones_pk"],
+  },
+  device_profile_stations: {
+    table: deviceProfileStations,
+    foreignKeys: ["device_profile_stations_profile_fk", "device_profile_stations_station_fk"],
+    checks: [],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: ["device_profile_stations_pk"],
+  },
+  device_profile_watchers: {
+    table: deviceProfileWatchers,
+    foreignKeys: ["device_profile_watchers_profile_fk", "device_profile_watchers_watcher_fk"],
+    checks: [],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: ["device_profile_watchers_pk"],
   },
   station_claims: {
     table: stationClaims,
@@ -205,8 +245,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers the fifteen tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(15);
+  it("covers the nineteen tables it lists", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(19);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

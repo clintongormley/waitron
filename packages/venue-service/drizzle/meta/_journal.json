@@ -169,6 +169,13 @@
       "when": 1791302547239,
       "tag": "0023_public_holidays",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791318137273,
+      "tag": "0024_profile_service_access",
+      "breakpoints": true
     }
   ]
 }

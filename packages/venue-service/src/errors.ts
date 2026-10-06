@@ -20,6 +20,23 @@ declare module "@waitron/shared" {
     "route.station_inactive": { stationId: string };
     "station.fallback_loop": { stationId: string; fallbackStationId: string };
     "time_zone.unreadable": Record<string, never>;
+    "device_profile.access_invalid": {
+      field:
+        | "profileId"
+        | "departmentId"
+        | "allowedZoneIds"
+        | "startingZoneId"
+        | "stationIds"
+        | "watcherIds";
+      reason:
+        | "not_found"
+        | "unavailable"
+        | "outside_department"
+        | "outside_allowed"
+        | "empty"
+        | "required"
+        | "department_required";
+    };
     // `route.dish_not_sent` is declared in apps/server's errors.ts, which raises it.
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };

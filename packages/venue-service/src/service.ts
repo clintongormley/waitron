@@ -37,6 +37,7 @@ import {
   readReleaseReminderMinutes,
   recordKitchenNotices,
 } from "./kitchen-notices.js";
+import { readProfileServiceAccess } from "./profile-access.js";
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
@@ -60,6 +61,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listZoneOffers,
   menuState,
   resolveNewOrderZone,
+  readProfileServiceAccess,
   recordOrderContext: recordOrderServiceContext,
   retargetOrderContext: retargetOrderServiceContext,
   recordLineContexts: recordWorkingLineContexts,

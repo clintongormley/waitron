@@ -417,6 +417,21 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     input: { zoneId?: string | null; deviceId?: string | null },
   ): Promise<OrderServiceContext>;
+  /** A profile's department, zones and kitchen lists as they stand now. A null department means no
+   *  department restriction, with null zones and starting zone; with a department, an empty zone
+   *  list and a null starting zone mean the profile cannot order. An unknown profile is refused
+   *  `device_profile.access_invalid`. */
+  readProfileServiceAccess(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    profileId: string,
+  ): Promise<{
+    departmentId: string | null;
+    allowedZoneIds: string[] | null;
+    startingZoneId: string | null;
+    stationIds: string[];
+    watcherIds: string[];
+  }>;
   recordOrderContext(
     tx: Transaction,
     cfg: { locationId: LocationId },

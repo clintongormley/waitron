@@ -23,6 +23,7 @@ describe("VENUE_SERVICE", () => {
       "readKitchenTicketGrouping",
       "readLinesSoldInEach",
       "readPrintHeldWork",
+      "readProfileServiceAccess",
       "readReleaseReminderMinutes",
       "readSaleReceiptHeader",
       "recordKitchenNotices",
@@ -50,6 +51,17 @@ describe("VENUE_SERVICE", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
     expect(names).toContain("service_settings");
     expect(names).not.toContain("kitchen_notices");
+  });
+
+  it("transfers a profile's department, zones and kitchen lists, which travel with profiles", () => {
+    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    expect(names).toContain("device_profile_service_access");
+    expect(names).toContain("device_profile_zones");
+    expect(names).toContain("device_profile_stations");
+    expect(names).toContain("device_profile_watchers");
+    expect(names.indexOf("device_profile_service_access")).toBeLessThan(
+      names.indexOf("device_profile_zones"),
+    );
   });
 
   it("transfers opening hours and fallbacks but not today's by-hand state", () => {
