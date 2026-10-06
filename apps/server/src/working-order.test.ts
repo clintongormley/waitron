@@ -100,7 +100,9 @@ import { createException, setClaim, writePrintHeldWork } from "@waitron/venue-se
 import {
   WEEK_DISPLAY_ORDER,
   departments,
+  readHolidayFacts,
   replaceWeekHours,
+  saveSpecialDate,
   setStationFallback,
   setStationToday,
   stationFallbacks,
@@ -3715,6 +3717,113 @@ describe("opening hours", () => {
         vi.useRealTimers();
       }
     });
+  });
+});
+
+describe("a sale on a Spanish public holiday", () => {
+  // Monday 12 October 2026, Spain's national day, and the ordinary Monday a week before, each at
+  // 20:00 in Seville.
+  const HOLIDAY = "2026-10-12";
+  const ORDINARY = "2026-10-05";
+
+  it("is made and routed by the station's own Hours as on an ordinary Monday, until the venue saves a special date", async () => {
+    const { cfg, catalogueId, cafeId } = await setupVenue();
+    const { upstairs, downstairs, product } = await withTransaction(db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid", province: "Sevilla", city: "Sevilla" })
+        .where(eq(locations.id, cfg.locationId));
+      expect(await readHolidayFacts(tx, cfg, HOLIDAY, HOLIDAY)).toEqual([
+        expect.objectContaining({ date: HOLIDAY, scope: "national" }),
+      ]);
+      expect(await readHolidayFacts(tx, cfg, ORDINARY, ORDINARY)).toEqual([]);
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
+      const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
+      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await setStationFallback(tx, cfg, upstairs.id, downstairs.id);
+      await seedStationWeek(tx, cfg, upstairs.id, [
+        { weekday: 1, opensAt: "19:00", closesAt: "23:00" },
+      ]);
+      const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
+      return { upstairs, downstairs, product };
+    });
+
+    /** Parks a priced sale of two coffees and fires one drink, at 20:00 in Seville on `date`. */
+    const saleOn = async (date: string) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(`${date}T18:00:00Z`));
+      try {
+        const parked = await parkProducts(cfg, {
+          id: randomUUID(),
+          lines: [{ productId: cafeId, quantity: "2" }],
+        });
+        const fired = await withTransaction(db, (tx) => fireContextless(tx, cfg, [product]));
+        return { parked: parked.id, fired: fired.id };
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+    const priced = (orderId: string) =>
+      db
+        .select({
+          productId: workingOrderLines.productId,
+          quantity: workingOrderLines.quantity,
+          descriptions: workingOrderLines.descriptions,
+          unitPriceGross: workingOrderLines.unitPriceGross,
+          vatClass: workingOrderLines.vatClass,
+          lineTotal: workingOrderLines.lineTotal,
+          category: workingOrderLines.category,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+    const tickets = (orderId: string) => withTransaction(db, (tx) => ticketItemsFor(tx, orderId));
+    const recorded = (orderId: string) =>
+      Promise.all([
+        db.select().from(workingOrders).where(eq(workingOrders.id, orderId)),
+        db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, orderId)),
+        db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+      ]);
+
+    const ordinary = await saleOn(ORDINARY);
+    const holiday = await saleOn(HOLIDAY);
+    expect(await priced(holiday.parked)).toEqual([
+      expect.objectContaining({ productId: cafeId, unitPriceGross: 150, lineTotal: 300 }),
+    ]);
+    expect(await priced(holiday.parked)).toEqual(await priced(ordinary.parked));
+    expect(await tickets(holiday.fired)).toEqual([
+      { productId: product, stationId: upstairs.id, state: "queued" },
+    ]);
+    expect(await tickets(holiday.fired)).toEqual(await tickets(ordinary.fired));
+
+    const before = await Promise.all([recorded(holiday.parked), recorded(holiday.fired)]);
+    await withTransaction(db, (tx) =>
+      saveSpecialDate(
+        tx,
+        cfg,
+        null,
+        {
+          date: HOLIDAY,
+          name: "Upstairs closed",
+          colour: "amber",
+          closeWholeVenue: false,
+          cells: [
+            {
+              subject: { kind: "station", id: upstairs.id },
+              cell: { mode: "closed", periods: [] },
+            },
+          ],
+        },
+        new Date(`${ORDINARY}T10:00:00Z`),
+      ),
+    );
+    const afterSpecialDate = await saleOn(HOLIDAY);
+    expect(await tickets(afterSpecialDate.fired)).toEqual([
+      { productId: product, stationId: downstairs.id, state: "queued" },
+    ]);
+    expect(await priced(afterSpecialDate.parked)).toEqual(await priced(ordinary.parked));
+    expect(await Promise.all([recorded(holiday.parked), recorded(holiday.fired)])).toEqual(before);
   });
 });
 

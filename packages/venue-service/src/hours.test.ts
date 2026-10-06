@@ -22,6 +22,7 @@ import {
   readCalendarDays,
   readHoursModel,
   readSpecialDate,
+  readStationSchedules,
   readWeekHours,
   renameSpecialDate,
   replaceWeekHours,
@@ -33,6 +34,7 @@ import {
 import {
   createHolidayStore,
   duplicateHolidayNamedSpecialDates as installedDuplicateHolidayNamedSpecialDates,
+  readHolidayFacts as installedReadHolidayFacts,
 } from "./holidays.js";
 import * as packageIndex from "./index.js";
 import { readCalendarDays as packageReadCalendarDays } from "./index.js";
@@ -2798,5 +2800,89 @@ describe("Hours with the holiday store", () => {
     );
     expect(renameSpecialDate).toBeTypeOf("function");
     expect(packageIndex.renameSpecialDate).toBe(renameSpecialDate);
+  });
+});
+
+describe("Hours on a real Spanish public holiday", () => {
+  // Monday 12 October 2026 is Spain's national day; Monday 5 October is an ordinary Monday.
+  const HOLIDAY = "2026-10-12";
+  const ORDINARY = "2026-10-05";
+
+  let tenantBefore: (typeof tenants.$inferSelect)[] = [];
+  beforeAll(async () => {
+    tenantBefore = await withTransaction(db, (tx) => tx.select().from(tenants));
+  });
+  afterEach(async () => {
+    await withTransaction(db, async (tx) => {
+      await tx.delete(tenants);
+      if (tenantBefore.length > 0) await tx.insert(tenants).values(tenantBefore);
+    });
+  });
+
+  /** The fixture's venue in Seville, Spain, with Monday hours for the restaurant and the bar. */
+  async function seville(): Promise<Fixture> {
+    const f = await fixture();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .insert(tenants)
+        .values({ id: 1, country: "ES", taxId: "X0000000", legalName: "Invented SL" })
+        .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
+      await tx
+        .update(locations)
+        .set({ province: "Sevilla", city: "Sevilla" })
+        .where(eq(locations.id, f.cfg.locationId));
+    });
+    await save(f, f.restaurant, week({ 1: periods(period("12:00", "16:00")) }));
+    await save(f, f.bar, week({ 1: periods(period("18:00", "23:00")) }));
+    return f;
+  }
+
+  const schedule = (f: Fixture, from: LocalDate, to: LocalDate) =>
+    withTransaction(db, async (tx) =>
+      (await readStationSchedules(tx, f.cfg, [f.bar.id], { from, to })).get(f.bar.id)!,
+    );
+
+  it("shows the holiday beside the standard hours, and every subject keeps its Monday", async () => {
+    const f = await seville();
+    const days = await withTransaction(db, (tx) =>
+      readCalendarDays(tx, f.cfg, HOLIDAY, HOLIDAY, installedReadHolidayFacts),
+    );
+    expect(days).toEqual([
+      {
+        date: HOLIDAY,
+        specialDate: null,
+        holidays: [expect.objectContaining({ date: HOLIDAY, scope: "national" })],
+        tone: "standard",
+      },
+    ]);
+    for (const subject of [f.restaurant, f.bar, f.kitchen]) {
+      const holiday = await resolve(f, subject, HOLIDAY);
+      expect({ ...holiday, openingDate: ORDINARY }).toEqual(await resolve(f, subject, ORDINARY));
+    }
+    expect(await schedule(f, ORDINARY, HOLIDAY)).toEqual({
+      weekSet: true,
+      hours: [{ weekday: 1, opensAt: "18:00", closesAt: "23:00" }],
+      dates: new Map(),
+    });
+    expect(await storedDates(f)).toEqual([]);
+  });
+
+  it("changes a station's hours on the holiday only through a special date the venue saves", async () => {
+    const f = await seville();
+    const saved = await saveDate(
+      f,
+      null,
+      specialInput({
+        date: HOLIDAY,
+        cells: [{ subject: f.bar, cell: { mode: "closed", periods: [] } }],
+      }),
+    );
+    expect((await schedule(f, ORDINARY, HOLIDAY)).dates).toEqual(new Map([[HOLIDAY, []]]));
+    expect(await resolve(f, f.bar, HOLIDAY)).toMatchObject({
+      source: "special",
+      specialDateId: saved.id,
+      cell: { mode: "closed", periods: [] },
+    });
+    expect((await resolve(f, f.bar, ORDINARY)).source).toBe("standard");
   });
 });
