@@ -1173,6 +1173,16 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Bucket settings now register their edit/new form on the branch. Cancel asks before removing a
+changed form. The comparison uses the existing trimmed request fields and the exact secret;
+testing the connection leaves the draft unsaved. An accepted settings write commits its captured
+body before loading the recovery kit, and input entered during Save remains protected. Disconnect
+clears local credentials and releases the scope. Deferred-reply cases cover older settings writes,
+connection tests, Turn off and kit actions after reconnect. Native input, Escape, Keep and Discard
+were inspected in English and Spanish, both themes and at phone/desktop widths. The dated audit
+records commands, deletion controls and limits. Actual settings-container/sidebar/history routes
+and activated native reload remain unverified; the other page and shell owners keep W69 incomplete.
+
 Recipe ingredient selections now use the same protection on the branch. Cancel and a different
 product or catalogue ask before replacing the selection; choosing the current one retains it.
 An accepted save commits the submitted membership before refresh; later toggles remain protected. Same-product live updates retain edited choices, including when the

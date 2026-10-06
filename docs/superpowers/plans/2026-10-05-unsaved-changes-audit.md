@@ -2719,3 +2719,59 @@ Source, logs, controls and captures are retained locally under Lane E's
 This is a partial W69 checkpoint. Configuration/module settings, device profiles after W97,
 remaining shell/tab/context routes, activated native reload and the advancing-owner audit remain
 open. This checkpoint does not make the whole item ready for finish-branch or landing.
+
+## 2026-10-06: Bucket-settings page checkpoint
+
+The bucket form now registers an independent scope while its new/edit fields are shown.
+Cancel asks through the shared coordinator. Its comparison uses `#body()` unchanged: the
+endpoint, region, bucket, prefix and access-key ID are trimmed, and the secret is exact.
+Testing the connection commits nothing. An accepted settings write commits the captured body
+before the recovery-kit read. Later input remains in the editor, compared with that submitted
+body. A refused write retains the draft. Disconnect disposes the scope and clears local
+credentials, messages and busy state. Deferred-reply cases cover old settings-write success and
+refusal, connection-test replies, Turn off replies, kit results and an old kit action completing
+while a newer kit action is pending.
+
+Focused commands on the candidate branch:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/screens/stream-settings-panel.unsaved.test.ts src/screens/stream-settings-panel.test.ts src/screens/stream-settings-panel.a11y.test.ts src/screens/backup-screen.test.ts src/screens/venue-settings-screen.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/server exec vitest run src/stream-api.route.test.ts
+pnpm exec vitest run scripts/module-seams.test.ts scripts/native-form-fields.test.ts scripts/live-subscriptions.test.ts
+pnpm --filter @waitron/dashboard typecheck
+pnpm exec eslint apps/dashboard/src/screens/stream-settings-panel.ts apps/dashboard/src/screens/stream-settings-panel.unsaved.test.ts
+```
+
+The five-file browser family reported 275 passing tests, the unedited fiscal pair 20, the
+stream route suite 38, and the three root guards 2069. The new owner's native cases cover EN/ES, both themes and measured
+390/1280 widths. Sixteen parked-pointer axe scans passed; sixteen captures of the open warning
+and retained draft were inspected. These are synthetic-API cases with the real form and shared
+LeaveController, not evidence of real bucket credentials, writes through a running server,
+settings-container/sidebar/history navigation or an activated native reload. No existing
+behavioral assertion changed.
+
+TDD receipts: the initial twelve cases all failed, including two save fixtures whose following
+read incorrectly returned the old off-state. Correcting that fixture to return the accepted
+settings produced eleven assertion failures and one passing clean-save case. The first
+implementation passed the owner cases except two reconnect fixtures that needed to wait for
+fresh fields. After that correction, old connection-test replies showed two assertion failures;
+old Turn off replies showed two; an old kit action unlocking a new request showed one. Each
+was followed by its implementation and passing focused run. The native matrix passed on the
+implemented form. A live-read case now waits for the remotely switched-off status to be applied,
+rather than using a fixed delay as evidence that a refresh completed.
+
+An independent frozen-installed clone ran deletion controls for input notification, Cancel's
+gate, exact secret comparison, draft restoration, submitted baseline, scope disposal, reconnect
+generation, later-input retention, kit-action busy release and test-reply checks. Each selected
+behavior failed while a pristine new-bucket leave control passed. Restored source and tests are
+checked against the feature worktree byte for byte. The first negative control saved a bucket;
+removing scope disposal also broke that control, so it was replaced with the independent pristine
+form case. A deleted additional settings-read catch guard left its deferred-read case passing.
+The guard was removed from the final change; QueryController releases its observation on
+disconnect, and the behavioral assertion is retained. Full raw controls and screenshots remain
+in the lane's local `receipts/w69-settings-20261006-222211/` directory.
+
+This is a partial W69 checkpoint. Configuration/canvas and contributed explicit-save settings,
+device profiles after W97, settings-container and actual page/till/navigation paths, native reload
+and the final advancing-owner audit remain. Finish-branch and landing are not ready.
