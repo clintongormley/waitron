@@ -447,6 +447,13 @@ describe("the standard week", () => {
       }),
       "days.0.cell",
     ],
+    [
+      "Saturday's tail overlapping Sunday",
+      () => ({
+        days: week({ 6: periods(period("22:00", "03:00")), 0: periods(period("01:00", "05:00")) }),
+      }),
+      "days.6.cell",
+    ],
   ];
 
   it.each(refusals)(
@@ -900,6 +907,15 @@ describe("hours either side of a special date", () => {
   it("lets a whole-venue closure stand beside any hours, and ignores its retained cells", async () => {
     const f = await fixture();
     await save(f, f.restaurant, week({ 6: periods(period("01:00", "05:00")) }));
-    await saveDate(f, null, { ...lateFriday(f), closeWholeVenue: true });
+    const input = { ...lateFriday(f), closeWholeVenue: true };
+    const saved = await saveDate(f, null, input);
+    expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, saved.id))).toEqual({
+      id: saved.id,
+      date: "2026-10-09",
+      name: "Harvest festival",
+      colour: "amber",
+      closeWholeVenue: true,
+      cells: input.cells,
+    });
   });
 });

@@ -57,31 +57,46 @@ function subjectOfRow(row: { departmentId: string | null; stationId: string | nu
 }
 
 /**
- * Resolves a subject within the venue: `hours.invalid` naming `field` when it is not this venue's,
- * `station.always_open` for the default station when `writing`.
+ * Resolves each subject within the venue, one read per kind: `hours.invalid` naming its `field`
+ * when it is not this venue's, `station.always_open` for the default station when `writing`.
  */
-async function requireSubject(
+async function requireSubjects(
   tx: Transaction,
   cfg: VenueScope,
-  subject: HoursSubject,
-  field: string,
-  writing: boolean,
+  entries: readonly { subject: HoursSubject; field: string; writing: boolean }[],
 ): Promise<void> {
-  if (subject.kind === "department") {
-    const [row] = await tx
+  const idsOf = (kind: HoursSubject["kind"]) =>
+    entries.filter((entry) => entry.subject.kind === kind).map((entry) => entry.subject.id);
+  const departmentIds = idsOf("department");
+  const stationIds = idsOf("station");
+  const found = new Set<string>();
+  if (departmentIds.length > 0)
+    for (const row of await tx
       .select({ id: departments.id })
       .from(departments)
-      .where(and(eq(departments.id, subject.id), eq(departments.locationId, cfg.locationId)));
-    if (row === undefined) invalidHours(field);
-    return;
+      .where(
+        and(inArray(departments.id, departmentIds), eq(departments.locationId, cfg.locationId)),
+      ))
+      found.add(keyOf({ kind: "department", id: row.id }));
+  const defaults = new Set<string>();
+  if (stationIds.length > 0)
+    for (const row of await tx
+      .select({ id: kitchenStations.id, isDefault: kitchenStations.isDefault })
+      .from(kitchenStations)
+      .where(
+        and(
+          inArray(kitchenStations.id, stationIds),
+          eq(kitchenStations.locationId, cfg.locationId),
+        ),
+      )) {
+      found.add(keyOf({ kind: "station", id: row.id }));
+      if (row.isDefault) defaults.add(row.id);
+    }
+  for (const { subject, field, writing } of entries) {
+    if (!found.has(keyOf(subject))) invalidHours(field);
+    if (writing && subject.kind === "station" && defaults.has(subject.id))
+      throw new AppError("station.always_open", { stationId: subject.id });
   }
-  const [row] = await tx
-    .select({ isDefault: kitchenStations.isDefault })
-    .from(kitchenStations)
-    .where(and(eq(kitchenStations.id, subject.id), eq(kitchenStations.locationId, cfg.locationId)));
-  if (row === undefined) invalidHours(field);
-  if (writing && row.isDefault)
-    throw new AppError("station.always_open", { stationId: subject.id });
 }
 
 /** Periods by cell id, in their saved order, wire times. */
@@ -111,7 +126,7 @@ function cellOf(mode: StoredMode, periods: HourPeriod[]): WeekCell & DateCell {
 
 /**
  * Writes one cell's mode and replaces its periods by deleting then inserting the whole set, so a
- * reordering cannot trip the position index midway (CLAUDE.md §3). Returns the cell id.
+ * reordering cannot trip the position index midway (CLAUDE.md §3).
  */
 async function writeCell(
   tx: Transaction,
@@ -140,8 +155,7 @@ async function writeCell(
 }
 
 /**
- * Refuses a period id that belongs to a cell other than the one it is being saved into. `owner`
- * gives the cell id each request field's periods are allowed to come from, if it exists yet.
+ * Refuses a period id that belongs to a cell other than the one it is being saved into.
  */
 async function assertPeriodOwnership(
   tx: Transaction,
@@ -185,7 +199,7 @@ export async function readWeekHours(
   cfg: VenueScope,
   subject: HoursSubject,
 ): Promise<WeekDay[]> {
-  await requireSubject(tx, cfg, subject, "subject", false);
+  await requireSubjects(tx, cfg, [{ subject, field: "subject", writing: false }]);
   const cells = await tx.select().from(hoursWeekCells).where(ownerOf(hoursWeekCells, subject));
   const periods = await periodsByCell(
     tx,
@@ -217,7 +231,7 @@ export async function replaceWeekHours(
 ): Promise<void> {
   const parsedSubject = parseSubject(subject, "subject");
   const week = parseWeek(days);
-  await requireSubject(tx, cfg, parsedSubject, "subject", true);
+  await requireSubjects(tx, cfg, [{ subject: parsedSubject, field: "subject", writing: true }]);
   const existing = await tx
     .select({ id: hoursWeekCells.id, weekday: hoursWeekCells.weekday })
     .from(hoursWeekCells)
@@ -258,7 +272,7 @@ interface DateState {
   cells: Map<string, Interval[] | null>;
 }
 
-/** The special dates on or after `from` (every one when `from` is null), with their cells. */
+/** The special dates, with their cells. */
 async function readDateStates(
   tx: Transaction,
   cfg: VenueScope,
@@ -395,7 +409,7 @@ export async function readSpecialDate(
         subject: subjectOfRow(cell),
         cell: cellOf(cell.mode, periods.get(cell.id) ?? []),
       }))
-      .sort((a, b) => (a.subject.id < b.subject.id ? -1 : 1)),
+      .sort((a, b) => Number(a.subject.id > b.subject.id) - Number(a.subject.id < b.subject.id)),
   };
 }
 
@@ -525,14 +539,15 @@ export async function saveSpecialDate(
 ): Promise<SpecialDate> {
   const parsed = parseSpecialDateInput(input);
   const current = id === null ? null : await requireSpecialDate(tx, cfg, id);
-  for (const [index, entry] of parsed.cells.entries())
-    await requireSubject(
-      tx,
-      cfg,
-      entry.subject,
-      `cells.${index}.subject`,
-      entry.cell.mode !== "inherit",
-    );
+  await requireSubjects(
+    tx,
+    cfg,
+    parsed.cells.map((entry, index) => ({
+      subject: entry.subject,
+      field: `cells.${index}.subject`,
+      writing: entry.cell.mode !== "inherit",
+    })),
+  );
   const [taken] = await tx
     .select({ id: specialDates.id })
     .from(specialDates)
