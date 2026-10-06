@@ -589,7 +589,7 @@ const ROUTES: readonly Row[] = [
     "PUT /api/tables/:id/placement (table)",
     "PUT",
     (x) => `/api/tables/${x.deliTable}/placement`,
-    (x) => ({ zoneId: x.deliTables, posX: 1, posY: 1, shape: "square", rotation: 0 }),
+    (x) => ({ zoneId: x.restTables, posX: 1, posY: 1, shape: "square", rotation: 0 }),
     deliTableZone,
   ],
   [
