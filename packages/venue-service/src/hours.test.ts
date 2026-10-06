@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
@@ -1036,7 +1036,7 @@ const duplicate = (
   );
 
 const remove = (f: Fixture, id: string, participants?: readonly SpecialDateParticipant[]) =>
-  withTransaction(db, (tx) => deleteSpecialDate(tx, f.cfg, id, participants));
+  withTransaction(db, (tx) => deleteSpecialDate(tx, f.cfg, id, AT, participants));
 
 /** Every special date the venue holds, with its cells and periods, in date order. */
 const storedDates = (f: Fixture) =>
@@ -1677,6 +1677,67 @@ describe("deleting a special date", () => {
     });
   });
 
+  const withBar = (f: Fixture, date: LocalDate, cell: DateHoursCell["cell"]) =>
+    specialInput({ date, cells: [{ subject: f.bar, cell }] });
+  const closedCell: DateHoursCell["cell"] = { mode: "closed", periods: [] };
+
+  it("refuses deleting a date whose standard hours would then clash with the special date before it", async () => {
+    const f = await fixture();
+    await save(f, f.bar, week({ 6: periods(period("01:00", "05:00")) }));
+    // Saturday 17 October is Closed, so Friday 16 October's late special hours can run into it.
+    const saturday = await saveDate(f, null, withBar(f, "2026-10-17", closedCell));
+    await saveDate(
+      f,
+      null,
+      withBar(f, "2026-10-16", { mode: "periods", periods: [period("22:00", "03:00")] }),
+    );
+    const before = await storedDates(f);
+    const rows = await dateRows(saturday.id);
+    const participant = { copy: vi.fn(), beforeDelete: vi.fn() };
+
+    await expect(remove(f, saturday.id, [participant])).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "date", date: "2026-10-16", subjectId: f.bar.id },
+    });
+    expect(participant.beforeDelete).not.toHaveBeenCalled();
+    expect(await storedDates(f)).toEqual(before);
+    expect(await dateRows(saturday.id)).toEqual(rows);
+  });
+
+  it("refuses deleting a Closed date whose standard tail would then run into the special date after it", async () => {
+    const f = await fixture();
+    await save(f, f.bar, week({ 5: periods(period("22:00", "03:00")) }));
+    const friday = await saveDate(f, null, withBar(f, "2026-10-16", closedCell));
+    await saveDate(
+      f,
+      null,
+      withBar(f, "2026-10-17", { mode: "periods", periods: [period("01:00", "05:00")] }),
+    );
+    const before = await storedDates(f);
+    const rows = await dateRows(friday.id);
+
+    await expect(remove(f, friday.id)).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "date", date: "2026-10-17", subjectId: f.bar.id },
+    });
+    expect(await storedDates(f)).toEqual(before);
+    expect(await dateRows(friday.id)).toEqual(rows);
+  });
+
+  it("deletes a past date beside such a neighbour, since past hours block nothing", async () => {
+    const f = await fixture();
+    await save(f, f.bar, week({ 6: periods(period("01:00", "05:00")) }));
+    // Friday 25 and Saturday 26 September are in the past at AT.
+    const saturday = await saveDate(f, null, withBar(f, "2026-09-26", closedCell));
+    await saveDate(
+      f,
+      null,
+      withBar(f, "2026-09-25", { mode: "periods", periods: [period("22:00", "03:00")] }),
+    );
+    await remove(f, saturday.id);
+    expect((await storedDates(f)).map((date) => date.date)).toEqual(["2026-09-25"]);
+  });
+
   it("refuses another venue reading, changing, copying or deleting the date", async () => {
     const f = await fixture();
     const other = await fixture();
@@ -1868,7 +1929,7 @@ describe("calendar participants", () => {
     let outer: Transaction | undefined;
     await withTransaction(db, (tx) => {
       outer = tx;
-      return deleteSpecialDate(tx, f.cfg, date.id, [menus.participant, wages.participant]);
+      return deleteSpecialDate(tx, f.cfg, date.id, AT, [menus.participant, wages.participant]);
     });
     for (const { calls } of [menus, wages]) {
       expect(calls.map(({ kind, id }) => ({ kind, id }))).toEqual([

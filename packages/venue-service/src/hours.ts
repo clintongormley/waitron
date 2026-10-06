@@ -65,12 +65,13 @@ function subjectOfRow(row: { departmentId: string | null; stationId: string | nu
 /**
  * Resolves each subject within the venue, one read per kind: `hours.invalid` naming its `field`
  * when it is not this venue's, `station.always_open` for the default station when `writing`.
+ * Returns the ids of the listed stations that are the default.
  */
 async function requireSubjects(
   tx: Transaction,
   cfg: VenueScope,
   entries: readonly { subject: HoursSubject; field: string; writing: boolean }[],
-): Promise<void> {
+): Promise<Set<string>> {
   const idsOf = (kind: HoursSubject["kind"]) =>
     entries.filter((entry) => entry.subject.kind === kind).map((entry) => entry.subject.id);
   const departmentIds = idsOf("department");
@@ -103,6 +104,7 @@ async function requireSubjects(
     if (writing && subject.kind === "station" && defaults.has(subject.id))
       throw new AppError("station.always_open", { stationId: subject.id });
   }
+  return defaults;
 }
 
 /** Periods by cell id, in their saved order, wire times. */
@@ -805,27 +807,34 @@ export async function duplicateSpecialDate(
 
 /**
  * Deletes a special date once every participant has agreed; its cells and periods go with it, so
- * its subjects read their standard week again.
+ * its subjects read their standard week again. Refused when those standard hours would clash with
+ * a neighbouring date's, as a save would be.
  */
 export async function deleteSpecialDate(
   tx: Transaction,
   cfg: VenueScope,
   id: string,
+  at: Date,
   participants: readonly SpecialDateParticipant[] = [],
 ): Promise<void> {
-  await requireSpecialDate(tx, cfg, id);
+  const row = await requireSpecialDate(tx, cfg, id);
+  await assertDatesBesideNeighbours(tx, cfg, at, new Map(), [row.date], id, (_, other, subject) =>
+    invalidHours("date", { date: other, subjectId: subject.id }),
+  );
   for (const participant of participants) await participant.beforeDelete(tx, cfg, id);
   await tx.delete(specialDates).where(eq(specialDates.id, id));
 }
 
 /**
  * Each subject's hours on one opening date, in a fixed number of reads however many subjects,
- * with the date's special date if it has one. The subjects must already be this venue's.
+ * with the date's special date if it has one. The subjects must already be this venue's, and
+ * `defaults` names those of them that are the default station.
  */
 async function resolveSubjects(
   tx: Transaction,
   cfg: VenueScope,
   subjects: readonly HoursSubject[],
+  defaults: ReadonlySet<string>,
   date: LocalDate,
 ): Promise<{ special: SpecialDate | null; resolved: ResolvedHours[] }> {
   const departmentIds = subjects.filter((s) => s.kind === "department").map((s) => s.id);
@@ -835,18 +844,6 @@ async function resolveSubjects(
       and(isNotNull(cells.departmentId), inArray(cells.departmentId, departmentIds)),
       and(isNotNull(cells.stationId), inArray(cells.stationId, stationIds)),
     );
-  const defaults = new Set(
-    stationIds.length === 0
-      ? []
-      : (
-          await tx
-            .select({ id: kitchenStations.id })
-            .from(kitchenStations)
-            .where(
-              and(inArray(kitchenStations.id, stationIds), eq(kitchenStations.isDefault, true)),
-            )
-        ).map((row) => row.id),
-  );
   const [special] = await tx
     .select({
       id: specialDates.id,
@@ -917,8 +914,10 @@ export async function resolveOpeningDateHours(
 ): Promise<ResolvedHours> {
   const parsed = parseSubject(subject, "subject");
   if (!isLocalDate(openingDate)) invalidHours("openingDate");
-  await requireSubjects(tx, cfg, [{ subject: parsed, field: "subject", writing: false }]);
-  return (await resolveSubjects(tx, cfg, [parsed], openingDate)).resolved[0]!;
+  const defaults = await requireSubjects(tx, cfg, [
+    { subject: parsed, field: "subject", writing: false },
+  ]);
+  return (await resolveSubjects(tx, cfg, [parsed], defaults, openingDate)).resolved[0]!;
 }
 
 /** How the calendar colours one date, from the active departments' hours that date. */
@@ -936,6 +935,7 @@ export async function readCalendarTone(
     tx,
     cfg,
     active.map((row) => ({ kind: "department" as const, id: row.id })),
+    new Set(),
     date,
   );
   return calendarTone(
