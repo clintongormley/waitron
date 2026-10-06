@@ -2418,6 +2418,32 @@ cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. St
 Make default and Disable/Enable actions belong to the Stations row menu. A supervisor sees only
 Stations.
 
+Hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week`, `dates` and `calendar`
+at `/manage/hours/view/<key>`; `/manage/hours/department/<id>` and `/manage/hours/station/<id>`
+open the week with focus on that subject's column heading once the hours are read, when that
+column is shown.
+
+- **Standard week.** Days are rows, Monday first, with today marked; departments, then prep
+  stations, are columns. The grid is one Tab stop and the arrow keys move between days and columns.
+  The default station's column reads Always open and has nothing to open. A subject with no hours
+  reads "No hours set" (a department) or "No hours restriction" (a station); Prep stations says
+  "Always open" for that station state. A cell opens that day's editor; a subject with no hours
+  opens a seven-day draft that starts Closed and saves only after a confirmation.
+- **Special dates.** A `wt-data-table` of every current and future special date, with Departments
+  and Prep stations column groups; a value kept from the standard week is muted. Its row menu holds
+  Edit, Duplicate and Delete, above it sit Add a date and Close the whole venue on a date. With the
+  whole-venue closure on, the date editor shows the subjects' cells locked.
+- **Calendar** (`hours-calendar.ts`). A Monday-first month beside the chosen date's panel; on a
+  phone the panel sits under the month. Each date says in words what its colour means (its special
+  date's name, Closed, a holiday), coloured by the calendar tokens above. The panel lists each active
+  subject's hours on that date, muted where kept from the standard week, then Edit, Duplicate and
+  Delete for a special date or Make this a special date for an ordinary one; a viewer gets no
+  actions.
+
+In the week grid and the date panel a period stays on one line, so hours wrap only between
+periods. The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
+Delete and Clear schedule are `compact`.
+
 Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
 each panel leaves it out because its tab already names the panel through `aria-labelledby`.
 

@@ -44,6 +44,15 @@ on being reattached, or in the reload after a save) runs the unfinished part aga
 and only while that load has not completed. That rerun starts the reads the load never reached and
 takes its remaining steps, such as opening the item the page's link names; it performs no mutation.
 
+A screen that waits for the change feed to show its own save shows the old data when the stream
+the browser holds open delivers nothing, as after a tablet wakes or the Wi-Fi changes: a review
+probe on the Hours page reproduced it, with no error shown until the 60-second timer. After a
+successful write, invalidate the written types through the shared `LiveData` (`invalidate`), as
+Hours does in `HoursApi.rereadWatches` (`packages/venue-service/src/dashboard/hours-client.ts`):
+every watched query depending on them reads again through the shared cache. The feed's own update
+can still arrive and read again; on Hours with the calendar open that measured two passive reads
+per save with the feed silent and four with it delivering (2026-10-06).
+
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`
 directly passes `{ passive: true }` as its fourth argument for background GETs. An interval is still

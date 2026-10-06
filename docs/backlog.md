@@ -976,6 +976,8 @@ explicit cancellation or replacement.
 [Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md), §§2–3 and the approved details in §9;
 [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md);
 [publication plan](superpowers/plans/2026-10-04-forward-only-menu-publication.md).
+The shared calendar it builds on is in (A261 step 5): its menu participant joins the empty
+`VENUE_SERVICE_CALENDAR_PARTICIPANTS` list in `packages/venue-service/src/calendar-participants.ts`.
 
 **The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
@@ -1116,6 +1118,8 @@ The [design](superpowers/specs/2026-10-05-unsaved-changes-warning-design.md),
 modals and pages across the dashboard, till, setup and contributed screens. Build the shared
 mechanism and modal rollout, then page/navigation coverage; neither rollout is implemented yet.
 Keep automatic saves and forced session exits on their existing paths.
+2026-10-06: Hours (A261 step 5) deleted `station-hours-form`, which the audit lists, and added
+the Hours page's editors, which it does not.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
@@ -4238,7 +4242,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Departments and zones; other screens still await their own one-department survey. Tab billing and
   the shared calendar remain open.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; steps 1–3, 7 and 8 implemented, steps 4–6 open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  APPROVED; steps 1–3, 5, 7 and 8 implemented, steps 4 and 6 open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
@@ -4275,16 +4279,48 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   numeric columns carry a retirement note. Review notes retained for future cleanup: the overview
   API object still exposes write methods (server routes remain the permission boundary), and
   station reordering repeats an active filter after an active-only read.
-  [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) was approved on 2026-10-05;
-  its standard week, special-date list/calendar and shared menu/wages date interface are not
-  implemented. Its Prep stations dependency is landed; follow the lane queue for the build.
-  Approved decisions cover unset versus Closed/all-day hours,
-  overnight and clock-change rules, manual override expiry, whole-venue closure and palette,
-  single-department display, read permissions and the proposed pre-live schedule reset.
+  [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) — DONE. One Hours page
+  (`/manage/hours`) holds each department's and station's standard week, the special dates and a
+  month calendar; routing reads the same schedules. The old station and department hours editors
+  and their two tables are gone (venue-service `0022_retire_legacy_hours`); a pre-live venue is
+  reset rather than carrying old hours over. Separate dependencies it leaves open:
+  - **W98's participant wiring.** Duplicating or deleting a special date hands it to every entry
+    of `VENUE_SERVICE_CALENDAR_PARTICIPANTS` (`packages/venue-service/src/calendar-participants.ts`),
+    which is empty. The department-menu plan is to add its menu-timetable participant there and
+    give its own rows a cascading foreign key to `special_dates` (Hours plan, "Shared date
+    lifecycle").
+  - **Step 6 public holidays.** The `HolidayReader` seam (`packages/venue-service/src/hours.ts`) is
+    ready and no reader is supplied, so no holiday shows yet. "Make this a special date" leaves the
+    name blank until step 6's naming rule fills it.
+  - **A9 wages** reads the calendar's holiday facts through its own composition contract; nothing
+    in Hours computes pay.
+  - **Step 7 time zone and cutover.** #1281 refuses a time zone or cutover change once the venue
+    has any sale, working order or daily close. Hours keeps wall times and date keys as stored and
+    reads again on a `locations` change; allowing a change after trading would need its own
+    decision on what stored hours mean.
+  Left open by its reviews:
+  - `scripts/dashboard-browser-purity.test.ts` reads only bookings' and adjustments' dashboard
+    folders, so nothing checks that venue-service's dashboard code stays free of server imports.
+  - `packages/fiscal-verifactu/src/privileges.expected.ts` still lists `department_hours`; the
+    file is a frozen record of the old grants and was not edited.
+  - The Hours page fixes its read window (yesterday plus a year) when it opens, so a page left open
+    for days keeps the old window until it is reopened.
+  - Cancel and Escape still work while a save is in flight: a late failure after closing is dropped
+    without a message, and a success still lands.
+  - For a non-default station with no hours, Hours says "No hours restriction" and Prep stations
+    says "Always open" (owner informed).
+  - Smaller notes: the calendar's day read repeats the subject precedence `resolveSubjects` holds
+    and matches a cell by id alone; one `hours-client.test.ts` case detaches in the same turn and
+    cannot fail; the participant-failure route case checks the status, not the body's code; the
+    time-zone route case never asserts `nextTransition`; nothing pins which of two repeated
+    midnights a clock change picks; no test opens Hours from a department's link end to end; with
+    the whole-venue closure on, a kept period at a skipped minute is refused on a field the closure
+    has disabled; and a default station's kept special-date cells are not checked against the
+    neighbouring dates if it stops being the default.
   [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is approved with
   the owner's 2026-10-05 13:25 amendments; national/regional data, owner-entered city holidays and
-  holiday-aware special-date naming are not implemented. Build waits for Hours landing, including
-  its Prep stations dependency, which is now landed. Hours remains unbuilt.
+  holiday-aware special-date naming are not implemented. Its Hours dependency (step 5) is built,
+  with the `HolidayReader` seam it supplies.
   Local holidays follow the venue address city directly, with no confirmation or reselection.
   Geography changes retain but hide old entries with `These local holidays were for <old city>`;
   matching the address again restores them automatically. Two additive venue-service tables hold
