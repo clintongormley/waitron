@@ -1194,7 +1194,12 @@ root draft. Keep retains every root value and the Live acknowledgement stage; Di
 the captured root baseline before the original choice proceeds. Repeating the same mode and
 switching between Prepare and Live retain the draft without asking. Mode-screen replacement,
 disconnect/reconnect and cancelling the Live stage invalidate unanswered choices. Start empty
-and the remaining setup forms still need work.
+now asks before changing an authored root or leaving the import form. Keep and warning Escape
+retain the selected export and passphrase; Discard restores the affected baselines first.
+Accepted imports commit the submitted child values before leaving, while newer input still
+asks and the staged root remains dirty. A departed import's success or refusal cannot replace
+the new step. Reconnect retains the child's original baseline, including File identity, and
+restoration updates the native file selection. The remaining setup forms still need work.
 See the dated setup entries in the W69 audit for commands and limits; activated native reload
 has not been verified.
 Dashboard voluntary logout and a language change also request the shared warning before their
@@ -8088,3 +8093,13 @@ Update it in the change that makes it stale (CLAUDE.md §7). In particular:
 - When a question is closed on primary source, say so and stop calling it blocked.
 - Delete finished items. If an entry is growing proof-of-work (test counts, grep receipts, "proven by
   deletion", what a review seat caught), that belongs in the PR thread, not here.
+
+
+**Setup Import button hover contrast (found during W69, 2026-10-06) — OPEN.**
+The temporary `light Import button hover contrast probe` mounted `setup-live-source-screen`
+at 390px, asserted the native primary button matched `:hover`, and ran axe. It failed with white
+text on `#4185ee`, 3.61:1 against 4.5:1 (`primary-hover.log` in Lane E's
+`receipts/w69-setup-empty-20261006`). The ordinary warning and retained-form scans passed with
+the pointer over their heading; they do not cover hover. Follow-up: check the primary button's
+hover opacity against each surface and theme, then correct the shared treatment separately.
+W69 does not change those styles. This probe was not repeated on main.

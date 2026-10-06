@@ -2184,3 +2184,37 @@ until provisioning succeeds; that root scope, mode/start-over interception, othe
 children, till shell and remaining page owners, native reload and final advancing-owner
 classification are still pending. Tasks 1/4/5/6 remain partial; Tasks 2/3 remain complete.
 Neither proposed W69 PR is ready for finish-branch. No existing assertion changed here.
+
+
+## 2026-10-06: Start empty and configuration import checkpoint
+
+The setup shell now asks about the root and current import child before Start empty patches
+`configurationImport` or changes the step. Back leaves only the child and retains the root.
+The child compares the actual selected File reference and passphrase, restores the native
+file selection as well as its values, and retains its original baseline across reconnect.
+Import still submits directly. Success commits the captured submitted child before requesting
+navigation, so newer file/passphrase input can Keep editing or Discard. The staged root remains
+dirty until provisioning. A response from a departed submitting form cannot replace the new step.
+
+Receipts: Lane E `receipts/w69-setup-empty-20261006`. The initial Start empty/import cases
+failed five tests (`red.log`), reconnect failed one (`red-lifecycle.log`), acceptance/departed
+replies failed three (`red-acceptance.log`), and restoring an accepted native file failed one
+(`red-native-file.log`). The final eight-suite setup command in `family-final.log` checks these
+routes and the existing shell/admin/mode/import assertions. `deletions.json` and their named
+logs record each installed-candidate deletion beside an unchanged same-step control. No
+existing assertion changed. The first stale-field check asserted before the continuation
+settled; its deletion survived. Waiting through that continuation made the deletion fail.
+
+The visual fixture uses real shell controls and native warning Escape with stubbed initial
+API reads. It covers EN/ES, light/dark and 390/1280px, checking the warning and retained form
+with axe and capturing both states. The captures were inspected in four sheets. Those scans
+move the pointer to the open modal heading or form heading. The separately hovered light Import
+button fails axe at 3.61:1 (`primary-hover.log`); it is recorded in the backlog, not fixed here.
+A first visual command tried to hover the inert background heading while the modal was open;
+its exact process tree was stopped. Neither these flows nor the synthetic unload events verify
+an activated native reload, a live onboarding server or the deployment's dark canvas.
+
+Task 6 still needs the remaining setup children, receipt/login and other page owners. Task 5
+still needs till integration, child screen/tab/context interception and activated native reload.
+Tasks 1/4 need final classification of advancing modal owners. W69 remains in progress and
+neither proposed PR is ready for finish-branch.

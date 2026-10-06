@@ -10,7 +10,7 @@ import "./screens/connect-screen.js";
 import "./screens/restore-screen.js";
 import "./screens/restore-bucket-screen.js";
 import "./screens/cloud-restore-screen.js";
-import "./screens/live-source-screen.js";
+import { SetupLiveSourceScreen } from "./screens/live-source-screen.js";
 import "./screens/configuration-preview-screen.js";
 import "./screens/fiscal-test-screen.js";
 import "./screens/mode-screen.js";
@@ -32,6 +32,7 @@ import type {
   CloudRecoveryView,
   VenueDefaults,
 } from "./api/client.js";
+import { dispatchSetupGoto } from "./events.js";
 import type {
   BucketRestoreRequestDetail,
   ConfigurationRequestDetail,
@@ -703,6 +704,35 @@ export class SetupApp extends LitElement {
       });
   }
 
+  #requestStartEmpty(proceed: () => void, signal: AbortSignal): void {
+    const owner = this.shadowRoot?.querySelector("setup-live-source-screen");
+    if (!this.isConnected || this.screen !== "live-source" || !owner) return;
+    const generation = this.#rootGeneration;
+    if (!this.leave.coordinator.isDirty([this, owner])) {
+      proceed();
+      return;
+    }
+    void this.leave.coordinator
+      .request({
+        scopes: [this, owner],
+        reason: "navigation",
+        signal,
+        proceed: () => {},
+      })
+      .then((outcome) => {
+        if (
+          outcome !== "proceeded" ||
+          signal.aborted ||
+          !this.isConnected ||
+          generation !== this.#rootGeneration ||
+          this.screen !== "live-source" ||
+          !owner.isConnected
+        )
+          return;
+        proceed();
+      });
+  }
+
   #onGoto(event: CustomEvent<{ screen: Screen }>): void {
     event.stopPropagation();
     const destination = event.detail.screen;
@@ -1087,6 +1117,8 @@ export class SetupApp extends LitElement {
   ): Promise<void> {
     event.stopPropagation();
     if (!this.isConnected) return;
+    const origin = event.composedPath()[0];
+    const owner = origin instanceof SetupLiveSourceScreen ? origin : undefined;
     this.#registerRoot();
     const generation = this.#rootGeneration;
     this.configurationError = undefined;
@@ -1095,7 +1127,8 @@ export class SetupApp extends LitElement {
         event.detail.request.artifact,
         event.detail.request.passphrase,
       );
-      if (!this.isConnected || generation !== this.#rootGeneration) return;
+      if (!this.isConnected || generation !== this.#rootGeneration || (owner && !owner.isConnected))
+        return;
       const location = Object.fromEntries(
         Object.entries(preview.venue.location).filter(([key]) => key !== "id"),
       ) as ProvisionBody["venue"]["location"];
@@ -1105,9 +1138,13 @@ export class SetupApp extends LitElement {
       }) as DeepPartial<ProvisionBody>;
       this.#rootScope?.changed();
       this.configurationPreview = preview;
-      this.screen = "configuration-preview";
+      if (owner) {
+        owner.acceptImport(event.detail.request);
+        dispatchSetupGoto(owner, "configuration-preview");
+      } else this.screen = "configuration-preview";
     } catch (error) {
-      if (!this.isConnected || generation !== this.#rootGeneration) return;
+      if (!this.isConnected || generation !== this.#rootGeneration || (owner && !owner.isConnected))
+        return;
       this.configurationError = describeConfigurationRefusal(error);
       this.screen = "live-source";
     }
@@ -1355,6 +1392,7 @@ export class SetupApp extends LitElement {
         return html`<setup-live-source-screen
           data-test="screen-live-source"
           .errorMessage=${this.configurationError?.()}
+          .beforeEmpty=${(proceed: () => void, signal: AbortSignal) => this.#requestStartEmpty(proceed, signal)}
         ></setup-live-source-screen>`;
       case "configuration-preview":
         return html`<setup-configuration-preview-screen

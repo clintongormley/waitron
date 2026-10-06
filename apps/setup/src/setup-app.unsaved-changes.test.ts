@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { leaveCoordinatorFor } from "@waitron/ui";
 import { SetupApp, type DeepPartial, type Screen } from "./setup-app.js";
 import type { ConfigurationPreview, ProvisionBody, SetupApi } from "./api/client.js";
+import type { SetupLiveSourceScreen } from "./screens/live-source-screen.js";
 import type { SetupAdminScreen } from "./screens/admin-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
@@ -862,4 +863,318 @@ describe("setup root import connection generation", () => {
       expect(unload()).toBe(false);
     },
   );
+});
+
+async function liveSource() {
+  const mounted = await mount();
+  goto(mounted.el, "live-source");
+  await expect.poll(() => (mounted.el as unknown as State).screen).toBe("live-source");
+  const source = mounted.el.shadowRoot!.querySelector<SetupLiveSourceScreen>(
+    "setup-live-source-screen",
+  )!;
+  await source.updateComplete;
+  return { ...mounted, source };
+}
+async function sourcePassphrase(source: SetupLiveSourceScreen, value: string) {
+  source
+    .shadowRoot!.querySelector<WtInput>("wt-input")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+  await source.updateComplete;
+}
+function sourceFile(source: SetupLiveSourceScreen, file?: File) {
+  const input = source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
+  const selection = new DataTransfer();
+  if (file) selection.items.add(file);
+  input.files = selection.files;
+  input.dispatchEvent(new Event("change"));
+}
+function startEmpty(source: SetupLiveSourceScreen) {
+  source.shadowRoot!.querySelector<HTMLElement>("[data-test=empty]")!.click();
+}
+
+describe("setup Start empty and import draft", () => {
+  it("Start empty asks before changing an authored root and Keep preserves it", async () => {
+    const { el, source } = await liveSource();
+    patchRoot(el, { configurationImport: true, venue: { legalName: "Authored restaurant" } });
+    const original = structuredClone((el as unknown as State).draft);
+    startEmpty(source);
+    await el.updateComplete;
+    expect((el as unknown as State).draft).toEqual(original);
+    expect((el as unknown as State).screen).toBe("live-source");
+    expect(warning(el).open).toBe(true);
+    await choose(el, "keep");
+    expect((el as unknown as State).draft).toEqual(original);
+    expect((el as unknown as State).screen).toBe("live-source");
+    expect(unload()).toBe(true);
+    startEmpty(source);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect((el as unknown as State).draft).toEqual({
+      mode: "prepare",
+      configurationImport: false,
+      venue: { admin: initialAdmin },
+    });
+    expect(unload()).toBe(true);
+  });
+
+  it.each(["empty", "back"] as const)(
+    "%s preserves file identity and passphrase until child discard is approved",
+    async (route) => {
+      const { el, source } = await liveSource();
+      const artifact = new File(["encrypted"], "authored.waitron-config");
+      sourceFile(source, artifact);
+      await sourcePassphrase(source, "authored passphrase");
+      const original = structuredClone((el as unknown as State).draft);
+      const leave = () =>
+        route === "empty"
+          ? startEmpty(source)
+          : source.shadowRoot!.querySelector<HTMLElement>(".actions wt-button")!.click();
+      leave();
+      await expect.poll(() => warning(el).open).toBe(true);
+      expect((el as unknown as State).screen).toBe("live-source");
+      expect((el as unknown as State).draft).toEqual(original);
+      await choose(el, "keep");
+      expect(
+        source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0],
+      ).toBe(artifact);
+      expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe(
+        "authored passphrase",
+      );
+      expect(unload()).toBe(true);
+      leave();
+      await expect.poll(() => warning(el).open).toBe(true);
+      await choose(el, "discard");
+      await expect
+        .poll(() => (el as unknown as State).screen)
+        .toBe(route === "empty" ? "admin" : "mode");
+      expect(
+        source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files!.length,
+      ).toBe(0);
+      expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe("");
+      expect((el as unknown as State).draft).toEqual(
+        route === "empty" ? { ...original, configurationImport: false } : original,
+      );
+    },
+  );
+
+  it("a clean or reverted import draft starts empty without a warning", async () => {
+    const { el, source } = await liveSource();
+    sourceFile(source, new File(["encrypted"], "selected.waitron-config"));
+    await sourcePassphrase(source, "temporary");
+    expect(unload()).toBe(true);
+    sourceFile(source);
+    await sourcePassphrase(source, "");
+    expect(unload()).toBe(false);
+    startEmpty(source);
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect(warning(el).open).toBe(false);
+    expect((el as unknown as State).draft.configurationImport).toBe(false);
+  });
+
+  it("Import submits without a discard question and a refusal keeps the child dirty", async () => {
+    const { el, source, api } = await liveSource();
+    const artifact = new File(["encrypted"], "refused.waitron-config");
+    const stage = vi.fn().mockRejectedValue({ code: "configuration.invalid" });
+    api.stageConfiguration = stage;
+    sourceFile(source, artifact);
+    await sourcePassphrase(source, "authored passphrase");
+    source.shadowRoot!.querySelector<HTMLElement>("[data-test=import]")!.click();
+    await expect.poll(() => stage.mock.calls.length).toBe(1);
+    await expect.poll(() => source.errorMessage).toBeTruthy();
+    expect(stage).toHaveBeenCalledExactlyOnceWith(artifact, "authored passphrase");
+    expect(warning(el).open).toBe(false);
+    expect(unload()).toBe(true);
+    expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe(
+      "authored passphrase",
+    );
+    expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
+      artifact,
+    );
+  });
+});
+
+describe("setup import draft lifecycle", () => {
+  it("reconnect retains the original import baseline and protects its passphrase", async () => {
+    const { el, source, host } = await liveSource();
+    await sourcePassphrase(source, "authored passphrase");
+    el.remove();
+    expect(unload()).toBe(false);
+    host.appendChild(el);
+    await el.updateComplete;
+    expect(unload()).toBe(true);
+    expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe(
+      "authored passphrase",
+    );
+    await sourcePassphrase(source, "");
+    expect(unload()).toBe(false);
+  });
+
+  it.each(["field", "root", "replacement", "disconnect"] as const)(
+    "%s invalidates an unanswered Start empty without changing the wizard",
+    async (change) => {
+      const { el, source } = await liveSource();
+      await sourcePassphrase(source, "original passphrase");
+      startEmpty(source);
+      await expect.poll(() => warning(el).open).toBe(true);
+      const question = warning(el);
+      if (change === "field") await sourcePassphrase(source, "newer passphrase");
+      if (change === "root") patchRoot(el, { venue: { legalName: "Newer restaurant" } });
+      if (change === "replacement") {
+        (el as unknown as State).screen = "role";
+        await el.updateComplete;
+      }
+      if (change === "disconnect") el.remove();
+      question.dispatchEvent(
+        new CustomEvent("wt-unsaved-choice", {
+          detail: { decision: "discard" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect((el as unknown as State).screen).toBe(
+        change === "replacement" ? "role" : "live-source",
+      );
+      expect((el as unknown as State).draft.configurationImport).toBeUndefined();
+      if (change === "root")
+        expect((el as unknown as State).draft.venue?.legalName).toBe("Newer restaurant");
+      if (change === "field")
+        expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe(
+          "newer passphrase",
+        );
+    },
+  );
+
+  it("a selected file alone is dirty, and changing its passphrase invalidates the old answer", async () => {
+    const { el, source } = await liveSource();
+    const artifact = new File(["encrypted"], "file-only.waitron-config");
+    sourceFile(source, artifact);
+    expect(unload()).toBe(true);
+    startEmpty(source);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await sourcePassphrase(source, "newer passphrase");
+    await expect.poll(() => warning(el).open).toBe(false);
+    expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
+      artifact,
+    );
+    startEmpty(source);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "keep");
+    expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe("newer passphrase");
+  });
+});
+
+describe("setup import acceptance", () => {
+  it("a successful import commits its submitted child while the preview keeps the root dirty", async () => {
+    const { el, source, api } = await liveSource();
+    const artifact = new File(["encrypted"], "accepted.waitron-config");
+    api.stageConfiguration = vi.fn().mockResolvedValue(importedConfiguration);
+    sourceFile(source, artifact);
+    await sourcePassphrase(source, "accepted passphrase");
+    source.shadowRoot!.querySelector<HTMLElement>("[data-test=import]")!.click();
+    await expect.poll(() => (el as unknown as State).screen).toBe("configuration-preview");
+    expect(warning(el).open).toBe(false);
+    expect(unload()).toBe(true);
+    expect((el as unknown as State).draft.configurationImport).toBe(true);
+    expect(source.isConnected).toBe(false);
+  });
+
+  it("a newer passphrase remains protected when the submitted import succeeds", async () => {
+    const { el, source, api } = await liveSource();
+    let accept!: (value: ConfigurationPreview) => void;
+    const stage = vi.fn().mockImplementation(
+      () =>
+        new Promise<ConfigurationPreview>((resolve) => {
+          accept = resolve;
+        }),
+    );
+    api.stageConfiguration = stage;
+    const artifact = new File(["encrypted"], "submitted.waitron-config");
+    sourceFile(source, artifact);
+    await sourcePassphrase(source, "submitted passphrase");
+    source.shadowRoot!.querySelector<HTMLElement>("[data-test=import]")!.click();
+    await expect.poll(() => stage.mock.calls.length).toBe(1);
+    await sourcePassphrase(source, "newer passphrase");
+    accept(importedConfiguration);
+    await expect.poll(() => warning(el).open).toBe(true);
+    expect((el as unknown as State).screen).toBe("live-source");
+    expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe("newer passphrase");
+    expect((el as unknown as State).draft.configurationImport).toBe(true);
+    await choose(el, "keep");
+    expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe("newer passphrase");
+    await sourcePassphrase(source, "submitted passphrase");
+    source.shadowRoot!.querySelector<HTMLElement>(".actions wt-button")!.click();
+    await expect.poll(() => (el as unknown as State).screen).toBe("mode");
+    expect(warning(el).open).toBe(false);
+    expect(unload()).toBe(true);
+    expect(stage).toHaveBeenCalledExactlyOnceWith(artifact, "submitted passphrase");
+  });
+
+  it.each(["success", "refusal"] as const)(
+    "a departed import's %s cannot replace the new step or its root values",
+    async (result) => {
+      const { el, source, api } = await liveSource();
+      let finish!: () => void;
+      const stage = vi.fn().mockImplementation(
+        () =>
+          new Promise<ConfigurationPreview>((resolve, reject) => {
+            finish = () =>
+              result === "success"
+                ? resolve(importedConfiguration)
+                : reject({ code: "configuration.invalid" });
+          }),
+      );
+      api.stageConfiguration = stage;
+      sourceFile(source, new File(["encrypted"], "departed.waitron-config"));
+      await sourcePassphrase(source, "submitted passphrase");
+      source.shadowRoot!.querySelector<HTMLElement>("[data-test=import]")!.click();
+      await expect.poll(() => stage.mock.calls.length).toBe(1);
+      startEmpty(source);
+      await expect.poll(() => warning(el).open).toBe(true);
+      await choose(el, "discard");
+      await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+      patchRoot(el, { venue: { legalName: "Newer restaurant" } });
+      const root = structuredClone((el as unknown as State).draft);
+      finish();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      expect((el as unknown as State).screen).toBe("admin");
+      expect((el as unknown as State).draft).toEqual(root);
+    },
+  );
+});
+
+it("discard after import restores the accepted file identity in the native selection", async () => {
+  const { el, source, api } = await liveSource();
+  let accept!: (preview: ConfigurationPreview) => void;
+  const stage = vi.fn().mockImplementation(
+    () =>
+      new Promise<ConfigurationPreview>((resolve) => {
+        accept = resolve;
+      }),
+  );
+  api.stageConfiguration = stage;
+  const submitted = new File(["original"], "same.waitron-config");
+  const newer = new File(["replacement"], "same.waitron-config");
+  sourceFile(source, submitted);
+  await sourcePassphrase(source, "submitted passphrase");
+  source.shadowRoot!.querySelector<HTMLElement>("[data-test=import]")!.click();
+  await expect.poll(() => stage.mock.calls.length).toBe(1);
+  sourceFile(source, newer);
+  accept(importedConfiguration);
+  await expect.poll(() => warning(el).open).toBe(true);
+  expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
+    newer,
+  );
+  await choose(el, "discard");
+  await expect.poll(() => (el as unknown as State).screen).toBe("configuration-preview");
+  expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
+    submitted,
+  );
+  expect(stage).toHaveBeenCalledExactlyOnceWith(submitted, "submitted passphrase");
+  expect(unload()).toBe(true);
 });
