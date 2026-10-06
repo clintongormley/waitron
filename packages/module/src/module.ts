@@ -415,7 +415,9 @@ export interface VenueServiceContribution {
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { locationId: LocationId },
-    input: { zoneId?: string | null; deviceId?: string | null },
+    /** A profile with a department starts at its starting zone, ahead of the device's default;
+     *  one with a department and no usable zone is refused `device_profile.no_service_zone`. */
+    input: { zoneId?: string | null; deviceId?: string | null; profileId?: string | null },
   ): Promise<OrderServiceContext>;
   /** A profile's department, zones and kitchen lists as they stand now. A null department means no
    *  department restriction, with null zones and starting zone; with a department, an empty zone
@@ -432,6 +434,24 @@ export interface VenueServiceContribution {
     stationIds: string[];
     watcherIds: string[];
   }>;
+  /** The department and zone half of {@link readProfileServiceAccess}. */
+  readProfileZones(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    profileId: string,
+  ): Promise<{
+    departmentId: string | null;
+    allowedZoneIds: string[] | null;
+    startingZoneId: string | null;
+  }>;
+  /** Refused `service_zone.not_allowed` when the profile has a department and `zoneId` is not one of
+   *  the zones it may order in now. */
+  assertProfileZone(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    profileId: string,
+    zoneId: string,
+  ): Promise<void>;
   recordOrderContext(
     tx: Transaction,
     cfg: { locationId: LocationId },

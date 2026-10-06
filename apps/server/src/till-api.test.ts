@@ -20,7 +20,12 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { departments, routeExceptions } from "@waitron/venue-service";
+import {
+  departments,
+  routeExceptions,
+  setProfileServiceAccess,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
 import {
   createPinThrottle,
   deviceProfileAdmissionPersons,
@@ -1861,10 +1866,11 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     });
   });
 
-  it("prefers the session's device's default service zone, whatever device cookie the request carries", async () => {
+  it("prefers the session's device's profile's starting zone, whatever device cookie the request carries", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const { deviceId } = await enrolTillDevice(suite.db);
+    const profileId = await seedDeviceProfile(suite.db, `Starting zone ${randomUUID()}`, [], null);
+    const { deviceId } = await enrolTillDevice(suite.db, profileId);
     const token = await openSession(suite.db, deviceId);
     const otherCookie = await enrolTillDeviceCookie(suite.db);
     const [second] = await suite.db
@@ -1882,9 +1888,23 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     await suite.db.execute(sql`
       insert into zone_menus (zone_id, menu_id)
       values (${second!.id}, ${aguaProduct.catalogueId})`);
+    // The device's own default names the counter: the profile's starting zone comes first.
     await suite.db.execute(sql`
       insert into device_zone_defaults (device_id, zone_id)
-      values (${deviceId}, ${second!.id})`);
+      values (${deviceId}, ${counterZoneId})`);
+    await withTransaction(suite.db, async (tx) => {
+      const [policy] = await tx
+        .select({ departmentId: zoneServicePolicies.departmentId })
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.zoneId, counterZoneId));
+      await setProfileServiceAccess(tx, cfg, profileId, {
+        departmentId: policy!.departmentId,
+        allowedZoneIds: null,
+        startingZoneId: second!.id,
+        stationIds: [],
+        watcherIds: [],
+      });
+    });
 
     for (const cookie of [
       `${SESSION_COOKIE}=${token}`,

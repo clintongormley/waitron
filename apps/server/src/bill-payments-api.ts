@@ -26,6 +26,7 @@ import { sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
 import { isUuid, requireSession } from "./till-session.js";
 import "./errors.js";
+import { gateZones } from "./zone-access.js";
 
 const MONEY = /^\d{1,12}(\.\d{1,2})?$/;
 
@@ -191,8 +192,9 @@ export function mountBillPaymentsApi(
 
   app.get("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
       return c.json(await getBillBalance(deps, id));
     }),
   );
@@ -202,6 +204,7 @@ export function mountBillPaymentsApi(
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
       const ask = parseAsk(asObject(await readRawJsonBody<unknown>(c)));
       return c.json(await previewBillPayment(fiscal, cfg, id, ask));
     }),
@@ -213,6 +216,7 @@ export function mountBillPaymentsApi(
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const request = parseRequest(body);
       if (request.entry !== "reader") {
@@ -265,6 +269,7 @@ export function mountBillPaymentsApi(
       const { personId, sessionId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
       const paymentId = c.req.param("paymentId");
       const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
       const saleCfg = sendingCfg(cfg, c, session.device);

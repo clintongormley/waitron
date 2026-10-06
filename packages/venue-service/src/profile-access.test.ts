@@ -22,8 +22,10 @@ import {
   createServiceZone,
   deactivateDepartment,
   deactivateServiceZone,
+  resolveNewOrderZone,
 } from "./operations.js";
 import {
+  assertProfileZone,
   readProfileServiceAccess,
   setProfileServiceAccess,
   type ProfileServiceAccessInput,
@@ -33,6 +35,7 @@ import {
   deviceProfileStations,
   deviceProfileWatchers,
   deviceProfileZones,
+  zoneServicePolicies,
 } from "./schema/service.js";
 
 const suite = useVenueDb({
@@ -627,5 +630,108 @@ describe("a profile's station and watcher lists", () => {
     await save(venue, display([grill], []));
     await save(venue, display([cold], []));
     await expect(read(venue)).resolves.toMatchObject({ stationIds: [cold] });
+  });
+});
+
+describe("a zone checked against a profile", () => {
+  const check = (venue: Venue, zoneId: string) =>
+    outcome(scoped((tx) => assertProfileZone(tx, venue.cfg, venue.profile, zoneId)));
+  const refused = (zoneId: string) => ({ code: "service_zone.not_allowed", params: { zoneId } });
+
+  it("allows each zone of the profile and refuses another department's", async () => {
+    const venue = await seedVenue();
+    await save(venue, restaurantScope(venue));
+    await expect(check(venue, venue.dining)).resolves.toEqual({ resolved: undefined });
+    await expect(check(venue, venue.terrace)).resolves.toEqual({ resolved: undefined });
+    await expect(check(venue, venue.counter)).resolves.toEqual(refused(venue.counter));
+  });
+
+  it("refuses a zone of the department outside the explicit subset", async () => {
+    const venue = await seedVenue();
+    await save(venue, restaurantScope(venue, { allowedZoneIds: [venue.dining] }));
+    await expect(check(venue, venue.terrace)).resolves.toEqual(refused(venue.terrace));
+  });
+
+  it("refuses a zone moved to another department or deactivated after the profile was saved", async () => {
+    const venue = await seedVenue();
+    await save(venue, restaurantScope(venue));
+    await scoped((tx) =>
+      configureZone(tx, venue.cfg, { zoneId: venue.terrace, departmentId: venue.deli }),
+    );
+    await expect(check(venue, venue.terrace)).resolves.toEqual(refused(venue.terrace));
+    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.dining));
+    await expect(check(venue, venue.dining)).resolves.toEqual(refused(venue.dining));
+  });
+
+  it("allows every zone to a profile with no department", async () => {
+    const venue = await seedVenue();
+    await expect(check(venue, venue.counter)).resolves.toEqual({ resolved: undefined });
+    await expect(check(venue, venue.dining)).resolves.toEqual({ resolved: undefined });
+  });
+
+  it("allows every zone to a shared display, whatever was stored before it became one", async () => {
+    const venue = await seedVenue();
+    await save(venue, restaurantScope(venue));
+    await makeSharedDisplay(venue);
+    await expect(check(venue, venue.counter)).resolves.toEqual({ resolved: undefined });
+  });
+});
+
+describe("a new order's zone for a profile", () => {
+  async function makeCounterDefault(zoneId: string): Promise<void> {
+    await db
+      .update(zoneServicePolicies)
+      .set({ isCounterDefault: true })
+      .where(eq(zoneServicePolicies.zoneId, zoneId));
+  }
+  const start = (venue: Venue, input: { zoneId?: string } = {}) =>
+    outcome(
+      scoped(async (tx) => {
+        const context = await resolveNewOrderZone(tx, venue.cfg, {
+          ...input,
+          profileId: venue.profile,
+        });
+        return context.zoneId;
+      }),
+    );
+
+  it("starts at the profile's starting zone rather than the counter default", async () => {
+    const venue = await seedVenue();
+    await makeCounterDefault(venue.counter);
+    await save(venue, restaurantScope(venue, { startingZoneId: venue.dining }));
+    await expect(start(venue)).resolves.toEqual({ resolved: venue.dining });
+  });
+
+  it("starts at the counter default for a profile with no department", async () => {
+    const venue = await seedVenue();
+    await makeCounterDefault(venue.counter);
+    await expect(start(venue)).resolves.toEqual({ resolved: venue.counter });
+  });
+
+  it("starts at the first allowed zone once the starting zone is deactivated", async () => {
+    const venue = await seedVenue();
+    await makeCounterDefault(venue.counter);
+    await save(venue, restaurantScope(venue, { startingZoneId: venue.dining }));
+    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.dining));
+    await expect(start(venue)).resolves.toEqual({ resolved: venue.terrace });
+  });
+
+  it("refuses a new order once the profile has no zone left", async () => {
+    const venue = await seedVenue();
+    await makeCounterDefault(venue.counter);
+    await save(venue, restaurantScope(venue, { allowedZoneIds: [venue.dining] }));
+    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.dining));
+    await expect(start(venue)).resolves.toEqual({
+      code: "device_profile.no_service_zone",
+      params: { profileId: venue.profile },
+    });
+  });
+
+  it("keeps an explicitly named zone, leaving its check to the caller", async () => {
+    const venue = await seedVenue();
+    await save(venue, restaurantScope(venue));
+    await expect(start(venue, { zoneId: venue.counter })).resolves.toEqual({
+      resolved: venue.counter,
+    });
   });
 });

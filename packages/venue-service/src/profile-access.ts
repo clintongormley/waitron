@@ -53,21 +53,7 @@ export async function readProfileServiceAccess(
   cfg: VenueScope,
   profileId: string,
 ): Promise<ProfileServiceAccess> {
-  const [profile] = await tx
-    .select({
-      formFactor: deviceProfiles.formFactor,
-      departmentId: deviceProfileServiceAccess.departmentId,
-      everyZone: deviceProfileServiceAccess.everyZone,
-      startingZoneId: deviceProfileServiceAccess.startingZoneId,
-    })
-    .from(deviceProfiles)
-    .leftJoin(
-      deviceProfileServiceAccess,
-      eq(deviceProfileServiceAccess.deviceProfileId, deviceProfiles.id),
-    )
-    .where(eq(deviceProfiles.id, profileId));
-  if (profile === undefined) refuse("profileId", "not_found");
-
+  const zones = await readProfileZones(tx, cfg, profileId);
   const stationIds = (
     await tx
       .select({ id: kitchenStations.id })
@@ -100,19 +86,53 @@ export async function readProfileServiceAccess(
       )
       .orderBy(asc(watchers.displayOrder), asc(watchers.name), asc(watchers.id))
   ).map((row) => row.id);
+  return { ...zones, stationIds, watcherIds };
+}
+
+/**
+ * Refuses `service_zone.not_allowed` when the profile has a department and `zoneId` is not one of
+ * the zones it may order in now, read as {@link readProfileServiceAccess} reads them. A profile with
+ * no department restriction may use any zone.
+ */
+export async function assertProfileZone(
+  tx: Transaction,
+  cfg: VenueScope,
+  profileId: string,
+  zoneId: string,
+): Promise<void> {
+  const { allowedZoneIds } = await readProfileZones(tx, cfg, profileId);
+  if (allowedZoneIds !== null && !allowedZoneIds.includes(zoneId)) {
+    throw new AppError("service_zone.not_allowed", { zoneId });
+  }
+}
+
+/** The zone half of {@link ProfileServiceAccess}. */
+export async function readProfileZones(
+  tx: Transaction,
+  cfg: VenueScope,
+  profileId: string,
+): Promise<Pick<ProfileServiceAccess, "departmentId" | "allowedZoneIds" | "startingZoneId">> {
+  const [profile] = await tx
+    .select({
+      formFactor: deviceProfiles.formFactor,
+      departmentId: deviceProfileServiceAccess.departmentId,
+      everyZone: deviceProfileServiceAccess.everyZone,
+      startingZoneId: deviceProfileServiceAccess.startingZoneId,
+    })
+    .from(deviceProfiles)
+    .leftJoin(
+      deviceProfileServiceAccess,
+      eq(deviceProfileServiceAccess.deviceProfileId, deviceProfiles.id),
+    )
+    .where(eq(deviceProfiles.id, profileId));
+  if (profile === undefined) refuse("profileId", "not_found");
 
   if (
     profile.formFactor === SHARED_DISPLAY ||
     profile.departmentId === null ||
     profile.startingZoneId === null
   ) {
-    return {
-      departmentId: null,
-      allowedZoneIds: null,
-      startingZoneId: null,
-      stationIds,
-      watcherIds,
-    };
+    return { departmentId: null, allowedZoneIds: null, startingZoneId: null };
   }
 
   const allowedZoneIds = (
@@ -147,8 +167,6 @@ export async function readProfileServiceAccess(
     startingZoneId: allowedZoneIds.includes(profile.startingZoneId)
       ? profile.startingZoneId
       : (allowedZoneIds[0] ?? null),
-    stationIds,
-    watcherIds,
   };
 }
 

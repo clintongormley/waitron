@@ -18,6 +18,7 @@ import { requestCfg } from "./request-config.js";
 import { requireSession } from "./till-session.js";
 import { recordUnpaidDeparture, type UnpaidDepartureRequest } from "./unpaid-departure.js";
 import "./errors.js";
+import { gateZones } from "./zone-access.js";
 
 /** The body, refused field by field as `management.request_invalid`, as a bill refund's is. */
 function parseDeparture(body: Record<string, unknown>): UnpaidDepartureRequest {
@@ -48,6 +49,7 @@ export function mountUnpaidDepartureApi(
       const { personId, sessionId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
+      await gateZones(deps, session, [{ partyId }]);
       const request = parseDeparture(asObject(await readRawJsonBody<unknown>(c)));
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await overrideToCheck(

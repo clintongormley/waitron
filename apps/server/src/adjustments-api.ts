@@ -35,6 +35,7 @@ import {
 } from "./till-api.js";
 import { requestCfg } from "./request-config.js";
 import { requireSession } from "./till-session.js";
+import { gateZones } from "./zone-access.js";
 import "./errors.js";
 
 const NOTE_LIMIT = 500;
@@ -129,6 +130,7 @@ export function mountAdjustmentsApi(
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBill(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const ask = parseAsk(id, personId, body);
       const submissionId = submissionIdOf(body);
@@ -159,8 +161,10 @@ export function mountAdjustmentsApi(
 
   app.post("/api/working-orders/:id/adjustments/preview", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c);
+      const { personId } = session;
       const id = requireBill(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
       const ask = parseAsk(id, personId, asObject(await readRawJsonBody<unknown>(c)));
       const preview = await withTransaction(deps.db, (tx) =>
         previewAdjustment(tx, ask, deps.venueLocale),

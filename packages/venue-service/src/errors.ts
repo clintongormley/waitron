@@ -15,6 +15,8 @@ declare module "@waitron/shared" {
       actual: string;
     };
     "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
+    /** The device's active profile may not work in this zone. Names only the zone tried. */
+    "service_zone.not_allowed": { zoneId: string };
     "route.not_found": { routeId: string };
     "route.subject_not_found": { subject: string; id: string };
     "route.station_inactive": { stationId: string };
@@ -38,6 +40,8 @@ declare module "@waitron/shared" {
         | "department_required"
         | "shared_display";
     };
+    /** The profile has a department but none of its zones can be used now, so it cannot order. */
+    "device_profile.no_service_zone": { profileId: string };
     // `route.dish_not_sent` is declared in apps/server's errors.ts, which raises it.
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };

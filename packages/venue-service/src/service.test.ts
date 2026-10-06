@@ -6,6 +6,7 @@ describe("VENUE_SERVICE", () => {
   it("exposes every generic ordering capability", () => {
     expect(Object.keys(VENUE_SERVICE).sort()).toEqual([
       "acknowledgeKitchenNotice",
+      "assertProfileZone",
       "copyLineContext",
       "copyOrderContext",
       "describeMakers",
@@ -24,6 +25,7 @@ describe("VENUE_SERVICE", () => {
       "readLinesSoldInEach",
       "readPrintHeldWork",
       "readProfileServiceAccess",
+      "readProfileZones",
       "readReleaseReminderMinutes",
       "readSaleReceiptHeader",
       "recordKitchenNotices",

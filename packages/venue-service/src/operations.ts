@@ -40,6 +40,7 @@ import {
   zoneServicePolicies,
 } from "./schema/service.js";
 import { routeExceptions } from "./schema/routing.js";
+import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
 
 export interface VenueScope {
@@ -824,11 +825,15 @@ export async function menuState(tx: Transaction, zoneId: string): Promise<ZoneMe
   return state;
 }
 
-/** Resolve an explicit service zone, or the venue's configured counter default for a new order. */
+/**
+ * A new order's zone: the one named, else the profile's starting zone when the profile has a
+ * department, else the device's default, else the venue's counter default. A named zone is not
+ * checked against the profile here.
+ */
 export async function resolveNewOrderZone(
   tx: Transaction,
   cfg: VenueScope,
-  input: { zoneId?: string | null; deviceId?: string | null },
+  input: { zoneId?: string | null; deviceId?: string | null; profileId?: string | null },
 ): Promise<{
   zoneId: string;
   departmentId: string;
@@ -838,6 +843,15 @@ export async function resolveNewOrderZone(
 }> {
   if (input.zoneId !== undefined && input.zoneId !== null) {
     return resolveZoneContext(tx, cfg, input.zoneId);
+  }
+  if (input.profileId !== undefined && input.profileId !== null) {
+    const zones = await readProfileZones(tx, cfg, input.profileId);
+    if (zones.departmentId !== null) {
+      if (zones.startingZoneId === null) {
+        throw new AppError("device_profile.no_service_zone", { profileId: input.profileId });
+      }
+      return resolveZoneContext(tx, cfg, zones.startingZoneId);
+    }
   }
   if (input.deviceId !== undefined && input.deviceId !== null) {
     const [deviceDefault] = await tx
