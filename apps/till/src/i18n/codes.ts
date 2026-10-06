@@ -382,10 +382,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // `device.join_rate_limited`, `device.join_full` and `device.join_stale` are deliberately UNMAPPED:
   // each leaves the operator only "try again", which the generic sentence says, and naming one would
   // tell an unapproved device something about the venue's state.
-  // `device.forbidden_action` is deliberately UNMAPPED: the server refuses other actions with it too
-  // (`assertDeviceCapability`, `apps/server/src/device-session.ts`), so the two
-  // card reader paths (the counter's card collect and the bill pay dialog) show
-  // `card_reader.not_set_up` themselves.
+  // The two card reader paths (the counter's card collect and the bill pay dialog) show
+  // `card_reader.not_set_up` for the reader's own `device.forbidden_action` (action `pay`).
+  "device.forbidden_action": {
+    en: "This device's profile doesn't allow that",
+    es: "El perfil de este dispositivo no lo permite",
+  },
   "device.pairing_closed": {
     en: "New devices aren't being accepted right now. Ask a manager to open Add a device in the dashboard.",
     es: "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que abra «Añadir un dispositivo» en el panel.",

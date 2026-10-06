@@ -198,7 +198,14 @@ import type {
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
 import { kindOfFormFactor } from "./layout.js";
-import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
+import type {
+  CanvasDef,
+  CapabilityFlag,
+  DeviceKind,
+  NavigationScreen,
+  ReceiptConfig,
+  TabDef,
+} from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
 import {
@@ -503,6 +510,7 @@ function lineWriteError(error: unknown): CounterError {
 /** Refusals the counter shows in their own words (`codeMessage`): each names what to do next, where
  * the generic "try again" would send the operator round the same refusal. */
 const ACTIONABLE_REFUSALS = new Set([
+  "device.forbidden_action",
   "order.payment_in_flight",
   "product.unavailable",
   "product.not_sold_separately",
@@ -868,9 +876,10 @@ function isPermanentSaleRefusal(error: unknown): boolean {
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
 }
 
-/** `POST /api/pay` throws this code only for a device not set up for the reader. */
+/** `POST /api/pay` names its reader refusal `pay`; a profile that takes no orders is `take-orders`. */
 function isReaderRefusal(error: unknown): boolean {
-  return (error as { code?: string } | undefined)?.code === "device.forbidden_action";
+  const refused = error as { code?: string; action?: unknown } | undefined;
+  return refused?.code === "device.forbidden_action" && refused.action === "pay";
 }
 
 /**
@@ -1049,6 +1058,7 @@ export class TillApp extends LitElement {
 
   /** The device profile's idle logout in seconds; `null` disables it. */
   #inactivityTimeoutSeconds: number | null = null;
+  #startingScreen: NavigationScreen | null = null;
 
   readonly #onInteraction = (): void => this.sessionActivity.noteInteraction();
 
@@ -1673,6 +1683,18 @@ export class TillApp extends LitElement {
     );
   }
 
+  /** Through `#pushDrill`, which opens only a screen `#affordances` offers. */
+  #openStartingScreen(): void {
+    const screen = this.#startingScreen;
+    if (screen === null) return;
+    const destinations = {
+      "show-station": "station",
+      "show-expo": "expo",
+      "show-schedule": "schedule",
+    } as const satisfies Record<NavigationScreen, TillDestination>;
+    this.#pushDrill({ kind: destinations[screen] });
+  }
+
   #restoreDestination(): void {
     const requested = this.#url.read("till-view");
     const destination =
@@ -1784,6 +1806,7 @@ export class TillApp extends LitElement {
       this.canvas = till.canvas;
       this.capabilities = till.capabilities;
       this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
+      this.#startingScreen = till.startingScreen ?? null;
       // Validated and retained, but not written to the URL: the front-door surfaces are not `/tabs/*`
       // destinations, so the tab is published only when the shell opens.
       this.activeTabKey = this.#requestedTab();
@@ -1961,6 +1984,7 @@ export class TillApp extends LitElement {
     this.#setActiveTab(this.#requestedTab(), true, true);
     this.#setScreen(landsOnFloor ? "floor" : "counter");
     this.#restoreDestination();
+    if (this.drill === undefined) this.#openStartingScreen();
     const showsCounterLists = this.#showsCounterLists();
     if (showsCounterLists) {
       // Each list says its own failure, so one that fails never stops the others loading.
@@ -3892,6 +3916,7 @@ export class TillApp extends LitElement {
       this.canvas = till.canvas;
       this.capabilities = till.capabilities;
       this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
+      this.#startingScreen = till.startingScreen ?? null;
     } catch {
       if (session === this.#operatorSession) this.errorKey = "boot.error";
       return;

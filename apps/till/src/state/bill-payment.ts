@@ -186,12 +186,14 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     field?: unknown;
     chargeable?: unknown;
     permission?: unknown;
+    action?: unknown;
   };
   return {
     code: typeof refused.code === "string" ? refused.code : "server.internal",
     ...(typeof refused.field === "string" ? { field: refused.field } : {}),
     ...(typeof refused.chargeable === "string" ? { chargeable: refused.chargeable } : {}),
     ...(typeof refused.permission === "string" ? { permission: refused.permission } : {}),
+    ...(typeof refused.action === "string" ? { action: refused.action } : {}),
   };
 }
 

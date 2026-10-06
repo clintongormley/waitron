@@ -2073,6 +2073,37 @@ describe("till-app", () => {
       expect(banner.textContent).not.toContain(t("sale.error"));
     });
 
+    it("says the profile does not allow it when the server refuses the sale for want of a profile action", async () => {
+      const el = await toHandheld(
+        withCounterTab,
+        {
+          capabilities: withReader,
+          cardProvider: "stripe_terminal",
+          activeReaders: readers,
+          defaultReaderId: readers[0]!.id,
+        },
+        {
+          pay: vi.fn().mockRejectedValue({
+            code: "device.forbidden_action",
+            status: 403,
+            action: "take-orders",
+          }),
+        },
+      );
+      selectTab(el, "counter");
+      await flush(el);
+      const c = counter(el)!;
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(codeMessage("device.forbidden_action"));
+      expect(banner.textContent).not.toContain(t("card_reader.not_set_up"));
+    });
+
     it("puts its sale tab's pay card back to its choices after the reader payment is refused", async () => {
       const pay = vi
         .fn()
@@ -5837,6 +5868,54 @@ describe("till-app", () => {
       .reverse()
       .find((e) => e.event === "nav");
     expect(nav?.fields.screen).toBe("schedule");
+  });
+
+  describe("the profile's starting screen", () => {
+    const rosterApi = {
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+      listMyAbsences: vi.fn().mockResolvedValue([]),
+    };
+
+    it("opens at sign-in, over the canvas's first tab", async () => {
+      const { el } = await mountApp({
+        ...rosterApi,
+        getTill: vi.fn().mockResolvedValue({ ...till, startingScreen: "show-schedule" }),
+      });
+      await toCounter(el);
+      expect(schedule(el)).not.toBeNull();
+      expect(counter(el)).not.toBeNull();
+    });
+
+    it("opens nothing when the profile no longer shows that screen", async () => {
+      const { el } = await mountApp({
+        ...rosterApi,
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
+          startingScreen: "show-schedule",
+        }),
+      });
+      await toCounter(el);
+      expect(schedule(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+    });
+
+    it("opens again for the next person after a logout", async () => {
+      const { el } = await mountApp({
+        ...rosterApi,
+        getTill: vi.fn().mockResolvedValue({ ...till, startingScreen: "show-schedule" }),
+      });
+      await toCounter(el);
+      emit(schedule(el)!, "back-to-counter");
+      await flush(el);
+      expect(schedule(el)).toBeNull();
+      emit(shell(el)!, "logout");
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
+      await flush(el);
+      expect(schedule(el)).not.toBeNull();
+    });
   });
 
   it("show-schedule shows the schedule screen (basket preserved) and threads the roster + operator id", async () => {

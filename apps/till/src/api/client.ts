@@ -23,7 +23,7 @@ import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
  * {@link menuOfferToTillProduct} from an offer and by `getHeldOrder` from a retrieved line.
  */
 
-import type { CanvasDef, CapabilityFlag, ReceiptConfig } from "../layout.js";
+import type { CanvasDef, CapabilityFlag, NavigationScreen, ReceiptConfig } from "../layout.js";
 import type {
   ExtraSelection,
   KitchenSignal,
@@ -131,6 +131,8 @@ export interface TillInfo {
    * (also a no-profile or cookieless request).
    */
   inactivityTimeoutSeconds: number | null;
+  /** The screen the CALLING device's profile opens at each sign-in; absent or `null` for none. */
+  startingScreen?: NavigationScreen | null;
   /** This node's id, so the app can tell which `servers` entry it is on. */
   nodeId: string;
   /** The venue's routable servers, primary first; `[]` when no membership document is held. */
