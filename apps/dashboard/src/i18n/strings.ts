@@ -113,6 +113,10 @@ export const en = {
   "folders.count_one": "1 category",
   "folders.product_count": "{count} products",
   "folders.product_count_one": "1 product",
+  "folders.product_count_all_disabled": "{count} products, all already disabled",
+  "folders.product_count_all_disabled_one": "1 product, already disabled",
+  "folders.product_count_some_disabled": "{count} products, {disabled} of them already disabled",
+  "folders.product_count_some_disabled_one": "{count} products, 1 of them already disabled",
   "folders.routes_warning":
     "{count} kitchen routing rules name these categories and will be removed.",
   "folders.routes_warning_one":
@@ -2342,6 +2346,10 @@ export const es: Record<StringKey, string> = {
   "folders.count_one": "1 categoría",
   "folders.product_count": "{count} productos",
   "folders.product_count_one": "1 producto",
+  "folders.product_count_all_disabled": "{count} productos, todos ya deshabilitados",
+  "folders.product_count_all_disabled_one": "1 producto, ya deshabilitado",
+  "folders.product_count_some_disabled": "{count} productos, {disabled} de ellos ya deshabilitados",
+  "folders.product_count_some_disabled_one": "{count} productos, 1 de ellos ya deshabilitado",
   "folders.routes_warning":
     "{count} reglas de envío a cocina nombran estas categorías y se eliminarán.",
   "folders.routes_warning_one": "1 regla de envío a cocina nombra estas categorías y se eliminará.",

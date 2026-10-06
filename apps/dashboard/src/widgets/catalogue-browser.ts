@@ -345,8 +345,9 @@ export class CatalogueBrowser extends LitElement {
     return fresh as FolderSummary[];
   }
   /** When what the dialog showed has changed, shows the new counts instead. When it has not, the
-   * delete sends this read's counts: the dialog shows no disabled products, so a change in them
-   * alone is not one to confirm, and the server still refuses one made after this read. */
+   * delete sends this read's counts: a change in disabled products alone is not asked about
+   * again, because they are switched off already, and the server still refuses one made after
+   * this read. */
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
@@ -370,6 +371,19 @@ export class CatalogueBrowser extends LitElement {
       "{count}",
       String(count),
     );
+  }
+  #productCount(count: number, disabled: number): string {
+    if (disabled === 0) return this.#plural("folders.product_count", count);
+    const key =
+      disabled === count
+        ? count === 1
+          ? "folders.product_count_all_disabled_one"
+          : "folders.product_count_all_disabled"
+        : disabled === 1
+          ? "folders.product_count_some_disabled_one"
+          : "folders.product_count_some_disabled";
+    const values: Record<string, string> = { count: String(count), disabled: String(disabled) };
+    return t(key).replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
   }
   /** Each category's path, numbered where others share it in the order the list draws them: depth
    * first, with siblings in `categories` order, which is how the table breaks a tie in its sort. */
@@ -429,10 +443,11 @@ export class CatalogueBrowser extends LitElement {
     const totals = rootSummaries.reduce(
       (sum, summary) => ({
         folders: sum.folders + summary.folders,
-        products: sum.products + summary.activeProducts,
+        products: sum.products + summary.products,
+        disabled: sum.disabled + summary.products - summary.activeProducts,
         routes: sum.routes + summary.routes,
       }),
-      { folders: 0, products: 0, routes: 0 },
+      { folders: 0, products: 0, disabled: 0, routes: 0 },
     );
     // Moving contents up removes only the selected categories themselves, each with its own rules.
     const routesRemoved =
@@ -514,7 +529,7 @@ export class CatalogueBrowser extends LitElement {
                               value="delete"
                               .checked=${this.contents === "delete"}
                               @change=${() => (this.contents = "delete")}
-                            />${t("folders.contents_delete").replace("{categories}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#plural("folders.product_count", totals.products))}</label
+                            />${t("folders.contents_delete").replace("{categories}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#productCount(totals.products, totals.disabled))}</label
                           >
                         </fieldset>
                         ${routesRemoved ? html`<p>${this.#plural(routesWarning, routesRemoved)}</p>` : nothing}`
