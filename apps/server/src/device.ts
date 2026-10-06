@@ -259,8 +259,10 @@ export async function assertNoPaymentInProgress(tx: Transaction, deviceId: strin
   if (found !== undefined) throw new AppError("device.payment_in_progress", {});
 }
 
-/** Ends each open session on the device whose person `profileId` does not admit; every one when
- * `profileId` is a shared display, which nobody signs in on whatever its admission list says. */
+/**
+ * Ends each open session on the device whose person `profileId` does not admit; every one when
+ * `profileId` is a shared display, which nobody signs in on whatever its admission list says.
+ */
 export async function endSessionsNotAdmitted(
   tx: Transaction,
   deviceId: string,
@@ -288,8 +290,8 @@ export async function endSessionsNotAdmitted(
  * Switch the device's active profile to `profileId` for the person signed in on `sessionId`: one
  * the device is approved for and the person may sign in on, whose list names the station or watcher
  * the device shows, with no payment of the device's in progress. Printers follow
- * {@link updateDeviceSettings}; the sessions of people the new profile does not admit end.
- * Choosing the active profile changes nothing.
+ * {@link updateDeviceSettings}; the sessions of people the new profile does not admit end, every
+ * one when it is a shared display. Choosing the active profile changes nothing.
  */
 export async function switchActiveProfile(
   tx: Transaction,
