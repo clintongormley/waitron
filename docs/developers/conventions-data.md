@@ -353,6 +353,32 @@ fire. The case "resolves every fired product's venue-service route in ONE batche
 `apps/server/src/working-order.test.ts` checks both that call and the stations reached by its
 three fired lines. This checks batching at the service boundary, not a fixed database-read count.
 
+## Opening hours store "no claim" as no row
+
+Hours (A261 step 5) keeps opening hours in five venue-service tables, all classified `state`:
+`hours_week_cells` and `hours_week_periods` for each department's and non-default station's
+standard week, and `special_dates`, `special_date_hours` and `special_date_hours_periods` for dated
+exceptions (`packages/venue-service/src/schema/hours.ts`). They replace `station_hours` and
+`department_hours`, which venue-service `0022_retire_legacy_hours` drops; old rows are not carried
+over (the pre-production rule in "No backwards-compatibility or data-migration code until Waitron
+is in production" below).
+
+- A stored cell is `closed`, `all_day` or `periods` (the `*_mode_ck` CHECKs). "No hours set" for a
+  subject's week and "keep the standard week" for a subject on a special date are both stored as
+  no row at all; `not_set` and `inherit` exist only on the wire (`packages/venue-service/src/hours-types.ts`).
+  A week is seven cells or none: `replaceWeekHours` (`packages/venue-service/src/hours.ts`) writes
+  all seven or deletes them, and the configuration import's `validate` refuses anything else.
+- A cell names its owner as a department or a station, and the SQL cannot tie that owner to the
+  cell's venue; the writers in `hours.ts` resolve each owner within the venue before writing.
+- A default station's special-date cells are dormant, not deleted: a save never removes one because
+  the request left it out (no request can carry it), and duplicating a date copies it. It applies
+  again if the station stops being the default, so that change is refused with `hours.invalid`
+  when the station's hours would then clash (`assertDemotedStationHours`, `hours.ts`).
+- A cell's periods are replaced by deleting and inserting the whole set, so a reordering cannot trip
+  the position index midway ("Editing rows one at a time can break a unique index the final state
+  satisfies" above).
+- One special date per venue and date (`special_dates_location_date_key`).
+
 **Tables the application code may read and never write**
 
 ## The tables `scripts/write-path-tables.json` lists are read-only to the application, and one guard is the whole of the enforcement
@@ -967,31 +993,6 @@ Venue-service uses it to leave out a clash between two days already past in the 
 the bundle was made, as a save does, so a venue's own export imports again. It reads no day
 cutover: for a venue whose cutover or numeric-offset zone a save cannot read, the save checks every
 pair while the import still leaves past pairs out.
-
-## Opening hours store "no claim" as no row
-
-Hours (A261 step 5) keeps opening hours in five venue-service tables, all classified `state`:
-`hours_week_cells` and `hours_week_periods` for each department's and non-default station's
-standard week, and `special_dates`, `special_date_hours` and `special_date_hours_periods` for dated
-exceptions (`packages/venue-service/src/schema/hours.ts`). They replace `station_hours` and
-`department_hours`, which venue-service `0022_retire_legacy_hours` drops; old rows are not carried
-over (the pre-production rule in "No backwards-compatibility or data-migration code until Waitron
-is in production" below).
-
-- A stored cell is `closed`, `all_day` or `periods` (the `*_mode_ck` CHECKs). "No hours set" for a
-  subject's week and "keep the standard week" for a subject on a special date are both stored as
-  no row at all; `not_set` and `inherit` exist only on the wire (`packages/venue-service/src/hours-types.ts`).
-  A week is seven cells or none: `replaceWeekHours` (`packages/venue-service/src/hours.ts`) writes
-  all seven or deletes them, and the configuration import's `validate` refuses anything else.
-- A cell names its owner as a department or a station, and the SQL cannot tie that owner to the
-  cell's venue; the writers in `hours.ts` resolve each owner within the venue before writing.
-- A default station's special-date cells are dormant, not deleted: a save never removes one because
-  the request left it out (no request can carry it), and duplicating a date copies it. It applies
-  again if the station stops being the default.
-- A cell's periods are replaced by deleting and inserting the whole set, so a reordering cannot trip
-  the position index midway ("Editing rows one at a time can break a unique index the final state
-  satisfies" above).
-- One special date per venue and date (`special_dates_location_date_key`).
 
 **Transactions**
 

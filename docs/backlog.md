@@ -4316,8 +4316,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     time-zone route case never asserts `nextTransition`; nothing pins which of two repeated
     midnights a clock change picks; no test opens Hours from a department's link end to end; with
     the whole-venue closure on, a kept period at a skipped minute is refused on a field the closure
-    has disabled; and a default station's kept special-date cells are not checked against the
-    neighbouring dates if it stops being the default; on a phone the calendar's cells break a long
+    has disabled; on a phone the calendar's cells break a long
     special-date name mid-word (a design choice for the owner); the test where the live feed
     delivers nothing does not check that its two reads cover different ranges; and no test sends
     the default station with a blank inherited cell.

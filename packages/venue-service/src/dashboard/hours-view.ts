@@ -32,8 +32,7 @@ export function cellText(cell: { mode: string; periods: readonly HourPeriod[] })
 
 /**
  * A cell's text as one `range` span per period, so it wraps between periods, never inside one
- * ("12:00–" / "23:00"). The comma stays inside its span, so a flex container cannot start a line
- * with it; the space outside is the break.
+ * ("12:00–" / "23:00"). The comma stays inside its span, so no line starts with it.
  */
 export function unbrokenRanges(text: string) {
   const parts = text.split(PERIOD_JOINER);
