@@ -65,6 +65,7 @@ useVenueDb({
       ticketThenPay = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         serviceMode: "ticket_then_pay",
+        paidWhen: "ticket_then_pay",
         productIds,
       });
     });
@@ -535,7 +536,7 @@ describe("a bill payment", () => {
   });
 });
 
-describe("placing a counter order under the simplified-invoice limit", () => {
+describe("placing and collecting a ticket-then-pay counter order", () => {
 it("does not file a saved F1 choice while original delivery is unavailable", async () => {
     const id = await parked(venue.app, invoiceFirst, { Mitad: 1 });
     venue.db.run(sql`update working_orders set invoice_type = 'F1',
@@ -562,14 +563,21 @@ it("does not file a saved F1 choice while original delivery is unavailable", asy
     expect(orderRow(id)!.status).toBe("placed");
   });
 
-  it("is refused over the limit, filing no invoice and leaving the order open", async () => {
+  it("places over-limit dishes without filing, then refuses collection without taking money", async () => {
     const id = await parked(venue.app, ticketThenPay, { Lote: 1, Céntimo: 1 });
     const before = written();
-    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/place`, {});
-    expect(answer.status).toBe(409);
-    expect(answer.json.code).toBe(REFUSED.code);
+    const placed = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/place`, {});
+    expect(placed.status).toBe(200);
+    expect(placed.json).toEqual({ id, status: "placed" });
     expect(written()).toEqual(before);
-    expect(orderRow(id)!.status).toBe("open");
+    expect(orderRow(id)!.status).toBe("placed");
+    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/collect`, {
+      tender: { method: "cash", amount: "4000.00" },
+    });
+    expect(answer.status).toBe(409);
+    expect(answer.json).toEqual({ ...REFUSED, params: { total: "3010.01", limit: "3010.00" } });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)!.status).toBe("placed");
   });
 });
 

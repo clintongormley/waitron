@@ -5515,7 +5515,6 @@ export async function placeOrder(
     }
     await refusePaymentInFlight(tx, [id]);
     await refuseBillWithPayments(tx, id);
-    await refuseOrderOverSimplifiedLimit(tx, cfg, id, null);
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? "prepay";
 
