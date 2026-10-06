@@ -123,6 +123,7 @@ Every named owner has the `.ts` extension. In the Test column, a named sibling h
 
 | Owner path(s)                                                                                                                       | Classification and observed baseline source; proposed comparison/reset                                                                                                                                                                                                                                                                                                                                                                                                   | Close/navigation routes                                                                          | Test                                                                                                                                              |
 | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TW `invoice-recipient-dialog`; `apps/till/src/till-app.ts` | **P** customer tax ID, name, street, postal code, locality and province until Use full invoice. Seed blank defaults; compare existing trimmed fields and valid normalized Spanish tax ID. Commit bill write before refresh, or accepted local choice before its owner leaves. Retain newer edits and returned bill revision. | Cancel/native Escape, parent/shell/unload | TW `invoice-recipient-dialog`; `apps/till/src/till-app-bill-payments.test.ts`; `apps/till/src/till-app.test.ts` |
 | TW `modifier-picker`                                                                                                                | **P** new/edit line variant, picks, quantities, answers and note; seed original line/product defaults. Compare emitted selection values, list identity and membership, retaining order only where body positions matter. Confirm commits child into store, not a server order/save.                                                                                                                                                                                      | Picker Cancel/Escape, parent counter/table view                                                  | TW `modifier-picker`; TS `till-counter-screen`; TS `till-table-order-screen`                                                                      |
 | TW `party-name-dialog`, `seat-dialog`                                                                                               | **P** typed party name and guest count until explicit action; seed current name/count/default absence, retain guestCount=null meaning no count. Commit accepted existing action.                                                                                                                                                                                                                                                                                         | Modal Cancel, floor/table parent/page                                                            | TW `party-name-dialog`; TW `seat-dialog`                                                                                                          |
 | TW `station-choice-dialog`                                                                                                          | **P** station selected/default current station, compare actual stationId including null rules choice. Commit existing station-chosen action; no station/payment semantics change.                                                                                                                                                                                                                                                                                        | Modal Cancel/Escape, line/parent leave                                                           | TW `station-choice-dialog`; TS `till-table-order-screen`                                                                                          |
@@ -826,3 +827,33 @@ Restoring that checkout passed all 17 station-action cases. Its checkout and par
 Package types, changed-file lint, formatting and `git diff --check` passed. Documentation paths
 are Prettier-ignored and were read directly. Generated visual and failure captures were archived
 outside the product source; no existing test assertion or fixture was edited.
+
+
+## 2026-10-06 invoice-recipient modal checkpoint
+
+The till's full-invoice recipient dialog now registers its six staged fields with the shared
+coordinator. Cancel and native Escape ask before dropping edits. Keep retains the entered values
+and Escape's input focus; Discard restores the opening values and emits cancellation once. Each
+field compares its existing trimmed submission spelling, with valid tax identifiers compared
+through the existing Spanish validator. Invalid text remains distinguishable. Same-form refusal
+renders preserve the draft and pending question.
+
+A bill's successful invoice-choice write commits the submitted snapshot before refreshing its
+bills. If newer fields were entered during the write, the dialog stays open and its next request
+uses the revision returned by that accepted write. A refusal leaves its values dirty. Disconnect
+unregisters the scope and invalidates captured completion callbacks. Reconnecting the retained form
+restores dirty tracking against its opening baseline; departed input, Cancel, Save and Enter
+controls cannot issue a new choice or cancellation. The field binding also restores the native
+widget value on reconnection when a detached control changed itself.
+
+Focused cases are in `apps/till/src/widgets/invoice-recipient-dialog.unsaved.test.ts` and the new
+recipient write-completion case in `apps/till/src/till-app-bill-payments.test.ts`. Six installed
+measuring-checkout controls failed the intended assertions after deleting the leave gate,
+submitted commit, reconnect baseline, departed input guard, host completion call or host connection
+lifetime check. Restoring that candidate passed 29 recipient-related cases. An accepted or refused
+reply from a disconnected till lifetime cannot refresh bills or mark the reconnected form. The temporary visual probe passed eight language,
+theme and viewport combinations with 16 axe scans; all 16 editor/warning captures were inspected.
+The initial probe used an unavailable viewport command and failed before inspection; the corrected
+probe uses `page.viewport` and asserts the document width. Synthetic unload events establish
+listener cancellation only. Other till/modal owners and Tasks 5–6 page/history/native reload work
+remain open. Public F1 issuance stays disabled.

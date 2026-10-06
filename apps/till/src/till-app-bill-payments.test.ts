@@ -558,6 +558,119 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
   });
 
+  it("recipient write completion retains newer edits and retries with the accepted revision", async () => {
+    let accept!: (value: { revision: number }) => void;
+    const setOrderInvoiceChoice = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<{ revision: number }>((resolve) => {
+            accept = resolve;
+          }),
+      )
+      .mockResolvedValue({ revision: 9 });
+    const { el } = await mountApp({ setOrderInvoiceChoice });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    for (const [name, value] of [
+      ["taxId", "12345678Z"],
+      ["legalName", "Ana García"],
+      ["address", "Calle Mayor 1"],
+      ["postalCode", "28013"],
+      ["locality", "Madrid"],
+      ["province", "Madrid"],
+    ]) {
+      const input = form
+        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+      input.value = value!;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await form.updateComplete;
+    }
+    form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+    await flush(el);
+    const name = form
+      .shadowRoot!.querySelector("wt-input[name=legalName]")!
+      .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    name.value = "Newer name";
+    name.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await form.updateComplete;
+    accept({ revision: 8 });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBe(form);
+    expect(name.value).toBe("Newer name");
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+    await flush(el);
+    expect(setOrderInvoiceChoice).toHaveBeenLastCalledWith("wo-4", {
+      revision: 8,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "12345678Z",
+        legalName: "Newer name",
+        address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+  });
+
+  it.each(["accepted", "refused"])(
+    "a disconnected recipient save's %s reply leaves the reconnected draft alone",
+    async (outcome) => {
+      let accept!: (value: { revision: number }) => void;
+      let refuse!: (error: unknown) => void;
+      const setOrderInvoiceChoice = vi.fn().mockImplementation(
+        () =>
+          new Promise<{ revision: number }>((resolve, reject) => {
+            accept = resolve;
+            refuse = reject;
+          }),
+      );
+      const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
+      const { el, host } = await mountApp({ setOrderInvoiceChoice, getPartyBills });
+      const order = await openTable(el);
+      order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+      await flush(el);
+      const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+      const name = form.shadowRoot!.querySelector("wt-input[name=legalName]")!;
+      emit(name, "wt-change", { value: "Retained draft" });
+      await flush(el);
+      emit(form, "invoice-recipient-confirm", {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Retained draft",
+          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      });
+      await flush(el);
+      el.remove();
+      host.appendChild(el);
+      await flush(el);
+      const reads = getPartyBills.mock.calls.length;
+      if (outcome === "accepted") accept({ revision: 8 });
+      else refuse({ code: "invoice.recipient_invalid", field: "legalName" });
+      await flush(el);
+      expect(getPartyBills).toHaveBeenCalledTimes(reads);
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBe(form);
+      expect(form.refusal).toBe("");
+      expect(
+        form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+          "wt-input[name=legalName]",
+        )!.value,
+      ).toBe("Retained draft");
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(true);
+    },
+  );
+
   it("asks where to make a bill dish before previewing a payment", async () => {
     const askOrderDeadEnds = vi.fn().mockResolvedValue({
       sends: true,

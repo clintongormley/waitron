@@ -1386,7 +1386,14 @@ ask before dropping edited choices; unchanged and reverted memberships close dir
 commits only its submitted selection before refresh, retaining newer input and other edited cells.
 Disconnect aborts pending questions, and departed selection and Save controls leave a replacement
 opening alone. The watcher unsaved suite checks these paths with the shared renderer.
-Other station-action drafts and the remaining dashboard/till modal owners still need Task 4 work; page/history/native reload remain
+The full-invoice recipient dialog now protects its staged customer fields through Cancel and
+native Escape. Keep retains values; clean/reverted values close directly, and Discard cancels once.
+Accepted bill recipient writes commit the submitted fields before refresh. Newer edits stay open
+and retry with the accepted revision; refusals retain the draft. Disconnect removes dirty tracking
+and invalidates late completion; reconnect retains the opening baseline. Departed controls cannot
+submit or cancel. Focused cases are in `apps/till/src/widgets/invoice-recipient-dialog.unsaved.test.ts`
+and `apps/till/src/till-app-bill-payments.test.ts`.
+The remaining till/modal owners still need Task 4 work; page/history/native reload remain
 Tasks 5–6. The existing station keyboard-reorder focus check failed in a filtered run and in the preceding checkpoint's installed measurement checkout.
 The 2026-10-06 follow-up reproduced it with Routing selected: the Today fixture inherited the
 preceding test's URL, leaving the Stations handle hidden. The fixture now opens Stations explicitly;

@@ -86,7 +86,10 @@ import {
 } from "./widgets/adjustment-dialog.js";
 import "./widgets/bill-pay-dialog.js";
 import "./widgets/invoice-recipient-dialog.js";
-import type { InvoiceRecipientDetail } from "./widgets/invoice-recipient-dialog.js";
+import type {
+  InvoiceRecipientDetail,
+  TillInvoiceRecipientDialog,
+} from "./widgets/invoice-recipient-dialog.js";
 import "./widgets/make-now.js";
 import "./widgets/dead-ends-dialog.js";
 import type { DeadEndsDecision } from "./widgets/dead-ends-dialog.js";
@@ -1101,6 +1104,8 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#invoiceRecipientLifetime = {};
+    this.invoiceRecipientSaving = false;
     this.#battery?.stop();
     this.#stopClockStatus();
     this.#menuPoll.stop();
@@ -1650,6 +1655,7 @@ export class TillApp extends LitElement {
     session: number;
   };
   private invoiceRecipientSaving = false;
+  #invoiceRecipientLifetime = {};
   private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail };
   /** Re-entry guard for {@link TillApp.#onParkOrder}, set before its first await. */
   @state() private parking = false;
@@ -6939,17 +6945,31 @@ export class TillApp extends LitElement {
     this.invoiceRecipientOpen = true;
   }
 
-  async #saveBillInvoiceChoice(choice: InvoiceRecipientDetail): Promise<void> {
+  async #saveBillInvoiceChoice(
+    choice: InvoiceRecipientDetail,
+    complete: () => boolean,
+  ): Promise<void> {
     const bill = this.invoiceRecipientBill;
     if (bill === undefined || this.invoiceRecipientSaving) return;
+    const lifetime = this.#invoiceRecipientLifetime;
+    const current = () =>
+      this.isConnected &&
+      this.#invoiceRecipientLifetime === lifetime &&
+      this.invoiceRecipientBill === bill &&
+      this.#operatorSession === bill.session;
     this.invoiceRecipientSaving = true;
     try {
-      await this.api.setOrderInvoiceChoice(bill.orderId, { revision: bill.revision, ...choice });
-      if (this.invoiceRecipientBill !== bill || this.#operatorSession !== bill.session) return;
-      this.invoiceRecipientOpen = false;
+      const saved = await this.api.setOrderInvoiceChoice(bill.orderId, {
+        revision: bill.revision,
+        ...choice,
+      });
+      if (!current()) return;
+      const close = complete();
+      bill.revision = saved.revision;
+      this.invoiceRecipientOpen = !close;
       this.invoiceRecipientRefusal = "";
       this.invoiceRecipientRefusalField = "";
-      this.invoiceRecipientBill = undefined;
+      if (close) this.invoiceRecipientBill = undefined;
       if (this.orderParty?.id === bill.partyId) {
         const refreshed = await this.#loadPartyBills();
         if (
@@ -6962,7 +6982,7 @@ export class TillApp extends LitElement {
           this.errorKey = "table.reread_failed";
       }
     } catch (error) {
-      if (this.invoiceRecipientBill === bill && this.#operatorSession === bill.session) {
+      if (current()) {
         const code = (error as { code?: unknown } | undefined)?.code;
         this.invoiceRecipientRefusal = codeMessage(
           typeof code === "string" ? code : "server.internal",
@@ -6975,7 +6995,7 @@ export class TillApp extends LitElement {
             : "";
       }
     } finally {
-      this.invoiceRecipientSaving = false;
+      if (this.#invoiceRecipientLifetime === lifetime) this.invoiceRecipientSaving = false;
     }
   }
 
@@ -8225,7 +8245,8 @@ export class TillApp extends LitElement {
                 }}
                 @invoice-recipient-confirm=${(event: CustomEvent<InvoiceRecipientDetail>) => {
                   if (this.invoiceRecipientBill !== undefined) {
-                    void this.#saveBillInvoiceChoice(event.detail);
+                    const form = event.currentTarget as TillInvoiceRecipientDialog;
+                    void this.#saveBillInvoiceChoice(event.detail, form.writeCompletion());
                     return;
                   }
                   if (this.invoiceRecipientOrderId === this.#store.id) {
