@@ -83,6 +83,8 @@ it("words every kind of change, each with where it came from", async () => {
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-40",
+        targets: { before: [], after: [] },
         kind: "product_added",
         productId: "p-lemonade",
         name: "Lemonade",
@@ -90,6 +92,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-39",
+        targets: { before: [], after: [] },
         kind: "price_changed",
         productId: "p-burger",
         name: "Burger",
@@ -99,6 +103,8 @@ it("words every kind of change, each with where it came from", async () => {
         alsoOn: ["Dinner Menu"],
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-38",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-lemonade",
         name: "Lemonade",
@@ -107,6 +113,8 @@ it("words every kind of change, each with where it came from", async () => {
         alsoOn: ["Dinner Menu"],
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-37",
+        targets: { before: [], after: [] },
         kind: "section_changed",
         sectionId: "s-drinks",
         name: "Drinks",
@@ -114,6 +122,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "included_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-36",
+        targets: { before: [], after: [] },
         kind: "product_removed",
         productId: "p-lager",
         name: "Lager",
@@ -122,6 +132,8 @@ it("words every kind of change, each with where it came from", async () => {
         alsoOn: ["Dinner Menu", "Terrace Menu"],
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-35",
+        targets: { before: [], after: [] },
         kind: "product_added",
         productId: "p-chips",
         name: "Chips",
@@ -129,6 +141,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-34",
+        targets: { before: [], after: [] },
         kind: "product_moved",
         productId: "p-soup",
         name: "Soup",
@@ -137,6 +151,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-33",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-cola",
         name: "Cola",
@@ -144,6 +160,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "shared_product",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-32",
+        targets: { before: [], after: [] },
         kind: "section_added",
         sectionId: "s-desserts",
         parentSectionIds: [],
@@ -152,6 +170,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-31",
+        targets: { before: [], after: [] },
         kind: "product_removed",
         productId: "p-bread",
         name: "Bread",
@@ -159,6 +179,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-30",
+        targets: { before: [], after: [] },
         kind: "section_removed",
         sectionId: "s-specials",
         parentSectionIds: [],
@@ -167,6 +189,8 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-29",
+        targets: { before: [], after: [] },
         kind: "section_removed",
         sectionId: "s-beer",
         parentSectionIds: ["s-drinks"],
@@ -175,22 +199,51 @@ it("words every kind of change, each with where it came from", async () => {
         source: "included_menu",
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-28",
+        targets: { before: [], after: [] },
         kind: "section_changed",
         sectionId: "s-mains",
         name: "Mains",
         fields: ["names", "image", "color"],
         source: "included_menu",
       },
-      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-27",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-26",
+        targets: { before: [], after: [] },
         kind: "order_changed",
         listSectionId: "s-drinks",
         list: ["Drinks"],
         source: "included_menu",
       },
-      { kind: "home_shortcuts_changed", source: "this_menu" },
-      { kind: "home_display_changed", device: "till", source: "this_menu" },
-      { kind: "menu_renamed", from: "Midday Menu", to: "Lunch Menu", source: "this_menu" },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-25",
+        targets: { before: [], after: [] },
+        kind: "home_shortcuts_changed",
+        source: "this_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-24",
+        targets: { before: [], after: [] },
+        kind: "home_display_changed",
+        device: "till",
+        source: "this_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-23",
+        targets: { before: [], after: [] },
+        kind: "menu_renamed",
+        from: "Midday Menu",
+        to: "Lunch Menu",
+        source: "this_menu",
+      },
     ]),
   });
   expect(items(el, "changes")).toEqual([
@@ -220,6 +273,8 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-22",
+        targets: { before: [], after: [] },
         kind: "product_moved",
         productId: "p-soup",
         name: "Soup",
@@ -227,8 +282,17 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
         to: [[], ["Mains", "Hot"]],
         source: "this_menu",
       },
-      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-21",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-20",
+        targets: { before: [], after: [] },
         kind: "price_changed",
         productId: "p-burger",
         name: "Burger",
@@ -237,8 +301,19 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
         source: "shared_product",
         alsoOn: ["Dinner Menu", "Terrace Menu"],
       },
-      { kind: "home_shortcuts_changed", source: "this_menu" },
-      { kind: "home_display_changed", device: "handheld", source: "this_menu" },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-19",
+        targets: { before: [], after: [] },
+        kind: "home_shortcuts_changed",
+        source: "this_menu",
+      },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-18",
+        targets: { before: [], after: [] },
+        kind: "home_display_changed",
+        device: "handheld",
+        source: "this_menu",
+      },
     ]),
   });
   expect(items(el, "changes").map((line) => line.replace(/\s/g, " "))).toEqual([
@@ -254,6 +329,8 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-17",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-lemonade",
         name: "Lemonade",
@@ -262,6 +339,8 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
         alsoOn: ["Dinner Menu"],
       },
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-16",
+        targets: { before: [], after: [] },
         kind: "product_deleted",
         productId: "p-extra-lemon",
         name: "Extra lemon",
@@ -288,6 +367,8 @@ it("names an extra's list and old and new units in both languages", async () => 
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-15",
+        targets: { before: [], after: [] },
         kind: "extra_unit_changed",
         productId: "p-ham",
         name: "Jamón",
@@ -315,6 +396,8 @@ it("names an extra's list and old and new portions with their units in both lang
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-14",
+        targets: { before: [], after: [] },
         kind: "extra_portion_changed",
         productId: "p-ham",
         name: "Jamón",
@@ -342,6 +425,8 @@ it("names an extra's change to no quantity limit in both languages", async () =>
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-13",
+        targets: { before: [], after: [] },
         kind: "extra_max_quantity_changed",
         productId: "p-ham",
         name: "Jamón",
@@ -367,6 +452,8 @@ it("names an extra's change to no quantity limit in both languages", async () =>
 /** A dish's VAT change, a variant's own (named in the variants too), and an extra's. */
 const VAT_CHANGES: MenuChange[] = [
   {
+    id: "fixture-src/widgets/menu-preview.test.ts-12",
+    targets: { before: [], after: [] },
     kind: "product_changed",
     productId: "p-lemonade",
     name: "Lemonade",
@@ -375,6 +462,8 @@ const VAT_CHANGES: MenuChange[] = [
     alsoOn: ["Dinner Menu"],
   },
   {
+    id: "fixture-src/widgets/menu-preview.test.ts-11",
+    targets: { before: [], after: [] },
     kind: "product_changed",
     productId: "p-burger",
     name: "Burger",
@@ -382,6 +471,8 @@ const VAT_CHANGES: MenuChange[] = [
     source: "shared_product",
   },
   {
+    id: "fixture-src/widgets/menu-preview.test.ts-10",
+    targets: { before: [], after: [] },
     kind: "product_changed",
     productId: "p-cheese",
     name: "Cheese",
@@ -417,6 +508,8 @@ it.each([
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-9",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-lemonade",
         name: "Lemonade",
@@ -436,6 +529,8 @@ it.each([
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-8",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-bacon",
         name: "Bacon",
@@ -451,6 +546,8 @@ it("shows the live version and when it was published, apart from the pending cha
   const el = await mount({
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-7",
+        targets: { before: [], after: [] },
         kind: "product_added",
         productId: "p-lemonade",
         name: "Lemonade",
@@ -474,6 +571,8 @@ it("says a menu never published has no live version, and offers to publish it", 
     status: { state: "unpublished", clashes: 0 },
     preview: preview([
       {
+        id: "fixture-src/widgets/menu-preview.test.ts-6",
+        targets: { before: [], after: [] },
         kind: "product_added",
         productId: "p-burger",
         name: "Burger",
@@ -489,7 +588,14 @@ it("says a menu never published has no live version, and offers to publish it", 
 it("names the one menu on the publish button, and asks to publish the hash it previewed", async () => {
   const el = await mount({
     preview: preview([
-      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-5",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
     ]),
   });
   const asked: unknown[] = [];
@@ -539,7 +645,14 @@ it("judges whether there is anything to publish by the state read with the previ
 it("keeps the click that asks for a publish or a retry from reaching the page around it", async () => {
   const { el, host } = await mountIn({
     preview: preview([
-      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-4",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
     ]),
   });
   const clicks: EventTarget[] = [];
@@ -624,7 +737,14 @@ it.each(["en-GB", "es-ES"])(
 it("holds the publish button while a publish is out, saying what it is doing", async () => {
   const el = await mount({
     preview: preview([
-      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-2",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
     ]),
     publishing: true,
   });
@@ -710,7 +830,14 @@ function topNames(tree: MenuStructureTree): string[] {
 it("shows the whole menu the publish would make live, read-only, under its own heading", async () => {
   const el = await mount({
     preview: preview([
-      { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-1",
+        targets: { before: [], after: [] },
+        kind: "order_changed",
+        listSectionId: null,
+        list: [],
+        source: "this_menu",
+      },
     ]),
   });
   expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it will be published");

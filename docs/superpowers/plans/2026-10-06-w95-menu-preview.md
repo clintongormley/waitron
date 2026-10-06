@@ -110,7 +110,7 @@ Source receipts: `menu-document-types.ts:142`, `menu-document.ts:594`, `:789`,
 `diffMenuDocuments` (`menu-document.ts:1079`), `sameEdit` (`menu-publication.ts:253`),
 dashboard client/widget/screen and catalogue/server tests. Trace these again on execution head.
 
-- [ ] Add failing cases in `menu-navigation.test.ts` using format-3 documents built with
+- [x] Add failing cases in `menu-navigation.test.ts` using format-3 documents built with
       distinguishable IDs/text and repeated section paths. Enumerate **all 16 current kinds**
       in the spec table with exact targets, plus every `ProductChangeField` and
       `SectionChangeField`. Include extra-only removal, two parent dishes/two lists, changed
@@ -142,21 +142,21 @@ dashboard client/widget/screen and catalogue/server tests. Trace these again on 
   expect(new Set(changes.map((c) => c.id)).size).toBe(changes.length);
   ```
 
-- [ ] Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-navigation.test.ts`.
+- [x] Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-navigation.test.ts`.
       Expected red: navigation export absent initially; after wiring, exact target assertion
       catches collapsed duplicate descendants/wrong list/extra identity. Watch both stages,
       not just an import error. Rename and reorder fixtures; assert row and target IDs stay
       identical while explanatory names change. Assert every target resolves in its own side.
       Use two sections with identical displayed names but different IDs, and two separate
       section removal rows under identical-name parents; assert their IDs/targets differ.
-- [ ] Before changing publication code, add expected-red envelope assertions to
+- [x] Before changing publication code, add expected-red envelope assertions to
       `menu-publication.test.ts`: first preview has null live; after publish/edit,
       `live.versionId` names the old publication and `live.document` has the old price/image
       even after their working rows change. Run
       `pnpm --filter @waitron/catalogue exec vitest run src/menu-publication.test.ts -t 'live snapshot'`
       using that phrase in the new cases. Expected red: `live` is undefined, not null/old snapshot.
       Assert `menuDocumentHash(preview.document) === preview.hash` and no input mutation.
-- [ ] Define spec types and pure index/enrichment. In `shapeOf`, keep one facts node per
+- [x] Define spec types and pure index/enrichment. In `shapeOf`, keep one facts node per
       section ID but descend every occurrence with a current-path cycle check, recording every
       parent path. Keep diff kind/source/order semantics. `DiffEntry.change` uses
       `MenuChangeBody`, with required `parentSectionIds` on section add/remove and
@@ -168,12 +168,12 @@ dashboard client/widget/screen and catalogue/server tests. Trace these again on 
       Derive navigation from actual tree occurrences. Raw graph paths include the menu root,
       but exposed and frozen offer placements already omit it (`operations.ts:488`): root
       placement is `[]`. Do not strip another section ID from a frozen placement.
-- [ ] Retain extra-only deletion and `alsoOn` assertions. Add raw-override navigation
+- [x] Retain extra-only deletion and `alsoOn` assertions. Add raw-override navigation
       controls before their implementation: changing `grossPrice` from null to the same
       effective price, or changing `menuPrice` while the variant effective price stays equal,
       must target `field: { kind: "override" }` on the exact dish/variant. Expected red:
       a price target shows two equal amounts and never reveals the changed override.
-- [ ] Run red then green with
+- [x] Run red then green with
       `pnpm --filter @waitron/catalogue exec vitest run src/menu-navigation.test.ts src/menu-document.test.ts src/menu-publication.test.ts`.
       Full-shape change assertions gain exact ID/targets without dropping existing values.
       Log these additions for the parent FYI. Commit signed off after the task's checks.

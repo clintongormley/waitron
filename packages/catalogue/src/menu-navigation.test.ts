@@ -1,3 +1,4 @@
+import type { MenuChange, MenuChangeBody } from "./menu-document-types.js";
 import { describe, expect, it } from "vitest";
 import type { DocumentMember, MenuDocument } from "./menu-document-types.js";
 import { diffMenuDocuments } from "./menu-document.js";
@@ -249,7 +250,9 @@ describe("diff identity paths", () => {
   it("records every added descendant beneath repeated included roots using ID paths", () => {
     const drinks = section("drinks", [section("beer")]);
     expect(
-      diffMenuDocuments(document([]), document([drinks, section("favourites", [drinks])])),
+      changeBodies(
+        diffMenuDocuments(document([]), document([drinks, section("favourites", [drinks])])),
+      ),
     ).toEqual([
       {
         kind: "section_added",
@@ -297,7 +300,7 @@ describe("diff identity paths", () => {
   it("keeps removed occurrences distinct even when both parents have identical names", () => {
     const live = document([section("a", [section("child")]), section("b", [section("child")])]);
     const proposed = document([section("a"), section("b")]);
-    expect(diffMenuDocuments(live, proposed)).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, proposed))).toEqual([
       {
         kind: "section_removed",
         sectionId: "child",
@@ -320,7 +323,7 @@ describe("diff identity paths", () => {
   it("identifies root and nested reorder lists independently of their names", () => {
     const live = document([section("a", [section("x"), section("y")]), section("b")]);
     const proposed = document([section("b"), section("a", [section("y"), section("x")])]);
-    expect(diffMenuDocuments(live, proposed)).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, proposed))).toEqual([
       { kind: "order_changed", listSectionId: null, list: [], source: "this_menu" },
       {
         kind: "order_changed",
@@ -342,7 +345,7 @@ describe("diff path comparisons", () => {
       section("a/b", [section("c")]),
       section("a", [section("b/c", [section("child")])]),
     ]);
-    expect(diffMenuDocuments(live, proposed)).toEqual([
+    expect(changeBodies(diffMenuDocuments(live, proposed))).toEqual([
       {
         kind: "section_removed",
         sectionId: "child",
@@ -368,7 +371,9 @@ describe("diff cyclic paths", () => {
     const loop = section("loop", [section("child")]);
     if (loop.kind !== "section") throw new Error("fixture is a section");
     loop.members.push(section("loop", [section("hidden")]));
-    expect(diffMenuDocuments(document([]), document([loop, section("other", [loop])]))).toEqual([
+    expect(
+      changeBodies(diffMenuDocuments(document([]), document([loop, section("other", [loop])]))),
+    ).toEqual([
       {
         kind: "section_added",
         sectionId: "loop",
@@ -412,3 +417,14 @@ describe("diff cyclic paths", () => {
     ]);
   });
 });
+
+function changeBodies(changes: readonly MenuChange[]): MenuChangeBody[] {
+  return changes.map((change) => {
+    expect(change.id).toEqual(expect.any(String));
+    expect(change.targets).toEqual({ before: expect.any(Array), after: expect.any(Array) });
+    const body: MenuChangeBody & Partial<Pick<MenuChange, "id" | "targets">> = { ...change };
+    delete body.id;
+    delete body.targets;
+    return body;
+  });
+}

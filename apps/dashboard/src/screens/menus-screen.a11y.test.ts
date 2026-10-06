@@ -149,6 +149,8 @@ function api(state: State): DashboardApi {
       hash: "b".repeat(64),
       changes: [
         {
+          id: "fixture-src/screens/menus-screen.a11y.test.ts-1",
+          targets: { before: [], after: [] },
           kind: "product_changed",
           productId: "p-lager",
           name: "Lager",

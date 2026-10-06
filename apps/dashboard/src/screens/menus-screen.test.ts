@@ -349,6 +349,8 @@ function lunchPreview(): MenuPreview {
     hash: LUNCH_HASH,
     changes: [
       {
+        id: "fixture-src/screens/menus-screen.test.ts-2",
+        targets: { before: [], after: [] },
         kind: "product_added",
         productId: "p-chips",
         name: "Chips",
@@ -356,6 +358,8 @@ function lunchPreview(): MenuPreview {
         source: "this_menu",
       },
       {
+        id: "fixture-src/screens/menus-screen.test.ts-1",
+        targets: { before: [], after: [] },
         kind: "product_changed",
         productId: "p-lemonade",
         name: "Lemonade",

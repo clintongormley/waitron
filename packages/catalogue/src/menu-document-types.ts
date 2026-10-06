@@ -184,7 +184,7 @@ export interface MenuOccurrence {
 /** Where a change came from (spec §11.1). */
 export type MenuChangeSource = "this_menu" | "shared_product" | "included_menu";
 
-export type MenuChange = {
+export type MenuChangeBody = {
   source: MenuChangeSource;
   includedMenu?: { id: string; name: string };
   /** The other published menus the same shared change flags, by name. */
@@ -241,6 +241,11 @@ export type MenuChange = {
   | { kind: "home_display_changed"; device: HomeDevice }
   | { kind: "menu_renamed"; from: string; to: string }
 );
+
+export type MenuChange = MenuChangeBody & {
+  id: string;
+  targets: { before: MenuTarget[]; after: MenuTarget[] };
+};
 
 export type ProductChangeField =
   | "names"

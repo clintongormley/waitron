@@ -1,3 +1,4 @@
+import { navigateMenuChanges } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
 import { eq, inArray, type SQL } from "drizzle-orm";
 import { catalogues, categories, products, type Transaction } from "@waitron/db";
@@ -27,6 +28,7 @@ import type {
   LiveOffer,
   LiveOfferedModifier,
   MenuChange,
+  MenuChangeBody,
   MenuChangeSource,
   MenuDocument,
   MenuUnavailable,
@@ -572,7 +574,7 @@ export async function applyLiveFields(
 }
 
 export interface DiffEntry {
-  change: MenuChange;
+  change: MenuChangeBody;
   section?: string;
 }
 
@@ -792,7 +794,7 @@ export function diffEntries(
   const next = shapeOf(proposed);
   const prev = shapeOf(live ?? { ...proposed, root: { members: [] }, offers: {} });
   const entries: DiffEntry[] = [];
-  const push = (change: MenuChange, section?: string): void => {
+  const push = (change: MenuChangeBody, section?: string): void => {
     if (
       change.source === "included_menu" &&
       change.includedMenu === undefined &&
@@ -808,7 +810,7 @@ export function diffEntries(
         next,
         prev,
       ).includedMenu;
-    const publicChange = { ...change } as MenuChange & { section?: string };
+    const publicChange = { ...change } as MenuChangeBody & { section?: string };
     delete publicChange.section;
     entries.push(
       section === undefined ? { change: publicChange } : { change: publicChange, section },
@@ -1083,5 +1085,9 @@ export function diffEntries(
 
 /** What publishing `proposed` would change from `live`; null is a menu never published. */
 export function diffMenuDocuments(live: MenuDocument | null, proposed: MenuDocument): MenuChange[] {
-  return diffEntries(live, proposed).map((entry) => entry.change);
+  return navigateMenuChanges(
+    live,
+    proposed,
+    diffEntries(live, proposed).map((entry) => entry.change),
+  );
 }

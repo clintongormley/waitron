@@ -568,14 +568,51 @@ describe("publishing the Device Home Page", () => {
     await app((tx) => moveShortcut(tx, f.lunch, soup!.memberId, 1));
     expect(await state()).toBe("changed");
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
-      { kind: "home_shortcuts_changed", source: "this_menu" },
+      {
+        kind: "home_shortcuts_changed",
+        source: "this_menu",
+        id: JSON.stringify([
+          f.lunch,
+          "home_shortcuts_changed",
+          "this_menu",
+          null,
+          ['["home","handheld","shortcuts"]', '["home","till","shortcuts"]'],
+          ['["home","handheld","shortcuts"]', '["home","till","shortcuts"]'],
+        ]),
+        targets: {
+          before: [
+            { kind: "home", device: "handheld", field: "shortcuts" },
+            { kind: "home", device: "till", field: "shortcuts" },
+          ],
+          after: [
+            { kind: "home", device: "handheld", field: "shortcuts" },
+            { kind: "home", device: "till", field: "shortcuts" },
+          ],
+        },
+      },
     ]);
     await app((tx) => moveShortcut(tx, f.lunch, soup!.memberId, 0));
     expect(await state()).toBe("current");
     await app((tx) => setHomeDisplay(tx, f.lunch, "till", { columns: 7 }));
     expect(await state()).toBe("changed");
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
-      { kind: "home_display_changed", device: "till", source: "this_menu" },
+      {
+        kind: "home_display_changed",
+        device: "till",
+        source: "this_menu",
+        id: JSON.stringify([
+          f.lunch,
+          "home_display_changed",
+          "this_menu",
+          null,
+          ['["home","till","columns"]'],
+          ['["home","till","columns"]'],
+        ]),
+        targets: {
+          before: [{ kind: "home", device: "till", field: "columns" }],
+          after: [{ kind: "home", device: "till", field: "columns" }],
+        },
+      },
     ]);
     await app((tx) => setHomeDisplay(tx, f.lunch, "till", { columns: 6 }));
     expect(await state()).toBe("current");

@@ -2061,8 +2061,9 @@ The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
 hierarchy, product inspection and linked before/after changes, with explicit translation
 fallbacks. Implementation is in progress: the preview envelope now carries the frozen live
 document, the occurrence index preserves repeated nested paths, and section/list changes carry
-ID paths independent of their displayed names. Linked change enrichment
-and the renderer remain pending. It includes W89's obsolete Preview clash label and
+ID paths independent of their displayed names. Changes now carry before/after addresses
+for their actual fields, including repeated dishes and nested variants, extras and option labels;
+focused tests check their document destinations. The renderer and linked Preview controls remain pending. It includes W89's obsolete Preview clash label and
 the phone overflow below; neither is marked fixed by the planning work.
 
 **A menu's Preview tab is wider than a phone for a one-word menu name — OPEN (found by W88).** At

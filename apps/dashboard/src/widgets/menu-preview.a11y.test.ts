@@ -26,6 +26,8 @@ const changes: MenuPreview = {
   hash: "b".repeat(64),
   changes: [
     {
+      id: "fixture-src/widgets/menu-preview.a11y.test.ts-2",
+      targets: { before: [], after: [] },
       kind: "price_changed",
       productId: "p-burger",
       name: "Burger",
@@ -35,6 +37,8 @@ const changes: MenuPreview = {
       alsoOn: ["Dinner Menu"],
     },
     {
+      id: "fixture-src/widgets/menu-preview.a11y.test.ts-1",
+      targets: { before: [], after: [] },
       kind: "section_changed",
       sectionId: "s-drinks",
       name: "Drinks",
