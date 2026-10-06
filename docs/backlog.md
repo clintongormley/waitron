@@ -1437,6 +1437,15 @@ option removal updates unload protection for the existing null fallback. Focused
 `station-choice-dialog.unsaved.test.ts` and the counter-adjustment shell suite;
 payment and other modal owners, plus page/navigation work, remain open.
 
+Supervisor approval now protects an unsubmitted PIN through Back and native Escape on the branch.
+Keep retains the digits; Discard clears only the proof, without sending an approval or drawer
+request. Selection alone is exempt, as is a PIN whose digits have all been removed. Authorize
+still emits the exact selected person and PIN and consumes the proof immediately; a refused attempt may
+start a new protected entry. Disconnect clears the PIN. Focused cases are in
+`supervisor-override-dialog.unsaved.test.ts`, with a real drawer-approval leave case in
+`apps/till/src/till-app.test.ts`. Tender, bill, adjustment, refund, collection and other modal
+owners, plus page/navigation work, remain open.
+
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
 **What a description reader shows — checked by running, 2026-10-02.** A throwaway catalogue test

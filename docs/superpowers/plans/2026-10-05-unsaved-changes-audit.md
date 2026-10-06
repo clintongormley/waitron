@@ -1018,3 +1018,40 @@ widths. The visual probe and captures stay outside product source.
 
 The other audited modal owners and inline/page/history/native-reload work remain pending.
 This is a coherent Task 4 family checkpoint; neither proposed W69 PR is ready.
+
+
+## 2026-10-06 supervisor proof checkpoint
+
+On the W69 branch, supervisor approval protects the typed PIN through Back and native Escape.
+Selecting an authorizer alone is exempt; deleting every digit reverts to the empty baseline.
+Keep retains the exact digits, including leading zeros. Discard clears only this proof; an
+independent action draft remains dirty. Authorize emits the existing selected person/PIN body
+without a question and consumes the PIN. A returned refusal does not restore that consumed secret;
+newly entered retry digits are protected. Roster/error rerenders leave unsubmitted digits intact.
+Disconnect aborts a pending question, clears the PIN and removes unload protection; reconnect
+starts with an empty attempt. Departed keypad events do not seed the reconnected form.
+
+Focused behavioral checks live in `apps/till/src/widgets/supervisor-override-dialog.unsaved.test.ts`.
+The real drawer-approval Escape/Keep/Discard route is exercised in `apps/till/src/till-app.test.ts`,
+retaining the ticket and making no additional drawer request. Existing test assertions are unchanged.
+
+The focused command below passed 936 browser cases, including the unchanged approval consumers:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/supervisor-override-dialog.unsaved.test.ts src/widgets/supervisor-override-dialog.test.ts src/widgets/supervisor-override-dialog.a11y.test.ts src/till-app-counter-adjustments.test.ts src/till-app-adjustments.test.ts src/till-app-counter-cancel-credit.test.ts src/till-app-bill-payments.test.ts src/till-app.test.ts
+```
+
+The unedited golden write-path and immutability suites passed 20 cases. The initial new-suite run
+failed eight cases at missing warning/unload assertions. In an installed
+disposable candidate, removing native pre-close, Back interception, input notification, pending-save
+invalidation, disconnect secret clearing and departed-input protection each failed an intended
+assertion. Removing the departed Authorize check alone did not fail its control: disconnect already
+empties the PIN, and empty proof cannot submit. That result is retained, rather than counted as
+proof of that check. The restored candidate passed all 13 new widget cases.
+Eight temporary visual flows exercised EN/ES, both themes and measured 390/1280 iframe widths, with
+16 axe scans. All 16 editor/warning captures were inspected; the probe and captures are kept outside
+product source. Receipts are in the lane's `w69-supervisor-20261006` directory.
+
+This is a Task 4 family checkpoint. Tender, bill, adjustment, refund, collection and other audited
+modal owners and inline/page/history/native-reload work remain pending. Neither proposed W69 PR
+is ready for finishing.

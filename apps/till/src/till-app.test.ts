@@ -1,5 +1,5 @@
 import { leaveCoordinatorFor } from "@waitron/ui";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { type WtCombobox, applyTokens, currentContentLanguages } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import indexHtml from "../index.html?raw";
@@ -4130,6 +4130,39 @@ describe("till-app", () => {
     expect(overrideDialog(el)).toBeNull();
     expect(openDrawer).toHaveBeenCalledTimes(1); // only the initial direct attempt
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("drawer approval Escape keeps an unsubmitted PIN, then discards without another drawer request", async () => {
+    const openDrawer = vi.fn().mockRejectedValue({ code: "authorization.not_permitted" });
+    const { el } = await mountApp({ openDrawer });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    const proof = el.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
+    proof.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await proof.updateComplete;
+    const pad = proof.shadowRoot!.querySelector("till-numeric-pad")!;
+    await pad.updateComplete;
+    pad.shadowRoot!.querySelector<HTMLElement>("[data-key='0']")!.click();
+    await proof.updateComplete;
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    expect(question.open).toBe(true);
+    expect(overrideDialog(el)).toBe(proof);
+    expect(openDrawer).toHaveBeenCalledTimes(1);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question.open).toBe(false);
+    expect(pad.value).toBe("0");
+    expect(overrideDialog(el)).toBe(proof);
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => overrideDialog(el)).toBeNull();
+    expect(openDrawer).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(ticket(el)).not.toBeNull();
   });
 
   it("a failed authorizers fetch degrades to the drawer.error banner, opening no dialog", async () => {

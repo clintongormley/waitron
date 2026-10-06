@@ -2,7 +2,8 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
 import type { PropertyValues } from "lit";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import "./numeric-pad.js";
@@ -77,11 +78,38 @@ export class TillSupervisorOverrideDialog extends LitElement {
   @state() private selected?: StaffMember;
   @state() private pin = "";
   @state() private dismissed = false;
+  @state() private active = true;
+  #scope?: DraftScope<string>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.pin = "";
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
 
   /** A freshly-delivered error (the parent nulls then re-sets it per attempt) must always show, even
    * after the operator dismissed the previous one by typing — so any change to `error` re-arms it. */
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("error")) this.dismissed = false;
+    if (!this.active || this.#scope) return;
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<string>({
+      id: this,
+      current: () => this.pin,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => (this.pin = value),
+    });
   }
 
   #text(which: "title" | "none" | "pick" | "enter_pin"): string {
@@ -96,47 +124,78 @@ export class TillSupervisorOverrideDialog extends LitElement {
   }
 
   #select(person: StaffMember): void {
+    if (!this.isConnected || !this.active) return;
     this.selected = person;
     this.pin = "";
+    this.#scope?.changed();
     this.dismissed = true;
   }
 
   #back(): void {
-    this.selected = undefined;
-    this.pin = "";
+    if (!this.isConnected || !this.active) return;
+    const proceed = () => {
+      this.selected = undefined;
+      this.pin = "";
+    };
+    if (this.#scope) {
+      void this.#leave!.request({ scopes: [this], reason: "cancel", proceed });
+    } else proceed();
   }
 
   #onPadChange(event: Event): void {
     event.stopPropagation();
+    if (!this.isConnected || !this.active) return;
     this.pin = (event as CustomEvent<{ value: string }>).detail.value;
+    this.#scope?.changed();
     this.dismissed = true;
   }
 
-  /** The PIN is wiped from state at once: it has left by value in the event detail. Guarded so an empty
-   * PIN can never confirm, even if Authorize is force-clicked past its disabled state. */
   #confirm(): void {
+    if (!this.isConnected || !this.active) return;
     const person = this.selected;
     if (person === undefined || this.pin === "") return;
+    const pin = this.pin;
+    this.pin = "";
+    this.#scope?.commit("");
     this.dispatchEvent(
       new CustomEvent<OverrideConfirmDetail>("override-confirm", {
-        detail: { personId: person.personId, pin: this.pin },
+        detail: { personId: person.personId, pin },
         bubbles: true,
         composed: true,
       }),
     );
-    this.pin = "";
   }
 
   #cancel(): void {
+    if (!this.isConnected || !this.active) return;
+    if (this.#scope) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+      return;
+    }
+    this.#reportClose();
+  }
+
+  #closed(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
+    this.active = false;
+    this.pin = "";
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#reportClose();
+  }
+
+  #reportClose(): void {
     this.dispatchEvent(new CustomEvent("override-cancel", { bubbles: true, composed: true }));
   }
 
   override render() {
     return html`<wt-dialog
       ${trackDialog()}
-      .open=${true}
+      .open=${this.active}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       .heading=${this.#text("title")}
-      @wt-close=${() => this.#cancel()}
+      @wt-close=${(event: Event) => this.#closed(event)}
     >
       ${this.selected ? this.#renderPin(this.selected) : this.#renderPicker()}
     </wt-dialog>`;
