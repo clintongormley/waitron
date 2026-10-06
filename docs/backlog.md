@@ -2841,19 +2841,20 @@ built.
 The owner, 2026-10-06: a large bill (their example, €5,000) is rarely paid on the spot; the customer
 gets the invoice and pays later, for instance by bank transfer — or, as the owner has seen in Italy,
 gets a proforma and the invoice only once the money arrives. [Q42](compliance/asesor-questions.md#q42-a-bill-paid-later-by-bank-transfer--invoice-now-or-a-proforma-and-the-invoice-on-payment-added-2026-10-06)
-asks the asesor which of the two is lawful and recommended, for full invoices (F1, A231) and
+asks the asesor whether both are lawful and which is recommended, for full invoices (F1, A231) and
 simplified invoices (F2) alike, with non-payment and deposits. **No design or build until the asesor
 answers and the owner decides.**
 
 Already built, to reuse: filing an order's invoice with no payment (`issueUnpaidInvoice`,
-`apps/server/src/working-order.ts`); the amount each invoice still owes (`apps/server/src/sale-due.ts`);
+`apps/server/src/working-order.ts`); the amount due on each issued invoice (`apps/server/src/sale-due.ts`);
 collecting a placed order's issued invoice later (`collectOrder`, `apps/server/src/till-sale.ts`);
 unpaid departure, which issues an F2 for the full amount and records what it owes (Q28); the Orders
 screen's Unpaid filter and Still owed column (`apps/server/src/orders-list.ts`); and a `transfer`
-tender method in the schema (`packages/db/src/schema/sales.ts`). Missing: an action that issues an
-invoice on account from a bill; recording a payment by transfer with its reference (collecting
+tender method in the schema (`packages/db/src/schema/sales.ts`). Missing: a till action that issues an
+invoice for the customer to pay later (today only invoice-first placing and an unpaid departure
+issue one before payment); recording a payment by transfer with its reference (collecting
 accepts only cash or card, `sale.unsupported_tender`); collecting part of what an issued invoice
-owes (`settleSale`, `packages/core/src/settle-sale.ts`, refuses a short or second settlement);
+owes (`settleSale`, `packages/core/src/settle-sale.ts`, refuses a settlement that does not match what is due, or a second one);
 whether the Orders screen is enough as the list of unpaid invoices; how the daily close shows an
 invoice still owed; and what happens when the customer never pays. An F1 also needs A231's build.
 
@@ -9709,7 +9710,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows) | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying built on the owner's decision (B17) | **send now** — Q28 to confirm the owner's 2026-10-01 decision |
 | Q31 (correct an issued ticket by differences or by substitution) | `recordCorrection` files by differences (`"I"`); no route calls it _(2026-10-02, C126: the whole-order cancel route now calls it for a whole-invoice credit)_ | needs advisor before the correction screen is designed |
 | Q32 (how a cancelled order's already-issued simplified invoice is undone) | the whole-order cancel credits the invoice in full with an R5 corrective invoice, not an annulment (C126) | built on the owner's 2026-10-02 decision; needs advisor to confirm |
-| Q42 (a bill paid later by transfer: invoice now, or a proforma and the invoice on payment; F1 and F2) | no action issues an invoice on account; a payment by transfer is refused (`sale.unsupported_tender`) | needs advisor before A275 is designed |
+| Q42 (a bill paid later by transfer: invoice now, or a proforma and the invoice on payment; F1 and F2) | no till action issues an invoice for the customer to pay later (only invoice-first placing and an unpaid departure issue one before payment); a payment by transfer is refused (`sale.unsupported_tender`) | needs advisor before A275 is designed |
 
 **The laboral advisor** (a *graduado social / gestoría*) has its own list in
 [asesor-laboral-questions.md](compliance/asesor-laboral-questions.md). Nothing there blocks the build;

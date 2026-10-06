@@ -962,16 +962,16 @@ It applies to both kinds of invoice:
   simplified invoice (`counterparty: null` in `packages/core/src/record-sale.ts`), and the F1 build
   (A231) is an open pull request.
 - **The simplified invoice (F2)** the till prints as the receipt — for example a regular customer,
-  or a group, who settles a bill below the ceiling by transfer later. An F2 names no customer, so
-  there is nobody on the invoice to chase.
+  or a group, who settles a bill of up to €3,000 by transfer later. An F2 as Waitron issues it names
+  no customer, so there is nobody on the invoice to chase.
 
 The two shapes we could build:
 
 - **(a) Invoice now, paid later.** Issue the invoice at once, unpaid; the bill closes owing the
   amount; the transfer is recorded against that invoice when it arrives. Much of this exists for
   F2: an order can file its invoice with no payment (`issueUnpaidInvoice`,
-  `apps/server/src/working-order.ts`), the amount each invoice still owes is read in
-  `apps/server/src/sale-due.ts`, and a table that leaves without paying already gets an F2 for the
+  `apps/server/src/working-order.ts`), the amount due on each issued invoice (its total net of
+  corrections) is read in `apps/server/src/sale-due.ts`, and a table that leaves without paying already gets an F2 for the
   full amount, collected later (Q28, on the owner's 2026-10-01 decision); the dashboard's Orders
   screen filters unpaid orders and shows what each still owes (`apps/server/src/orders-list.ts`).
   Missing: recording a payment by transfer (collecting an issued invoice accepts only cash or card —
@@ -1003,10 +1003,12 @@ are why shape (b) is the one we cannot settle ourselves:
   haya recibido el pago anticipado, siempre que se trate de una fecha distinta a la de expedición de
   la factura».
 
-On our reading, art. 11.1 ties issue to the operation, not to payment, which is what makes shape
-(b) doubtful for a consumer; for a business customer the day-16 deadline gives up to about six
-weeks, counted from when the tax fell due, not from payment. That reading is ours, and it is what
-we are asking the asesor to confirm or correct. AEAT's own words on proformas — lawful, and kept
+[verifactu-findings.md §15.4](verifactu-findings.md#154-issue-and-deliver-at-the-moment-of-the-operation)
+reads art. 11.1 as issuing a consumer's invoice when the sale happens, and Q21 asks whether, in a
+restaurant, that moment is when the meal is served or when it is paid. If it is when the meal is
+served, shape (b) does not work for a consumer. For a business customer the day-16 deadline gives
+up to about six weeks, counted from when the tax fell due, not from payment. These readings are
+ours, and they are what we ask the asesor to confirm or correct. AEAT's own words on proformas — lawful, and kept
 unaltered once issued, under art. 29.2.j LGT — are quoted in
 [verifactu-findings.md §8](verifactu-findings.md#8-pre-facturas-are-lawful-and-preserved-once-issued-added-2026-07-31);
 whether a restaurant pre-bill counts as one is Q14, still open.
@@ -1015,7 +1017,9 @@ Ask it with **Q27** (money taken before the invoice exists; its part (c) is prin
 before anyone pays), **Q28** (a table that leaves without paying: the same "invoice issued, paid
 later" shape for an F2), **Q21** (pre-bill or invoice when the bill is asked for) and **Q14** (is a
 *precuenta* a *prefactura*). Part (c) meets the full-invoices design's open decision 5: how an
-issued F1 is cancelled or corrected, which the first F1 build will not do automatically.
+issued F1 is cancelled or corrected, which the first F1 build will not do automatically. The same
+decision asks which operation date an F1 carries for a service spanning dates, which sits beside
+(b3).
 
 > **(a)** *Factura ahora, cobro después.* Prestado el servicio (por ejemplo, una comida de grupo de
 > 5.000 €), ¿podemos expedir la factura en ese momento, entregarla o enviarla sin haber cobrado, y
@@ -1024,16 +1028,16 @@ issued F1 is cancelled or corrected, which the first F1 build will not do automa
 > - **(a1) Factura completa (F1)**, con NIF y domicilio del cliente: ¿qué debe conservar o mostrar
 >   el sistema sobre el importe pendiente de cobro (por ejemplo, una relación de facturas
 >   pendientes, o la referencia de la transferencia al cobrarla)?
-> - **(a2) Factura simplificada (F2)**, por debajo de 3.000 € (por ejemplo, un cliente habitual o un
+> - **(a2) Factura simplificada (F2)**, de hasta 3.000 €, IVA incluido (por ejemplo, un cliente habitual o un
 >   grupo que paga días después): ¿es igualmente admisible, aunque la factura no identifique al
 >   cliente? ¿Debemos conservar en otro sitio quién debe el importe?
 > - **(a3)** Nuestro cierre diario de caja es un documento interno, no una declaración. ¿Cómo debe
 >   tratar una factura expedida y no cobrada: como venta del día de expedición con el importe
->   pendiente aparte, y el cobro por transferencia en el día en que se recibe? ¿Hay algún
+>   pendiente aparte, y el cobro por transferencia en el día en que se reciba? ¿Hay algún
 >   inconveniente?
 >
 > **(b)** *Proforma primero, factura al cobro.* ¿Podemos enviar al cliente una proforma o
-> prefactura sin validez fiscal y expedir la factura sólo cuando se recibe la transferencia, días o
+> prefactura sin validez fiscal y expedir la factura sólo cuando se reciba la transferencia, días o
 > semanas después de prestado el servicio? Lo preguntamos a la vista del artículo 11.1 del RD
 > 1619/2012 («en el momento de realizarse la operación») y del artículo 75.Uno.2.º de la Ley
 > 37/1992 (devengo «cuando se presten, ejecuten o efectúen las operaciones gravadas»).
@@ -1043,11 +1047,13 @@ issued F1 is cancelled or corrected, which the first F1 build will not do automa
 >   F1 es un particular, ¿cabe esperar al cobro?
 > - **(b2) Factura simplificada (F2)**, a un consumidor final: ¿cabe esperar al cobro, o debe
 >   expedirse en el momento de la comida?
-> - **(b3)** Si cabe esperar, ¿la factura debe indicar la fecha de la operación distinta de la de
->   expedición (artículos 6.1.i y 7.1.c del RD 1619/2012)? ¿Y la proforma enviada debe conservarse
->   de forma inalterable, con sus cambios anotados como registros posteriores (artículo 29.2.j de la
->   LGT, según la interpretación de la AEAT para albaranes, proformas y prefacturas)?
-> - **(b4)** De las dos formas, (a) y (b), ¿cuál es lícita y cuál nos recomienda?
+> - **(b3)** Si cabe esperar, ¿debe indicar la factura la fecha de la operación, al ser distinta de
+>   la de expedición (artículos 6.1.i y 7.1.c del RD 1619/2012)? Entendemos, según la
+>   interpretación de la AEAT sobre albaranes, proformas y prefacturas (artículo 29.2.j de la LGT),
+>   que la proforma enviada debe conservarse de forma inalterable y que cualquier cambio se anota como
+>   un registro posterior. ¿Cambia algo por el hecho de que la factura se expida días o semanas
+>   después?
+> - **(b4)** De las dos formas, (a) y (b), ¿son lícitas ambas? ¿Cuál nos recomienda?
 >
 > **(c)** *Impago.* Si el cliente no paga nunca:
 >
