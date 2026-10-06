@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -995,3 +996,156 @@ function capture(el: HTMLElement, type: string): unknown[] {
   el.addEventListener(type, (event) => seen.push((event as CustomEvent).detail));
   return seen;
 }
+
+it.each([
+  ["en", "Price override", "Menu price"],
+  ["es-ES", "Precio propio", "Precio de la carta"],
+])(
+  "names a publication clash with today's override wording in %s",
+  async (locale, wanted, retired) => {
+    setLocale(locale);
+    const value = preview([]);
+    value.clashes = [
+      {
+        productId: "p-burger",
+        variantId: null,
+        field: "price",
+        candidates: [
+          { place: { kind: "own_sections" }, value: "12.00" as never, source: { kind: "product" } },
+          {
+            place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+            value: "14.00" as never,
+            source: { kind: "own" },
+          },
+        ],
+      },
+    ];
+    const el = await mount({ preview: value });
+    expect(text(q(el, '[data-test="clashes"]'))).toContain(wanted);
+    expect(text(q(el, '[data-test="clashes"]'))).not.toContain(retired);
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!.disabled).toBe(true);
+  },
+);
+
+it.each([
+  ["en", "included menu", "also on Dinner"],
+  ["es-ES", "carta incluida", "también en Dinner"],
+])(
+  "identifies an included menu by name and preserves affected menus in %s",
+  async (locale, source, also) => {
+    setLocale(locale);
+    const el = await mount({
+      preview: preview([
+        {
+          id: "included-source",
+          targets: { before: [], after: [] },
+          kind: "section_changed",
+          sectionId: "s-drinks",
+          name: "Drinks",
+          fields: ["image"],
+          source: "included_menu",
+          includedMenu: { id: "included", name: "Bar {source}" },
+          alsoOn: ["Dinner"],
+        },
+      ]),
+    });
+    const words = text(q(el, '[data-test="changes"] .source'));
+    expect(words).toContain(source);
+    expect(words).toContain("Bar {source}");
+    expect(words).toContain(also);
+  },
+);
+
+it.each([
+  [390, "en", "light"],
+  [390, "es-ES", "dark"],
+  [1280, "en", "dark"],
+  [1280, "es-ES", "light"],
+] as const)(
+  "places the menu and changes in bounded panes at %i px (%s, %s)",
+  async (width, locale, theme) => {
+    await page.viewport(width, 850);
+    try {
+      setLocale(locale);
+      const { el, host } = await mountWidget<MenuPreviewPanel>(
+        "dashboard-menu-preview",
+        {
+          menuName: "Lunch",
+          status: changedStatus,
+          preview: preview([
+            {
+              id: "layout",
+              targets: { before: [], after: [] },
+              kind: "menu_renamed",
+              from: "Old lunch",
+              to: "Lunch",
+              source: "this_menu",
+            },
+          ]),
+        },
+        theme,
+      );
+      host.style.width = "100%";
+      await el.updateComplete;
+      const documentPane = q(el, '[data-test="document-pane"]');
+      const changesPane = q(el, '[data-test="changes-pane"]');
+      expect(documentPane).not.toBeNull();
+      expect(changesPane).not.toBeNull();
+      const left = documentPane!.getBoundingClientRect();
+      const right = changesPane!.getBoundingClientRect();
+      if (width === 390) {
+        expect(right.top).toBeGreaterThanOrEqual(left.bottom);
+        expect(Math.abs(right.left - left.left)).toBeLessThan(1);
+      } else {
+        expect(right.left).toBeGreaterThanOrEqual(left.right);
+        expect(Math.abs(right.top - left.top)).toBeLessThan(1);
+      }
+      expect(documentPane!.contains(q(el, '[data-test="document"]'))).toBe(true);
+      expect(changesPane!.contains(q(el, '[data-test="changes"]'))).toBe(true);
+      const publish = q(el, '[data-test="publish"]')!;
+      expect(documentPane!.contains(publish)).toBe(false);
+      expect(changesPane!.contains(publish)).toBe(false);
+      expect(publish.getBoundingClientRect().bottom).toBeLessThanOrEqual(left.top);
+      expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+      expect(getComputedStyle(documentPane!).overflowY).toBe("auto");
+      expect(getComputedStyle(changesPane!).overflowY).toBe("auto");
+    } finally {
+      await page.viewport(414, 850);
+    }
+  },
+);
+
+it("makes overflowing pane regions keyboard reachable without scrolling the publication action", async () => {
+  await page.viewport(1280, 850);
+  try {
+    const document = menuDocument(
+      Array.from({ length: 40 }, (_, i) => documentProduct(`mi-${i}`, `p-${i}`)),
+      Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`p-${i}`, `Frozen dish ${i}`])),
+    );
+    const changes: MenuChange[] = Array.from({ length: 40 }, (_, i) => ({
+      id: `change-${i}`,
+      targets: { before: [], after: [] },
+      kind: "menu_renamed",
+      from: `Long old title ${i}`,
+      to: `Long new title ${i}`,
+      source: "this_menu",
+    }));
+    const el = await mount({ preview: { ...preview(changes), document } });
+    const publish = q(el, '[data-test="publish"]')!;
+    const actionTop = publish.getBoundingClientRect().top;
+    for (const name of ["document", "changes"]) {
+      const pane = q(el, `[data-test="${name}-pane"]`)!;
+      expect(pane.scrollHeight).toBeGreaterThan(pane.clientHeight);
+      expect(pane.tabIndex).toBe(0);
+      expect(pane.getAttribute("role")).toBe("region");
+      expect(pane.getAttribute("aria-labelledby")).toBe(`${name}-heading`);
+      pane.focus();
+      expect(el.shadowRoot!.activeElement).toBe(pane);
+      pane.scrollTop = pane.scrollHeight;
+      expect(pane.scrollTop).toBeGreaterThan(0);
+      expect(publish.getBoundingClientRect().top).toBe(actionTop);
+    }
+  } finally {
+    await page.viewport(414, 850);
+  }
+});

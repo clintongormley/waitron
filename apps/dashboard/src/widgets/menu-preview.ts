@@ -144,6 +144,26 @@ export class MenuPreviewPanel extends LitElement {
         display: grid;
         gap: var(--wt-space-5);
         min-width: 0;
+        container-type: inline-size;
+        overflow-wrap: anywhere;
+      }
+      .panes {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--wt-space-5);
+        min-width: 0;
+      }
+      .pane {
+        min-width: 0;
+        max-block-size: calc(var(--wt-tap-min) * 12);
+        overflow: auto;
+        scrollbar-gutter: stable;
+      }
+      @container (min-width: 800px) {
+        .panes {
+          grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+          align-items: start;
+        }
       }
       section {
         display: grid;
@@ -370,7 +390,10 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   #source(change: MenuChange): string {
-    const source = t(SOURCES[change.source]);
+    const source =
+      change.includedMenu === undefined
+        ? t(SOURCES[change.source])
+        : `${t(SOURCES[change.source])}: ${change.includedMenu.name}`;
     return change.alsoOn?.length
       ? fill("menu_preview.also_on", { source, menus: conjunctionList(change.alsoOn) })
       : source;
@@ -482,7 +505,7 @@ export class MenuPreviewPanel extends LitElement {
             </li>`,
         )}
       </ul>`;
-    return html`<section aria-labelledby="changes-heading">
+    return html`<section>
       <h2 id="changes-heading">${t("menu_preview.changes_heading")}</h2>
       ${body}
     </section>`;
@@ -522,7 +545,7 @@ export class MenuPreviewPanel extends LitElement {
             }
           : node,
       );
-    return html`<section data-test="document" aria-labelledby="document-heading">
+    return html`<section data-test="document">
       <h2 id="document-heading">${heading}</h2>
       <dashboard-menu-structure-tree
         readonly
@@ -582,7 +605,7 @@ export class MenuPreviewPanel extends LitElement {
             t,
           );
           return html`<li>
-            ${name}${variant ? ` — ${variant}` : ""}: ${t("menu_prices.menu_price")} — ${words}
+            ${name}${variant ? ` — ${variant}` : ""}: ${t("menu_prices.override_column")} — ${words}
           </li>`;
         })}
       </ul>
@@ -590,40 +613,59 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   override render() {
-    return html`${this.#renderLive()} ${this.#renderResult()} ${this.#renderChanges()}
-    ${this.#renderWarnings()} ${this.#renderClashes()} ${this.#renderPublish()}
-    ${this.#renderDocument()}
-    ${
-      this.confirmingHash === null
-        ? nothing
-        : html`<wt-dialog
-            .open=${this.confirmingHash !== null}
-            heading=${fill("menu_preview.publish", { menu: this.menuName })}
-            data-test="publish-confirmation"
-            @wt-close=${(event: Event) => {
-              event.stopPropagation();
-              this.confirmingHash = null;
-            }}
-          >
-            ${this.#warningWords().map((words) => html`<p>${words}</p>`)}
-            <wt-form-actions slot="footer">
-              <wt-button
-                slot="cancel"
-                variant="secondary"
-                @click=${() => {
-                  this.confirmingHash = null;
-                }}
-                >${t("action.cancel")}</wt-button
-              >
-              <wt-button
-                data-test="publish-confirm"
-                .disabled=${this.publishing || this.preview === null || !!this.preview.clashes.length}
-                @click=${(event: Event) => this.#publish(event, true)}
-                >${fill("menu_preview.publish", { menu: this.menuName })}</wt-button
-              >
-            </wt-form-actions>
-          </wt-dialog>`
-    }`;
+    return html`${this.#renderLive()} ${this.#renderResult()} ${this.#renderWarnings()}
+      ${this.#renderClashes()} ${this.#renderPublish()}
+      <div class="panes">
+        <div
+          class="pane"
+          data-test="document-pane"
+          tabindex=${this.preview !== null && !this.failed ? 0 : nothing}
+          role=${this.preview !== null && !this.failed ? "region" : nothing}
+          aria-labelledby=${this.preview !== null && !this.failed ? "document-heading" : nothing}
+        >
+          ${this.#renderDocument()}
+        </div>
+        <div
+          class="pane"
+          data-test="changes-pane"
+          tabindex="0"
+          role="region"
+          aria-labelledby="changes-heading"
+        >
+          ${this.#renderChanges()}
+        </div>
+      </div>
+      ${
+        this.confirmingHash === null
+          ? nothing
+          : html`<wt-dialog
+              .open=${this.confirmingHash !== null}
+              heading=${fill("menu_preview.publish", { menu: this.menuName })}
+              data-test="publish-confirmation"
+              @wt-close=${(event: Event) => {
+                event.stopPropagation();
+                this.confirmingHash = null;
+              }}
+            >
+              ${this.#warningWords().map((words) => html`<p>${words}</p>`)}
+              <wt-form-actions slot="footer">
+                <wt-button
+                  slot="cancel"
+                  variant="secondary"
+                  @click=${() => {
+                    this.confirmingHash = null;
+                  }}
+                  >${t("action.cancel")}</wt-button
+                >
+                <wt-button
+                  data-test="publish-confirm"
+                  .disabled=${this.publishing || this.preview === null || !!this.preview.clashes.length}
+                  @click=${(event: Event) => this.#publish(event, true)}
+                  >${fill("menu_preview.publish", { menu: this.menuName })}</wt-button
+                >
+              </wt-form-actions>
+            </wt-dialog>`
+      }`;
   }
 }
 

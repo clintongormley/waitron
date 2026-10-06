@@ -1898,9 +1898,9 @@ module, in the order they are checked, whose count differs.
 the tab on the running dev stack — the product page opening from a Status link, a real save and
 the re-read after it, and Undo against the real server (the look in Chromium used mounted widgets
 only).
-Left open, raised in #1239's review and not taken: the Preview tab still labels a clash "Menu
-price", the name of a column W89 removed (owner's wording choice); and a size with its own price decides
-whether its clash comes from its product by matching the two clashes, which can be misread in a
+W95's implementation now uses Price override / Precio propio for Preview clashes.
+Left open, raised in #1239's review and not taken: a size with its own price decides whether
+its clash comes from its product by matching the two clashes, which can be misread in a
 rare setup where they match exactly — telling them apart needs the prices read to say which level
 a clash came from.
 
@@ -2066,9 +2066,12 @@ for their actual fields, including repeated dishes and nested variants, extras a
 focused tests check their document destinations. Text presentation identifies its requested, default
 or staff fallback and actual language, and effective variant prices have a Decimal-compared range.
 The isolated customer-menu renderer now draws frozen hierarchy and read-only product details,
-with local variant and modifier choices and ID-addressed focus. The linked Preview controls
-and screen integration remain pending. It includes W89's obsolete Preview clash label and
-the phone overflow below; neither is marked fixed by the planning work.
+with local variant and modifier choices and ID-addressed focus. Preview now has bounded,
+keyboard-reachable menu/change panes beside each other on desktop and stacked on phones,
+with publication controls outside their scroll regions. Its clash copy uses Price override /
+Precio propio, and included-menu changes name their source menu. The customer renderer is not
+yet connected to those panes; linked controls, screen integration and final validation remain
+pending. The phone overflow entry below remains open until final Preview validation.
 
 **A menu's Preview tab is wider than a phone for a one-word menu name — OPEN (found by W88).** At
 390 px, with a menu named as one word longer than the screen, the page scrolls sideways on the
