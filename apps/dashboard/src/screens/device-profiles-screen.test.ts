@@ -1358,6 +1358,94 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
 
   const extras = (api: DashboardApi) => vi.mocked(api.updateDeviceProfile).mock.calls[0]![7];
 
+  it("keeps a stored zone switched off since when a save changes only the name", async () => {
+    const { api, el } = await openEdit({
+      ...profiles[0]!,
+      allowedZoneIds: ["z1", "z4"],
+      startingZoneId: "z1",
+    });
+    change(el, "profile-name", "Renamed counter");
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledOnce();
+    expect(extras(api)).toBeUndefined();
+  });
+
+  it("saves a name change on a profile whose only zone is switched off, sending no zones", async () => {
+    const { api, el } = await openEdit({
+      ...profiles[0]!,
+      allowedZoneIds: ["z4"],
+      startingZoneId: "z4",
+    });
+    change(el, "profile-name", "Renamed counter");
+    toggle(el, "profile-role-staff", false);
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledOnce();
+    expect(extras(api)).toEqual({ admittedRoles: ["supervisor", "manager", "admin"] });
+    expect(q(el, "editor-form")).toBeNull();
+  });
+
+  it("asks for zones once the manager edits where a profile with no zone left serves", async () => {
+    const { api, el } = await openEdit({
+      ...profiles[0]!,
+      allowedZoneIds: ["z4"],
+      startingZoneId: "z4",
+    });
+    toggle(el, "profile-zone-z1", true);
+    await flush(el);
+    toggle(el, "profile-zone-z1", false);
+    await flush(el);
+    await save(el);
+    expect(api.updateDeviceProfile).not.toHaveBeenCalled();
+    expect(text(el, "profile-zones-error")).toBe(t("device_profiles.err_zones_required"));
+  });
+
+  it("keeps a reopened new profile's departments when the first opening's read arrives late", async () => {
+    let arriveLate!: (choices: ProfileScopeChoices) => void;
+    const api = stubApi({
+      getProfileScopeChoices: vi
+        .fn()
+        .mockImplementationOnce(
+          () => new Promise<ProfileScopeChoices>((resolve) => (arriveLate = resolve)),
+        )
+        .mockResolvedValueOnce({
+          departments: [{ id: "d2", name: "Deli", active: true }],
+          zones: [{ id: "dz2", name: "Deli counter", departmentId: "d2", active: true }],
+        }),
+    });
+    const el = await mount(api);
+    q(el, "create")!.click();
+    await flush(el);
+    q(el, "profile-cancel")!.click();
+    await flush(el);
+    q(el, "create")!.click();
+    await flush(el);
+    arriveLate(scopeChoices);
+    await flush(el);
+    expect(q(el, "profile-department")!.value).toBe("d2");
+    expect(options(el, "profile-department")).toEqual(["d2"]);
+    expect(options(el, "profile-starting-zone")).toEqual(["dz2"]);
+  });
+
+  it("stays on a new profile opened while an edit's reads were still on their way", async () => {
+    let arriveLate!: (profile: DeviceProfile) => void;
+    const api = stubApi({
+      getDeviceProfile: vi.fn(
+        () => new Promise<DeviceProfile>((resolve) => (arriveLate = resolve)),
+      ),
+    });
+    const el = await mount(api);
+    q(el, "edit-p1")!.click();
+    await flush(el);
+    q(el, "create")!.click();
+    await flush(el);
+    change(el, "profile-name", "Terraza");
+    await flush(el);
+    arriveLate(profiles[0]!);
+    await flush(el);
+    expect(q(el, "editor-form")!.hasAttribute("data-editing-id")).toBe(false);
+    expect(q(el, "profile-name")!.value).toBe("Terraza");
+  });
+
   it("starts a new profile in the venue's only department, at its first zone, using every zone", async () => {
     const api = stubApi();
     const el = await openCreate(api);

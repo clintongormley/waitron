@@ -61,6 +61,22 @@ export const NAVIGATION_SCREENS = [
 export const FORM_FACTORS = ["till", "phone-portrait", "tablet-landscape", "kds"] as const;
 export type FormFactor = (typeof FORM_FACTORS)[number];
 
+/** A `kds` profile is a shared display: nobody signs in on it. */
+export function isSharedDisplay(formFactor: FormFactor): boolean {
+  return formFactor === "kds";
+}
+
+/** The only action a shared display can be given: every other one needs a named person signed in. */
+const SHARED_DISPLAY_ACTIONS: readonly CapabilityFlag[] = ["prepare-orders"];
+
+/** Whether a shared display may hold `flag`: any screen, and only its own actions. */
+export function sharedDisplayMay(flag: CapabilityFlag): boolean {
+  return (
+    !(PROFILE_ACTIONS as readonly CapabilityFlag[]).includes(flag) ||
+    SHARED_DISPLAY_ACTIONS.includes(flag)
+  );
+}
+
 /** Form factors that must place every sale-critical card. */
 export const SELLING_FORM_FACTORS: readonly FormFactor[] = ["till"];
 

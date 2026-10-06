@@ -14,7 +14,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
-import { printerLabel, roleName } from "../i18n/domain.js";
+import { ROLES, printerLabel, roleName } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 // Reuses the canvas editor's dashboard-local mirror: `@waitron/layouts`' barrel would pull
 // `@waitron/db` into the browser bundle. A profile's `capabilities` is an opaque `string[]` on the
@@ -25,6 +25,8 @@ import {
   NAVIGATION_SCREENS,
   PROFILE_ACTIONS,
   PROFILE_SCREENS,
+  isSharedDisplay,
+  sharedDisplayMay,
   type CapabilityFlag,
   type FormFactor,
 } from "./canvas-editor/card-contracts.js";
@@ -140,18 +142,6 @@ function liveZones(
     allowedZoneIds: allowed,
     startingZoneId: start !== null && usable.includes(start) ? start : (usable[0] ?? ""),
   };
-}
-
-const EVERY_ROLE: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
-
-/** The one action a kitchen display may take: nobody signs in on it. */
-const SHARED_DISPLAY_ACTIONS: readonly CapabilityFlag[] = ["prepare-orders"];
-
-function sharedDisplayMay(flag: CapabilityFlag): boolean {
-  return (
-    !(PROFILE_ACTIONS as readonly CapabilityFlag[]).includes(flag) ||
-    SHARED_DISPLAY_ACTIONS.includes(flag)
-  );
 }
 
 /** The editor's fields a check or a refusal can mark, in the order the form draws them. */
@@ -375,7 +365,10 @@ export class DeviceProfilesScreen extends LitElement {
   /** The chosen zones while `draftEveryZone` is off, by the zones' position. */
   @state() private draftZoneIds: string[] = [];
   @state() private draftStartingZoneId = "";
-  @state() private draftRoles: PersonRole[] = [...EVERY_ROLE];
+  /** Set once the manager changes the department, zones or starting zone; until then an edit keeps
+   * the stored scope, zones switched off since included. */
+  #scopeEdited = false;
+  @state() private draftRoles: PersonRole[] = [...ROLES];
   @state() private draftExceptions: PersonException[] = [];
   @state() private draftStartingScreen: string | null = null;
   /** The edited profile as opened, so an edit sends only the parts it changed; null for a new one. */
@@ -497,7 +490,7 @@ export class DeviceProfilesScreen extends LitElement {
   // ── The form's own checks ────────────────────────────────────────────────────────────────────────
 
   #ordering(): boolean {
-    return this.draftFormFactor !== "kds";
+    return !isSharedDisplay(this.draftFormFactor);
   }
 
   /** The fields the form draws now, so a refusal about a hidden one goes to the bottom instead. */
@@ -514,17 +507,26 @@ export class DeviceProfilesScreen extends LitElement {
     });
   }
 
+  /** Whether this save decides where the profile serves: a new one, one that had no department, or
+   * one whose scope the manager changed. Otherwise the stored scope is neither checked nor sent. */
+  #decidesScope(): boolean {
+    const loaded = this.#loaded;
+    return loaded === null || loaded.departmentId === null || this.#scopeEdited;
+  }
+
   #ownErrors(): FieldErrors {
     if (!this.attempted) return {};
     const errors: FieldErrors = {};
     if (this.draftName.trim() === "") errors.name = t("form.name_required");
     if (this.#ordering()) {
-      if (this.draftDepartmentId === "")
-        errors.department = t("device_profiles.err_department_required");
-      else if (!this.draftEveryZone && this.draftZoneIds.length === 0)
-        errors.zones = t("device_profiles.err_zones_required");
-      if (this.draftStartingZoneId === "")
-        errors.startingZone = t("device_profiles.err_starting_zone_required");
+      if (this.#decidesScope()) {
+        if (this.draftDepartmentId === "")
+          errors.department = t("device_profiles.err_department_required");
+        else if (!this.draftEveryZone && this.draftZoneIds.length === 0)
+          errors.zones = t("device_profiles.err_zones_required");
+        if (this.draftStartingZoneId === "")
+          errors.startingZone = t("device_profiles.err_starting_zone_required");
+      }
       if (this.draftRoles.length === 0) errors.roles = t("device_profiles.err_roles_required");
     }
     return errors;
@@ -573,6 +575,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   #onDepartment(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    this.#scopeEdited = true;
     this.draftDepartmentId = event.detail.value;
     this.draftEveryZone = true;
     this.draftZoneIds = [];
@@ -583,6 +586,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   #onEveryZone(event: CustomEvent<{ checked: boolean }>): void {
     event.stopPropagation();
+    this.#scopeEdited = true;
     this.draftEveryZone = event.detail.checked;
     this.draftZoneIds = event.detail.checked
       ? []
@@ -593,16 +597,20 @@ export class DeviceProfilesScreen extends LitElement {
 
   #onZone(event: CustomEvent<{ checked: boolean }>, zoneId: string): void {
     event.stopPropagation();
-    const order = this.#departmentZones(this.draftDepartmentId).map((zone) => zone.id);
-    const others = this.draftZoneIds.filter((id) => id !== zoneId);
-    const chosen = event.detail.checked ? [...others, zoneId] : others;
-    this.draftZoneIds = order.filter((id) => chosen.includes(id));
+    this.#scopeEdited = true;
+    this.draftZoneIds = toggleMembership(
+      this.draftZoneIds,
+      this.#departmentZones(this.draftDepartmentId).map((zone) => zone.id),
+      zoneId,
+      event.detail.checked,
+    );
     this.#settleStartingZone();
     this.#clearRefusal("zones", "startingZone");
   }
 
   #onStartingZone(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    this.#scopeEdited = true;
     this.draftStartingZoneId = event.detail.value;
     this.#clearRefusal("startingZone");
   }
@@ -611,9 +619,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   #onRole(event: CustomEvent<{ checked: boolean }>, role: PersonRole): void {
     event.stopPropagation();
-    const others = this.draftRoles.filter((entry) => entry !== role);
-    const chosen = event.detail.checked ? [...others, role] : others;
-    this.draftRoles = EVERY_ROLE.filter((entry) => chosen.includes(entry));
+    this.draftRoles = toggleMembership(this.draftRoles, ROLES, role, event.detail.checked);
     this.#clearRefusal("roles");
   }
 
@@ -663,7 +669,8 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftEveryZone = true;
     this.draftZoneIds = [];
     this.draftStartingZoneId = "";
-    this.draftRoles = [...EVERY_ROLE];
+    this.#scopeEdited = false;
+    this.draftRoles = [...ROLES];
     this.draftExceptions = [];
     this.draftStartingScreen = null;
     this.#loaded = null;
@@ -676,21 +683,18 @@ export class DeviceProfilesScreen extends LitElement {
    * on changes nothing. */
   #opened = 0;
 
-  /** Read when the editor opens rather than kept live: the editor is the only reader. */
-  async #readScopeChoices(): Promise<ProfileScopeChoices> {
-    this.scopeChoices = await this.api.getProfileScopeChoices();
-    return this.scopeChoices;
-  }
-
-  /** A venue with one department starts the profile there, at its first zone. */
+  /** A venue with one department starts the profile there, at its first zone. The departments and
+   * zones are read when the editor opens rather than kept live: the editor is the only reader. */
   #openCreate(): void {
     this.#clearDraft();
     this.#showError(null);
     this.mode = "editor";
     const opened = this.#opened;
-    this.#readScopeChoices().then(
+    this.api.getProfileScopeChoices().then(
       (choices) => {
-        if (opened !== this.#opened || this.draftDepartmentId !== "") return;
+        if (opened !== this.#opened) return;
+        this.scopeChoices = choices;
+        if (this.draftDepartmentId !== "") return;
         const departments = choices.departments.filter((department) => department.active);
         if (departments.length !== 1) return;
         this.draftDepartmentId = departments[0]!.id;
@@ -706,13 +710,16 @@ export class DeviceProfilesScreen extends LitElement {
    * may not have delivered yet. */
   async #openEditor(id: string): Promise<void> {
     this.#showError(null);
+    const opened = ++this.#opened;
     try {
       const [profile, kitchenLists, choices] = await Promise.all([
         this.api.getDeviceProfile(id),
         this.api.listProfileKitchenLists(),
-        this.#readScopeChoices(),
+        this.api.getProfileScopeChoices(),
       ]);
+      if (opened !== this.#opened) return;
       this.#clearDraft();
+      this.scopeChoices = choices;
       this.editingId = id;
       this.#loaded = profile;
       this.draftName = profile.name;
@@ -740,12 +747,12 @@ export class DeviceProfilesScreen extends LitElement {
         this.draftZoneIds = zones.allowedZoneIds ?? [];
         this.draftStartingZoneId = zones.startingZoneId;
       }
-      this.draftRoles = EVERY_ROLE.filter((role) => profile.admittedRoles.includes(role));
+      this.draftRoles = ROLES.filter((role) => profile.admittedRoles.includes(role));
       this.draftExceptions = [...profile.personExceptions];
       this.draftStartingScreen = profile.startingScreen;
       this.mode = "editor";
     } catch (error) {
-      this.#showReadError(error);
+      if (opened === this.#opened) this.#showReadError(error);
     }
   }
 
@@ -828,7 +835,7 @@ export class DeviceProfilesScreen extends LitElement {
    * so a save that leaves them alone cannot be refused over a screen they do not touch.
    */
   #kitchenListsToSend(formFactor: FormFactor, editing: boolean): ProfileKitchenLists | undefined {
-    if (formFactor !== "kds") return undefined;
+    if (!isSharedDisplay(formFactor)) return undefined;
     const draft = this.draftKitchenLists;
     const loaded = this.#loadedKitchenLists;
     const changed =
@@ -841,14 +848,14 @@ export class DeviceProfilesScreen extends LitElement {
 
   /**
    * What the save sends beside the profile's own settings. An edit sends a part only when it
-   * changed, as the kitchen lists are, so a zone switched off since cannot refuse a save that does
-   * not touch where the profile serves; a new profile sends its department and what is not the
-   * server's default. A kitchen display has no department, sign-in rule or starting screen.
+   * changed, and where the profile serves only when {@link #decidesScope} says so, so a save that
+   * leaves it alone keeps the zones switched off since; a new profile sends its department and what
+   * is not the server's default. A kitchen display has no department, sign-in rule or starting screen.
    */
   #extrasToSend(formFactor: FormFactor): ProfileSaveExtras | undefined {
     const loaded = this.#loaded;
     const extras: ProfileSaveExtras = { ...this.#kitchenListsToSend(formFactor, loaded !== null) };
-    if (formFactor === "kds") {
+    if (isSharedDisplay(formFactor)) {
       if (loaded !== null && loaded.startingScreen !== null) extras.startingScreen = null;
     } else {
       const scope: ProfileServiceScope = {
@@ -856,11 +863,10 @@ export class DeviceProfilesScreen extends LitElement {
         allowedZoneIds: this.draftEveryZone ? null : [...this.draftZoneIds],
         startingZoneId: this.draftStartingZoneId,
       };
-      if (loaded === null || !sameScope(scope, loaded)) Object.assign(extras, scope);
+      if (this.#decidesScope() && (loaded === null || !sameScope(scope, loaded)))
+        Object.assign(extras, scope);
       const roles = this.draftRoles;
-      if (
-        loaded === null ? roles.length < EVERY_ROLE.length : !sameIds(roles, loaded.admittedRoles)
-      )
+      if (loaded === null ? roles.length < ROLES.length : !sameIds(roles, loaded.admittedRoles))
         extras.admittedRoles = [...roles];
       const exceptions = this.draftExceptions;
       if (
@@ -909,12 +915,12 @@ export class DeviceProfilesScreen extends LitElement {
     const canvasId = this.draftCanvasId;
     const formFactor = this.draftFormFactor;
     const capabilities = this.draftCapabilities.filter(
-      (flag) => formFactor !== "kds" || sharedDisplayMay(flag),
+      (flag) => !isSharedDisplay(formFactor) || sharedDisplayMay(flag),
     );
     // Minutes → seconds at the wire edge. A `kds` profile always sends null, whatever minutes are left
     // in the draft: the input is hidden for kds.
     const inactivityTimeoutSeconds =
-      formFactor === "kds" || this.draftInactivityMinutes == null
+      isSharedDisplay(formFactor) || this.draftInactivityMinutes == null
         ? null
         : this.draftInactivityMinutes * 60;
     const printerLists = this.draftPrinterLists;
@@ -975,7 +981,7 @@ export class DeviceProfilesScreen extends LitElement {
     const name = `${profile.name}${t("device_profiles.copy_suffix")}`;
     void this.#mutate(async () => {
       const extras: ProfileSaveExtras = {};
-      if (profile.formFactor === "kds") {
+      if (isSharedDisplay(profile.formFactor)) {
         const stored = this.kitchenLists.find((entry) => entry.profileId === profile.id);
         const on = (all: { id: string; active: boolean }[], ids: readonly string[]) =>
           all.filter((entry) => entry.active && ids.includes(entry.id)).map((entry) => entry.id);
@@ -992,7 +998,7 @@ export class DeviceProfilesScreen extends LitElement {
         const zones = liveZones(profile, choices);
         if (departmentOn && zones.startingZoneId !== "")
           Object.assign(extras, { departmentId: profile.departmentId, ...zones });
-        if (profile.admittedRoles.length < EVERY_ROLE.length)
+        if (profile.admittedRoles.length < ROLES.length)
           extras.admittedRoles = profile.admittedRoles;
         if (profile.personExceptions.length > 0) extras.personExceptions = profile.personExceptions;
         if (profile.startingScreen !== null) extras.startingScreen = profile.startingScreen;
@@ -1229,32 +1235,24 @@ export class DeviceProfilesScreen extends LitElement {
     return html`<p class="hint" data-test="kitchen-lists-hint">
         ${t("device_profiles.kitchen_lists_hint")}
       </p>
-      ${lists.map(({ list, choices }) => {
-        const refusal = errors[list.key] ?? null;
-        return html`<div
-          class="field"
-          role="group"
-          aria-labelledby="${list.test}-heading"
-          aria-describedby=${refusal === null ? nothing : `${list.test}-error`}
-          data-test=${list.test}
-        >
-          <span class="panel-subtitle" id="${list.test}-heading">${t(list.heading)}</span>
-          <div class="toggles">
-            ${choices.map(
-              (choice) =>
-                html`<wt-switch
-                  data-test="${list.item}-${choice.id}"
-                  name="${list.key}"
-                  label=${choice.label}
-                  .checked=${choice.listed}
-                  @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
-                    this.#onKitchenToggle(e, list.key, choice.id)}
-                ></wt-switch>`,
-            )}
-          </div>
-          ${this.#groupError(list.test, refusal)}
-        </div>`;
-      })}`;
+      ${lists.map(({ list, choices }) =>
+        this.#switchGroup(
+          list.test,
+          t(list.heading),
+          errors[list.key],
+          choices.map(
+            (choice) =>
+              html`<wt-switch
+                data-test="${list.item}-${choice.id}"
+                name="${list.key}"
+                label=${choice.label}
+                .checked=${choice.listed}
+                @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
+                  this.#onKitchenToggle(e, list.key, choice.id)}
+              ></wt-switch>`,
+          ),
+        ),
+      )}`;
   }
 
   #groupError(test: string, error: string | null | undefined): TemplateResult | typeof nothing {
@@ -1427,7 +1425,7 @@ export class DeviceProfilesScreen extends LitElement {
         "profile-roles",
         t("device_profiles.roles"),
         errors.roles,
-        EVERY_ROLE.map(
+        ROLES.map(
           (role) =>
             html`<wt-switch
               data-test="profile-role-${role}"

@@ -19,6 +19,10 @@ import {
 } from "@waitron/layouts/src/validate-canvas.js";
 import { DEFAULT_CANVASES as SRC_DEF } from "@waitron/layouts/src/default-canvases.js";
 import {
+  isSharedDisplay as srcIsSharedDisplay,
+  validateCapabilities as srcValidateCapabilities,
+} from "@waitron/layouts/src/device-profile.js";
+import {
   CARD_CONTRACTS,
   CARD_TYPES,
   CAPABILITY_FLAGS,
@@ -31,6 +35,8 @@ import {
   PROFILE_SCREENS,
   SALE_CRITICAL_CARDS,
   SELLING_FORM_FACTORS,
+  isSharedDisplay,
+  sharedDisplayMay,
 } from "./card-contracts.js";
 
 describe("card-contracts mirror parity", () => {
@@ -48,6 +54,20 @@ describe("card-contracts mirror parity", () => {
     expect([...PROFILE_ACTIONS]).toEqual([...SRC_ACTIONS]);
     expect([...PROFILE_SCREENS]).toEqual([...SRC_SCREENS]);
     expect([...NAVIGATION_SCREENS]).toEqual([...SRC_NAVIGATION]);
+  });
+
+  it("mirrors which form factor is a shared display and which flags the server lets one hold", () => {
+    for (const formFactor of SRC_FF)
+      expect(isSharedDisplay(formFactor), formFactor).toBe(srcIsSharedDisplay(formFactor));
+    const serverAllows = (flag: (typeof SRC_CAPS)[number]) => {
+      try {
+        srcValidateCapabilities([flag], "kds");
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    for (const flag of SRC_CAPS) expect(sharedDisplayMay(flag), flag).toBe(serverAllows(flag));
   });
 
   it("mirrors each card's contract fields (spans, states, permission, capability, saleCritical, config keys)", () => {

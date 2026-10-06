@@ -40,7 +40,9 @@ describe("DashboardApi routes", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ departments, zones: [] }));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getVenueDepartments()).toEqual(departments);
-    expect(callsOf(fetchImpl)).toEqual([["/management-api/venue-service", "GET", undefined]]);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/venue-service/departments-and-zones", "GET", undefined],
+    ]);
   });
 
   it("reads pending pretend reader payments and sends a decision", async () => {

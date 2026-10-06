@@ -2410,7 +2410,7 @@ export class DashboardApi {
   async getVenueDepartments(): Promise<{ id: string; name: string; active: boolean }[]> {
     const venue = await this.#request<{
       departments: { id: string; name: string; active: boolean }[];
-    }>("/management-api/venue-service", "GET");
+    }>("/management-api/venue-service/departments-and-zones", "GET");
     return venue.departments;
   }
 

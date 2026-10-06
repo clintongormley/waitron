@@ -132,7 +132,7 @@ export function roleName(value: string, locale: string = currentLocale()): strin
   return resolveNameTable(ROLE_NAMES, value, locale);
 }
 
-const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
+export const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
 
 export function rolesByName(locale: string = currentLocale()): PersonRole[] {
   const collator = new Intl.Collator(locale, { sensitivity: "base" });
