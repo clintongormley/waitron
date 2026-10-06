@@ -1467,9 +1467,11 @@ that write succeeds, before refreshing. Saving a child form commits its child sc
 parent's server write still has its own baseline.
 
 Bind the dialog's `beforeClose` property to a scoped coordinator request and return whether its
-outcome is `"proceeded"`. Route Cancel, close controls and an existing backdrop action through
-`requestClose(reason)`. Native Escape uses the same gate. The dialog stays open while asking,
-and a later answer cannot close a different opening. `closeAfter("saved")` and
+outcome is `"proceeded"`. Keep the callback reference stable while that editor is open:
+`WtDialog.requestClose` rejects a pending close if its `beforeClose` callback changes. A background
+render must not replace it while you are answering the question. Route Cancel, close controls and
+an existing backdrop action through `requestClose(reason)`. Native Escape uses the same gate. The
+dialog stays open while asking, and a later answer cannot close a different opening. `closeAfter("saved")` and
 `closeAfter("security")` bypass a pending question for a successful write or forced teardown.
 An owner's `open` binding still controls rendering; it is not a user-dismissal path.
 

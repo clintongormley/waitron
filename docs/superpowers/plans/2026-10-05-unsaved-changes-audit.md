@@ -580,3 +580,63 @@ pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations
 The subsequent unfiltered selection of prep-station, hours and exception suites passed 443 tests
 across six matched files in 184.34 seconds. The requested `station-hours-form.a11y.test.ts` path
 matched no file, so this run supplies no result for a separate hours accessibility suite.
+
+
+## 2026-10-06 follow-up: Watcher Add and seeded form drafts
+
+`watcher-form.unsaved.test.ts` exercises the actual Prep Stations Add host. The initial focused
+run failed nine of eleven cases: edited values neither registered unload protection nor opened a
+leave question, and acceptance removed newer input. After wiring the form scope and host close
+route, the two-file form selection passed 24 cases. Further controls cover refreshed seeded rows,
+reordered offered choices, an accepted write invalidating an open question, and departed write
+acceptance/refusal during another pending write. They passed without another production change;
+these are characterization controls rather than new red results.
+
+A further red case removed the form and pressed its retained Save control. The host still wrote
+its input. The host now checks that the originating form is connected before submitting. The
+five-file form/station/exception/hours selection then passed 84 tests. Existing assertions remain
+unchanged. The seeded Edit control verifies the form contract directly; Prep Stations currently
+opens that form only for Add. Its separate Rename modal and staged inline selections remain open.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/watcher-form.unsaved.test.ts src/dashboard/watcher-form.test.ts src/dashboard/prep-stations-screen.unsaved.test.ts src/dashboard/prep-exceptions.unsaved.test.ts src/dashboard/station-hours-form.unsaved.test.ts
+```
+
+In an independently installed disposable candidate, deleting the Watcher host's close gate failed
+the native Escape question assertion; deleting the submitted-value commit failed the newer-input
+revert's unload assertion; deleting the connected-form check failed the no-write assertion. Each
+mutation failed one focused case. Restoring all three passed all sixteen watcher cases, including
+the clean/revert controls. The temporary candidate was then removed.
+
+The generated visual probe ran eight EN/ES, light/dark, 390/1280 combinations and sixteen axe scans
+covering the editor and confirmation. It retained sixteen screenshots; representative desktop and
+phone renders were inspected. The probe's initial missing health-read stub displayed a load error
+behind the editor. Adding the same empty health response used by the form fixture removed that
+fixture error; the eight visual cases and sixteen scans passed again. Captures and exact commands
+are retained in Lane E's local receipts. This records the Watcher Add/form boundary only, not
+completion of all Watcher controls or the W69 rollout.
+
+A further red case re-rendered the Prep Stations host while its discard question was open.
+Discard restored the draft but left the modal mounted. `WtDialog.requestClose` compares its
+`beforeClose` callback by identity after the answer; the inline render expression had replaced
+that callback. The Watcher host now binds a stable method. The final two-file watcher selection
+passed 30 tests, including the added background-render case.
+
+The broader selection reported the same background-render failure plus the existing clean-Cancel
+case at `prep-stations-screen.test.ts:5740`. That case waited a timer and the host update, which no
+longer waits for the native close report. It now waits until the modal disconnects, keeping its
+original modal-absence and no-create assertions unchanged. This does not change the expected
+clean-close behavior. The latest consumer result is recorded separately in Lane E's checkpoint.
+
+
+After those corrections, the watcher-filtered host/form selection passed 109 tests; its 238 other
+cases were filtered out. The existing clean Cancel and dismiss controls still assert no create
+request and absence of the original modal. An updated independently installed candidate tested
+four final controls: removing the gate, removing the submitted commit, removing connected-form
+validation, and replacing the stable gate with a fresh render callback. Each failed its intended
+case; restoring the candidate passed all seventeen watcher cases. Both owned candidates were
+removed. This supersedes the earlier control receipt for the final gate's shape.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.test.ts src/dashboard/watcher-form.unsaved.test.ts -t 'watcher|Watcher'
+```

@@ -50,7 +50,7 @@ import type {
 import { watchersOfStation, watchersSeeing, type WatcherView } from "./watchers-seen.js";
 import { t } from "./strings.js";
 import "./station-health-table.js";
-import { watcherInputErrors } from "./watcher-form.js";
+import { watcherInputErrors, type WatcherForm } from "./watcher-form.js";
 
 type StationAction =
   | { kind: "today"; stationId: string; state: "open" | "closed" | null }
@@ -530,7 +530,9 @@ export class PrepStationsScreen extends LitElement {
   override disconnectedCallback() {
     this.#exceptionRun++;
     if (this.pending?.change.kind === "exception") this.pending = undefined;
-    if (this.#stationIdentity || this.#renameIdentity || this.#exceptionIdentity) this.busy = false;
+    if (this.#stationIdentity || this.#renameIdentity || this.#exceptionIdentity || this.watcherEditor)
+      this.busy = false;
+    this.watcherEditor = undefined;
     this.#stationScope?.dispose();
     this.#renameScope?.dispose();
     this.#exceptionScope?.dispose();
@@ -2773,20 +2775,39 @@ export class PrepStationsScreen extends LitElement {
       </wt-form-actions>
     </wt-modal>`;
   }
-  async #saveWatcher(input: WatcherInput) {
-    if (this.busy || !this.watcherEditor) return;
+  readonly #beforeWatcherClose = async (reason: LeaveReason): Promise<boolean> => {
+    const editor = this.watcherEditor;
+    const form = this.shadowRoot!.querySelector<WatcherForm>("watcher-form");
+    if (!editor || !form) return false;
+    const allowed = await form.requestLeave(reason);
+    return allowed && this.watcherEditor === editor && form.isConnected;
+  };
+
+  async #saveWatcher(input: WatcherInput, form: WatcherForm, editor: { id?: string }) {
+    if (this.busy || !this.isConnected || !form.isConnected || this.watcherEditor !== editor)
+      return;
     this.busy = true;
     this.#showError("");
     try {
-      if (this.watcherEditor.id) await this.api.updateWatcher(this.watcherEditor.id, input);
+      if (editor.id) await this.api.updateWatcher(editor.id, input);
       else await this.api.createWatcher(input);
-      this.watcherEditor = undefined;
-      await this.#load();
     } catch (error) {
-      this.watcherRefusal = error as { code: string; params?: { field?: string } };
-    } finally {
-      this.busy = false;
+      if (this.isConnected && this.watcherEditor === editor && form.isConnected) {
+        this.watcherRefusal = error as { code: string; params?: { field?: string } };
+        this.busy = false;
+      }
+      return;
     }
+    if (!this.isConnected || this.watcherEditor !== editor || !form.isConnected) return;
+    const clean = form.commitSubmitted(input);
+    this.busy = false;
+    if (clean) {
+      this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+        "[data-test=watcher-modal]",
+      )!.closeAfter("saved");
+      this.watcherEditor = undefined;
+    }
+    await this.#load();
   }
   /** A Disable only ever disables; a Delete disables instead a watcher something has come to name. */
   async #removeWatcher() {
@@ -2807,31 +2828,49 @@ export class PrepStationsScreen extends LitElement {
     }
   }
   #watcherDialogs() {
-    const watcher = this.view?.watchers.find((row) => row.id === this.watcherEditor?.id);
+    const editor = this.watcherEditor;
+    const watcher = this.view?.watchers.find((row) => row.id === editor?.id);
     return html`${
-      this.watcherEditor
-        ? html`<wt-modal
-            size="standard"
-            open
-            data-test="watcher-modal"
-            heading=${watcher?.name ?? t("watchers.new")}
-            .dismissible=${!this.busy}
-            @wt-close=${() => {
-              this.watcherEditor = undefined;
-            }}
-          >
-            <watcher-form
-              .watcher=${watcher}
-              .stations=${this.view?.stations ?? []}
-              .zones=${this.view?.zones ?? []}
-              .refusal=${this.watcherRefusal}
-              .busy=${this.busy}
-              @watcher-save=${(event: CustomEvent<{ input: WatcherInput }>) => void this.#saveWatcher(event.detail.input)}
-              @watcher-cancel=${() => {
-                this.watcherEditor = undefined;
+      editor
+        ? keyed(
+            editor,
+            html`<wt-modal
+              size="standard"
+              open
+              data-test="watcher-modal"
+              heading=${watcher?.name ?? t("watchers.new")}
+              .dismissible=${!this.busy}
+              .beforeClose=${this.#beforeWatcherClose}
+              @wt-close=${(event: Event) => {
+                event.stopPropagation();
+                if (
+                  this.isConnected &&
+                  this.watcherEditor === editor &&
+                  (event.currentTarget as HTMLElement).isConnected
+                )
+                  this.watcherEditor = undefined;
               }}
-            ></watcher-form>
-          </wt-modal>`
+            >
+              <watcher-form
+                .watcher=${watcher}
+                .stations=${this.view?.stations ?? []}
+                .zones=${this.view?.zones ?? []}
+                .refusal=${this.watcherRefusal}
+                .busy=${this.busy}
+                @watcher-save=${(event: CustomEvent<{ input: WatcherInput }>) => void this.#saveWatcher(event.detail.input, event.currentTarget as WatcherForm, editor)}
+                @watcher-cancel=${(event: Event) => {
+                  if (
+                    this.isConnected &&
+                    this.watcherEditor === editor &&
+                    (event.currentTarget as HTMLElement).isConnected
+                  )
+                    void (event.currentTarget as HTMLElement)
+                      .closest<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!
+                      .requestClose("cancel");
+                }}
+              ></watcher-form>
+            </wt-modal>`,
+          )
         : nothing
     }
     ${

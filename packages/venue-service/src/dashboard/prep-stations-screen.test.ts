@@ -5789,7 +5789,7 @@ it.each(["cancel", "dismiss"])("%s abandons new watcher creation without writing
   expect(modal).not.toBeNull();
   if (how === "dismiss") modal.dispatchEvent(new CustomEvent("wt-close"));
   else modal.querySelector("watcher-form")!.dispatchEvent(new CustomEvent("watcher-cancel"));
-  await settle(el);
+  await expect.poll(() => modal.isConnected).toBe(false);
   expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
   expect(create).not.toHaveBeenCalled();
 });

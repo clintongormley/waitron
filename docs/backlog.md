@@ -1352,10 +1352,17 @@ Confirmed writes commit their captured body before refresh; refusals keep the dr
 values close directly, including Add's initially empty destination; a cleared saved destination stays
 dirty. Pending preview reads block dismissal. Disconnect aborts the question and invalidates old
 preview/write replies. Focused cases are in
-`packages/venue-service/src/dashboard/prep-exceptions.unsaved.test.ts`. Watchers, department/zone
-forms, other station-action drafts and the remaining dashboard/till modal owners still need Task 4
-work; page/history/native reload remain Tasks 5–6. The existing station keyboard-reorder focus
-check failed in a filtered run and in the preceding checkpoint's installed measurement checkout.
+`packages/venue-service/src/dashboard/prep-exceptions.unsaved.test.ts`. Watcher Add now protects
+its submitted name, station/zone selections and pass switch. Cancel and native Escape ask before
+closing; clean and normalized reverted values close directly. An accepted write commits before
+refresh, retaining newer edits made while it ran. Refusals preserve the draft; disconnect aborts
+its question, and departed write replies cannot release another editor's busy state. The seeded
+Watcher form compares selected ID membership independently of offered order and keeps its opening
+snapshot across refreshed rows. Focused cases are in
+`packages/venue-service/src/dashboard/watcher-form.unsaved.test.ts`. The separate watcher Rename
+modal, staged inline watcher selections, department/zone forms, other station-action drafts and
+the remaining dashboard/till modal owners still need Task 4 work; page/history/native reload remain
+Tasks 5–6. The existing station keyboard-reorder focus check failed in a filtered run and in the preceding checkpoint's installed measurement checkout.
 The 2026-10-06 follow-up reproduced it with Routing selected: the Today fixture inherited the
 preceding test's URL, leaving the Stations handle hidden. The fixture now opens Stations explicitly;
 the original focus, order and routing assertions remain. The dated W69 audit records the commands.

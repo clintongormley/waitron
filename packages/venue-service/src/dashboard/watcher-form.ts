@@ -1,6 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -72,8 +79,52 @@ export class WatcherForm extends LitElement {
   };
   @state() private attempted = false;
 
-  protected override willUpdate(changed: Map<PropertyKey, unknown>) {
-    if (changed.has("watcher")) {
+  private scope?: DraftScope<WatcherInput>;
+  private leave?: LeaveCoordinator;
+  private identity?: object;
+  private watcherId?: string;
+
+  override disconnectedCallback() {
+    this.scope?.dispose();
+    this.scope = undefined;
+    this.leave = undefined;
+    this.identity = undefined;
+    super.disconnectedCallback();
+  }
+
+  private equalInput(a: WatcherInput, b: WatcherInput): boolean {
+    const sameIds = (a: readonly string[], b: readonly string[]) =>
+      a.length === b.length && a.every((id) => b.includes(id));
+    return (
+      a.name === b.name &&
+      a.everyStation === b.everyStation &&
+      sameIds(a.stationIds, b.stationIds) &&
+      a.everyZone === b.everyZone &&
+      sameIds(a.zoneIds, b.zoneIds) &&
+      a.runsPass === b.runsPass &&
+      a.displayOrder === b.displayOrder
+    );
+  }
+
+  readonly requestLeave = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.busy || !this.isConnected) return false;
+    const identity = this.identity;
+    if (!this.scope) return true;
+    const outcome = await this.leave!.request({ scopes: [this.scope.id], reason, proceed() {} });
+    return this.isConnected && identity === this.identity && outcome === "proceeded";
+  };
+
+  commitSubmitted(input: WatcherInput): boolean {
+    if (!this.isConnected) return false;
+    this.scope?.commit(input);
+    return this.scope ? !this.scope.isDirty() : this.equalInput(this.input, input);
+  }
+
+  protected override willUpdate() {
+    if (!this.identity || this.watcherId !== this.watcher?.id) {
+      this.scope?.dispose();
+      this.identity = {};
+      this.watcherId = this.watcher?.id;
       this.draft = this.watcher
         ? {
             name: this.watcher.name,
@@ -93,6 +144,20 @@ export class WatcherForm extends LitElement {
             runsPass: false,
           };
       this.attempted = false;
+      this.leave = leaveCoordinatorFor(this);
+      this.scope = this.leave?.register({
+        id: this.identity,
+        current: () => this.input,
+        snapshot: (input) => ({
+          ...input,
+          stationIds: [...input.stationIds],
+          zoneIds: [...input.zoneIds],
+        }),
+        equal: (a, b) => this.equalInput(a, b),
+        restore: (input) => {
+          this.draft = { ...input, stationIds: [...input.stationIds], zoneIds: [...input.zoneIds] };
+        },
+      });
     }
   }
   private get visibleStations() {
@@ -124,6 +189,7 @@ export class WatcherForm extends LitElement {
   private set(field: keyof WatcherInput, value: WatcherInput[typeof field]) {
     this.draft = { ...this.draft, [field]: value };
     this.refusal = undefined;
+    this.scope?.changed();
   }
   private toggle(field: "stationIds" | "zoneIds", id: string, checked: boolean) {
     this.set(
