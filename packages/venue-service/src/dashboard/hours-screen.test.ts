@@ -12,9 +12,9 @@ import type {
   WeekCell,
   WeekDay,
 } from "../hours-types.js";
+import { clockChangeAfter, minutesAfter } from "../testing/clock-change.js";
 import { HoursApi } from "./hours-client.js";
-import type { HoursScreen } from "./hours-screen.js";
-import "./hours-screen.js";
+import { formatDate, type HoursScreen } from "./hours-screen.js";
 
 const hosts: HTMLElement[] = [];
 const originalUrl = location.href;
@@ -1363,6 +1363,96 @@ describe("Hours: special dates", () => {
     expect(text(el.shadowRoot!.querySelector('[data-test="repeat-note"]'))).toBe(
       "Bar: el reloj se atrasa, así que la hora 02:15 se da dos veces. Este horario se aplica las dos veces.",
     );
+  });
+
+  /** A Madrid clocks-back date, a week before it, and a time on it the clock shows twice. */
+  function clocksBack() {
+    const back = clockChangeAfter("Europe/Madrid", "2026-10-08T00:00:00Z", "backward");
+    const weekBefore = new Date(Date.parse(`${back.date}T00:00:00Z`) - 7 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    return { date: back.date, weekBefore, twice: minutesAfter(back.after, 30) };
+  }
+
+  /** Fiesta's stored cells gain a period from the repeated time for the bar and the default kitchen. */
+  function fiestaFrom(state: { model: HoursModel }, time: string) {
+    const cell: WeekCell = { mode: "periods", periods: [P("fx", time, minutesAfter(time, 60))] };
+    state.model.specialCells[0]!.cells.push(
+      { subject: { kind: "station", id: "bar" }, cell },
+      { subject: { kind: "station", id: "kitchen" }, cell },
+    );
+  }
+
+  const duplicateNotes = (el: HoursScreen) =>
+    [...el.shadowRoot!.querySelectorAll('[data-test="duplicate-repeat-note"]')].map((note) =>
+      text(note),
+    );
+
+  it("explains under each duplicate target where the clock shows a copied time twice, and still saves", async () => {
+    const { date, weekBefore, twice } = clocksBack();
+    const { api, state, calls } = server();
+    fiestaFrom(state, twice);
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Fiesta"), "duplicate-date");
+    await setField(el, "dates.0", weekBefore);
+    expect(duplicateNotes(el)).toEqual([]);
+    await click(el, el.shadowRoot!.querySelector('[data-test="add-target"]'));
+    await setField(el, "dates.1", date);
+    // The default kitchen is always open, so its copied period is not explained.
+    expect(duplicateNotes(el)).toEqual([
+      `Bar on ${formatDate(date)}: the clock goes back, so ${twice} happens twice. These hours apply both times.`,
+    ]);
+    const note = el.shadowRoot!.querySelector('[data-test="duplicate-repeat-note"]')!;
+    expect(note.previousElementSibling!.querySelector('[name="dates.1"]')).not.toBeNull();
+    await setField(el, "dates.1", "not a date");
+    expect(duplicateNotes(el)).toEqual([]);
+    await setField(el, "dates.1", date);
+    await click(el, saveButton(el));
+    expect(calls("POST")).toEqual([
+      [
+        "/management-api/venue-service/special-dates/fiesta/duplicate",
+        { dates: [weekBefore, date] },
+      ],
+    ]);
+    expect(modal(el)).toBeNull();
+  });
+
+  it("explains a duplicated time the clock shows twice in Spanish", async () => {
+    setLocale("es");
+    const { date, twice } = clocksBack();
+    const { api, state } = server();
+    fiestaFrom(state, twice);
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Fiesta"), "duplicate-date");
+    await setField(el, "dates.0", date);
+    expect(duplicateNotes(el)).toEqual([
+      `Bar el ${formatDate(date)}: el reloj se atrasa, así que la hora ${twice} se da dos veces. Este horario se aplica las dos veces.`,
+    ]);
+  });
+
+  it("explains no repeated time while the venue's clock cannot be read", async () => {
+    const { date, twice } = clocksBack();
+    const { api, state } = server();
+    state.model.clockReadable = false;
+    state.model.civilDate = null;
+    state.model.dayCutover = "not a time";
+    fiestaFrom(state, twice);
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
+    await setField(el, "date", date);
+    await choose(el, "station.bar.mode", "periods");
+    await setField(el, "station.bar.periods.0.opensAt", twice);
+    await setField(el, "station.bar.periods.0.closesAt", minutesAfter(twice, 60));
+    expect(field(el, "station.bar.periods.0.closesAt")!.value).toBe(minutesAfter(twice, 60));
+    expect(el.shadowRoot!.querySelectorAll('[data-test="repeat-note"]')).toHaveLength(0);
+    await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
+    await menuAction(el, rowOf(el, "Fiesta"), "duplicate-date");
+    await setField(el, "dates.0", date);
+    expect(field(el, "dates.0")!.value).toBe(date);
+    expect(duplicateNotes(el)).toEqual([]);
   });
 
   it("lists, edits and deletes a date saved beyond the calendar's year", async () => {

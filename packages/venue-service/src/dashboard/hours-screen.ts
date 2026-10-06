@@ -908,6 +908,29 @@ export class HoursScreen extends LitElement {
     );
   }
 
+  /** As {@link #repeatNotes}, for the source date's shown cells copied onto one target date. */
+  #duplicateRepeatNotes(source: SpecialDate, date: string) {
+    const model = this.model!;
+    if (source.closeWholeVenue || !model.clockReadable || !isLocalDate(date)) return nothing;
+    const cells = storedCells(model, source.id);
+    return model.subjects
+      .filter((subject) => subject.active && !isDefaultStation(subject))
+      .flatMap((subject) => {
+        const cell = cells.find((entry) => keyOf(entry.subject) === keyOf(subject))?.cell;
+        if (cell?.mode !== "periods") return [];
+        return repeatedTimes(date, cell.periods, model.timeZone).map(
+          (time) =>
+            html`<p class="note" data-test="duplicate-repeat-note">
+              ${format("hours.duplicate_time_repeats", {
+                subject: subject.name,
+                date: formatDate(date),
+                time,
+              })}
+            </p>`,
+        );
+      });
+  }
+
   #duplicateForm(editor: Extract<Editor, { kind: "duplicate" }>, errors: Record<string, string>) {
     const set = (dates: string[], name: string) => this.#changed(name, { ...editor, dates });
     return html`<p class="note" data-test="duplicate-note">${t("hours.duplicate_note")}</p>
@@ -915,39 +938,40 @@ export class HoursScreen extends LitElement {
         ${editor.dates.map(
           (date, index) =>
             html`<div class="target">
-              <wt-input
-                type="date"
-                required
-                name=${`dates.${index}`}
-                label=${format("hours.target_date", { n: String(index + 1) })}
-                .value=${date}
-                error=${errors[`dates.${index}`] ?? ""}
-                ?disabled=${this.busy}
-                @wt-change=${(event: CustomEvent<{ value: string }>) =>
-                  set(
-                    editor.dates.map((value, at) => (at === index ? event.detail.value : value)),
-                    `dates.${index}`,
-                  )}
-              ></wt-input>
-              ${
-                editor.dates.length > 1
-                  ? html`<wt-button
-                      variant="ghost"
-                      data-test=${`remove-target-${index}`}
-                      aria-label=${format("hours.remove_target", { n: String(index + 1) })}
-                      ?disabled=${this.busy}
-                      @click=${() => {
-                        this.refused = {};
-                        set(
-                          editor.dates.filter((_, at) => at !== index),
-                          "dates",
-                        );
-                      }}
-                      >${t("hours.remove")}</wt-button
-                    >`
-                  : nothing
-              }
-            </div>`,
+                <wt-input
+                  type="date"
+                  required
+                  name=${`dates.${index}`}
+                  label=${format("hours.target_date", { n: String(index + 1) })}
+                  .value=${date}
+                  error=${errors[`dates.${index}`] ?? ""}
+                  ?disabled=${this.busy}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) =>
+                    set(
+                      editor.dates.map((value, at) => (at === index ? event.detail.value : value)),
+                      `dates.${index}`,
+                    )}
+                ></wt-input>
+                ${
+                  editor.dates.length > 1
+                    ? html`<wt-button
+                        variant="ghost"
+                        data-test=${`remove-target-${index}`}
+                        aria-label=${format("hours.remove_target", { n: String(index + 1) })}
+                        ?disabled=${this.busy}
+                        @click=${() => {
+                          this.refused = {};
+                          set(
+                            editor.dates.filter((_, at) => at !== index),
+                            "dates",
+                          );
+                        }}
+                        >${t("hours.remove")}</wt-button
+                      >`
+                    : nothing
+                }
+              </div>
+              ${this.#duplicateRepeatNotes(editor.source, date)}`,
         )}
         <div>
           <wt-button
