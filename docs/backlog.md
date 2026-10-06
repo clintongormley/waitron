@@ -1614,7 +1614,7 @@ cancellation; the owner chose (2026-10-06) to keep holding there, and the live p
 cases is queued as W41s-1b. A refusal that would refuse every later record (one about the
 taxpayer's identity, say) opens one case per record until the brake below stops the chain; one
 reply can still open up to 1,000 cases first (`MAX_REGISTROS_POR_ENVIO`).
-**W41s-3b (built; PR number pending; owner review pending):** when the three records immediately
+**W41s-3b (built, #1303; owner review pending):** when the three records immediately
 before a record on its chain were all rejected with one error code (`SAME_CODE_REFUSAL_LIMIT` in
 `packages/fiscal-verifactu/src/drain.ts`), the drain holds that record and the chain's later ones
 when they are claimed, between envíos, and only records never sent before. A record still awaiting
