@@ -1885,7 +1885,8 @@ Left open:
 **Menu search lists the shown menu first, then each other menu the device is served — DONE (W94,
 #1291, 2026-10-06).** The till's menu search groups matches by menu, the shown one first, each tile
 that menu's own offer and price; [design-system.md](developers/design-system.md), _The till's menu
-search_.
+search_. The till and dashboard Home preview label the search field "Search" / "Buscar"
+(A289, 2026-10-06).
 
 **Each menu has one Device Home Page, shown two ways — DONE (W93, #1287, 2026-10-06).** A menu's one
 Device Home Page is the first row of its Structure tab, and the Home page tab sets a Handheld and a
@@ -1909,6 +1910,9 @@ schema version, which the import refuses (`validateConfigurationBundle`,
 **Looked at (2026-10-06):** on the demo venue, reset rather than republished (the upgrade-path
 item below): the Structure tab's Device Home Page row and its add-shortcut picker, the Home page tab's
 controls and preview, and the till's home at a phone's width and on the counter at 1280 px.
+**Wording follow-up done (A289, 2026-10-06):** Included menus in the shortcut picker now use
+"Menu: Drinks" / "Carta: Drinks", matching the Structure tree. Spanish restaurant-menu controls
+use "carta".
 Left open:
 - The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
   the menu shares the screen with the order: from 720 px wide the table order screen gives it three
@@ -1916,16 +1920,6 @@ Left open:
   its grid was 796 px wide, six columns at a setting of 10. So the Till preview can show up to
   about four more columns than the till does. Not changed, because the real width depends on the
   till screen's layout.
-- In the Structure tab's add-shortcut section picker, an included menu is labelled by its bare name
-  ("Drinks") where the tree says "Menu: Drinks", and a section of the same name inside it reads
-  "Drinks › Drinks", so the two cannot be told apart. Not changed, because the fix changes existing
-  assertions in `apps/dashboard/src/screens/menus-screen.test.ts`: the case "offers as product
-  shortcuts only active products…" pins `{ value: "included-drinks", label: "Drinks" }`. **For the
-  owner:** should the picker say "Menu: Drinks"?
-- The Spanish `menus.menu_prefix` reads "Menú: {name}", which the Structure tree shows for an
-  included menu, though the dashboard's other strings call a menu "carta". "Incluir un menú"
-  (`menus.include_menu`) and "Quitar de este menú" (`menus.remove_included`) say "menú" too. All
-  three date from #993, before W93.
 - On the till, opening a section from lower on the screen leaves the page scrolled, so the
   breadcrumb is out of view. I believe this predates W93: neither `main`'s nor W93's
   `apps/till/src/widgets/menu-browser.ts` scrolls on opening a section (read, not bisected).

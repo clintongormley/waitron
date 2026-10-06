@@ -222,7 +222,12 @@ mode a tile is painted as above. In Thumbnails mode a tile with an image shows i
 Colours mode, or neutral. A section tile always keeps its "Section" word under its name, so a
 section and a product differ without colour; its image, when shown, takes the folder icon's place.
 
-**The till's menu search.** The search field sits above both blocks, on home and inside a
+**Menu wording.** Spanish restaurant menus are "cartas"; an account menu remains "menú".
+The Structure tree and shortcut picker label an included menu "Menu: <name>" / "Carta: <name>",
+so you can distinguish it from a section with the same name.
+
+**The till's menu search.** The till and dashboard Home preview label the field "Search" / "Buscar".
+The search field sits above both blocks, on home and inside a
 section; typing replaces the view with results, and clearing returns to where it was. Its results
 list the shown menu first, headed "<menu> (this menu)", then each other menu the device's service
 zone serves that has a match, headed with that menu's name, in the zone's order; the group

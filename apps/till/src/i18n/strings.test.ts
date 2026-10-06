@@ -102,3 +102,10 @@ describe("the discard refusal for a held order that still holds money", () => {
     expect(catalogues[locale]?.["held.discard_holds_money"]).toBe(message);
   });
 });
+
+it.each([
+  ["en-GB", "Search"],
+  ["es-ES", "Buscar"],
+])("labels the menu search simply in %s", (locale, label) => {
+  expect(catalogues[locale]?.["menu.search"]).toBe(label);
+});
