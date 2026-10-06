@@ -407,9 +407,7 @@ export interface VenueServiceContribution {
     >
   >;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
-   *  the zone's active menus. With `menuItemIds`, only the offers it names are served. Each menu's home
-   *  layout is the one `deviceProfileId` chose for it when the menu's live version holds it, and
-   *  the menu's default otherwise. */
+   *  the zone's active menus. With `menuItemIds`, only the offers it names are served. */
   listZoneOffers(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -417,17 +415,10 @@ export interface VenueServiceContribution {
     options?: {
       asserted?: readonly { menuId: string; versionId: string }[];
       menuItemIds?: readonly string[];
-      deviceProfileId?: string | null;
     },
   ): Promise<ZoneOffers>;
-  /** Does not check the zone: an unknown one holds nothing. Each menu's home layout is the one
-   *  `deviceProfileId` chose for it when the menu's live version holds it, and the menu's default
-   *  otherwise. */
-  menuState(
-    tx: Transaction,
-    zoneId: string,
-    options?: { deviceProfileId?: string | null },
-  ): Promise<ZoneMenuState>;
+  /** Does not check the zone: an unknown one holds nothing. */
+  menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState>;
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { locationId: LocationId },

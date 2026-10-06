@@ -64,8 +64,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["device_card_readers", ["reader_id"], "card_readers"],
   ["device_made_here_stations", ["device_id"], "devices"],
   ["device_made_here_stations", ["station_id"], "kitchen_stations"],
-  ["device_profile_home_layouts", ["device_profile_id"], "device_profiles"],
-  ["device_profile_home_layouts", ["menu_id"], "catalogues"],
   ["device_profile_printers", ["device_profile_id"], "device_profiles"],
   ["device_profile_printers", ["printer_id"], "printers"],
   ["device_profiles", ["canvas_id"], "canvases"],

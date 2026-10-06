@@ -6,7 +6,6 @@ import {
   buildMenuDocument,
   createHomeLayout,
   listHomeLayouts,
-  setDeviceHomeLayout,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -2477,10 +2476,6 @@ describe("each served menu's structure and home layouts", () => {
       await addShortcut(tx, counter, { kind: "product", productId: venue.burger });
       const dinnerVersionId = await publish(tx, venue.dinner);
       const defaultOf = async (menuId: string) => (await listHomeLayouts(tx, menuId))[0]!.id;
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: `Handheld ${randomUUID()}`, formFactor: "phone-portrait" })
-        .returning({ id: deviceProfiles.id });
       return {
         ...venue,
         dinnerVersionId,
@@ -2489,7 +2484,6 @@ describe("each served menu's structure and home layouts", () => {
         counter,
         dinnerHome: await defaultOf(venue.dinner),
         allDayHome: await defaultOf(venue.menuId),
-        profile: profile!.id,
       };
     });
   }
@@ -2550,44 +2544,6 @@ describe("each served menu's structure and home layouts", () => {
           layoutFallback: null,
         },
       ]);
-    });
-  });
-
-  it("serves each menu the layout the device's profile chose for it, in the offers and the menu state alike", async () => {
-    const venue = await seedDinnerLayouts();
-    await scoped(async (tx) => {
-      await setDeviceHomeLayout(tx, venue.profile, venue.dinner, venue.counter);
-      const expected = [
-        { id: venue.menuId, homeLayoutId: venue.allDayHome, layoutFallback: null },
-        { id: venue.dinner, homeLayoutId: venue.counter, layoutFallback: null },
-      ];
-      const offers = await listZoneOffers(tx, venue.cfg, venue.diningZone, {
-        deviceProfileId: venue.profile,
-      });
-      expect(
-        offers.menus.map(({ id, homeLayoutId, layoutFallback }) => ({
-          id,
-          homeLayoutId,
-          layoutFallback,
-        })),
-      ).toEqual(expected);
-      const state = await menuState(tx, venue.diningZone, { deviceProfileId: venue.profile });
-      expect(
-        state.menus.map(({ menuId, homeLayoutId, layoutFallback }) => ({
-          id: menuId,
-          homeLayoutId,
-          layoutFallback,
-        })),
-      ).toEqual(expected);
-      // A layout chosen after the publish is not in the live version yet.
-      const bar = (await createHomeLayout(tx, venue.menuId, "Bar")).id;
-      await setDeviceHomeLayout(tx, venue.profile, venue.menuId, bar);
-      expect(
-        (await menuState(tx, venue.diningZone, { deviceProfileId: venue.profile })).menus[0],
-      ).toMatchObject({
-        homeLayoutId: venue.allDayHome,
-        layoutFallback: "layout_unpublished",
-      });
     });
   });
 

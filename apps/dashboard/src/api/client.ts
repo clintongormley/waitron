@@ -102,7 +102,6 @@ import type {
   OptionListRow,
 } from "@waitron/catalogue/src/modifier-list-types.js";
 import type {
-  DeviceMenuHomeLayouts,
   HomeLayout,
   HomeTile,
   SectionDetails,
@@ -110,15 +109,7 @@ import type {
   SectionInput,
   SectionMember,
 } from "@waitron/catalogue/src/section-types.js";
-export type {
-  DeviceMenuHomeLayouts,
-  HomeLayout,
-  HomeTile,
-  SectionDetails,
-  MemberRef,
-  SectionInput,
-  SectionMember,
-};
+export type { HomeLayout, HomeTile, SectionDetails, MemberRef, SectionInput, SectionMember };
 import type {
   LanguageTranslationGaps,
   TranslationGap,
@@ -2706,23 +2697,6 @@ export class DashboardApi {
 
   deleteDeviceProfile(id: string): Promise<void> {
     return this.#request<void>(`/management-api/device-profiles/${id}`, "DELETE");
-  }
-
-  /** Every menu with its layouts and the layout this profile chose for it. */
-  getDeviceHomeLayouts(id: string): Promise<DeviceMenuHomeLayouts[]> {
-    return this.#request<DeviceMenuHomeLayouts[]>(
-      `/management-api/device-profiles/${id}/home-layouts`,
-      "GET",
-    );
-  }
-
-  /** Null goes back to the menu's default layout. */
-  setDeviceHomeLayout(id: string, menuId: string, layoutId: string | null): Promise<void> {
-    return this.#request<void>(
-      `/management-api/device-profiles/${id}/home-layouts/${menuId}`,
-      "PUT",
-      { layoutId },
-    );
   }
 
   revokeDevice(id: string): Promise<void> {

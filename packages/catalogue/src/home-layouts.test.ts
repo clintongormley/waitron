@@ -1,36 +1,25 @@
 import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  captureError,
-  deviceProfiles,
-  FOREIGN_KEY_VIOLATION,
-  isRefusal,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { captureError, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, product, section, type MenusFixture } from "../test/menus-fixture.js";
 import {
   addShortcut,
   createHomeLayout,
   deleteHomeLayout,
-  deviceHomeLayouts,
   duplicateHomeLayout,
   listHomeLayouts,
   moveShortcut,
   removeShortcut,
   replaceShortcut,
   renameHomeLayout,
-  resolveDeviceHomeLayouts,
   setDefaultHomeLayout,
-  setDeviceHomeLayout,
 } from "./home-layouts.js";
 import { membersOf } from "./section-members.js";
 import { readSection } from "./sections.js";
-import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
+import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
 import { deactivateCatalogue, deactivateProduct, listMenuOffers } from "./operations.js";
 import { addMember, createSectionIn, deleteSection, removeMember } from "./sections.js";
-import { deviceProfileHomeLayouts } from "./schema/home-layouts.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 
@@ -60,21 +49,6 @@ async function tileRefs(layoutId: string) {
     position: row.position,
     ref: row.productId === null ? section(row.childSectionId!) : product(row.productId),
   }));
-}
-
-async function makeProfile(name: string): Promise<string> {
-  const [row] = await fx.db
-    .insert(deviceProfiles)
-    .values({ name, formFactor: "till" })
-    .returning({ id: deviceProfiles.id });
-  return row!.id;
-}
-
-async function selectionRows() {
-  return fx.db
-    .select()
-    .from(deviceProfileHomeLayouts)
-    .orderBy(asc(deviceProfileHomeLayouts.menuId));
 }
 
 describe("home layouts", () => {
@@ -593,123 +567,6 @@ describe("home tiles", () => {
   });
 });
 
-describe("device home layouts", () => {
-  it("saves a profile's layout for a menu, and Default clears it", async () => {
-    const f = await menusFixture(fx.db);
-    const profile = await makeProfile("Handheld");
-    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
-    expect(await selectionRows()).toEqual([
-      { deviceProfileId: profile, menuId: f.lunch, layoutId: counter.id },
-    ]);
-    const home = await defaultLayout(f.lunch);
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, home));
-    expect(await selectionRows()).toEqual([
-      { deviceProfileId: profile, menuId: f.lunch, layoutId: home },
-    ]);
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, null));
-    expect(await selectionRows()).toEqual([]);
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, null));
-    expect(await selectionRows()).toEqual([]);
-  });
-
-  it("answers every menu's layouts, and the profile's choice for each", async () => {
-    const f = await menusFixture(fx.db);
-    const profile = await makeProfile("Handheld");
-    const other = await makeProfile("Till");
-    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
-    const lunchHome = await defaultLayout(f.lunch);
-    const dinnerHome = await defaultLayout(f.dinner);
-    const drinksHome = await defaultLayout(f.drinksMenu);
-    await app((tx) => setDeviceHomeLayout(tx, other, f.dinner, dinnerHome));
-    expect(await app((tx) => deviceHomeLayouts(tx, profile))).toEqual([
-      {
-        menuId: f.dinner,
-        menuName: "Dinner Menu",
-        layouts: [{ id: dinnerHome, name: "Home", isDefault: true }],
-        selectedLayoutId: null,
-        selectedRemoved: false,
-      },
-      {
-        menuId: f.drinksMenu,
-        menuName: "Drinks",
-        layouts: [{ id: drinksHome, name: "Home", isDefault: true }],
-        selectedLayoutId: null,
-        selectedRemoved: false,
-      },
-      {
-        menuId: f.lunch,
-        menuName: "Lunch Menu",
-        layouts: [
-          { id: lunchHome, name: "Home", isDefault: true },
-          { id: counter.id, name: "Counter", isDefault: false },
-        ],
-        selectedLayoutId: counter.id,
-        selectedRemoved: false,
-      },
-    ]);
-  });
-
-  it("keeps a selection whose layout was deleted, and reports it removed (D14)", async () => {
-    const f = await menusFixture(fx.db);
-    const profile = await makeProfile("Handheld");
-    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
-    await app((tx) => deleteHomeLayout(tx, counter.id));
-    expect(await selectionRows()).toEqual([
-      { deviceProfileId: profile, menuId: f.lunch, layoutId: counter.id },
-    ]);
-    const lunch = (await app((tx) => deviceHomeLayouts(tx, profile))).find(
-      (menu) => menu.menuId === f.lunch,
-    );
-    expect(lunch).toMatchObject({
-      layouts: [{ name: "Home", isDefault: true }],
-      selectedLayoutId: counter.id,
-      selectedRemoved: true,
-    });
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, null));
-    expect(await selectionRows()).toEqual([]);
-  });
-
-  it("refuses a layout of another menu, a section that is no layout, and a missing menu", async () => {
-    const f = await menusFixture(fx.db);
-    const profile = await makeProfile("Handheld");
-    const dinnerHome = await defaultLayout(f.dinner);
-    for (const layoutId of [dinnerHome, f.lunchRoot, f.drinks, MISSING]) {
-      const refused = await captureError(() =>
-        app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, layoutId)),
-      );
-      expect(refused).toMatchObject({
-        code: "menu.layout_not_found",
-        params: { layoutId, menuId: f.lunch },
-      });
-    }
-    for (const layoutId of [dinnerHome, null])
-      expect(
-        await codeOf(() => app((tx) => setDeviceHomeLayout(tx, profile, MISSING, layoutId))),
-      ).toBe("catalogue.not_found");
-    expect(await selectionRows()).toEqual([]);
-  });
-
-  it("leaves the profile's existence to its key, and goes with a deleted profile", async () => {
-    const f = await menusFixture(fx.db);
-    const home = await defaultLayout(f.lunch);
-    const refused = await captureError(() =>
-      app((tx) => setDeviceHomeLayout(tx, MISSING, f.lunch, home)),
-    );
-    expect(isRefusal(refused, FOREIGN_KEY_VIOLATION)).toBe(true);
-    const profile = await makeProfile("Handheld");
-    const kept = await makeProfile("Till");
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, home));
-    await app((tx) => setDeviceHomeLayout(tx, kept, f.lunch, home));
-    await fx.db.delete(deviceProfiles).where(eq(deviceProfiles.id, profile));
-    expect(await selectionRows()).toEqual([
-      { deviceProfileId: kept, menuId: f.lunch, layoutId: home },
-    ]);
-  });
-});
-
 describe("publishing the layouts", () => {
   async function publish(menuId: string) {
     const { hash } = await app((tx) => previewMenu(tx, menuId));
@@ -757,137 +614,5 @@ describe("publishing the layouts", () => {
     await publish(f.dinner);
     await app((tx) => moveShortcut(tx, home, soup!.memberId, 0));
     expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.state).toBe("current");
-  });
-});
-
-describe("the layout a device shows, resolved against the live version (D14)", () => {
-  async function publish(menuId: string) {
-    const { hash } = await app((tx) => previewMenu(tx, menuId));
-    await app((tx) => publishMenu(tx, menuId, hash, "person-1"));
-  }
-
-  async function resolved(profile: string | null, menuIds: string[]) {
-    return app(async (tx) => {
-      const live = await readLiveDocuments(tx, menuIds);
-      const documents = menuIds.flatMap((menuId) => {
-        const found = live.get(menuId);
-        return found === undefined ? [] : [found.document];
-      });
-      return Object.fromEntries(await resolveDeviceHomeLayouts(tx, profile, documents));
-    });
-  }
-
-  it("shows the default to a device with no profile, and to a profile that chose nothing", async () => {
-    const f = await menusFixture(fx.db);
-    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
-    await publish(f.lunch);
-    const profile = await makeProfile("Handheld");
-    const home = { homeLayoutId: await defaultLayout(f.lunch), layoutFallback: null };
-    expect(await resolved(null, [f.lunch])).toEqual({ [f.lunch]: home });
-    expect(await resolved(profile, [f.lunch])).toEqual({ [f.lunch]: home });
-    expect(counter.id).not.toBe(home.homeLayoutId);
-  });
-
-  it("keeps a chosen layout deleted in the working state until a republish leaves it out", async () => {
-    const f = await menusFixture(fx.db);
-    const profile = await makeProfile("Handheld");
-    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
-    await publish(f.lunch);
-    const chosen = { homeLayoutId: counter.id, layoutFallback: null };
-    expect(await resolved(profile, [f.lunch])).toEqual({ [f.lunch]: chosen });
-
-    await app((tx) => deleteHomeLayout(tx, counter.id));
-    expect(await resolved(profile, [f.lunch])).toEqual({ [f.lunch]: chosen });
-
-    await publish(f.lunch);
-    expect(await resolved(profile, [f.lunch])).toEqual({
-      [f.lunch]: { homeLayoutId: await defaultLayout(f.lunch), layoutFallback: "layout_removed" },
-    });
-  });
-
-  it("shows the default, as unpublished, for a chosen layout the live version never held", async () => {
-    const f = await menusFixture(fx.db);
-    const profile = await makeProfile("Handheld");
-    await publish(f.lunch);
-    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
-    const home = await defaultLayout(f.lunch);
-    expect(await resolved(profile, [f.lunch])).toEqual({
-      [f.lunch]: { homeLayoutId: home, layoutFallback: "layout_unpublished" },
-    });
-    await publish(f.lunch);
-    expect(await resolved(profile, [f.lunch])).toEqual({
-      [f.lunch]: { homeLayoutId: counter.id, layoutFallback: null },
-    });
-  });
-
-  it("shows the default, as removed, for a chosen layout deleted before it was ever published", async () => {
-    const f = await menusFixture(fx.db);
-    const profile = await makeProfile("Handheld");
-    await publish(f.lunch);
-    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
-    const home = await defaultLayout(f.lunch);
-    expect(await resolved(profile, [f.lunch])).toEqual({
-      [f.lunch]: { homeLayoutId: home, layoutFallback: "layout_unpublished" },
-    });
-    await app((tx) => deleteHomeLayout(tx, counter.id));
-    expect(await resolved(profile, [f.lunch])).toEqual({
-      [f.lunch]: { homeLayoutId: home, layoutFallback: "layout_removed" },
-    });
-  });
-
-  it("counts as removed another menu's layout, or a section that is no layout, which only a direct write can choose", async () => {
-    const f = await menusFixture(fx.db);
-    const dinnerOnly = await app((tx) => createHomeLayout(tx, f.dinner, "Dinner only"));
-    await publish(f.lunch);
-    const removed = {
-      [f.lunch]: { homeLayoutId: await defaultLayout(f.lunch), layoutFallback: "layout_removed" },
-    };
-    // Lunch's own root is owned by Lunch, so only its role tells it from an unpublished layout.
-    for (const layoutId of [dinnerOnly.id, f.lunchRoot]) {
-      const profile = await makeProfile(`Handheld ${layoutId}`);
-      await fx.db
-        .insert(deviceProfileHomeLayouts)
-        .values({ deviceProfileId: profile, menuId: f.lunch, layoutId });
-      expect(await resolved(profile, [f.lunch])).toEqual(removed);
-    }
-  });
-
-  it("is unmoved by a rename, before and after the republish", async () => {
-    const f = await menusFixture(fx.db);
-    const profile = await makeProfile("Handheld");
-    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
-    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
-    await publish(f.lunch);
-    const chosen = { [f.lunch]: { homeLayoutId: counter.id, layoutFallback: null } };
-    await app((tx) => renameHomeLayout(tx, counter.id, "Front counter"));
-    expect(await resolved(profile, [f.lunch])).toEqual(chosen);
-    await publish(f.lunch);
-    expect(await resolved(profile, [f.lunch])).toEqual(chosen);
-  });
-
-  it("resolves each menu from its own choice, and another profile's choice from its own", async () => {
-    const f = await menusFixture(fx.db);
-    const profile = await makeProfile("Handheld");
-    const other = await makeProfile("Till");
-    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
-    const bar = await app((tx) => createHomeLayout(tx, f.dinner, "Bar"));
-    await app(async (tx) => {
-      await setDeviceHomeLayout(tx, profile, f.lunch, counter.id);
-      await setDeviceHomeLayout(tx, profile, f.dinner, bar.id);
-      await setDeviceHomeLayout(tx, other, f.dinner, await defaultLayout(f.dinner));
-    });
-    await publish(f.lunch);
-    await publish(f.dinner);
-    expect(await resolved(profile, [f.lunch, f.dinner])).toEqual({
-      [f.lunch]: { homeLayoutId: counter.id, layoutFallback: null },
-      [f.dinner]: { homeLayoutId: bar.id, layoutFallback: null },
-    });
-    expect(await resolved(other, [f.lunch, f.dinner])).toEqual({
-      [f.lunch]: { homeLayoutId: await defaultLayout(f.lunch), layoutFallback: null },
-      [f.dinner]: { homeLayoutId: await defaultLayout(f.dinner), layoutFallback: null },
-    });
   });
 });

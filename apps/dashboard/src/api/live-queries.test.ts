@@ -118,12 +118,6 @@ it.each([
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile. Not `devices`, which a device's heartbeat changes every minute.
   ["listPrinterProfiles", [], ["device_profile_printers", "device_profiles"]],
-  // `deviceHomeLayouts` (the same file): every menu by name, each menu's layouts, and the choices.
-  [
-    "getDeviceHomeLayouts",
-    ["dp-1"],
-    ["device_profile_home_layouts", "sections", "menu_details", "catalogues"],
-  ],
   // `computeCategorySales` (packages/reporting/src/category-sales.ts) reads the period's lines under
   // the same inclusion clauses as the other reports, on the venue clock from `locations`; current
   // mode adds today's classification (`currentClassifications`, packages/catalogue).

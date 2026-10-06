@@ -894,34 +894,6 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("reads a device profile's home page layout choices and saves one, null meaning the default", async () => {
-    const menus = [
-      {
-        menuId: "c1",
-        menuName: "Lunch",
-        layouts: [{ id: "l1", name: "Home", isDefault: true }],
-        selectedLayoutId: null,
-        selectedRemoved: false,
-      },
-    ];
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(menus))
-      .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-
-    await expect(api.getDeviceHomeLayouts("dp-1")).resolves.toEqual(menus);
-    await expect(api.setDeviceHomeLayout("dp-1", "c1", "l2")).resolves.toBeUndefined();
-    await expect(api.setDeviceHomeLayout("dp-1", "c1", null)).resolves.toBeUndefined();
-
-    expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/device-profiles/dp-1/home-layouts", "GET", undefined],
-      ["/management-api/device-profiles/dp-1/home-layouts/c1", "PUT", { layoutId: "l2" }],
-      ["/management-api/device-profiles/dp-1/home-layouts/c1", "PUT", { layoutId: null }],
-    ]);
-  });
-
   it("reads menus' publication status and preview, and publishes the previewed hash", async () => {
     const current = {
       state: "current" as const,

@@ -183,6 +183,13 @@
       "when": 1791202919777,
       "tag": "0025_category_color",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1791237609900,
+      "tag": "0026_device_home_page",
+      "breakpoints": true
     }
   ]
 }

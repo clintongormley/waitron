@@ -172,6 +172,12 @@ describe("creating a menu", () => {
       menuId: menu.id,
       rootSectionId: root.id,
       defaultHomeLayoutId: layout.id,
+      handheldColumns: 3,
+      handheldTiles: "colours",
+      handheldOrder: "home_first",
+      tillColumns: 6,
+      tillTiles: "colours",
+      tillOrder: "home_first",
     });
     expect(await app((tx) => readMenuStructure(tx, menu.id))).toEqual({
       rootSectionId: root.id,

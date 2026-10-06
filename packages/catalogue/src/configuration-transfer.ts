@@ -1,5 +1,6 @@
 import { AppError } from "@waitron/shared";
 import { colorOrNull } from "./color-inheritance.js";
+import { HOME_DEVICES, homeDisplayProblem } from "./device-home.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { storeProductNameKeys } from "./product-names.js";
 import "./errors.js";
@@ -33,6 +34,20 @@ function checkColors(rows: Rows | undefined, table: string): void {
       });
 }
 
+/** A display setting a save would refuse is refused on import too: the till draws it. */
+function checkHomeDisplays(rows: Rows | undefined): void {
+  for (const row of rows ?? [])
+    for (const device of HOME_DEVICES) {
+      const field = homeDisplayProblem(device, {
+        columns: row[`${device}_columns`],
+        tiles: row[`${device}_tiles`],
+        order: row[`${device}_order`],
+      });
+      if (field !== null)
+        throw new AppError("setup.request_invalid", { field: `menu_details.${device}_${field}` });
+    }
+}
+
 /** The first name two of `names` share, ignoring case and surrounding spaces. An import replaces
  * every stored category and product, so each imported row counts as changed. */
 function sharedName(names: readonly string[]): string | undefined {
@@ -44,10 +59,11 @@ function sharedName(names: readonly string[]): string | undefined {
  * that share a name: the rules `assertCategoryNamesFree` and `assertFamilyNamesFree` hold on a save.
  * A category with no `category_details` row is top-level, as it is to the save's check.
  * Also refuses (`setup.request_invalid`) a product whose `active` is not 0 or 1, a category or
- * product whose name is not text, or a product, category or section colour other than lowercase
- * `#rrggbb` or null.
+ * product whose name is not text, a product, category or section colour other than lowercase
+ * `#rrggbb` or null, or a menu display setting a save would refuse.
  */
 export function validateCatalogueConfiguration(tables: Readonly<Record<string, Rows>>): void {
+  checkHomeDisplays(tables.menu_details);
   checkColors(tables.products, "products");
   checkColors(tables.category_details, "category_details");
   checkColors(tables.sections, "sections");
@@ -101,7 +117,6 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "sections" },
     { name: "section_members" },
     { name: "menu_details" },
-    { name: "device_profile_home_layouts", references: ["layout_id"] },
   ],
   validate: validateCatalogueConfiguration,
   afterImport: storeProductNameKeys,

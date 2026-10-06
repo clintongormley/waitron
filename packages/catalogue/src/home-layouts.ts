@@ -1,9 +1,8 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
-import { catalogues, products, type Transaction } from "@waitron/db";
+import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { requireMenuRoot } from "./menu-structure.js";
-import { deviceProfileHomeLayouts } from "./schema/home-layouts.js";
 import { menuDetails } from "./schema/menu.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import {
@@ -23,14 +22,7 @@ import {
   nameOf,
   requirePosition,
 } from "./section-members.js";
-import type {
-  DeviceMenuHomeLayouts,
-  HomeLayout,
-  MemberRef,
-  SectionMember,
-  TileRef,
-} from "./section-types.js";
-import type { DeviceHomeLayout, MenuDocument } from "./menu-document-types.js";
+import type { HomeLayout, MemberRef, SectionMember, TileRef } from "./section-types.js";
 import "./errors.js";
 
 /*
@@ -216,10 +208,7 @@ export async function renameHomeLayout(
   await tx.update(sections).set({ internalName }).where(eq(sections.id, layoutId));
 }
 
-/**
- * Deletes a layout that is not its menu's default, and its tiles. A device profile's choice of it
- * is left in place (D14), so the profile can be shown the choice as removed.
- */
+/** Deletes a layout that is not its menu's default, and its tiles. */
 export async function deleteHomeLayout(tx: Transaction, layoutId: string): Promise<void> {
   const menuId = await readLayout(tx, layoutId);
   const [details] = await tx
@@ -294,148 +283,4 @@ export async function moveShortcut(
 ): Promise<SectionMember<TileRef>[]> {
   await readLayout(tx, layoutId);
   return moveMemberTo(tx, layoutId, await membersOf(tx, layoutId, "home_layout"), memberId, to);
-}
-
-/**
- * Chooses the layout a device profile shows for the menu; null goes back to the menu's default.
- * The caller establishes that the profile exists: here only its foreign key refuses one that does
- * not.
- */
-export async function setDeviceHomeLayout(
-  tx: Transaction,
-  deviceProfileId: string,
-  menuId: string,
-  layoutId: string | null,
-): Promise<void> {
-  await requireMenuRoot(tx, menuId);
-  const row = and(
-    eq(deviceProfileHomeLayouts.deviceProfileId, deviceProfileId),
-    eq(deviceProfileHomeLayouts.menuId, menuId),
-  );
-  if (layoutId === null) {
-    await tx.delete(deviceProfileHomeLayouts).where(row);
-    return;
-  }
-  await readLayout(tx, layoutId, menuId);
-  await tx
-    .insert(deviceProfileHomeLayouts)
-    .values({ deviceProfileId, menuId, layoutId })
-    .onConflictDoUpdate({
-      target: [deviceProfileHomeLayouts.deviceProfileId, deviceProfileHomeLayouts.menuId],
-      set: { layoutId },
-    });
-}
-
-/** The profile's chosen layout for each menu it has chosen one for, keyed by menu id. */
-async function chosenHomeLayouts(
-  tx: Transaction,
-  deviceProfileId: string,
-): Promise<Map<string, string>> {
-  const rows = await tx
-    .select({
-      menuId: deviceProfileHomeLayouts.menuId,
-      layoutId: deviceProfileHomeLayouts.layoutId,
-    })
-    .from(deviceProfileHomeLayouts)
-    .where(eq(deviceProfileHomeLayouts.deviceProfileId, deviceProfileId));
-  return new Map(rows.map((row) => [row.menuId, row.layoutId]));
-}
-
-/** Every menu, by name, with its working layouts and the profile's choice for it. */
-export async function deviceHomeLayouts(
-  tx: Transaction,
-  deviceProfileId: string,
-): Promise<DeviceMenuHomeLayouts[]> {
-  const menus = await tx
-    .select({
-      menuId: menuDetails.menuId,
-      menuName: catalogues.name,
-      defaultHomeLayoutId: menuDetails.defaultHomeLayoutId,
-    })
-    .from(menuDetails)
-    .innerJoin(catalogues, eq(catalogues.id, menuDetails.menuId))
-    .orderBy(asc(catalogues.name), asc(catalogues.id));
-  const layouts = await tx
-    .select({ id: sections.id, name: sections.internalName, menuId: sections.ownerMenuId })
-    .from(sections)
-    .where(eq(sections.role, "home_layout"))
-    .orderBy(asc(sections.internalName), asc(sections.id));
-  const chosen = await chosenHomeLayouts(tx, deviceProfileId);
-  const byMenu = new Map<string, { id: string; name: string }[]>();
-  for (const { id, name, menuId } of layouts) {
-    const list = byMenu.get(menuId!) ?? [];
-    list.push({ id, name });
-    byMenu.set(menuId!, list);
-  }
-  return menus.map(({ menuId, menuName, defaultHomeLayoutId }) => {
-    const own = (byMenu.get(menuId) ?? []).map(({ id, name }) => ({
-      id,
-      name,
-      isDefault: id === defaultHomeLayoutId,
-    }));
-    const selectedLayoutId = chosen.get(menuId) ?? null;
-    return {
-      menuId,
-      menuName,
-      layouts: defaultFirst(own, defaultHomeLayoutId),
-      selectedLayoutId,
-      selectedRemoved:
-        selectedLayoutId !== null && !own.some((layout) => layout.id === selectedLayoutId),
-    };
-  });
-}
-
-/**
- * The layout a device of the profile shows for each document's menu, keyed by menu id (D14). The
- * profile's choice when the live document holds it, so a layout deleted or renamed since the publish
- * still shows; otherwise the document's default, with why. A null profile shows every default.
- */
-export async function resolveDeviceHomeLayouts(
-  tx: Transaction,
-  deviceProfileId: string | null,
-  documents: readonly MenuDocument[],
-): Promise<Map<string, DeviceHomeLayout>> {
-  const chosen =
-    deviceProfileId === null
-      ? new Map<string, string>()
-      : await chosenHomeLayouts(tx, deviceProfileId);
-  // Each document with the chosen layout its live version lacks, or null.
-  const resolved = documents.map((document): [MenuDocument, string | null] => {
-    const layoutId = chosen.get(document.menuId);
-    return [
-      document,
-      layoutId === undefined || document.homeLayouts.some((layout) => layout.id === layoutId)
-        ? null
-        : layoutId,
-    ];
-  });
-  const missing = resolved.flatMap(([, layoutId]) => layoutId ?? []);
-  // A chosen layout the live version lacks: its menu, if the working state still has it.
-  const working = new Map<string, string>();
-  if (missing.length > 0)
-    for (const row of await tx
-      .select({ id: sections.id, ownerMenuId: sections.ownerMenuId })
-      .from(sections)
-      .where(and(inArray(sections.id, missing), eq(sections.role, "home_layout"))))
-      working.set(row.id, row.ownerMenuId!);
-  return new Map(
-    resolved.map(([document, layoutId]): [string, DeviceHomeLayout] => {
-      if (layoutId === null)
-        return [
-          document.menuId,
-          {
-            homeLayoutId: chosen.get(document.menuId) ?? document.defaultHomeLayoutId,
-            layoutFallback: null,
-          },
-        ];
-      return [
-        document.menuId,
-        {
-          homeLayoutId: document.defaultHomeLayoutId,
-          layoutFallback:
-            working.get(layoutId) === document.menuId ? "layout_unpublished" : "layout_removed",
-        },
-      ];
-    }),
-  );
 }

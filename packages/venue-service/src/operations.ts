@@ -20,7 +20,6 @@ import {
   isEachUnit,
   readLiveDocuments,
   readUnavailable,
-  resolveDeviceHomeLayouts,
   units,
   type MenuDocument,
   type MenuOffer,
@@ -823,8 +822,7 @@ async function zoneLiveDocuments(
  * layouts. An inactive menu, or one with no live version, is left out, and a default that is
  * inactive or unpublished gives way to the zone's first menu that is served. Refused
  * `menu.version_changed` unless every `asserted` version is the live version of one of the zone's
- * active menus. With `menuItemIds`, only the offers it names are served; the menus are all listed. Each
- * menu's `homeLayoutId` is resolved against its live version (`resolveDeviceHomeLayouts`).
+ * active menus. With `menuItemIds`, only the offers it names are served; the menus are all listed.
  */
 export async function listZoneOffers(
   tx: Transaction,
@@ -833,7 +831,6 @@ export async function listZoneOffers(
   options: {
     asserted?: readonly { menuId: string; versionId: string }[];
     menuItemIds?: readonly string[];
-    deviceProfileId?: string | null;
   } = {},
 ): Promise<ZoneOffers> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
@@ -848,11 +845,6 @@ export async function listZoneOffers(
     published.some((menu) => menu.menuId === context.defaultMenuId)
       ? context.defaultMenuId
       : (published[0]?.menuId ?? null);
-  const layouts = await resolveDeviceHomeLayouts(
-    tx,
-    options.deviceProfileId ?? null,
-    published.map((menu) => menu.document),
-  );
   // Catalogue's `ServedMenu` is the type the till reads each menu as.
   const menus: ServedMenu[] = published.map(({ menuId, versionId, document }) => ({
     id: menuId,
@@ -862,30 +854,26 @@ export async function listZoneOffers(
     structure: document.root,
     homeLayouts: document.homeLayouts,
     defaultHomeLayoutId: document.defaultHomeLayoutId,
-    ...layouts.get(menuId)!,
+    homeLayoutId: document.defaultHomeLayoutId,
+    layoutFallback: null,
   }));
   return { defaultMenuId, menus, offers: published.flatMap((menu) => served.get(menu.menuId)!) };
 }
 
 /**
- * Each of the zone's live menus with its version and the home layout `deviceProfileId` shows for
- * it, resolved against that version (`resolveDeviceHomeLayouts`), and what those versions hold that cannot be sold now
- * (`readUnavailable`). Does not check the zone: an unknown one holds nothing.
+ * Each of the zone's live menus with its version, and what those versions hold that cannot be sold
+ * now (`readUnavailable`). Does not check the zone: an unknown one holds nothing.
  */
-export async function menuState(
-  tx: Transaction,
-  zoneId: string,
-  options: { deviceProfileId?: string | null } = {},
-): Promise<ZoneMenuState> {
+export async function menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState> {
   const published = await zoneLiveDocuments(tx, zoneId);
   const documents = published.map((menu) => menu.document);
-  const layouts = await resolveDeviceHomeLayouts(tx, options.deviceProfileId ?? null, documents);
   // Catalogue's `MenuState` is the type the till reads this answer as.
   const state: MenuState = {
-    menus: published.map(({ menuId, versionId }) => ({
+    menus: published.map(({ menuId, versionId, document }) => ({
       menuId,
       versionId,
-      ...layouts.get(menuId)!,
+      homeLayoutId: document.defaultHomeLayoutId,
+      layoutFallback: null,
     })),
     unavailable: await readUnavailable(tx, documents),
   };

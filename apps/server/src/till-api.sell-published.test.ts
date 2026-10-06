@@ -29,13 +29,10 @@ import {
   createProduct,
   createSectionIn,
   deactivateCatalogue,
-  deleteHomeLayout,
   listHomeLayouts,
   menuStatus,
   optionLabels,
-  renameHomeLayout,
   requireMenuRoot,
-  setDeviceHomeLayout,
   updateExtraList,
   updateMenuItem,
   updateProduct,
@@ -907,119 +904,14 @@ describe("GET /api/menu-state", () => {
 });
 
 describe("the home layout each menu shows the device (D14)", () => {
-  type LayoutState = {
-    menus: { menuId: string; versionId: string; homeLayoutId: string; layoutFallback: unknown }[];
-  };
-  const layoutsOf = async (v: Lunch, query = `?zoneId=${v.zoneId}`, cookie = v.cookie) => {
-    const response = await v.app.request(`/api/menu-state${query}`, { headers: { cookie } });
-    expect(response.status).toBe(200);
-    return ((await response.json()) as LayoutState).menus.map(
-      ({ menuId, homeLayoutId, layoutFallback }) => ({ menuId, homeLayoutId, layoutFallback }),
-    );
-  };
   const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
   const homeOf = async (menuId: string) => (await app((tx) => listHomeLayouts(tx, menuId)))[0]!.id;
-
-  it("keeps showing a chosen layout deleted since the publish, and the default once a republish leaves it out", async () => {
-    const v = await setupLunch();
-    const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
-    await app((tx) => setDeviceHomeLayout(tx, v.profileId, v.menuId, counter));
-    await publish(v.menuId);
-    const chosen = [{ menuId: v.menuId, homeLayoutId: counter, layoutFallback: null }];
-    expect(await layoutsOf(v)).toEqual(chosen);
-
-    await app((tx) => deleteHomeLayout(tx, counter));
-    expect(await layoutsOf(v)).toEqual(chosen);
-
-    await publish(v.menuId);
-    expect(await layoutsOf(v)).toEqual([
-      { menuId: v.menuId, homeLayoutId: await homeOf(v.menuId), layoutFallback: "layout_removed" },
-    ]);
-  });
-
-  it("shows the default for a chosen layout never published, and a rename changes nothing", async () => {
-    const v = await setupLunch();
-    await publish(v.menuId);
-    const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
-    await app((tx) => setDeviceHomeLayout(tx, v.profileId, v.menuId, counter));
-    expect(await layoutsOf(v)).toEqual([
-      {
-        menuId: v.menuId,
-        homeLayoutId: await homeOf(v.menuId),
-        layoutFallback: "layout_unpublished",
-      },
-    ]);
-
-    await publish(v.menuId);
-    const chosen = [{ menuId: v.menuId, homeLayoutId: counter, layoutFallback: null }];
-    expect(await layoutsOf(v)).toEqual(chosen);
-    await app((tx) => renameHomeLayout(tx, counter, "Front counter"));
-    expect(await layoutsOf(v)).toEqual(chosen);
-    await publish(v.menuId);
-    expect(await layoutsOf(v)).toEqual(chosen);
-  });
-
-  it("resolves each of the zone's menus from its own choice, with or without a zone named", async () => {
-    const v = await setupLunch();
-    const brunch = await app(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Brunch" });
-      await addProductToMenu(tx, { menuId: menu.id, productId: v.burger.productId });
-      await tx.execute(sql`
-        insert into zone_menus (zone_id, menu_id, display_order) values (${v.zoneId}, ${menu.id}, 1)`);
-      return menu.id;
-    });
-    const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
-    const bar = (await app((tx) => createHomeLayout(tx, brunch, "Bar"))).id;
-    await app(async (tx) => {
-      await setDeviceHomeLayout(tx, v.profileId, v.menuId, counter);
-      await setDeviceHomeLayout(tx, v.profileId, brunch, bar);
-    });
-    await publish(v.menuId);
-    await publish(brunch);
-    const expected = [
-      { menuId: v.menuId, homeLayoutId: counter, layoutFallback: null },
-      { menuId: brunch, homeLayoutId: bar, layoutFallback: null },
-    ];
-    expect(await layoutsOf(v)).toEqual(expected);
-    expect(await layoutsOf(v, "")).toEqual(expected);
-  });
-
-  it("shows the default to a device whose profile chose nothing", async () => {
-    const v = await setupLunch();
-    await publish(v.menuId);
-    const home = [{ menuId: v.menuId, homeLayoutId: await homeOf(v.menuId), layoutFallback: null }];
-    expect(await layoutsOf(v)).toEqual(home);
-  });
-
-  it("shows the session's device's choice whatever device cookie the request carries", async () => {
-    const v = await setupLunch();
-    const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
-    await app((tx) => setDeviceHomeLayout(tx, v.profileId, v.menuId, counter));
-    await publish(v.menuId);
-    const [otherProfile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
-    const other = await enrolDeviceForTest(suite.db, v.cfg, {
-      name: `Other till ${randomUUID()}`,
-      profileId: otherProfile!.id,
-    });
-    const otherCookie = `${v.sessionCookie}; ${DEVICE_COOKIE}=${other.deviceId}.${other.token}`;
-    const chosen = [{ menuId: v.menuId, homeLayoutId: counter, layoutFallback: null }];
-    for (const cookie of [v.sessionCookie, otherCookie]) {
-      expect(await layoutsOf(v, `?zoneId=${v.zoneId}`, cookie)).toEqual(chosen);
-      expect(await layoutsOf(v, "", cookie)).toEqual(chosen);
-    }
-  });
 
   it("serves each menu's structure, layouts and the device's layout on both offers routes", async () => {
     const v = await setupLunch();
     await app((tx) => updateSection(tx, v.postresId, { names: { [LOCALE]: "Para terminar" } }));
     const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
-    await app(async (tx) => {
-      await addShortcut(tx, counter, { kind: "section", sectionId: v.postresId });
-      await setDeviceHomeLayout(tx, v.profileId, v.menuId, counter);
-    });
+    await app((tx) => addShortcut(tx, counter, { kind: "section", sectionId: v.postresId }));
     const versionId = await publish(v.menuId);
     const home = await homeOf(v.menuId);
     const served = async (path: string, cookie = v.cookie) => {
@@ -1059,7 +951,7 @@ describe("the home layout each menu shows the device (D14)", () => {
         { id: counter, name: "Counter", tiles: [{ kind: "section", sectionId: v.postresId }] },
       ],
       defaultHomeLayoutId: home,
-      homeLayoutId: counter,
+      homeLayoutId: home,
       layoutFallback: null,
     };
     for (const path of [zonePath, "/api/default-service-zone/offers"])

@@ -49,15 +49,3 @@ export interface HomeLayout {
   isDefault: boolean;
   tiles: HomeTile[];
 }
-
-/** One menu's layouts, and the one a device profile chose for it. */
-export interface DeviceMenuHomeLayouts {
-  menuId: string;
-  menuName: string;
-  /** The default first, then the others by name. */
-  layouts: { id: string; name: string; isDefault: boolean }[];
-  /** Null means the menu's default layout. */
-  selectedLayoutId: string | null;
-  /** The chosen layout is no longer one of the menu's working layouts (D14). */
-  selectedRemoved: boolean;
-}
