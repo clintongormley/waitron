@@ -1864,7 +1864,7 @@ Left open:
   every pack offered at setup carries one, not with a route refusal, so that test stays as it is.
 
 **The demo seed's data is one data set the country pack names (W109 step 1, Task 1 of
-`docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`) — DONE (W109-1,
+`docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`) — DONE (W109-1, #1315,
 2026-10-06).** What the demo seed writes — menus, option lists, floor, staff, adjustment reasons
 and the staff-facing names — is one data set, `casa-delgado-es`, which Spain's pack names; nothing
 a demo seeds changes.
