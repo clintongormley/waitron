@@ -165,6 +165,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "{count} fiscal record(s) were rejected by the tax agency or conflict with the record it holds, and need someone to decide what to do. Contact support.",
     es: "{count} registro(s) fiscal(es) han sido rechazados por la Agencia Tributaria o no coinciden con el registro que tiene, y alguien tiene que decidir qué hacer. Contacta con soporte.",
   },
+  "fiscal.refusals_repeated": {
+    en: "The tax agency (AEAT) refused {count} fiscal records in a row with the same error code ({codigo}). Sending has stopped for the records after them until someone decides what to do. Contact support.",
+    es: "La AEAT ha rechazado {count} registros fiscales seguidos con el mismo código de error ({codigo}). El envío de los registros posteriores se ha detenido hasta que alguien decida qué hacer. Contacta con soporte.",
+  },
   "fiscal.awaiting_certificate": {
     en: "Fiscal records are waiting because no valid tax certificate is installed. Upload the certificate to resume submitting.",
     es: "Hay registros fiscales en espera porque no hay un certificado tributario válido instalado. Sube el certificado para reanudar los envíos.",

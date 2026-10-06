@@ -1598,7 +1598,7 @@ keeping each task's fiscal and adviser gates.
 **Update, 2026-10-06 (W41s-3, landed):** Task 3 landed as
 [#1289](https://github.com/clintongormley/waitron/pull/1289), with the owner's approval of its
 nine changed filing checks and of the landing. Every line of AEAT's reply is kept. A
-rejection no longer holds the later records of its chain (D2, on
+rejection on its own no longer holds the later records of its chain (D2, on
 [§7.1's receipts](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1));
 only rejection code 1161 was tested, and it was triggered artificially. A conflict with AEAT's
 copy, or a held cancellation, holds the later records of its chain that have not been sent. A
@@ -1612,8 +1612,18 @@ alert, `fiscal.filing_cases_open`, counts the cases with no resolution. **Still 
 has yet shown what AEAT does with a record sent after a 3000 conflict or after a held
 cancellation; the owner chose (2026-10-06) to keep holding there, and the live probe of those two
 cases is queued as W41s-1b. A refusal that would refuse every later record (one about the
-taxpayer's identity, say) now opens one case per record; the follow-up W41s-3b adds a brake that
-stops a chain after several refusals in a row with the same code.
+taxpayer's identity, say) opens one case per record until the brake below stops the chain; one
+reply can still open up to 1,000 cases first (`MAX_REGISTROS_POR_ENVIO`).
+**W41s-3b (built; PR number pending; owner review pending):** when the three records immediately
+before a record on its chain were all rejected with one error code (`SAME_CODE_REFUSAL_LIMIT` in
+`packages/fiscal-verifactu/src/drain.ts`), the drain holds that record and the chain's later ones
+when they are claimed, between envíos, and only records never sent before. The ongoing alert
+`fiscal.refusals_repeated` names the code and the length of the run. Nothing releases the hold yet.
+**Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
+again).** Task 8 as planned resolves records that have a case of their own; a record the brake holds
+has none. While held, those records are not retried hourly. Open owner question: keep release to a
+person (as built), or add an automatic hourly probe that sends the first held record once an hour,
+an accept restarting the chain and a same-code refusal adding one case.
 **Follow-up W41s-3c (a defect W41s-3's review found that predates W41s-3):**
 `resolveLines` in `packages/fiscal-verifactu/src/drain.ts` matches a reply line to a claimed record
 by `RefExterna` alone, without checking the line's invoice identity or a repeated reference. A

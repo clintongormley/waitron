@@ -428,7 +428,8 @@ things — three visible in the body above without needing the logs, one that ne
   fed into `/health`: the record that caused a hold, or that AEAT rejected, gets a row in the
   `incidents` table and a filing case in `filing_cases` (open ones raise the `fiscal.filing_cases_open`
   alert); a record held behind it gets neither, and shows in the `fiscal.submission_stopped` alert
-  and in `recordsHalted` in `drain.complete`; see
+  (and, when a run of rejections with one error code holds its chain, in the
+  `fiscal.refusals_repeated` alert) and in `recordsHalted` in `drain.complete`; see
   the opening section above. Find a park via the error-level `reconcile.run_parked` log line, which
   carries the duty, period and `errorCode`.
 
