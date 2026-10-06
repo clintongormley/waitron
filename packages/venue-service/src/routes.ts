@@ -63,13 +63,8 @@ import {
 import type { ExceptionInput, RouteTarget } from "./routing.js";
 import { isLocalDate, weekdayOf } from "./hours-rules.js";
 import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
-import {
-  deleteSpecialDate,
-  duplicateSpecialDate,
-  readHoursModel,
-  replaceWeekHours,
-  saveSpecialDate,
-} from "./hours.js";
+import { duplicateHolidayNamedSpecialDates } from "./holidays.js";
+import { deleteSpecialDate, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
 import type { RoutingChange } from "./routing-types.js";
 import { setStationFallback, setStationToday } from "./station-times.js";
@@ -323,7 +318,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           const extra = Object.keys(body).find((key) => key !== "dates");
           if (extra !== undefined)
             throw new AppError("management.request_invalid", { field: extra });
-          return duplicateSpecialDate(
+          return duplicateHolidayNamedSpecialDates(
             tx,
             ctx.cfg,
             id,

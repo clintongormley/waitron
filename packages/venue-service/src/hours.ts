@@ -16,6 +16,7 @@ import {
   pairMatters,
   parseWeek,
   rangeDates,
+  specialDateName,
   tailOverlaps,
   weekdayOf,
   type DateState,
@@ -751,6 +752,25 @@ export async function saveSpecialDate(
   if (dropped.length > 0)
     await tx.delete(specialDateHours).where(inArray(specialDateHours.id, dropped));
   return { id: specialDateId, ...values };
+}
+
+/** Renames a special date and changes nothing else about it. */
+export async function renameSpecialDate(
+  tx: Transaction,
+  cfg: VenueScope,
+  id: string,
+  name: string,
+): Promise<SpecialDate> {
+  const row = await requireSpecialDate(tx, cfg, id);
+  const trimmed = specialDateName(name);
+  await tx.update(specialDates).set({ name: trimmed }).where(eq(specialDates.id, id));
+  return {
+    id: row.id,
+    date: row.date,
+    name: trimmed,
+    colour: row.colour,
+    closeWholeVenue: row.closeWholeVenue,
+  };
 }
 
 /**

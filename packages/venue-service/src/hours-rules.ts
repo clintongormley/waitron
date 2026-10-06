@@ -210,12 +210,18 @@ export function parseWeek(value: unknown): ParsedWeek {
   return { cells, indexOf };
 }
 
+/** A special date's name, trimmed; a blank one is refused. */
+export function specialDateName(value: unknown): string {
+  if (typeof value !== "string" || value.trim() === "") invalidHours("name");
+  return value.trim();
+}
+
 /** A special date's own fields and cells, structurally; ownership and clashes are the writer's. */
 export function parseSpecialDateInput(value: unknown): SpecialDateInput {
   if (typeof value !== "object" || value === null) invalidHours("input");
   const { date, name, colour, closeWholeVenue, cells } = value as Record<string, unknown>;
   if (!isLocalDate(date)) invalidHours("date");
-  if (typeof name !== "string" || name.trim() === "") invalidHours("name");
+  const trimmed = specialDateName(name);
   if (!CALENDAR_COLOURS.includes(colour as CalendarColour)) invalidHours("colour");
   if (typeof closeWholeVenue !== "boolean") invalidHours("closeWholeVenue");
   if (!Array.isArray(cells)) invalidHours("cells");
@@ -239,7 +245,7 @@ export function parseSpecialDateInput(value: unknown): SpecialDateInput {
   );
   return {
     date,
-    name: name.trim(),
+    name: trimmed,
     colour: colour as CalendarColour,
     closeWholeVenue,
     cells: parsed,

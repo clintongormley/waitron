@@ -24,6 +24,7 @@ export {
   readHoursModel,
   readSpecialDate,
   readWeekHours,
+  renameSpecialDate,
   replaceWeekHours,
   resolveOpeningDateHours,
   saveSpecialDate,
@@ -34,6 +35,7 @@ export { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js"
 export {
   deleteLocalHoliday,
   deleteRetainedHolidayGeography,
+  duplicateHolidayNamedSpecialDates,
   readHolidayFacts,
   readHolidays,
   readLocalHolidayModel,

@@ -8,6 +8,7 @@ import {
 import { getCountryPack } from "@waitron/country-packs";
 import { locations, readTenant, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { compareHolidayFacts, holidayDateName } from "./holiday-naming.js";
 import { localHolidayName } from "./holiday-rules.js";
 import {
   type HolidayCoverage,
@@ -19,8 +20,13 @@ import {
   type LocalHolidayModel,
 } from "./holiday-types.js";
 import { isLocalDate, rangeDates } from "./hours-rules.js";
-import type { HolidayFact, LocalDate } from "./hours-types.js";
-import type { HolidayReader } from "./hours.js";
+import type { HolidayFact, LocalDate, SpecialDate } from "./hours-types.js";
+import {
+  duplicateSpecialDate,
+  renameSpecialDate,
+  type HolidayReader,
+  type SpecialDateParticipant,
+} from "./hours.js";
 import type { VenueScope } from "./operations.js";
 import { holidayGeographies, localHolidays } from "./schema/holidays.js";
 import "./errors.js";
@@ -67,18 +73,6 @@ function parseAreaKey(value: unknown): string | null {
   const { areaKey } = value as { areaKey: unknown };
   if (areaKey !== null && typeof areaKey !== "string") invalid("areaKey");
   return areaKey;
-}
-
-const SCOPE_ORDER: Readonly<Record<HolidayFact["scope"], number>> = {
-  national: 0,
-  regional: 1,
-  local: 2,
-};
-
-function compareFacts(a: HolidayFact, b: HolidayFact): number {
-  if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-  if (a.scope !== b.scope) return SCOPE_ORDER[a.scope] - SCOPE_ORDER[b.scope];
-  return a.id < b.id ? -1 : 1;
 }
 
 const ownerSourceId = (geographyId: string) => `owner:${geographyId}`;
@@ -233,7 +227,9 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
       });
     }
 
-    const unique = [...new Map(facts.map((fact) => [fact.id, fact])).values()].sort(compareFacts);
+    const unique = [...new Map(facts.map((fact) => [fact.id, fact])).values()].sort(
+      compareHolidayFacts,
+    );
     const referenced = new Set([
       ...unique.map(({ sourceId }) => sourceId),
       ...coverage.flatMap(({ sourceIds }) => sourceIds),
@@ -388,9 +384,40 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     await tx.delete(holidayGeographies).where(eq(holidayGeographies.id, row.id));
   }
 
+  /**
+   * Hours' duplicate, after which each copy on a holiday takes that date's holiday name; a copy on
+   * any other date keeps the source's name. Targets may be years apart, so facts are read one civil
+   * year at a time.
+   */
+  async function duplicateHolidayNamedSpecialDates(
+    tx: Transaction,
+    cfg: VenueScope,
+    sourceId: string,
+    dates: readonly LocalDate[],
+    at: Date,
+    participants: readonly SpecialDateParticipant[] = [],
+  ): Promise<SpecialDate[]> {
+    const copies = await duplicateSpecialDate(tx, cfg, sourceId, dates, at, participants);
+    const byYear = new Map<number, LocalDate[]>();
+    for (const { date } of copies)
+      byYear.set(yearOf(date), [...(byYear.get(yearOf(date)) ?? []), date]);
+    const facts: HolidayFact[] = [];
+    for (const targets of byYear.values()) {
+      targets.sort();
+      facts.push(...(await readHolidays(tx, cfg, targets[0]!, targets[targets.length - 1]!)).facts);
+    }
+    const named: SpecialDate[] = [];
+    for (const copy of copies) {
+      const name = holidayDateName(facts, copy.date, copy.name);
+      named.push(name === copy.name ? copy : await renameSpecialDate(tx, cfg, copy.id, name));
+    }
+    return named;
+  }
+
   return {
     readHolidays,
     readHolidayFacts,
+    duplicateHolidayNamedSpecialDates,
     readLocalHolidayModel,
     saveHolidayArea,
     saveLocalHoliday,
@@ -408,5 +435,6 @@ export const {
   saveLocalHoliday,
   deleteLocalHoliday,
   deleteRetainedHolidayGeography,
+  duplicateHolidayNamedSpecialDates,
 } = INSTALLED;
 export const readHolidayFacts: HolidayReader = INSTALLED.readHolidayFacts;
