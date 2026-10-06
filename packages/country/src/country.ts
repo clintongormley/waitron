@@ -89,6 +89,8 @@ export interface CountryDemoIdentity {
   readonly taxId: string;
   readonly locationName: string;
   readonly departmentTradingNames: { readonly restaurant: string; readonly deli: string };
+  /** The id of the server-side demo data set (menus, floor, staff) the seed writes. */
+  readonly dataSet: string;
 }
 
 export interface CountryPack {

@@ -562,6 +562,15 @@ export function inLanguages(
 }
 ```
 
+As built (2026-10-06): `inLanguages` lives in `apps/server/scripts/demo-seed/in-languages.ts` and
+`data-set.ts` re-exports it. Kept in `data-set.ts` it made a circular import (`data-set.ts` imports
+`data-sets/casa-delgado-es.ts`, which imports `seed-adjustments.ts`, which uses `inLanguages`) that
+left the data set undefined in the seed suites. It also keeps each text's own key order, filtering
+`Object.entries(text)`, rather than the venue's language order shown above: that order stored the
+same values with `es` before `en` in 120 texts of a Spanish seed. Tasks 3 and 4 use this version.
+`demoDataSet` checks the id with `Object.hasOwn`, so `"toString"` throws too, and its message starts
+`demoDataSet: `.
+
 - `SeedDemoInput` gains `dataSet: DemoDataSet`.
 - Every inner writer takes the whole data set as a required `dataSet` field. The two that write a
   translated map from outside the catalogue also take the venue's languages as a required field:
@@ -1093,7 +1102,7 @@ export function demoLanguagesFor(set: DemoDataSet, geography: VenueGeography): D
 - [ ] **Step 3: Run them and watch them fail.**
   Run: `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/data-set.test.ts src/demo-seed.test.ts scripts/demo-seed/seed-sales.test.ts scripts/demo-seed/seed.test.ts`
   Expected: FAIL — `demoDataSetFor` is not exported; the `XX` venue reaches `demoDataSet(undefined)`
-  and throws `no demo data set "undefined"`; `data-set.test.ts`'s language cases fail because
+  and throws `demoDataSet: no demo data set "undefined"`; `data-set.test.ts`'s language cases fail because
   `demoLanguagesFor` is not exported; the
   two real-database United Kingdom cases throw `sif.not_registered` from the practice sales
   (measured, "What happens today"), before any language is checked. The guard's two cases

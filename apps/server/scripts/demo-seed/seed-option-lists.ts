@@ -1,25 +1,29 @@
-// The seeded staff names are Spanish because a staff name is one plain string, never translated at
-// read time. `createOptionList` and `writeProductModifiers` are not session-gated, so this calls
-// them directly rather than raw-inserting.
+// `createOptionList` and `writeProductModifiers` are not session-gated, so this calls them directly
+// rather than raw-inserting.
 
 import { randomUUID } from "node:crypto";
 import { createOptionList, writeProductModifiers } from "@waitron/catalogue";
 import type { ProductModifierRef } from "@waitron/catalogue";
 import type { Transaction } from "@waitron/db";
-import { PRODUCT_OPTION_LISTS, type SeedLocale } from "./menu.js";
+import type { SeedLocale } from "./menu.js";
+import type { DemoDataSet } from "./data-set.js";
+import { inLanguages } from "./in-languages.js";
 
 export interface SeedOptionListsInput {
   /** image basename -> product id, from `seedCatalogues`. */
   productsByImage: Map<string, string>;
   /** The `fallbackLanguage` `createOptionList` checks the names against. */
   locale: SeedLocale;
+  dataSet: DemoDataSet;
+  /** The venue's content languages; every customer-facing name is cut to them. */
+  languages: readonly string[];
 }
 
 export async function seedOptionLists(
   tx: Transaction,
-  { productsByImage, locale }: SeedOptionListsInput,
+  { productsByImage, locale, dataSet, languages }: SeedOptionListsInput,
 ): Promise<void> {
-  for (const { productImage, lists } of PRODUCT_OPTION_LISTS) {
+  for (const { productImage, lists } of dataSet.productOptionLists) {
     const productId = productsByImage.get(productImage);
     if (productId === undefined) {
       throw new Error(`seedOptionLists: no seeded product for image '${productImage}'`);
@@ -33,7 +37,7 @@ export async function seedOptionLists(
         tx,
         {
           name: list.name,
-          customerName: list.customerName,
+          customerName: inLanguages(list.customerName, languages),
           kitchenName: list.kitchenName,
           defaultLabelId: labels.find((label) => label.preselected)?.id ?? null,
           active: true,
@@ -42,7 +46,7 @@ export async function seedOptionLists(
           labels: labels.map(({ id, name, customerName, kitchenName }) => ({
             id,
             name,
-            customerName,
+            customerName: inLanguages(customerName, languages),
             kitchenName,
             available: true,
           })),

@@ -6,6 +6,7 @@ const { seedDemoRestaurant } = vi.hoisted(() => ({ seedDemoRestaurant: vi.fn() }
 vi.mock("../scripts/demo-seed/seed.js", () => ({ seedDemoRestaurant }));
 
 import { INSTALLED_DEMO_SALES_DAYS, demoSeedLocale, seedInstalledDemo } from "./demo-seed.js";
+import { DEMO_DATA_SETS } from "../scripts/demo-seed/data-set.js";
 
 function venueWithLocales(invoiceLocales: string[], country = "ES"): VenueRequest {
   return { country, location: { invoiceLocales } } as unknown as VenueRequest;
@@ -55,7 +56,17 @@ describe("seedInstalledDemo", () => {
       locale: "es",
       salesDays: 30,
       departmentTradingNames: { restaurant: "Bar Casa Delgado", deli: "Deli Delgado" },
+      dataSet: DEMO_DATA_SETS["casa-delgado-es"],
     });
+  });
+
+  it("seeds a Spanish venue from the data set its country pack names", async () => {
+    seedDemoRestaurant.mockReset();
+    seedDemoRestaurant.mockResolvedValue(undefined);
+
+    await seedInstalledDemo({} as Database, RESULT, venueWithLocales(["es-ES"]));
+
+    expect(seedDemoRestaurant.mock.calls[0]![1].dataSet).toBe(DEMO_DATA_SETS["casa-delgado-es"]);
   });
 
   it("names the departments after the venue's country, not the seed language", async () => {

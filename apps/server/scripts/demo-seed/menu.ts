@@ -82,6 +82,8 @@ export interface SeedProductOptionLists {
   lists: SeedOptionList[];
 }
 
+// This list's staff names are Spanish because a staff name is one plain string, never translated
+// at read time.
 export const PRODUCT_OPTION_LISTS: SeedProductOptionLists[] = [
   {
     productImage: "solomillo.png",

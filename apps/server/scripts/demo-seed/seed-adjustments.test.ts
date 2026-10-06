@@ -8,6 +8,7 @@ import { ADJUSTMENTS_PROVISIONING, listAdjustmentReasons } from "@waitron/adjust
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
+import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -40,7 +41,11 @@ describe("seedAdjustmentReasons", () => {
       const node = { locationId, nodeId: await seedNode(suite.db, locationId) };
       const reasons = await withTransaction(suite.db, async (tx) => {
         await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
-        await seedAdjustmentReasons(tx, { locale });
+        await seedAdjustmentReasons(tx, {
+          locale,
+          dataSet: CASA_DELGADO_ES,
+          languages: locale === "en" ? ["en", "es"] : ["es", "en"],
+        });
         return listAdjustmentReasons(tx, { includeInactive: true });
       });
       expect(reasons.map((reason) => reason.names.en)).toEqual(ENGLISH);
@@ -49,7 +54,11 @@ describe("seedAdjustmentReasons", () => {
 
   it("seeds the owner's seven example reasons, in order, named in the seed's language", async () => {
     const reasons = await withTransaction(suite.db, async (tx) => {
-      await seedAdjustmentReasons(tx, { locale: "es" });
+      await seedAdjustmentReasons(tx, {
+        locale: "es",
+        dataSet: CASA_DELGADO_ES,
+        languages: ["es", "en"],
+      });
       return listAdjustmentReasons(tx);
     });
     expect(reasons.map((reason) => reason.names.en)).toEqual(ENGLISH);
@@ -70,8 +79,16 @@ describe("seedAdjustmentReasons", () => {
 
   it("names each reason in English for an English seed, and adds nothing on a second run", async () => {
     const reasons = await withTransaction(suite.db, async (tx) => {
-      await seedAdjustmentReasons(tx, { locale: "en" });
-      await seedAdjustmentReasons(tx, { locale: "en" });
+      await seedAdjustmentReasons(tx, {
+        locale: "en",
+        dataSet: CASA_DELGADO_ES,
+        languages: ["en", "es"],
+      });
+      await seedAdjustmentReasons(tx, {
+        locale: "en",
+        dataSet: CASA_DELGADO_ES,
+        languages: ["en", "es"],
+      });
       return listAdjustmentReasons(tx, { includeInactive: true });
     });
     expect(reasons.map((reason) => reason.name)).toEqual(ENGLISH);
@@ -79,7 +96,11 @@ describe("seedAdjustmentReasons", () => {
 
   it("keeps every cancel-only reason free of approval and every reduction under a limit", async () => {
     const reasons = await withTransaction(suite.db, async (tx) => {
-      await seedAdjustmentReasons(tx, { locale: "en" });
+      await seedAdjustmentReasons(tx, {
+        locale: "en",
+        dataSet: CASA_DELGADO_ES,
+        languages: ["en", "es"],
+      });
       return listAdjustmentReasons(tx);
     });
     for (const reason of reasons) {

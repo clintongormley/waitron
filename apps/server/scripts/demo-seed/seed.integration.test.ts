@@ -26,6 +26,7 @@ import { getHeldOrder, parkOrder } from "../../src/working-order.js";
 import { readImageBytes } from "@waitron/media";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
+import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
@@ -74,6 +75,7 @@ describe("demo seed end-to-end", () => {
       locale: LOCALE,
       salesDays: 3,
       departmentTradingNames: getCountryPack("ES")!.demo!.departmentTradingNames,
+      dataSet: CASA_DELGADO_ES,
     });
 
     const paired = await suite.db.execute<{ n: number }>(sql`select count(*) as n from devices`);

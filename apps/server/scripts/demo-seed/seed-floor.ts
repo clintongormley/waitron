@@ -28,13 +28,14 @@ import {
 import type { CountryDemoIdentity } from "@waitron/country";
 import { createTable, createZone, setTablePlacement } from "../../src/tables.js";
 import type { TillConfig } from "../../src/till-config.js";
-import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "./floor.js";
-import { CASA_DELGADO, SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import type { DemoDataSet } from "./data-set.js";
 
 export interface SeedFloorInput {
   locationId: string;
   locale: SeedLocale;
   departmentTradingNames: CountryDemoIdentity["departmentTradingNames"];
+  dataSet: DemoDataSet;
   menuIds?: { restaurant: string; lunch: string; deli: string };
 }
 
@@ -65,7 +66,7 @@ function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
  *  zone of this location. */
 export async function seedFloor(
   tx: Transaction,
-  { locationId, locale, departmentTradingNames, menuIds }: SeedFloorInput,
+  { locationId, locale, departmentTradingNames, dataSet, menuIds }: SeedFloorInput,
 ): Promise<void> {
   const cfg = toTableCfg(locationId, locale);
 
@@ -78,7 +79,8 @@ export async function seedFloor(
     throw new Error(`seedFloor: no default service zone for location ${locationId}`);
   }
 
-  const restaurantName = locale === "en" ? "Restaurant and bar" : "Restaurante y bar";
+  const { floor } = dataSet;
+  const restaurantName = floor.departmentNames.restaurant[locale];
   await tx.execute(sql`
     update departments
     set name = ${restaurantName}, trading_name = ${departmentTradingNames.restaurant},
@@ -88,7 +90,7 @@ export async function seedFloor(
     .insert(departments)
     .values({
       locationId,
-      name: locale === "en" ? "Deli" : "Charcutería",
+      name: floor.departmentNames.deli[locale],
       tradingName: departmentTradingNames.deli,
       defaultServiceMode: "prepay",
       active: true,
@@ -100,7 +102,7 @@ export async function seedFloor(
   await tx.insert(departmentSalePolicies).values({ departmentId: deliDepartmentId });
 
   const zoneIds = new Map<string, string>();
-  for (const zone of DEMO_ZONES) {
+  for (const zone of floor.zones) {
     const zoneId =
       zone.key === "bar"
         ? defaultPolicy.zone_id
@@ -146,7 +148,7 @@ export async function seedFloor(
   }
 
   const upstairsBarZone = await createZone(tx, cfg, {
-    name: locale === "en" ? "Upstairs bar" : "Bar de arriba",
+    name: floor.upstairsBarZone[locale],
     displayOrder: 3,
   });
   await tx.insert(zoneServicePolicies).values({
@@ -202,7 +204,7 @@ export async function seedFloor(
       .where(
         inArray(
           categories.name,
-          CASA_DELGADO.categories
+          dataSet.menus.restaurant.categories
             .filter((category) => category.station === "bar")
             .map((category) => category.name.en),
         ),
@@ -225,7 +227,7 @@ export async function seedFloor(
     .insert(floorZones)
     .values({
       locationId,
-      name: locale === "en" ? "Deli counter" : "Mostrador de charcutería",
+      name: floor.deliCounterZone[locale],
       displayOrder: 4,
       active: true,
     })
@@ -265,7 +267,7 @@ export async function seedFloor(
     new Date(),
   );
 
-  for (const table of DEMO_TABLES) {
+  for (const table of floor.tables) {
     const zoneId = zoneIds.get(table.zoneKey);
     if (zoneId === undefined) {
       throw new Error(`seedFloor: no zone seeded for key "${table.zoneKey}"`);
@@ -284,7 +286,7 @@ export async function seedFloor(
     });
   }
 
-  for (const [index, status] of DEMO_STATUSES.entries()) {
+  for (const [index, status] of floor.statuses.entries()) {
     await tx.insert(tableServiceStatuses).values({
       label: status.label[locale],
       color: status.color,

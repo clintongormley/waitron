@@ -22,6 +22,7 @@ import { readWeekHours, resolveMakers, setClaim } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
+import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
@@ -53,6 +54,7 @@ describe("seedDemoRestaurant", () => {
       locale: LOCALE,
       salesDays: 0,
       departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
     });
 
     const { rows: printers } = await suite.db.execute<{
@@ -103,6 +105,7 @@ describe("seedDemoRestaurant", () => {
         locale: LOCALE,
         salesDays: 7,
         departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
       }),
     ).rejects.toMatchObject({ code: "deployment.demo_data_refused" });
 
@@ -123,6 +126,7 @@ describe("seedDemoRestaurant", () => {
       locale: LOCALE,
       salesDays: 1,
       departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
     });
 
     await withTransaction(suite.db, async (tx) => {
@@ -228,6 +232,7 @@ describe("seedDemoRestaurant", () => {
       locale: LOCALE,
       salesDays: 1,
       departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
     });
 
     await withTransaction(suite.db, async (tx) => {
@@ -308,6 +313,7 @@ describe("seedDemoRestaurant", () => {
       locale: LOCALE,
       salesDays: 7,
       departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
     });
 
     const read = await withTransaction(suite.db, async (tx) => {

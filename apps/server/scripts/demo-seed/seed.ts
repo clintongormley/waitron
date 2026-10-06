@@ -10,6 +10,7 @@ import {
   listAvailableProducts,
   menuDocumentHash,
   publishMenu,
+  readContentLanguages,
 } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { seedFloor } from "./seed-floor.js";
@@ -21,6 +22,7 @@ import { seedOptionLists } from "./seed-option-lists.js";
 import { demoSeedEnvironment, seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct } from "./seed-sales.js";
 import type { SeedLocale } from "./menu.js";
+import type { DemoDataSet } from "./data-set.js";
 import { DEMO_PRINTER_KEY, routeToDemoPrinter } from "../../src/demo-printer.js";
 
 /** `seriesId` is the standard series, the first of `applyVenue`'s `seriesIds`. */
@@ -34,13 +36,14 @@ export interface SeedDemoInput {
   venue: SeedDemoVenue;
   locale: SeedLocale;
   departmentTradingNames: CountryDemoIdentity["departmentTradingNames"];
+  dataSet: DemoDataSet;
   /** `0` seeds no sales; everything else still seeds. */
   salesDays: number;
 }
 
 export async function seedDemoRestaurant(
   db: Database,
-  { venue, locale, salesDays, departmentTradingNames }: SeedDemoInput,
+  { venue, locale, salesDays, departmentTradingNames, dataSet }: SeedDemoInput,
 ): Promise<void> {
   const { locationId } = venue;
   demoSeedEnvironment(process.env);
@@ -49,7 +52,9 @@ export async function seedDemoRestaurant(
     const { productsByImage, menuIds, stationIds } = await seedCatalogues(tx, {
       locationId,
       locale,
+      dataSet,
     });
+    const { languages } = await readContentLanguages(tx, locale);
     const demoPrinter = await createPrinter(
       tx,
       { locationId },
@@ -61,11 +66,11 @@ export async function seedDemoRestaurant(
       },
     );
     await routeToDemoPrinter(tx, locationId, demoPrinter.id);
-    await seedOptionLists(tx, { productsByImage, locale });
-    await seedFloor(tx, { locationId, locale, departmentTradingNames, menuIds });
-    await seedWatchers(tx, { locationId, locale, stationIds });
-    await seedStaff(tx);
-    await seedAdjustmentReasons(tx, { locale });
+    await seedOptionLists(tx, { productsByImage, locale, dataSet, languages });
+    await seedFloor(tx, { locationId, locale, departmentTradingNames, dataSet, menuIds });
+    await seedWatchers(tx, { locationId, locale, dataSet, stationIds });
+    await seedStaff(tx, { dataSet });
+    await seedAdjustmentReasons(tx, { locale, dataSet, languages });
     await seedMedia(tx, { productsByImage });
     // Published last, so each live version holds the option lists and photos above (D17).
     for (const menuId of Object.values(menuIds)) {
