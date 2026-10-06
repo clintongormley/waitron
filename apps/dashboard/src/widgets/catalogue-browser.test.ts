@@ -1920,11 +1920,6 @@ it.each([
     "1 categoría y 3 productos, 2 de ellos ya deshabilitados",
   ],
   ["es", { folders: 0, products: 1, activeProducts: 0 }, "1 producto, ya deshabilitado"],
-  [
-    "es",
-    { folders: 0, products: 3, activeProducts: 2 },
-    "3 productos, 1 de ellos ya deshabilitado",
-  ],
   ["es", { folders: 0, products: 2, activeProducts: 0 }, "2 productos, todos ya deshabilitados"],
 ] as const)(
   "the delete choice counts disabled products too and says how many are disabled (%s, %o)",
@@ -1942,6 +1937,33 @@ it.each([
     ).toContain(sentence);
   },
 );
+it("says nothing about disabled products when none of the products to delete is disabled", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "f", folders: 1, products: 2, activeProducts: 2, routes: 0, ownRoutes: 0 },
+  ]);
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  expect(
+    el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent!.trim(),
+  ).toBe("Delete it too: 1 category and 2 products (products are disabled)");
+});
+it("words the whole Spanish delete choice when one of the products to delete is disabled", async () => {
+  setLocale("es");
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "f", folders: 0, products: 3, activeProducts: 2, routes: 0, ownRoutes: 0 },
+  ]);
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  expect(
+    el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent!.trim(),
+  ).toBe(
+    "Eliminarlo también: 0 categorías y 3 productos, 1 de ellos ya deshabilitado (los productos se deshabilitan)",
+  );
+});
 it("sums every selected category's products, disabled ones included, when only one of them holds disabled products", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders).mockResolvedValue([

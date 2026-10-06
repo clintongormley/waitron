@@ -307,9 +307,11 @@ what happens to its contents:
   products and subcategories to its parent. For a top-level category they move to **All products**.
   Only the routing rules naming a selected category itself are removed; its subcategories that are
   not selected keep theirs. The dialog's routing-rule warning counts only the removed ones.
-- **Delete it too** removes the subtree and disables its products. The summary shows the
-  numbers of subcategories, active products and routing rules removed (category claims and
-  exceptions, in the whole subtree). A product that is already disabled is not counted. Every product in the subtree,
+- **Delete it too** removes the subtree and disables its products. The summary shows how many
+  subcategories and routing rules are removed (category claims and exceptions, in the whole
+  subtree) and how many products the subtree holds. The product count includes products that are
+  disabled already and, when there are any, says how many, as in "3 products, 1 of them already
+  disabled". Every product in the subtree,
   disabled ones included, is moved to the parent of the outermost selected category that holds it.
 
 An empty category is deleted without confirmation. A category's row-menu Delete uses the same path.
@@ -318,15 +320,14 @@ to approve unknown contents. The dialog lists each category being deleted by its
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
 again; if the numbers of subcategories, active products or routing rules (in the subtree, or
 naming the category itself) have changed, it deletes nothing, shows the new counts and asks you to
-confirm again; a change in disabled products alone does not stop it, because the dialog does not
-show them. The delete request carries the counts
+confirm again; a change in disabled products alone does not stop it, because those products are
+switched off already. The delete request carries the counts
 the dashboard read before deleting, the number of all products, disabled ones included, among them,
 and the server compares them again inside the delete itself: if
 they no longer match, nothing is deleted and the dialog shows the new counts with the refusal's own
 message. If an empty category, which is deleted without confirmation, has gained subcategories,
 products (disabled ones included) or routing rules by then, the dialog opens with its new counts.
-The dialog does not count disabled products, so when only a disabled product was added it shows the
-refusal's message beside counts that look unchanged. A refused action
+A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes its station claim and every exception naming it, because both tables
 have a cascading foreign key to `categories`. The dialog's routing-rule warning counts the rules the

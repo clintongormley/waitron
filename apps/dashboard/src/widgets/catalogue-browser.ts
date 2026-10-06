@@ -344,10 +344,10 @@ export class CatalogueBrowser extends LitElement {
     }
     return fresh as FolderSummary[];
   }
-  /** When what the dialog showed has changed, shows the new counts instead. When it has not, the
-   * delete sends this read's counts: a change in disabled products alone is not asked about
-   * again, because they are switched off already, and the server still refuses one made after
-   * this read. */
+  /** When the subcategories, switched-on products or routing rules the dialog showed have changed,
+   * shows the new counts instead. When they have not, the delete sends this read's counts: a change
+   * in disabled products alone is not asked about again, because they are switched off already,
+   * and the server still refuses one made after this read. */
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
@@ -380,9 +380,12 @@ export class CatalogueBrowser extends LitElement {
           ? "folders.product_count_all_disabled_one"
           : "folders.product_count_all_disabled"
         : disabled === 1
-          ? "folders.product_count_some_disabled_one"
+          ? "folders.product_count_one_disabled"
           : "folders.product_count_some_disabled";
-    const values: Record<string, string> = { count: String(count), disabled: String(disabled) };
+    return this.#fill(key, { count: String(count), disabled: String(disabled) });
+  }
+  // One pass with a function replacement: a `$&` or a `{name}` inside a value stays literal.
+  #fill(key: Parameters<typeof t>[0], values: Record<string, string>): string {
     return t(key).replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
   }
   /** Each category's path, numbered where others share it in the order the list draws them: depth
@@ -411,16 +414,11 @@ export class CatalogueBrowser extends LitElement {
       const path = pathOf.get(id) ?? "";
       const same = sharing.get(path) ?? [];
       if (same.length < 2) return path;
-      const values: Record<string, string> = {
+      return this.#fill("folders.path_ordinal", {
         path,
         position: String(same.indexOf(id) + 1),
         total: String(same.length),
-      };
-      // One pass with a function replacement: a `$&` or `{total}` in a name stays literal.
-      return t("folders.path_ordinal").replace(
-        /\{(\w+)\}/g,
-        (whole, name: string) => values[name] ?? whole,
-      );
+      });
     });
   }
   #operationDialog() {
