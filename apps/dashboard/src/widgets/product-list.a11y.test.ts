@@ -353,3 +353,34 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     at(over, "pointercancel");
   });
 });
+
+describe.each(["light", "dark"] as const)("product media menu a11y (%s)", (theme) => {
+  it.each([null, "soup.webp"])(
+    "names the closed and open colour/photo controls with image %s",
+    async (image) => {
+      await page.viewport(1280, 844);
+      const { el, host } = await mountWidget<ProductList>(
+        "dashboard-product-list",
+        {
+          products: [
+            { ...products[0]!, primaryCategoryId: null, image, color: "#b12525", variants: [] },
+          ],
+        },
+        theme,
+      );
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      const media =
+        table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+          '[data-test="color-p1"]',
+        )!;
+      await media.updateComplete;
+      await expectNoA11yViolations(host);
+      media.show();
+      expect(media.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      expect(media.querySelector('[data-test="media-colour"]')!.textContent).toContain("…");
+      expect(media.querySelector('[data-test="media-photo"]')!.textContent).toContain("…");
+      await expectNoA11yViolations(host);
+    },
+  );
+});

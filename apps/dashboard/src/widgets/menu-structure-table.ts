@@ -25,6 +25,7 @@ import {
   type DragGhost,
   type DropGap,
 } from "./tree-drag.js";
+import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import type {
@@ -257,6 +258,7 @@ export class MenuStructureTable extends LitElement {
         border: 0;
       }
     `,
+    productMediaStyles,
   ];
 
   @property({ attribute: false }) nodes: MenuStructureNode[] = [];
@@ -598,7 +600,7 @@ export class MenuStructureTable extends LitElement {
     for (let depth = segments.length; depth >= 0; depth--) {
       const candidate = depth === 0 ? ROOT_KEY : segments.slice(0, depth).join("/");
       const menu = root.querySelector<HTMLElement>(
-        `tr[data-row-key="${CSS.escape(candidate)}"] wt-row-actions`,
+        `tr[data-row-key="${CSS.escape(candidate)}"] wt-row-actions[data-test^="actions-"]`,
       );
       if (menu) {
         menu.focus();
@@ -744,42 +746,28 @@ export class MenuStructureTable extends LitElement {
     >`;
     if (node.ref.kind === "section")
       return html`<span part="folder-cell">${folderFrame(this.#swatch(row))}${stack}</span>`;
-    const image = this.#productById.get(node.ref.productId)?.image ?? null;
-    return html`<span part="product-cell"
-      >${
-        image === null
-          ? html`<span
-              part="thumb-placeholder"
-              data-test="thumb-placeholder"
-              aria-hidden="true"
-            ></span>`
-          : html`<span part="thumb-frame" data-test="thumb"
-              ><img part="thumbnail" src=${`/media/${image}`} alt="" draggable="false"
-            /></span>`
-      }${stack}${this.#swatch(row)}</span
-    >`;
+    return html`<span part="product-cell">${this.#swatch(row)}${stack}</span>`;
   }
 
-  /** A section's goes in its leading slot; a product's after its name, as its photo has that slot. */
   #swatch(row: MemberRow) {
     const { node, key, name } = row;
-    let color: string | null;
-    let send: () => void;
-    let editable: boolean;
-    if (node.ref.kind === "section") {
-      const detail = { sectionId: node.ref.sectionId, path: row.path };
-      color = node.color ?? null;
-      send = () => this.#send("wt-member-edit", detail);
-      editable = this.#ownedSection(row);
-    } else {
+    if (node.ref.kind === "product") {
       const productId = node.ref.productId;
       const product = this.#productById.get(productId);
-      color = product?.color ?? categoryColor(product?.categoryId ?? null, this.#categoryById);
-      send = () => this.#send("wt-product-color", { productId });
-      editable = !row.readOnly && product !== undefined;
+      return productMedia({
+        key,
+        productId,
+        name,
+        image: product?.image ?? null,
+        color: product?.color ?? categoryColor(product?.categoryId ?? null, this.#categoryById),
+        editable: !row.readOnly && product !== undefined,
+        busy: this.busy,
+        colour: () => this.#send("wt-product-color", { productId }),
+      });
     }
-    const chip = swatchChip(color);
-    if (!editable)
+    const sectionId = node.ref.sectionId;
+    const chip = swatchChip(node.color ?? null);
+    if (!this.#ownedSection(row))
       return html`<span part="swatch-box" data-test=${`color-${key}`} aria-hidden="true"
         >${chip}</span
       >`;
@@ -789,7 +777,7 @@ export class MenuStructureTable extends LitElement {
       data-test=${`color-${key}`}
       aria-label=${t("folders.edit_color").replace("{name}", name)}
       ?disabled=${this.busy}
-      @click=${send}
+      @click=${() => this.#send("wt-member-edit", { sectionId, path: row.path })}
     >
       ${chip}
     </button>`;

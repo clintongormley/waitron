@@ -442,3 +442,27 @@ test("Escape that closes the menu goes no further, so a dialog around it stays o
   expect(escape.defaultPrevented).toBe(true);
   expect(outside).not.toHaveBeenCalled();
 });
+
+describe("custom media trigger", () => {
+  it("renders supplied trigger content and opens its actions from that content", async () => {
+    const el = await mount(
+      '<wt-row-actions label="Media for Soup"><span slot="trigger">Photo</span><wt-button>Colour…</wt-button></wt-row-actions>',
+    );
+    const slot = el.shadowRoot!.querySelector<HTMLSlotElement>('slot[name="trigger"]');
+    expect(slot).not.toBeNull();
+    expect(slot!.assignedElements()[0]!.textContent).toBe("Photo");
+    await userEvent.click(el.querySelector('[slot="trigger"]')!);
+    expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    expect(el.shadowRoot!.querySelector("button")!.getBoundingClientRect().width).toBeGreaterThan(
+      0,
+    );
+  });
+  it("refuses to open a disabled media trigger, including programmatic show", async () => {
+    const { el } = await mountWidget<WtRowActions>("wt-row-actions", { label: "Media for Soup" });
+    el.setAttribute("disabled", "");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    el.show();
+    expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  });
+});

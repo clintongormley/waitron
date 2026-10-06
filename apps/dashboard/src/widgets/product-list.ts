@@ -22,6 +22,8 @@ import {
 } from "../i18n/domain.js";
 import { categoryPathSearchText, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
+import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
+import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
   holdPageCursor,
@@ -316,6 +318,7 @@ export class ProductList extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
     `,
+    productMediaStyles,
   ];
 
   /** Fills a bounded flex column, with the table's rows scrolling under its headings. */
@@ -359,6 +362,7 @@ export class ProductList extends LitElement {
   #emptyChecked = false;
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, { categories: number; products: number }>();
+  #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   #categorySearchTexts: ReadonlyMap<string, string> = new Map();
   #dragged: string[] = [];
   #pointerDrag: { pointerId: number; key: string; x: number; y: number; active: boolean } | null =
@@ -615,13 +619,15 @@ export class ProductList extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
-    if (changed.has("categories"))
+    if (changed.has("categories")) {
+      this.#categoryById = new Map(this.categories.map((category) => [category.id, category]));
       this.#categorySearchTexts = new Map(
         this.categories.map((category) => [
           category.id,
           categoryPathSearchText(category, this.categories),
         ]),
       );
+    }
     if (changed.has("nameDraft")) {
       const draft = this.nameDraft;
       this.#nameSent = false;
@@ -975,21 +981,17 @@ export class ProductList extends LitElement {
           variant
             ? html`<span part="variant-name">${variant.name}</span>`
             : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
-                ${
-                  product.image === null
-                    ? html`<span
-                        part="thumb-placeholder"
-                        data-test="thumb-placeholder"
-                        aria-hidden="true"
-                      ></span>`
-                    : html`<span part="thumb-frame" data-test="thumb"
-                        ><img
-                          part="thumbnail"
-                          src=${`/media/${product.image}`}
-                          alt=""
-                          draggable="false"
-                      /></span>`
-                }<span part="name-stack"
+                ${productMedia({
+                  key: product.id,
+                  name: product.name,
+                  image: product.image,
+                  color:
+                    product.color ?? categoryColor(product.primaryCategoryId, this.#categoryById),
+                  busy: false,
+                  colour: () => this.#send("product-colour", { productId: product.id }),
+                  photo: () =>
+                    this.#send("edit-product", { productId: product.id, field: "image" }),
+                })}<span part="name-stack"
                   ><strong>${product.name}</strong>${this.#variantCount(product)}</span
                 >
               </span>`,

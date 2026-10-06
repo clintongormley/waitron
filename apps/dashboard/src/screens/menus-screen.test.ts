@@ -7909,6 +7909,7 @@ describe("after the server comes back", () => {
 });
 
 describe("colour swatches on the Structure tab", () => {
+  beforeEach(() => page.viewport(1280, 844));
   const paintedCategories = (): CategorySummary[] =>
     categories.map((each) => (each.id === "c-drinks" ? { ...each, color: "#256bb1" } : each));
   type ColorForm = HTMLElementTagNameMap["dashboard-product-color-form"];
@@ -7919,7 +7920,13 @@ describe("colour swatches on the Structure tab", () => {
   async function openLemonade(client: Api): Promise<MenusScreen> {
     const el = await mountLunch(client);
     await toggleRow(el, "m-drinks");
-    inStructure(el, `[data-test="${CSS.escape("color-m-drinks/m-lemonade")}"]`)!.click();
+    const media = inStructure<HTMLElementTagNameMap["wt-row-actions"]>(
+      el,
+      `[data-test="${CSS.escape("color-m-drinks/m-lemonade")}"]`,
+    )!;
+    await media.updateComplete;
+    await userEvent.click(media.shadowRoot!.querySelector("button")!);
+    media.querySelector<HTMLElement>('[data-test="media-colour"]')!.click();
     await el.updateComplete;
     await vi.waitFor(() => expect(colorForm(el).open).toBe(true));
     return el;

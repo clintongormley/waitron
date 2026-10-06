@@ -23,6 +23,9 @@ import type {
   Unit,
   UnitInput,
 } from "../api/client.js";
+import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
+import "../widgets/product-color-form.js";
+import { fieldOf } from "../widgets/section-writes.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { dashboardPath } from "../navigation.js";
@@ -138,6 +141,10 @@ export class CatalogueScreen extends LitElement {
   /** The category whose menu started the open add, or null for All products; undefined while none is. */
   #addFrom: string | null | undefined = undefined;
   #linkedProduct: string | null = null;
+  @state() private editorInitialField = "";
+  @state() private colouring: Product | null = null;
+  @state() private colourBusy = false;
+  @state() private colourErrors: Record<string, string> = {};
   /** Rebuilt only when a new refusal arrives: a form takes a new `fieldErrors` object as a new
    * refusal and shows again the ones the operator had since dismissed. */
   #childRefusals: { error: unknown; errors: ChildRefusals } | null = null;
@@ -313,6 +320,7 @@ export class CatalogueScreen extends LitElement {
   @state() private newCategoryId: string | null = null;
 
   #openCreate(categoryId: string | null): void {
+    this.editorInitialField = "";
     this.newCategoryId = this.categories.some(({ id }) => id === categoryId) ? categoryId : null;
     this.#editorGeneration++;
     this.#resetEditorState();
@@ -330,11 +338,12 @@ export class CatalogueScreen extends LitElement {
     );
   }
 
-  async #openProduct(productId: string): Promise<void> {
+  async #openProduct(productId: string, field = ""): Promise<void> {
     if (!this.#knows(productId)) return;
     this.#resetEditorState();
     this.editorOpen = false;
     this.editorValue = null;
+    this.editorInitialField = field === "image" ? "image" : "";
     this.#showError(null);
     const generation = ++this.#editorGeneration;
     try {
@@ -352,7 +361,27 @@ export class CatalogueScreen extends LitElement {
     const id = this.#linkedProduct;
     if (id === null || !this.#knows(id)) return;
     this.#linkedProduct = null;
-    await this.#openProduct(id);
+    await this.#openProduct(id, new URL(location.href).searchParams.get("field") ?? "");
+  }
+
+  async #saveColour(color: string | null): Promise<void> {
+    const product = this.colouring;
+    if (!product || this.colourBusy) return;
+    this.colourBusy = true;
+    this.colourErrors = {};
+    try {
+      await this.api.setProductColor(product.id, color);
+      this.colouring = null;
+    } catch (error) {
+      this.colourErrors =
+        fieldOf(error) === "color"
+          ? { color: t("editor.field_rejected") }
+          : { _form: codeMessage(codeOf(error)) };
+      return;
+    } finally {
+      this.colourBusy = false;
+    }
+    await this.#reloadProducts().catch(() => undefined);
   }
 
   #openDelete(productId: string): void {
@@ -432,7 +461,12 @@ export class CatalogueScreen extends LitElement {
     this.editorOpen = false;
     this.editorValue = null;
     this.#linkedProduct = null;
-    if (writeUrl && this.#url.read("product") !== null) this.#url.write({ product: null }, true);
+    if (writeUrl) {
+      const url = new URL(location.href);
+      url.searchParams.delete("field");
+      history.replaceState(history.state, "", url);
+      if (this.#url.read("product") !== null) this.#url.write({ product: null }, true);
+    }
   }
 
   async #save(event: CustomEvent<{ value: ProductEditorInput }>): Promise<void> {
@@ -704,9 +738,15 @@ export class CatalogueScreen extends LitElement {
                 this.#addFrom = event.detail.categoryId;
                 this.#openCreate(event.detail.categoryId);
               }}
-              @edit-product=${(event: CustomEvent<{ productId: string }>) => {
+              @product-colour=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
-                void this.#openProduct(event.detail.productId);
+                this.colouring =
+                  this.products.find((product) => product.id === event.detail.productId) ?? null;
+                this.colourErrors = {};
+              }}
+              @edit-product=${(event: CustomEvent<{ productId: string; field?: string }>) => {
+                event.stopPropagation();
+                void this.#openProduct(event.detail.productId, event.detail.field);
               }}
               @delete-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
@@ -724,6 +764,22 @@ export class CatalogueScreen extends LitElement {
           ? html`<p class="error" role="alert">${refusalText(this.errorKey, this.refusedLists)}</p>`
           : nothing
       }
+      <dashboard-product-color-form
+        .open=${this.colouring !== null}
+        .busy=${this.colourBusy}
+        .name=${this.colouring?.name ?? ""}
+        .color=${this.colouring?.color ?? null}
+        .categoryColor=${categoryColor(this.colouring?.primaryCategoryId ?? null, new Map(this.categories.map((category) => [category.id, category])))}
+        .errors=${this.colourErrors}
+        @wt-submit=${(event: CustomEvent<{ color: string | null }>) => {
+          event.stopPropagation();
+          void this.#saveColour(event.detail.color);
+        }}
+        @wt-cancel=${(event: Event) => {
+          event.stopPropagation();
+          this.colouring = null;
+        }}
+      ></dashboard-product-color-form>
       <dashboard-product-editor
         @wt-close=${() => {
           if (!this.editorOpen && this.placing === null) this.#refocusAdd();
@@ -733,6 +789,7 @@ export class CatalogueScreen extends LitElement {
         .childOpen=${this.#child.kind !== null}
         .locales=${locales}
         .value=${this.editorValue}
+        .initialField=${this.editorInitialField}
         .newCategoryId=${this.newCategoryId}
         .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}

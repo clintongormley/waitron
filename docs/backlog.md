@@ -920,21 +920,25 @@ spans it keeps its scroll position (tested with rows of fractional height at a d
 row). The Products list's
 unused `units` property is gone (it closes W75's leftover).
 
-- **A303, owner 2026-10-06, in progress:** one `--wt-tap-min` box for colour squares and photos;
-  both trees hide their media slots at ≤440px. The Products count is visually hidden there but
-  remains in the row's accessible name. Slot and count browser checks added; the count check's
-  phone and desktop controls replace the old hidden-box measurement. The grip/checkbox column now
-  precedes the indentation, and Select mode has a separate action bar below Search with Done and
-  focus return. Still to implement: the leading product colour/photo menu, colour ring and editor
-  photo-field focus. Visual and whole-item finish checks remain
-  pending.
+- **A303, owner 2026-10-06 — DONE:** colour squares and photos share a `--wt-tap-min` box;
+  both trees hide their media slots at ≤440px. Products counts remain in each row's accessible
+  name while visually hidden. Grips and checkboxes sit before the indentation. Select/Seleccionar
+  opens an action bar below Search; Done returns focus to Select. A product's leading slot shows
+  its photo with an own-or-inherited colour ring, or its colour square; it opens Colour… and
+  Change photo…, which opens the existing editor with the photo field focused. Category and
+  section squares still open their colour picker directly.
+- **Products maker-link contrast on a focused row, found during A303:** a whole-widget axe scan
+  after clicking a product media trigger reports the made-at link at 3.87:1 in light theme and
+  3.57:1 in dark theme against the focused row background. Reproduced in
+  `product-list.a11y.test.ts` with a native trigger click; the retained diagnostic is Lane D's
+  `receipts/a303/colour-focus-a11y-green.log`. Origin before this branch is unverified. Open-menu
+  scans through the component's `show()` method pass in both themes. Fix the row/link contrast
+  separately; no axe rule is excluded here.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
   not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the bottom
   (left alone; not measured).
-- Products' toggle is named Select and move, not Reorder as the brief said, because a drag there
-  files rows into a category rather than reordering them.
-- In the Structure tree a product's colour square stays after its name, because its photo holds the
-  leading slot.
+- A303 supersedes A294's Select and move label and trailing product colour square with the controls
+  described above.
 - Price overrides and departments-and-zones (`apps/dashboard/src/widgets/menu-prices-table.ts`,
   `packages/venue-service/src/dashboard/venue-operations-screen.ts`) draw no grips, folder icons or
   product counts, so nothing changed there.

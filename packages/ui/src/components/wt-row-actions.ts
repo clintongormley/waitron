@@ -55,6 +55,7 @@ export class WtRowActions extends LitElement {
 
   @property() label = "";
   @property() icon = "kebab";
+  @property({ type: Boolean, reflect: true }) disabled = false;
   @property() iconSize: WtIconSize = "md";
   /** The trigger edge the popup lines up with; "end" suits a menu at the trailing edge. */
   @property() align: "start" | "end" = "start";
@@ -76,7 +77,8 @@ export class WtRowActions extends LitElement {
    * before the first render or while the host is off the page, where a popover cannot open. */
   show(): void {
     const popup = this.popup as HTMLElement | null;
-    if (popup === null || !this.isConnected || popup.matches(":popover-open")) return;
+    if (this.disabled || popup === null || !this.isConnected || popup.matches(":popover-open"))
+      return;
     popup.showPopover();
     this.positionPopup();
   }
@@ -134,13 +136,15 @@ export class WtRowActions extends LitElement {
     return html`
       <button
         type="button"
+        part="trigger"
+        ?disabled=${this.disabled}
         aria-label=${this.label}
         aria-expanded=${this.expanded}
         popovertarget="actions"
         @click=${this.onTriggerClick}
         @keydown=${this.onKeydown}
       >
-        <wt-icon name=${this.icon} size=${this.iconSize}></wt-icon>
+        <slot name="trigger"><wt-icon name=${this.icon} size=${this.iconSize}></wt-icon></slot>
         <slot name="badge"></slot>
       </button>
       <div id="actions" part="popup" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>

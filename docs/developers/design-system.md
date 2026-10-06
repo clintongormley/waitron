@@ -847,9 +847,12 @@ a muted name; in Reorder mode each keeps an unseen grip-sized space. Only an own
 In Reorder mode, put every grip in one leading column before the tree arrow and indentation.
 Reserve that column on the menu's, Home's and read-only rows. Keep the arrow and media slot inside
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
-holds a section's colour square, a product's photo, or nothing on the Home and menu rows. Hide
-media in both trees when the tree's box is at most 440px wide. A product's separate colour control
-still follows its name until A303's media menu lands.
+holds a section's colour square, a product's colour square or photo, or nothing on the Home and
+menu rows. A photo has a ring in the product's own colour, falling back to its category's inherited
+colour. The product slot opens Colour… and Change photo…; the latter opens the existing product
+editor with its photo field focused. Section squares still open their colour picker directly. Hide
+media in both trees when the tree's box is at most 440px wide; the product editor remains available
+through the row's Actions menu.
 
 The grips show only in Reorder mode, so a menu is not rearranged by a stray drag while you browse
 it. The tab's toolbar starts with a Reorder icon button (a grip mark, Reordenar in Spanish; "Icon
@@ -1005,9 +1008,12 @@ the tree arrow and indentation. Leave a blank grip on All products and a categor
 outside that mode, draw no grip or its space and allow no drag. In the name column, first comes
 the table's arrow or its blank space, narrower at phone width as above.
 Last comes a slot a product photo wide: on a category
-row it holds the category's colour square, centred; on a product row, the product's photo, or its
-empty placeholder frame when it has none; on All products and on a category being added or renamed
-it is blank. No row draws a folder icon, though the picture that follows the pointer while you drag
+row it holds the category's colour square, centred; on a product row, the product's photo with a
+colour ring, or a filled colour square when it has no photo. Both use the product's own colour,
+falling back to its category's inherited colour; without either colour the frame is empty. Clicking
+the product slot opens Colour… and Change photo… (Color… and Cambiar foto… in Spanish); Change
+photo… opens the existing editor with its photo field focused. Category squares still open their
+colour picker directly. On All products and on a category being added or renamed the slot is blank. No row draws a folder icon, though the picture that follows the pointer while you drag
 a category keeps one. Then come `--wt-space-3` and the name. So on those rows names step in by the
 table's indent per level whether the row is a category or a product, and the Name heading, which
 moves with the mode, sits over the All products name. A colour square and a product's photo or

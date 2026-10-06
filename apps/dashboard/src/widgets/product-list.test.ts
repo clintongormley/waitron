@@ -1615,7 +1615,11 @@ describe("the product list at phone width", () => {
           products: phoneProducts(),
         });
         await tableRoot(el);
-        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 3);
+        expectRowMenusOnScreen(
+          el.shadowRoot!.querySelector("wt-data-table")!,
+          3,
+          'wt-row-actions[data-test^="actions-"]',
+        );
       } finally {
         setLocale(before);
         await page.viewport(width, height);
@@ -2579,7 +2583,7 @@ describe("the product list as a tree", () => {
         });
         await el.revealCategory("k");
         const table = el.shadowRoot!.querySelector("wt-data-table")!;
-        expectRowMenusOnScreen(table, 5);
+        expectRowMenusOnScreen(table, 5, 'wt-row-actions[data-test^="actions-"]');
         // The table learns its width from a ResizeObserver, which reports after the next layout,
         // and sets `narrow` a frame later.
         await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
@@ -3529,7 +3533,7 @@ describe("the Products tree's Name column", () => {
       grip: box(row.querySelector('.drag-grip, [part="grip-space"]')),
       media: box(
         cell.querySelector(
-          '[part="folder-frame"], [part="thumb-frame"], [part="thumb-placeholder"]',
+          '[part="folder-frame"], [part~="thumb-frame"], [part~="thumb-placeholder"]',
         ),
       ),
       name: box({ getBoundingClientRect: () => text.getBoundingClientRect() } as Element)!,
@@ -4540,3 +4544,50 @@ it.each([390, 1280])(
     }
   },
 );
+
+describe("product media actions", () => {
+  it("paints the leading photo ring with inherited colour and sends separate colour/photo actions", async () => {
+    const { el, root } = await mountTree({
+      products: [product({ id: "cola", name: "Cola", primaryCategoryId: "d", image: "cola.webp" })],
+      categories: [{ ...drinks, color: "#256bb1" }],
+    });
+    await openRow(el, "folder:d");
+    const media = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="color-cola"]',
+    );
+    expect(media).not.toBeNull();
+    await media!.updateComplete;
+    const frame = media!.querySelector<HTMLElement>('[data-test="thumb"]')!;
+    expect(getComputedStyle(frame).borderTopColor).toBe("rgb(37, 107, 177)");
+    expect(parseFloat(getComputedStyle(frame).borderTopWidth)).toBeGreaterThan(1);
+    const name = media!.parentElement!.querySelector("strong")!;
+    expect(media!.getBoundingClientRect().right).toBeLessThanOrEqual(
+      name.getBoundingClientRect().left,
+    );
+    const sent: unknown[] = [];
+    for (const type of ["edit-product", "product-colour"])
+      el.addEventListener(type, (e) => sent.push([type, (e as CustomEvent).detail]));
+    await userEvent.click(media!.shadowRoot!.querySelector("button")!);
+    expect(sent).toEqual([]);
+    media!.querySelector<HTMLElement>('[data-test="media-colour"]')!.click();
+    expect(sent).toEqual([["product-colour", { productId: "cola" }]]);
+    await userEvent.click(media!.shadowRoot!.querySelector("button")!);
+    media!.querySelector<HTMLElement>('[data-test="media-photo"]')!.click();
+    expect(sent).toEqual([
+      ["product-colour", { productId: "cola" }],
+      ["edit-product", { productId: "cola", field: "image" }],
+    ]);
+  });
+  it("fills a product without a photo with its own colour and hides the whole menu at phone width", async () => {
+    const { el, root } = await mountTree({
+      products: [product({ id: "plain", name: "Plain", color: "#b12525" })],
+    });
+    const media = root.querySelector<HTMLElement>('[data-test="color-plain"]');
+    expect(media).not.toBeNull();
+    const frame = media!.querySelector<HTMLElement>('[data-test="thumb-placeholder"]')!;
+    expect(getComputedStyle(frame).backgroundColor).toBe("rgb(177, 37, 37)");
+    await page.viewport(390, 844);
+    await expect.poll(() => media!.getBoundingClientRect().width).toBe(0);
+    expect((await tableRoot(el)).querySelector('[data-test="edit-plain"]')).not.toBeNull();
+  });
+});
