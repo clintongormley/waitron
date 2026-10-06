@@ -76,6 +76,15 @@ export const RECEIPT_LABEL_KEYS = [
 
 export type ReceiptLabels = Readonly<Record<(typeof RECEIPT_LABEL_KEYS)[number], string>>;
 
+/** The made-up business a Demo venue in this country is set up as, the same in every seed language.
+ * Never for Prepare or Live. */
+export interface CountryDemoIdentity {
+  readonly legalName: string;
+  readonly taxId: string;
+  readonly locationName: string;
+  readonly departmentTradingNames: { readonly restaurant: string; readonly deli: string };
+}
+
 export interface CountryPack {
   readonly countryCode: string;
   readonly defaultLocale: string;
@@ -90,8 +99,7 @@ export interface CountryPack {
   readonly administrativeAreas: readonly AdministrativeArea[];
   readonly fiscalJurisdictions: readonly FiscalJurisdiction[];
   readonly defaultFiscalJurisdictionId?: string;
-  /** Made-up identity for disposable Demo onboarding; never for Prepare or Live. */
-  readonly demo?: { createCompanyTaxId(): string };
+  readonly demo?: CountryDemoIdentity;
   readonly taxIdentifier?: ValueValidator<string>;
   readonly postalCode?: ValueValidator<"postal-code">;
   readonly telephone?: ValueValidator<string>;

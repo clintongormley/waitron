@@ -267,8 +267,9 @@ export class SetupVenueScreen extends LitElement {
     if (!this.#seeded) {
       this.#seeded = true;
       this.#seedFromDraft();
-      if (this.#demo && this.values.taxId === "") {
-        this.values = { ...this.values, taxId: this.#pack()?.demo?.createCompanyTaxId() ?? "" };
+      const demoLocation = this.#demo ? this.#pack()?.demo?.locationName : undefined;
+      if (demoLocation !== undefined && this.values.name === "") {
+        this.values = { ...this.values, name: demoLocation };
       }
     }
     if (
@@ -282,10 +283,7 @@ export class SetupVenueScreen extends LitElement {
     if (changed.has("invalidField")) {
       const refusal =
         this.invalidField === undefined ? undefined : SERVER_FIELDS[this.invalidField];
-      this.serverInvalid =
-        refusal === undefined
-          ? undefined
-          : { key: this.#demo && refusal.key === "legalName" ? "name" : refusal.key, refusal };
+      this.serverInvalid = refusal === undefined ? undefined : { key: refusal.key, refusal };
     }
     if (changed.has("errorMessage")) this.refusalDismissed = false;
     this.#errors = this.#collectErrors();
@@ -422,8 +420,6 @@ export class SetupVenueScreen extends LitElement {
   #invalidFields(): Set<FieldKey> {
     const invalid = new Set<FieldKey>();
     for (const key of REQUIRED_TEXT_FIELDS) {
-      // Demo copies the location name into the legal name on Next.
-      if (this.#demo && key === "legalName") continue;
       if (this.values[key].trim() === "") invalid.add(key);
     }
     const pack = this.#pack();
@@ -486,6 +482,12 @@ export class SetupVenueScreen extends LitElement {
       this.shadowRoot?.querySelector<HTMLElement>("[data-test=defaults-error]")?.focus();
       return;
     }
+    // From the pack chosen NOW, so a country changed after the form was seeded cannot send another
+    // country's demo identity.
+    const identity = this.#demo ? this.#pack()?.demo : undefined;
+    if (identity !== undefined) {
+      this.values = { ...this.values, taxId: identity.taxId, legalName: identity.legalName };
+    }
     this.attempted = true;
     this.refusalDismissed = true;
     this.serverInvalid = undefined;
@@ -493,7 +495,6 @@ export class SetupVenueScreen extends LitElement {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    if (this.#demo) this.values = { ...this.values, legalName: this.values.name };
     const pack = this.#pack();
     const area = this.#area(pack);
     const postalValidation = pack?.postalCode?.validate(this.values.postalCode);
