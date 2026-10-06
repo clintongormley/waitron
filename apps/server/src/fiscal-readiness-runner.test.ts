@@ -107,7 +107,7 @@ describe("fiscal readiness submission runner", () => {
         },
         now: () => new Date("2026-09-09T12:00:00.000Z"),
       }),
-    ).resolves.toBe("accepted");
+    ).resolves.toEqual({ status: "accepted" });
     expect(drain).toHaveBeenCalledOnce();
     expect(drain.mock.calls[0]![0]).toMatchObject({
       environment: "preproduction",
@@ -280,7 +280,11 @@ describe("fiscal readiness submission runner", () => {
       moduleVersions: { core: 1 },
       applicationVersion: "0.0.0",
     };
-    async function submitWith(drain: () => Promise<unknown>, stateDir?: string) {
+    async function submitWith(
+      drain: () => Promise<unknown>,
+      stateDir?: string,
+      readinessRejections?: () => Promise<{ code: string | null; message: string | null }[]>,
+    ) {
       const dir = stateDir ?? (await mkdtemp(join(tmpdir(), "waitron-readiness-runner-drain-")));
       if (stateDir === undefined) dirs.push(dir);
       return submitFiscalReadiness({
@@ -291,6 +295,7 @@ describe("fiscal readiness submission runner", () => {
           ...selected.contribution!,
           activationReadiness: "accepted-test-submission" as const,
           drain: drain as never,
+          readinessRejections,
         },
         secret: undefined,
         ring: {} as never,
@@ -299,33 +304,59 @@ describe("fiscal readiness submission runner", () => {
       });
     }
 
+    it("includes the saved authority refusal when the sample is rejected", async () => {
+      await expect(
+        submitWith(
+          () => Promise.resolve({ ...emptyDrainResult(), recordsHalted: 1 }),
+          undefined,
+          async () => [{ code: "1161", message: "Importe total incorrecto" }],
+        ),
+      ).resolves.toEqual({
+        status: "rejected",
+        rejections: [{ code: "1161", message: "Importe total incorrecto" }],
+      });
+    });
+
+    it("keeps a saved refusal visible when a retry finds no due submission", async () => {
+      await expect(
+        submitWith(
+          () => Promise.resolve(emptyDrainResult()),
+          undefined,
+          async () => [{ code: "1161", message: "Importe total incorrecto" }],
+        ),
+      ).resolves.toEqual({
+        status: "rejected",
+        rejections: [{ code: "1161", message: "Importe total incorrecto" }],
+      });
+    });
+
     it("reports a halted sample as rejected", async () => {
       await expect(
         submitWith(() => Promise.resolve({ ...emptyDrainResult(), recordsHalted: 1 })),
-      ).resolves.toBe("rejected");
+      ).resolves.toEqual({ status: "rejected" });
     });
 
     it("reports a drain that neither accepted nor halted anything as uncertain", async () => {
-      await expect(submitWith(() => Promise.resolve(emptyDrainResult()))).resolves.toBe(
-        "uncertain",
-      );
+      await expect(submitWith(() => Promise.resolve(emptyDrainResult()))).resolves.toEqual({
+        status: "uncertain",
+      });
     });
 
     it("reports a drain that throws as uncertain", async () => {
       await expect(
         submitWith(() => Promise.reject(new Error("authority unreachable"))),
-      ).resolves.toBe("uncertain");
+      ).resolves.toEqual({ status: "uncertain" });
     });
 
     it("reuses the retained venue and its one sample when the same inputs run again", async () => {
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-rerun-"));
       dirs.push(stateDir);
-      await expect(submitWith(() => Promise.resolve(emptyDrainResult()), stateDir)).resolves.toBe(
-        "uncertain",
-      );
+      await expect(
+        submitWith(() => Promise.resolve(emptyDrainResult()), stateDir),
+      ).resolves.toEqual({ status: "uncertain" });
       await expect(
         submitWith(() => Promise.resolve({ ...emptyDrainResult(), recordsAccepted: 1 }), stateDir),
-      ).resolves.toBe("accepted");
+      ).resolves.toEqual({ status: "accepted" });
 
       const connection = new DatabaseSync(
         join(
@@ -380,7 +411,7 @@ describe("fiscal readiness submission runner", () => {
           applicationVersion: "0.0.0",
         },
       }),
-    ).resolves.toBe("accepted");
+    ).resolves.toEqual({ status: "accepted" });
     const after = Date.now();
     expect(seal).toHaveBeenCalledOnce();
     expect(seal.mock.calls[0]![0]).toMatchObject({ ring });
@@ -409,7 +440,7 @@ describe("fiscal readiness submission runner", () => {
         ring: {} as never,
         readinessInput: {} as never,
       }),
-    ).resolves.toBe("accepted");
+    ).resolves.toEqual({ status: "accepted" });
     expect(drain).not.toHaveBeenCalled();
     await expect(readdir(stateDir)).resolves.toEqual([]);
   });

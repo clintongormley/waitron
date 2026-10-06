@@ -356,12 +356,22 @@ stream `pointer.ts`/`supervisor.ts`; till receipt-result handling and durable de
   membership before enabling fencing. Test genuine newer evidence, stale/replayed evidence,
   forged signatures and unavailable storage. Online fencing remains additional protection;
   paper recovery makes no remote-fencing claim.
-- [ ] Refuse production use of an unstamped database containing nonproduction fiscal records.
-  Preserve a legitimate empty setup. Warn on measured clock drift beyond one minute without
-  refusing sales; no reachable time source means unknown, not a fabricated drift value.
-- [ ] Surface actual readiness-test rejection details and the measured limits of name checking.
-  Run each changed source's focused suite and the startup recovery routes. Split this task into
-  independently reviewed queue items by witness, deployment and readiness responsibility.
+- [x] W41s-10c implementation checkpoint, 2026-10-05 (not landed): refuse production use of an
+  unstamped database containing preproduction or unknown-environment fiscal records. Preserve
+  an empty setup and production-record history. The deployment-guard suite exercises the real
+  boot refusal before a missing migration directory can be reached, preserving the original
+  record and empty stamp; the module probe also covers fiscal tables not yet migrated.
+- [x] W41s-10c implementation checkpoint, 2026-10-05 (not landed): observe zoned AEAT
+  presentation timestamps during background submissions. Warn when the entire request interval
+  differs by more than one minute, through a fiscal alert and authenticated till banner. Missing,
+  malformed, unzoned or ambiguous samples mean unknown. The banner describes the last comparison;
+  no freshness guarantee or extra time-source request is added. Cash-sale tests cover warning
+  and unavailable reads. Lane A's receipt overlap is explicitly waived by the campaign queue.
+- [x] W41s-10c implementation checkpoint, 2026-10-05 (not landed): show saved AEAT rejection
+  codes and messages, including a repeated readiness attempt while the refusal is still saved.
+  Explain that acceptance does not verify the registered name: W41s-1's §7.1 receipt retained the
+  correct header name while varying the record issuer's name. Your legal name and tax ID still
+  need checking against your tax registration. Witness work remains separately queued.
 
 ## Task 11: full offline exercise and operator instructions
 

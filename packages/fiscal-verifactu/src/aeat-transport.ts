@@ -6,7 +6,7 @@ import { getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
 import { SOAP_ENDPOINTS, SOAP_ENDPOINTS_SELLO, createClient } from "@waitron/verifactu";
 import type { VerifactuClient } from "@waitron/verifactu";
-import type { FiscalDutyLog } from "@waitron/fiscal";
+import type { FiscalDutyDeps, FiscalDutyLog } from "@waitron/fiscal";
 import "./errors.js";
 
 /** The two FNMT certificate kinds this host routes on. `CertKind` is derived from this array, so
@@ -121,6 +121,7 @@ export interface TransportDeps {
   ring: KeyRing;
   endpointFor: (certKind: CertKind) => string;
   fetchFor: (material: CertMaterial) => TenantTransport;
+  observeAuthorityTime?: FiscalDutyDeps["observeAuthorityTime"];
 }
 
 export interface ClientResolver {
@@ -143,10 +144,30 @@ export function aeatClientResolver(deps: TransportDeps, log?: FiscalDutyLog): Cl
       const material = await readCertMaterial(deps.db, deps.ring);
       const transport = deps.fetchFor(material);
       open.push(transport);
-      return createClient({
+      const client = createClient({
         endpoint: deps.endpointFor(material.certKind),
         fetch: transport.fetch,
       });
+      if (deps.observeAuthorityTime === undefined) return client;
+      return {
+        consultar: (header, filter) => client.consultar(header, filter),
+        submit: async (header, records) => {
+          const sentAt = new Date();
+          let authorityTimestamp: string | null = null;
+          try {
+            const response = await client.submit(header, records);
+            authorityTimestamp = response.DatosPresentacion?.TimestampPresentacion ?? null;
+            return response;
+          } finally {
+            // Diagnostics must not discard a reply or replace the transport's own failure.
+            try {
+              deps.observeAuthorityTime!({ authorityTimestamp, sentAt, receivedAt: new Date() });
+            } catch {
+              /* The diagnostic observer has no authority over submission. */
+            }
+          }
+        },
+      };
     },
     closeAll: async () => {
       // Concurrently: this runs in the drain seat's `finally`, on the critical path of every pass.

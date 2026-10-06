@@ -1,3 +1,7 @@
+import { eq, isNull, ne, or } from "drizzle-orm";
+import { tableExists } from "@waitron/db";
+import { envios } from "./schema/envios.js";
+import { registrosFacturacion } from "./schema/registros.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
@@ -22,6 +26,23 @@ export const FISCAL_SLOT: FiscalContribution = {
   activationReadiness: "accepted-test-submission",
   activationReadinessTarget: (secret) =>
     aeatEndpointFor("preproduction")(parseAeatCert(secret).certKind),
+  hasNonproductionRecords: async (db) => {
+    if (!(await tableExists(db, "registros_facturacion"))) return false;
+    const rows = await db
+      .select({ id: registrosFacturacion.id })
+      .from(registrosFacturacion)
+      .where(
+        or(isNull(registrosFacturacion.entorno), ne(registrosFacturacion.entorno, "production")),
+      )
+      .limit(1);
+    return rows.length > 0;
+  },
+  readinessRejections: (db) =>
+    db
+      .select({ code: envios.codigoError, message: envios.mensajeError })
+      .from(envios)
+      .where(eq(envios.estado, "rechazado"))
+      .orderBy(envios.registroId),
   makeBackend: ({ db, clock, environment }) =>
     new VerifactuBackend({
       clock,
@@ -34,9 +55,15 @@ export const FISCAL_SLOT: FiscalContribution = {
   // (one TLS pool per pass with due work, released in `finally`) and hands `runDrain` only the
   // vault-scoped `resolveClient`. `environment` doubles as `runDrain`'s `Entorno` guard and
   // `aeatEndpointFor`'s host selector — the same `"production" | "preproduction"` union — so no cast.
-  drain: async ({ db, ring, environment, skipRetryMs, log }, now) => {
+  drain: async ({ db, ring, environment, skipRetryMs, log, observeAuthorityTime }, now) => {
     const resolver = aeatClientResolver(
-      { db, ring, endpointFor: aeatEndpointFor(environment), fetchFor: mtlsFetch },
+      {
+        db,
+        ring,
+        endpointFor: aeatEndpointFor(environment),
+        fetchFor: mtlsFetch,
+        observeAuthorityTime,
+      },
       log,
     );
     try {

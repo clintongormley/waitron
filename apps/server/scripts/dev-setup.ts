@@ -3,13 +3,6 @@
 // against a production directory — it chains real fiscal records under `preproduction`, and it
 // refuses `WAITRON_ENV=production` before touching the directory.
 //
-// The `.env` carries `WAITRON_ENV=dev`, which `deploymentEnvironment` (src/config.ts) maps to
-// `preproduction`: the dev device switcher turns on, the fiscal side does not change. Note this is a
-// runtime mapping, not a stored stamp: `devSetup` here never calls `stampDeployment` at all (unlike
-// the `/setup-api/provision` HTTP route), so the database's `deployment` singleton is left UNSTAMPED
-// by this flow, and `assertDeploymentMatches` (`src/deployment-guard.ts`) treats an unstamped
-// database as matching any host environment.
-//
 // Re-registering a node starts a new hash chain (CLAUDE.md §5), so this reuses a venue the `.env`
 // names and refuses when the directory holds one it cannot account for. The only "start over" is
 // `pnpm dev:reset`, which removes the venue directory.

@@ -26,6 +26,7 @@ declare module "@waitron/shared" {
       reason: "sales" | "orders" | "daily_close" | "geography_context";
     };
     "venue.detail_changed": { field: string };
+    "fiscal.clock_drift": { seconds: number };
     "cloud.unavailable": Record<string, never>;
     "cloud.request_unavailable": Record<string, never>;
     "cloud.state_invalid": Record<string, never>;

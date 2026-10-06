@@ -86,3 +86,18 @@ describe("SetupFiscalTestScreen in Spanish", () => {
     );
   });
 });
+
+it("shows the saved rejection as text and keeps the retry available", async () => {
+  const { el } = await mountWidget<SetupFiscalTestScreen>("setup-fiscal-test-screen", {
+    status: "rejected",
+    rejections: [{ code: "1161", message: "Importe <total> incorrecto" }],
+  });
+  const alert = el.shadowRoot!.querySelector("[role=alert]");
+  expect(alert?.textContent).toContain("1161");
+  expect(alert?.textContent).toContain("Importe <total> incorrecto");
+  expect(alert?.querySelector("total")).toBeNull();
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-test=run]")!.disabled,
+  ).toBe(false);
+  expect(el.shadowRoot!.textContent).toContain("does not prove the registered name matches");
+});

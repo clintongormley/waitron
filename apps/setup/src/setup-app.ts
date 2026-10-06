@@ -498,6 +498,7 @@ export class SetupApp extends LitElement {
   @state() private configurationError?: Message;
   @state() private configurationPreview?: ConfigurationPreview;
   @state() private fiscalTestStatus?: "accepted" | "rejected" | "uncertain";
+  @state() private fiscalTestRejections: { code: string | null; message: string | null }[] = [];
   @state() private fiscalTestRunning = false;
   @state() private fiscalTestError?: Message;
 
@@ -989,12 +990,15 @@ export class SetupApp extends LitElement {
 
   async #onFiscalTestRequested(event: CustomEvent): Promise<void> {
     event.stopPropagation();
+    this.fiscalTestStatus = undefined;
+    this.fiscalTestRejections = [];
     this.fiscalTestRunning = true;
     this.fiscalTestError = undefined;
     try {
       const result = await this.api.runFiscalTest(assembleBody(this.draft));
       if (!this.isConnected) return;
       this.fiscalTestStatus = result.status === "not-applicable" ? "accepted" : result.status;
+      this.fiscalTestRejections = result.status === "rejected" ? (result.rejections ?? []) : [];
     } catch {
       if (!this.isConnected) return;
       this.fiscalTestError = say("shell.fiscal_test.could_not_run");
@@ -1224,6 +1228,7 @@ export class SetupApp extends LitElement {
         return html`<setup-fiscal-test-screen
           data-test="screen-fiscal-test"
           .status=${this.fiscalTestStatus}
+          .rejections=${this.fiscalTestRejections}
           .running=${this.fiscalTestRunning}
           .errorMessage=${this.fiscalTestError?.()}
         ></setup-fiscal-test-screen>`;

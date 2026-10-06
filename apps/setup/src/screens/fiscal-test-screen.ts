@@ -25,6 +25,8 @@ export class SetupFiscalTestScreen extends LitElement {
   ];
 
   @property() status?: "accepted" | "rejected" | "uncertain";
+  @property({ attribute: false }) rejections: { code: string | null; message: string | null }[] =
+    [];
   @property({ type: Boolean }) running = false;
   @property() errorMessage?: string;
 
@@ -37,11 +39,15 @@ export class SetupFiscalTestScreen extends LitElement {
     return html`
       <h1>${t("fiscal_test.heading")}</h1>
       <p>${t("fiscal_test.intro")}</p>
+      <p>${t("fiscal_test.name_limit")}</p>
       ${
         this.status === "accepted"
           ? html`<p class="success" role="status">${t("fiscal_test.accepted")}</p>`
           : this.status === "rejected"
-            ? html`<p class="error" role="alert">${t("fiscal_test.rejected")}</p>`
+            ? html`<div class="error" role="alert">
+                <p>${t("fiscal_test.rejected")}</p>
+                ${this.rejections.map(({ code, message }) => html`<p>${code}${code && message ? ": " : ""}${message}</p>`)}
+              </div>`
             : this.status === "uncertain"
               ? html`<p class="error" role="alert">${t("fiscal_test.uncertain")}</p>`
               : this.errorMessage

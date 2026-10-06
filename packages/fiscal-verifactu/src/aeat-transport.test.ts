@@ -424,3 +424,65 @@ function anyRegistro(): EnvioRegistro {
     },
   };
 }
+
+it("reports the parsed authority timestamp and preserves submission when its observer throws", async () => {
+  await provision("sello");
+  const observations: { authorityTimestamp: string | null; sentAt: Date; receivedAt: Date }[] = [];
+  const resolver = aeatClientResolver({
+    db: suite.db,
+    ring,
+    endpointFor: () => "https://example.test/soap",
+    fetchFor: () => ({
+      fetch: async () =>
+        new Response(`<Envelope><Body><RespuestaRegFactuSistemaFacturacion>
+        <DatosPresentacion><NIFPresentador>89890001K</NIFPresentador><TimestampPresentacion>2026-10-05T12:00:00+02:00</TimestampPresentacion></DatosPresentacion>
+        <EstadoEnvio>Correcto</EstadoEnvio><CSV>saved-csv</CSV>
+      </RespuestaRegFactuSistemaFacturacion></Body></Envelope>`),
+      close: async () => {},
+    }),
+    observeAuthorityTime: (sample) => {
+      observations.push(sample);
+      throw new Error("diagnostic unavailable");
+    },
+  });
+  try {
+    const client = await resolver.resolve();
+    const before = Date.now();
+    const result = await client.submit(anyCabecera(), [anyRegistro()]);
+    const after = Date.now();
+    expect(result.CSV).toBe("saved-csv");
+    expect(observations).toHaveLength(1);
+    expect(observations[0]!.authorityTimestamp).toBe("2026-10-05T12:00:00+02:00");
+    expect(observations[0]!.sentAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(observations[0]!.receivedAt.getTime()).toBeLessThanOrEqual(after);
+  } finally {
+    await resolver.closeAll();
+  }
+});
+
+it("preserves a failed submission when its diagnostic observer throws", async () => {
+  await provision("sello");
+  const observations: (string | null)[] = [];
+  const resolver = aeatClientResolver({
+    db: suite.db,
+    ring,
+    endpointFor: () => "https://example.test/soap",
+    fetchFor: () => ({
+      fetch: async () => new Response("authority unavailable", { status: 502 }),
+      close: async () => {},
+    }),
+    observeAuthorityTime: ({ authorityTimestamp }) => {
+      observations.push(authorityTimestamp);
+      throw new Error("diagnostic unavailable");
+    },
+  });
+  try {
+    const client = await resolver.resolve();
+    await expect(client.submit(anyCabecera(), [anyRegistro()])).rejects.toMatchObject({
+      status: 502,
+    });
+    expect(observations).toEqual([null]);
+  } finally {
+    await resolver.closeAll();
+  }
+});

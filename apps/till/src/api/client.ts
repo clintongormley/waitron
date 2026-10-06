@@ -143,6 +143,10 @@ export interface TillInfo {
   simplifiedInvoiceLimit: string | null;
 }
 
+export type AuthorityClockStatus =
+  | { state: "unknown" | "not-applicable" }
+  | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
+
 /**
  * One venue-routable server as the boot payload carries it. `evicted` nodes are excluded server-side,
  * so `standing` is the three serving/sell states only.
@@ -1898,6 +1902,15 @@ export class TillApi {
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
     this.#baseUrl = baseUrl;
     this.#fetchImpl = fetchImpl;
+  }
+
+  clockStatus(options: ReadOptions = {}): Promise<AuthorityClockStatus> {
+    return this.#request<AuthorityClockStatus>(
+      "/api/clock-status",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   getTill(): Promise<TillInfo> {

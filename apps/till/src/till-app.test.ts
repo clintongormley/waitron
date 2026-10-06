@@ -401,6 +401,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+    clockStatus: vi.fn().mockResolvedValue({ state: "not-applicable" }),
     getTill: vi.fn().mockResolvedValue(till),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: "en-GB" }),
@@ -10780,6 +10781,23 @@ describe("a failed list refresh after a successful write", () => {
     expect(listWorkingOrders).toHaveBeenCalledTimes(3);
   });
 
+  it("clock polling leaves an unattended operator's idle sign-out due", async () => {
+    const clockStatus = vi.fn().mockResolvedValue({ state: "unknown" });
+    const { el } = await mountApp({
+      clockStatus,
+      getTill: vi.fn().mockResolvedValue({ ...till, inactivityTimeoutSeconds: 75 }),
+    });
+    await toCounterFake(el);
+    await tick(el, 60_000);
+    expect(clockStatus).toHaveBeenCalledTimes(2);
+    expect(lock(el)).toBeNull();
+    await tick(el, 15_000);
+    expect(lock(el)).not.toBeNull();
+    expect(currentApi.logout).toHaveBeenCalledOnce();
+    await tick(el, 60_000);
+    expect(clockStatus).toHaveBeenCalledTimes(2);
+  });
+
   it("automatic retries do not count as operator activity: the idle sign-out still falls due", async () => {
     const listWorkingOrders = failingAfterLogin<HeldOrderSummary[]>([]);
     const { el } = await mountApp({
@@ -13096,4 +13114,87 @@ describe("the device's printers, switched from the header", () => {
 
     expect(printersDialog(el)).toBeNull();
   });
+});
+
+it("shows measured clock drift without stopping a cash sale", async () => {
+  const { el } = await mountApp({
+    clockStatus: async () => ({
+      state: "warning",
+      driftSeconds: 86400,
+      measuredAt: "2026-10-06T12:00:00Z",
+    }),
+  });
+  await toTicket(el);
+  setLocale("en-GB");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")?.textContent ?? "").toContain(
+    "Check the server's date and time",
+  );
+  expect(ticket(el)).not.toBeNull();
+});
+
+it("shows an unavailable authority comparison as unknown without stopping a sale", async () => {
+  const { el } = await mountApp({
+    clockStatus: async () => {
+      throw new Error("offline");
+    },
+  });
+  await toTicket(el);
+  setLocale("en-GB");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=clock-unknown]")?.textContent ?? "").toContain(
+    "has not been verified",
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")).toBeNull();
+  expect(ticket(el)).not.toBeNull();
+});
+
+it("drops a clock warning at logout while the next operator's read is pending", async () => {
+  let finish!: (status: { state: "ok"; driftSeconds: number; measuredAt: string }) => void;
+  const clockStatus = vi
+    .fn()
+    .mockResolvedValueOnce({
+      state: "warning",
+      driftSeconds: 86400,
+      measuredAt: "2026-10-06T12:00:00Z",
+    })
+    .mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+  const { el } = await mountApp({ clockStatus });
+  const c = await toCounter(el);
+  expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")).not.toBeNull();
+  emit(c, "logout");
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")).toBeNull();
+  await toCounter(el);
+  expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")).toBeNull();
+  finish({ state: "ok", driftSeconds: 0, measuredAt: "2026-10-06T12:00:00Z" });
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")).toBeNull();
+});
+
+it("ignores a clock reply from a signed-out operator after another operator signs in", async () => {
+  let finish!: (status: { state: "warning"; driftSeconds: number; measuredAt: string }) => void;
+  const clockStatus = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    )
+    .mockResolvedValue({ state: "not-applicable" });
+  const { el } = await mountApp({ clockStatus });
+  const c = await toCounter(el);
+  emit(c, "logout");
+  await flush(el);
+  await toCounter(el);
+  finish({ state: "warning", driftSeconds: 86400, measuredAt: "2026-10-06T12:00:00Z" });
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")).toBeNull();
+  expect(counter(el)).not.toBeNull();
 });

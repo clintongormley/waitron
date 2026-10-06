@@ -26,6 +26,11 @@ export interface FiscalDutyDeps {
   readonly environment: DeploymentEnvironment;
   readonly skipRetryMs: number;
   readonly log?: FiscalDutyLog;
+  readonly observeAuthorityTime?: (sample: {
+    authorityTimestamp: string | null;
+    sentAt: Date;
+    receivedAt: Date;
+  }) => void;
 }
 
 /**
@@ -40,6 +45,11 @@ export interface FiscalContribution {
   readonly activationReadiness: "accepted-test-submission" | "not-applicable";
   /** The exact preproduction authority endpoint bound into activation evidence. */
   activationReadinessTarget?(secret: unknown): string | null;
+  /** Regimes with stored fiscal records probe their environment before boot migrates anything.
+   * An absent regime table is an empty history; an unknown record environment is not production. */
+  hasNonproductionRecords?(db: Database): Promise<boolean>;
+  /** Saved authority refusals from the isolated readiness sample, without changing its records. */
+  readinessRejections?(db: Database): Promise<{ code: string | null; message: string | null }[]>;
   /** The SALE-PATH backend: it records locally and never contacts an authority — nothing external
    * may block a sale. */
   makeBackend(deps: FiscalBackendDeps): FiscalBackend;

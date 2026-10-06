@@ -134,7 +134,11 @@ export interface ConfigurationPreview {
 }
 
 export type FiscalReadinessResult =
-  | { status: "accepted" | "rejected" | "uncertain"; testedAt?: string }
+  | {
+      status: "accepted" | "rejected" | "uncertain";
+      testedAt?: string;
+      rejections?: { code: string | null; message: string | null }[];
+    }
   | { status: "not-applicable" };
 
 export interface ApiError {
