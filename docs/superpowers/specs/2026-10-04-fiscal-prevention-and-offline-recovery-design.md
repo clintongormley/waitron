@@ -129,6 +129,16 @@ These are proposed requirements, not a claim that all current paths have been ve
 | D8: clock warning without blocking sales | Retain the one-minute warning decision. |
 | D9: short series checked against local/device/AEAT history | Replace the allocation method with §2–3. Lookups supply evidence, not reservations. Add the agreed emergency prefix and explicit later short-series change. |
 
+**Implemented, 2026-10-06 (W41s-3; owner review pending).** A pointer, not a revision of the
+table above: `packages/fiscal-verifactu/src/drain.ts` keeps every line of AEAT's reply. A rejection
+no longer holds its chain (D2, on §7.1's receipts; only code 1161 was tested, triggered
+artificially). A conflict, or a held cancellation, holds the later unsent records of its chain. A
+cancellation whose original is rejected or held is held and never sent. A failed duplicate lookup
+makes only that record's outcome unknown. Filing cases (`src/filing-cases.ts`) are append-only,
+and resolving one releases nothing until Tasks 8–9. A new ongoing alert,
+`fiscal.filing_cases_open`, counts unresolved cases. Not yet probed: a successor sent after a 3000
+conflict or after a held cancellation.
+
 ## 6. Approved scope, remaining technical decisions and adviser questions
 
 **Automatic unexpected-conflict recovery.** Approved with this design: automate only when an
