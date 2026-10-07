@@ -68,17 +68,20 @@ describe.each(["light", "dark"] as const)("wt-button hovered a11y (%s theme)", (
   }
 
   // A dialog paints its body on --wt-color-surface-raised, a page's cards on --wt-color-surface.
-  describe.each(["--wt-color-surface", "--wt-color-surface-raised"] as const)("on %s", (surface) => {
-    test.each(["primary", "danger", "secondary", "ghost"] as const)(
-      "%s variant under the pointer",
-      async (variant) => {
-        const inner = await mountOn(surface, variant);
-        await userEvent.hover(inner);
-        expect(inner.matches(":hover")).toBe(true);
-        await expectNoA11yViolations(host);
-      },
-    );
-  });
+  describe.each(["--wt-color-surface", "--wt-color-surface-raised"] as const)(
+    "on %s",
+    (surface) => {
+      test.each(["primary", "danger", "secondary", "ghost"] as const)(
+        "%s variant under the pointer",
+        async (variant) => {
+          const inner = await mountOn(surface, variant);
+          await userEvent.hover(inner);
+          expect(inner.matches(":hover")).toBe(true);
+          await expectNoA11yViolations(host);
+        },
+      );
+    },
+  );
 
   test.each(["primary", "danger"] as const)(
     "%s variant focused from the keyboard and under the pointer",
