@@ -1822,7 +1822,7 @@ export class ProductEditor extends LitElement {
         .beforeClose=${this.#draftScope ? this.#beforeClose : undefined}
         heading=${
           this.inherited
-            ? t("editor.edit_variant_of").replace("{name}", this.inherited.name)
+            ? t("editor.edit_variant_of").replace("{name}", () => this.inherited!.name)
             : t(this.value?.id ? "product.edit" : "product.new")
         }
         @keydown=${(event: KeyboardEvent) =>

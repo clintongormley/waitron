@@ -3728,6 +3728,22 @@ it("titles a variant's page as a variant, with no Modifiers and no Variants sect
   expect(variantTable(el)).toBeNull();
 });
 
+it("shows replacement-marker characters literally in a variant parent's name", async () => {
+  const previous = currentLocale();
+  try {
+    setLocale("en");
+    const el = await mountVariant({
+      ...glass,
+      inherited: { ...parentValues, name: "$& coffee $` $'" },
+    });
+    expect(el.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).toBe(
+      "Edit variant of: $& coffee $` $'",
+    );
+  } finally {
+    setLocale(previous);
+  }
+});
+
 // Who may order a dish on its own is read from the dish; a variant is only ever ordered under it.
 it("shows no standalone ordering choice on a variant's page, and keeps the variant's own value", async () => {
   const el = await mountVariant({ ...glass, ordering: "public" });
