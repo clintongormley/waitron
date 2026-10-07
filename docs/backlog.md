@@ -992,7 +992,7 @@ unused `units` property is gone (it closes W75's leftover).
     `wt-help-tooltip` set their open state only from the popover's toggle events, so one taken off
     the page while open may come back with its button still marked open — the bug #1362 fixed in
     `wt-data-table`'s Filters. A359 has since changed `wt-row-actions`; check it first.
-- **A342, owner 2026-10-07 — DONE (several values in one table filter):** a `wt-data-table` filter
+- **A342, owner 2026-10-07 — DONE (#1366, several values in one table filter):** a `wt-data-table` filter
   declared with `multiple` takes several values, and keeps a row matching any of them; separate
   filters still all apply, and the Filters badge counts a filter once. Its list keeps the "All …"
   row first, which clears it. Multi-select: a menu's prices (Section, Main category — a category
