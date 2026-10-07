@@ -158,3 +158,32 @@ it("refreshes a pristine default but preserves a changed draft", async () => {
   await panel.updateComplete;
   expect(field(panel).value).toBe("super_reduced");
 });
+
+it.each(["success", "refusal"])(
+  "ignores a late save %s after the panel is removed",
+  async (outcome) => {
+    let resolve!: (value: CatalogueSettings) => void;
+    let reject!: (error: unknown) => void;
+    const pending = new Promise<CatalogueSettings>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    const api = fixture({ saveCatalogueSettings: vi.fn(() => pending) });
+    const panel = await mount(api);
+    await change(panel, "zero");
+    click(panel, "save");
+    await panel.updateComplete;
+    expect(api.saveCatalogueSettings).toHaveBeenCalledOnce();
+    panel.remove();
+    if (outcome === "success") resolve({ defaultProductVatClass: "zero" });
+    else reject({ code: "product.invalid", params: { field: "defaultProductVatClass" } });
+    await pending.catch(() => undefined);
+    await panel.updateComplete;
+    expect(panel.shadowRoot!.querySelector('[role="status"]')).toBeNull();
+    expect(field(panel).error).toBe("");
+    expect(
+      panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+        .error,
+    ).toBe("");
+  },
+);

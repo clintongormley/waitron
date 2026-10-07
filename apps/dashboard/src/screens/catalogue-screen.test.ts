@@ -3159,6 +3159,37 @@ it("closing a guarded linked product retires its field query before opening anot
   expect(editor(el).initialField).toBe("");
 });
 
+it("waits for the venue's VAT default before enabling Add product", async () => {
+  let resolve!: (value: { defaultProductVatClass: "reduced" }) => void;
+  const pending = new Promise<{ defaultProductVatClass: "reduced" }>((yes) => {
+    resolve = yes;
+  });
+  const api = stubApi({ getCatalogueSettings: vi.fn(() => pending) });
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  await expect.poll(() => editor(el)?.units.length).toBeGreaterThan(0);
+  await expect.poll(() => editor(el)?.locales.length).toBeGreaterThan(0);
+  await flush(el);
+  const add = async () =>
+    (await productTable(el)).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="add-product-root"]',
+    )!;
+  expect((await add()).disabled).toBe(true);
+  (await add()).click();
+  await el.updateComplete;
+  expect(editor(el).open).toBe(false);
+  resolve({ defaultProductVatClass: "reduced" });
+  await pending;
+  await flush(el);
+  expect((await add()).disabled).toBe(false);
+  (await add()).click();
+  await flush(el);
+  expect(editor(el).open).toBe(true);
+  expect(
+    editor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="tax"]')!
+      .value,
+  ).toBe("reduced");
+});
+
 it("reads the venue's default into a new editor without replacing an open draft", async () => {
   const liveData = new LiveData();
   const api = Object.assign(
