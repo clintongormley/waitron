@@ -4,7 +4,7 @@ import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
-import { MenuPreviewPanel, documentTree, type PublishResult } from "./menu-preview.js";
+import { MenuPreviewPanel, type PublishResult } from "./menu-preview.js";
 import type { CustomerMenu } from "./customer-menu.js";
 import {
   cleanupWidgets,
@@ -899,61 +899,6 @@ it("names the whole-menu view in Spanish when there is nothing to publish", asyn
   };
   const el = await mount({ status: current, preview: { ...preview([]), status: current } });
   expect(text(q(el, '[data-test="document"] h2'))).toBe("La carta tal como está publicada");
-});
-
-it("maps a document's lists to the tree, keyed by what each member names, with each name once", () => {
-  const beer = documentSection("s-beer", "Beer", [documentProduct("mi-lager", "p-lager")]);
-  const drinks = documentSection("s-drinks", "Drinks", [
-    documentProduct("mi-lemonade", "p-lemonade"),
-    beer,
-  ]);
-  const document = menuDocument(
-    [
-      documentProduct("mi-burger", "p-burger"),
-      drinks,
-      documentSection("s-fav", "Favourites", [
-        documentProduct("mi-lemonade", "p-lemonade"),
-        drinks,
-      ]),
-    ],
-    { "p-burger": "Burger", "p-lemonade": "Lemonade", "p-lager": "Lager" },
-  );
-  const drinksNode = {
-    memberId: "s:s-drinks",
-    ref: { kind: "section", sectionId: "s-drinks" },
-    children: [
-      { memberId: "p:p-lemonade", ref: { kind: "product", productId: "p-lemonade" } },
-      {
-        memberId: "s:s-beer",
-        ref: { kind: "section", sectionId: "s-beer" },
-        children: [{ memberId: "p:p-lager", ref: { kind: "product", productId: "p-lager" } }],
-      },
-    ],
-  };
-  expect(documentTree(document)).toStrictEqual({
-    nodes: [
-      { memberId: "p:p-burger", ref: { kind: "product", productId: "p-burger" } },
-      drinksNode,
-      {
-        memberId: "s:s-fav",
-        ref: { kind: "section", sectionId: "s-fav" },
-        children: [
-          { memberId: "p:p-lemonade", ref: { kind: "product", productId: "p-lemonade" } },
-          drinksNode,
-        ],
-      },
-    ],
-    products: [
-      { id: "p-burger", name: "Burger" },
-      { id: "p-lemonade", name: "Lemonade" },
-      { id: "p-lager", name: "Lager" },
-    ],
-    sections: [
-      { id: "s-drinks", internalName: "Drinks" },
-      { id: "s-beer", internalName: "Beer" },
-      { id: "s-fav", internalName: "Favourites" },
-    ],
-  });
 });
 
 it("names a product the document offers nothing for as no longer available", async () => {

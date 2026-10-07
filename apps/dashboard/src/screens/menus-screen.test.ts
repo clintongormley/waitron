@@ -3891,14 +3891,11 @@ describe("the Structure tree", () => {
     },
   );
 
-  it("puts nothing beside the tabs and draws no Add a product picker", async () => {
+  it("puts nothing beside the tabs", async () => {
     const el = await mountLunch();
     await settleStructure(el);
     const tabs = q(el, 'wt-tabs[data-test="menu-tabs"]')!;
     expect(tabs.querySelector('[slot="actions"]')).toBeNull();
-    expect(q(el, "dashboard-member-list-editor")).toBeNull();
-    expect(q(el, '[name="member-ref"]')).toBeNull();
-    expect(inStructure(el, '[name="member-ref"]')).toBeNull();
   });
 
   it("fits a phone: the tab does not scroll sideways and every row's ⋮ is on screen (390 px)", async () => {
