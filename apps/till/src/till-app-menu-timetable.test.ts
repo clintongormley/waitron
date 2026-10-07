@@ -15,9 +15,9 @@ import type {
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
-// The menu-state poll carries the zone's default menu as the department's timetable has it now. A
-// till following the default moves to it while its basket is empty; a person's own pick, a basket
-// with lines and a table's order are left alone.
+// The menu-state poll carries the zone's default menu. A till following the default moves to it
+// while its basket is empty; a person's own pick, a basket with lines and a table's order are left
+// alone.
 
 interface Menu {
   id: string;
