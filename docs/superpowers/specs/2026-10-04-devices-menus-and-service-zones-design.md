@@ -1,5 +1,7 @@
 # Devices, menus and service zones
 
+> **2026-10-07 — A366:** §2 and §4's station and watcher bindings are replaced by [Service times, departments, zones and prep stations](2026-10-07-service-times-departments-and-stations-design.md).
+
 **Status:** Conversation decisions agreed with the owner on 2026-10-04; written spec awaiting
 review. No implementation plan or product changes accompany this spec. Behaviour below is the
 target design, not a claim about what runs today. Section 9 labels the designer's proposed details

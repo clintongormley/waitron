@@ -1,5 +1,7 @@
 # Departments, service styles and opening hours
 
+> **2026-10-07 — A366:** §4 (opening hours) are replaced by [Service times, departments, zones and prep stations](2026-10-07-service-times-departments-and-stations-design.md).
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to

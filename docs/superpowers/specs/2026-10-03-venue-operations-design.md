@@ -5,6 +5,8 @@
 
 # Venue operations: how the venue is organised and configured
 
+> **2026-10-07 — A366:** §4, §5 in part, §6 and §7 (except §7.1's holiday sources) are replaced by [Service times, departments, zones and prep stations](2026-10-07-service-times-departments-and-stations-design.md).
+
 > **2026-10-05 — A261 step 3:** For the replacement station, printer, watcher and timing controls, see the [Prep stations tabs implementation plan](../plans/2026-10-05-prep-stations-tabs.md) and its dated implementation checkpoints. This document retains the earlier screen layout and procedures as historical context.
 
 > **2026-10-04 follow-up:** the [devices, menus and service zones design](2026-10-04-devices-menus-and-service-zones-design.md)

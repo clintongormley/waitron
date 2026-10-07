@@ -1,5 +1,7 @@
 # Product folders, menus that include menus, and prep station routing
 
+> **2026-10-07 — A366:** §5.7 and §5.9 are replaced by [Service times, departments, zones and prep stations](2026-10-07-service-times-departments-and-stations-design.md).
+
 > **2026-10-05 — A261 step 3:** For the replacement station, printer, watcher and timing controls, see the [Prep stations tabs implementation plan](../plans/2026-10-05-prep-stations-tabs.md) and its dated implementation checkpoints. This document retains the earlier screen layout and procedures as historical context.
 
 > **2026-10-07 — A343:** the Price overrides tab no longer shows a count of the menu's own prices; the owner removed it.
