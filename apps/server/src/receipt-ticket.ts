@@ -17,7 +17,6 @@ import {
   type ReceiptDocumentInput,
   type ReceiptIndent,
 } from "./receipt-document.js";
-export { buildReceiptDocument } from "./receipt-document.js";
 export type { ReceiptIssuer, ReceiptTrim } from "./receipt-document.js";
 
 export interface FormatReceiptInput extends ReceiptDocumentInput {
