@@ -212,15 +212,7 @@ export class RoutingGrid extends LitElement {
     if (!changed.has("model") || this.model === null) return;
     const model = this.model;
     this.#rules = selectionRulesFromModel(model);
-    this.#fallbackRules = {
-      ...this.#rules,
-      timing: new Map(
-        model.stationTimes.map((times) => [
-          times.stationId,
-          { fallbackId: times.fallbackStationId, hours: [], today: null },
-        ]),
-      ),
-    };
+    this.#fallbackRules = null;
     this.#cells = new Map(model.cells.map((c) => [cellKey(c), c]));
     this.#products = new Map(model.products.map((product) => [product.id, product]));
     this.#categories = new Map(model.categories.map((category) => [category.id, category]));
@@ -275,7 +267,16 @@ export class RoutingGrid extends LitElement {
 
   /** Where a disabled station's work goes, before any opening hours are applied. */
   #fallbackSentence(stationId: string): string {
-    const { stationId: receiver } = followFallbacks(this.#fallbackRules!, stationId, null);
+    this.#fallbackRules ??= {
+      ...this.#rules!,
+      timing: new Map(
+        this.model!.stationTimes.map((times) => [
+          times.stationId,
+          { fallbackId: times.fallbackStationId, hours: [], today: null },
+        ]),
+      ),
+    };
+    const { stationId: receiver } = followFallbacks(this.#fallbackRules, stationId, null);
     return receiver === null
       ? t("prep.no_replacement_ask")
       : format("prep.work_goes_to", {
