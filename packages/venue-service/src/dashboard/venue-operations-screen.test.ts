@@ -3664,3 +3664,97 @@ it("does not attach an earlier inline name refusal to newer text", async () => {
   expect(find(el, '[data-test="enable-name-clash"]')).toBeNull();
   expect(native.value).toBe("New terrace");
 });
+
+it.each(["success", "refusal"] as const)(
+  "does not attach a pending inline Enable %s to newer text",
+  async (outcome) => {
+    let resolve!: () => void;
+    let reject!: (reason: unknown) => void;
+    const pending = new Promise<void>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    const update = vi.fn().mockImplementation(async (_id: string, patch: { active?: boolean }) => {
+      if (patch.active) return pending;
+      throw { code: "zone.name_disabled", params: { name: "Deli counter", zoneId: "z2" } };
+    });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateZone: update,
+    } as unknown as VenueServiceApi);
+    await action(el, "edit-zone-name");
+    const control = find(el, 'wt-input[name="zoneName"]')!;
+    const change = async (value: string) => {
+      const native = control.shadowRoot!.querySelector("input")!;
+      native.value = value;
+      native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await settle(el);
+    };
+    await change("Deli counter");
+    await action(el, "save-zone-name");
+    await action(el, "enable-name-clash");
+    await change("New terrace");
+    expect(control.getAttribute("error")).toBe("");
+    if (outcome === "success") resolve();
+    else reject({ code: "zone.department_inactive", params: { zoneId: "z2" } });
+    await settle(el);
+    expect(control.getAttribute("error")).toBe("");
+    expect(find(el, '[data-test="enable-name-clash"]')).toBeNull();
+  },
+);
+
+it("explains a blocked zone Enable beside its reserved name and removes the unusable offer", async () => {
+  const el = await mount({
+    load: vi.fn().mockResolvedValue(model),
+    createZone: vi
+      .fn()
+      .mockRejectedValue({
+        code: "zone.name_disabled",
+        params: { name: "Dining room", zoneId: "z1" },
+      }),
+    updateZone: vi
+      .fn()
+      .mockRejectedValue({ code: "zone.department_inactive", params: { zoneId: "z1" } }),
+  } as unknown as VenueServiceApi);
+  await action(el, "new-zone");
+  await type(el, "new-zone-name", "Dining room");
+  await chooseOption(field(el, "new-zone-department"), "Restaurant and bar");
+  await action(el, "save-editor");
+  await action(el, "enable-name-clash");
+  expect(fieldError(el, "new-zone-name")).toBe(
+    "A disabled zone already has this name. Enable its department or assign it to an active department first.",
+  );
+  expect(find(el, '[data-test="enable-name-clash"]')).toBeNull();
+  expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+  expect(saveDisabled(el)).toBe(false);
+  expect(modal(el)).not.toBeNull();
+});
+
+it.each(["department", "zone"] as const)(
+  "keeps a refused inline %s Enable ready to retry beside its name",
+  async (kind) => {
+    const update = vi.fn().mockImplementation(async (_id: string, patch: { active?: boolean }) => {
+      if (patch.active) throw new Error("offline");
+      throw {
+        code: `${kind}.name_disabled`,
+        params: { name: "Reserved", [`${kind}Id`]: "target" },
+      };
+    });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      [kind === "department" ? "updateDepartment" : "updateZone"]: update,
+    } as unknown as VenueServiceApi);
+    await action(el, `edit-${kind}-name`);
+    const control = find(el, `wt-input[name="${kind}Name"]`)!;
+    const native = control.shadowRoot!.querySelector("input")!;
+    native.value = "Reserved";
+    native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await settle(el);
+    await action(el, `save-${kind}-name`);
+    await action(el, "enable-name-clash");
+    expect(control.getAttribute("error")).toBe("The change could not be saved.");
+    expect(find(el, '[data-test="enable-name-clash"]')).not.toBeNull();
+    expect(native.value).toBe("Reserved");
+    expect(pageAlert(el)).toBe("");
+  },
+);

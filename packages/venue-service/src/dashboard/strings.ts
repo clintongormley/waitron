@@ -308,6 +308,8 @@ const en = {
   "venue.enable_name": "Enable {name}",
   "venue.department_name_taken": "A department with this name already exists.",
   "venue.zone_name_taken": "A zone with this name already exists.",
+  "venue.zone_name_department_inactive":
+    "A disabled zone already has this name. Enable its department or assign it to an active department first.",
   "venue.department_name_disabled":
     "A disabled department already has this name. Enable it instead.",
   "venue.zone_name_disabled": "A disabled zone already has this name. Enable it instead.",
@@ -1010,6 +1012,8 @@ const es: Record<keyof typeof en, string> = {
   "venue.enable_name": "Habilitar {name}",
   "venue.department_name_taken": "Ya existe un departamento con este nombre.",
   "venue.zone_name_taken": "Ya existe una zona con este nombre.",
+  "venue.zone_name_department_inactive":
+    "Una zona deshabilitada ya tiene este nombre. Habilita su departamento o asígnala primero a uno habilitado.",
   "venue.department_name_disabled":
     "Un departamento deshabilitado ya tiene este nombre. Habilítalo en su lugar.",
   "venue.zone_name_disabled":

@@ -646,15 +646,18 @@ export class VenueOperationsScreen extends LitElement {
     clash: NameClash,
   ): Promise<void> {
     if (!this.#currentName(kind, draft) || this.busy) return;
+    const submitted = this.#nameValue(kind).trim();
     this.busy = true;
     try {
       await this.#writeNameClash(clash);
-      if (this.#currentName(kind, draft))
+      if (this.#currentName(kind, draft) && this.#nameValue(kind).trim() === submitted)
         this.#clearNameError(kind, this.#nameRefusal(`${clash.kind}.name_taken`));
       if (this.isConnected) await this.#load();
     } catch (error) {
-      if (this.#currentName(kind, draft)) {
-        if (kind === "department")
+      if (this.#currentName(kind, draft) && this.#nameValue(kind).trim() === submitted) {
+        if (codeOf(error ?? {}) === "zone.department_inactive")
+          this.#clearNameError(kind, t("venue.zone_name_department_inactive"));
+        else if (kind === "department")
           this.departmentNameError = this.#refusal(codeOf(error ?? {}), error);
         else this.zoneNameError = this.#refusal(codeOf(error ?? {}), error);
       }
@@ -686,6 +689,17 @@ export class VenueOperationsScreen extends LitElement {
   }
   #refused(error: unknown, { fields = {}, codes = {} }: ServerFields): void {
     const code = codeOf(error ?? {});
+    if (
+      code === "zone.department_inactive" &&
+      this.nameClash?.kind === "zone" &&
+      this.editor?.kind === "new-zone"
+    ) {
+      this.nameClash = undefined;
+      this.refusedFields = { "new-zone-name": t("venue.zone_name_department_inactive") };
+      this.editorError = undefined;
+      this.#focusInvalid();
+      return;
+    }
     const field = (error as { params?: { field?: unknown } } | undefined)?.params?.field;
     const control =
       code === "management.request_invalid"

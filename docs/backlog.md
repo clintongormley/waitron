@@ -6895,7 +6895,9 @@ bump it when a fixed version is published, and run the certificate suites in tho
   names the existing row (`department.name_disabled` / `zone.name_disabled`). Departments and
   zones puts the message beside the name and offers Enable there. Enabling from Add closes
   the editor after success; enabling from an inline rename keeps the draft and explains that
-  the enabled item's name is still taken. Enabling a zone still requires an active department.
+  the enabled item's name is still taken. Enabling a zone still requires an active department;
+  if that blocks Enable, the name explains how to fix the assignment and the unusable offer
+  goes away. A reply to an earlier name does not mark text you edited while Enable was waiting.
   An active zone with no department had its "Not configured" note run onto its name with no space before
   it (the owner's screenshot read "Private roomNot configured") — DONE by A301: the note now has
   its own gap and the muted colour. (e) a test gap,
