@@ -1173,11 +1173,18 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+The rendered-link acceptance checks now cover contributed image usage, menu inclusion/preview,
+routing-table device/watcher links, the demo bar, setup help/Cloud/Done and till enrolment's
+approval guide. The installed deletion checks fail at their intended assertions and retain
+passing exemption controls. No production behavior changed in this checkpoint. These dispatched
+clicks and synthetic unload events do not establish physical click reachability or a native
+browser prompt; the earlier native leave receipts remain separate. The final advancing-owner
+and exemption audit, branch review and current-head CI still keep W69 incomplete.
+
 Receipt preview department selection and same-page Back now retain your edited appearance without
 asking to discard it. The real department-management link and switching to Kitchen still ask.
 The actual dashboard tests cover EN/ES, both themes and phone/desktop widths; the dated audit
-records the failing case, installed deletion controls and inspected captures. The remaining
-link/owner audit and branch review keep W69 incomplete.
+records the failing case, installed deletion controls and inspected captures. The final owner/exemption audit and branch review keep W69 incomplete.
 
 Unassigned table orders now register their memory-only draft separately from automatically saved
 party drafts. Tabs retain those lines without asking; opening another table or signing out asks

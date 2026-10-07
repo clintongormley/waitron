@@ -386,11 +386,15 @@ for (const locale of ["en-GB", "es-ES"]) {
         await warning.updateComplete;
         await commands.parkPointer();
         await expectNoA11yViolations(warning);
-        await page.screenshot({ path: `w69-venue-look/${locale}-${theme}-${width}-warning.png` });
+        await page.screenshot({
+          path: `node_modules/.cache/w69-venue-look/${locale}-${theme}-${width}-warning.png`,
+        });
         await choose(app, "keep");
         expect(street.value).toBe("Different street");
         expect(street.checkVisibility()).toBe(true);
-        await page.screenshot({ path: `w69-venue-look/${locale}-${theme}-${width}-kept.png` });
+        await page.screenshot({
+          path: `node_modules/.cache/w69-venue-look/${locale}-${theme}-${width}-kept.png`,
+        });
         await select(app, "tables");
         await choose(app, "discard");
         await expect.poll(() => selected(app)).toBe("tables");

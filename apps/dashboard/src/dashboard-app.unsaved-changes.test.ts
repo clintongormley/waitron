@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { leaveCoordinatorFor, type WtInput } from "@waitron/ui";
+import { leaveCoordinatorFor, navigationGuardFor, type WtInput } from "@waitron/ui";
 import type { DashboardApi, OwnProfile } from "./api/client.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
@@ -24,9 +24,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function mount(overrides: Partial<DashboardApi> = {}) {
+async function mount(overrides: Partial<DashboardApi> = {}, request?: DashboardApp["request"]) {
   history.replaceState(null, "", "/manage/profile");
   const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
+    ...(request ? { request } : {}),
     api: {
       getMe: async () => ({
         personId: "p1",
@@ -703,3 +704,297 @@ it("a malformed route segment still asks before discarding the profile and falls
   expect(m.screen.isConnected).toBe(false);
   expect(unload()).toBe(false);
 });
+
+it.each(["same-app", "device"] as const)(
+  "the actual demo bar %s link respects the edited profile's leave route",
+  async (destination) => {
+    const m = await mount({
+      getMe: async () => ({
+        personId: "p1",
+        email: "ada@example.com",
+        role: "manager",
+        locale: "en-GB",
+        venueLocale: "en-GB",
+        sessionDefault: "en-GB",
+        venueName: "Venue",
+        permissions: [],
+        modules: [],
+        onboardingIntent: "prepare",
+      }),
+      getEmailInbox: async () => ({ mode: "unconfigured", count: 0, messages: [] }),
+    });
+    change(m, "123456");
+    await m.screen.updateComplete;
+    const bar = m.app.shadowRoot!.querySelector("wt-demo-bar")!;
+    await bar.updateComplete;
+    const link = bar.shadowRoot!.querySelector<HTMLAnchorElement>(
+      destination === "device" ? 'a[href="/"]' : 'a[href="/manage/email"]',
+    )!;
+    expect(link).not.toBeNull();
+    let browserDefault = false;
+    const blockNavigation = (event: MouseEvent) => {
+      browserDefault = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    const click = () => {
+      document.addEventListener("click", blockNavigation, { once: true });
+      try {
+        link.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+        );
+      } finally {
+        document.removeEventListener("click", blockNavigation);
+      }
+    };
+    click();
+    if (destination === "device") {
+      expect(browserDefault).toBe(true);
+      expect(m.question.open).toBe(false);
+      expect(telephone(m)).toBe("123456");
+      expect(unload()).toBe(true);
+      expect(location.pathname).toBe("/manage/profile");
+      return;
+    }
+    await expect.poll(() => m.question.open).toBe(true);
+    expect(browserDefault).toBe(false);
+    expect(location.pathname).toBe("/manage/profile");
+    await choose(m, "keep");
+    expect(telephone(m)).toBe("123456");
+    expect(unload()).toBe(true);
+    click();
+    await expect.poll(() => m.question.open).toBe(true);
+    await choose(m, "discard");
+    await expect.poll(() => location.pathname).toBe("/manage/email");
+    expect(m.screen.isConnected).toBe(false);
+    expect(unload()).toBe(false);
+  },
+);
+
+it.each([
+  { use: { kind: "receipt" }, path: "/manage/venue-settings/view/receipts" },
+  {
+    use: { kind: "section", id: "section-one", internalName: "Lunch", ownerMenuId: "menu-one" },
+    path: "/manage/menus/menu/menu-one/view/structure",
+  },
+  {
+    use: {
+      kind: "product",
+      id: "product-one",
+      catalogueId: "catalogue-one",
+      name: "Staff bread",
+      active: true,
+    },
+    path: "/manage/catalogue/product/product-one",
+  },
+  { use: { kind: "included-menu" }, path: "/manage/menus/menu/menu-two/view/structure" },
+  { use: { kind: "menu-preview" }, path: "/manage/menus/menu/menu-one/view/preview" },
+  { use: { kind: "routing-device" }, path: "/manage/devices" },
+  { use: { kind: "routing-watcher" }, path: "/manage/prep-stations/view/watchers" },
+] as const)(
+  "the rendered $use.kind link asks before leaving actual edited profile input",
+  async ({ use, path }) => {
+    const image = {
+      id: "image-one",
+      filename: "one.png",
+      names: { en: "Bread" },
+      createdAt: "2026-10-06T10:00:00Z",
+      updatedAt: "2026-10-06T10:00:00Z",
+      usageCount: 1,
+    };
+    const m = await mount(
+      {
+        getMe: async () => ({
+          personId: "p1",
+          email: "ada@example.com",
+          role: "manager",
+          locale: "en-GB",
+          venueLocale: "en-GB",
+          sessionDefault: "en-GB",
+          venueName: "Venue",
+          permissions: [
+            "image.manage",
+            "venue.view",
+            "venue.configure",
+            "product.manage",
+            "venue_service.manage",
+            "device.manage",
+          ],
+          modules: ["media", "venue-service"],
+        }),
+        listCatalogues: async () => [
+          { id: "menu-one", name: "Lunch", active: true, version: 1 },
+          { id: "menu-two", name: "Dinner", active: true, version: 1 },
+        ],
+        listLibraryProducts: async () => [],
+        listProducts: async () => [],
+        listCategories: async () => [],
+        getMenuStatuses: async () => ({ "menu-one": { state: "unpublished", clashes: 0 } }),
+        getMenuStatus: async () => ({
+          state: "changed",
+          clashes: 0,
+          version: 1,
+          publishedAt: "2026-10-06T10:00:00Z",
+          hash: "menu-hash",
+        }),
+        getMenuStructure: async () => ({
+          rootSectionId: "root",
+          root: {
+            id: "root",
+            internalName: "Lunch",
+            names: {},
+            image: null,
+            color: null,
+            members: [],
+          },
+          nodes: [],
+          includable: [],
+          includedBy: [{ id: "menu-two", name: "Dinner" }],
+        }),
+        getProductEditor: async () => {
+          throw { code: "product.not_found" };
+        },
+        getReceipt: async () => ({ receipt: {}, venueAddress: [] }),
+        getLocationSettings: async () => ({ name: "Venue", operationDescription: "Sale" }),
+        getReceiptLanguage: async () => ({ language: "en-GB", choices: ["en-GB"], fixed: null }),
+        getVenueDepartments: async () => [],
+      },
+      async (url) => {
+        if (url === "/management-api/images/image-one") return { image, uses: [use] } as never;
+        if (url.startsWith("/management-api/images?"))
+          return { images: [image], total: 1 } as never;
+        if (url === "/management-api/venue-service/routing")
+          return {
+            claims: [],
+            exceptions: [],
+            unassigned: { folders: [], products: [] },
+            defaultStationId: "bar",
+            stations: [{ id: "bar", name: "Bar", active: true }],
+            stationTimes: [],
+            todayEnds: { timeOfDay: "06:00", tomorrow: true },
+            clockReadable: true,
+          } as never;
+        if (url === "/management-api/stations?includeDisabled=true")
+          return [
+            {
+              id: "bar",
+              name: "Bar",
+              active: true,
+              isDefault: true,
+              displayOrder: 0,
+              warmAfterMinutes: 5,
+              overdueAfterMinutes: 10,
+              forgottenAfterMinutes: 15,
+              timingDefaults: {
+                warmAfterMinutes: 5,
+                overdueAfterMinutes: 10,
+                forgottenAfterMinutes: 15,
+              },
+              timingOverrides: {
+                warmAfterMinutes: null,
+                overdueAfterMinutes: null,
+                forgottenAfterMinutes: null,
+              },
+              showsRestOfOrder: false,
+            },
+          ] as never;
+        if (url === "/management-api/stations/health")
+          return {
+            capturedAt: "2026-10-06T10:00:00Z",
+            stations: [],
+            outputsDown: { printersDown: [], screensDark: [] },
+          } as never;
+        if (url === "/management-api/stations/outputs-down")
+          return { printersDown: [], screensDark: [] } as never;
+        if (
+          [
+            "/management-api/categories",
+            "/management-api/zones",
+            "/management-api/products",
+            "/management-api/printers",
+            "/management-api/devices",
+            "/management-api/watchers?includeDisabled=true",
+            "/management-api/stations/bar/printers",
+          ].includes(url)
+        )
+          return [] as never;
+        throw new Error(`Unexpected request: ${url}`);
+      },
+    );
+    let link: HTMLAnchorElement;
+    if (use.kind === "routing-device" || use.kind === "routing-watcher") {
+      await navigationGuardFor(window)!.write("/manage/prep-stations/view/tickets");
+      await expect
+        .poll(() =>
+          m.app
+            .shadowRoot!.querySelector("dashboard-prep-stations-screen")
+            ?.shadowRoot?.querySelector("[data-test=tickets-table]"),
+        )
+        .not.toBeNull();
+      const prep = m.app.shadowRoot!.querySelector("dashboard-prep-stations-screen")!;
+      const table = prep.shadowRoot!.querySelector("wt-data-table")!;
+      await expect.poll(() => table.shadowRoot!.querySelector(`a[href="${path}"]`)).not.toBeNull();
+      link = table.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="${path}"]`)!;
+    } else if (use.kind === "included-menu" || use.kind === "menu-preview") {
+      await navigationGuardFor(window)!.write("/manage/menus/menu/menu-one/view/structure");
+      await expect
+        .poll(() => m.app.shadowRoot!.querySelector("dashboard-menus-screen"))
+        .not.toBeNull();
+      const menus = m.app.shadowRoot!.querySelector("dashboard-menus-screen")!;
+      const selector =
+        use.kind === "included-menu" ? "[data-test=included-by] a" : "[data-test=status-changes]";
+      await expect.poll(() => menus.shadowRoot!.querySelector(selector)).not.toBeNull();
+      link = menus.shadowRoot!.querySelector<HTMLAnchorElement>(selector)!;
+    } else {
+      await navigationGuardFor(window)!.write("/manage/images");
+      await expect
+        .poll(() => m.app.shadowRoot!.querySelector("dashboard-image-library"))
+        .not.toBeNull();
+      const library = m.app.shadowRoot!.querySelector("dashboard-image-library")!;
+      await expect
+        .poll(() => library.shadowRoot!.querySelector("[data-test=preview-image-one]"))
+        .not.toBeNull();
+      library.shadowRoot!.querySelector<HTMLElement>("[data-test=preview-image-one]")!.click();
+      await expect.poll(() => library.shadowRoot!.querySelector("wt-modal .uses a")).not.toBeNull();
+      link = library.shadowRoot!.querySelector<HTMLAnchorElement>("wt-modal .uses a")!;
+    }
+    const source = m.app.shadowRoot!.querySelector(".body")!.firstElementChild!;
+    expect(link.pathname).toBe(path);
+    m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=profile]")!.click();
+    await expect
+      .poll(() =>
+        m.app
+          .shadowRoot!.querySelector("dashboard-profile-screen")
+          ?.shadowRoot?.querySelector("wt-tabs"),
+      )
+      .not.toBeNull();
+    const screen = m.app.shadowRoot!.querySelector("dashboard-profile-screen")!;
+    m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-profile-details]")!.click();
+    await screen.updateComplete;
+    const field = screen.shadowRoot!.querySelector<WtInput>("wt-input[name=telephone]")!;
+    field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "654321" } }));
+    await screen.updateComplete;
+    const click = () =>
+      link.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+      );
+    click();
+    await expect.poll(() => m.question.open).toBe(true);
+    expect(location.pathname).toBe(
+      use.kind === "included-menu" || use.kind === "menu-preview"
+        ? "/manage/profile/view/structure"
+        : use.kind === "routing-device" || use.kind === "routing-watcher"
+          ? "/manage/profile/view/tickets"
+          : "/manage/profile",
+    );
+    await choose(m, "keep");
+    expect(field.value).toBe("654321");
+    expect(source.isConnected).toBe(true);
+    expect(unload()).toBe(true);
+    click();
+    await expect.poll(() => m.question.open).toBe(true);
+    await choose(m, "discard");
+    await expect.poll(() => location.pathname).toBe(path);
+    expect(screen.isConnected).toBe(false);
+    expect(unload()).toBe(false);
+  },
+);

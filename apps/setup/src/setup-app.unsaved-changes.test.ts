@@ -1178,3 +1178,81 @@ it("discard after import restores the accepted file identity in the native selec
   expect(stage).toHaveBeenCalledExactlyOnceWith(submitted, "submitted passphrase");
   expect(unload()).toBe(true);
 });
+
+it("the real setup trust-help link opens another tab without abandoning the accepted root draft", async () => {
+  const { el, api } = await nextEditedAdmin();
+  goto(el, "mode");
+  await expect.poll(() => (el as unknown as State).screen).toBe("mode");
+  const mode = el.shadowRoot!.querySelector("setup-mode-screen")!;
+  await mode.updateComplete;
+  const link = mode.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=trust-help]")!;
+  expect(link.pathname).toBe("/setup/trust");
+  expect(link.target).toBe("_blank");
+  let browserDefault = false;
+  const blockNavigation = (event: MouseEvent) => {
+    browserDefault = !event.defaultPrevented;
+    event.preventDefault();
+  };
+  document.addEventListener("click", blockNavigation, { once: true });
+  try {
+    link.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+    );
+  } finally {
+    document.removeEventListener("click", blockNavigation);
+  }
+  expect(browserDefault).toBe(true);
+  expect(warning(el).open).toBe(false);
+  expect((el as unknown as State).draft.venue!.admin!.email).toBe("submitted@example.com");
+  expect(unload()).toBe(true);
+  expect(api.provision).not.toHaveBeenCalled();
+});
+
+it("the actual Done links leave a successfully provisioned root without another warning", async () => {
+  const { el, api } = await nextEditedAdmin();
+  vi.mocked(api.provision).mockResolvedValue({ provisioned: true, restarting: true });
+  submitRoot(el);
+  await expect.poll(() => (el as unknown as State).screen).toBe("done");
+  const done = el.shadowRoot!.querySelector("setup-done-screen")!;
+  await done.updateComplete;
+  const links: [HTMLAnchorElement, string][] = [];
+  for (const [id, path] of [
+    ["till", "/"],
+    ["dashboard", "/manage"],
+    ["email", "/manage/email"],
+  ]) {
+    const choice = done.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-choice-row"]>(
+      `[data-test=link-${id}]`,
+    )!;
+    await choice.updateComplete;
+    const link = choice.shadowRoot!.querySelector<HTMLAnchorElement>("a")!;
+    links.push([link, path]);
+  }
+  links.push([
+    done.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=backup-nudge] a")!,
+    "/manage/backup",
+  ]);
+  for (const [link, path] of links) {
+    expect(link.pathname).toBe(path);
+    let browserDefault = false;
+    const blockNavigation = (event: MouseEvent) => {
+      browserDefault = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener("click", blockNavigation, { once: true });
+    try {
+      link.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+      );
+    } finally {
+      document.removeEventListener("click", blockNavigation);
+    }
+    expect(browserDefault).toBe(true);
+    expect(warning(el).open).toBe(false);
+    expect(unload()).toBe(false);
+  }
+  expect(api.provision).toHaveBeenCalledExactlyOnceWith({
+    mode: "prepare",
+    venue: { admin: { ...initialAdmin, email: "submitted@example.com" } },
+  });
+});

@@ -3920,3 +3920,46 @@ actual management link. Contributed image-usage/routing links, menu/product link
 links, setup help/cloud/done and till enrolment approval links still need the remaining actual
 route matrix, followed by the advancing-owner audit, whole-branch review and current-head CI.
 W69 remains incomplete; Tasks 1/4/5/6 stay partial and Tasks 2/3 complete.
+
+
+## Rendered management links and browser-owned departures, 2026-10-07
+
+The rendered-link cases now check image usage destinations (receipt, section and product),
+menu inclusion and the preview link's own handler, routing-table device/watcher links and the
+demo bar. They retain an edited profile telephone through Keep and follow the destination
+only after Discard. The device link in the demo bar remains browser-owned and retains unload
+protection. The accepted profile URL preserves the underlying view segment.
+
+Setup checks its rendered trust-help and Cloud approval links with an accepted root draft.
+Both target another tab and leave the draft protected. After successful provisioning, the
+three Done choice links and the backup link leave without a second question. Till checks
+its real enrolment approval link before submission, after a revert and after the join request
+succeeds. Only the edited, unsubmitted name cancels an unload event; the submitted name is
+checked against the exact join argument.
+
+These are acceptance checks of the existing implementation. No production behavior changed.
+The initial missing demo-mode response, incorrect API reference, incomplete menu/email fixtures
+and profile URL expectations were fixture failures, excluded from defect evidence. No existing
+behavioral assertion changed. The mount helper additionally accepts an optional contributed
+request client. The earlier venue-settings captures now write under the ignored package
+`node_modules/.cache/` folder; the surrounding suite is rerun after that path change.
+
+The events are dispatched through the actual rendered elements and shadow roots. The tests
+suppress browser navigation at the document boundary; the contributed-link cases dispatch
+from a source behind a profile modal. They establish interception and draft decisions, not
+physical click reachability through a native modal, another tab opening, or an activated native
+unload prompt. The earlier native leave receipts remain separate. The product destination
+fixture returns `product.not_found`; it checks accepted navigation, not a loaded product editor.
+
+The installed detached measuring checkout removes three boundaries separately. Dropping the
+dashboard link write fails eight leave-question assertions, with the device departure passing.
+Removing native unload cancellation fails the two dirty setup cases and edited enrolment;
+Done, reverted enrolment and submitted enrolment pass. Widening dashboard interception to other
+app paths fails the device-link default-handling assertion, with the same-app link passing.
+All changes are restored before the final selected runs and byte comparison. Exact commands,
+counts and limits are in Lane E `receipts/w69-rendered-links-20261007/checkpoint.md`.
+
+The rendered-link matrix is covered at this checkpoint. The final advancing-owner/exemption
+audit, reconciliation with main, whole-branch run-it review, normal push hook and current-head
+CI remain outstanding. Tasks 2/3 stay complete; Tasks 1/4/5/6 remain partial. W69 is not ready
+for finish-branch or landing.

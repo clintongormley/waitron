@@ -2523,6 +2523,64 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it.each(["edited", "reverted", "submitted"] as const)(
+    "the real enrolment approval link leaves %s input to native document navigation",
+    async (state) => {
+      const { el } = await mountApp({
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      await flush(el);
+      const screen = enrolScreen(el)!;
+      const field =
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-name]")!;
+      field.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "Counter edited" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      if (state === "reverted")
+        field.dispatchEvent(
+          new CustomEvent("wt-change", {
+            detail: { value: "" },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      await (screen as HTMLElementTagNameMap["till-enrol-screen"]).updateComplete;
+      if (state === "submitted") {
+        screen.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+        await expect
+          .poll(() => screen.shadowRoot!.querySelector("[data-number]")?.textContent?.trim())
+          .toBe("47");
+      }
+      const link = screen.shadowRoot!.querySelector<HTMLAnchorElement>("[data-approval-guide]")!;
+      expect(link.pathname).toBe("/manage/devices");
+      const click = new MouseEvent("click", { bubbles: true, composed: true, cancelable: true });
+      let browserDefault = false;
+      const blockNavigation = (event: MouseEvent) => {
+        browserDefault = !event.defaultPrevented;
+        event.preventDefault();
+      };
+      document.addEventListener("click", blockNavigation, { once: true });
+      try {
+        link.dispatchEvent(click);
+      } finally {
+        document.removeEventListener("click", blockNavigation);
+      }
+      expect(browserDefault).toBe(true);
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(state === "edited");
+      expect(currentApi.join).toHaveBeenCalledTimes(state === "submitted" ? 1 : 0);
+      if (state === "submitted") expect(currentApi.join).toHaveBeenCalledWith("Counter edited");
+      else expect(field.value).toBe(state === "edited" ? "Counter edited" : "");
+      expect(enrolScreen(el)).toBe(screen);
+    },
+  );
+
   it("a NON-401 identity-probe failure (transient) stays on the LOGIN screen, never the enrol front door", async () => {
     // `getTill` succeeds but `getDeviceIdentity` fails transiently — a 5xx or a network blip carrying NO
     // `device.unauthorized` code. An enrolled, SELLABLE till must NOT be stranded behind an approval it

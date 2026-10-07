@@ -263,3 +263,41 @@ describe("setup Cloud restore leave lifecycle", () => {
     },
   );
 });
+
+it("the actual Cloud approval link opens another tab and retains the root draft", async () => {
+  const { el, form, api } = await mount();
+  await load(el, form);
+  form.dispatchEvent(
+    new CustomEvent("setup-patch", {
+      detail: { patch: { admin: { email: "root@example.test" } } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  const link = form.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=open-cloud]")!;
+  expect(link.href).toBe(
+    "https://cloud.example.test/recover#request=be9c200d-d6ae-4dad-8895-e5eb50fa8ea3",
+  );
+  expect(link.target).toBe("_blank");
+  let browserDefault = false;
+  const blockNavigation = (event: MouseEvent) => {
+    browserDefault = !event.defaultPrevented;
+    event.preventDefault();
+  };
+  document.addEventListener("click", blockNavigation, { once: true });
+  try {
+    link.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+    );
+  } finally {
+    document.removeEventListener("click", blockNavigation);
+  }
+  expect(browserDefault).toBe(true);
+  expect(warning(el).open).toBe(false);
+  expect((el as unknown as { draft: { admin: { email: string } } }).draft.admin.email).toBe(
+    "root@example.test",
+  );
+  expect(screen(el)).toBe("cloud-restore");
+  expect(unload()).toBe(true);
+  expect(api.restoreFromCloud).not.toHaveBeenCalled();
+});
