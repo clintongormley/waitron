@@ -3279,14 +3279,14 @@ describe("a product's variants in the list", () => {
     expect(grip.getBoundingClientRect().right).toBeLessThan(arrow.getBoundingClientRect().left);
   });
 
-  it("draws a product's variant arrow in the small muted type and font it has always had", async () => {
+  it("draws a product's variant arrow small and muted, in the browser's own button font", async () => {
     const { el, root } = await mountDeli();
     const arrow = root.querySelector<HTMLElement>('tr[data-row-key="cecina"] .tree-toggle')!;
     const probe = document.createElement("span");
     probe.style.color = "var(--wt-color-text-muted)";
     probe.style.fontSize = "var(--wt-font-size-sm)";
     probe.style.paddingInlineEnd = "var(--wt-space-1)";
-    // A button no author style reaches carries the browser's own button font, which A221's arrow keeps.
+    // A button no author style reaches carries the browser's own button font, which a product's arrow keeps.
     const host = document.createElement("div");
     const plainButton = host
       .attachShadow({ mode: "open" })
@@ -4490,6 +4490,22 @@ describe("a category row's leading slot", () => {
         expect(root.querySelector('wt-input[name="category-name"] > [slot="end"]')).toBeNull();
       }),
   );
+
+  it("draws a renamed category's arrow in the size, colour and font of its arrow at rest", async () => {
+    const { el, root } = await mountTree({
+      categories: [{ ...drinks, color: "#b12525" }, beer, food],
+    });
+    const row = 'tr[data-row-key="folder:d"]';
+    const look = (selector: string) => {
+      const style = getComputedStyle(root.querySelector<HTMLElement>(selector)!);
+      return { fontSize: style.fontSize, color: style.color, fontFamily: style.fontFamily };
+    };
+    const atRest = look(`${row} .tree-arrow`);
+    el.nameDraft = { kind: "rename", categoryId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    expect(look(`${row} .tree-toggle`)).toEqual(atRest);
+  });
 
   it("puts a new category's square in its leading slot, lined up with its siblings' squares, at 1280 px", () =>
     atWidth(1280, async () => {

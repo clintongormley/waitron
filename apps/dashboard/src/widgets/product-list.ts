@@ -257,7 +257,7 @@ export class ProductList extends LitElement {
         flex-direction: column;
       }
       /* A category's toggle, drawn while it is renamed, takes its resting arrow's font, so the row
-         keeps its baseline and its square stays put. A product's keeps the button's own font. */
+         keeps its baseline and its square stays put. */
       wt-data-table::part(tree-toggle) {
         font-family: inherit;
       }
