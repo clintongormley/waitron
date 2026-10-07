@@ -1873,7 +1873,13 @@ capabilities, remaps the id/location and imports the page printer disabled with 
 notice. Synthetic database cases cover these paths; core schema conformance and the stepwise
 upgrade guard passed with generated migrations 0120/0121. Registration, location selection,
 A4 claim/renewal/transport and delivery UI remain open.
-Bill delivery staging, email setup/settings and the delivery UI remain open; no Task 4
+The bill's internal invoice-choice writer now stages receipt/email/A4 metadata under its
+revision check. Email consent snapshots use server staff/time and preserve the displayed
+venue contact; stale edits, malformed choices and unavailable email are refused. A4 staging
+requires an active local page printer. The new column is included in the database's
+transition restrictions, with focused refusal and valid-revision cases. HTTP forwarding,
+server-context composition, bill read projections, issuance reservation and receipt suppression
+remain open, along with email setup/settings and the delivery UI; no Task 4
 completion claim.
 For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same

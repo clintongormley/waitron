@@ -1,3 +1,7 @@
+import {
+  checkedInvoiceChoiceDelivery,
+  type InvoiceChoiceDeliveryContext,
+} from "./invoice-choice-delivery.js";
 import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
 import {
@@ -3349,6 +3353,7 @@ export async function readOrderRevision(tx: Transaction, orderId: string): Promi
 export interface InvoiceChoiceRequest {
   revision: number;
   invoiceType: "F1" | "F2";
+  delivery?: unknown;
   recipient: {
     taxId: string;
     legalName: string;
@@ -3376,6 +3381,7 @@ export async function setOrderInvoiceChoice(
   cfg: Pick<TillConfig, "nodeId">,
   orderId: string,
   request: InvoiceChoiceRequest,
+  deliveryContext?: InvoiceChoiceDeliveryContext,
 ): Promise<number> {
   if (request.invoiceType !== "F1" && request.invoiceType !== "F2") {
     throw new AppError("management.request_invalid", { field: "invoiceType" });
@@ -3394,6 +3400,7 @@ export async function setOrderInvoiceChoice(
         status: workingOrders.status,
         revision: workingOrders.revision,
         invoiceType: workingOrders.invoiceType,
+        locationId: workingOrders.locationId,
       })
       .from(workingOrders)
       .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
@@ -3425,10 +3432,17 @@ export async function setOrderInvoiceChoice(
         .limit(1);
       if (paid !== undefined) throw new AppError("invoice.choice_locked", {});
     }
+    const invoiceDelivery = await checkedInvoiceChoiceDelivery(tx, {
+      delivery: request.delivery,
+      invoiceType: request.invoiceType,
+      locationId: order.locationId,
+      context: deliveryContext,
+    });
     const revision = order.revision + 1;
     await tx
       .update(workingOrders)
       .set({
+        invoiceDelivery,
         invoiceType: request.invoiceType,
         recipientTaxId: normalizedRecipient?.taxId ?? null,
         recipientLegalName: normalizedRecipient?.legalName ?? null,

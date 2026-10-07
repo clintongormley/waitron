@@ -331,6 +331,51 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
   });
 
+  it.each([
+    ["without a revision", "placed", {}],
+    ["during settlement", "placed", { status: "settled", settledAt: AT }],
+    ["with placed handover", "placed", { collectedAt: AT }],
+    ["with settled handover", "settled", { collectedAt: AT }],
+  ] as const)("refuses a staged delivery change %s", async (_name, status, change) => {
+    const id = await open();
+    await inTx((tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status, ...(status === "settled" ? { settledAt: AT } : {}) })
+        .where(eq(workingOrders.id, id)),
+    );
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ ...change, invoiceDelivery: { medium: "receipt" } })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("allows a delivery change before issuance with a placed bill revision", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    await inTx((tx) =>
+      tx
+        .update(workingOrders)
+        .set({ revision: 1, invoiceDelivery: { medium: "receipt" } })
+        .where(eq(workingOrders.id, id)),
+    );
+    const [saved] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, id)),
+    );
+    expect(saved).toMatchObject({
+      status: "placed",
+      revision: 1,
+      invoiceDelivery: { medium: "receipt" },
+    });
+  });
+
   it("keeps a placed bill's recipient fixed while settling it", async () => {
     const id = await open();
     await inTx((tx) =>

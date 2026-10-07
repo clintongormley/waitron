@@ -197,6 +197,20 @@ upgrade checks passed. Bill staging, location printer selection, registration/re
 routes, A4 claim/renewal/transport and delivery UI remain open. This is no Task 2/5 completion
 claim.
 
+**2026-10-07 bill staging checkpoint.** `setOrderInvoiceChoice` now stores an optional
+receipt, email or A4 choice in the bill's revision transaction. Email staging requires
+staff-recorded consent for the current statement version, an allowed invoice language,
+and the same venue contact shown with that statement. It stamps staff identity and time
+from the server context rather than taking either from the request. The stored contact
+survives later contact edits; a stale revision leaves the saved snapshot unchanged.
+A4 staging requires an active page printer in the bill's location. Null means no explicit
+choice; saving F2 without a delivery clears the draft. Generated migration 0122 adds the
+JSON column, and custom migration 0123 includes it in each transition's fixed-column list.
+Focused database cases cover revision-free edits, settlement and both handover states,
+alongside a valid pre-issuance revision advance. HTTP forwarding and server-context
+composition, bill read projections, issuance reservation and automatic-receipt suppression
+remain pending. This is an internal staging checkpoint, not a completed Task 2/4.
+
 ## 3. Set up email for a live venue, without a terminal
 
 **Inspect/change:** `apps/setup/src/setup-app.ts` (venue advances to certificate or review at `:807`; `apps/setup/src/screens/cert-screen.ts:276` advances to fiscal test, and `fiscal-test-screen.ts:66` to review), a new Email screen beside those screens, `apps/setup/src/api/client.ts`, `apps/server/src/setup-api.ts` and `setup-operation.ts`, `apps/server/src/email-delivery.ts`, `packages/credentials/src/purposes.ts` (read only: `email.smtp` keeps its `url` and `from` fields), a settings card on `apps/dashboard/src/screens/email-screen.ts` and its server route, the setup and dashboard translations. Keep the existing CLI path in Task 0.
