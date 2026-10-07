@@ -2,14 +2,6 @@ import { sql, type SQL } from "drizzle-orm";
 import { claimRows, nowIso, type Transaction } from "@waitron/db";
 import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";
 
-/**
- * The agent runtime: one pull → push → report batch. The calling loop owns the interval between
- * batches, which is also the only spacing between retries.
- *
- * Single writer per row: the enqueuer owns a job's creation, this path its move to `printing`,
- * `done` or `failed`.
- */
-
 /** Jobs claimed per batch. A bound, not a tuning knob — the loop calls again while work remains. */
 export const PULL_BATCH_LIMIT = 50;
 
@@ -100,7 +92,13 @@ function dueNow(): { claimedAt: string; due: SQL } {
 export async function claimPrintJobs(
   tx: Transaction,
   agentId: string,
-  ctx: { locationId: string; visibleKeys: string[]; printerId?: string },
+  ctx: {
+    locationId: string;
+    visibleKeys: string[];
+    printerId?: string;
+    /** Includes due invoice receipts; the caller must attach their token in this transaction. */
+    invoiceReceiptsAt?: string;
+  },
 ): Promise<ClaimedJob[]> {
   const { claimedAt, due } = dueNow();
   const usbBt =
@@ -114,6 +112,14 @@ export async function claimPrintJobs(
     claimable: sql`p.active = true
       and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
       ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
+      and (not exists (select 1 from invoice_deliveries d where d.print_job_id = j.id)
+        or ${
+          ctx.invoiceReceiptsAt === undefined
+            ? sql`false`
+            : sql`exists (
+          select 1 from invoice_deliveries d where d.print_job_id = j.id
+            and d.status = 'queued' and d.next_attempt_at <= ${ctx.invoiceReceiptsAt})`
+        })
       and ${due}`,
     order: sql`j.created_at`,
     limit: PULL_BATCH_LIMIT,
@@ -198,7 +204,8 @@ export async function endUnpairedPrinterJobs(
  * `printing`, so a retried report on a finished job is a no-op rather than a second `attempts` bump.
  * An unknown job, another agent's and a finished one all return the same `{ updated: false }`.
  *
- * A duplicate report that arrives after the SAME agent re-claimed the job applies to the new claim:
+ * Correlated invoice receipts report through the invoice adapter, which checks their attempt token.
+ * For ordinary jobs, a duplicate report after the SAME agent re-claimed the job applies to the new claim:
  * telling the two apart would need a per-claim token the schema does not carry.
  */
 export async function reportPrintJob(
@@ -215,6 +222,7 @@ export async function reportPrintJob(
     where print_jobs.id = ${jobId}
       and print_jobs.status = 'printing'
       and print_jobs.claimed_by = ${agentId}
+      and not exists (select 1 from invoice_deliveries d where d.print_job_id = print_jobs.id)
     returning print_jobs.id`);
   return { updated: result.rows.length > 0 };
 }

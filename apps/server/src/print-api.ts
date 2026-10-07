@@ -24,7 +24,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import {
-  claimPrintJobs,
   canResendPrintJob,
   resendPrintJob,
   createPrinter,
@@ -34,7 +33,6 @@ import {
   failUnprintableBluetoothJobs,
   listPrinters,
   MAX_DELIVERY_ATTEMPTS,
-  reportPrintJob,
   updatePrinter,
   esc,
   textGrid,
@@ -58,6 +56,8 @@ import {
 } from "./station-printers.js";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
+import { claimInvoicePrintJobs, reportInvoicePrintJob } from "./invoice-print.js";
+import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { requireAgent } from "./print-agent-session.js";
 import { createJoinRequest, readAgentJoinStatus } from "./join-requests.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
@@ -133,6 +133,30 @@ const run = createErrorBoundary(STATUS, "print.failed");
 function optionalString(v: unknown, field: string): string | undefined {
   if (v === undefined) return undefined;
   return requireString(v, field);
+}
+
+function readInvoicePrintClaim(value: unknown): InvoicePrintClaim | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new AppError("management.request_invalid", { field: "invoiceClaim" });
+  }
+  const claim = value as Record<string, unknown>;
+  if (
+    typeof claim.deliveryId !== "string" ||
+    !isUuid(claim.deliveryId) ||
+    typeof claim.token !== "string" ||
+    !isUuid(claim.token) ||
+    typeof claim.generation !== "number" ||
+    !Number.isSafeInteger(claim.generation) ||
+    claim.generation < 1
+  ) {
+    throw new AppError("management.request_invalid", { field: "invoiceClaim" });
+  }
+  return {
+    deliveryId: claim.deliveryId,
+    generation: claim.generation,
+    token: claim.token,
+  };
 }
 
 function optionalAgentSetupUrl(value: unknown): string | null | undefined {
@@ -548,10 +572,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             pairedBluetooth.map((p) => p.localKey).filter((key) => !elsewhere.has(key)),
           );
         }
-        return claimPrintJobs(tx, agentId, {
-          locationId: deps.cfg.locationId,
-          visibleKeys,
-        });
+        return claimInvoicePrintJobs(
+          tx,
+          agentId,
+          {
+            locationId: deps.cfg.locationId,
+            visibleKeys,
+          },
+          deps.now?.(),
+        );
       });
       // Settled only once the switch-off has committed, so an agent resends an outcome whose pull
       // failed, and before this reply's commands are read, so a command stops in the reply to the
@@ -572,6 +601,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           port: job.port,
           localKey: job.local_key,
           payload: Buffer.from(job.payload).toString("base64"),
+          ...(job.invoiceClaim === undefined ? {} : { invoiceClaim: job.invoiceClaim }),
         })),
         discoveryUntil: discoveryUntil > Date.now() ? discoveryUntil : null,
         ...(networkProbes.length ? { networkProbes } : {}),
@@ -584,16 +614,19 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db }, c);
       const jobId = requireUuidParam(c.req.param("id"), "PrintJobId");
-      const body = await readJsonBody<{ status?: unknown; error?: unknown }>(c);
+      const body = await readJsonBody<{
+        status?: unknown;
+        error?: unknown;
+        invoiceClaim?: unknown;
+      }>(c);
       const status = requireEnum(body.status, "status", ["done", "failed"] as const);
       const outcome =
         status === "done"
           ? ({ status: "done" } as const)
           : ({ status: "failed", error: requireString(body.error ?? "", "error") } as const);
-      // `reportPrintJob` changes only a printing job this agent claimed. The 204 is the same whether or
-      // not a row matched, so it discloses no job ids.
+      const invoiceClaim = readInvoicePrintClaim(body.invoiceClaim);
       await withTransaction(deps.db, async (tx) => {
-        return reportPrintJob(tx, { agentId, jobId, outcome });
+        await reportInvoicePrintJob(tx, { agentId, jobId, outcome, invoiceClaim }, deps.now?.());
       });
       return c.body(null, 204);
     }),
