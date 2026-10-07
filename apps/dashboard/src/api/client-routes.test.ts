@@ -850,6 +850,16 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("sets how one include shows its menu and returns the answer", async () => {
+    const folder = { showAsFolder: true, overrides: { names: { es: "Copas" }, color: "#aabbcc" } };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(folder));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setIncludeFolder("s1", "m1", folder)).resolves.toEqual(folder);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/sections/s1/members/m1/folder", "PUT", folder],
+    ]);
+  });
+
   it("reads a menu's prices and saves one product's settings on it", async () => {
     const row = {
       menuItemId: "mi1",

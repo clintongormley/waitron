@@ -105,6 +105,9 @@ import type {
 } from "@waitron/catalogue/src/modifier-list-types.js";
 import type {
   HomeTile,
+  IncludeFolder,
+  IncludeFolderInput,
+  IncludeFolderOverrides,
   MenuHome,
   SectionDetails,
   MemberRef,
@@ -112,7 +115,17 @@ import type {
   SectionMember,
   TileRef,
 } from "@waitron/catalogue/src/section-types.js";
-export type { HomeTile, MenuHome, SectionDetails, MemberRef, SectionInput, SectionMember };
+export type {
+  HomeTile,
+  IncludeFolder,
+  IncludeFolderInput,
+  IncludeFolderOverrides,
+  MenuHome,
+  SectionDetails,
+  MemberRef,
+  SectionInput,
+  SectionMember,
+};
 import type {
   LanguageTranslationGaps,
   TranslationGap,
@@ -190,6 +203,8 @@ export interface MenuStructureNode {
   color?: string | null;
   ownerMenuId?: string;
   includedMenuId?: string;
+  /** Present exactly when `includedMenuId` is. */
+  folder?: IncludeFolder;
 }
 
 export interface MenuStructure {
@@ -2438,6 +2453,18 @@ export class DashboardApi {
     return this.#request(`/management-api/sections/${id}/members/${memberId}/position`, "PUT", {
       to,
     });
+  }
+
+  setIncludeFolder(
+    listId: string,
+    memberId: string,
+    input: IncludeFolderInput,
+  ): Promise<IncludeFolder> {
+    return this.#request(
+      `/management-api/sections/${listId}/members/${memberId}/folder`,
+      "PUT",
+      input,
+    );
   }
 
   get imageLibraryRequest(): DashboardRequest {
