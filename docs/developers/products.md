@@ -40,21 +40,23 @@ A variant's names are never inherited: a blank customer or kitchen name falls ba
 staff name, never to the parent's. A line that names no variant renders exactly as it did before
 variants existed.
 
-**A write may not give an Active row a staff name another Active row has.** A write that would
-leave an Active product, or an Active variant of an Active product, with a staff name another such
-row in the venue already has is refused with `product.name_taken`, ignoring case and surrounding
-spaces (`packages/catalogue/src/product-names.ts`). Rows that already share a name are not refused.
-The check finds other rows by `products.name_key`, the folded name each catalogue write of the name
-stores beside it. A configuration import sets it from each imported row's name
-(`storeProductNameKeys`, run through the catalogue module's `afterImport`); a bundle never carries
-it, and one that does is refused. A row whose name has not been written since that column was added
-holds a null key and is not compared. A configuration import is checked without that key: a bundle
-holding two such Active rows with one name is refused whole (`validateCatalogueConfiguration`,
-`packages/catalogue/src/configuration-transfer.ts`), when setup opens the export and again when it
-is imported. It judges what the import will store: a product row with no `active` value counts as
-Active, the column's default; a product row whose `active` is not 0 or 1 (what an export writes),
-a category or product row whose name is not text, or a product, category or section colour that
-is neither null nor lowercase `#rrggbb`, is refused with `setup.request_invalid` naming the column.
+**Active product names are unique among products; active variant names are unique within their
+product.** You can give Seagrams Gin and London Gin a variant named Single, and you can also
+have a product named Single. Two active products called Single, or two active Single variants
+of one active product, are refused with `product.name_taken`, ignoring case and surrounding
+spaces (`packages/catalogue/src/product-names.ts`). A save that preserves an existing clash
+without creating another keeps the existing behavior.
+
+Each name write stores its folded `products.name_key`. Product and single-variant lookups
+compare that key within the relevant parent scope; a row with a null key is absent from those
+lookups. A whole-family save compares the submitted variant names directly. Configuration
+imports also compare names directly, grouping products separately from each product's variants
+(`validateCatalogueConfiguration`, `packages/catalogue/src/configuration-transfer.ts`). An
+import sets the keys through `storeProductNameKeys` in the catalogue module's `afterImport`;
+a bundle carrying a name key is refused. A product with no `active` value counts as active,
+the column's default. An import refuses an `active` value other than 0 or 1, a category or
+product name that is not text, or a product, category or section colour other than null or
+lowercase `#rrggbb`, with `setup.request_invalid` naming the column.
 
 The three resolvers, one per audience:
 

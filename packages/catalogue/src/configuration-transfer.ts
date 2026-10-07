@@ -56,15 +56,6 @@ function sharedName(names: readonly string[]): string | undefined {
   return firstNewClash(names.map((name) => ({ name, changed: true })))?.name.trim();
 }
 
-/**
- * Refuses a bundle holding two categories with one parent, or two Active products or variants,
- * that share a name: the rules `assertCategoryNamesFree` and `assertFamilyNamesFree` hold on a save.
- * A category with no `category_details` row is top-level, as it is to the save's check.
- * Also refuses (`setup.request_invalid`) a product whose `active` is not 0 or 1, a category or
- * product whose name is not text, a product, category or section colour other than lowercase
- * `#rrggbb` or null, a menu display setting a save would refuse, a new-product VAT default not in
- * `VAT_CLASSES`, or an include folder setting `checkIncludeFolderRows` refuses.
- */
 export function validateCatalogueConfiguration(tables: Readonly<Record<string, Rows>>): void {
   for (const row of tables.catalogue_settings ?? []) {
     const value = row.default_product_vat_class;
@@ -106,8 +97,17 @@ export function validateCatalogueConfiguration(tables: Readonly<Record<string, R
       row.active &&
       (row.parentId === null || row.parentId === undefined || activeIds.has(row.parentId)),
   );
-  const name = sharedName(counted.map((row) => row.name));
-  if (name !== undefined) throw new AppError("product.name_taken", { field: "name", name });
+  const productScopes = new Map<unknown, string[]>();
+  for (const row of counted) {
+    const parent = row.parentId ?? null;
+    const names = productScopes.get(parent);
+    if (names === undefined) productScopes.set(parent, [row.name]);
+    else names.push(row.name);
+  }
+  for (const names of productScopes.values()) {
+    const name = sharedName(names);
+    if (name !== undefined) throw new AppError("product.name_taken", { field: "name", name });
+  }
 }
 
 export const CATALOGUE_CONFIGURATION_TRANSFER = {

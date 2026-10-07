@@ -54,8 +54,35 @@ describe("validateCatalogueConfiguration: category names", () => {
   });
 });
 
+describe("relative variant import names", () => {
+  it("accepts Single under Seagrams Gin and London Gin, and as a product", () => {
+    expect(() =>
+      validateCatalogueConfiguration({
+        products: [
+          { id: "s", name: "Seagrams Gin", active: 1, parent_id: null },
+          { id: "l", name: "London Gin", active: 1, parent_id: null },
+          { id: "p", name: "Single", active: 1, parent_id: null },
+          { id: "sv", name: "Single", active: 1, parent_id: "s" },
+          { id: "lv", name: "Single", active: 1, parent_id: "l" },
+        ],
+      }),
+    ).not.toThrow();
+  });
+  it("refuses Single twice under Seagrams Gin with omitted active flags", () => {
+    expect(() =>
+      validateCatalogueConfiguration({
+        products: [
+          { id: "s", name: "Seagrams Gin", parent_id: null },
+          { id: "v1", name: "Single", parent_id: "s" },
+          { id: "v2", name: " single ", parent_id: "s" },
+        ],
+      }),
+    ).toThrowError(refusal("product.name_taken", "single"));
+  });
+});
+
 describe("validateCatalogueConfiguration: product names", () => {
-  it("refuses an Active variant of an Active product named like another Active product", () => {
+  it("accepts an Active variant named like another Active product", () => {
     expect(() =>
       validateCatalogueConfiguration({
         products: [
@@ -64,7 +91,7 @@ describe("validateCatalogueConfiguration: product names", () => {
           { id: "v1", name: " café solo ", active: 1, parent_id: "p2" },
         ],
       }),
-    ).toThrowError(refusal("product.name_taken", "café solo"));
+    ).not.toThrow();
   });
 
   it("counts a product or variant with no Active flag as Active, as the column's default does", () => {
@@ -81,7 +108,7 @@ describe("validateCatalogueConfiguration: product names", () => {
         products: [
           { id: "p1", name: "Café", parent_id: null },
           { id: "v1", name: "Café Solo", parent_id: "p1" },
-          { id: "p2", name: "café solo", active: 1, parent_id: null },
+          { id: "v2", name: "café solo", active: 1, parent_id: "p1" },
         ],
       }),
     ).toThrowError(refusal("product.name_taken", "café solo"));
