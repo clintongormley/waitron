@@ -1,3 +1,4 @@
+import { createLabelComparator } from "@waitron/shared";
 import type { GridCategory, GridProduct, GridRow, RoutingModel, RoutingRow } from "../routing.js";
 
 interface Hidden {
@@ -17,8 +18,10 @@ function append<T>(lists: Map<string, T[]>, key: string, value: T): void {
  * hidden ancestors), then the No category row and the products with no category under it. A
  * shown category's children are shown exactly when its id is in `expanded`, so a category shown
  * only for its cell opens too. A category whose children are not shown counts the rows of its
- * subtree that are absent. Siblings keep the model's order; a category's subcategories come before
- * its products.
+ * subtree that are absent. Siblings are sorted by name with the shared label comparison, equal
+ * names keeping the model's order. A category that is its own parent is sorted with the roots.
+ * Categories on or below a longer parent cycle follow the roots, and the cycle members placed at
+ * the top level are not sorted by name; a category's subcategories come before its products.
  */
 export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<string>): GridRow[] {
   const known = new Map(model.categories.map((category) => [category.id, category]));
@@ -41,6 +44,12 @@ export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<st
       append(productsIn, product.categoryId, product);
     }
   }
+  const compare = createLabelComparator();
+  const byName = (a: { name: string }, b: { name: string }): number => compare(a.name, b.name);
+  roots.sort(byName);
+  uncategorised.sort(byName);
+  for (const list of childCategories.values()) list.sort(byName);
+  for (const list of productsIn.values()) list.sort(byName);
   const categoriesWithCells = new Set<string>();
   const productsWithCells = new Set<string>();
   for (const { row } of model.cells) {
