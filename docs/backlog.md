@@ -1317,6 +1317,8 @@ category; it was missing only for a variant saved Inactive and for a product wit
 (`packages/catalogue/src/variant-fallback.test.ts`, run). Read, not run: Cancel closes the product
 editor with no prompt, so a variant added and not saved is lost silently — the likeliest cause; ask
 the owner if it recurs.
+_2026-10-07: W69 (#1325) delivered the shared discard warning; see its entry and dated owner
+audit above for the current editor behavior._
 
 **A variant always has its product's unit (A222, owner 2026-10-02) — DONE (#1101).**
 **Left open:**
