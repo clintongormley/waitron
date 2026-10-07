@@ -67,6 +67,8 @@ type Editor =
       action: () => Promise<unknown>;
       impact?: DepartmentRemovalImpact;
     };
+type NameClash = { kind: "department" | "zone"; id: string; name: string };
+
 type NameCell = "department" | "zone" | "trading";
 type NameDraft = {
   id: object;
@@ -121,6 +123,15 @@ export class VenueOperationsScreen extends LitElement {
         cursor: pointer;
         padding: 0;
         text-decoration: underline;
+      }
+      wt-data-table::part(name-editor) {
+        display: block;
+        width: min(calc(var(--wt-tap-min) * 6), calc(100vw - var(--wt-tap-min) * 3));
+        white-space: normal;
+      }
+      wt-data-table::part(name-clash-action) {
+        display: block;
+        margin-block-start: var(--wt-space-2);
       }
       wt-data-table::part(collection-cell) {
         display: inline-flex;
@@ -204,6 +215,8 @@ export class VenueOperationsScreen extends LitElement {
   @state() private refusedFields: Record<string, string> = {};
   /** A refusal that names no field the editor shows, until the operator saves again. */
   @state() private editorError?: string;
+  @state() private nameClash?: NameClash;
+  @state() private inlineNameClashes: Partial<Record<NameCell, NameClash>> = {};
   /** Save has been pressed in the open editor, so it re-checks its fields on every change. */
   @state() private attempted = false;
   @state() private busy = false;
@@ -249,6 +262,9 @@ export class VenueOperationsScreen extends LitElement {
     else this.tradingNameEditor = rowId;
   }
   #clearNameError(kind: NameCell, message = ""): void {
+    const clashes = { ...this.inlineNameClashes };
+    delete clashes[kind];
+    this.inlineNameClashes = clashes;
     if (kind === "department") this.departmentNameError = message;
     else if (kind === "zone") this.zoneNameError = message;
     else this.tradingNameError = message;
@@ -364,8 +380,16 @@ export class VenueOperationsScreen extends LitElement {
       }
       if (this.isConnected) await this.#load();
     } catch (error) {
-      if (this.#currentName(kind, draft))
-        this.actionError = this.#refusal(codeOf(error ?? {}), error);
+      if (this.#currentName(kind, draft)) {
+        const message = this.#nameRefusal(codeOf(error ?? {}));
+        if (message && this.#nameValue(kind).trim() === submitted) {
+          this.#clearNameError(kind, message);
+          this.inlineNameClashes = {
+            ...this.inlineNameClashes,
+            [kind]: this.#disabledNameClash(error),
+          };
+        } else if (!message) this.actionError = this.#refusal(codeOf(error ?? {}), error);
+      }
     } finally {
       this.busy = false;
     }
@@ -542,6 +566,7 @@ export class VenueOperationsScreen extends LitElement {
     this.fieldErrors = {};
     this.refusedFields = {};
     this.editorError = undefined;
+    this.nameClash = undefined;
   }
   async #save(action: () => Promise<unknown>, fields: ServerFields = {}): Promise<void> {
     if (this.busy) return;
@@ -582,6 +607,76 @@ export class VenueOperationsScreen extends LitElement {
     // Every Add button is disabled while busy, and focus does not take on a disabled one.
     if (closed) this.#returnFocus();
   }
+  #nameRefusal(code: string): string | undefined {
+    switch (code) {
+      case "department.name_taken":
+        return t("venue.department_name_taken");
+      case "department.name_disabled":
+        return t("venue.department_name_disabled");
+      case "zone.name_taken":
+        return t("venue.zone_name_taken");
+      case "zone.name_disabled":
+        return t("venue.zone_name_disabled");
+      default:
+        return undefined;
+    }
+  }
+  #disabledNameClash(error: unknown): NameClash | undefined {
+    const code = codeOf(error ?? {});
+    const kind =
+      code === "department.name_disabled"
+        ? "department"
+        : code === "zone.name_disabled"
+          ? "zone"
+          : undefined;
+    if (kind === undefined) return undefined;
+    const params = (error as { params?: Record<string, unknown> }).params;
+    const id = params?.[`${kind}Id`];
+    const name = params?.name;
+    return typeof id === "string" && typeof name === "string" ? { kind, id, name } : undefined;
+  }
+  #writeNameClash(clash: NameClash): Promise<void> {
+    return clash.kind === "department"
+      ? this.api.updateDepartment(clash.id, { active: true })
+      : this.api.updateZone(clash.id, { active: true });
+  }
+  async #enableInlineNameClash(
+    kind: NameCell,
+    draft: NameDraft | undefined,
+    clash: NameClash,
+  ): Promise<void> {
+    if (!this.#currentName(kind, draft) || this.busy) return;
+    const submitted = this.#nameValue(kind).trim();
+    this.busy = true;
+    try {
+      await this.#writeNameClash(clash);
+      if (this.#currentName(kind, draft) && this.#nameValue(kind).trim() === submitted)
+        this.#clearNameError(kind, this.#nameRefusal(`${clash.kind}.name_taken`));
+      if (this.isConnected) await this.#load();
+    } catch (error) {
+      if (this.#currentName(kind, draft) && this.#nameValue(kind).trim() === submitted) {
+        if (codeOf(error ?? {}) === "zone.department_inactive")
+          this.#clearNameError(kind, t("venue.zone_name_department_inactive"));
+        else if (kind === "department")
+          this.departmentNameError = this.#refusal(codeOf(error ?? {}), error);
+        else this.zoneNameError = this.#refusal(codeOf(error ?? {}), error);
+      }
+    } finally {
+      this.busy = false;
+    }
+  }
+  #enableNameClash(clash: NameClash, kind?: NameCell, draft?: NameDraft) {
+    return html`<wt-button
+      variant="secondary"
+      data-test="enable-name-clash"
+      ?disabled=${this.busy}
+      @click=${() =>
+        kind === undefined
+          ? void this.#save(() => this.#writeNameClash(clash))
+          : void this.#enableInlineNameClash(kind, draft, clash)}
+      >${format("venue.enable_name", { name: clash.name })}</wt-button
+    >`;
+  }
   #refusal(code: string, error?: unknown): string {
     if (code === "zone.department_inactive") return t("venue.zone_department_inactive");
     if (code === "department.last_active") return t("venue.department_last_active");
@@ -594,6 +689,17 @@ export class VenueOperationsScreen extends LitElement {
   }
   #refused(error: unknown, { fields = {}, codes = {} }: ServerFields): void {
     const code = codeOf(error ?? {});
+    if (
+      code === "zone.department_inactive" &&
+      this.nameClash?.kind === "zone" &&
+      this.editor?.kind === "new-zone"
+    ) {
+      this.nameClash = undefined;
+      this.refusedFields = { "new-zone-name": t("venue.zone_name_department_inactive") };
+      this.editorError = undefined;
+      this.#focusInvalid();
+      return;
+    }
     const field = (error as { params?: { field?: unknown } } | undefined)?.params?.field;
     const control =
       code === "management.request_invalid"
@@ -604,7 +710,8 @@ export class VenueOperationsScreen extends LitElement {
           ? codes[code]
           : undefined;
     if (control !== undefined) {
-      this.refusedFields = { [control]: t("venue.field_refused") };
+      this.nameClash = this.#disabledNameClash(error);
+      this.refusedFields = { [control]: this.#nameRefusal(code) ?? t("venue.field_refused") };
       this.#focusInvalid();
     } else {
       this.editorError = this.#refusal(code, error);
@@ -886,7 +993,8 @@ export class VenueOperationsScreen extends LitElement {
           if (row.kind !== "department")
             return html`${
               this.zoneNameEditor === row.zone.id
-                ? html`<wt-input
+                ? html`<div part="name-editor">
+                    <wt-input
                       name="zoneName"
                       @keydown=${(event: KeyboardEvent) => this.#nameKey(event, "zone", zoneDraft)}
                       label=${t("venue.name")}
@@ -913,7 +1021,11 @@ export class VenueOperationsScreen extends LitElement {
                       @click=${() => this.#leaveName("zone", zoneDraft, "cancel", () => this.#closeName("zone", zoneDraft!))}
                     >
                       ${t("venue.cancel")}
-                    </button>`
+                    </button>
+                    <div part="name-clash-action">
+                      ${this.inlineNameClashes.zone ? this.#enableNameClash(this.inlineNameClashes.zone, "zone", zoneDraft) : nothing}
+                    </div>
+                  </div>`
                 : html`<button
                     type="button"
                     part="edit-zone-name"
@@ -962,7 +1074,8 @@ export class VenueOperationsScreen extends LitElement {
                       >${t("venue.department_disabled")}</span
                     >`
               }`;
-          return html`<wt-input
+          return html`<div part="name-editor">
+            <wt-input
               name="departmentName"
               @keydown=${(event: KeyboardEvent) => this.#nameKey(event, "department", departmentDraft)}
               label=${t("venue.name")}
@@ -989,7 +1102,11 @@ export class VenueOperationsScreen extends LitElement {
               @click=${() => this.#leaveName("department", departmentDraft, "cancel", () => this.#closeName("department", departmentDraft!))}
             >
               ${t("venue.cancel")}
-            </button>`;
+            </button>
+            <div part="name-clash-action">
+              ${this.inlineNameClashes.department ? this.#enableNameClash(this.inlineNameClashes.department, "department", departmentDraft) : nothing}
+            </div>
+          </div>`;
         },
       },
       {
@@ -1577,6 +1694,7 @@ export class VenueOperationsScreen extends LitElement {
                 fields: { name: "new-zone-name", departmentId: "new-zone-department" },
                 codes: {
                   "zone.name_taken": "new-zone-name",
+                  "zone.name_disabled": "new-zone-name",
                   "department.not_found": "new-zone-department",
                 },
               },
@@ -1604,6 +1722,10 @@ export class VenueOperationsScreen extends LitElement {
                   name: "department-name",
                   tradingName: "trading-name",
                   defaultServiceMode: "department-mode",
+                },
+                codes: {
+                  "department.name_taken": "department-name",
+                  "department.name_disabled": "department-name",
                 },
               },
             );
@@ -1669,6 +1791,7 @@ export class VenueOperationsScreen extends LitElement {
     this.attempted = true;
     this.refusedFields = {};
     this.editorError = undefined;
+    this.nameClash = undefined;
     this.fieldErrors = content.check();
     if (Object.keys(this.fieldErrors).length === 0) {
       content.save();
@@ -1690,6 +1813,7 @@ export class VenueOperationsScreen extends LitElement {
         const refused = { ...this.refusedFields };
         delete refused[name];
         this.refusedFields = refused;
+        this.nameClash = undefined;
       }
       if (this.attempted) this.fieldErrors = content.check();
     };
@@ -1713,7 +1837,9 @@ export class VenueOperationsScreen extends LitElement {
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'));
         }}
       >
-        <div class="form" @wt-change=${recheck} @change=${recheck}>${content.body}</div>
+        <div class="form" @wt-change=${recheck} @change=${recheck}>
+          ${content.body} ${this.nameClash ? this.#enableNameClash(this.nameClash) : nothing}
+        </div>
         <wt-form-actions
           slot="footer"
           .error=${[...(this.editorError ? [this.editorError] : []), ...(marked ? [t("venue.fix_fields")] : [])].join(" ")}

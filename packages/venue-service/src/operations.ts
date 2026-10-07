@@ -126,11 +126,34 @@ export async function listServiceZones(
   }));
 }
 
+async function requireDepartmentName(
+  tx: Transaction,
+  cfg: VenueScope,
+  name: string,
+  ownId?: string,
+): Promise<void> {
+  const [other] = await tx
+    .select({ id: departments.id, active: departments.active })
+    .from(departments)
+    .where(
+      and(
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.name, name),
+        ownId === undefined ? undefined : ne(departments.id, ownId),
+      ),
+    );
+  if (other === undefined) return;
+  if (!other.active)
+    throw new AppError("department.name_disabled", { name, departmentId: other.id });
+  throw new AppError("department.name_taken", { name });
+}
+
 export async function createDepartment(
   tx: Transaction,
   cfg: VenueScope,
   input: { name: string; tradingName?: string; defaultServiceMode: ServiceMode },
 ): Promise<Department> {
+  await requireDepartmentName(tx, cfg, input.name);
   const [row] = await tx
     .insert(departments)
     .values({
@@ -156,6 +179,7 @@ export async function updateDepartment(
   departmentId: string,
   input: { name: string; tradingName: string; defaultServiceMode: ServiceMode },
 ): Promise<void> {
+  await requireDepartmentName(tx, cfg, input.name, departmentId);
   const [row] = await tx
     .update(departments)
     .set(input)
@@ -483,8 +507,15 @@ export async function createServiceZone(
         table: "floor_zones",
         columns: ["location_id", "name"],
       })
-    )
+    ) {
+      const [other] = await tx
+        .select({ id: floorZones.id, active: floorZones.active })
+        .from(floorZones)
+        .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.name, input.name)));
+      if (other?.active === false)
+        throw new AppError("zone.name_disabled", { name: input.name, zoneId: other.id });
       throw new AppError("zone.name_taken", { name: input.name });
+    }
     throw error;
   }
   await configureZone(tx, cfg, { zoneId, departmentId: input.departmentId });

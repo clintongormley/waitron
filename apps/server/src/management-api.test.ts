@@ -3495,3 +3495,31 @@ describe("venue late-flag defaults", () => {
     },
   );
 });
+
+it("a zone rename onto a disabled name answers 409 with the existing zone id", async () => {
+  const name = unique("Disabled terrace");
+  const target = (await (
+    await req(
+      "/venue-service/zones",
+      { method: "POST", body: JSON.stringify({ name }) },
+      managerCookie,
+    )
+  ).json()) as { id: string };
+  const source = (await (
+    await req(
+      "/venue-service/zones",
+      { method: "POST", body: JSON.stringify({ name: unique("Dining") }) },
+      managerCookie,
+    )
+  ).json()) as { id: string };
+  expect((await req(`/zones/${target.id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+  const response = await req(
+    `/zones/${source.id}`,
+    { method: "PATCH", body: JSON.stringify({ name }) },
+    managerCookie,
+  );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    error: { code: "zone.name_disabled", params: { name, zoneId: target.id } },
+  });
+});

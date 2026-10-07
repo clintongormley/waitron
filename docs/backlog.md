@@ -6890,10 +6890,15 @@ bump it when a fixed version is published, and run the certificate suites in tho
   you to enable or assign a department, in English or Spanish. The policy-tree row withholds
   Enable until that assignment is active. The table-with-no-department gap is closed by the
   same checks, with direct unassigned-row fixtures covering create, move and placement.
-  Creating a department with a name another department has still answers 500 `server.internal`,
-  because there is no `department.name_taken` code (run on W110d's branch: a second
-  `POST /management-api/venue-service/departments` with the same name); and an active
-  zone with no department had its "Not configured" note run onto its name with no space before
+  A283 is DONE: creating or renaming a department onto another department's name answers
+  409 `department.name_taken`; a disabled department or zone keeps its name and the refusal
+  names the existing row (`department.name_disabled` / `zone.name_disabled`). Departments and
+  zones puts the message beside the name and offers Enable there. Enabling from Add closes
+  the editor after success; enabling from an inline rename keeps the draft and explains that
+  the enabled item's name is still taken. Enabling a zone still requires an active department;
+  if that blocks Enable, the name explains how to fix the assignment and the unusable offer
+  goes away. A reply to an earlier name does not mark text you edited while Enable was waiting.
+  An active zone with no department had its "Not configured" note run onto its name with no space before
   it (the owner's screenshot read "Private roomNot configured") — DONE by A301: the note now has
   its own gap and the muted colour. (e) a test gap,
   reported by W110's review and not re-checked: `#fallbackReason`

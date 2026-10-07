@@ -2393,3 +2393,38 @@ describe("read-only station overview", () => {
     }
   });
 });
+
+it.each([false, true])("answers department name clashes with 409 (active=%s)", async (active) => {
+  const fx = await fixture();
+  const path = "/management-api/venue-service/departments";
+  const original = await send(fx.app, "POST", path, fx.managerCookie, {
+    name: "Deli",
+    defaultServiceMode: "prepay",
+  });
+  expect(original.status).toBe(201);
+  const target = (await original.json()) as { id: string };
+  if (!active)
+    await db.update(departments).set({ active: false }).where(eq(departments.id, target.id));
+  const expected = active
+    ? { code: "department.name_taken", params: { name: "Deli" } }
+    : { code: "department.name_disabled", params: { name: "Deli", departmentId: target.id } };
+  const duplicate = await send(fx.app, "POST", path, fx.managerCookie, {
+    name: "Deli",
+    defaultServiceMode: "prepay",
+  });
+  expect(duplicate.status).toBe(409);
+  expect(await duplicate.json()).toEqual({ error: expected });
+  const source = (await (
+    await send(fx.app, "POST", path, fx.managerCookie, {
+      name: "Bar",
+      defaultServiceMode: "prepay",
+    })
+  ).json()) as { id: string };
+  const rename = await send(fx.app, "PATCH", `${path}/${source.id}`, fx.managerCookie, {
+    name: "Deli",
+    tradingName: "Bar",
+    defaultServiceMode: "prepay",
+  });
+  expect(rename.status).toBe(409);
+  expect(await rename.json()).toEqual({ error: expected });
+});

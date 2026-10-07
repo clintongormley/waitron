@@ -56,6 +56,7 @@ import { routeExceptions } from "./schema/routing.js";
 import { zoneSalePolicies } from "./schema/service.js";
 import { zoneAllDayMenus } from "./schema/menus.js";
 import {
+  type Department,
   copyOrderServiceContext,
   copyWorkingLineContext,
   configureZone,
@@ -2644,3 +2645,84 @@ for (const { statement, constraint } of [
     ).resolves.toMatchObject({ serviceMode: "prepay" });
   });
 }
+
+describe("reserved venue names", () => {
+  it.each([
+    { active: false, action: "create" },
+    { active: true, action: "create" },
+    { active: false, action: "rename" },
+    { active: true, action: "rename" },
+  ])(
+    "refuses a department $action onto a reserved name (active=$active)",
+    async ({ active, action }) => {
+      const cfg = { locationId: brandLocationId(await seedLocation("Names")) };
+      const target = await scoped((tx) =>
+        createDepartment(tx, cfg, { name: "Deli", defaultServiceMode: "prepay" }),
+      );
+      const source = await scoped((tx) =>
+        createDepartment(tx, cfg, { name: "Bar", defaultServiceMode: "prepay" }),
+      );
+      if (!active) await scoped((tx) => deactivateDepartment(tx, cfg, target.id));
+      const expected = active
+        ? { code: "department.name_taken", params: { name: "Deli" } }
+        : { code: "department.name_disabled", params: { name: "Deli", departmentId: target.id } };
+      const write =
+        action === "create"
+          ? (tx: Transaction) =>
+              createDepartment(tx, cfg, { name: "Deli", defaultServiceMode: "prepay" })
+          : (tx: Transaction) =>
+              updateDepartment(tx, cfg, source.id, {
+                name: "Deli",
+                tradingName: "Changed",
+                defaultServiceMode: "table_tab",
+              });
+      await expect(scoped<Department | void>(write)).rejects.toMatchObject(expected);
+      expect(await scoped((tx) => listDepartments(tx, cfg))).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: source.id,
+            name: "Bar",
+            tradingName: "Bar",
+            defaultServiceMode: "prepay",
+          }),
+          expect.objectContaining({ id: target.id, name: "Deli", active }),
+        ]),
+      );
+      await scoped((tx) =>
+        updateDepartment(tx, cfg, source.id, {
+          name: "Bar",
+          tradingName: "Same name allowed",
+          defaultServiceMode: "prepay",
+        }),
+      );
+      const other = { locationId: brandLocationId(await seedLocation("Other names")) };
+      expect(
+        (
+          await scoped((tx) =>
+            createDepartment(tx, other, { name: "Deli", defaultServiceMode: "prepay" }),
+          )
+        ).name,
+      ).toBe("Deli");
+    },
+  );
+
+  it("identifies the disabled zone that keeps a new zone's name", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Disabled zone names")) };
+    const department = await scoped((tx) =>
+      createDepartment(tx, cfg, { name: "Restaurant", defaultServiceMode: "prepay" }),
+    );
+    const zone = await scoped((tx) =>
+      createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
+    );
+    await scoped((tx) => deactivateServiceZone(tx, cfg, zone.id));
+    await expect(
+      scoped((tx) => createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id })),
+    ).rejects.toMatchObject({
+      code: "zone.name_disabled",
+      params: { name: "Terrace", zoneId: zone.id },
+    });
+    expect(await db.select().from(floorZones).where(eq(floorZones.id, zone.id))).toEqual([
+      expect.objectContaining({ name: "Terrace", active: false }),
+    ]);
+  });
+});
