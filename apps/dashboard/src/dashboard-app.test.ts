@@ -6246,6 +6246,11 @@ describe("printer breadcrumb during a pending save", () => {
           try {
             for (const size of [390, 1280]) {
               await page.viewport(size, 900);
+              q(
+                editor === "name"
+                  ? "[data-test=printer-name-refusal]"
+                  : "[data-test=printer-section-connection] [role=alert]",
+              ).scrollIntoView({ block: "center" });
               await page.screenshot({
                 element: host,
                 path: `__screenshots__/look/a360-${locale}-${theme}-${editor}-${size}.png`,
