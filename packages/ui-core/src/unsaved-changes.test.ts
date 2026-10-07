@@ -698,3 +698,72 @@ it("ignores retained scopes for navigation while keeping their unload protection
   expect(f.coordinator.isDirty(undefined, [retained.id])).toBe(false);
   expect(f.coordinator.isDirty()).toBe(true);
 });
+
+function tracked<T>(initial: T) {
+  let value = initial;
+  const id = {};
+  const scope = core.trackDraft<T>({
+    id,
+    current: () => value,
+    snapshot: (input) => structuredClone(input),
+    equal: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    restore: () => {
+      throw new Error("a tracked draft is never restored");
+    },
+  });
+  return {
+    id,
+    scope,
+    set(input: T) {
+      value = input;
+      scope.changed();
+    },
+  };
+}
+
+it("a tracked draft starts unchanged, follows edits and is clean again once reverted", () => {
+  const d = tracked({ name: "saved" });
+  expect(d.scope.id).toBe(d.id);
+  expect(d.scope.isDirty()).toBe(false);
+  d.set({ name: "edited" });
+  expect(d.scope.isDirty()).toBe(true);
+  d.set({ name: "saved" });
+  expect(d.scope.isDirty()).toBe(false);
+});
+
+it("a tracked draft's baseline is a detached snapshot of the opened value", () => {
+  const initial = { rows: [1, 2] };
+  const d = tracked(initial);
+  initial.rows.push(3);
+  expect(d.scope.isDirty()).toBe(true);
+});
+
+it("committing a tracked draft makes the submitted value its new baseline", () => {
+  const d = tracked({ name: "saved" });
+  const submitted = { name: "submitted" };
+  d.set({ name: "submitted" });
+  d.scope.commit(submitted);
+  expect(d.scope.isDirty()).toBe(false);
+  submitted.name = "changed after commit";
+  expect(d.scope.isDirty()).toBe(false);
+  d.set({ name: "saved" });
+  expect(d.scope.isDirty()).toBe(true);
+});
+
+it("a disposed tracked draft stays clean and ignores later commits", () => {
+  const d = tracked("saved");
+  d.set("edited");
+  d.scope.dispose();
+  expect(d.scope.isDirty()).toBe(false);
+  d.set("another edit");
+  expect(() => d.scope.commit("committed")).not.toThrow();
+  expect(d.scope.isDirty()).toBe(false);
+  expect(() => d.scope.dispose()).not.toThrow();
+});
+
+it("a dirty tracked draft adds no unload protection", () => {
+  const d = tracked("saved");
+  d.set("edited");
+  expect(d.scope.isDirty()).toBe(true);
+  expect(unload(window).defaultPrevented).toBe(false);
+});

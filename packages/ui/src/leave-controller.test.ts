@@ -4,6 +4,8 @@ import * as ui from "./index.js";
 test("exports the application leave controller for contributed forms", () => {
   expect(ui).toHaveProperty("LeaveController", expect.any(Function));
   expect(ui).toHaveProperty("leaveCoordinatorFor", expect.any(Function));
+  expect(ui).toHaveProperty("draftScopeFor", expect.any(Function));
+  expect(ui).toHaveProperty("saveActionState", expect.any(Function));
 });
 
 import { LitElement, html } from "lit";
@@ -226,4 +228,173 @@ test("a removed renderer cannot answer a later leave question", async () => {
   expect(current.open).toBe(true);
   current.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
   expect(await next).toBe("kept");
+});
+
+class DraftTestForm extends LitElement {
+  value = "Original";
+  draft?: { coordinator: ui.LeaveCoordinator | undefined; scope: ui.DraftScope<string> };
+  override connectedCallback() {
+    super.connectedCallback();
+    const owner: ui.DraftOwner<string> = {
+      id: this,
+      current: () => this.value,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.value = value;
+      },
+    };
+    this.draft = ui.draftScopeFor(this, owner);
+  }
+  override render() {
+    const s = ui.saveActionState(this.draft?.scope);
+    return html`<wt-button variant=${s.variant} ?disabled=${s.unchanged}>Save</wt-button>`;
+  }
+  edit(value: string) {
+    this.value = value;
+    this.draft!.scope.changed();
+    this.requestUpdate();
+  }
+  get save() {
+    return this.shadowRoot!.querySelector("wt-button")!;
+  }
+}
+customElements.define("draft-test-form", DraftTestForm);
+
+test("a form inside an application gets its coordinator, and a dirty draft still asks to leave", async () => {
+  const app = (await mount("<leave-test-app></leave-test-app>")) as LeaveTestApp;
+  const form = document.createElement("draft-test-form") as DraftTestForm;
+  app.shadowRoot!.append(form);
+  await form.updateComplete;
+  const { coordinator, scope } = form.draft!;
+  expect(coordinator).toBe(app.leave.coordinator);
+  expect(scope.id).toBe(form);
+  form.edit("Edited");
+  expect(scope.isDirty()).toBe(true);
+  expect(coordinator!.isDirty([form])).toBe(true);
+  expect(unloadPrevented()).toBe(true);
+  const pending = coordinator!.request({ scopes: [form], reason: "cancel", proceed() {} });
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+  expect(await pending).toBe("proceeded");
+  expect(form.value).toBe("Original");
+  expect(scope.isDirty()).toBe(false);
+  expect(unloadPrevented()).toBe(false);
+});
+
+function unloadPrevented() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+test("a form with no application above still knows whether its draft changed", async () => {
+  const form = (await mount("<draft-test-form></draft-test-form>")) as DraftTestForm;
+  const { coordinator, scope } = form.draft!;
+  expect(coordinator).toBeUndefined();
+  expect(scope.id).toBe(form);
+  expect(scope.isDirty()).toBe(false);
+  form.edit("Edited");
+  expect(scope.isDirty()).toBe(true);
+  form.edit("Original");
+  expect(scope.isDirty()).toBe(false);
+});
+
+for (const placement of ["inside an application", "on its own"] as const) {
+  test(`a commit redraws Save quiet without the form asking, ${placement}`, async () => {
+    const form = document.createElement("draft-test-form") as DraftTestForm;
+    if (placement === "on its own") await mount("<div></div>").then((div) => div.append(form));
+    else {
+      const app = (await mount("<leave-test-app></leave-test-app>")) as LeaveTestApp;
+      app.shadowRoot!.append(form);
+    }
+    await form.updateComplete;
+    expect(form.save.variant).toBe("secondary");
+    expect(form.save.disabled).toBe(true);
+    form.edit("Edited");
+    await form.updateComplete;
+    expect(form.save.variant).toBe("primary");
+    expect(form.save.disabled).toBe(false);
+    form.draft!.scope.commit("Edited");
+    await form.updateComplete;
+    expect(form.draft!.scope.isDirty()).toBe(false);
+    expect(form.save.variant).toBe("secondary");
+    expect(form.save.disabled).toBe(true);
+  });
+
+  test(`a dispose redraws Save quiet without the form asking, ${placement}`, async () => {
+    const form = document.createElement("draft-test-form") as DraftTestForm;
+    if (placement === "on its own") await mount("<div></div>").then((div) => div.append(form));
+    else {
+      const app = (await mount("<leave-test-app></leave-test-app>")) as LeaveTestApp;
+      app.shadowRoot!.append(form);
+    }
+    await form.updateComplete;
+    form.edit("Edited");
+    await form.updateComplete;
+    expect(form.save.variant).toBe("primary");
+    form.draft!.scope.dispose();
+    await form.updateComplete;
+    expect(form.draft!.scope.isDirty()).toBe(false);
+    expect(form.save.variant).toBe("secondary");
+    expect(form.save.disabled).toBe(true);
+  });
+}
+
+test("a host with no update cycle can commit and dispose its draft", () => {
+  let value = "Original";
+  const { coordinator, scope } = ui.draftScopeFor(document.createElement("div"), {
+    id: {},
+    current: () => value,
+    snapshot: (input) => input,
+    equal: (a, b) => a === b,
+    restore: () => {},
+  });
+  expect(coordinator).toBeUndefined();
+  value = "Edited";
+  scope.changed();
+  expect(scope.isDirty()).toBe(true);
+  expect(() => scope.commit("Edited")).not.toThrow();
+  expect(scope.isDirty()).toBe(false);
+  value = "Again";
+  expect(scope.isDirty()).toBe(true);
+  expect(() => scope.dispose()).not.toThrow();
+  expect(scope.isDirty()).toBe(false);
+});
+
+for (const [scope, savableAtOpen, expected] of [
+  [undefined, undefined, { variant: "secondary", unchanged: true }],
+  [undefined, false, { variant: "secondary", unchanged: true }],
+  [undefined, true, { variant: "primary", unchanged: false }],
+  [false, undefined, { variant: "secondary", unchanged: true }],
+  [false, false, { variant: "secondary", unchanged: true }],
+  [false, true, { variant: "primary", unchanged: false }],
+  [true, undefined, { variant: "primary", unchanged: false }],
+  [true, false, { variant: "primary", unchanged: false }],
+  [true, true, { variant: "primary", unchanged: false }],
+] as const) {
+  const draft = scope === undefined ? "no draft" : scope ? "a changed draft" : "an unchanged draft";
+  const opened =
+    savableAtOpen === undefined ? "no options" : `savableAtOpen ${String(savableAtOpen)}`;
+  test(`Save for ${draft} with ${opened} is ${expected.variant}`, () => {
+    const state =
+      savableAtOpen === undefined
+        ? ui.saveActionState(scope === undefined ? undefined : { isDirty: () => scope })
+        : ui.saveActionState(scope === undefined ? undefined : { isDirty: () => scope }, {
+            savableAtOpen,
+          });
+    expect(state).toEqual(expected);
+  });
+}
+
+test("Save with an empty options object follows the draft alone", () => {
+  expect(ui.saveActionState({ isDirty: () => false }, {})).toEqual({
+    variant: "secondary",
+    unchanged: true,
+  });
+  expect(ui.saveActionState({ isDirty: () => true }, {})).toEqual({
+    variant: "primary",
+    unchanged: false,
+  });
 });

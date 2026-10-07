@@ -103,6 +103,17 @@ export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language
 export { ReorderController, type ReorderModel } from "./reorder-table.js";
 export { reorder } from "./reorder.js";
 
-export { LeaveController, leaveCoordinatorFor, type LeaveCopy } from "./leave-controller.js";
+export {
+  LeaveController,
+  draftScopeFor,
+  leaveCoordinatorFor,
+  saveActionState,
+  type LeaveCopy,
+} from "./leave-controller.js";
 
-export type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui-core/unsaved-changes";
+export type {
+  DraftOwner,
+  DraftScope,
+  LeaveCoordinator,
+  LeaveReason,
+} from "@waitron/ui-core/unsaved-changes";

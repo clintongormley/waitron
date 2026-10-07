@@ -1,4 +1,10 @@
-import { ReorderController, reorder, leaveCoordinatorFor, type ReorderModel } from "@waitron/ui";
+import {
+  ReorderController,
+  draftScopeFor,
+  reorder,
+  saveActionState,
+  type ReorderModel,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
@@ -507,8 +513,7 @@ export class ProductEditor extends LitElement {
       this.#draftScope = undefined;
       this.#leave = undefined;
     } else if (!this.#draftScope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#draftScope = this.#leave?.register({
+      const { coordinator, scope } = draftScopeFor(this, {
         id: this,
         current: () => this.currentValue,
         snapshot: (value) => structuredClone(value),
@@ -517,6 +522,8 @@ export class ProductEditor extends LitElement {
           this.draft = value;
         },
       });
+      this.#leave = coordinator;
+      this.#draftScope = scope;
     }
     if ((changed.has("busy") && !this.busy) || changed.has("fieldErrors")) this.submitted = false;
     // A field error the SERVER reported is surfaced the same way a local one is: its section opens
@@ -858,6 +865,7 @@ export class ProductEditor extends LitElement {
   private save(event: Event, restore = false) {
     event.stopPropagation();
     if (this.suspended || this.submitted) return;
+    if (!restore && saveActionState(this.#draftScope).unchanged) return;
     const errors = this.validate();
     if (this.attempted && Object.keys(errors).length) return;
     this.attempted = true;
@@ -939,7 +947,7 @@ export class ProductEditor extends LitElement {
   private cancel(event: Event) {
     event.stopPropagation();
     if (this.suspended) return;
-    if (this.#draftScope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.reportCancel();
   }
 
@@ -1852,6 +1860,7 @@ export class ProductEditor extends LitElement {
     const local = this.attempted ? this.validate() : {};
     const { errors, fieldKeys, rows, bottom } = this.assess(local);
     const invalid = Object.keys(local).length > 0;
+    const saveAction = saveActionState(this.#draftScope);
     this.#errorsNow = errors;
     this.#fieldKeysNow = fieldKeys;
     this.#rowsNow = rows;
@@ -1860,7 +1869,7 @@ export class ProductEditor extends LitElement {
         size="standard"
         .open=${this.open}
         .dismissible=${!this.suspended}
-        .beforeClose=${this.#draftScope ? this.#beforeClose : undefined}
+        .beforeClose=${this.#leave ? this.#beforeClose : undefined}
         heading=${
           this.inherited
             ? t("editor.edit_variant_of").replace("{name}", () => this.inherited!.name)
@@ -1924,8 +1933,9 @@ export class ProductEditor extends LitElement {
           }
           <wt-button
             data-test="save"
+            variant=${saveAction.variant}
             .loading=${this.busy}
-            ?disabled=${this.suspended || invalid}
+            ?disabled=${saveAction.unchanged || this.suspended || invalid}
             @click=${this.save}
             >${t("action.save")}</wt-button
           ></wt-form-actions

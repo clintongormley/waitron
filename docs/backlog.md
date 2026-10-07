@@ -1431,6 +1431,34 @@ quantities. Cause and real-venue reproduction remain unverified. Inspect the rea
 attributing them to W69 or changing quantity/money handling. Service-status labels, sidebar
 and warning hover contrast investigations remain separate below.
 
+**A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
+BUILT: batch 1 in #1391; batches 2–7 OPEN.** The owner: "open a form with the Save button
+transparent (and disabled?). but as soon as you make a change, make the Save button active/blue",
+then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
+disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
+pressable, and undoing the change turns it quiet and disabled again. "Changed" is what the form's
+unsaved-changes tracking (W69) already says, not a comparison written per screen. The rule, and
+how a screen adopts it: [design-system.md](developers/design-system.md) → Forms. The plan, one pull
+request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes.md).
+
+- **Batch 1 — the shared mechanism, the product editor and the variant form.** `draftScopeFor` and
+  `saveActionState` in `@waitron/ui`. Enable on a disabled product still saves at once: pressing
+  it is the change. No batch-1 form opens already savable. Looked at on 2026-10-08 in 35
+  screenshots of the two forms mounted with test data (English and Spanish, light and dark,
+  1280px and 390px wide, unchanged and after one edit, plus a changed form refused by its own
+  checks and a disabled product), kept outside the repository in `~/waitron-campaign-b/a331-shots/`:
+  no defect found. In the same mount, the first screen frame after `closeSaved` (what the
+  Products screen calls once a save succeeds) already has the product editor closed, so its Save
+  is not seen turning quiet as the dialog goes.
+- **Batch 2 — OPEN.** The dashboard's catalogue and menus forms.
+- **Batch 3 — OPEN.** The rest of the dashboard's screens that track unsaved changes.
+- **Batch 4 — OPEN.** Module screens: venue service, Stripe, SumUp, adjustments, bookings, media.
+- **Batch 5 — OPEN.** The till; many of its dialogs act (pay, refund, find) rather than save, and
+  the batch says which ones save.
+- **Batch 6 — OPEN.** The setup wizard, only the steps that edit something already stored.
+- **Batch 7 — OPEN.** Forms with a Save that do not track unsaved changes, and the server's and
+  print agent's own pages: each brought under the rule, or listed with the reason it is not.
+
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected
 EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell receipts are

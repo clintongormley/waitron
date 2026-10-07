@@ -48,6 +48,52 @@ interface RegisteredDraft {
   release(): void;
 }
 
+interface Baseline<T> {
+  readonly live: boolean;
+  dirty(): boolean;
+  restore(): void;
+  commit(submitted: T, beforeSwap?: () => void): void;
+  release(): void;
+}
+
+function baselineFor<T>(source: DraftOwner<T>): Baseline<T> {
+  let owner: DraftOwner<T> | undefined = source;
+  let baseline: T | undefined = owner.snapshot(owner.current());
+  return {
+    get live() {
+      return owner !== undefined;
+    },
+    dirty: () => !!owner && !owner.equal(baseline as T, owner.current()),
+    restore: () => {
+      if (owner) owner.restore(owner.snapshot(baseline as T));
+    },
+    commit(submitted, beforeSwap) {
+      if (!owner) return;
+      const snapshot = owner.snapshot(submitted);
+      beforeSwap?.();
+      baseline = snapshot;
+    },
+    release: () => {
+      owner = undefined;
+      baseline = undefined;
+    },
+  };
+}
+
+/** A draft followed for its changed state alone: it asks no leave question and guards no unload. */
+export function trackDraft<T>(owner: DraftOwner<T>): DraftScope<T> {
+  const draft = baselineFor(owner);
+  return {
+    id: owner.id,
+    changed() {},
+    isDirty: draft.dirty,
+    commit(submitted) {
+      draft.commit(submitted);
+    },
+    dispose: draft.release,
+  };
+}
+
 interface PendingLeave {
   roots: readonly object[] | undefined;
   except: readonly object[];
@@ -110,20 +156,14 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
   return {
     register<T>(source: DraftOwner<T>): DraftScope<T> {
       if (disposed) throw new Error("Cannot register a draft on a disposed leave coordinator");
-      let owner: DraftOwner<T> | undefined = source;
-      let baseline: T | undefined = owner.snapshot(owner.current());
-      const id = owner.id;
+      const draft = baselineFor(source);
+      const id = source.id;
       const record: RegisteredDraft = {
         id,
-        parent: owner.parent,
-        dirty: () => !!owner && !owner.equal(baseline as T, owner.current()),
-        restore: () => {
-          if (owner) owner.restore(owner.snapshot(baseline as T));
-        },
-        release: () => {
-          owner = undefined;
-          baseline = undefined;
-        },
+        parent: source.parent,
+        dirty: draft.dirty,
+        restore: draft.restore,
+        release: draft.release,
       };
       if (owners.has(id)) invalidate(id);
       owners.get(id)?.release();
@@ -133,20 +173,17 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
       return {
         id,
         changed() {
-          if (!owner) return;
+          if (!draft.live) return;
           invalidate(id);
           refreshUnload();
         },
         isDirty: record.dirty,
         commit(submitted) {
-          if (!owner) return;
-          const snapshot = owner.snapshot(submitted);
-          invalidate(id);
-          baseline = snapshot;
+          draft.commit(submitted, () => invalidate(id));
           refreshUnload();
         },
         dispose() {
-          if (!owner) return;
+          if (!draft.live) return;
           invalidate(id);
           record.release();
           owners.delete(id);

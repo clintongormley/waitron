@@ -1,0 +1,179 @@
+# A331 — a form's Save stays quiet and disabled until something changes
+
+Owner, 2026-10-07 ~12:05: "open a form with the Save button transparent (and disabled?). but as soon
+as you make a change, make the Save button active/blue". ~13:10: "this should be global". The full
+item, with the owner's interaction rules, is A331 in lane B's queue; this plan is its runbook.
+
+**Goal.** Every form in Waitron that saves opens with its primary action (Save, Create, Add…)
+disabled and drawn in the quiet `secondary` style. As soon as the draft differs from what was
+opened, the action is enabled and drawn `primary` (blue). Undoing the change back to the opened
+values makes it quiet and disabled again.
+
+**Rules carried from the item (do not re-decide them):**
+
+- "Changed" is what the screen's draft scope already says (`DraftScope.isDirty()`,
+  `packages/ui-core/src/unsaved-changes.ts`), not a second hand-written comparison per screen.
+- The form-error contract (`docs/developers/design-system.md` → Forms) is unchanged for a CHANGED
+  form: errors beside fields after the first press, one message above the buttons, the action
+  disabled while the form's own checks fail. A refusal from a request never disables the action by
+  itself (owner, 2026-09-29) — a refused save leaves the draft changed, so the action stays enabled.
+- A create form with nothing typed counts as unchanged.
+- A form whose OPENED state is already savable (a duplicate, or a pre-filled value the operator must
+  confirm) must not be stuck disabled: it treats its opened state as a change. Each batch names
+  any such screen.
+- Disabled means `disabled` on `wt-button`, not only a look.
+- A second action that saves by itself (the product editor's "Enable" on an inactive product) is not
+  the form's primary action and is not gated: pressing it IS the change. Each batch names any such
+  action.
+- The setup wizard's step navigation (Continue/Next) is not a save; a sign-in is not a save.
+
+## Batches — one pull request each, in this order
+
+1. **Shared mechanism + the product and variant editors** (this plan's tasks 1–4).
+2. Dashboard catalogue and menus forms (`apps/dashboard/src/widgets/*-form.ts`, `recipe-editor`,
+   `section-*`, `include-folder-form`, `add-to-menus`, `image-upload`, `catalogue-browser`,
+   `catalogue-settings-panel`, `units-screen`, `menus-screen`, `menu-publications`).
+3. The rest of the dashboard's draft-scope screens (`git grep -ln leaveCoordinatorFor apps/dashboard/src`
+   less batches 1–2).
+4. Module screens: `packages/venue-service`, `packages/payments-stripe`, `packages/payments-sumup`,
+   `packages/adjustments`, `packages/bookings`, `packages/media`.
+5. `apps/till` — many of its dialogs take an action (pay, refund, find, override) rather than save an
+   edit; the batch says which are saves.
+6. `apps/setup` — only the steps that edit something already stored.
+7. Save-type forms with NO draft scope, and string-rendered pages served by `apps/server` or the
+   print agent that have a Save: bring each under the rule or list it with the reason.
+
+Each later batch gets a short task list appended here before it starts, reviewed once.
+
+## Batch 1
+
+Worktree `/Users/clintongormley/workspace/worktrees/waitron-feat-save-follows-changes`, branch
+`feat/save-follows-changes`. Reviewed once by a fresh-context reader (2026-10-07); its findings are
+folded in below.
+
+**What batch 1 found about already-savable openings:** `git grep -n -i duplicat` over
+`catalogue-screen.ts`, `product-editor.ts` and `catalogue-browser.ts` finds no duplicate or clone
+flow, so no batch-1 form opens already savable. The one ungated action is the product editor's
+"Enable" (`data-test="restore"`, `save(event, true)`).
+
+**Two facts the tasks rest on** (read 2026-10-07):
+
+- Every widget test mounts its widget WITHOUT an application coordinator
+  (`apps/dashboard/src/widgets/test-helpers.ts` ~42–60), so `leaveCoordinatorFor(this)?.register(…)`
+  gives no scope there. Both editors also use "a scope exists" to mean "a coordinator exists": Cancel
+  calls `requestClose` only with a scope (`product-editor.ts` ~942, `variant-form.ts` ~156), and
+  `beforeClose` is bound only with one (`product-editor.ts` ~1863, `variant-form.ts` ~242), and the
+  guard reads `this.#leave!` (`product-editor.ts` ~445–447, `variant-form.ts` ~74–76). So the
+  coordinator and the scope are handed back SEPARATELY, and the leave paths keep gating on the
+  coordinator.
+- Tests press Save with `.click()` on the `wt-button` host. Measured by the plan reviewer in
+  Playwright's Chromium: a host `.click()` reaches the host's click listener even while the inner
+  `<button>` is disabled. So `disabled` alone stops a person but not a test, and a test that presses
+  Save on an untouched form stays green. Each save handler therefore also returns early while
+  unchanged; that makes every such test fail loudly, and the failures ARE the "Changed test checks".
+
+### Task 1 — the shared mechanism (`packages/ui-core`, `packages/ui`)
+
+1. `packages/ui-core/src/unsaved-changes.ts`: export `trackDraft<T>(owner: DraftOwner<T>):
+   DraftScope<T>` — the same baseline/`equal`/`commit`/`dispose` behaviour a coordinator's
+   `register` gives, with no leave question and no `beforeunload`. Share the baseline logic with
+   `register` rather than copying it. Tests in `unsaved-changes.test.ts`: unchanged at start; dirty
+   after the owner's value changes; clean again when changed back; `commit(v)` makes `v` the new
+   baseline; `dispose()` makes it clean for good; it adds no `beforeunload` listener.
+2. `packages/ui/src/leave-controller.ts`: export `draftScopeFor<T>(host: HTMLElement, owner:
+   DraftOwner<T>): { coordinator: LeaveCoordinator | undefined; scope: DraftScope<T> }` — the
+   coordinator from `leaveCoordinatorFor(host)`, and its `register(owner)` or, with none,
+   `trackDraft(owner)`. The returned scope's `commit` and `dispose` also call
+   `host.requestUpdate()` when the host has one, because a baseline is not a reactive property and a
+   form that stays open after a save must redraw its Save quiet. Export `draftScopeFor` and
+   `DraftOwner` (beside `DraftScope`) from `packages/ui/src/index.ts`. Tests: with a
+   `LeaveController` above, `coordinator` is set and the leave question still fires for a dirty
+   draft; without, `coordinator` is undefined and the scope still reports dirty/clean; `commit`
+   requests an update.
+3. Beside it, export `saveActionState(scope: Pick<DraftScope<unknown>, "isDirty"> | undefined,
+   options?: { savableAtOpen?: boolean }): { variant: "primary" | "secondary"; unchanged: boolean }`.
+   `unchanged` is `!(options?.savableAtOpen || scope?.isDirty())`; `variant` is `secondary` when
+   unchanged, else `primary`. A screen binds `variant=${s.variant}` and
+   `?disabled=${s.unchanged || <its existing conditions>}`, and its save handler returns early while
+   `s.unchanged`. A changed form that is blocked (invalid, busy, a nested window open) stays drawn
+   `primary` and disabled. Unit tests for every combination (ui and ui-core are mutation-tested at
+   90, in the weekly run: thin tests pass the PR and fail on Monday).
+4. Docs, as the owner decision dated 2026-10-07:
+   - `docs/developers/design-system.md` → Forms: add the rule, naming `draftScopeFor`,
+     `saveActionState` and the early return. Reword the lines it contradicts: "Only the form's own
+     checks ever disable the action" (~1471), "the primary action works until the first submission"
+     (~1478), and "reopening or resetting a form starts it again: no messages, the action enabled"
+     (~1507). Leave the sign-in example snippet (~1539–1555) alone — a sign-in is not a save — and
+     add a separate short save-form snippet. State what a blocked change looks like (primary,
+     disabled).
+   - `docs/developers/conventions-ui.md`'s forms entry (~11–15) and the forms line in the root
+     `CLAUDE.md` §3: one added clause each with the decision and a pointer.
+
+Checks: `pnpm --filter @waitron/ui-core exec vitest run src/unsaved-changes.test.ts`,
+`pnpm --filter @waitron/ui exec vitest run src/leave-controller` (or the file the tests land in),
+both packages' `typecheck`, `pnpm format:check`, `pnpm lint`. Prove each new check by deletion.
+
+### Task 2a — the product editor: wire it and test it (`apps/dashboard/src/widgets/product-editor.ts`)
+
+1. Replace the registration with `draftScopeFor(this, …)` (same owner object): `#leave` takes
+   `coordinator`, `#draftScope` takes `scope`. Every leave path (Cancel's `requestClose`,
+   `beforeClose`, `#beforeClose`) gates on `#leave`, not on `#draftScope`.
+2. Bind the Save button (`data-test="save"`; today `variant` is unset, so it is `secondary` by
+   `wt-button`'s default, `wt-button.ts` ~113) to `saveActionState(this.#draftScope)`. "Enable"
+   (`data-test="restore"`) is not gated.
+3. Tests first, in real Chromium (a new `product-editor.save-state.test.ts`): an existing product,
+   FULLY filled (translated names incl. a regional code, a price like `9.00`, dietary marks,
+   variants), opens with Save `disabled` on the host AND on its inner `<button>`, and
+   `variant="secondary"`; so do an inactive product (its Enable enabled) and a variant's own page
+   (`value.inherited`); a new product with nothing typed opens disabled; one edit makes Save enabled
+   and `primary`; typing the original value back makes it disabled and `secondary` again; a changed
+   but invalid form still shows its errors after a press and keeps Save disabled (primary) until
+   fixed; after a refused save (`fieldErrors` set) Save stays enabled. In
+   `product-editor.unsaved.test.ts` (which has a `LeaveController` above): edit, then `commitSaved`
+   with the editor still open, and Save goes quiet and disabled; edit, Cancel, Discard, and Save is
+   quiet if the editor is reopened. Prove "cannot save" with the handler's early return (no
+   `wt-submit`) or a real pointer click on the inner button, never only an outer `.click()`.
+4. `product-editor.a11y.test.ts`: axe on the unchanged and the changed state, both themes. Its
+   "errors" state (~231, mounted empty ~155) presses Save on an untouched form: make one edit first
+   and list it under "Changed test checks".
+5. Checks: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.save-state
+   src/widgets/product-editor.unsaved src/widgets/product-editor.a11y`, dashboard `typecheck`.
+   Commit.
+
+### Task 2b — the product editor: the early return, and the tests it changes
+
+1. `save()` returns early while `saveActionState(this.#draftScope).unchanged`, except the Enable
+   path (`save(event, true)`). Test first: an untouched form's Save press sends no `wt-submit`.
+2. Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor
+   src/screens/catalogue-screen src/screens/modifier-owners.unsaved src/screens/unit-owners.unsaved
+   src/state/product-child-create`. Each test that now fails because it pressed Save on an untouched
+   form gets one edit before the press, or asserts the disabled state instead — the reviewer
+   predicted, among others, `product-editor.test.ts` ~888–896, ~1020–1035, ~1068–1075, ~2666–2677,
+   ~3075–3085. A failure for any OTHER reason is a regression signal: stop and report it. List each
+   change (`file:line`, before → after) in the ledger for the PR's "Changed test checks".
+3. Checks: the run above green, dashboard `typecheck`, `pnpm format:check`, `pnpm lint`. Commit.
+
+### Task 3 — the variant form (`apps/dashboard/src/widgets/variant-form.ts`)
+
+Same as Tasks 2a and 2b for `data-test="variant-save"`: register through `draftScopeFor` (the scope
+keeps `parent: this.draftParent`; leave paths gate on the coordinator, ~74–76, ~156, ~242); REPLACE
+its fixed `variant="primary"` (~321) with the helper's; `#save` returns early while unchanged.
+Tests: an existing variant opens disabled/secondary; Add variant with nothing typed opens disabled;
+one edit enables it; undo disables it; axe both states, both themes (`variant-form.a11y.test.ts` —
+its "errors" state ~54–58 mounts empty and clicks Save: make one edit first, list it). Run
+`src/widgets/variant-form` and `src/widgets/product-editor` again (the editor opens the form), plus
+dashboard `typecheck`, `pnpm format:check`, `pnpm lint`; list every changed check.
+
+### Task 4 — look, docs, backlog
+
+LOOK at the product editor and the variant form, unchanged and changed, EN and ES, light and dark,
+desktop and 390px (`wa-wt demo waitron-feat-save-follows-changes`; check port 8080 and the venue
+folder's holders first), and watch Save as the dialog closes after a save. Add an A331 entry to
+`docs/backlog.md` saying batch 1 landed and listing batches 2–7 as open. The queue-side FYI on
+changed checks goes in lane B's `questions.md`.
+
+`isDirty()` in `render()` deep-copies the product draft about three times per keystroke
+(`currentValue`, and `submissionValue` on both sides of the comparison). It is small; if the look
+shows typing lag, cache the result per update.
+
+Then `/finish-branch` (light path: no migration, no risk trigger).

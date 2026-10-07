@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { comparablePrice, sameValue } from "./product-editor-model.js";
-import { baseStyles, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import { baseStyles, submitOnEnter, draftScopeFor, saveActionState } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -110,8 +110,7 @@ export class VariantForm extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
     } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<ProductEditorVariant>({
+      const { coordinator, scope } = draftScopeFor<ProductEditorVariant>(this, {
         id: this,
         parent: this.draftParent,
         current: () => this.#currentValue(),
@@ -130,6 +129,8 @@ export class VariantForm extends LitElement {
           this.image = value.image;
         },
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
 
@@ -153,7 +154,7 @@ export class VariantForm extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy || !this.open) return;
-    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#reportCancel();
   }
 
@@ -165,6 +166,7 @@ export class VariantForm extends LitElement {
   #save(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     const errors = this.#validate();
     // A refused submit leaves every field as it was, so one bad value is corrected on its own rather
@@ -235,11 +237,12 @@ export class VariantForm extends LitElement {
     const errors = this.attempted ? this.#validate() : {};
     const invalid = Object.keys(errors).length > 0;
     const fields = this.#fields(errors);
+    const saveAction = saveActionState(this.#scope);
     return html`<wt-modal
       size="standard"
       .open=${this.open}
       .dismissible=${!this.busy}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${this.#heading()}
       @wt-close=${(event: Event) => {
         if (event.target !== event.currentTarget) return;
@@ -318,8 +321,8 @@ export class VariantForm extends LitElement {
           >${t("action.cancel")}</wt-button
         ><wt-button
           data-test="variant-save"
-          variant="primary"
-          .disabled=${this.busy || invalid}
+          variant=${saveAction.variant}
+          .disabled=${saveAction.unchanged || this.busy || invalid}
           @click=${(event: Event) => this.#save(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions
