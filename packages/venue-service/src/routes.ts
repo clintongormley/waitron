@@ -1002,10 +1002,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         onlyKeys(body, ["name", "menuId"]);
-        const name = requireString(body.name, "name");
-        const menuId = requireBodyUuid(body.menuId, "menuId");
+        if (body.name === undefined && body.menuId === undefined)
+          throw new AppError("management.request_invalid", { field: "body" });
+        const period = {
+          ...(body.name === undefined ? {} : { name: requireString(body.name, "name") }),
+          ...(body.menuId === undefined ? {} : { menuId: requireBodyUuid(body.menuId, "menuId") }),
+        };
         return c.json(
-          await gated(sessionId, (tx) => updateMenuPeriod(tx, ctx.cfg, periodId, { name, menuId })),
+          await gated(sessionId, (tx) => updateMenuPeriod(tx, ctx.cfg, periodId, period)),
         );
       }),
     );

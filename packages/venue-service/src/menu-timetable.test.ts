@@ -45,6 +45,7 @@ import {
   saveMenuPeriod,
   saveSpecialDateMenus,
   setZonePeriodMenu,
+  updateMenuPeriod,
 } from "./menu-timetable.js";
 import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -758,6 +759,38 @@ describe("the timetable's writers", () => {
       code: "menu_period.not_found",
       params: { periodId: periods.noches },
     });
+  });
+
+  it("keep a period's stored name when only its menu changes, and its stored menu when only its name does", async () => {
+    const v = await timed();
+    const { menus, periods } = v;
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, periods.noches, { name: "Cenas", menuId: menus.Cena }),
+    );
+    expect(
+      await scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: menus.Cócteles })),
+    ).toEqual({ id: periods.noches, name: "Cenas", menuId: menus.Cócteles });
+    expect(
+      await scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { name: "Noches tarde" })),
+    ).toEqual({ id: periods.noches, name: "Noches tarde", menuId: menus.Cócteles });
+    const model = await scoped((tx) => readMenuTimetableModel(tx, v.cfg, AT));
+    const restaurant = model.departments.find((entry) => entry.id === v.restaurant)!;
+    expect(restaurant.periods.find((period) => period.id === periods.noches)).toMatchObject({
+      name: "Noches tarde",
+      menuId: menus.Cócteles,
+    });
+    // A partial update is still checked like a whole one.
+    await expect(
+      scoped((tx) =>
+        updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: menus["Deli para llevar"] }),
+      ),
+    ).rejects.toMatchObject({
+      code: "department_menu.not_found",
+      params: { departmentId: v.restaurant, menuId: menus["Deli para llevar"] },
+    });
+    await expect(
+      scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { name: "  " })),
+    ).rejects.toMatchObject(invalid("name"));
   });
 
   it("refuse removing a menu a zone's period menu or a period names, naming every use", async () => {

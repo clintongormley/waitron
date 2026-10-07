@@ -232,6 +232,42 @@ describe("the menu timetable routes", () => {
     expect(model.specialDates.find((date) => date.id === r.christmas)!.timetables).toEqual([]);
   });
 
+  it("change only what a period update sends, keeping a rename made in the meantime", async () => {
+    const r = await routed();
+    await answers(
+      await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, {
+        name: "Desayunos tempranos",
+        menuId: r.desayunos,
+      }),
+      200,
+    );
+    const pointed = await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, {
+      menuId: r.cafe,
+    });
+    expect(pointed.status).toBe(200);
+    expect(await pointed.json()).toEqual({
+      id: r.mananas,
+      name: "Desayunos tempranos",
+      menuId: r.cafe,
+    });
+    const renamed = await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, {
+      name: "Mañanas",
+    });
+    expect(await renamed.json()).toEqual({ id: r.mananas, name: "Mañanas", menuId: r.cafe });
+    expect(
+      restaurantOf(await r.model(), r).periods.find((period) => period.id === r.mananas),
+    ).toMatchObject({ name: "Mañanas", menuId: r.cafe });
+    await answers(await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, {}), 400, {
+      code: "management.request_invalid",
+      params: { field: "body" },
+    });
+    await answers(
+      await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, { menuId: r.cafe, name: 7 }),
+      400,
+      { code: "management.request_invalid", params: { field: "name" } },
+    );
+  });
+
   it("refuse every write to anyone who may not manage venue service, changing nothing", async () => {
     const r = await routed();
     const before = await r.model();

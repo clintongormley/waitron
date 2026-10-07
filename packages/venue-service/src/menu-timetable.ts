@@ -52,7 +52,12 @@ async function requireSpecialDate(tx: Transaction, cfg: VenueScope, id: string) 
 
 async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: string) {
   const [row] = await tx
-    .select({ id: menuPeriods.id, departmentId: menuPeriods.departmentId })
+    .select({
+      id: menuPeriods.id,
+      departmentId: menuPeriods.departmentId,
+      name: menuPeriods.name,
+      menuId: menuPeriods.menuId,
+    })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
     .where(and(eq(menuPeriods.id, periodId), eq(departments.locationId, cfg.locationId)));
@@ -394,15 +399,22 @@ export async function saveMenuPeriod(
   return { id: period.id, ...values };
 }
 
-/** Renames and re-points a named period of this venue, in its own department. */
+/**
+ * Renames or re-points a named period of this venue, in its own department; a field left out keeps
+ * its stored value, so a menu choice cannot undo a rename saved since the caller last read.
+ */
 export async function updateMenuPeriod(
   tx: Transaction,
   cfg: VenueScope,
   periodId: string,
-  period: { name: string; menuId: string },
+  period: { name?: string; menuId?: string },
 ): Promise<MenuPeriod> {
-  const { departmentId } = await requirePeriod(tx, cfg, periodId);
-  return saveMenuPeriod(tx, cfg, departmentId, { id: periodId, ...period });
+  const stored = await requirePeriod(tx, cfg, periodId);
+  return saveMenuPeriod(tx, cfg, stored.departmentId, {
+    id: periodId,
+    name: period.name ?? stored.name,
+    menuId: period.menuId ?? stored.menuId,
+  });
 }
 
 /** Every day that places each listed period: weekdays in order, then special dates by date. */

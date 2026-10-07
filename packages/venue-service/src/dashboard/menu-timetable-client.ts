@@ -66,7 +66,11 @@ export class MenuTimetableApi {
     return this.request(`${BASE}/departments/${at(departmentId)}/menu-periods`, "POST", input);
   }
 
-  updatePeriod(periodId: string, input: { name: string; menuId: string }): Promise<MenuPeriod> {
+  /** A field left out keeps the period's stored value. */
+  updatePeriod(
+    periodId: string,
+    input: { name: string; menuId?: string } | { name?: string; menuId: string },
+  ): Promise<MenuPeriod> {
     return this.request(`${BASE}/menu-periods/${at(periodId)}`, "PUT", input);
   }
 

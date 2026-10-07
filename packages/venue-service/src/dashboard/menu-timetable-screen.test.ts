@@ -907,6 +907,15 @@ describe("Menu timetable: menus by zone", () => {
     ]);
   });
 
+  it("sends only the menu when a period's menu is chosen in the table, so a rename saved elsewhere is not undone", async () => {
+    const { api, writes } = server();
+    const el = await mount(api);
+    await choose(el, "periods.noches.menuId", m("Cócteles"));
+    expect(writes()).toEqual([
+      ["PUT", "/management-api/venue-service/menu-periods/noches", { menuId: m("Cócteles") }],
+    ]);
+  });
+
   it("puts a refusal under the zone's choice that was refused", async () => {
     const { api, state } = server();
     state.writes.push(

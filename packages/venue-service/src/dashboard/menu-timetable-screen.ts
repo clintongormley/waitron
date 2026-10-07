@@ -1382,10 +1382,7 @@ export class MenuTimetableScreen extends LitElement {
                           row.menuId,
                           null,
                           async (menuId) => {
-                            await this.api.updatePeriod(row.id, {
-                              name: row.name,
-                              menuId: menuId!,
-                            });
+                            await this.api.updatePeriod(row.id, { menuId: menuId! });
                           },
                         )
                   }
