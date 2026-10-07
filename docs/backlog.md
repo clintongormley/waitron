@@ -1112,7 +1112,7 @@ unused `units` property is gone (it closes W75's leftover).
     Next: the owner picks one word.
   - Open, from #1383's review: on the Preview tab a failed live refresh keeps the heading's old
     clash count, as the rest of that line already does (`#menuReadFailed`, from A290, #1307).
-- **A347, owner 2026-10-07 — DONE (branch `fix/inactive-off-menus`, a disabled product or size is on
+- **A347, owner 2026-10-07 — DONE (#1392, a disabled product or size is on
   no menu):** disabling a product takes it off every menu list in the same transaction and clears
   its prices on every menu, so each menu's next publish leaves it out; a Device Home Page shortcut
   to it becomes a missing tile, and enabling it again does not put it back on any menu. Disabling a
