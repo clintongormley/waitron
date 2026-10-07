@@ -231,7 +231,7 @@
 - what is reported when the tray is empty;
 - what is reported when the printer is switched off mid-job.
 
-Write what the printer reported into the PR and `docs/backlog.md`. Use the historical design's HP format receipt to scope this exercise; PWG Raster still needs the independent reader and `ippeveprinter` checks. Without owner presence/arrangement and printer access, leave physical output unverified, name the pending checks in the final `needs-owner-review` handoff and do not call the build ready to land. Do not print real paper autonomously.
+Write what the printer reported into the PR and `docs/backlog.md`. Use the historical design's HP format receipt to scope this exercise; Repeat the independent reader and `ippeveprinter` checks through the production transport once Task 5 wires it in. Task 1's source-code encoders passed those checks on 2026-10-07; the backlog records their scope. Without owner presence/arrangement and printer access, leave physical output unverified, name the pending checks in the final `needs-owner-review` handoff and do not call the build ready to land. Do not print real paper autonomously.
 
 ## 6. Send or print again, from the till and the dashboard
 

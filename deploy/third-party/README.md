@@ -86,6 +86,12 @@ files says so beside the paths.
 
 - `licenses/Apache-2.0.txt` is that licence.
 
+## CUPS raster encoding
+
+The server's PWG and Apple Raster encoders adapt CUPS's page headers and row compression
+for grey A4 pages. `cups-raster/NOTICES.txt` names the upstream source and its copyright holders;
+`licenses/Apache-2.0.txt` carries the licence. Both ship under `/app/third-party/`.
+
 ## Noto Sans
 
 The server embeds Noto Sans in invoice PDFs and draws its glyph outlines for invoice raster pages.
