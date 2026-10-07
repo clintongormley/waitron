@@ -102,18 +102,12 @@ export interface RoutingModel {
   stationTimes: StationTimes[];
   todayEnds: { timeOfDay: string; tomorrow: boolean } | null;
   clockReadable: boolean;
-  claims: { categoryId: string; target: RouteTarget; stationOff: boolean }[];
-  exceptions: {
-    id: string;
-    position: number;
-    zoneId: string | null;
-    categoryId: string | null;
-    productId: string | null;
-    target: RouteTarget;
-    neverMatches: boolean;
-    stationOff: boolean;
-  }[];
-  unassigned: { folders: { id: string; name: string }[]; products: { id: string; name: string }[] };
+  /** Active zones in display order: the grid's columns. */
+  zones: { id: string; name: string }[];
+  categories: GridCategory[];
+  /** Active top-level products; a disabled product's stored cells are left out of `cells` too. */
+  products: GridProduct[];
+  cells: RoutingCell[];
   defaultStationId: string | null;
   /** Includes referenced inactive stations, which the active-station management list omits. */
   stations: { id: string; name: string; active: boolean }[];

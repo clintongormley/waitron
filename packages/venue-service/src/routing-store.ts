@@ -16,7 +16,6 @@ import {
   folderAncestors,
   stationDayHours,
   stationStatus,
-  unreachableExceptions,
   type RouteTarget,
   type RoutingRules,
   type RoutingMoment,
@@ -37,6 +36,7 @@ import { stationDayStates, stationFallbacks } from "./schema/station-times.js";
 import type {
   CellAddress,
   ExceptionInput,
+  RoutingCell,
   RouteExplanation,
   RoutingChange,
   RoutingModel,
@@ -98,6 +98,16 @@ const readTarget = (row: { stationId: string | null }): RouteTarget =>
   row.stationId === null
     ? { kind: "no_preparation" }
     : { kind: "station", stationId: row.stationId };
+const readCell = (row: typeof routingCells.$inferSelect): RoutingCell => ({
+  row:
+    row.productId !== null
+      ? { kind: "product", productId: row.productId }
+      : row.categoryId !== null
+        ? { kind: "category", categoryId: row.categoryId }
+        : { kind: "all" },
+  zoneId: row.zoneId,
+  target: readTarget(row),
+});
 
 /** Refuses an address or target no ordinary write may store; returns the canonical spelling. */
 export async function validateRoutingCell(
@@ -406,16 +416,11 @@ function scopeAt(moment: VenueLocalMoment | null, daysAhead = 0): SnapshotScope 
 
 async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope = UNTIMED) {
   const businessDay = scope.businessDay;
-  const claims = await tx
+  const cellRows = await tx
     .select()
-    .from(stationClaims)
-    .where(eq(stationClaims.locationId, cfg.locationId))
-    .orderBy(asc(stationClaims.categoryId));
-  const exceptions = await tx
-    .select()
-    .from(routeExceptions)
-    .where(eq(routeExceptions.locationId, cfg.locationId))
-    .orderBy(asc(routeExceptions.position), asc(routeExceptions.id));
+    .from(routingCells)
+    .where(eq(routingCells.locationId, cfg.locationId))
+    .orderBy(asc(routingCells.id));
   const folders = await tx
     .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
     .from(categories)
@@ -467,15 +472,7 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
     ]),
   );
   const rules: RoutingRules = {
-    claims: new Map(claims.map((row) => [row.categoryId, readTarget(row)])),
-    exceptions: exceptions.map(({ id, position, zoneId, categoryId, productId, ...row }) => ({
-      id,
-      position,
-      zoneId,
-      categoryId,
-      productId,
-      target: readTarget(row),
-    })),
+    cells: cellRows.map(readCell),
     parentOf: new Map(folders.map((row) => [row.id, row.parentId])),
     activeStationIds: new Set(stations.filter((row) => row.active).map((row) => row.id)),
     defaultStationId: stations.find((row) => row.active && row.isDefault)?.id ?? null,
@@ -912,11 +909,12 @@ export async function describeMakers(
       route: choice.route,
       noReplacement: choice.noReplacement,
       unavailableStationId: choice.noReplacement ? choice.fallbacks[0]!.stationId : null,
-      variesByZone: rules.exceptions.some(
-        (exception) =>
-          exception.zoneId !== null &&
-          (exception.productId === null || exception.productId === row.routedId) &&
-          (exception.categoryId === null || ancestors.includes(exception.categoryId)),
+      variesByZone: rules.cells.some(
+        ({ row: cellRow, zoneId }) =>
+          zoneId !== null &&
+          (cellRow.kind === "all" ||
+            (cellRow.kind === "product" && cellRow.productId === row.routedId) ||
+            (cellRow.kind === "category" && ancestors.includes(cellRow.categoryId))),
       ),
     });
   }
@@ -932,60 +930,25 @@ export async function routingModel(
   const { rules, folders, stations } = await snapshot(tx, cfg, scopeAt(moment, NEXT_CHANGE_DAYS));
   const cutover = clock.dayCutover.slice(0, 5);
   const nextChange = nextChangeFinder(rules, at, clock, moment);
-  const neverMatches = unreachableExceptions(rules);
   const restricted = await stationsRestrictedFrom(tx, cfg, moment?.civilDate ?? null);
-  const productFolders = await tx
-    .select({
-      id: products.id,
-      parentId: products.parentId,
-      categoryId: effectiveProductColumns.categoryId,
-    })
+  const zones = await tx
+    .select({ id: floorZones.id, name: floorZones.name })
+    .from(floorZones)
+    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
+    .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
+  const gridProducts = await tx
+    .select({ id: products.id, name: products.name, categoryId: products.categoryId })
     .from(products)
-    .leftJoin(parentProducts, parentJoin);
-  const below = (folderId: string | null, earlierId: string) =>
-    folderAncestors(rules.parentOf, folderId).includes(earlierId);
-  for (const [i, candidate] of rules.exceptions.entries()) {
-    if (candidate.productId === null) continue;
-    const family = productFolders.filter(
-      (row) => row.id === candidate.productId || row.parentId === candidate.productId,
-    );
-    if (
-      family.length > 0 &&
-      rules.exceptions
-        .slice(0, i)
-        .some(
-          (earlier) =>
-            earlier.categoryId !== null &&
-            (earlier.zoneId === null || earlier.zoneId === candidate.zoneId) &&
-            family.every((row) => below(row.categoryId, earlier.categoryId!)),
-        )
-    )
-      neverMatches.add(candidate.id);
-  }
-  const stationOff = (target: RouteTarget) =>
-    target.kind === "station" && !rules.activeStationIds.has(target.stationId);
-  const unfiled = await tx
-    .select({ id: products.id, name: products.name })
-    .from(products)
-    .where(and(eq(products.active, true), isNull(products.parentId), isNull(products.categoryId)))
+    .where(and(eq(products.active, true), isNull(products.parentId)))
     .orderBy(asc(products.name), asc(products.id));
+  const shown = new Set(gridProducts.map((product) => product.id));
   return {
-    claims: [...rules.claims].map(([categoryId, target]) => ({
-      categoryId,
-      target,
-      stationOff: stationOff(target),
-    })),
-    exceptions: rules.exceptions.map((e) => ({
-      ...e,
-      neverMatches: neverMatches.has(e.id),
-      stationOff: stationOff(e.target),
-    })),
-    unassigned: {
-      folders: folders
-        .filter((row) => row.parentId === null && !rules.claims.has(row.id))
-        .map(({ id, name }) => ({ id, name })),
-      products: unfiled,
-    },
+    zones,
+    categories: folders,
+    products: gridProducts,
+    cells: rules.cells.filter(
+      (cell) => cell.row.kind !== "product" || shown.has(cell.row.productId),
+    ),
     defaultStationId: rules.defaultStationId,
     stations: stations.map(({ id, name, active }) => ({ id, name, active })),
     stationTimes: stations.map(({ id }) => ({
