@@ -28,10 +28,10 @@ for (const [path, mod] of Object.entries(modules)) {
   }
 }
 
-// "Interactive" means reflects a `disabled` property; a primitive that does not is never checked
-// here, whatever it renders.
+// Row actions is an interactive disclosure without a disabled state.
 const interactiveComponents = allComponents.filter(
-  ({ ctor }) => ctor.elementProperties?.get("disabled")?.reflect === true,
+  ({ tag, ctor }) =>
+    tag === "wt-row-actions" || ctor.elementProperties?.get("disabled")?.reflect === true,
 );
 
 test("discovers at least one interactive primitive", () => {
