@@ -6721,6 +6721,29 @@ test("a table taken off the page with its full-screen Filters open accepts new c
   });
 });
 
+test("a table put back on the page after leaving with its full-screen Filters open shows Filters closed, and one click opens them", async () => {
+  onTestFinished(() => commands.parkPointer());
+  await inWindow(390, 844, async () => {
+    const { el, trigger, panel } = await leadingTable<StickyRow>(390, leadingSticky);
+    const parent = el.parentElement!;
+    trigger.click();
+    await el.updateComplete;
+    expect(panel.matches(":popover-open")).toBe(true);
+    el.remove();
+    el.columns = [...stickyColumns];
+    await el.updateComplete;
+    parent.append(el);
+    await el.updateComplete;
+    await settle();
+    expect(panel.matches(":popover-open")).toBe(false);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await userEvent.click(trigger);
+    await el.updateComplete;
+    expect(panel.matches(":popover-open")).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  });
+});
+
 test("the leading Filters button's tooltip shows on hover and on keyboard focus, over the sticky headings, and Escape hides it", async () => {
   await inWindow(1280, 900, async () => {
     const { el, root, trigger } = await leadingTable<StickyRow>(900, {

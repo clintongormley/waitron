@@ -968,6 +968,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#endColumnDrag();
+    // Removal hides an open popover without a toggle event.
+    if (!this.sideFilters) this.filtersOpen = false;
     this.#hostObserver.disconnect();
     if (this.#resizeFrame !== null) cancelAnimationFrame(this.#resizeFrame);
     this.#resizeFrame = null;
