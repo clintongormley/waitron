@@ -795,3 +795,19 @@ describe("the print-agent image carries the copyright files of python3-minimal a
     );
   });
 });
+
+describe("the invoice renderer's bundled font", () => {
+  it("ships the same font beside the bundle and records its licence and source hash", () => {
+    const font = readFileSync(`${ROOT}apps/server/src/assets/invoice-noto-sans.ttf`);
+    const provenance = read("deploy/third-party/noto-sans/README.md");
+    expect(provenance).toContain(createHash("sha256").update(font).digest("hex"));
+    expect(read("deploy/third-party/noto-sans/OFL.txt")).toContain(
+      "SIL OPEN FONT LICENSE Version 1.1",
+    );
+    expect(DOCKERFILE).toContain("/src/apps/server/dist/assets/ /app/assets/");
+    expect(IMAGE_SMOKE).toContain("test -s /app/assets/invoice-noto-sans.ttf");
+    expect(IMAGE_SMOKE).toContain("test -s /app/third-party/noto-sans/OFL.txt");
+    expect(read("apps/server/scripts/copy-migrations.mjs")).toContain('join(distDir, "assets")');
+    expect(noticeSection("Noto Sans")).toContain("noto-sans/OFL.txt");
+  });
+});

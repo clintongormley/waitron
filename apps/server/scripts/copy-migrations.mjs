@@ -21,6 +21,8 @@ for (const set of manifest) {
   process.stdout.write(`copied ${set.name} migrations\n`);
 }
 
+await cp(join(packageRoot, "src/assets"), join(distDir, "assets"), { recursive: true });
+
 // The ESM bundle carries its own module type, so a `dist/` copied out alone does not depend on
 // finding apps/server/package.json above it or on Node's syntax detection.
 await writeFile(join(distDir, "package.json"), `${JSON.stringify({ type: "module" })}\n`);
