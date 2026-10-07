@@ -324,7 +324,7 @@ export class MenuTimetableScreen extends LitElement {
   #scope?: DraftScope<Editor>;
   /** That editor as it was opened, which Discard puts back and a successful save replaces. */
   #baseline?: Editor;
-  /** Stable while one editor is open: the modal refuses a close if its callback changes. */
+  /** Stable while one editor is open. */
   #beforeClose?: (reason: LeaveReason) => Promise<boolean>;
 
   readonly #url = new UrlStateController(this, () => this.#followUrl(), {

@@ -785,7 +785,8 @@ caller remains; remove the `zoneMenus` fixture keys listed at the end; `docs/bac
   address is now `/manage/menu-timetable/department/…`, written through the navigation guard). Remove
   `PUT …/zones/:zoneId/menus/:menuId`, `listZoneMenuAssignments` and `zoneMenus` from the model and
   its type, and remove the `zoneMenus` fixture keys; `allowMenuInZone` moves to `src/testing/`
-  with its refusal cases unchanged (import paths change in its callers).
+  with its refusal cases unchanged (import paths change in its callers) (2026-10-07 review: the
+  helper is now named `offerMenuThroughZone`).
 - [ ] Run `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/menu-timetable-screen.test.ts src/dashboard/menu-timetable-screen.a11y.test.ts src/dashboard/hours-cell-editor.test.ts src/dashboard/hours-cell-editor.a11y.test.ts src/dashboard/index.test.ts src/dashboard/venue-operations-screen.test.ts src/dashboard/venue-operations-screen.a11y.test.ts src/dashboard/client.test.ts src/routes.test.ts`,
   `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/live-subscriptions.test.ts scripts/pinned-actions-column.test.ts scripts/style-token-names.test.ts`,
   `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts`. Open the screen
