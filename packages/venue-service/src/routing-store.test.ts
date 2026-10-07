@@ -1781,6 +1781,48 @@ describe("routing previews", () => {
           { productId: soup, productName: "Soup" },
         ]);
       }));
+
+    it("names an extra that is a variant by its product and its variant", async () =>
+      scoped(async (tx) => {
+        const f = await withExtras(tx);
+        const sides = (await createCategory(tx, { name: "Sides" })).id;
+        const large = async (name: string) => {
+          const [variant] = await tx
+            .insert(products)
+            .values({
+              catalogueId: f.menu,
+              parentId: await f.product(name, sides),
+              name: "Large",
+              categoryId: null,
+            })
+            .returning();
+          return variant!.id;
+        };
+        const sizes = await createExtraList(
+          tx,
+          {
+            name: "Sizes",
+            minPicks: 0,
+            maxPicks: 2,
+            active: true,
+            items: [
+              { productId: await large("Olives"), price: "1.00" },
+              { productId: await large("Chips"), price: "1.00" },
+            ],
+          },
+          "en",
+        );
+        await writeProductModifiers(tx, f.burger, [{ kind: "extras", id: sizes.id }]);
+        const moves = await previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address: { row: categoryRow(sides), zoneId: null },
+          target: station(f.bar),
+        });
+        expect(extraMoves(moves).map((move) => [move.productName, move.dish])).toEqual([
+          ["Chips (Large)", { productId: f.burger, productName: "Burger" }],
+          ["Olives (Large)", { productId: f.burger, productName: "Burger" }],
+        ]);
+      }));
   });
 });
 

@@ -7,6 +7,7 @@ import {
   parentProducts,
   productWithId,
   readOfferedModifiers,
+  staffPresentationName,
 } from "@waitron/catalogue";
 import { AppError, normaliseUuid } from "@waitron/shared";
 import { publishedOffersByZone, resolveZoneContext, type VenueScope } from "./operations.js";
@@ -412,6 +413,7 @@ export async function previewRoutingChange(
     .select({
       id: products.id,
       name: products.name,
+      parentName: parentProducts.name,
       routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
       categoryId: effectiveProductColumns.categoryId,
     })
@@ -468,7 +470,13 @@ async function extraMoves(
   cfg: VenueScope,
   before: RoutingRules,
   after: RoutingRules,
-  dishes: readonly { id: string; name: string; routedId: string; categoryId: string | null }[],
+  dishes: readonly {
+    id: string;
+    name: string;
+    parentName: string | null;
+    routedId: string;
+    categoryId: string | null;
+  }[],
   zones: readonly { id: string | null; name: string | null }[],
 ): Promise<RoutingMove[]> {
   /** By dish, then extra: the zones the pairing applies in, or null for every zone. */
@@ -505,6 +513,7 @@ async function extraMoves(
     .select({
       id: products.id,
       name: products.name,
+      parentName: parentProducts.name,
       routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
       categoryId: effectiveProductColumns.categoryId,
     })
@@ -515,7 +524,7 @@ async function extraMoves(
     extraRows.map((row) => [
       storedUuid(row.id),
       {
-        name: row.name,
+        name: staffName(row),
         facts: { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId },
       },
     ]),
@@ -567,13 +576,18 @@ async function extraMoves(
           from: from.target,
           to: to.target,
           toNoReplacement: to.follows && to.noReplacement,
-          dish: { productId: dish.id, productName: dish.name },
+          dish: { productId: dish.id, productName: staffName(dish) },
         });
       }
     }
   }
   return moves;
 }
+
+const staffName = (row: { name: string; parentName: string | null }) =>
+  row.parentName === null
+    ? row.name
+    : staffPresentationName({ name: row.parentName, variantName: row.name });
 
 const sameRoute = (a: RouteTarget | null, b: RouteTarget | null) => targetKey(a) === targetKey(b);
 
