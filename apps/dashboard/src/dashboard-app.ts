@@ -764,7 +764,7 @@ export class DashboardApp extends LitElement {
   @state() private alertsVisible = false;
   @state() private alertError: string | null = null;
   @state() private alertBusyKey: string | null = null;
-  @state() private alertToast: { message: string; tone: "info" | "error" } | null = null;
+  @state() private alertToast: { alerts: AlertView[]; tone: "info" | "error" } | null = null;
   readonly #alertArrivals = new AlertArrivals();
   /** Bumped whenever the alerts state is cleared, which also happens without a new session (a
    * re-check that finds the person is now staff), so a Mark handled started before it is ignored. */
@@ -1026,10 +1026,7 @@ export class DashboardApp extends LitElement {
     this.alerts = response.alerts;
     if (arrived.length === 0) return;
     this.alertToast = {
-      message:
-        arrived.length === 1
-          ? alertMessage(arrived[0]!.code, arrived[0]!.params)
-          : t("alerts.toast_many").replace("{count}", String(arrived.length)),
+      alerts: arrived,
       tone: arrived.some((a) => a.severity === "error") ? "error" : "info",
     };
   }
@@ -1340,7 +1337,13 @@ export class DashboardApp extends LitElement {
             class="alert-toast"
             data-test="alert-toast"
             .open=${this.alertToast !== null}
-            .message=${this.alertToast?.message ?? ""}
+            .message=${
+              this.alertToast === null
+                ? ""
+                : this.alertToast.alerts.length === 1
+                  ? alertMessage(this.alertToast.alerts[0]!.code, this.alertToast.alerts[0]!.params)
+                  : t("alerts.toast_many").replace("{count}", String(this.alertToast.alerts.length))
+            }
             tone=${this.alertToast?.tone ?? "info"}
             close-label=${t("action.close")}
             @wt-activate=${(e: Event) => this.#onToastActivate(e)}
