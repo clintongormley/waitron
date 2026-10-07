@@ -62,8 +62,8 @@ function sharedName(names: readonly string[]): string | undefined {
  * A category with no `category_details` row is top-level, as it is to the save's check.
  * Also refuses (`setup.request_invalid`) a product whose `active` is not 0 or 1, a category or
  * product whose name is not text, a product, category or section colour other than lowercase
- * `#rrggbb` or null, a menu display setting a save would refuse, or an include folder setting
- * `checkIncludeFolderRows` refuses.
+ * `#rrggbb` or null, a menu display setting a save would refuse, a new-product VAT default not in
+ * `VAT_CLASSES`, or an include folder setting `checkIncludeFolderRows` refuses.
  */
 export function validateCatalogueConfiguration(tables: Readonly<Record<string, Rows>>): void {
   for (const row of tables.catalogue_settings ?? []) {
