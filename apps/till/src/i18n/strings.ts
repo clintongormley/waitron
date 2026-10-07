@@ -3,6 +3,14 @@
 // fails typecheck.
 export const en = {
   "department_transfer.title": "Department transfers",
+  "department_transfer.current_tab": "Current tab",
+  "department_transfer.source_responsible":
+    "Your department remains responsible until the receiving desk accepts.",
+  "department_transfer.department": "Destination department",
+  "department_transfer.choose_department": "Choose a permitted destination department.",
+  "department_transfer.request": "Request transfer",
+  "department_transfer.withdraw": "Withdraw request",
+  "department_transfer.retry_destinations": "Retry destination choices",
   "department_transfer.retry_tables": "Retry table choices",
   "department_transfer.save": "Save",
   "department_transfer.accept": "Accept transfer",
@@ -1099,6 +1107,14 @@ export type StringKey = keyof typeof en;
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
   "department_transfer.title": "Traspasos entre departamentos",
+  "department_transfer.current_tab": "Cuenta actual",
+  "department_transfer.source_responsible":
+    "Tu departamento sigue siendo responsable hasta que el mostrador receptor acepte.",
+  "department_transfer.department": "Departamento de destino",
+  "department_transfer.choose_department": "Elige un departamento de destino permitido.",
+  "department_transfer.request": "Solicitar traspaso",
+  "department_transfer.withdraw": "Retirar solicitud",
+  "department_transfer.retry_destinations": "Volver a cargar los destinos",
   "department_transfer.retry_tables": "Volver a cargar las mesas",
   "department_transfer.save": "Guardar",
   "department_transfer.accept": "Aceptar traspaso",

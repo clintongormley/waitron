@@ -4829,7 +4829,10 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   reads time out after 25 seconds and can be cancelled or retried. A successful receiving write
   clears the editor and reloads the durable queue. Closing or replacing a detail read aborts it and
   ignores late replies; a resolved request or lost receiving access clears its displayed detail.
-  Sender request/withdraw controls, human tab/department/station summaries and transfer-driven
+  Sender controls now request the selected tab through a permitted destination choice and withdraw
+  a pending request. Destination drafts use the shared leave confirmation; successful requests keep
+  their pending result visible while the durable history reloads. A request is offered only while
+  the selected tab surface is showing. Human tab/department/station summaries and transfer-driven
   refresh of ordinary tab lists remain to build. Party-linked bills are
   refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and

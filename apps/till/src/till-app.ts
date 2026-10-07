@@ -8897,6 +8897,8 @@ export class TillApp extends LitElement {
                         this.transferSnapshot === undefined
                           ? nothing
                           : html`<till-department-transfers
+                              .currentTabId=${this.#tableCatalogueActive() ? this.activeTabId : undefined}
+                              .currentTabLabel=${this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId)?.label ?? this.orderParty?.displayName ?? ""}
                               .serviceZones=${this.counterServiceZones}
                               @transfer-changed=${() => this.#departmentTransfers?.refresh()}
                               .api=${this.api}

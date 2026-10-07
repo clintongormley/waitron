@@ -83,12 +83,17 @@ export class TillDepartmentTransfers extends LitElement {
   @property({ attribute: false }) snapshot!: TransferSnapshot;
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
   @property({ type: Boolean }) open = false;
+  @property({ attribute: false }) currentTabId?: string;
+  @property() currentTabLabel = "";
   @state() private selected?: string;
   @state() private detail?: DepartmentTransferDetail;
   @state() private loading = false;
   @state() private error = "";
   #read?: AbortController;
-  @state() private action?: "accept" | "decline";
+  @state() private action?: "accept" | "decline" | "request";
+  @state() private destinationDepartmentId = "";
+  @state() private requested?: DepartmentTransfer;
+  @state() private destinations: { id: string; name: string }[] = [];
   @state() private zoneId = "";
   @state() private tableId = "";
   @state() private reason = "";
@@ -112,7 +117,7 @@ export class TillDepartmentTransfers extends LitElement {
   };
 
   #draft(): string[] {
-    return [this.zoneId, this.tableId, this.reason.trim()];
+    return [this.zoneId, this.tableId, this.reason.trim(), this.destinationDepartmentId];
   }
 
   #resetAction(): void {
@@ -125,6 +130,8 @@ export class TillDepartmentTransfers extends LitElement {
     this.#saving = false;
     this.action = undefined;
     this.zoneId = "";
+    this.destinationDepartmentId = "";
+    this.destinations = [];
     this.tableId = "";
     this.reason = "";
     this.tables = [];
@@ -135,8 +142,29 @@ export class TillDepartmentTransfers extends LitElement {
     this.tableReadError = "";
   }
 
-  #begin(action: "accept" | "decline"): void {
-    if (!this.isConnected || this.busy || !this.detail || !this.open) return;
+  #senderRows(): DepartmentTransfer[] {
+    const rows = this.snapshot.sent;
+    return this.requested && !rows.some((row) => row.id === this.requested!.id)
+      ? [this.requested, ...rows]
+      : rows;
+  }
+
+  #canRequest(): boolean {
+    return (
+      this.currentTabId !== undefined &&
+      !this.#senderRows().some((row) => row.tabId === this.currentTabId && row.status === "pending")
+    );
+  }
+
+  #begin(action: "accept" | "decline" | "request"): void {
+    if (
+      !this.isConnected ||
+      this.busy ||
+      !this.open ||
+      (action === "request" ? !this.#canRequest() : !this.detail)
+    )
+      return;
+    if (action === "request") this.#clearDetail();
     this.#resetAction();
     this.action = action;
     this.#leave = leaveCoordinatorFor(this);
@@ -146,15 +174,21 @@ export class TillDepartmentTransfers extends LitElement {
       snapshot: (value) => [...value],
       equal: (a, b) => a.every((value, index) => value === b[index]),
       restore: (value) => {
-        [this.zoneId, this.tableId, this.reason] = value as [string, string, string];
+        [this.zoneId, this.tableId, this.reason, this.destinationDepartmentId] = value as [
+          string,
+          string,
+          string,
+          string,
+        ];
       },
     });
     this.#scope?.commit(this.#draft());
-    if (action === "accept") void this.#loadTables();
+    if (action !== "decline") void this.#loadChoices();
   }
 
-  async #loadTables(): Promise<void> {
-    if (!this.isConnected || this.action !== "accept" || this.busy) return;
+  async #loadChoices(): Promise<void> {
+    if (!this.isConnected || (this.action !== "accept" && this.action !== "request") || this.busy)
+      return;
     const identity = {};
     this.#write = identity;
     this.busy = true;
@@ -168,11 +202,16 @@ export class TillDepartmentTransfers extends LitElement {
       limit.signal.addEventListener("abort", cancel, { once: true });
     });
     try {
-      const tables = await Promise.race([
-        this.api.getTablesState({ signal: limit.signal }),
+      const choices = await Promise.race([
+        this.action === "request"
+          ? this.api.listDepartmentTransferDestinations({ signal: limit.signal })
+          : this.api.getTablesState({ signal: limit.signal }),
         cancelled,
       ]);
-      if (this.#write === identity) this.tables = tables;
+      if (this.#write === identity) {
+        if (Array.isArray(choices)) this.tables = choices;
+        else this.destinations = choices.destinations;
+      }
     } catch (error) {
       if (this.#write === identity) this.tableReadError = this.#message(error);
     } finally {
@@ -202,9 +241,11 @@ export class TillDepartmentTransfers extends LitElement {
   }
 
   #invalid(): boolean {
-    return this.action === "accept"
-      ? !this.#validZone() || !this.#validTable()
-      : !this.reason.trim();
+    return this.action === "request"
+      ? !this.destinations.some((row) => row.id === this.destinationDepartmentId)
+      : this.action === "accept"
+        ? !this.#validZone() || !this.#validTable()
+        : !this.reason.trim();
   }
 
   #validTable(): boolean {
@@ -214,7 +255,10 @@ export class TillDepartmentTransfers extends LitElement {
     );
   }
 
-  #change(field: "zoneId" | "tableId" | "reason", event: CustomEvent<{ value: string }>): void {
+  #change(
+    field: "zoneId" | "tableId" | "reason" | "destinationDepartmentId",
+    event: CustomEvent<{ value: string }>,
+  ): void {
     event.stopPropagation();
     if (!this.isConnected || !this.action || this.busy) return;
     this[field] = event.detail.value;
@@ -224,7 +268,14 @@ export class TillDepartmentTransfers extends LitElement {
   }
 
   async #save(): Promise<void> {
-    if (!this.isConnected || this.busy || !this.action || !this.detail || !this.open) return;
+    if (
+      !this.isConnected ||
+      this.busy ||
+      !this.action ||
+      !this.open ||
+      (this.action === "request" ? !this.#canRequest() : !this.detail)
+    )
+      return;
     this.attempted = true;
     this.fieldRefusal = undefined;
     this.actionError = "";
@@ -236,28 +287,54 @@ export class TillDepartmentTransfers extends LitElement {
     const identity = {};
     this.#write = identity;
     this.busy = true;
-    const detail = this.detail;
+    const detail = this.detail!;
+    const tabId = this.currentTabId;
     this.#saving = true;
     try {
-      if (this.action === "accept")
-        await this.api.acceptDepartmentTransfer(detail.request.id, {
-          revision: detail.tab.revision,
-          zoneId: this.zoneId,
-          tableId: this.tableId || null,
-        });
-      else await this.api.declineDepartmentTransfer(detail.request.id, this.reason.trim());
+      let requestId: string;
+      if (this.action === "request") {
+        const request = await this.api.requestDepartmentTransfer(
+          tabId!,
+          this.destinationDepartmentId,
+        );
+        requestId = request.id;
+        if (this.#write === identity) this.requested = request;
+      } else {
+        requestId = detail.request.id;
+        if (this.action === "accept")
+          await this.api.acceptDepartmentTransfer(detail.request.id, {
+            revision: detail.tab.revision,
+            zoneId: this.zoneId,
+            tableId: this.tableId || null,
+          });
+        else await this.api.declineDepartmentTransfer(detail.request.id, this.reason.trim());
+      }
       if (this.#write !== identity) return;
       this.#scope?.commit(this.#draft());
       this.#clearDetail();
-      this.#emit("transfer-changed", { requestId: detail.request.id });
+      this.#emit("transfer-changed", { requestId });
     } catch (error) {
       if (this.#write !== identity) return;
       const message = this.#message(error);
       const field =
-        error !== null && typeof error === "object" && "field" in error ? error.field : undefined;
+        this.action === "request" &&
+        error !== null &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "department_transfer.desk_unavailable" &&
+        "departmentId" in error &&
+        error.departmentId === this.destinationDepartmentId
+          ? "destinationDepartmentId"
+          : error !== null && typeof error === "object" && "field" in error
+            ? error.field
+            : undefined;
       if (
         typeof field === "string" &&
-        (this.action === "accept" ? ["zoneId", "tableId"].includes(field) : field === "reason")
+        (this.action === "request"
+          ? field === "destinationDepartmentId"
+          : this.action === "accept"
+            ? ["zoneId", "tableId"].includes(field)
+            : field === "reason")
       )
         this.fieldRefusal = { field, message };
       else this.actionError = message;
@@ -274,8 +351,10 @@ export class TillDepartmentTransfers extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("api")) this.requested = undefined;
     if (
       changed.has("api") ||
+      (this.action === "request" && (changed.has("currentTabId") || !this.#canRequest())) ||
       (changed.has("open") && !this.open) ||
       (this.selected !== undefined && this.snapshot.receivingAllowed !== true) ||
       (this.selected !== undefined &&
@@ -286,6 +365,7 @@ export class TillDepartmentTransfers extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.requested = undefined;
     this.#clearDetail();
     super.disconnectedCallback();
   }
@@ -342,6 +422,34 @@ export class TillDepartmentTransfers extends LitElement {
       limit.signal.removeEventListener("abort", cancel);
       limit.done();
       if (this.#read === read) this.loading = false;
+    }
+  }
+
+  async #withdraw(row: DepartmentTransfer): Promise<void> {
+    if (
+      !this.isConnected ||
+      !this.open ||
+      this.busy ||
+      this.action ||
+      !this.#senderRows().some((current) => current.id === row.id && current.status === "pending")
+    )
+      return;
+    const identity = {};
+    this.#write = identity;
+    this.busy = true;
+    this.#saving = true;
+    this.actionError = "";
+    try {
+      const result = await this.api.withdrawDepartmentTransfer(row.id);
+      if (this.#write === identity && this.requested?.id === row.id) this.requested = result;
+      if (this.#write === identity) this.#emit("transfer-changed", { requestId: row.id });
+    } catch (error) {
+      if (this.#write === identity) this.actionError = this.#message(error);
+    } finally {
+      if (this.#write === identity) {
+        this.busy = false;
+        this.#saving = false;
+      }
     }
   }
 
@@ -413,43 +521,68 @@ export class TillDepartmentTransfers extends LitElement {
         : this.fieldRefusal?.field === "reason"
           ? this.fieldRefusal.message
           : "";
-    const marked = this.action === "accept" ? zoneError || tableError : reasonError;
+    const destinationError =
+      this.attempted && this.action === "request" && this.#invalid()
+        ? t("department_transfer.choose_department")
+        : this.fieldRefusal?.field === "destinationDepartmentId"
+          ? this.fieldRefusal.message
+          : "";
+    const marked =
+      this.action === "request"
+        ? destinationError
+        : this.action === "accept"
+          ? zoneError || tableError
+          : reasonError;
     return html`<div
       class="fields"
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-save-transfer]"))}
     >
       ${
-        this.action === "accept"
-          ? html`<wt-combobox
-                name="zoneId"
+        this.action === "request"
+          ? html`<p>${this.currentTabLabel || t("department_transfer.current_tab")}</p>
+              <p>${t("department_transfer.source_responsible")}</p>
+              <wt-combobox
+                name="destinationDepartmentId"
                 required
                 search="never"
-                .label=${t("department_transfer.zone")}
-                .value=${this.zoneId}
-                .options=${this.serviceZones.filter((zone) => zone.departmentId === this.detail!.request.destinationDepartmentId).map((zone) => ({ value: zone.id, label: zone.name }))}
-                .error=${zoneError}
+                .label=${t("department_transfer.department")}
+                .value=${this.destinationDepartmentId}
+                .options=${this.destinations.map((row) => ({ value: row.id, label: row.name }))}
+                .error=${destinationError}
                 ?disabled=${this.busy}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("zoneId", event)}
-              ></wt-combobox>
-              <wt-combobox
-                name="tableId"
-                search="never"
-                .label=${t("department_transfer.table")}
-                .value=${this.tableId}
-                .options=${[{ value: "", label: t("department_transfer.no_table") }, ...this.tables.filter((table) => table.zoneId === this.zoneId).map((table) => ({ value: table.id, label: table.label }))]}
-                .error=${tableError}
-                ?disabled=${this.busy || !this.#validZone()}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("tableId", event)}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("destinationDepartmentId", event)}
               ></wt-combobox>`
-          : html`<wt-textarea
-              name="reason"
-              required
-              .label=${t("department_transfer.reason")}
-              .value=${this.reason}
-              .error=${reasonError}
-              ?disabled=${this.busy}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("reason", event)}
-            ></wt-textarea>`
+          : this.action === "accept"
+            ? html`<wt-combobox
+                  name="zoneId"
+                  required
+                  search="never"
+                  .label=${t("department_transfer.zone")}
+                  .value=${this.zoneId}
+                  .options=${this.serviceZones.filter((zone) => zone.departmentId === this.detail!.request.destinationDepartmentId).map((zone) => ({ value: zone.id, label: zone.name }))}
+                  .error=${zoneError}
+                  ?disabled=${this.busy}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("zoneId", event)}
+                ></wt-combobox>
+                <wt-combobox
+                  name="tableId"
+                  search="never"
+                  .label=${t("department_transfer.table")}
+                  .value=${this.tableId}
+                  .options=${[{ value: "", label: t("department_transfer.no_table") }, ...this.tables.filter((table) => table.zoneId === this.zoneId).map((table) => ({ value: table.id, label: table.label }))]}
+                  .error=${tableError}
+                  ?disabled=${this.busy || !this.#validZone()}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("tableId", event)}
+                ></wt-combobox>`
+            : html`<wt-textarea
+                name="reason"
+                required
+                .label=${t("department_transfer.reason")}
+                .value=${this.reason}
+                .error=${reasonError}
+                ?disabled=${this.busy}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("reason", event)}
+              ></wt-textarea>`
       }
       ${
         this.tableReadError
@@ -458,8 +591,8 @@ export class TillDepartmentTransfers extends LitElement {
                 data-retry-tables
                 variant="secondary"
                 ?disabled=${this.busy}
-                @click=${() => void this.#loadTables()}
-                >${t("department_transfer.retry_tables")}</wt-button
+                @click=${() => void this.#loadChoices()}
+                >${t(this.action === "request" ? "department_transfer.retry_destinations" : "department_transfer.retry_tables")}</wt-button
               >`
           : nothing
       }
@@ -535,11 +668,25 @@ export class TillDepartmentTransfers extends LitElement {
                       ${snapshot.incoming.length === 0 ? html`<p>${t("department_transfer.empty")}</p>` : nothing}`
               }
               ${this.#currentTab()}
+              ${
+                this.action === "request"
+                  ? this.#actionForm()
+                  : this.action === undefined && this.#canRequest()
+                    ? html`<p>${this.currentTabLabel || t("department_transfer.current_tab")}</p>
+                        <wt-button
+                          data-request-transfer
+                          ?disabled=${this.busy}
+                          @click=${() => this.#begin("request")}
+                          >${t("department_transfer.request")}</wt-button
+                        >`
+                    : nothing
+              }
               <h3>${t("department_transfer.sent")}</h3>
               <ul>
-                ${snapshot.sent.map((row) => html`<li data-sent=${row.id}>${this.#summary(row, false)}</li>`)}
+                ${this.#senderRows().map((row) => html`<li data-sent=${row.id}>${this.#summary(row, false)}${row.status === "pending" ? html`<wt-button data-withdraw-transfer variant="secondary" ?disabled=${this.busy || this.action !== undefined} @click=${() => void this.#withdraw(row)}>${t("department_transfer.withdraw")}</wt-button>` : nothing}</li>`)}
               </ul>
-              ${snapshot.sent.length === 0 ? html`<p>${t("department_transfer.no_sent")}</p>` : nothing}
+              ${this.#senderRows().length === 0 ? html`<p>${t("department_transfer.no_sent")}</p>` : nothing}
+              ${this.action === undefined && this.actionError ? html`<p role="alert" class="error">${this.actionError}</p>` : nothing}
               <wt-form-actions slot="footer"
                 ><wt-button
                   slot="cancel"

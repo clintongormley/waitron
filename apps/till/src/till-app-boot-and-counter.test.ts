@@ -2878,6 +2878,60 @@ describe("department transfers across operator lifetimes", () => {
     expect(transferRoot(el)?.querySelector("[data-current-tab]")).toBeNull();
   });
 
+  it("requests the selected source tab from the actual shell and reloads its durable sender status", async () => {
+    const desk = transfers();
+    let requested = false;
+    const send = vi.fn(async () => {
+      requested = true;
+      return { ...request, tabId: "selected-tab" };
+    });
+    const { el } = await mountApp({
+      ...desk.calls,
+      listDepartmentSentTransfers: vi.fn(async () => ({
+        requests: requested ? [{ ...request, tabId: "selected-tab" }] : [],
+      })),
+      listDepartmentTransferDestinations: vi
+        .fn()
+        .mockResolvedValue({ destinations: [{ id: "restaurant", name: "Restaurant" }] }),
+      requestDepartmentTransfer: send,
+    });
+    await signIn(el);
+    Object.assign(el, { activeTabId: "selected-tab", drill: { kind: "table-order" } });
+    el.requestUpdate();
+    await flush(el);
+    await openTransfers(el);
+    const requestButton = transferRoot(el)!.querySelector<HTMLElement>("[data-request-transfer]");
+    expect(requestButton).not.toBeNull();
+    requestButton!.click();
+    await vi.waitFor(() =>
+      expect(
+        transferRoot(el)?.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+          ?.disabled,
+      ).toBe(false),
+    );
+    emit(transferRoot(el)!.querySelector("[name=destinationDepartmentId]")!, "wt-change", {
+      value: "restaurant",
+    });
+    await flush(el);
+    transferRoot(el)!.querySelector<HTMLElement>("[data-save-transfer]")!.click();
+    await vi.waitFor(() => expect(send).toHaveBeenCalledWith("selected-tab", "restaurant"));
+    await vi.waitFor(() =>
+      expect(transferRoot(el)?.querySelector("[data-sent=request-1]")).not.toBeNull(),
+    );
+    expect(transferRoot(el)?.querySelector("[data-request-transfer]")).toBeNull();
+  });
+
+  it("does not offer a request for a previously selected tab while another surface is showing", async () => {
+    const desk = transfers();
+    const { el } = await mountApp(desk.calls);
+    await signIn(el);
+    Object.assign(el, { activeTabId: "previous-tab" });
+    el.requestUpdate();
+    await flush(el);
+    await openTransfers(el);
+    expect(transferRoot(el)?.querySelector("[data-request-transfer]")).toBeNull();
+  });
+
   it("starts a fresh detail read after close and ignores the previous opening's late reply", async () => {
     const desk = transfers();
     let oldReply!: (value: typeof currentDetail) => void;
