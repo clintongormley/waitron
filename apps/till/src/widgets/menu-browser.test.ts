@@ -1754,13 +1754,13 @@ describe("till-menu-browser", () => {
       });
 
       // wt-button has no pressed style of its own, so there is none here to keep.
-      it("keeps the hover dip on a painted tile", async () => {
+      it("keeps hovered plain and painted tiles opaque", async () => {
         const el = await mountPainted(theme);
         await userEvent.hover(entry(el, "structure", "Bare"));
         const neutral = opacity(entry(el, "structure", "Bare"));
         await userEvent.hover(entry(el, "structure", "Blue"));
         const blueHovered = opacity(entry(el, "structure", "Blue"));
-        expect(neutral).toBeLessThan(1);
+        expect(neutral).toBe(1);
         expect(blueHovered).toBe(neutral);
         expect(opacity(entry(el, "structure", "Bare"))).toBe(1);
       });

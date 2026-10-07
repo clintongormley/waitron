@@ -7,8 +7,7 @@ interface PlaywrightMousePage {
 /**
  * Moves the real mouse cursor off every element, so nothing is left matching CSS `:hover`. The cursor
  * belongs to the page every test file in a worker shares, so an earlier test's click can leave a later
- * test's element hovered, and `wt-button`'s hover dimming of a secondary or ghost button can then
- * fail axe's colour-contrast check.
+ * test's element hovered.
  *
  * `userEvent.unhover()` cannot do this: @vitest/browser implements it as a hover of `html > body`,
  * which parks the cursor in the middle of the page. Negative coordinates are outside the viewport.

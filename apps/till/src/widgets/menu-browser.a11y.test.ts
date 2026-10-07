@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { DocumentMember } from "@waitron/catalogue/src/menu-document-types.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget, type Theme } from "./test-helpers.js";
+import { page, userEvent } from "vitest/browser";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
@@ -18,6 +20,13 @@ function product(key: string, name: string, available = true): TillProduct {
     kitchenName: `${name} KDS`,
     pricingUnit: "each",
     unitPrice: "1.50",
+    unit: {
+      id: "unit-each",
+      name: { en: "Each", es: "Unidad" },
+      abbreviation: { en: "ea", es: "ud" },
+      precision: 0,
+      hardwareUnit: null,
+    },
     vatClass: "general",
     category: null,
     allergens: null,
@@ -34,7 +43,7 @@ const beer: DocumentMember = {
   kind: "section",
   sectionId: "sec-beer",
   internalName: "beer-internal",
-  names: { en: "Beer (EN)" },
+  names: { en: "Beer (EN)", es: "Cervezas" },
   image: null,
   color: null,
   members: [member("cana")],
@@ -44,7 +53,7 @@ const drinks: DocumentMember = {
   kind: "section",
   sectionId: "sec-drinks",
   internalName: "drinks-internal",
-  names: { en: "Drinks (EN)" },
+  names: { en: "Drinks (EN)", es: "Bebidas" },
   image: null,
   color: null,
   members: [member("cola"), member("burger"), beer],
@@ -55,7 +64,7 @@ const red: DocumentMember = {
   kind: "section",
   sectionId: "sec-red",
   internalName: "red-internal",
-  names: { en: "Red (EN)" },
+  names: { en: "Red (EN)", es: "Rojo" },
   image: null,
   color: "#b12525",
   members: [member("cafe")],
@@ -95,7 +104,17 @@ const products = [
   product("cana", "Caña"),
   product("burger", "Burger", false),
   // Sold by weight, so its tile's price reads per kilo.
-  { ...product("jamon", "Jamón"), pricingUnit: "weight" as const },
+  {
+    ...product("jamon", "Jamón"),
+    pricingUnit: "weight" as const,
+    unit: {
+      id: "unit-kg",
+      name: { en: "Kilogram", es: "Kilogramo" },
+      abbreviation: { en: "kg", es: "kg" },
+      precision: 3,
+      hardwareUnit: "kg" as const,
+    },
+  },
   { ...product("blue", "Blue"), color: "#256bb1" },
   { ...product("pink", "Pink"), color: "#edabab" },
   { ...product("bluegone", "Blue gone", false), color: "#256bb1" },
@@ -174,6 +193,41 @@ function groupHeadings(el: TillMenuBrowser): string[] {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (theme) => {
+  it.each([
+    ["en-GB", 390],
+    ["en-GB", 1280],
+    ["es-ES", 390],
+    ["es-ES", 1280],
+  ] as const)(
+    "hovered plain and painted tiles are accessible in %s at %i px",
+    async (locale, width) => {
+      const previous = currentLocale();
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      setLocale(locale);
+      await page.viewport(width, 900);
+      try {
+        expect(window.innerWidth).toBe(width);
+        const { el, host } = await mount(theme);
+        const tiles = el.shadowRoot!.querySelectorAll("wt-button[data-kind]");
+        expect(tiles.length).toBeGreaterThanOrEqual(9);
+        for (const tile of tiles) {
+          const inner = tile.shadowRoot!.querySelector("button")!;
+          await userEvent.hover(inner);
+          expect(inner.matches(":hover")).toBe(true);
+          await expectNoA11yViolations(host);
+        }
+        await userEvent.hover(button(el, "Blue").shadowRoot!.querySelector("button")!);
+        await page.screenshot({
+          element: host,
+          path: `__screenshots__/look/a319-tiles-${locale}-${theme}-${width}.png`,
+        });
+      } finally {
+        setLocale(previous);
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
+
   it("home, with a plain and two painted (dark and pale) sold-out tiles and a weighed product's tile, has no violations", async () => {
     const { el, host } = await mount(theme);
     expect(button(el, "Jamón").querySelector(".price")!.textContent).toContain("/kg");

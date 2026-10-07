@@ -1230,19 +1230,13 @@ adjust the colour-field width using the shared field contract without changing s
 **Sidebar contrast (found during W69, 2026-10-06) — DONE (A306, #1336).** The group headings and the
 selected item read `--wt-color-primary-text`.
 
-**Hover contrast A306 (#1336) measured but did not fix — OPEN.** A306's axe probes in real Chromium
-(2026-10-07) also measured two hovered treatments that do not use the filled buttons it fixed:
-(1) card actions drawn as a secondary button with coloured text and the opacity dip — the Account
-settings screen's pending-email "Confirmar" (`apps/dashboard/src/screens/profile-screen.ts`) 3.66:1 light, 4.19:1 dark, and the content-languages page's primary-coloured
-actions 3.61:1 light, 4.21:1 dark (its danger-coloured "Quitar" passed, 5.04:1 and 4.74:1); (2) a
-hovered till tile's muted price and kind text — 4.38:1 on an unpainted tile in light (dark 5.44:1),
-and the price at 4.1:1 on a blue-painted tile in light (dark 4.84:1). The bar is 4.5:1. Not measured: the
-Account settings screen's other card actions, disabled or sold-out tiles, a category row's made-at link, the prep
-stations screen. Next action: an item of its own that moves those hovers off the opacity dip, as
-A306 did for filled buttons, with axe cases that hover. Also seen in A306's screenshots, not
-measured: on a hovered Products row in the dark theme the status and allergen badges' borders
-disappear into the row; A306's review saw the same in a screenshot of the base commit (`53acadca6`), so it does not come
-from A306.
+**Hover contrast A306 (#1336) — DONE (A319).** Secondary and ghost buttons keep text at full
+opacity and accent their border on hover; painted till tiles use their text colour for that border.
+Real-pointer axe cases scan Account settings' Details and Security actions, content-language
+actions, and plain, painted and sold-out menu tiles in both themes, English and Spanish, at
+390 and 1280 px. The earlier screenshot-only observation remains open: on a hovered Products row
+in the dark theme, status and allergen badge borders appear to disappear into the row. Contrast
+for those borders, a category row's maker link and the prep stations screen remains unmeasured.
 
 **Dark modal danger-button hover contrast (found during W69, 2026-10-06), and its light reading of
 2026-10-07 — DONE (A306, #1336).** Primary and danger buttons hover onto their own fill tokens instead of

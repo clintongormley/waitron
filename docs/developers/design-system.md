@@ -335,18 +335,11 @@ and till app suites: one for the app's own text, one for text on the page outsid
 dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
 `--wt-duration-disclosure` is how long a disclosure body takes to open or close (900 ms).
 
-`--wt-opacity-hover` is the hover feedback of `wt-button`'s secondary and ghost variants
-(`button:hover:not(:disabled)`) — a plain opacity dip. The primary and danger variants hover onto
-`--wt-color-primary-hover` and `--wt-color-danger-hover` at full opacity instead: the dip faded a
-filled button and its label together, and axe measured the hovered light primary at 3.61:1 and,
-inside a dialog, the dark danger at 4.49:1 (A306). A background or border-colour change for the
-unfilled variants would need a distinct value per variant to stay visible in both themes: `--wt-color-surface`
-and `--wt-color-surface-raised`, the pair other primitives already hover onto (`wt-tabs`, and
-`wt-data-table`'s rows that open nothing), are identical in the light theme today, so that idiom would be invisible on
-`wt-button`'s own secondary variant, which already rests on `--wt-color-surface`. For the same
-reason `wt-combobox`'s option rows hover onto `--wt-color-bg`, not the raised surface: the raised
-surface equals the popover panel's own background in the light theme, so a raised-surface hover
-would not show.
+Secondary and ghost `wt-button` variants keep their fill and text at full opacity on hover;
+their border reads `--wt-color-primary-text`. Primary and danger variants use their hover fill
+tokens at full opacity. A hover must preserve the label's contrast, including coloured text and
+muted prices in a till tile. `--wt-opacity-hover` remains the feedback for the course and options
+list's name controls.
 
 `wt-button` also exposes its inner `<button>` as a CSS part (`part="button"`), so a consuming
 screen can layer its own hover accent onto specific buttons — `wt-button.foo::part(button):hover`
@@ -1909,7 +1902,7 @@ idiom `wt-tabs` already uses for its selected tab (`border-bottom-color` there,
 `border-inline-start-color` here), not a new one — and it is now the one loud thing in an otherwise
 calm list. Hovering a row moves it to full-strength text plus a `--wt-color-surface` background —
 visible here because the sidebar itself sits on `--wt-color-bg`, unlike `wt-button`'s own secondary
-variant (see `--wt-opacity-hover` above). A `.nav-group` header takes a small-caps treatment
+variant, whose hover changes its border. A `.nav-group` header takes a small-caps treatment
 (uppercase, `letter-spacing: 0.04em`) so it reads as a label, not a fainter link. The headers' text
 and the selected item's text read `--wt-color-primary-text`, and the selected item's leading edge
 reads `--wt-color-primary`: `--wt-color-primary` measured 4.32:1 as text on the light
@@ -2220,15 +2213,16 @@ pills. Colour appears only on **hover**, via `wt-button`'s exposed `button` CSS 
 
 Use `accent-primary` for a forward/constructive action, `accent-danger` for one that removes or
 disables something, and neither class for a purely maintenance action ("Replace recovery codes"
-when 2FA is already on) — it gets only `wt-button`'s own generic hover dim. This is deliberately
+when 2FA is already on) — it gets only `wt-button`'s own border accent. This is deliberately
 **not** a change to what `variant="primary"`/`"danger"` mean on `wt-button` itself — those still
 render solid at rest everywhere else (the till's checkout button, for one, needs to read as
 "the important action" without anyone hovering it first, and there is no hover on a touchscreen at
 all). The part hook lets a screen layer an accent onto specific buttons without touching that
 contract.
 
-Under the pointer the primary accent measured 3.61 to 4.21:1 wherever A306 measured it
-(2026-10-07), under the 4.5:1 bar; see the backlog entry "Hover contrast A306 measured but did not fix".
+The account and content-language hover cases scan these actions with axe in both themes,
+English and Spanish, at phone and desktop widths (`profile-screen.a11y.test.ts` and
+`content-languages-screen.a11y.test.ts`).
 
 Give every card action a fixed `min-width` (`ch`-based — see `--dashboard-sidebar-width` in
 `dashboard-app.ts` for the same reasoning) so a row of differently-worded actions still reads as

@@ -979,10 +979,11 @@ the cursor position is the page's. So `userEvent.click` or `userEvent.hover` par
 those coordinates for every test that runs afterwards, in that file and in every file scheduled after
 it in the same worker. Whatever renders under those coordinates next is `:hover`ed with nothing in the
 test asking for it, and Blink re-evaluates that after layout, so it lands on a freshly mounted element
-even though no mouse event was sent. `wt-button`'s hover rule then dims a secondary or ghost button
-to `--wt-opacity-hover`, and an axe scan can report a colour-contrast violation for a button that
-looks correct in the app. Until A306 the rule dimmed primary and danger buttons too, which is what the
-measurement below caught.
+even though no mouse event was sent. Before A319, `wt-button`'s secondary and ghost hover rule
+dimmed text with `--wt-opacity-hover`, which could make an axe scan report a colour-contrast
+violation. A319 replaces that dip with a border accent; the reset still keeps tests from inheriting
+another test's pointer state. Before A306 the rule dimmed primary and danger buttons too, which is
+what the measurement below caught.
 
 Measured, 2026-09-13: `test-dashboard` failed three times on PR #350 on
 `floor-screen.a11y.test.ts`'s "renders accessibly with empty lists" (light theme) — always

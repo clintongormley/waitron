@@ -15,8 +15,7 @@ interface PlaywrightMousePage {
  * The cursor position belongs to the PAGE, and every test file in a worker shares one page — so a
  * `userEvent` click or hover parks the cursor at those coordinates for every later test, in this
  * file and in every file that runs after it. Whatever then renders under those coordinates is
- * `:hover`ed with no test having asked for it, and `wt-button`'s hover rule dims a secondary or
- * ghost button to `--wt-opacity-hover`, which axe can score as a colour-contrast violation.
+ * `:hover`ed with no test having asked for it.
  *
  * `userEvent.unhover()` cannot do this: @vitest/browser implements it as a hover of `html > body`,
  * which parks the cursor in the MIDDLE of the page, on top of whatever is mounted there. Negative
