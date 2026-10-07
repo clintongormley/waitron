@@ -112,7 +112,8 @@ or Variants section, because a variant always uses its product's extras and opti
 changes, because leaving the product would lose them: save the product first.
 
 **Disable** makes a saved variant disabled once you save the product: the till stops offering it,
-and its past sales are kept. **Remove**, on a variant you added and have not saved yet, simply drops
+the prices any menu set for it are deleted, and its past sales are kept. Enabled again, it is back
+on every menu its product is on, with no menu price of its own until you set one. **Remove**, on a variant you added and have not saved yet, simply drops
 it. The table shows only Active variants at first. While some variant is disabled, a link beside
 **Add variant** says how many, such as **Show 1 disabled**: choose it to see them in the table, and
 choose **Hide disabled** to hide them again. Choose **Enable** from a disabled row's menu to make it

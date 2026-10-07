@@ -2007,7 +2007,7 @@ describe("the management prices read", () => {
     }
   });
 
-  it("lists an inactive product an included menu prices, with that menu as its source, and its clash without blocking publication", async () => {
+  it("lists an inactive product in no menu's prices, and its clash with an included menu's price goes with it", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
       await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lager), {
@@ -2015,23 +2015,13 @@ describe("the management prices read", () => {
       });
       // Dinner also places Lager itself, at its own 4.00: a clash with Drinks' 5.00.
       await addMember(tx, f.dinnerRoot, product(f.lager));
-      await deactivateProduct(tx, f.lager);
     });
-    const lager = (await app((tx) => operations.menuPrices(tx, f.dinner))).find(
-      ({ productId }) => productId === f.lager,
-    )!;
-    expect(lager.active).toBe(false);
-    expect(lager.combined.price).toEqual({
-      state: "clash",
-      candidates: [
-        { place: { kind: "own_sections" }, value: "4.00", source: { kind: "product" } },
-        {
-          place: { kind: "menu", menuId: f.drinksMenu, menuName: "Drinks" },
-          value: "5.00",
-          source: { kind: "menu", menuId: f.drinksMenu, menuName: "Drinks", from: { kind: "own" } },
-        },
-      ],
-    });
+    expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.clashes).toBe(1);
+    await app((tx) => deactivateProduct(tx, f.lager));
+    for (const menuId of [f.dinner, f.drinksMenu])
+      expect(
+        (await app((tx) => operations.menuPrices(tx, menuId))).map(({ productId }) => productId),
+      ).not.toContain(f.lager);
     const preview = await app((tx) => previewMenu(tx, f.dinner));
     expect(preview.clashes.filter(({ productId }) => productId === f.lager)).toEqual([]);
     expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.clashes).toBe(0);

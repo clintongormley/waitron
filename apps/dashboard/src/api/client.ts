@@ -2246,6 +2246,16 @@ export class DashboardApi {
     return this.#request(`/management-api/folders/summary?${query}`, "GET");
   }
 
+  /** How many Active menus the products are on, each menu counted once. */
+  async countProductMenus(productIds: string[]): Promise<number> {
+    const query = productIds.map((id) => `id=${encodeURIComponent(id)}`).join("&");
+    const { menus } = await this.#request<{ menus: number }>(
+      `/management-api/products/menus?${query}`,
+      "GET",
+    );
+    return menus;
+  }
+
   createCategory(input: CategoryInput): Promise<CategorySummary> {
     return this.#request<CategorySummary>("/management-api/categories", "POST", input);
   }

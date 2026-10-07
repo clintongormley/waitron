@@ -111,10 +111,17 @@ describe("Active and Available", () => {
     expect((await reads()).editor).toEqual({ active: false, available: false });
   });
 
-  it("a product that is both Active and Available is sold again", async () => {
+  it("a product made Active and Available again is on no menu, and is sold again once put back on one", async () => {
     await save({ active: false, available: false });
     await save({ active: true, available: true });
 
+    expect(await reads()).toEqual({
+      editor: { active: true, available: true },
+      listed: { active: true, available: true },
+      offers: [],
+      sellable: [productId],
+    });
+    await run((tx) => addProductToMenu(tx, { menuId: catalogueId, productId }));
     expect(await reads()).toEqual({
       editor: { active: true, available: true },
       listed: { active: true, available: true },

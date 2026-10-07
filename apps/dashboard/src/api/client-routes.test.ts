@@ -32,6 +32,15 @@ function callsOf(fetchImpl: ReturnType<typeof vi.fn>): Call[] {
 }
 
 describe("DashboardApi routes", () => {
+  it("counts the menus the products are on, sending each id encoded", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ menus: 3 }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.countProductMenus(["a&b", "c d"])).toBe(3);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/products/menus?id=a%26b&id=c%20d", "GET", undefined],
+    ]);
+  });
+
   it("reads venue departments for the receipt preview without changing their active state", async () => {
     const departments = [
       { id: "deli", name: "Deli", active: true },

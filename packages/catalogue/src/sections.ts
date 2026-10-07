@@ -133,7 +133,8 @@ async function checkListRef(
     if (role !== "menu_root")
       throw new AppError("menu_section.wrong_role", { sectionId: ref.sectionId, role });
   }
-  await checkRef(tx, graph, sectionId, ref, replacing);
+  // An Inactive product is on no menu, so no list may take one.
+  await checkRef(tx, graph, sectionId, ref, replacing, { active: true });
   if (ref.kind === "section" && wouldCreateCycle(graph, sectionId, ref.sectionId))
     throw new AppError("menu_section.member_cycle", {
       sectionId,
@@ -272,7 +273,7 @@ export async function addProducts(
 ): Promise<{ added: number }> {
   const graph = await loadSectionGraph(tx);
   requireWritableList(graph, sectionId);
-  if (!Array.isArray(productIds) || !(await allTopLevelProducts(tx, productIds)))
+  if (!Array.isArray(productIds) || !(await allTopLevelProducts(tx, productIds, { active: true })))
     throw new AppError("menu_section.membership_invalid", {});
   const held = new Set(
     graph

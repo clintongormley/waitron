@@ -36,6 +36,7 @@ import {
 import { batches } from "./batches.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember, sectionPatchValues } from "./sections.js";
+import { dropMenuPrices, takeOffMenus } from "./menu-removal.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
@@ -472,7 +473,6 @@ async function offerRowsOn(
   tx: Transaction,
   roots: ReadonlyMap<string, string>,
   graph: SectionGraph,
-  includeInactive = false,
 ) {
   // Keyed in the order `reachableProducts` gives, so a key's position is its rank on the menu.
   const placed = new Map(
@@ -526,7 +526,7 @@ async function offerRowsOn(
             inArray(menuItems.productId, batch),
             eq(catalogues.active, true),
             isTopLevelProduct,
-            includeInactive ? undefined : eq(products.active, true),
+            eq(products.active, true),
           ),
         )),
     );
@@ -569,9 +569,6 @@ async function offersOn(
   roots: ReadonlyMap<string, string>,
   graph: SectionGraph,
   options: OfferOptions,
-  /** Inactive products and variants too: the management prices read alone; a till's offer never
-   * lists one. */
-  includeInactive = false,
 ): Promise<MenuOffer[]> {
   const allRoots = new Map(roots);
   const include = (menuId: string): void => {
@@ -582,7 +579,7 @@ async function offersOn(
     }
   };
   for (const id of roots.keys()) include(id);
-  const { rows: offered, placementsOf } = await offerRowsOn(tx, allRoots, graph, includeInactive);
+  const { rows: offered, placementsOf } = await offerRowsOn(tx, allRoots, graph);
   if (offered.length === 0) return [];
   const offeredByItem = await readOfferedModifiers(
     tx,
@@ -592,7 +589,6 @@ async function offersOn(
   const variantsByItem = await readOfferVariants(
     tx,
     offered.map((row) => row.id),
-    includeInactive,
   );
   const raw = offered.map((row) => {
     const { override, unitPrice } = offerPrices(row);
@@ -686,21 +682,20 @@ async function offersOn(
 }
 
 /**
- * Every product the menu reaches, Active or not, once each in `listMenuOffers`' order, with its own
- * price and its combined decisions. Sold-out and Inactive ones are listed.
+ * Every product the menu reaches, once each in `listMenuOffers`' order, with its own price, its
+ * combined decisions and its Active sizes. Sold-out ones are listed.
  */
 export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuPriceRow[]> {
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const graph = await loadSectionGraph(tx);
   const roots = new Map([[menuId, rootSectionId]]);
-  const combinedOffers = await offersOn(tx, roots, graph, {}, true);
+  const combinedOffers = await offersOn(tx, roots, graph, {});
   const combinedByProduct = new Map(combinedOffers.map((offer) => [offer.productId, offer]));
-  const { rows } = await offerRowsOn(tx, roots, graph, true);
+  const { rows } = await offerRowsOn(tx, roots, graph);
   if (rows.length === 0) return [];
   const variantsByItem = await menuVariantsOfItems(
     tx,
     rows.map((row) => row.id),
-    true,
   );
   return rows
     .filter((row) => combinedByProduct.has(row.productId))
@@ -725,7 +720,6 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
 async function readOfferVariants(
   tx: Transaction,
   menuItemIds: readonly string[],
-  includeInactive = false,
 ): Promise<Map<string, (MenuOfferVariant & { cataloguePrice: Decimal | null })[]>> {
   const rows = await tx
     .select({
@@ -756,12 +750,7 @@ async function readOfferVariants(
         eq(menuItemVariantOverrides.variantId, products.id),
       ),
     )
-    .where(
-      and(
-        inArray(menuItems.id, [...menuItemIds]),
-        includeInactive ? undefined : eq(products.active, true),
-      ),
-    )
+    .where(and(inArray(menuItems.id, [...menuItemIds]), eq(products.active, true)))
     .orderBy(menuItems.id, products.variantOrder, products.id);
   const grouped = new Map<string, (MenuOfferVariant & { cataloguePrice: Decimal | null })[]>();
   for (const row of rows) {
@@ -1134,7 +1123,7 @@ async function patchProduct(
   checkNames: boolean,
 ): Promise<void> {
   const namesChange = checkNames && (patch.name !== undefined || patch.active !== undefined);
-  const row = patch.active === true || namesChange ? await readUpdatedName(tx, id) : undefined;
+  const row = patch.active !== undefined || namesChange ? await readUpdatedName(tx, id) : undefined;
   if (patch.active === true && row?.parentId != null)
     await assertNotOfferedAsExtra(tx, row.parentId, "active");
   if (namesChange && row !== undefined)
@@ -1224,10 +1213,24 @@ async function patchProduct(
       allergens: allergens !== undefined,
       diet: dietOverride !== undefined,
     });
+  // Only a change from Active runs the removal: the editor resends `active` on every save.
+  if (patch.active === false && row?.active === true)
+    await (row.parentId === null ? takeOffMenus : dropMenuPrices)(tx, [id]);
 }
 
+/** For a product with no parent: sets it Inactive and takes it off every menu. */
 export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {
-  await tx.update(products).set({ active: false, updatedAt: now() }).where(eq(products.id, id));
+  await markInactive(tx, [id]);
+  await takeOffMenus(tx, [id]);
+}
+
+/** Sets the products Inactive and nothing else: the caller takes them off menus. */
+export async function markInactive(tx: Transaction, ids: readonly string[]): Promise<void> {
+  for (const batch of batches(ids))
+    await tx
+      .update(products)
+      .set({ active: false, updatedAt: now() })
+      .where(inArray(products.id, batch));
 }
 
 export async function assignCatalogueToLocation(

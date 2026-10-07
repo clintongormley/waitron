@@ -131,10 +131,12 @@ export async function vacateCategories(
     .set({ categoryId: null, updatedAt: now() })
     .where(and(inArray(products.categoryId, ids), isNotNull(products.parentId)));
 }
-/** Are these all distinct top-level products? A repeat leaves the count short, as an absent id does. */
+/** Are these all distinct top-level products, and Active ones when `active`? A repeat leaves the
+ * count short, as an absent id does. */
 export async function allTopLevelProducts(
   tx: Transaction,
   ids: readonly unknown[],
+  { active = false }: { active?: boolean } = {},
 ): Promise<boolean> {
   if (ids.some((id) => typeof id !== "string")) return false;
   // Counted as a set, so a repeat in a later batch than its first still leaves the count short.
@@ -143,7 +145,13 @@ export async function allTopLevelProducts(
     const rows = await tx
       .select({ id: products.id })
       .from(products)
-      .where(and(inArray(products.id, batch), isTopLevelProduct));
+      .where(
+        and(
+          inArray(products.id, batch),
+          isTopLevelProduct,
+          active ? eq(products.active, true) : undefined,
+        ),
+      );
     for (const row of rows) found.add(row.id);
   }
   return found.size === ids.length;

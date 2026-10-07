@@ -50,6 +50,22 @@ function checkHomeDisplays(rows: Rows | undefined): void {
     }
 }
 
+/** An Inactive product sits in no menu list or Device Home Page shortcut, and an Inactive variant
+ * holds no menu price, whichever writer made the rows. */
+function checkActiveOnMenus(
+  tables: Readonly<Record<string, Rows>>,
+  inactiveIds: Set<unknown>,
+): void {
+  for (const row of tables.section_members ?? [])
+    if (inactiveIds.has(row.product_id))
+      throw new AppError("setup.request_invalid", { field: "section_members.product_id" });
+  for (const row of tables.menu_item_variant_overrides ?? [])
+    if (inactiveIds.has(row.variant_id))
+      throw new AppError("setup.request_invalid", {
+        field: "menu_item_variant_overrides.variant_id",
+      });
+}
+
 /** The first name two of `names` share, ignoring case and surrounding spaces. An import replaces
  * every stored category and product, so each imported row counts as changed. */
 function sharedName(names: readonly string[]): string | undefined {
@@ -92,6 +108,7 @@ export function validateCatalogueConfiguration(tables: Readonly<Record<string, R
     parentId: row.parent_id,
   }));
   const activeIds = new Set(products.filter((row) => row.active).map((row) => row.id));
+  checkActiveOnMenus(tables, new Set(products.filter((row) => !row.active).map((row) => row.id)));
   const counted = products.filter(
     (row) =>
       row.active &&

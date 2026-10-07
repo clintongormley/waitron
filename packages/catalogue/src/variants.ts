@@ -5,6 +5,7 @@ import type { ContentLanguages, Decimal } from "@waitron/shared";
 import { assertContentTranslations, readContentLanguages } from "./content-languages.js";
 import { reachableMenuItem } from "./menu-structure.js";
 import { batches } from "./batches.js";
+import { dropMenuPrices } from "./menu-removal.js";
 import { menuItems } from "./schema/menu.js";
 import { extraListItems, extraLists } from "./schema/extras.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
@@ -146,7 +147,7 @@ export async function assertNotOfferedAsExtra(
  * Save a product's variants: each one in the input is written Active or Inactive as its `active`
  * says — with `active` absent, a new variant is created Active and one sent by `id` keeps its
  * current state — in the input's order; each current variant the input leaves out is made Inactive and kept,
- * ordered after the ones sent. The caller owns the transaction, including product
+ * ordered after the ones sent. A variant made Inactive loses its price on every menu. The caller owns the transaction, including product
  * fields and supporting associations.
  */
 export async function setProductVariants(
@@ -255,6 +256,12 @@ async function writeProductVariants(
     }
   }
   const left = current.filter((variant) => !seen.has(variant.id));
+  const madeInactive = [
+    ...normalized.flatMap((input) =>
+      input.id !== undefined && !input.active && currentActive.get(input.id) ? [input.id] : [],
+    ),
+    ...left.filter((variant) => variant.active).map((variant) => variant.id),
+  ];
   for (const [index, variant] of left.entries()) {
     await tx
       .update(products)
@@ -265,6 +272,7 @@ async function writeProductVariants(
       })
       .where(and(eq(products.parentId, productId), eq(products.id, variant.id)));
   }
+  if (madeInactive.length > 0) await dropMenuPrices(tx, madeInactive);
   return listProductVariants(tx, productId);
 }
 
@@ -301,14 +309,12 @@ async function menuVariantsOf(tx: Transaction, menuItemId: string): Promise<Menu
 }
 
 /**
- * This menu's settings for the variants of each menu item's product, with each one's Active state,
- * keyed by menu-item id, in variant order, in one query per batch of ids. Only Active variants
- * unless `includeInactive`.
+ * This menu's settings for the Active variants of each menu item's product, keyed by menu-item id,
+ * in variant order, in one query per batch of ids.
  */
 export async function menuVariantsOfItems(
   tx: Transaction,
   menuItemIds: readonly string[],
-  includeInactive = false,
 ): Promise<Map<string, MenuPriceVariant[]>> {
   const grouped = new Map<string, MenuPriceVariant[]>();
   for (const batch of batches(menuItemIds))
@@ -328,9 +334,7 @@ export async function menuVariantsOfItems(
           eq(menuItemVariantOverrides.variantId, products.id),
         ),
       )
-      .where(
-        and(inArray(menuItems.id, batch), includeInactive ? undefined : eq(products.active, true)),
-      )
+      .where(and(inArray(menuItems.id, batch), eq(products.active, true)))
       .orderBy(menuItems.id, products.variantOrder, products.id)) {
       const held = grouped.get(row.menuItemId) ?? [];
       held.push({ variantId: row.variantId, price: priceOrNull(row.price), active: row.active });
@@ -341,8 +345,8 @@ export async function menuVariantsOfItems(
 
 /**
  * Save this menu's prices for the Active variants of the offer's product. An entry with no price
- * stores no row, and so does an Active variant the input leaves out. An Inactive variant's row is
- * left alone, for when it is made Active again.
+ * stores no row, and so does an Active variant the input leaves out. An Inactive variant holds no
+ * row: making it Inactive deleted them.
  */
 export async function setMenuVariants(
   tx: Transaction,
@@ -393,8 +397,8 @@ export async function setMenuVariants(
 }
 
 /**
- * Sets or clears this menu's price for one variant of the offer's product, Active or not, and
- * leaves every other variant's row as it is.
+ * Sets or clears this menu's price for one Active variant of the offer's product, and leaves every
+ * other variant's row as it is.
  */
 export async function setMenuVariantPrice(
   tx: Transaction,
@@ -404,7 +408,7 @@ export async function setMenuVariantPrice(
   menuId?: string,
 ): Promise<void> {
   const productId = await offerProduct(tx, menuItemId, menuId);
-  if (!(await listProductVariants(tx, productId)).some(({ id }) => id === variantId))
+  if (!(await activeVariants(tx, productId)).some(({ id }) => id === variantId))
     throw new AppError("product.variant_not_found", { variantId });
   const value = validatePrice(price, "price");
   const row = and(

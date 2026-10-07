@@ -359,7 +359,7 @@ the 2026-09-30 folders design; what remains:
   from reading only, a Columns panel wider than a very narrow screen would not shrink to fit, and is
   not re-placed on resize.
 - **Publishing (#677).** After a publish the editor's heading shows the browser's clock until the
-  next read; a re-enabled product's "added" change can name its section as the source; the status
+  next read; the status
   and preview reads build every menu's frozen copy inside `withTransaction`, the venue's write lock
   — about 21 ms median for 4 menus and 300 dishes on a dev laptop, not measured on the box; at
   phone width the list keeps a fixed room for the row menu, and a status sort falls back to a name
@@ -1112,6 +1112,30 @@ unused `units` property is gone (it closes W75's leftover).
     Next: the owner picks one word.
   - Open, from #1383's review: on the Preview tab a failed live refresh keeps the heading's old
     clash count, as the rest of that line already does (`#menuReadFailed`, from A290, #1307).
+- **A347, owner 2026-10-07 — DONE (branch `fix/inactive-off-menus`, a disabled product or size is on
+  no menu):** disabling a product takes it off every menu list in the same transaction and clears
+  its prices on every menu, so each menu's next publish leaves it out; a Device Home Page shortcut
+  to it becomes a missing tile, and enabling it again does not put it back on any menu. Disabling a
+  size deletes its price on every menu; enabled again, it follows its product back with no menu
+  price of its own. Every writer does it (`takeOffMenus` for a product and `dropMenuPrices` for a
+  size, `packages/catalogue/src/menu-removal.ts`: the product save and editor, the Products list's
+  Disable, a category deleted with its contents, a variant save); the list writers refuse an Inactive product, the size-price route refuses a
+  Disabled size, and a configuration import refuses either on a menu (`setup.request_invalid`).
+  `GET /management-api/products/menus` counts the menus the products are on, and the Disable
+  dialogs say "They come off the N menus they are on…" (or "every menu" while the count is
+  unknown), counting only the products picked directly when a category is selected too.
+  - Open, found in A347's review, believed to predate it: an imported bundle may carry priced menu
+    rows for a product no menu reaches, and adding the product back to a menu revives those prices.
+    Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
+    reaches.
+  - Open: a bulk Disable of 500 products could not read the count in A347's review (HTTP 431,
+    because the ids go in the URL), so the dialog says "every menu"; the smallest count that fails
+    was not measured.
+  - Open: deleting a category with its contents says its products come off every menu, with no
+    count.
+  - Open, for A348: the Price overrides widget still handles disabled rows `menuPrices` no longer
+    sends (`viaParent` and `#active` in `apps/dashboard/src/widgets/menu-prices-table.ts`, the
+    `menu_prices.status_parent_disabled` strings, and the test case asserting a "Disabled" row).
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is

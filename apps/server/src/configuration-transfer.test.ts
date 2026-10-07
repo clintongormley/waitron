@@ -24,6 +24,7 @@ import {
   readSection,
   sectionMembers,
   sections,
+  setMenuVariantPrice,
   setProductVariants,
   updateOptionList,
   writeProductModifiers,
@@ -2261,6 +2262,88 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
         importConfigurationTables(tx, withProduct, result, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({ code: "product.name_taken" });
+  const persisted = await targetSuite.db.execute<{ count: number }>(sql`
+    select count(*) as count from tenants where tax_id = ${target.taxId}
+  `);
+  expect(persisted.rows[0]!.count).toBe(0);
+});
+
+it("refuses an Inactive product in a menu list and a menu price for an Inactive variant", async () => {
+  const source = await applyVenue(planVenue(venue("B31415926"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const ids = await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Inactive rows" });
+    const gin = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Gin",
+      pricingUnit: "each",
+      unitPrice: "5.00",
+      vatClass: "general",
+    });
+    const [single] = await setProductVariants(
+      tx,
+      gin.id,
+      [
+        {
+          name: "Single",
+          customerName: { es: "Sencillo" },
+          kitchenName: null,
+          image: null,
+          unitPrice: "5.50",
+          available: true,
+          active: true,
+        },
+      ],
+      "es",
+    );
+    const item = await addProductToMenu(tx, { menuId: menu.id, productId: gin.id });
+    await setMenuVariantPrice(tx, item.id, single!.id, "6.00", menu.id);
+    return { gin: gin.id, single: single!.id };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const clean = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-07T12:00:00Z"),
+    versions,
+  );
+  expect(clean.tables.section_members!.some((row) => row.product_id === ids.gin)).toBe(true);
+  expect(
+    clean.tables.menu_item_variant_overrides!.some((row) => row.variant_id === ids.single),
+  ).toBe(true);
+  expect(() => validateConfigurationBundle(clean, ALL_MODULES, versions)).not.toThrow();
+  const inactive = (id: string): ConfigurationBundle => ({
+    ...clean,
+    tables: {
+      ...clean.tables,
+      products: clean.tables.products!.map((row) => (row.id === id ? { ...row, active: 0 } : row)),
+    },
+  });
+
+  expect(() =>
+    validateConfigurationBundle(inactive(ids.single), ALL_MODULES, versions),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "menu_item_variant_overrides.variant_id" },
+    }),
+  );
+  const target = venue("B27182818");
+  await expect(
+    applyVenue(planVenue(target, ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, inactive(ids.gin), result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "section_members.product_id" },
+  });
   const persisted = await targetSuite.db.execute<{ count: number }>(sql`
     select count(*) as count from tenants where tax_id = ${target.taxId}
   `);

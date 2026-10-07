@@ -122,7 +122,7 @@ owned section's id.
 `menu_section.member_cycle` (409, `sectionId`, `childSectionId`) refuses a loop of inclusions,
 including a menu containing itself. `menu_section.member_duplicate` (409, `sectionId`) refuses
 an already-held target. `menu_section.membership_invalid` (400) refuses missing or variant product
-ids and repeated ids in a product batch. `menu_section.invalid` (400, `field`) refuses a blank
+ids, an Inactive product, and repeated ids in a product batch. `menu_section.invalid` (400, `field`) refuses a blank
 internal name, an invalid colour or image, and a negative or non-integer position.
 `menu_section.translation_required` (400, `field: "names"`, `language`) refuses a non-empty
 customer-name map without text in the default language; invalid language keys answer
@@ -145,18 +145,18 @@ value. The retired `active` and `offered` fields are refused with `management.re
 this menu answers `menu_item.not_found` (404). Publish again to change what the till sells.
 
 `PATCH /management-api/catalogues/:id/items/:itemId/variants/:variantId` sets or clears this
-menu's price for one size of the item's product, Active or Disabled, and leaves every other size's
-price as it is. The body is `{ price }`, a price or null; it returns 204. A missing `price`, or one
+menu's price for one Active size of the item's product, and leaves every other size's price as it
+is. The body is `{ price }`, a price or null; it returns 204. A missing `price`, or one
 that is neither a string nor null, answers `management.request_invalid` (400, `field: "price"`),
 and any other key in the body answers the same code naming that key. A malformed price answers
-`product.variant_invalid` (400, `field: "price"`); a size that is not one of the product's,
-`product.variant_not_found` (404); an item of another menu, or one this menu no longer reaches,
+`product.variant_invalid` (400, `field: "price"`); a size that is not one of the product's Active
+sizes, `product.variant_not_found` (404); an item of another menu, or one this menu no longer reaches,
 `menu_item.not_found` (404).
 
-`GET /management-api/catalogues/:id/prices` gives one row per product reached by the working
-structure, Active or Disabled, including sold-out products. An inactive menu gives no rows. Each row is
+`GET /management-api/catalogues/:id/prices` gives one row per Active product reached by the
+working structure, including sold-out products. An inactive menu gives no rows. Each row is
 `{ menuItemId, productId, name, categoryId, placements, override, effectivePrice, combined, active, variants }`,
-with `active` the product's own Active state.
+with `active` the product's own Active state, so always true.
 `override` is this menu's saved price, which may be null. `combined` explains the resulting price,
 including each variant's. Each setting is either decided, with its `value`, `source` and
 `otherwise`, or a clash with its `candidates`. A source
@@ -171,8 +171,8 @@ source records whether it was decided at the size or product level. For example,
 to €3.00 and Casa Delgado includes only Drinks' beer, Casa charges €3.00. If Casa also places that
 beer in its own Specials at the product's €2.80, the two values clash. Setting Casa's own beer
 price to €3.00 resolves it. `variants` keeps the menu's size prices as
-`{ variantId, price, active }`, one per size, disabled ones included, with `price` null where this
-menu sets none and `active` the size's own Active state; `combined.variants` explains each one's
+`{ variantId, price, active }`, one per Active size, with `price` null where this menu sets none and
+`active` the size's own Active state, so always true; `combined.variants` explains each one's
 result.
 
 `GET /management-api/catalogues/:id/status` gives `{ state: "unpublished", clashes }`, or
@@ -294,8 +294,9 @@ Malformed ids answer `shared.invalid_id` (400) and malformed bodies `management.
 `menu.home_display_invalid` (400, `device`, `field`) refuses a value that device cannot take,
 `field` being `columns`, `tiles` or `order`; with more than one wrong it names the first in that
 order. `menu.shortcut_unreachable` (409, `ref`) refuses a target outside the working structure,
-including the menu's own root. Disabled products are structurally accepted, but publish as empty
-slots. `menu_section.wrong_role` (409, `sectionId`, `role`) refuses a Device Home Page section,
+including the menu's own root, and a Disabled product, which no list holds. A shortcut to a product
+disabled later becomes a missing tile in its place, which publishes as an empty slot with a
+`shortcut_missing` warning. `menu_section.wrong_role` (409, `sectionId`, `role`) refuses a Device Home Page section,
 this menu's or another's, as a target. `menu_section.not_found` names a missing section, or a
 member the menu's Device Home Page does not hold; a product target must be a stored top-level
 product or it answers `menu_section.membership_invalid` (400). A repeated target answers
@@ -356,12 +357,31 @@ requested keeps its captured selection, including while the category summary is 
 
 With only products selected, the toolbar's action reads **Disable**: it switches them off (the
 product's `active` flag), and its dialog asks "Disable N products?". Their rows and previous sales
-remain, and you can enable the products again later, each from its row menu's **Enable**. When
+remain, and you can enable the products again later, each from its row menu's **Enable**. The
+dialog adds how many menus the products come off, read from `GET /management-api/products/menus`
+(below): "They come off the 2 menus they are on.", nothing when
+they are on none, and "They come off every menu they are on." while the count is being read or when
+it cannot be read. With a category in the selection, the count covers only the products selected
+directly. When
 every selected product is disabled already, the toolbar offers no **Disable**; a selection that
 mixes active and disabled products still offers it, and the disabled ones stay disabled. Once a category is in the selection the action
 reads **Delete**, because the category itself is deleted. Products you selected directly are still
 only disabled. The products inside the category, its subcategories included, are disabled only if
-you choose the dialog's "Also: …" answer; with the other answer they stay active.
+you choose the dialog's "Also: …" answer; with the other answer they stay active. Once that answer
+is chosen and the categories hold active products, the dialog adds "Products disabled by this deletion
+come off every menu they are on.", with no count.
+
+A disabled product is on no menu. Disabling one, whichever way (this toolbar, a category deleted
+with its contents, the product's row menu or its editor), takes it off every list that holds it in
+the same transaction and clears its prices on every menu; each menu's next publish leaves it out. A Device Home Page
+shortcut to it becomes a missing tile in its place. Enabling it again does not put it back on any
+menu. A disabled size holds no menu price: disabling one deletes its
+price on every menu, and enabling it again brings it back wherever its product is listed, with no
+menu price of its own until one is set. A configuration import refuses a bundle that puts a
+disabled product in a list or a shortcut (`setup.request_invalid`,
+`field: "section_members.product_id"`) or gives a disabled size a menu price
+(`field: "menu_item_variant_overrides.variant_id"`).
+
 Before deleting a category that holds active products or subcategories, the compact dialog asks
 "What happens to what is inside?". Each answer names what it does, counting only active products
 and leaving out anything that is zero. The place named is the shared parent's path, **No
@@ -436,6 +456,7 @@ category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_
 | `PATCH /management-api/categories/:id` | supplied name, parent or colour fields; 200, saved category |
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents, shown }`; 204 |
+| `GET /management-api/products/menus?id=<id>&id=<id>` | 200, `{ menus }`: how many Active menus' structures reach any of the products, each menu once, a menu that reaches them only through an included menu too; a size counts by its product, and a Device Home Page shortcut alone counts nothing; no id gives `{ menus: 0 }`, and a malformed id is `shared.invalid_id` (400) |
 | `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes disabled products, `activeProducts` leaves them out; `routes` counts the routing cells on the category's row or the row of any category below it, `ownRoutes` those on the category's own row |
 
 Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`

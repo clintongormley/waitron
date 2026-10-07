@@ -5,7 +5,8 @@ import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
 import { listCategories, vacateCategories, validateParent, type Category } from "./categories.js";
 import { assertCategoryNamesFree } from "./category-names.js";
-import { deactivateProduct } from "./operations.js";
+import { takeOffMenus } from "./menu-removal.js";
+import { markInactive } from "./operations.js";
 import { isTopLevelProduct } from "./variant-fallback.js";
 import "./errors.js";
 
@@ -143,30 +144,34 @@ export async function deleteCatalogueItems(
   const tree = await readTree(tx, selection);
   if (shown !== undefined) await assertContentsAsShown(tx, tree, selection.categoryIds, shown);
   if (contents === "move_up") await assertMovedUpNamesFree(tx, tree, selection.categoryIds);
-  for (const id of selection.productIds) await deactivateProduct(tx, id);
+  await markInactive(tx, selection.productIds);
+  const deactivated = [...selection.productIds];
   if (contents === "move_up") {
     for (const id of tree.byDepth(selection.categoryIds, "deepest"))
       await removeFolder(tx, id, tree.parent(id));
-    return;
-  }
-  const gone = new Set<string>();
-  for (const id of tree.byDepth(selection.categoryIds, "shallowest")) {
-    if (gone.has(id)) continue; // inside a selected folder already deleted with its contents
-    const parent = tree.parent(id);
-    const subtree = tree.subtree(id);
-    for (const batch of batches(subtree)) {
-      const inside = await tx
-        .select({ id: products.id })
-        .from(products)
-        .where(and(inArray(products.categoryId, batch), isTopLevelProduct));
-      for (const product of inside) await deactivateProduct(tx, product.id);
-      await vacateCategories(tx, batch, parent);
+  } else {
+    const gone = new Set<string>();
+    for (const id of tree.byDepth(selection.categoryIds, "shallowest")) {
+      if (gone.has(id)) continue; // inside a selected folder already deleted with its contents
+      const parent = tree.parent(id);
+      const subtree = tree.subtree(id);
+      for (const batch of batches(subtree)) {
+        const inside = await tx
+          .select({ id: products.id })
+          .from(products)
+          .where(and(inArray(products.categoryId, batch), isTopLevelProduct));
+        const ids = inside.map((product) => product.id);
+        await markInactive(tx, ids);
+        deactivated.push(...ids);
+        await vacateCategories(tx, batch, parent);
+      }
+      for (const folder of tree.byDepth(subtree, "deepest")) {
+        await removeFolder(tx, folder, tree.parent(folder));
+        gone.add(folder);
+      }
     }
-    for (const folder of tree.byDepth(subtree, "deepest")) {
-      await removeFolder(tx, folder, tree.parent(folder));
-      gone.add(folder);
-    }
   }
+  await takeOffMenus(tx, deactivated);
 }
 
 /**

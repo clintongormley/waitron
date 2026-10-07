@@ -493,6 +493,56 @@ describe("folder selection routes", () => {
   );
 });
 
+describe("GET /management-api/products/menus", () => {
+  it("counts the menus the products are on, each once", async () => {
+    const app = mountApp();
+    const first = await createCatalogueVia(app, `Menus count A ${crypto.randomUUID()}`);
+    const second = await createCatalogueVia(app, `Menus count B ${crypto.randomUUID()}`);
+    const onBoth = await createNamedProductVia(app, `On both ${crypto.randomUUID()}`);
+    const onOne = await createNamedProductVia(app, `On one ${crypto.randomUUID()}`);
+    const onNone = await createNamedProductVia(app, `On none ${crypto.randomUUID()}`);
+    await offerVia(app, first, onBoth);
+    await offerVia(app, second, onBoth);
+    await offerVia(app, first, onOne);
+    const count = async (ids: string[]) => {
+      const response = await send(
+        app,
+        "GET",
+        `/management-api/products/menus?${ids.map((id) => `id=${id}`).join("&")}`,
+      );
+      expect(response.status).toBe(200);
+      return response.json();
+    };
+    expect(await count([onBoth])).toEqual({ menus: 2 });
+    expect(await count([onOne, onBoth])).toEqual({ menus: 2 });
+    expect(await count([onOne])).toEqual({ menus: 1 });
+    expect(await count([onNone])).toEqual({ menus: 0 });
+    expect(await count([])).toEqual({ menus: 0 });
+  });
+
+  it("refuses an id that is not a uuid", async () => {
+    const response = await send(mountApp(), "GET", "/management-api/products/menus?id=invalid");
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+  });
+
+  it("is refused without a manager session", async () => {
+    for (const [cookie, status, code] of [
+      [null, 401, "management_session.required"],
+      [staffCookie, 403, "authorization.not_permitted"],
+    ] as const) {
+      const response = await send(
+        mountApp(),
+        "GET",
+        `/management-api/products/menus?id=${crypto.randomUUID()}`,
+        { cookie },
+      );
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+  });
+});
+
 let locationId: string;
 let managerCookie: string;
 let managerPersonId: string;
@@ -2501,31 +2551,39 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
-  it("keeps an Unavailable and an Inactive product on the menu's price list, each with its Active state", async () => {
+  it("keeps an Unavailable product on the menu's price list with its Active state, and takes an Inactive one off it", async () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Management offers");
-    const created = await send(
-      app,
-      "POST",
-      `/management-api/catalogues/${catalogueId}/product-editor`,
-      { body: await editorBody(app) },
-    );
-    const productId = ((await created.json()) as { id: string }).id;
-    const offerId = await offerVia(app, catalogueId, productId, "4.50");
+    const create = async (name: string): Promise<string> => {
+      const created = await send(
+        app,
+        "POST",
+        `/management-api/catalogues/${catalogueId}/product-editor`,
+        { body: await editorBody(app, { name }) },
+      );
+      return ((await created.json()) as { id: string }).id;
+    };
+    const unavailableId = await create("Rutas");
+    const inactiveId = await create("Bravas");
+    const unavailableOffer = await offerVia(app, catalogueId, unavailableId, "4.50");
+    const inactiveOffer = await offerVia(app, catalogueId, inactiveId, "4.50");
     const listed = async (): Promise<[string, boolean][]> =>
       (await menuPricesVia(app, catalogueId)).map(({ menuItemId, active }) => [menuItemId, active]);
 
-    const soldOut = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
-      body: await editorBody(app, { active: true, available: false }),
+    const soldOut = await send(app, "PUT", `/management-api/products/${unavailableId}/editor`, {
+      body: await editorBody(app, { name: "Rutas", active: true, available: false }),
     });
     expect(soldOut.status).toBe(200);
-    expect(await listed()).toEqual([[offerId, true]]);
+    expect(await listed()).toEqual([
+      [unavailableOffer, true],
+      [inactiveOffer, true],
+    ]);
 
-    const deleted = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
-      body: await editorBody(app, { active: false, available: true }),
+    const deleted = await send(app, "PUT", `/management-api/products/${inactiveId}/editor`, {
+      body: await editorBody(app, { name: "Bravas", active: false, available: true }),
     });
     expect(deleted.status).toBe(200);
-    expect(await listed()).toEqual([[offerId, false]]);
+    expect(await listed()).toEqual([[unavailableOffer, true]]);
   });
 
   it("creates a product with its kitchen course in one save", async () => {

@@ -15,6 +15,7 @@ import {
   moveCatalogueItems,
   deleteCatalogueItems,
   summariseFolders,
+  menusHolding,
   type CatalogueSelection,
   type FolderContents,
   type ShownFolderCounts,
@@ -1285,6 +1286,13 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const session = requireManagementSession(c);
       return c.json(await gated(c, session, (tx) => listProducts(tx)));
+    }),
+  );
+  app.get("/management-api/products/menus", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const ids = (c.req.queries("id") ?? []).map((id) => requireUuidParam(id, "ProductId"));
+      return c.json({ menus: await gated(c, session, (tx) => menusHolding(tx, ids)) });
     }),
   );
   app.get("/management-api/products/made-at", (c) =>

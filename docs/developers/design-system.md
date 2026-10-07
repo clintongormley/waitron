@@ -2910,8 +2910,8 @@ changed, while an Unavailable one stays listed with an "Unavailable" badge besid
 A variant's Disable and Enable work the same way, on the products list and in the product editor's
 variants section; a disabled variant is hidden behind the list's same Status filter, and in the
 editor until the "Show N disabled" link beside Add variant shows it. A menu's Price overrides tab
-shows Active or Disabled in its Status column, as a link to the product's page, and never shows
-Available.
+lists no disabled product or size, because disabling one takes it off every menu; its Status
+column is a link to the product's page and never shows Available.
 
 ### Navigation and language controls
 

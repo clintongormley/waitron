@@ -90,7 +90,7 @@ export interface MenuVariant {
   price: string | null;
 }
 
-/** One size's price setting on one menu, with its own Active state. */
+/** One Active size's price setting on one menu. */
 export interface MenuPriceVariant extends MenuVariant {
   active: boolean;
 }
@@ -112,7 +112,7 @@ export interface MenuPriceRow {
   effectivePrice: string;
   /** The product's own Active state. A size's is on its `variants` entry. */
   active: boolean;
-  /** Every size, Inactive ones too, in variant order. */
+  /** Every Active size, in variant order; an Inactive one is on no menu. */
   variants: MenuPriceVariant[];
 }
 
