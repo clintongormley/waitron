@@ -77,7 +77,7 @@ export interface ExtraExplanation {
   fallbacks: FallbackStep[];
 }
 
-/** @deprecated Used only by the old exception routes; delete with them. */
+/** @deprecated The old exception writers' input; deleted with them in Task 8a. */
 export interface ExceptionInput {
   zoneId: string | null;
   categoryId: string | null;
