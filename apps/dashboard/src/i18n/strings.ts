@@ -401,7 +401,7 @@ export const en = {
   "content_gaps.load_error": "Missing translations could not be loaded.",
   "content_gaps.count": "{count} missing",
   "content_gaps.none": "Nothing missing",
-  "content_gaps.complete": "Every name has a {language} translation.",
+  "content_gaps.complete": "Every name has a translation in {language}.",
   "content_gaps.required_warning_one":
     "{language} stays enabled for venues in this region, and 1 name is not translated into it yet.",
   "content_gaps.required_warning":
@@ -2857,7 +2857,7 @@ export const es: Record<StringKey, string> = {
   "content_gaps.load_error": "No se pudieron cargar las traducciones que faltan.",
   "content_gaps.count": "{count} sin traducir",
   "content_gaps.none": "Nada sin traducir",
-  "content_gaps.complete": "Todos los nombres están traducidos al {language}.",
+  "content_gaps.complete": "Todos los nombres tienen una traducción en {language}.",
   "content_gaps.required_warning_one":
     "El {language} se mantiene activado en los locales de esta región y falta 1 nombre por traducir a este idioma.",
   "content_gaps.required_warning":

@@ -1,7 +1,5 @@
-import {
-  customerPresentationText,
-  staffPresentationName,
-} from "@waitron/catalogue/src/product-presentation.js";
+import { staffPresentationName } from "@waitron/catalogue/src/product-presentation.js";
+import { resolveContentText } from "@waitron/shared";
 import type { ProductPresentation } from "@waitron/catalogue/src/product-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
@@ -39,11 +37,9 @@ export function lineProductName(product: TillProduct): string {
 
 /** For a document a diner reads (the printed allergen sheet), never for an operator lookup. */
 export function customerProductName(product: TillProduct, locale: string): string {
-  const { product: text } = customerPresentationText(
-    toPresentation(product),
-    currentContentLanguages().defaultLanguage,
-  );
-  return descriptionFor(text, product.name, locale);
+  if (!currentContentLanguages().languages.includes(locale.split("-")[0]!)) return product.name;
+  // The sheet uses staff text when its chosen translation is missing; it does not choose another translation.
+  return resolveContentText(product.customerName ?? {}, locale, locale) || product.name;
 }
 
 export function unitName(

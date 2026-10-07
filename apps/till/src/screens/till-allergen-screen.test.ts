@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillAllergenScreen, ALLERGEN_DISPLAY_ORDER } from "./till-allergen-screen.js";
 import { ALLERGEN_NAMES, allergenName } from "../i18n/allergen-names.js";
+import { setContentLanguages } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { TillProduct } from "../api/client.js";
 
@@ -354,6 +355,37 @@ describe("till-allergen-screen", () => {
       ]);
     } finally {
       printSpy.mockRestore();
+    }
+  });
+
+  it("prints unsupported receipt languages with English headings and English customer names", async () => {
+    setContentLanguages({ defaultLanguage: "ca", languages: ["ca", "en", "es"] });
+    let printed: string[] = [];
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {
+      printed = [".title", ".pending-cell", '[scope="col"]', ".row-open"].map((selector) =>
+        el.shadowRoot!.querySelector(selector)!.textContent!.trim(),
+      );
+    });
+    const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
+      products: [{ ...coffee, customerName: { ...coffee.customerName, ca: "Cafè per al client" } }],
+      locale: "es-ES",
+      invoiceLocale: "ca-ES",
+    });
+    try {
+      el.shadowRoot!.querySelector<HTMLElement>("wt-button.print")!.click();
+      await el.updateComplete;
+      expect(printSpy).toHaveBeenCalledTimes(1);
+      expect(printed).toEqual([
+        "Allergens",
+        "Allergen info pending",
+        "Cereals containing gluten",
+        "Coffee for the customer",
+      ]);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector(".row-open")!.textContent!.trim()).toBe("Café");
+    } finally {
+      printSpy.mockRestore();
+      setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
     }
   });
 
