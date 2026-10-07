@@ -15,6 +15,14 @@ describe.each(["light", "dark"] as const)("wt-toast a11y (%s theme)", (theme) =>
     await expectNoA11yViolations(host);
   });
 
+  test("an open info toast with an action", async () => {
+    await mountThemed(
+      '<wt-toast open message="Price saved" close-label="Close" duration="0"><button slot="action">Undo</button></wt-toast>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test("a closed toast", async () => {
     await mountThemed('<wt-toast message="x" close-label="Close"></wt-toast>', theme);
     await expectNoA11yViolations(host);

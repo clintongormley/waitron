@@ -49,6 +49,9 @@ export class WtToast extends LitElement {
         padding: 0 var(--wt-space-2);
         text-align: start;
       }
+      ::slotted([slot="action"]) {
+        align-self: center;
+      }
     `,
   ];
 
@@ -132,6 +135,7 @@ export class WtToast extends LitElement {
           @focusout=${this.#onFocusChange}
         >
           <button class="message" type="button" @click=${this.#onMessage}>${this.message}</button>
+          <slot name="action"></slot>
           <button class="close" type="button" aria-label=${this.closeLabel} @click=${this.#onClose}>
             <wt-icon name="close"></wt-icon>
           </button>

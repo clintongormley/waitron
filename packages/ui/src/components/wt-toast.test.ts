@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { commands, userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { WtToast } from "./wt-toast.js";
 import "./wt-toast.js";
@@ -304,6 +305,73 @@ test("a toast dismissed by hand and shown again gets the full countdown, not the
   await el.updateComplete;
   el.show();
   await el.updateComplete;
+  vi.advanceTimersByTime(999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(el.open).toBe(false);
+});
+
+const withAction = (attrs: string) =>
+  `<wt-toast ${attrs} message="Saved" close-label="Close"><button slot="action">Undo</button></wt-toast>`;
+
+test("an open toast draws its action between the message and the close button", async () => {
+  const el = (await mount(withAction("open"))) as WtToast;
+  const slot = part(el, '.toast slot[name="action"]')!;
+  expect(slot).not.toBeNull();
+  expect(slot.previousElementSibling!.classList.contains("message")).toBe(true);
+  expect(slot.nextElementSibling!.classList.contains("close")).toBe(true);
+  const action = el.querySelector("button")!;
+  const box = action.getBoundingClientRect();
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.height).toBeGreaterThan(0);
+  const message = part(el, ".message")!.getBoundingClientRect();
+  const close = part(el, ".close")!.getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(message.right);
+  expect(box.right).toBeLessThanOrEqual(close.left);
+});
+
+test("a closed toast draws no action", async () => {
+  const el = await mount(withAction(""));
+  const box = el.querySelector("button")!.getBoundingClientRect();
+  expect(box.width).toBe(0);
+  expect(box.height).toBe(0);
+});
+
+test("pressing the action neither closes the toast nor activates it", async () => {
+  const el = (await mount(withAction("open"))) as WtToast;
+  const activated = vi.fn();
+  const closed = vi.fn();
+  el.addEventListener("wt-activate", activated);
+  el.addEventListener("wt-close", closed);
+  await userEvent.click(el.querySelector("button")!);
+  expect(el.open).toBe(true);
+  expect(activated).not.toHaveBeenCalled();
+  expect(closed).not.toHaveBeenCalled();
+});
+
+test("keyboard focus on the action pauses the countdown until it leaves", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const el = (await mount(withAction('open duration="1000"'))) as WtToast;
+  const action = el.querySelector("button")!;
+  action.focus();
+  vi.advanceTimersByTime(5_000);
+  expect(el.open).toBe(true);
+  action.blur();
+  vi.advanceTimersByTime(999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(el.open).toBe(false);
+});
+
+test("the pointer over the action pauses the countdown until it leaves", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await commands.parkPointer();
+  const el = (await mount(withAction('open duration="1000"'))) as WtToast;
+  await userEvent.hover(el.querySelector("button")!);
+  vi.advanceTimersByTime(5_000);
+  expect(el.open).toBe(true);
+  // userEvent.unhover() hovers the middle of <body>, which can land on the toast itself.
+  await commands.parkPointer();
   vi.advanceTimersByTime(999);
   expect(el.open).toBe(true);
   vi.advanceTimersByTime(1);
