@@ -1106,6 +1106,7 @@ export class TillApp extends LitElement {
     super.connectedCallback();
     this.#subscribeRouter();
     this.#syncBasketDraft();
+    this.#syncPartylessDraft();
     // pointerdown/keydown are composed, so they reach this host from inside the screens' shadow roots.
     this.addEventListener("pointerdown", this.#onInteraction);
     this.addEventListener("keydown", this.#onInteraction);
@@ -1114,6 +1115,10 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#partylessScope?.dispose();
+    this.#partylessScope = undefined;
+    this.#partylessUnsubscribe?.();
+    this.#partylessUnsubscribe = undefined;
     this.#basketScope?.dispose();
     this.#basketScope = undefined;
     this.#releaseEditDeadEnds();
@@ -1145,10 +1150,10 @@ export class TillApp extends LitElement {
   #basketGeneration = 0;
   #basketObserved?: string;
 
-  #basketPayload(): string {
+  #basketPayload(store = this.#store): string {
     return JSON.stringify([
-      this.#store.label ?? null,
-      this.#store.lines.map((line) => [
+      store.label ?? null,
+      store.lines.map((line) => [
         line.product.id,
         line.product.menuItemId ?? null,
         line.product.variantId ?? null,
@@ -1417,6 +1422,49 @@ export class TillApp extends LitElement {
   #signIns = 0;
   /** The draft of an order with no party, which is never saved. */
   #partylessDraft = new WorkingOrderStore();
+  readonly #partylessOwner = {};
+  #partylessScope?: DraftScope<string>;
+  #partylessUnsubscribe?: () => void;
+  #partylessObserved?: string;
+
+  #partylessPayload(): string {
+    return JSON.stringify([
+      this.#basketPayload(this.#partylessDraft),
+      this.#partylessDraft.lines.map((line) => [line.courseId ?? null, line.noMerge === true]),
+    ]);
+  }
+
+  #syncPartylessDraft(): void {
+    if (!this.isConnected) return;
+    this.#partylessUnsubscribe ??= this.#partylessDraft.subscribe(() => this.#syncPartylessDraft());
+    if (!this.#partylessScope) {
+      this.#partylessScope = this.leave.coordinator.register({
+        id: this.#partylessOwner,
+        current: () => this.#partylessPayload(),
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        // A refused table read must keep the draft; the accepted replacement performs its reset.
+        restore: () => undefined,
+      });
+      this.#partylessScope.commit(JSON.stringify([JSON.stringify([null, []]), []]));
+      this.#partylessObserved = this.#partylessPayload();
+    }
+    const payload = this.#partylessPayload();
+    if (payload !== this.#partylessObserved) {
+      this.#partylessObserved = payload;
+      this.#partylessScope.changed();
+    }
+  }
+
+  #resetPartylessDraft(): void {
+    this.#partylessScope?.dispose();
+    this.#partylessScope = undefined;
+    this.#partylessUnsubscribe?.();
+    this.#partylessUnsubscribe = undefined;
+    this.#partylessDraft.clear();
+    this.#partylessDraft = new WorkingOrderStore();
+    this.#syncPartylessDraft();
+  }
   /** {@link #draftSync} has been read, so the screen may show it. */
   #draftReady = false;
   /** The draft may hold lines priced against a menu version that is not the live one, and has not
@@ -1771,11 +1819,12 @@ export class TillApp extends LitElement {
   readonly #url = new UrlStateController(this, () => this.#onHistory(), {
     ...tillPath,
     leave: {
-      isDirty: () => this.leave.coordinator.isDirty(undefined, [this.#basketOwner]),
+      isDirty: () =>
+        this.leave.coordinator.isDirty(undefined, [this.#basketOwner, this.#partylessOwner]),
       request: (proceed, signal) =>
         this.leave.coordinator.request({
           scopes: "all",
-          except: [this.#basketOwner],
+          except: [this.#basketOwner, this.#partylessOwner],
           reason: "navigation",
           proceed,
           signal,
@@ -1797,13 +1846,15 @@ export class TillApp extends LitElement {
     proceed: () => void | Promise<void>,
     reason: "navigation" | "signout" = "navigation",
   ): void {
-    if (!this.leave.coordinator.isDirty(undefined, [this.#basketOwner])) {
+    const except =
+      reason === "signout" ? [this.#basketOwner] : [this.#basketOwner, this.#partylessOwner];
+    if (!this.leave.coordinator.isDirty(undefined, except)) {
       void proceed();
       return;
     }
     void this.leave.coordinator.request({
       scopes: "all",
-      except: [this.#basketOwner],
+      except,
       reason,
       proceed,
     });
@@ -4493,6 +4544,18 @@ export class TillApp extends LitElement {
   /** A free table seats a party with the guest count given; a seated one resumes its party
    * ({@link billToOpen}). */
   async #onOpenTable(event: Event): Promise<void> {
+    if (this.#partylessScope?.isDirty()) {
+      await this.leave.coordinator.request({
+        scopes: [this.#partylessOwner],
+        reason: "navigation",
+        proceed: () => this.#openTableFromEvent(event),
+      });
+      return;
+    }
+    await this.#openTableFromEvent(event);
+  }
+
+  async #openTableFromEvent(event: Event): Promise<void> {
     if (!this.#inShell()) return;
     const { tableId, seated, guestCount } = (
       event as CustomEvent<{ tableId: string; seated: boolean; guestCount?: number | null }>
@@ -4835,7 +4898,7 @@ export class TillApp extends LitElement {
    * in an operator session that has since ended. */
   async #openDraft(read: boolean, session: number): Promise<OpenedDraft> {
     this.#dropDraft();
-    this.#partylessDraft = new WorkingOrderStore();
+    this.#resetPartylessDraft();
     if (session !== this.#operatorSession) return undefined;
     const party = this.orderParty;
     if (party === null) return { sync: undefined, read: true };
@@ -7328,7 +7391,9 @@ export class TillApp extends LitElement {
 
   #endOperatorSession(): void {
     this.#stopClockStatus();
+    this.#resetPartylessDraft();
     this.leave.forceReset();
+    this.#partylessScope = undefined;
     this.#basketScope = undefined;
     this.#syncBasketDraft();
     navigationGuardFor(window)?.reset();

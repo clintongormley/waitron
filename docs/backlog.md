@@ -1173,6 +1173,14 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Unassigned table orders now register their memory-only draft separately from automatically saved
+party drafts. Tabs retain those lines without asking; opening another table or signing out asks
+first. Keep retains the draft, and an approved but refused table read keeps it unload-protected.
+Inactivity lock clears that local draft and cancels a pending question. The focused real-shell
+cases cover edited/reverted/clean values, stale answers, native Escape and focus return;
+the dated audit records the failing tests, installed deletion controls and inspected captures.
+The final advancing-owner/context/link audit and branch review remain unfinished.
+
 The till's profile switch now protects an edited Schedule request before changing context.
 Keep retains its note and chooser; Discard switches once without submitting. An order filled
 while the question is open still refuses the switch. Clean/reverted requests switch directly,

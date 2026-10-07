@@ -3772,3 +3772,56 @@ advancing-owner inventory and remaining context/link acceptance still keep W69 i
 In particular, inspect the separate unassigned table store and its replacement paths during that
 inventory; no runtime defect or exemption is established here for that store. Tasks 2/3 remain
 complete; Tasks 1/4/5/6 remain partial. No external review, push, PR, CI or landing is claimed.
+
+
+## Unassigned table orders, 2026-10-07
+
+The actual till shell's unassigned table draft is a separate `WorkingOrderStore` from the
+counter basket and the automatically saved party draft. Three new cases failed before the fix:
+after adding Beer the unload event was not cancelled; opening another table did not ask before
+replacing the draft; voluntary signout did not ask. The second red run put the replacement
+assertion before the unload assertion, establishing the missing table gate independently.
+
+That store now supplies its own shared draft scope. Its comparison includes order values,
+course overrides and split-row markers; display-only notifications do not cancel an outstanding
+question. Tabs and history that retain the store exclude its scope from the navigation question.
+Opening another table includes it; Keep retains the local lines and Discard continues the read.
+A refused read keeps those lines and the unload listener. Voluntary signout includes this scope,
+while inactivity lock clears the local store immediately and invalidates the old decision.
+The counter basket continues to follow its separate retained lifecycle. Party drafts remain
+exempt and the test observes their normal automatic save after returning to the floor.
+
+Commands retained in Lane E `receipts/w69-partyless-20261007/`:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app-drafts.test.ts -t 'W69 unassigned table draft'
+# initial three cases: 3 failed; expanded final cases: 18 passed
+pnpm --filter @waitron/till exec vitest run src/till-app-drafts.test.ts src/till-app.test.ts src/till-app.unsaved-changes.test.ts
+# 955 passed before adding the fifteen additional controls/visual cases
+pnpm exec vitest run scripts/english-only.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/claude-md-pointers.test.ts
+# 1334 passed
+```
+
+The related till run prints the deliberately incomplete printer-choice fixture's rejection;
+`receipts/w69-till-pages-20261007/baseline-switch.log` holds the earlier installed baseline
+receipt. No printer behavior or existing assertion changed here. The mount helper gained an
+optional theme argument for the new capture matrix.
+
+Eight native table-button/Escape/Keep/Discard flows passed in EN/ES, light/dark and 390/1280 widths.
+They assert initial Keep focus and return focus to the same table button, retained lines and no
+party draft read before Discard. Eight warning-only neutral-pointer axe scans passed. Sixteen
+captures were inspected in four contact sheets. The API is synthetic; its kitchen read refusal
+and unknown clock produce banners behind the warning. This is no live-venue or full-shell
+accessibility measurement, and this owner uses dispatched unload events rather than a new
+activated native reload experiment. Earlier actual-Schedule native leave receipts remain separate.
+
+Five independent mutations ran in a fully installed detached measuring checkout containing the
+complete candidate. Removing the store subscription, table gate, signout inclusion, course
+comparison or inactivity reset each failed its intended case alongside three passing
+clean/revert/automatic-save controls. `deletions.json` records the exact commands and summaries.
+The candidate is restored and its sources compared before removal; cleanup is recorded locally.
+
+This checkpoint covers the measured unassigned table owner. The final advancing-source inventory,
+remaining context/link acceptance, reconciliation with main, whole-branch review and current-head
+CI remain outstanding. Tasks 2/3 stay complete; Tasks 1/4/5/6 stay partial. W69 is not ready for
+finish-branch or landing.
