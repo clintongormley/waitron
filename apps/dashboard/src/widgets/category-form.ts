@@ -1,4 +1,5 @@
 import type { CategorySummary } from "../api/client.js";
+import { compareDecimal, decimal } from "@waitron/shared";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
@@ -42,9 +43,28 @@ export function categoryPathSearchText(
     .join("\n");
 }
 
-/** The collation `wt-data-table` sorts text with, so a picker or list and the tables agree. */
 export function byLabel(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  const left = a.match(/\d+(?:[.,]\d+)?|\D+/g) ?? [];
+  const right = b.match(/\d+(?:[.,]\d+)?|\D+/g) ?? [];
+  for (let index = 0; index < Math.min(left.length, right.length); index++) {
+    const x = left[index]!;
+    const y = right[index]!;
+    const numbers = /^\d/.test(x) && /^\d/.test(y);
+    const compared = numbers
+      ? compareDecimal(
+          decimal(x.replace(",", ".").replace(/^0+(?=\d)/, "")),
+          decimal(y.replace(",", ".").replace(/^0+(?=\d)/, "")),
+        )
+      : x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" });
+    if (compared !== 0)
+      return numbers
+        ? compared
+        : left.slice(index).join("").localeCompare(right.slice(index).join(""), undefined, {
+            numeric: true,
+            sensitivity: "base",
+          });
+  }
+  return left.length - right.length;
 }
 
 export function categoryWithDescendants(

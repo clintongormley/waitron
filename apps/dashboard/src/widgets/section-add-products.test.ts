@@ -56,6 +56,31 @@ function listed(el: SectionAddProducts): string[] {
   );
 }
 
+it.each(["en-GB", "es-ES"])(
+  "offers decimal-named products and category paths by value in %s",
+  async (locale) => {
+    setLocale(locale);
+    const separator = locale === "es-ES" ? "," : ".";
+    const el = await mount({
+      products: [
+        { id: "half", name: `Bag 0${separator}5 kg`, categoryId: "half" },
+        { id: "quarter", name: `Bag 0${separator}25 kg`, categoryId: "quarter" },
+        { id: "two", name: "Bag 2 kg", categoryId: "half" },
+      ],
+      categories: [
+        category("half", `0${separator}5 kg`, null),
+        category("quarter", `0${separator}25 kg`, null),
+      ],
+    });
+    expect(listed(el)).toEqual(["quarter", "half", "two"]);
+    expect(categoryBox(el).options.map(({ label }) => label)).toEqual([
+      t("add_products.all_categories"),
+      `0${separator}25 kg`,
+      `0${separator}5 kg`,
+    ]);
+  },
+);
+
 async function filterBy(el: SectionAddProducts, categoryId: string): Promise<void> {
   await chooseOption(q(el, 'wt-combobox[name="category"]'), categoryId);
   await el.updateComplete;
