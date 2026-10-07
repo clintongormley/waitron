@@ -2128,8 +2128,10 @@ print through a route CUPS calls deprecated. CUPS held a job while the printer w
 it by itself later; its source code waits 7 days before counting such a job failed. The owner approved drawing pages ourselves (decision 10), and A231 has landed.
 **Next action:** build A231p from the reconciled plan, with email and A4 printing in one PR
 that ends `needs-owner-review`. Physical printer checks need the owner present or an agreed
-arrangement. The build remains unimplemented; it settles A3's open "Printing A4 invoices on
-an office printer" work when complete.
+arrangement. The build is in progress: the shared document content has been extracted from the roll renderer,
+with captured mixed-rate discounted F1 bytes preserved on 58/80 mm paper. PDF/raster rendering,
+delivery metadata, SMTP, office transport and the delivery UI remain to be built; it settles A3's
+open "Printing A4 invoices on an office printer" work when complete.
 
 **Owner decisions in place of the asesor's answers (2026-10-07, under the plan's Task 0.1), so A231p may be built.** Public F1 stays disabled until A231's own enablement gates are met; the asesor is asked to confirm these as [Q44](compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
 
