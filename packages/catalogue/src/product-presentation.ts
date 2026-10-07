@@ -27,7 +27,10 @@ export function joinCustomerPresentationText(
     [...locales].map((locale) => {
       const parentText = resolveSnapshotText(product, locale, locale);
       const variantText = resolveSnapshotText(variant, locale, locale) || variantName;
-      return [locale, variantText ? `${parentText} (${variantText})` : parentText];
+      return [
+        locale,
+        variantText ? (parentText ? `${parentText} (${variantText})` : variantText) : parentText,
+      ];
     }),
   );
 }
