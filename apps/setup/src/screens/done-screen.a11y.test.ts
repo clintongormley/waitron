@@ -22,7 +22,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations once the reload control is offered", async () => {
+  it("has no violations once the server is ready", async () => {
     const { el, host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",
       {
@@ -32,7 +32,11 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
       },
       theme,
     );
-    await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(
+        "The server is ready. Open it here:",
+      ),
+    );
     await expectNoA11yViolations(host);
   });
 
@@ -78,7 +82,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     );
     await expectNoA11yViolations(host);
   });
-  it("has no violations live, with the backup nudge and the reload offered", async () => {
+  it("has no violations live, with the backup nudge and the server ready", async () => {
     const { el, host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",
       {
@@ -89,7 +93,11 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
       },
       theme,
     );
-    await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(
+        "The server is ready. Open it here:",
+      ),
+    );
     expect(q(el, "[data-test=backup-nudge]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });

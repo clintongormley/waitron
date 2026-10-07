@@ -1,10 +1,9 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
-import { actionsStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
+import { helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
 import type { SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -12,18 +11,12 @@ import { t } from "../i18n/t.js";
 
 export const BACKUP_SETUP_URL = "/manage/backup";
 
-/**
- * The wizard's final screen. The box restarts after provision, restore or adopt, and this screen
- * polls `GET /setup-api/status` until the setup route stops answering — see
- * {@link SetupDoneScreen.#pollOnce} for which failures mean "still restarting".
- */
 @customElement("setup-done-screen")
 export class SetupDoneScreen extends LitElement {
   static override styles = [
     helpLinkStyles,
     baseStyles,
     statusStyles,
-    actionsStyles,
     introStyles,
     modePillStyles,
     css`
@@ -95,8 +88,6 @@ export class SetupDoneScreen extends LitElement {
 
   /** True after a rebuild from the owner's bucket, whose devices may need pointing at this server. */
   @property({ type: Boolean }) rebuilt = false;
-
-  @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
   /** A pause before the first poll so the box has begun its restart. */
   @property({ type: Number }) startDelayMs = 800;
@@ -171,23 +162,19 @@ export class SetupDoneScreen extends LitElement {
           ? nothing
           : html`<div class="mode">${modePill(this.onboardingIntent, "mode-indicator")}</div>`
       }
-      <p class="intro">${t("done.restarting")}</p>
+      <p class="intro" data-test="status" role="status">
+        ${t(this.ready ? "done.ready" : "done.restarting")}
+      </p>
       <div class="choices" data-test="links">
-        <wt-choice-row
-          data-test="link-till"
-          heading=${t("done.link.till")}
-          href="/"
-        ></wt-choice-row>
-        <wt-choice-row
-          data-test="link-dashboard"
-          heading=${t("done.link.dashboard")}
-          href="/manage"
-        ></wt-choice-row>
-        <wt-choice-row
-          data-test="link-email"
-          heading=${t("done.link.email")}
-          href="/manage/email"
-        ></wt-choice-row>
+        <wt-choice-row data-test="link-dashboard" heading=${t("done.link.dashboard")} href="/manage"
+          >${t("done.description.dashboard")}</wt-choice-row
+        >
+        <wt-choice-row data-test="link-till" heading=${t("done.link.till")} href="/"
+          >${t("done.description.till")}</wt-choice-row
+        >
+        <wt-choice-row data-test="link-email" heading=${t("done.link.email")} href="/manage/email"
+          >${t("done.description.email")}</wt-choice-row
+        >
       </div>
       ${this.rebuilt ? this.#deviceSteps() : nothing} ${this.#breakGlass()}
       ${
@@ -197,15 +184,6 @@ export class SetupDoneScreen extends LitElement {
               <p>${t("done.backup_nudge")}</p>
               <a href=${BACKUP_SETUP_URL}>${t("done.backup_link")}</a>
             </wt-card>`
-      }
-      ${
-        this.ready
-          ? html`<div class="actions">
-              <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
-                >${t("done.reload")}</wt-button
-              >
-            </div>`
-          : html`<p class="status" data-test="status">${t("done.waiting_online")}</p>`
       }
     `;
   }

@@ -26,7 +26,8 @@ async function mountDone(
   return el;
 }
 
-const RESTART_EN = "The server is restarting — once it is back, open it here:";
+const RESTART_EN = "The server is restarting to finish setup. Once it is back, open it here:";
+const READY_EN = "The server is ready. Open it here:";
 
 afterEach(() => {
   setLocale("en-GB");
@@ -38,6 +39,95 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}));
     expect(el.shadowRoot!.textContent).toContain(RESTART_EN);
   });
+
+  it.each([
+    [
+      "en-GB",
+      [
+        [
+          "Dashboard",
+          "/manage",
+          "Set up your menu, staff, devices and settings, and see your sales.",
+        ],
+        ["Till", "/", "Take orders and payments."],
+        [
+          "Email inbox",
+          "/manage/email",
+          "Read account emails captured locally, such as invitations and password resets.",
+        ],
+      ],
+    ],
+    [
+      "es-ES",
+      [
+        [
+          "Panel",
+          "/manage",
+          "Configura la carta, el personal, los dispositivos y los ajustes, y consulta tus ventas.",
+        ],
+        ["Caja", "/", "Toma pedidos y cobra."],
+        [
+          "Bandeja de correo",
+          "/manage/email",
+          "Lee los correos de cuentas capturados localmente, como invitaciones y restablecimientos de contraseña.",
+        ],
+      ],
+    ],
+  ] as const)(
+    "describes each destination under its heading in %s, dashboard first",
+    async (locale, expected) => {
+      setLocale(locale);
+      const el = await mountDone(() => new Promise(() => {}));
+      const rows = [...q(el, "[data-test=links]")!.querySelectorAll("wt-choice-row")];
+      await Promise.all(rows.map((row) => row.updateComplete));
+      expect(
+        rows.map((row) => [
+          row.heading,
+          row.shadowRoot!.querySelector("a")!.getAttribute("href"),
+          row.textContent!.trim(),
+        ]),
+      ).toEqual(expected);
+      for (const row of rows) {
+        const slot = row.shadowRoot!.querySelector<HTMLSlotElement>("[part=description] slot")!;
+        expect(
+          slot
+            .assignedNodes()
+            .map((node) => node.textContent)
+            .join("")
+            .trim(),
+        ).toBe(row.textContent!.trim());
+        expect(getComputedStyle(slot.parentElement!).display).not.toBe("none");
+      }
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "announces the waiting-to-ready change in one status region in %s",
+    async (locale) => {
+      setLocale(locale);
+      let fail!: (error: unknown) => void;
+      const el = await mountDone(
+        () =>
+          new Promise((_, reject) => {
+            fail = reject;
+          }),
+      );
+      await vi.waitFor(() => expect(fail).toBeTypeOf("function"));
+      const status = q(el, "[data-test=status]")!;
+      expect(status.getAttribute("role")).toBe("status");
+      const waiting =
+        locale === "es-ES"
+          ? "El servidor se está reiniciando para terminar la configuración. Cuando vuelva, ábrelo desde aquí:"
+          : RESTART_EN;
+      expect(status.textContent!.trim()).toBe(waiting);
+      fail({ code: "server.internal" });
+      const ready = locale === "es-ES" ? "El servidor está listo. Ábrelo desde aquí:" : READY_EN;
+      await vi.waitFor(() => expect(status.textContent!.trim()).toBe(ready));
+      expect(q(el, "[data-test=status]")).toBe(status);
+      expect(el.shadowRoot!.querySelectorAll('[role="status"]')).toHaveLength(1);
+      expect(el.shadowRoot!.textContent).not.toContain(waiting);
+    },
+  );
 
   it.each([
     ["demo", "Demo"],
@@ -75,34 +165,34 @@ describe("setup-done-screen", () => {
     // the browser's event loop.
     await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(1));
     expect(q(el, "[data-test=reload]")).toBeNull();
-    expect(q(el, "[data-test=status]")).not.toBeNull();
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(RESTART_EN);
   });
 
-  it("offers the reload once getStatus rejects with a non-2xx code", async () => {
+  it("reports ready once getStatus rejects with a non-2xx code", async () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
     const el = await mountDone(getStatus);
-    await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
-    expect(q(el, "[data-test=status]")).toBeNull();
+    await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
+    expect(q(el, "[data-test=reload]")).toBeNull();
   });
 
-  it("waits through network failures, then offers the reload on the first non-2xx", async () => {
+  it("waits through network failures, then reports ready on the first non-2xx", async () => {
     const getStatus = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockRejectedValue({ code: "server.internal" });
     const el = await mountDone(getStatus);
-    await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
+    await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
   });
 
-  it("keeps waiting while getStatus still resolves, then reloads once it 404s", async () => {
+  it("keeps waiting while getStatus still resolves, then reports ready once it 404s", async () => {
     const getStatus = vi
       .fn()
       .mockResolvedValueOnce({ provisioned: false, environment: "preproduction", needs: ["venue"] })
       .mockResolvedValueOnce({ provisioned: false, environment: "preproduction", needs: ["venue"] })
       .mockRejectedValue({ code: "server.internal" });
     const el = await mountDone(getStatus);
-    await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
+    await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
   });
 
   // The removed element still renders once and arms its first-poll timer after it has left the page.
@@ -128,8 +218,8 @@ describe("setup-done-screen", () => {
   });
 
   // In the case this test guards against, both elements run the same code and the removed one is
-  // rejected first, so it has finished by the time the control shows its reload.
-  it("does not offer the reload when it is removed while a poll is in flight", async () => {
+  // rejected first, so it has finished by the time the control reports ready.
+  it("does not report ready when it is removed while a poll is in flight", async () => {
     const inFlight = () => {
       let fail!: (reason: unknown) => void;
       const getStatus = vi.fn(
@@ -152,22 +242,36 @@ describe("setup-done-screen", () => {
     el.remove();
     removed.fail({ code: "server.internal" });
     control.fail({ code: "server.internal" });
-    await vi.waitFor(() => expect(q(controlEl, "[data-test=reload]")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(q(controlEl, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN),
+    );
     host.appendChild(el);
     await el.updateComplete;
     expect(q(el, "[data-test=reload]")).toBeNull();
-    expect(q(el, "[data-test=status]")).not.toBeNull();
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(RESTART_EN);
     expect(removed.getStatus).toHaveBeenCalledOnce();
   });
 
-  it("reloads into the till when the reload control is clicked", async () => {
-    const reload = vi.fn();
-    const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
-    const el = await mountDone(getStatus, { reload });
-    await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
-    q(el, "[data-test=reload]")!.click();
-    expect(reload).toHaveBeenCalledOnce();
-  });
+  it.each(["en-GB", "es-ES"])(
+    "offers no reload control before or after ready in %s",
+    async (locale) => {
+      setLocale(locale);
+      let fail!: (error: unknown) => void;
+      const el = await mountDone(
+        () =>
+          new Promise((_, reject) => {
+            fail = reject;
+          }),
+      );
+      await vi.waitFor(() => expect(fail).toBeTypeOf("function"));
+      expect(q(el, "wt-button")).toBeNull();
+      fail({ code: "server.internal" });
+      const ready = locale === "es-ES" ? "El servidor está listo. Ábrelo desde aquí:" : READY_EN;
+      await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(ready));
+      expect(q(el, "wt-button")).toBeNull();
+      expect(q(el, "[data-test=reload]")).toBeNull();
+    },
+  );
 
   it("shows a 'no backups yet' nudge with a link to backup setup", async () => {
     const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "live" });
@@ -187,7 +291,7 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}));
     const links = el.shadowRoot!.querySelector("[data-test=links]")!;
     const hrefs = [...links.querySelectorAll("wt-choice-row")].map((row) => row.href);
-    expect(hrefs).toEqual(["/", "/manage", "/manage/email"]);
+    expect(hrefs).toEqual(["/manage", "/", "/manage/email"]);
   });
 
   it("does not promise trading mode on the mirror path", async () => {
@@ -248,24 +352,30 @@ describe("setup-done-screen", () => {
     expect(q(el, "h1")!.textContent!.trim()).toBe("Configuración completada");
     expect(q(el, "[data-test=mode-indicator]")!.textContent!.trim()).toBe("Preparación");
     const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
-    expect(text).toContain("El servidor se está reiniciando: cuando vuelva, ábrelo desde aquí:");
+    expect(text).toContain(
+      "El servidor se está reiniciando para terminar la configuración. Cuando vuelva, ábrelo desde aquí:",
+    );
     const links = [...q(el, "[data-test=links]")!.querySelectorAll("wt-choice-row")].map(
       (row) => row.heading,
     );
-    expect(links).toEqual(["Caja", "Panel", "Bandeja de correo"]);
+    expect(links).toEqual(["Panel", "Caja", "Bandeja de correo"]);
     expect(q(el, "[data-test=backup-nudge] a")!.textContent!.trim()).toBe(
       "Configura ahora las copias de seguridad",
     );
     expect(q(el, "[data-test=status]")!.textContent!.trim()).toBe(
-      "Esperando a que el servidor vuelva a estar en línea…",
+      "El servidor se está reiniciando para terminar la configuración. Cuando vuelva, ábrelo desde aquí:",
     );
   });
 
-  it("offers the reload in Spanish once the server is trading", async () => {
+  it("reports ready in Spanish once the setup route is gone", async () => {
     setLocale("es-ES");
     const el = await mountDone(() => Promise.reject(new Error("404")));
-    await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
-    expect(q(el, "[data-test=reload]")!.textContent!.trim()).toBe("Recargar para abrir la caja");
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(
+        "El servidor está listo. Ábrelo desde aquí:",
+      ),
+    );
+    expect(q(el, "[data-test=reload]")).toBeNull();
   });
 
   it("names the devices to reconnect after a rebuild in Spanish", async () => {
@@ -354,16 +464,16 @@ const pillLook = (pill: HTMLElement) => {
 };
 
 describe("setup-done-screen layout", () => {
-  it("offers the till, dashboard and email inbox as choice rows with headings only", async () => {
+  it("offers dashboard, till and email inbox as choice rows with descriptions", async () => {
     const el = await mountDone(() => new Promise(() => {}));
     const rows = [...q(el, "[data-test=links]")!.querySelectorAll("wt-choice-row")];
     expect(q(el, "[data-test=links]")!.classList.contains("choices")).toBe(true);
     expect(rows.map((row) => [row.heading, row.href])).toEqual([
-      ["Till", "/"],
       ["Dashboard", "/manage"],
+      ["Till", "/"],
       ["Email inbox", "/manage/email"],
     ]);
-    expect(rows.map((row) => row.childNodes.length)).toEqual([0, 0, 0]);
+    expect(rows.every((row) => row.textContent!.trim().length > 0)).toBe(true);
     expect(q(el, "[data-test=links]")!.querySelectorAll("a")).toHaveLength(0);
   });
 

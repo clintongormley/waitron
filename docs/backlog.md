@@ -6012,8 +6012,9 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
     without `#clearProvisionOutcome()`, which the four other ways onto that screen call first, so an
     earlier attempt's message could show there (found by reading, not run); `AdoptOutcome`'s
     `breakGlassSecret` is typed as required, but a replayed adopt answers without it
-    (`apps/server/src/setup-api.ts`); the done screen treats any failed status read as "the box is
-    trading", so a passing 503 could offer the reload early; the mode screen's own text says a live
+    (`apps/server/src/setup-api.ts`); the done screen treats a non-network status refusal as ready, so an HTTP 503
+    can announce "The server is ready" early (A324 synthetic 503 probe through the real
+    `SetupApi`, 2026-10-07; the polling rule is unchanged); the mode screen's own text says a live
     server files real invoices, which a live run on a development box does not; `setup-app.test.ts`
     has two test titles naming a `SyntaxError` from a non-JSON error body that `apiError` turns into
     `server.internal`; `events.test.ts` has no case for the restore and fiscal-test dispatchers; the
@@ -7530,6 +7531,11 @@ a Bizum tap before designing any UX.
 The long form for tracked items, so the tracks above stay readable.
 
 ### Setup wizard — the constraints A2's rework left behind (A2)
+
+**Final setup screen (A324) — DONE.** Dashboard comes first, followed by Till and Email inbox,
+with a short description under each link. The inbox description covers locally captured account
+mail. One status sentence changes from restarting to ready; the reload button is gone. The
+mirror-join screen and the existing restart polling rules are unchanged.
 
 Live A2 work is under _A2_ in Track A. What constrains the next change to the wizard:
 
