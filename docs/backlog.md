@@ -3830,7 +3830,7 @@ that has fallen behind.
   NFC is Chrome-for-Android only; the browser's own QR decoder is not dependable, so decode in JS or
   WASM. Also here: restoring `stripe_on_device` (Tap-to-Pay). Redsys and
   bank terminals are parked; Bizum research is under _Later and parked_.
-  _2026-10-07: the printed QR sticker and the dropdown landed with W100 (this branch's pull request;
+  _2026-10-07: the printed QR sticker and the dropdown landed with W100 (#1332;
   see "Devices, profiles and departmental transfers" below). One difference from the decision
   above: a card reader now has one holding device at a time, and a scan or a confirmed choice from
   the dropdown moves it to the waiter's device. NFC (queued as W102) and Tap-to-Pay are still
@@ -4800,7 +4800,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
   access and switching DONE (W97, #1311; a venue reset is needed after it, its profiles need the new
-  action flags); equipment BUILT except NFC (W100, this branch's pull request); transfers queued in
+  action flags); equipment LANDED except NFC (W100, #1332); transfers queued in
   lane D, not implemented.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
@@ -4895,7 +4895,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       the same id gets the failed payment back and tells staff the card was declined: no card was
       charged, but the reason shown is wrong; the next tap starts a fresh payment (read, not run).
   - **W100 delivers** (the [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md),
-    Tasks 1–4, this branch's pull request). "Equipment" here means a device's receipt printer, its
+    Tasks 1–4, #1332, 2026-10-07). "Equipment" here means a device's receipt printer, its
     payment-slip printer (the printer for the card slip), its card reader and its cash drawer.
     - Each profile lists the printers, card readers and cash drawers its devices may use, with a
       default for each role. A device is on "Use default" until someone picks an item from the
@@ -4944,6 +4944,14 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       - Also as built: a till's equipment list (`GET /api/device/equipment`) needs only a joined
         device, not a signed-in person, so a locked till can see who holds an item on another
         device (staff names are already public through `/api/staff`).
+    - Left open at the land (found by reading, not run): if the till's last 15-second check said a
+      reader was busy and that payment has since finished, picking it skips "Take it?" and the
+      server refuses it as held, so staff pick again; and if a profile switch succeeds but its reply
+      is lost, a check sent before the switch can briefly show the old profile's reader until the
+      next check. The till's equipment poll and menu poll are near copies and could share one class
+      (left out of #1332 as too large). The payments test "refreshes only active reader statuses"
+      failed once locally beside another coverage run, then passed five times alone and in CI; not
+      investigated.
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,
