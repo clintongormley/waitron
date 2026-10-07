@@ -82,7 +82,7 @@ export function foldForSearch(text: string): string {
 type DocumentSection = Extract<DocumentMember, { kind: "section" }>;
 
 /** The members a device draws for `members`: an include shown directly gives way to its own
- * members, in their order, all the way down. */
+ * members, in their order; a direct include among those gives way too. */
 export function shownMembers(members: readonly DocumentMember[]): DocumentMember[] {
   return members.flatMap((member) =>
     member.kind === "section" && member.direct === true ? shownMembers(member.members) : [member],

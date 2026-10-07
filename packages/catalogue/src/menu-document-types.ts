@@ -54,7 +54,8 @@ export type DocumentMember =
       includedMenu?: { id: string; name: string };
       /** Its members are drawn in its place; a shortcut to it still opens it. */
       direct?: true;
-      /** What the include fixes, so a change list can tell it from a change to the included menu. */
+      /** What the include fixes, present only while it is shown as a folder (absent when shown
+       * directly, whatever it stores), so a change list can tell it from the included menu's change. */
       fixed?: IncludeFolderOverrides;
       sectionId: string;
       internalName: string;

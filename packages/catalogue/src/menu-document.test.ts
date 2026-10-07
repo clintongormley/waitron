@@ -1569,11 +1569,12 @@ describe("an include shown as a folder or directly", () => {
 
   it("a folder include is unchanged, and so is the hash of a menu with no direct include", async () => {
     const f = await menusFixture(fx.db);
+    const memberId = await includeIn(f.lunch, f.lunchRoot, f.drinks);
     const before = await build(f.lunch);
     const hash = menuDocumentHash(before);
-    await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
-      showAsFolder: true,
-    });
+    await setFolder(f.lunchRoot, memberId, { showAsFolder: false });
+    expect(menuDocumentHash(await build(f.lunch))).not.toBe(hash);
+    await setFolder(f.lunchRoot, memberId, { showAsFolder: true, overrides: {} });
     const after = await build(f.lunch);
     expect(after).toEqual(before);
     expect(menuDocumentHash(after)).toBe(hash);
