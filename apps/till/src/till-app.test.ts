@@ -12520,12 +12520,17 @@ describe("a failed list refresh after a successful write", () => {
   });
 
   describe("a list read after a write that never answers leaves the basket usable", () => {
+    /** Like fetch, the read rejects only when its signal aborts. */
+    function unanswered(...args: unknown[]): Promise<never> {
+      const options = args.at(-1) as { signal?: AbortSignal } | undefined;
+      return new Promise((_, reject) =>
+        options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+      );
+    }
+
     /** The login's own read answers; every read after it stays out. */
     function unansweredAfterLogin<T>(first: T) {
-      return vi
-        .fn()
-        .mockResolvedValueOnce(first)
-        .mockImplementation(() => new Promise<T>(() => {}));
+      return vi.fn().mockResolvedValueOnce(first).mockImplementation(unanswered);
     }
 
     async function payNextSale(el: TillApp): Promise<void> {
@@ -12606,7 +12611,7 @@ describe("a failed list refresh after a successful write", () => {
       await el.updateComplete;
       emit(c, "place-order");
       await settle(el);
-      listCounterWaiting.mockImplementation(() => new Promise(() => {}));
+      listCounterWaiting.mockImplementation(unanswered);
       const reads = listCounterWaiting.mock.calls.length;
 
       emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
@@ -12639,7 +12644,7 @@ describe("a failed list refresh after a successful write", () => {
       expect(currentApi.recordSale).toHaveBeenCalledOnce();
     });
 
-    it("a read still out when the till's request limit passes is said in the list's retry notice, and retried", async () => {
+    it("a read still out when the till's request limit passes is cancelled, said in the list's retry notice, and retried", async () => {
       const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
       const { el } = await mountApp({ listWorkingOrders });
       const c = await toCounterFake(el);
@@ -12647,11 +12652,14 @@ describe("a failed list refresh after a successful write", () => {
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await settle(el);
+      const [options] = listWorkingOrders.mock.lastCall as [{ signal?: AbortSignal }?];
 
       // TABLE_REQUEST_LIMIT_MS in till-app.ts.
       await tick(el, 149_999);
+      expect(options?.signal?.aborted).toBe(false);
       expect(message(el, "held")).toBe("");
       await tick(el, 1);
+      expect(options?.signal?.aborted).toBe(true);
       expect(message(el, "held")).toBe(t("refresh.held_after_sale"));
       expect(countdown(el, "held")).toBe(secondsLeft(5));
 
@@ -12662,6 +12670,38 @@ describe("a failed list refresh after a successful write", () => {
       await settle(el);
       expect(counter(el)!.heldOrders).toEqual([heldSummary]);
     });
+
+    it.each([
+      ["the waiting list", "waiting", "listCounterWaiting", "refresh.waiting_after_place"],
+      ["the kitchen stations", "station", "listStations", "refresh.station_after_place"],
+      ["the kitchen queue", "station", "getStationQueue", "refresh.station_after_place"],
+    ] as const)(
+      "a read of %s after a place still out when the till's request limit passes is cancelled and said in the list's retry notice",
+      async (_read, list, method, key) => {
+        const { el } = await mountApp(ticketThenPay);
+        const c = await toCounterFake(el);
+        c.store.addProduct(cafe, "2");
+        await el.updateComplete;
+        const read = vi.mocked(currentApi[method] as (...args: unknown[]) => Promise<unknown>);
+        read.mockImplementation(unanswered);
+        const reads = read.mock.calls.length;
+
+        emit(c, "place-order");
+        await settle(el);
+        expect(read).toHaveBeenCalledTimes(reads + 1);
+        const options = read.mock.lastCall!.at(-1) as { signal?: AbortSignal } | undefined;
+        const said = () =>
+          el.shadowRoot!.querySelector(`[data-refresh-notice="${list}"]`)?.textContent ?? "";
+
+        // TABLE_REQUEST_LIMIT_MS in till-app.ts.
+        await tick(el, 149_999);
+        expect(options?.signal?.aborted).toBe(false);
+        expect(said()).not.toContain(t(key));
+        await tick(el, 1);
+        expect(options?.signal?.aborted).toBe(true);
+        expect(said()).toContain(t(key));
+      },
+    );
   });
 });
 

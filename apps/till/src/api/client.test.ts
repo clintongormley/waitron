@@ -1035,6 +1035,22 @@ describe("TillApi", () => {
     expect(fetchStub.mock.calls.map(([, init]) => init?.signal)).toEqual([signal, signal]);
   });
 
+  it("listWorkingOrders, listStations and listCounterWaiting hand a caller's abort signal to fetch", async () => {
+    const fetchStub = vi.fn<typeof fetch>(async () => jsonResponse([]));
+    const api = new TillApi("", fetchStub);
+    const signal = new AbortController().signal;
+
+    await api.listWorkingOrders({ signal });
+    await api.listStations({ signal });
+    await api.listCounterWaiting({ signal });
+
+    expect(fetchStub.mock.calls.map(([url, init]) => [url, init?.signal])).toEqual([
+      ["/api/working-orders", signal],
+      ["/api/stations", signal],
+      ["/api/orders/counter-waiting", signal],
+    ]);
+  });
+
   it("an aborted read rejects with fetch's own abort error, which reads as no answer", async () => {
     const fetchStub = vi.fn(
       (_path: string, init?: RequestInit) =>

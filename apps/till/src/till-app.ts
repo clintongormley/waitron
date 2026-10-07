@@ -228,6 +228,7 @@ import type {
   DeviceIdentity,
   DevicePrintersChange,
   ProfileChoice,
+  ReadOptions,
 } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -2065,21 +2066,16 @@ export class TillApp extends LitElement {
    * Only the newest refresh of a list may install the list's rows (`heldOrders`, `stationQueue`,
    * `counterWaiting`) or start, change or end its retry, and
    * {@link TillApp.#abandonListRefreshes} makes every earlier request stale. Without a `messageKey`
-   * a failure is also thrown to the caller. A read still out after `limitMs` fails as a refused one
-   * does.
+   * a failure is also thrown to the caller. A read still out after `limitMs` is cancelled and fails
+   * like any other failed read.
    */
   async #refreshList(list: RefreshList, messageKey?: StringKey, limitMs?: number): Promise<void> {
     const request = ++this.#refreshGeneration[list];
     const limit = limitMs === undefined ? undefined : limited(limitMs);
+    const options: [] | [ReadOptions] = limit === undefined ? [] : [{ signal: limit.signal }];
     let install: () => void;
     try {
-      const load = this.#loadList(list);
-      install = await (limit === undefined
-        ? load
-        : Promise.race([
-            load,
-            pause(limit.signal).then(() => Promise.reject(limit.signal.reason as Error)),
-          ]));
+      install = await this.#loadList(list, ...options);
     } catch (error) {
       if (request === this.#refreshGeneration[list]) this.#onRefreshFailed(list, messageKey);
       if (messageKey === undefined) throw error;
@@ -2092,29 +2088,31 @@ export class TillApp extends LitElement {
     this.#endRefreshRetry(list);
   }
 
-  async #loadList(list: RefreshList): Promise<() => void> {
-    if (list === "station") return this.#loadStationQueue();
+  async #loadList(list: RefreshList, ...options: [] | [ReadOptions]): Promise<() => void> {
+    if (list === "station") return this.#loadStationQueue(...options);
     if (list === "waiting") {
-      const waiting = await this.api.listCounterWaiting();
+      const waiting = await this.api.listCounterWaiting(...options);
       return () => (this.counterWaiting = waiting);
     }
-    const rows = await this.api.listWorkingOrders();
+    const rows = await this.api.listWorkingOrders(...options);
     return () => (this.heldOrders = rows);
   }
 
-  async #loadStationQueue(): Promise<() => void> {
-    await this.#loadStations(true);
+  async #loadStationQueue(...options: [] | [ReadOptions]): Promise<() => void> {
+    await this.#loadStations(true, ...options);
     if (this.orderFlow === "prepay") return () => (this.stationQueue = []);
     const defaultStation = this.stations.find((station) => station.isDefault);
     const queue =
-      defaultStation === undefined ? [] : (await this.api.getStationQueue(defaultStation.id)).items;
+      defaultStation === undefined
+        ? []
+        : (await this.api.getStationQueue(defaultStation.id, ...options)).items;
     return () => (this.stationQueue = queue);
   }
 
-  async #loadStations(throwOnFailure = false): Promise<void> {
+  async #loadStations(throwOnFailure = false, ...options: [] | [ReadOptions]): Promise<void> {
     const read = ++this.#stationsRead;
     try {
-      const stations = await this.api.listStations();
+      const stations = await this.api.listStations(...options);
       if (read === this.#stationsRead) {
         this.stations = stations;
         this.#stationsLoaded = true;
@@ -2701,7 +2699,6 @@ export class TillApp extends LitElement {
       this.submitting = false;
     }
     if (session !== this.#operatorSession) return;
-    // A just-paid retrieved order must drop off the held list.
     if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
@@ -2724,6 +2721,7 @@ export class TillApp extends LitElement {
 
   #afterSaleReads(sendsToKitchen: boolean): (readonly [RefreshList, StringKey])[] {
     return [
+      // A just-paid retrieved order must drop off the held list.
       ["held", "refresh.held_after_sale"],
       ...(sendsToKitchen ? [["station", "refresh.station_after_sale"] as const] : []),
       ["waiting", "refresh.waiting_after_sale"],
