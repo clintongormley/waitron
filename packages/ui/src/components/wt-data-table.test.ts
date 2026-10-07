@@ -3284,6 +3284,117 @@ test("a filter with an initial choice starts on it, and its dropdown shows it", 
   expect(statusSelect(el).value).toBe("active");
 });
 
+test("filterValues reads what a filter narrows by: its initial choice, a restored one, or all chosen", async () => {
+  const el = await tableS({ viewKey: "test.values-initial", columns: initiallyActive });
+  expect(el.filterValues("status")).toEqual(["active"]);
+  expect(el.filterValues("name")).toEqual([]);
+  await chooseOption(statusSelect(el), "");
+  await el.updateComplete;
+  expect(el.filterValues("status")).toEqual([]);
+  sessionStorage.setItem("test.values-restored", JSON.stringify({ filters: { status: "off" } }));
+  const restored = await tableS({ viewKey: "test.values-restored", columns: initiallyActive });
+  expect(restored.filterValues("status")).toEqual(["off"]);
+});
+
+test("filterValues answers none while a column's choice waits for its options", async () => {
+  sessionStorage.setItem("test.values-waiting", JSON.stringify({ filters: { status: "off" } }));
+  const el = await tableS({ viewKey: "test.values-waiting", columns: statusOffering([]) });
+  expect(storedFilters("test.values-waiting")).toEqual({ status: "off" });
+  expect(el.filterValues("status")).toEqual([]);
+});
+
+test("chooseFilter chooses as the person would: rows narrow, the dropdown shows it, it is reported and remembered", async () => {
+  const el = await tableS({ viewKey: "test.choose", columns: initiallyActive });
+  await chooseOption(statusSelect(el), "");
+  await el.updateComplete;
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  el.chooseFilter("status", ["off"]);
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["2"]);
+  expect(statusSelect(el).value).toBe("off");
+  expect(el.filterValues("status")).toEqual(["off"]);
+  expect(seen).toEqual([{ filters: { status: "off" } }]);
+  expect(storedFilters("test.choose")).toEqual({ status: "off" });
+  el.chooseFilter("missing", ["off"]);
+  el.chooseFilter("missing", []);
+  el.chooseFilter("name", ["off"]);
+  el.chooseFilter("name", []);
+  await el.updateComplete;
+  expect(seen).toHaveLength(1);
+  expect(rowKeysS(el)).toEqual(["2"]);
+  el.chooseFilter("status", []);
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "2"]);
+  expect(seen).toEqual([{ filters: { status: "off" } }, { filters: { status: "" } }]);
+});
+
+test("chooseFilter given only values the filter does not offer leaves it alone: nothing narrows, is reported or remembered", async () => {
+  const el = await tableS({ viewKey: "test.choose-unoffered", columns: initiallyActive });
+  const stored = sessionStorage.getItem("test.choose-unoffered");
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  el.chooseFilter("status", ["not-offered"]);
+  await el.updateComplete;
+  expect(el.filterValues("status")).toEqual(["active"]);
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(statusSelect(el).value).toBe("active");
+  expect(seen).toEqual([]);
+  expect(sessionStorage.getItem("test.choose-unoffered")).toBe(stored);
+});
+
+test("chooseFilter given no values on a column without a filter leaves its waiting choice alone", async () => {
+  sessionStorage.setItem("test.choose-unfiltered", JSON.stringify({ filters: { name: "x" } }));
+  const el = await tableS({ viewKey: "test.choose-unfiltered", columns: withStatus });
+  const stored = sessionStorage.getItem("test.choose-unfiltered");
+  expect(storedFilters("test.choose-unfiltered")).toEqual({ name: "x" });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  el.chooseFilter("name", []);
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(sessionStorage.getItem("test.choose-unfiltered")).toBe(stored);
+});
+
+test("chooseFilter keeps only the offered values of a mix, and one on a single-choice filter", async () => {
+  const multi = await multiTable({ viewKey: "test.choose-mixed" });
+  const seen: unknown[] = [];
+  multi.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  multi.chooseFilter("status", ["gone", "off", "paused"]);
+  await multi.updateComplete;
+  expect(multi.filterValues("status")).toEqual(["off", "paused"]);
+  expect(rowKeysS(multi)).toEqual(["2", "3", "4"]);
+  expect(seen).toEqual([{ filters: { status: ["off", "paused"] } }]);
+  expect(storedFilters("test.choose-mixed")).toEqual({ status: ["off", "paused"] });
+  cleanup();
+  const single = await tableS({ viewKey: "test.choose-single", columns: initiallyActive });
+  const heard: unknown[] = [];
+  single.addEventListener("wt-filter-change", (event) => heard.push((event as CustomEvent).detail));
+  single.chooseFilter("status", ["gone", "off", "active"]);
+  single.chooseFilter("status", ["gone", "off", "active"]);
+  await single.updateComplete;
+  expect(single.filterValues("status")).toEqual(["off"]);
+  expect(rowKeysS(single)).toEqual(["2"]);
+  expect(heard).toEqual([{ filters: { status: "off" } }]);
+});
+
+test("chooseFilter chooses nothing on a filter that offers no options yet, so nothing waits for them", async () => {
+  const loading: DataTableColumn<RowS>[] = [
+    withStatus[0]!,
+    { ...withStatus[1]!, filter: { ...withStatus[1]!.filter!, options: [] } },
+  ];
+  const el = await tableS({ viewKey: "test.choose-loading", columns: loading });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  el.chooseFilter("status", ["off"]);
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  el.columns = withStatus;
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "2"]);
+  expect(el.filterValues("status")).toEqual([]);
+});
+
 /** Eight statuses and the all row: more than a filter's list shows without a search box. */
 const manyStatuses = statusOffering(
   Array.from({ length: 8 }, (_, index) => ({ value: `s${index}`, label: `Status ${index}` })),

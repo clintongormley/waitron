@@ -115,8 +115,8 @@ function statusLine(
     : html`${drawLabel(label)} · ${live.version} · <span class="time">${live.time}</span>`;
 }
 
-function previewAddress(menuId: string): string {
-  return `/manage/menus/menu/${encodeURIComponent(menuId)}/view/preview`;
+function tabAddress(menuId: string, tab: Tab): string {
+  return `/manage/menus/menu/${encodeURIComponent(menuId)}/view/${tab}`;
 }
 
 /** The state a publish answered as version `number` left, shown until the next read replaces it.
@@ -426,6 +426,9 @@ export class MenusScreen extends LitElement {
       }
       .status-line .time {
         white-space: nowrap;
+      }
+      .status-line .clashes {
+        color: var(--wt-color-danger);
       }
       .list,
       .sizer {
@@ -1810,17 +1813,17 @@ export class MenusScreen extends LitElement {
     return html`<a
       part="changes-link"
       data-test=${`changes-${menu.id}`}
-      href=${previewAddress(menu.id)}
+      href=${tabAddress(menu.id, "preview")}
       aria-label=${`${label}: ${menu.name}`}
-      @click=${(event: MouseEvent) => this.#openPreview(event, menu.id)}
+      @click=${(event: MouseEvent) => this.#openTab(event, menu.id, "preview")}
       >${label}</a
     >`;
   }
 
-  #openPreview(event: MouseEvent, menuId: string): void {
+  #openTab(event: MouseEvent, menuId: string, tab: Tab): void {
     if (leftToBrowser(event)) return;
     event.preventDefault();
-    this.#open(menuId, "preview");
+    this.#open(menuId, tab);
   }
 
   /** On a narrow list the status and the changes link move under the name and their columns go, as
@@ -2523,7 +2526,8 @@ export class MenusScreen extends LitElement {
     });
   }
 
-  /** On the Preview tab the changes are already shown, so the label stays plain words there. */
+  /** On the tab where a state is settled it stays plain words, since a link would only open that
+   * tab again. */
   #renderStatusLine(menuId: string) {
     const words = this.statusError
       ? this.statusResetRequired
@@ -2537,13 +2541,33 @@ export class MenusScreen extends LitElement {
               (label) =>
                 html`<a
                   data-test="status-changes"
-                  href=${previewAddress(menuId)}
-                  @click=${(event: MouseEvent) => this.#openPreview(event, menuId)}
+                  href=${tabAddress(menuId, "preview")}
+                  @click=${(event: MouseEvent) => this.#openTab(event, menuId, "preview")}
                   >${label}</a
                 >`,
             )
           : statusLine(this.status);
-    return html`<p class="status-line" data-test="menu-status">${words}</p>`;
+    const clashes = this.statusError ? 0 : (this.status?.clashes ?? 0);
+    const waits =
+      clashes === 1
+        ? t("menus.publish_waits_clash")
+        : t("menus.publish_waits_clashes").replace("{count}", String(clashes));
+    return html`<p class="status-line" data-test="menu-status">
+      ${words}${
+        !clashes
+          ? nothing
+          : this.view === "prices"
+            ? html` · <span class="clashes" data-test="status-clashes">${waits}</span>`
+            : html` ·
+                <a
+                  class="clashes"
+                  data-test="status-clashes"
+                  href=${tabAddress(menuId, "prices")}
+                  @click=${(event: MouseEvent) => this.#openTab(event, menuId, "prices")}
+                  >${waits}</a
+                >`
+      }
+    </p>`;
   }
 
   #renderIncludeEdit() {

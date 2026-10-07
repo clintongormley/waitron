@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-toast.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import {
+  followsClash,
   productInherited,
   sizeClash,
   sizeSetting,
@@ -23,6 +24,7 @@ import {
 import type { Setting } from "../api/client.js";
 import type { Decimal } from "@waitron/shared";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
+import { clashesOf } from "@waitron/catalogue/src/menu-combine.js";
 import { stringToCents } from "@waitron/shared";
 import type {
   CategorySummary,
@@ -93,6 +95,20 @@ const toggleLabel = ({ item }: Line, expanded: boolean): string =>
   t(expanded ? "menu_prices.collapse" : "menu_prices.expand").replace("{name}", item.name);
 const keepsVariantOrder = ({ variant }: Line): boolean => variant === null;
 
+/** The row as a published menu holds it: Inactive sizes left out. */
+const activeOffer = (item: MenuPriceRow): MenuPriceRow["combined"] => {
+  const active = new Set(item.variants.filter((v) => v.active).map((v) => v.variantId));
+  return {
+    ...item.combined,
+    variants: item.combined.variants.filter(({ variantId }) => active.has(variantId)),
+  };
+};
+
+/** Whether a clash in the product's own price, as its field reads now, stops publishing: it has
+ * no Active size, or an Active size charges that clashing price. */
+const ownPriceSold = (item: MenuPriceRow, parent: ParentPrice = undefined): boolean =>
+  item.variants.every((v) => !v.active) || followsClash(item, parent);
+
 /** Whether this menu stores a price for any of the product's sizes. */
 const pricesASize = (item: MenuPriceRow): boolean =>
   item.variants.some(({ price }) => price !== null);
@@ -143,8 +159,15 @@ export class MenuPricesTable extends LitElement {
         container-type: inline-size;
       }
       .error {
-        margin-block: 0 var(--wt-space-3);
+        margin-block: 0;
         color: var(--wt-color-danger);
+      }
+      .clash-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        column-gap: var(--wt-space-3);
+        margin-block-end: var(--wt-space-3);
       }
       wt-data-table::part(name-box) {
         display: contents;
@@ -271,6 +294,9 @@ export class MenuPricesTable extends LitElement {
   @state() private invalid: ReadonlySet<string> = new Set();
   /** Refusals hidden since their field changed. */
   @state() private hiddenRefusals: ReadonlySet<string> = new Set();
+  /** Whether the table's price filter is on Clashes, read from the table once it has drawn, since
+   * it restores a remembered choice itself. */
+  @state() private filterOnClashes = true;
   /** Fields whose last Enter or leaving failed their own check, so each change checks them again. */
   readonly #checking = new Set<string>();
   /** The text each field last sent, so a second commit of it sends nothing. */
@@ -296,9 +322,7 @@ export class MenuPricesTable extends LitElement {
   /** Each row that clashes as this menu stores it, drafts aside, so a row under the Clashes filter
    * stays while a price is typed into it. */
   #clashing: ReadonlyMap<string, "size" | "own"> = new Map();
-  /** Clashing prices, by the same per-product rule as `clashesOf`
-   * (packages/catalogue/src/menu-combine.ts): a product with variants by its clashing variants.
-   * Unlike the publish check, Inactive products and variants are counted too. */
+  /** Clashing prices, as the publish check counts them. */
   #clashCount = 0;
   /** Whether the price filter starts on Clashes, decided on the first loaded update of each load;
    * undefined until then. Dropped for the rest of a load once it has no clash, so a clash that
@@ -308,7 +332,13 @@ export class MenuPricesTable extends LitElement {
    * worked out for. */
   readonly #underParent = new Map<
     string,
-    { parent: ParentPrice; from?: InheritedFrom; inherited?: Inherited; sizeClash?: boolean }
+    {
+      parent: ParentPrice;
+      from?: InheritedFrom;
+      inherited?: Inherited;
+      sizeClash?: boolean;
+      ownSold?: boolean;
+    }
   >();
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -363,18 +393,19 @@ export class MenuPricesTable extends LitElement {
     const clashing = new Map<string, "size" | "own">();
     let count = 0;
     for (const item of this.rows) {
+      if (!item.active) continue;
+      count += clashesOf(activeOffer(item)).length;
       const own =
         item.override === null &&
+        ownPriceSold(item) &&
         (item.combined.price.state === "clash" ||
           this.#productInheritance.get(item)!.inherited.state === "clash");
       const product = sizeClash(item) ? "size" : own ? "own" : null;
       if (product !== null) clashing.set(item.menuItemId, product);
-      if (product !== null && item.variants.length === 0) count++;
-      for (const { variantId, price } of item.variants) {
-        if (price !== null || variantInherited(item, variantId, undefined).state !== "clash")
-          continue;
+      for (const { variantId, price, active } of item.variants) {
+        if (!active || price !== null) continue;
+        if (variantInherited(item, variantId, undefined).state !== "clash") continue;
         clashing.set(`${item.menuItemId}:${variantId}`, "own");
-        count++;
       }
     }
     this.#clashing = clashing;
@@ -457,6 +488,8 @@ export class MenuPricesTable extends LitElement {
   }
 
   protected override updated(changed: PropertyValues): void {
+    const table = this.#table();
+    if (table !== null) void table.updateComplete.then(() => this.#readFilter());
     if (changed.has("outcome")) this.#outcomeFitted = this.#showOutcome();
     // The cells read these, and the table redraws only when its own properties change.
     if (
@@ -491,6 +524,11 @@ export class MenuPricesTable extends LitElement {
     return false;
   }
 
+  #readFilter(): void {
+    const onClashes = this.#table()?.filterValues("override").includes("clash") ?? true;
+    if (onClashes !== this.filterOnClashes) this.filterOnClashes = onClashes;
+  }
+
   #table(): HTMLElementTagNameMap["wt-data-table"] | null {
     return this.shadowRoot?.querySelector("wt-data-table") ?? null;
   }
@@ -502,6 +540,19 @@ export class MenuPricesTable extends LitElement {
         `wt-price-input[data-row="${CSS.escape(key)}"]`,
       ) ?? null
     );
+  }
+
+  /** The button goes once the filter is on Clashes, so focus moves to the first clashing row's
+   * field, or to the search box when the search leaves none. */
+  async #showClashes(): Promise<void> {
+    const table = this.#table()!;
+    table.chooseFilter("override", ["clash"]);
+    await table.updateComplete;
+    const root = table.shadowRoot!;
+    (
+      root.querySelector<HTMLElement>("wt-price-input[data-row]") ??
+      root.querySelector<HTMLElement>('input[name="search"]')!
+    ).focus();
   }
 
   async #focusField(key: string): Promise<void> {
@@ -571,7 +622,7 @@ export class MenuPricesTable extends LitElement {
           from: variantInheritedFrom(item, variant.variantId, parent),
           inherited: variantInherited(item, variant.variantId, parent),
         }
-      : { parent, sizeClash: sizeClash(item, parent) };
+      : { parent, sizeClash: sizeClash(item, parent), ownSold: ownPriceSold(item, parent) };
     this.#underParent.set(key, worked);
     return worked;
   }
@@ -589,12 +640,14 @@ export class MenuPricesTable extends LitElement {
     return stored === null ? this.#inherited(line) : { state: "price", low: stored, high: stored };
   }
 
-  /** "size" for a product row whose own price is decided but an Active size's is not; "own" for a
-   * row whose own price, or what it inherits, is undecided and whose field holds no price. A size
-   * is judged by what it inherits alone, which follows a price typed for its product. */
+  /** An Active row's mark, its product's field as it reads now: "size" on a product row by
+   * `sizeClash`; "own" on a row whose field holds no price and whose own price, or what it
+   * inherits, clashes, on a product row only while `ownPriceSold`. */
   #clash(line: Line): "size" | "own" | null {
+    if (!this.#active(line)) return null;
     if (line.variant === null && this.#withParent(line).sizeClash) return "size";
     if (this.#holds(line, this.drafts.get(keyOf(line)))) return null;
+    if (line.variant === null && !this.#withParent(line).ownSold) return null;
     return (line.variant === null && this.#priceSetting(line).state === "clash") ||
       this.#inherited(line).state === "clash"
       ? "own"
@@ -978,11 +1031,26 @@ export class MenuPricesTable extends LitElement {
       count === 1
         ? t("menu_prices.clash_message_one")
         : t("menu_prices.clash_message").replace("{count}", String(count));
-    return html`<p class="error" role="status" data-test="clash-message">${words}</p>`;
+    // Clashes is offered only while a row is marked, which the publish count does not decide.
+    const offer = this.#clashing.size > 0 && !this.filterOnClashes;
+    return html`<div class="clash-line">
+      <p class="error" role="status" data-test="clash-message">${words}</p>
+      ${
+        offer
+          ? html`<wt-button
+              variant="ghost"
+              data-test="show-clashes"
+              @click=${() => void this.#showClashes()}
+              >${t("menu_prices.show_clashes")}</wt-button
+            >`
+          : nothing
+      }
+    </div>`;
   }
 
   override render() {
     return html`${this.#clashMessage()}<wt-data-table
+        @wt-filter-change=${() => this.#readFilter()}
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}

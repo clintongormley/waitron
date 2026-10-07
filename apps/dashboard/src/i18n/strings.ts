@@ -2074,6 +2074,7 @@ export const en = {
   "menu_prices.overridden_only": "Overridden only",
   "menu_prices.not_overridden": "Not overridden",
   "menu_prices.clashes_only": "Clashes",
+  "menu_prices.show_clashes": "Show clashes",
   "menu_prices.clash_message":
     "{count} prices clash. Settle them before this menu can be published.",
   "menu_prices.clash_message_one": "1 price clashes. Settle it before this menu can be published.",
@@ -2109,6 +2110,8 @@ export const en = {
   "menus.included_in": "Included in",
   "menus.clash": "clash",
   "menus.clashes": "clashes",
+  "menus.publish_waits_clash": "Publishing waits on 1 clash",
+  "menus.publish_waits_clashes": "Publishing waits on {count} clashes",
   "menus.edit_section": "Edit section",
   "menus.delete_section": "Delete section",
   "menus.delete_section_note":
@@ -4543,6 +4546,7 @@ export const es: Record<StringKey, string> = {
   "menu_prices.overridden_only": "Solo con precio propio",
   "menu_prices.not_overridden": "Sin precio propio",
   "menu_prices.clashes_only": "Con discrepancias",
+  "menu_prices.show_clashes": "Ver discrepancias",
   "menu_prices.clash_message":
     "{count} precios tienen discrepancias. Resuélvelas antes de poder publicar esta carta.",
   "menu_prices.clash_message_one":
@@ -4580,6 +4584,8 @@ export const es: Record<StringKey, string> = {
   "menus.included_in": "Incluido en",
   "menus.clash": "conflicto",
   "menus.clashes": "conflictos",
+  "menus.publish_waits_clash": "No se puede publicar hasta resolver 1 discrepancia",
+  "menus.publish_waits_clashes": "No se puede publicar hasta resolver {count} discrepancias",
   "menus.edit_section": "Editar sección",
   "menus.delete_section": "Eliminar sección",
   "menus.delete_section_note":

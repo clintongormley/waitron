@@ -2686,6 +2686,40 @@ it("drops a product's clash sentence once this menu's saved price decides it, an
   expect(override(el, "mi-lager").placeholder).toBe(t("menu_prices.clash_placeholder"));
 });
 
+it("marks a product whose saved price settled the clash a following size charges once its field is emptied, so the clash shows with the product closed", async () => {
+  const settled = {
+    state: "decided",
+    value: "2.20",
+    source: { kind: "own" },
+    otherwise: clashPrice,
+  };
+  const row = {
+    ...lemonade,
+    override: "2.20",
+    combined: {
+      ...lemonade.combined,
+      price: settled,
+      variants: lemonade.combined.variants.map((v, at) =>
+        at === 0
+          ? { ...v, price: { ...settled, source: { kind: "parent" }, level: "product" } }
+          : v,
+      ),
+    },
+  } as MenuPriceRow;
+  const el = await mount({ rows: [row] });
+  expect(clashMarker(el, "mi-lemonade")).toBe("");
+  await typeIn(el, "mi-lemonade", "");
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].prices);
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
+  await typeIn(el, "mi-lemonade", "2.80");
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lemonade")).toBe("");
+  expect(clashMarker(el, "mi-lemonade:v-small")).toBe("");
+});
+
 it("drops a product's clash sentence while a price is typed for it, and not for text that is no price", async () => {
   const el = await mount({ rows: [clashRow(lager)] });
   expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
@@ -2730,7 +2764,7 @@ it("drops a size's clash sentence once this menu's saved price decides it, and s
   expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
 });
 
-it("turns a clashing product's sentence into the one naming its variants' clash once a price is typed for the product", async () => {
+it("names its variants' clash on a product whose own clashing price is never sold, before and after a price is typed for it", async () => {
   const el = await mount({
     rows: [
       {
@@ -2740,7 +2774,13 @@ it("turns a clashing product's sentence into the one naming its variants' clash 
       },
     ],
   });
-  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].prices);
+  // Its own price is never sold: each Active size's price comes from its size's own sources.
+  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].sizes);
+  expect(override(el, "mi-lemonade").placeholder).toBe("—");
+  await allPrices(el);
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
   await typeIn(el, "mi-lemonade", "2.80");
   await table(el).updateComplete;
   expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].sizes);
@@ -2990,7 +3030,7 @@ it("widens a field's end margin when a narrower window wraps the outcome message
   }
 });
 
-it("keeps an Inactive size's clash on its own row, off its product's", async () => {
+it("marks an Inactive size's clash on neither its own row nor its product's, as publishing leaves the size out", async () => {
   const row = variantClashRow();
   const el = await allPrices(
     await mount({
@@ -3008,7 +3048,8 @@ it("keeps an Inactive size's clash on its own row, off its product's", async () 
   expect(override(el, "mi-lemonade").placeholder).toBe("3.75");
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
-  expect(cell(el, "override", "mi-lemonade:v-small").querySelector("[part~=clash]")).not.toBeNull();
+  expect(cell(el, "override", "mi-lemonade:v-small").querySelector("[part~=clash]")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="clash-message"]')).toBeNull();
 });
 
 it("shows each row's own Active state as a link to its product page, a size by its own id", async () => {
@@ -3558,6 +3599,92 @@ describe("the clash message and the Clashes filter", () => {
     expect(shown(el)).toEqual(["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lager"]);
   });
 
+  const showClashes = (el: MenuPricesTable) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="show-clashes"]');
+
+  it("offers no Show clashes while the filter is on Clashes, or when nothing clashes", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    expect(priceFilter(el)).toBe("clash");
+    expect(showClashes(el)).toBeNull();
+    const calm = await mount();
+    expect(showClashes(calm)).toBeNull();
+    await choose(calm, "override", "overridden");
+    expect(showClashes(calm)).toBeNull();
+  });
+
+  it.each([
+    ["en-GB", "Show clashes"],
+    ["es-ES", "Ver discrepancias"],
+  ])(
+    "offers %s Show clashes beside the red line once another filter is chosen, and a click puts the filter back on Clashes",
+    async (locale, label) => {
+      setLocale(locale);
+      try {
+        const el = await mount({ rows: [burger, clashRow(lager)] });
+        await choose(el, "override", "");
+        await el.updateComplete;
+        const button = showClashes(el)!;
+        expect(text(button)).toBe(label);
+        expect(button.variant).toBe("ghost");
+        expect(message(el)!.contains(button)).toBe(false);
+        await userEvent.click(button);
+        await el.updateComplete;
+        await table(el).updateComplete;
+        expect(priceFilter(el)).toBe("clash");
+        expect(shown(el)).toEqual(["mi-lager"]);
+        expect(showClashes(el)).toBeNull();
+      } finally {
+        setLocale("es-ES");
+      }
+    },
+  );
+
+  it("puts the filter back on Clashes from the keyboard", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    await choose(el, "override", "not_overridden");
+    await el.updateComplete;
+    showClashes(el)!.focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    await table(el).updateComplete;
+    expect(priceFilter(el)).toBe("clash");
+    expect(showClashes(el)).toBeNull();
+  });
+
+  it("moves focus from Show clashes, which goes, to the first clashing row's field", async () => {
+    const el = await mount({ rows: [burger, variantClashRow(), clashRow(lager)] });
+    await choose(el, "override", "");
+    await el.updateComplete;
+    showClashes(el)!.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(table(el).shadowRoot.activeElement).not.toBeNull());
+    expect(shown(el)[0]).toBe("mi-lemonade");
+    expect(table(el).shadowRoot.activeElement).toBe(override(el, "mi-lemonade"));
+  });
+
+  it("moves focus from Show clashes to the search box when the search leaves no clashing row", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    await choose(el, "override", "");
+    await search(el, "Burger");
+    await el.updateComplete;
+    showClashes(el)!.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(table(el).shadowRoot.activeElement).not.toBeNull());
+    expect(shown(el)).toEqual([]);
+    expect(table(el).shadowRoot.activeElement).toBe(
+      table(el).shadowRoot.querySelector('input[name="search"]'),
+    );
+  });
+
+  it("offers Show clashes on a return to the tab whose remembered filter is All prices", async () => {
+    const first = await mount({ rows: [burger, clashRow(lager)] });
+    await choose(first, "override", "");
+    cleanupWidgets();
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    await vi.waitFor(() => expect(showClashes(el)).not.toBeNull());
+    expect(priceFilter(el)).toBe("");
+  });
+
   it("keeps exactly the right products and variants under each price filter", async () => {
     const el = await mount({ rows: [burger, variantClashRow(), clashRow(lager)] });
     await choose(el, "override", "");
@@ -3629,6 +3756,157 @@ describe("the clash message and the Clashes filter", () => {
     const two = await mount({ rows: [burger, followedClashRow()] });
     expect(text(message(two))).toBe(
       "2 precios tienen discrepancias. Resuélvelas antes de poder publicar esta carta.",
+    );
+  });
+});
+
+describe("the clash count, marks and Clashes filter read what publishing refuses", () => {
+  const decidedSize = (value: string) => ({
+    state: "decided",
+    value,
+    source: { kind: "product" },
+    otherwise: null,
+    level: "size",
+  });
+  const decidedPrice = {
+    state: "decided",
+    value: "3.00",
+    source: { kind: "product" },
+    otherwise: null,
+  };
+  /** A product this menu sets no price for, each size's combined price as given. */
+  function shapeRow(
+    id: string,
+    price: unknown,
+    sizes: { variantId: string; active: boolean; price: unknown }[],
+    active = true,
+  ): MenuPriceRow {
+    return {
+      menuItemId: `mi-${id}`,
+      productId: `p-${id}`,
+      name: id,
+      categoryId: null,
+      placements: [[]],
+      override: null,
+      effectivePrice: "3.00",
+      active,
+      combined: {
+        productId: `p-${id}`,
+        price,
+        variants: sizes.map(({ variantId, price }) => ({ variantId, price })),
+      },
+      variants: sizes.map(({ variantId, active }) => ({ variantId, price: null, active })),
+    } as MenuPriceRow;
+  }
+  const shapes = {
+    i: () => clashRow(lager),
+    ii: () => variantClashRow(),
+    iii: () =>
+      shapeRow("cola", clashPrice, [
+        { variantId: "v-c1", active: true, price: decidedSize("2.00") },
+        { variantId: "v-c2", active: true, price: decidedSize("2.40") },
+      ]),
+    iv: () => clashRow({ ...lager, menuItemId: "mi-cider", productId: "p-cider" }, clashPrice),
+    v: () =>
+      shapeRow("tonic", decidedPrice, [
+        { variantId: "v-t1", active: false, price: { ...clashPrice, level: "size" } },
+        { variantId: "v-t2", active: true, price: decidedSize("2.00") },
+      ]),
+    vi: () =>
+      shapeRow("juice", clashPrice, [
+        { variantId: "v-j1", active: false, price: decidedSize("2.00") },
+      ]),
+  };
+  const inactiveCider = () => ({ ...shapes.iv(), active: false });
+
+  const message = (el: MenuPricesTable) =>
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="clash-message"]');
+
+  /** Opens every product row shown, then reads the rows shown. */
+  async function openedRows(el: MenuPricesTable): Promise<string[]> {
+    for (const key of shown(el)) {
+      const toggle = toggleOf(el, key);
+      if (toggle !== null && text(toggle) === "▸") {
+        toggle.click();
+        await table(el).updateComplete;
+      }
+    }
+    return shown(el);
+  }
+
+  /** Every row carrying the red clash sentence, every product opened, under All prices. */
+  async function marked(el: MenuPricesTable): Promise<string[]> {
+    await choose(el, "override", "");
+    const rows = await openedRows(el);
+    return rows.filter((key) => cell(el, "override", key).querySelector("[part~=clash]") !== null);
+  }
+
+  async function check(
+    rows: MenuPriceRow[],
+    expected: { count: number; marked: string[]; underClashes: string[] },
+  ): Promise<void> {
+    setLocale("en-GB");
+    try {
+      const el = await mount({ rows });
+      const said = message(el);
+      if (expected.count === 0) expect(said).toBeNull();
+      else expect(text(said).split(" ")[0]).toBe(String(expected.count));
+      const offersClashes = options(el, "override").includes("Clashes");
+      expect(offersClashes).toBe(expected.underClashes.length > 0);
+      if (offersClashes) {
+        await choose(el, "override", "clash");
+        expect(await openedRows(el)).toEqual(expected.underClashes);
+      }
+      expect(await marked(el)).toEqual(expected.marked);
+    } finally {
+      setLocale("es-ES");
+    }
+  }
+
+  it("(i) a product without variants whose price clashes: counted, marked and under Clashes", async () => {
+    await check([burger, shapes.i()], {
+      count: 1,
+      marked: ["mi-lager"],
+      underClashes: ["mi-lager"],
+    });
+  });
+
+  it("(ii) an Active size's clash: counted, its product and size marked and under Clashes", async () => {
+    await check([burger, shapes.ii()], {
+      count: 1,
+      marked: ["mi-lemonade", "mi-lemonade:v-small"],
+      underClashes: ["mi-lemonade", "mi-lemonade:v-small"],
+    });
+  });
+
+  it("(iii) a product whose own price clashes but every Active size is priced at size level: nothing", async () => {
+    await check([burger, shapes.iii()], { count: 0, marked: [], underClashes: [] });
+  });
+
+  it("(iv) an Inactive product whose price clashes: nothing", async () => {
+    await check([burger, inactiveCider()], { count: 0, marked: [], underClashes: [] });
+  });
+
+  it("(v) an Inactive size's clash under an Active product: nothing", async () => {
+    await check([burger, shapes.v()], { count: 0, marked: [], underClashes: [] });
+  });
+
+  it("(vi) a product whose every size is Inactive and whose own price clashes: counted and marked on its own price", async () => {
+    await check([burger, shapes.vi()], {
+      count: 1,
+      marked: ["mi-juice"],
+      underClashes: ["mi-juice"],
+    });
+  });
+
+  it("counts 3 with all six on one table, the number publishing would refuse", async () => {
+    await check(
+      [burger, shapes.i(), shapes.ii(), shapes.iii(), inactiveCider(), shapes.v(), shapes.vi()],
+      {
+        count: 3,
+        marked: ["mi-lager", "mi-lemonade", "mi-lemonade:v-small", "mi-juice"],
+        underClashes: ["mi-lager", "mi-lemonade", "mi-lemonade:v-small", "mi-juice"],
+      },
     );
   });
 });
