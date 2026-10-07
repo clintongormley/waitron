@@ -46,9 +46,7 @@ import type { WorkingOrderStore } from "../state/working-order.js";
 import type { StoredLines } from "./basket.js";
 import type { OtherDraft } from "../screens/till-table-order-screen.js";
 import type { CardOutcome, CardProvider } from "./tender-pay.js";
-
-/** The till's phone width, as `language-chooser-styles.ts` has it. */
-const PHONE_WIDTH = "(max-width: 40rem)";
+import { PHONE_WIDTH } from "./language-chooser-styles.js";
 
 /**
  * Lays a canvas tab's cards on a grid. Every store-backed card is handed the SAME `store`; card events

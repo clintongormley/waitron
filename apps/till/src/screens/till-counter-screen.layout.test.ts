@@ -5,14 +5,18 @@ import type { TabDef } from "../layout.js";
 import type { Station, TillProduct, TillZoneMenu } from "../api/client.js";
 import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import "./till-counter-screen.js";
+import indexHtml from "../../index.html?raw";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 
 // Vitest's own default frame, which every other case runs in.
 const DEFAULT_FRAME = [414, 896] as const;
 
+let pageStyle: HTMLStyleElement | undefined;
+
 afterEach(async () => {
   cleanupWidgets();
-  document.body.style.padding = "";
+  pageStyle?.remove();
+  pageStyle = undefined;
   await page.viewport(...DEFAULT_FRAME);
 });
 
@@ -63,11 +67,14 @@ const menus: TillZoneMenu[] = servedMenus(
 /** `croquetas` of fifteen make a three-digit line total, wider than the 1280 px basket fits on one row. */
 async function mountCounter(width: number, height: number, croquetas = "15"): Promise<HTMLElement> {
   await page.viewport(width, height);
+  expect(window.innerWidth).toBe(width);
   const store = new WorkingOrderStore();
   store.addProduct(cafe, "1");
   store.addProduct(croquetasDish, croquetas);
-  // The page's own padding (apps/till/index.html), which narrows the screen on a phone.
-  document.body.style.padding = "24px";
+  // The page's own style (apps/till/index.html), whose padding narrows the screen on a phone.
+  pageStyle = document.createElement("style");
+  pageStyle.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+  document.head.append(pageStyle);
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     counterTab,
     store,

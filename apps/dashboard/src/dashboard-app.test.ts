@@ -4027,11 +4027,6 @@ it("keeps the phone drawer within the window inside the real page", async () => 
   }
 });
 
-/**
- * The part of the sidebar the window shows, as the browser's own intersection observer reports it:
- * that clips by every scrolling or clipping ancestor, where the sidebar's own box does not, and an
- * inert sidebar is still observed, where hit-testing skips it.
- */
 /** Presses Tab `presses` times from the top of the page and reports whether focus ever landed in the sidebar. */
 async function tabReachesSidebar(el: DashboardApp, presses: number): Promise<boolean> {
   const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
@@ -4048,6 +4043,11 @@ async function tabReachesSidebar(el: DashboardApp, presses: number): Promise<boo
   return false;
 }
 
+/**
+ * The part of the sidebar the window shows, as the browser's own intersection observer reports it:
+ * that clips by every scrolling or clipping ancestor, where the sidebar's own box does not, and an
+ * inert sidebar is still observed, where hit-testing skips it.
+ */
 async function sidebarInWindow(el: DashboardApp): Promise<DOMRectReadOnly> {
   const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
   return new Promise((resolve) => {
