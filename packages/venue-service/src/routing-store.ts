@@ -13,7 +13,6 @@ import {
   chooseMaker,
   chooseExtraMaker,
   closedSendsTo,
-  folderAncestors,
   stationDayHours,
   stationStatus,
   type RouteTarget,
@@ -108,6 +107,9 @@ const readCell = (row: typeof routingCells.$inferSelect): RoutingCell => ({
   zoneId: row.zoneId,
   target: readTarget(row),
 });
+
+const cellKey = ({ row, zoneId }: CellAddress) =>
+  `${row.kind === "category" ? row.categoryId : row.kind === "product" ? row.productId : ""}|${row.kind}|${zoneId ?? ""}`;
 
 /** Refuses an address or target no ordinary write may store; returns the canonical spelling. */
 export async function validateRoutingCell(
@@ -591,85 +593,11 @@ export async function previewRoutingChange(
   change: RoutingChange,
 ): Promise<RoutingMove[]> {
   const { rules } = await snapshot(tx, cfg);
-  const claims = new Map(rules.claims);
-  const exceptions = [...rules.exceptions];
-  const notFound = (id: string) => new AppError("route.not_found", { routeId: id });
-  if (change.kind === "claim") {
-    if (change.target !== null) {
-      await validateRoutingInput(tx, cfg, {
-        zoneId: null,
-        categoryId: change.categoryId,
-        productId: null,
-        target: change.target,
-      });
-      claims.set(change.categoryId, change.target);
-    } else claims.delete(change.categoryId);
-  } else if (change.kind === "exception") {
-    await validateRoutingInput(tx, cfg, change.input);
-    const index = change.id === null ? -1 : exceptions.findIndex((row) => row.id === change.id);
-    if (change.id !== null && index < 0) throw notFound(change.id);
-    const next = {
-      id: change.id ?? "preview",
-      position:
-        index < 0
-          ? Math.max(-1, ...exceptions.map((row) => row.position)) + 1
-          : exceptions[index]!.position,
-      ...change.input,
-    };
-    if (index < 0) exceptions.push(next);
-    else exceptions[index] = next;
-  } else if (change.kind === "exception_delete") {
-    const index = exceptions.findIndex((row) => row.id === change.id);
-    if (index < 0) throw notFound(change.id);
-    exceptions.splice(index, 1);
-  } else if (change.kind === "exception_order") {
-    const known = new Set(exceptions.map((row) => row.id));
-    if (
-      change.ids.length !== exceptions.length ||
-      new Set(change.ids).size !== change.ids.length ||
-      change.ids.some((id) => !known.has(id))
-    )
-      throw new AppError("management.request_invalid", { field: "ids" });
-    for (const [position, id] of change.ids.entries()) {
-      const index = exceptions.findIndex((row) => row.id === id);
-      exceptions[index] = { ...exceptions[index]!, position };
-    }
-  } else {
-    const [product] = await tx
-      .select({ id: products.id })
-      .from(products)
-      .where(
-        and(
-          productWithId(change.productId, "top-level"),
-          eq(products.active, true),
-          isNull(products.categoryId),
-        ),
-      );
-    if (product === undefined)
-      throw new AppError("route.subject_not_found", { subject: "product", id: change.productId });
-    await validateRoutingInput(tx, cfg, {
-      zoneId: null,
-      categoryId: null,
-      productId: change.productId,
-      target: change.target,
-    });
-    const existing = exceptions
-      .filter(
-        (row) =>
-          row.zoneId === null && row.categoryId === null && row.productId === change.productId,
-      )
-      .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
-    for (const row of existing) exceptions.splice(exceptions.indexOf(row), 1);
-    exceptions.push({
-      id: existing[0]?.id ?? "preview",
-      position: Math.min(0, ...exceptions.map((row) => row.position)) - 1,
-      zoneId: null,
-      categoryId: null,
-      productId: change.productId,
-      target: change.target,
-    });
-  }
-  const after: RoutingRules = { ...rules, claims, exceptions };
+  const { address, target } = await validateRoutingCell(tx, cfg, change.address, change.target);
+  const key = cellKey(address);
+  const cells = rules.cells.filter((cell) => cellKey(cell) !== key);
+  if (target !== null) cells.push({ ...address, target });
+  const after: RoutingRules = { ...rules, cells };
   const zones = await tx
     .select({ id: floorZones.id, name: floorZones.name })
     .from(floorZones)
@@ -696,10 +624,7 @@ export async function previewRoutingChange(
       const from = previous.route;
       const next = chooseMaker(after, facts, zone.id, null);
       const to = next.route;
-      if (
-        JSON.stringify(from) !== JSON.stringify(to) ||
-        previous.noReplacement !== next.noReplacement
-      )
+      if (!sameRoute(from, to) || previous.noReplacement !== next.noReplacement)
         moves.push({
           productId: product.id,
           productName: product.name,
@@ -716,6 +641,12 @@ export async function previewRoutingChange(
       (a.zoneName ?? "").localeCompare(b.zoneName ?? "") ||
       a.productId.localeCompare(b.productId),
   );
+}
+
+function sameRoute(a: RouteTarget | null, b: RouteTarget | null): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.kind === "station") return b.kind === "station" && a.stationId === b.stationId;
+  return a.kind === b.kind;
 }
 
 /** Canonical database spelling, also used to group caller spellings of one product. */
@@ -877,6 +808,10 @@ export async function describeMakers(
   >
 > {
   const rules = await loadRoutingRules(tx, cfg, null);
+  const zones = await tx
+    .select({ id: floorZones.id })
+    .from(floorZones)
+    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)));
   const rows = await tx
     .select({
       id: products.id,
@@ -898,24 +833,18 @@ export async function describeMakers(
   >();
   for (const row of rows) {
     if (row.parentActive === false) continue;
-    const ancestors = folderAncestors(rules.parentOf, row.categoryId);
-    const choice = chooseMaker(
-      rules,
-      { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId },
-      null,
-      null,
-    );
+    const facts = { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId };
+    const choice = chooseMaker(rules, facts, null, null);
     result.set(row.id, {
       route: choice.route,
       noReplacement: choice.noReplacement,
       unavailableStationId: choice.noReplacement ? choice.fallbacks[0]!.stationId : null,
-      variesByZone: rules.cells.some(
-        ({ row: cellRow, zoneId }) =>
-          zoneId !== null &&
-          (cellRow.kind === "all" ||
-            (cellRow.kind === "product" && cellRow.productId === row.routedId) ||
-            (cellRow.kind === "category" && ancestors.includes(cellRow.categoryId))),
-      ),
+      variesByZone: zones.some(({ id }) => {
+        const inZone = chooseMaker(rules, facts, id, null);
+        return (
+          inZone.noReplacement !== choice.noReplacement || !sameRoute(inZone.route, choice.route)
+        );
+      }),
     });
   }
   return result;

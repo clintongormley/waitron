@@ -433,6 +433,31 @@ describe("selectRoutingCell", () => {
     ),
   };
 
+  it("reads the cell list once per rules object, however many products and zones it routes", () => {
+    let scans = 0;
+    // Every scan of a non-empty list reads its first element; a lookup by coordinate does not.
+    const counted = new Proxy(rules.cells as RoutingCell[], {
+      get(target, property, receiver) {
+        if (property === "0") scans++;
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    const countedRules: RoutingRules = { ...rules, cells: counted };
+    const routed = [mojito, lager, bread].flatMap((facts) =>
+      ["terrace", "garden", "indoors", null].map(
+        (zoneId) => chooseMaker(countedRules, facts, zoneId, null).route,
+      ),
+    );
+    expect(routed).toEqual(
+      [mojito, lager, bread].flatMap((facts) =>
+        ["terrace", "garden", "indoors", null].map(
+          (zoneId) => chooseMaker(rules, facts, zoneId, null).route,
+        ),
+      ),
+    );
+    expect(scans).toBe(1);
+  });
+
   it("selects All categories × the zone, then the implicit default, for the All row", () => {
     expect(selectRoutingCell(rules, all, "garden")).toEqual({
       target: station("mainBar"),

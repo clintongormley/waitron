@@ -113,6 +113,23 @@ function rowKey(row: RoutingRow): string {
       : `c:${row.categoryId}`;
 }
 
+const cellIndexes = new WeakMap<readonly RoutingCell[], ReadonlyMap<string, RoutingCell>>();
+
+/** Built once per cell list, so routing a whole catalogue does not rescan it per product and zone. */
+function cellIndex(cells: readonly RoutingCell[]): ReadonlyMap<string, RoutingCell> {
+  let index = cellIndexes.get(cells);
+  if (index === undefined) {
+    const built = new Map<string, RoutingCell>();
+    for (const cell of cells) {
+      const key = `${rowKey(cell.row)}|${cell.zoneId ?? ""}`;
+      if (!built.has(key)) built.set(key, cell);
+    }
+    index = built;
+    cellIndexes.set(cells, index);
+  }
+  return index;
+}
+
 /**
  * Row order decides before zone: the product, its category, each parent, All categories, and
  * within each row its zone cell before Every zone. All categories × Every zone is the implicit
@@ -132,21 +149,15 @@ export function selectRoutingCell(
     }
   }
   lineage.push({ kind: "all" });
-  const rank = new Map(lineage.map((r, i) => [rowKey(r), i]));
-  let best: RoutingCell | null = null;
-  let bestRank = Infinity;
-  for (const cell of rules.cells) {
-    if (cell.zoneId !== null && cell.zoneId !== zoneId) continue;
-    if (cell.row.kind === "all" && cell.zoneId === null) continue;
-    const rowRank = rank.get(rowKey(cell.row));
-    if (rowRank === undefined) continue;
-    const cellRank = rowRank * 2 + (cell.zoneId === null ? 1 : 0);
-    if (cellRank < bestRank) {
-      best = cell;
-      bestRank = cellRank;
-    }
+  const byCoordinate = cellIndex(rules.cells);
+  let best: RoutingCell | undefined;
+  for (const candidate of lineage) {
+    const key = rowKey(candidate);
+    if (zoneId !== null) best = byCoordinate.get(`${key}|${zoneId}`);
+    if (best === undefined && candidate.kind !== "all") best = byCoordinate.get(`${key}|`);
+    if (best !== undefined) break;
   }
-  if (best !== null) {
+  if (best !== undefined) {
     return {
       target: best.target,
       decidedBy: { kind: "cell", address: { row: best.row, zoneId: best.zoneId } },
