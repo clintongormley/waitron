@@ -12,6 +12,8 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { printAgents } from "./print-agents.js";
+import { printJobs } from "./print-jobs.js";
 import { sales } from "./sales.js";
 
 export type InvoiceEmailConsent = {
@@ -31,6 +33,9 @@ export const invoiceDeliveries = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     saleId: id("sale_id").notNull(),
+    /* v8 ignore start */
+    printJobId: id("print_job_id").references(() => printJobs.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     requestKey: label("request_key").notNull(),
     medium: invoiceDeliveryMedium("medium").notNull(),
     designation: invoiceDeliveryDesignation("designation").notNull(),
@@ -46,6 +51,9 @@ export const invoiceDeliveries = table(
     completedAt: tsString("completed_at"),
     claimTokenHash: label("claim_token_hash"),
     claimedBy: label("claimed_by"),
+    /* v8 ignore start */
+    claimedAgentId: id("claimed_agent_id").references(() => printAgents.id),
+    /* v8 ignore stop */
     claimedAt: tsString("claimed_at"),
     expiredAt: tsString("expired_at"),
     failureCode: label("failure_code").$type<"transport_failed" | "timeout" | "restart">(),
@@ -59,6 +67,7 @@ export const invoiceDeliveries = table(
       foreignColumns: [sales.id],
       name: "invoice_deliveries_sale_fk",
     }).onDelete("restrict"),
+    uniqueIndex("invoice_deliveries_print_job_uq").on(t.printJobId),
     uniqueIndex("invoice_deliveries_request_uq").on(t.saleId, t.requestKey),
     uniqueIndex("invoice_deliveries_generation_uq").on(t.saleId, t.generation),
     uniqueIndex("invoice_deliveries_active_uq")

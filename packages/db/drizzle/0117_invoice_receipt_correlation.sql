@@ -1,0 +1,2 @@
+ALTER TABLE `invoice_deliveries` ADD `print_job_id` text REFERENCES print_jobs(id);--> statement-breakpoint
+CREATE UNIQUE INDEX `invoice_deliveries_print_job_uq` ON `invoice_deliveries` (`print_job_id`);

@@ -20,10 +20,17 @@ export type EmailDeliveryRequest = {
   consent: InvoiceEmailConsent;
 };
 
+export type ReceiptDeliveryRequest = {
+  requestKey: string;
+  personId: string;
+  medium: "receipt";
+  printJobId: string;
+};
+
 export async function reserveInvoiceDelivery(
   tx: Transaction,
   saleId: string,
-  input: EmailDeliveryRequest,
+  input: EmailDeliveryRequest | ReceiptDeliveryRequest,
 ): Promise<InvoiceDelivery> {
   const [sale] = await tx
     .select({ recipient: sales.counterpartyTaxId })
@@ -38,6 +45,25 @@ export async function reserveInvoiceDelivery(
       and(eq(invoiceDeliveries.saleId, saleId), eq(invoiceDeliveries.requestKey, input.requestKey)),
     );
   if (replay !== undefined) return replay;
+  const [receiptJob] =
+    input.medium === "receipt"
+      ? await tx.select().from(printJobs).where(eq(printJobs.id, input.printJobId))
+      : [];
+  if (input.medium === "receipt") {
+    const [linked] = await tx
+      .select({ id: invoiceDeliveries.id })
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.printJobId, input.printJobId));
+    if (
+      receiptJob === undefined ||
+      receiptJob.saleId !== saleId ||
+      receiptJob.kind !== "document" ||
+      receiptJob.status !== "queued" ||
+      linked !== undefined
+    ) {
+      throw new AppError("invoice_delivery.receipt_invalid", {});
+    }
+  }
   const [active] = await tx
     .select({ id: invoiceDeliveries.id })
     .from(invoiceDeliveries)
@@ -49,7 +75,7 @@ export async function reserveInvoiceDelivery(
     );
   if (active !== undefined) throw new AppError("invoice_delivery.active", {});
   const receiptJobs = await tx
-    .select({ status: printJobs.status, attempts: printJobs.attempts })
+    .select({ id: printJobs.id, status: printJobs.status, attempts: printJobs.attempts })
     .from(printJobs)
     .where(
       and(
@@ -61,9 +87,10 @@ export async function reserveInvoiceDelivery(
   if (
     receiptJobs.some(
       (job) =>
-        job.status === "queued" ||
-        job.status === "printing" ||
-        (job.status === "failed" && job.attempts < MAX_DELIVERY_ATTEMPTS),
+        !(input.medium === "receipt" && job.id === input.printJobId) &&
+        (job.status === "queued" ||
+          job.status === "printing" ||
+          (job.status === "failed" && job.attempts < MAX_DELIVERY_ATTEMPTS)),
     )
   ) {
     throw new AppError("invoice_delivery.active", {});
@@ -73,6 +100,14 @@ export async function reserveInvoiceDelivery(
     .from(invoiceDeliveries)
     .where(eq(invoiceDeliveries.saleId, saleId))
     .orderBy(desc(invoiceDeliveries.generation));
+  const designation =
+    receiptJobs.some((job) => job.status === "done") ||
+    history.some((row) => row.designation === "original" && row.status === "sent")
+      ? "duplicate"
+      : "original";
+  if (receiptJob !== undefined && receiptJob.receiptCopy !== (designation === "duplicate")) {
+    throw new AppError("invoice_delivery.receipt_invalid", {});
+  }
   const [delivery] = await tx
     .insert(invoiceDeliveries)
     .values({
@@ -80,14 +115,17 @@ export async function reserveInvoiceDelivery(
       requestKey: input.requestKey,
       personId: input.personId,
       medium: input.medium,
-      designation:
-        receiptJobs.some((job) => job.status === "done") ||
-        history.some((row) => row.designation === "original" && row.status === "sent")
-          ? "duplicate"
-          : "original",
+      designation,
       generation: (history[0]?.generation ?? 0) + 1,
-      recipient: input.recipient,
-      consent: { ...input.consent, recordedAt: new Date(input.consent.recordedAt).toISOString() },
+      ...(input.medium === "email"
+        ? {
+            recipient: input.recipient,
+            consent: {
+              ...input.consent,
+              recordedAt: new Date(input.consent.recordedAt).toISOString(),
+            },
+          }
+        : { printJobId: input.printJobId }),
     })
     .returning();
   return delivery!;
@@ -113,6 +151,24 @@ export async function claimInvoiceDelivery(
   holder: string,
   now = new Date(),
 ): Promise<InvoiceDeliveryClaim | undefined> {
+  const [delivery] = await tx
+    .select()
+    .from(invoiceDeliveries)
+    .where(eq(invoiceDeliveries.id, deliveryId));
+  if (delivery === undefined) return undefined;
+  if (delivery.medium === "receipt") {
+    const [job] = await tx
+      .select({ id: printJobs.id })
+      .from(printJobs)
+      .where(
+        and(
+          eq(printJobs.id, delivery.printJobId!),
+          eq(printJobs.status, "printing"),
+          eq(printJobs.claimedBy, holder),
+        ),
+      );
+    if (job === undefined) return undefined;
+  }
   const token = randomUUID();
   const [row] = await tx
     .update(invoiceDeliveries)
@@ -121,6 +177,7 @@ export async function claimInvoiceDelivery(
       attempts: 1,
       claimTokenHash: tokenHash(token),
       claimedBy: holder,
+      claimedAgentId: delivery.medium === "receipt" ? holder : null,
       claimedAt: now.toISOString(),
     })
     .where(
@@ -154,7 +211,18 @@ export async function expireInvoiceDeliveryClaims(
           : lte(invoiceDeliveries.claimedAt, new Date(now.getTime() - 60_000).toISOString()),
       ),
     )
-    .returning({ id: invoiceDeliveries.id });
+    .returning({ id: invoiceDeliveries.id, printJobId: invoiceDeliveries.printJobId });
+  const jobIds = expired.flatMap((row) => (row.printJobId === null ? [] : [row.printJobId]));
+  if (jobIds.length > 0) {
+    await tx
+      .update(printJobs)
+      .set({
+        status: "failed",
+        attempts: MAX_DELIVERY_ATTEMPTS,
+        lastError: restart ? "restart" : "timeout",
+      })
+      .where(inArray(printJobs.id, jobIds));
+  }
   return expired.length;
 }
 
@@ -215,5 +283,15 @@ export async function reportInvoiceDelivery(
           }),
     })
     .where(eq(invoiceDeliveries.id, delivery.id));
+  if (!historical && delivery.printJobId !== null) {
+    await tx
+      .update(printJobs)
+      .set(
+        outcome.status === "sent"
+          ? { status: "done", deliveredAt: now.toISOString(), lastError: null }
+          : { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: outcome.failureCode },
+      )
+      .where(and(eq(printJobs.id, delivery.printJobId), eq(printJobs.claimedBy, claim.holder)));
+  }
   return { updated: !historical, historical };
 }

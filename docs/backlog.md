@@ -1804,10 +1804,16 @@ retains the recipient and consent for each request, and distinguishes original r
 duplicates. Its claim helpers use fresh tokens, keep only their hashes, expire to an unknown
 outcome, and authenticate late reports against the recorded attempt. Tests cover late results
 before a retry, while it is queued or sending, and after it succeeds or fails. Existing receipt
-originals participate in reservation checks. The focused delivery and receipt suites pass 198
-cases; the schema/error guards pass 414, and the unchanged fiscal suites pass 20.
-The helpers are not wired into a worker or public route yet. Receipt-job/agent correlation,
-stale receipt-report fencing, bill staging, A4 printer references, SMTP, office transport,
+originals participate in reservation checks. Receipt reservations now correlate to the existing
+job through a declared foreign key and unique index, and reject another sale's job, drawer
+jobs, non-receipts, reused jobs and an original/copy designation that differs from the saved
+job. Receipt claim metadata references the print agent and requires that agent's current
+print-job claim. At helper expiry the linked job loses automatic claim eligibility before an
+email retry is reserved; a historical report leaves that job unchanged. Current and latest
+late reports project the outcome onto the existing job without another handover snapshot.
+The focused tests and independent guard deletions cover these helper paths.
+The helpers are not wired into a worker or public route yet. API/agent receipt-token transport
+and stale-report fencing, bill staging, A4 printer references, SMTP, office transport,
 delivery UI and image/box checks remain. It settles A3's open "Printing A4 invoices on an office
 printer" work when complete.
 Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe
