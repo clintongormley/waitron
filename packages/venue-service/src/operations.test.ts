@@ -2139,7 +2139,7 @@ describe("zone offers from the published menus", () => {
       // The bar zone sells All day alone; with only an unpublished menu it sells nothing.
       await allowMenuInZone(tx, cfg, venue.barZone, brunch.id, { makeDefault: true });
       await tx.execute(
-        sql`delete from zone_menus where zone_id = ${venue.barZone} and menu_id = ${venue.menuId}`,
+        sql`delete from department_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
       );
       await expect(listZoneOffers(tx, cfg, venue.barZone)).resolves.toEqual({
         defaultMenuId: null,
@@ -2158,7 +2158,7 @@ describe("zone offers from the published menus", () => {
       const brunch = await createCatalogue(tx, { name: "Brunch" });
       await allowMenuInZone(tx, cfg, venue.barZone, brunch.id, { makeDefault: true });
       await tx.execute(
-        sql`delete from zone_menus where zone_id = ${venue.barZone} and menu_id = ${venue.menuId}`,
+        sql`delete from department_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
       );
       // The dining room's unpublished Brunch is beside published menus, so it is not reported.
       await allowMenuInZone(tx, cfg, venue.diningZone, brunch.id);

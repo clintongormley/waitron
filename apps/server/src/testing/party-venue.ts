@@ -407,8 +407,9 @@ export async function counterOrder(v: PartyVenue, ...names: string[]): Promise<s
 }
 
 /**
- * A menu of its own offering the product at `price`, allowed in the zone and made its default, and
- * published; answers the offer. Every other zone keeps selling the product at its own price.
+ * A menu of its own offering the product at `price`, added to the zone's department list and made
+ * the zone's all-day menu, and published; answers the offer. Every zone of that department serves
+ * the menu too.
  */
 export async function pricedInZone(
   v: PartyVenue,

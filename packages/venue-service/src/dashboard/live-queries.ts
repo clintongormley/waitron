@@ -59,7 +59,9 @@ export const QUERY_DEPENDENCIES = {
   operations: [
     "departments",
     "zone_service_policies",
-    "zone_menus",
+    "department_menus",
+    "department_all_day_menus",
+    "zone_all_day_menus",
     "station_claims",
     "route_exceptions",
     "service_settings",

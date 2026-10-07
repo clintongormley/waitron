@@ -247,6 +247,10 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "venue-service/0020_retire_invoice_first": {
     refused: ["DROP TABLE `departments`", "FOREIGN KEY constraint failed"],
   },
+  // The walk printed this step's DROP TABLE of zone_service_policies refused by a foreign key.
+  "venue-service/0027_retire_zone_menus": {
+    refused: ["DROP TABLE `zone_service_policies`", "FOREIGN KEY constraint failed"],
+  },
   "core/0106_retire_location_order_flow": {
     refused: ["DROP TABLE `locations`", "FOREIGN KEY constraint failed"],
   },

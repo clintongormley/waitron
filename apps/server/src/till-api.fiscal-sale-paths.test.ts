@@ -221,13 +221,15 @@ async function setupVenue(): Promise<{
       grossPrice: "1.50",
     });
     await tx.execute(sql`
-      insert into zone_menus (zone_id, menu_id, display_order)
-      select zone_id, ${cat.id}, 0
+      insert into department_menus (department_id, menu_id, display_order)
+      select department_id, ${cat.id}, 0
       from zone_service_policies
       where location_id = ${cfg.locationId}
         and is_counter_default`);
     await tx.execute(sql`
-      update zone_service_policies set default_menu_id = ${cat.id}
+      insert into zone_all_day_menus (zone_id, department_id, menu_id)
+      select zone_id, department_id, ${cat.id}
+      from zone_service_policies
       where location_id = ${cfg.locationId}
         and is_counter_default`);
     await publishWorkingMenu(tx, cat.id);

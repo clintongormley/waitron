@@ -233,26 +233,23 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       await tx.execute(sql`
       insert into floor_zones (id, location_id, name, created_at)
       values (${zoneId}, ${locationId}, 'Counter', ${createdAt})`);
-      // Three statements, because `zone_service_policies` and `zone_menus` point at each other and
-      // neither key is deferrable: insert the policy with a NULL default menu, insert the allowed
-      // menus, then name one of them (packages/venue-service/src/schema/service.ts, above
-      // `zone_service_policies_default_allowed_fk`).
       await tx.execute(sql`
       insert into zone_service_policies
-        (location_id, zone_id, department_id, default_menu_id, is_counter_default)
-      values (${locationId}, ${zoneId}, ${departmentId}, null, true)`);
+        (location_id, zone_id, department_id, is_counter_default)
+      values (${locationId}, ${zoneId}, ${departmentId}, true)`);
       await tx.execute(sql`
       insert into department_sale_policies (department_id, paid_when)
       values (${departmentId}, ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
       await tx.execute(sql`
       insert into zone_sale_policies (zone_id) values (${zoneId})`);
       await tx.execute(sql`
-      insert into zone_menus (zone_id, menu_id, display_order)
+      insert into department_menus (department_id, menu_id, display_order)
       values
-        (${zoneId}, ${cat.id}, 0),
-        (${zoneId}, ${premium.id}, 1)`);
+        (${departmentId}, ${cat.id}, 0),
+        (${departmentId}, ${premium.id}, 1)`);
       await tx.execute(sql`
-      update zone_service_policies set default_menu_id = ${cat.id} where zone_id = ${zoneId}`);
+      insert into zone_all_day_menus (zone_id, department_id, menu_id)
+      values (${zoneId}, ${departmentId}, ${cat.id})`);
       await publishWorkingMenu(tx, cat.id);
       await publishWorkingMenu(tx, premium.id);
       return {
@@ -1107,23 +1104,13 @@ describe("openTab service context", () => {
       const downstairsZone = await tx.execute<{ id: string }>(sql`
         insert into floor_zones (id, location_id, name, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Downstairs', ${nowIso()}) returning id`);
-      // The policy goes in with a NULL default menu, the allowed menus follow, and the last
-      // statement names one — the same three-step the venue fixture above explains: the two tables
-      // point at each other and neither key is deferrable on this engine.
+      // The venue's one department already lists both menus, so the zone serves them as it joins.
       await tx.execute(sql`
-        insert into zone_service_policies
-          (location_id, zone_id, department_id, default_menu_id)
-        values (${cfg.locationId}, ${downstairsZone.rows[0]!.id},
-          ${department.rows[0]!.id}, null)`);
+        insert into zone_service_policies (location_id, zone_id, department_id)
+        values (${cfg.locationId}, ${downstairsZone.rows[0]!.id}, ${department.rows[0]!.id})`);
       await tx.execute(sql`
-        insert into zone_menus (zone_id, menu_id)
-        values
-          (${downstairsZone.rows[0]!.id}, ${catalogueId}),
-          (${downstairsZone.rows[0]!.id},
-            (select menu_id from menu_items where id = ${premiumCafeOfferId}))`);
-      await tx.execute(sql`
-        update zone_service_policies set default_menu_id = ${catalogueId}
-        where zone_id = ${downstairsZone.rows[0]!.id}`);
+        insert into zone_all_day_menus (zone_id, department_id, menu_id)
+        values (${downstairsZone.rows[0]!.id}, ${department.rows[0]!.id}, ${catalogueId})`);
       const upstairsBar = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairsBar = await createStation(tx, cfg, { name: "Downstairs bar" });
       const product = await tx.execute<{ category_id: string }>(sql`

@@ -234,10 +234,12 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       variantIds = { double: variants[0]!.id, fuera: variants[1]!.id };
     }
     await tx.execute(sql`
-      insert into zone_menus (zone_id, menu_id)
-      values (${zone.rows[0]!.id}, ${cat.id})`);
+      insert into department_menus (department_id, menu_id)
+      select department_id, ${cat.id} from zone_service_policies
+      where zone_id = ${zone.rows[0]!.id}`);
     await tx.execute(sql`
-      update zone_service_policies set default_menu_id = ${cat.id}
+      insert into zone_all_day_menus (zone_id, department_id, menu_id)
+      select zone_id, department_id, ${cat.id} from zone_service_policies
       where zone_id = ${zone.rows[0]!.id}`);
     await tx.execute(sql`
       insert into station_claims (id, location_id, category_id, station_id)

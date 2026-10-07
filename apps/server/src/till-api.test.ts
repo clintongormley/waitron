@@ -21,9 +21,11 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  addDepartmentMenu,
   departments,
   routeExceptions,
   setProfileServiceAccess,
+  setZoneAllDayMenu,
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import {
@@ -222,22 +224,17 @@ const suite = useVenueDb({
           .insert(floorZones)
           .values({ locationId: loc!.id, name: "Counter" })
           .returning({ id: floorZones.id });
-        // Three statements: `zone_service_policies_default_allowed_fk` is checked at each statement
-        // and `zone_menus.zone_id` points back at the policy row, so the order is the one the comment
-        // above that key in `packages/venue-service/src/schema/service.ts` gives.
         await tx.execute(sql`
         insert into zone_service_policies
-          (location_id, zone_id, department_id, default_menu_id, is_counter_default)
-        values (${loc!.id}, ${zone!.id}, ${department!.id}, null, true)`);
+          (location_id, zone_id, department_id, is_counter_default)
+        values (${loc!.id}, ${zone!.id}, ${department!.id}, true)`);
         await tx.execute(sql`
         insert into department_sale_policies (department_id) values (${department!.id})`);
         await tx.execute(sql`
         insert into zone_sale_policies (zone_id) values (${zone!.id})`);
-        await tx.execute(sql`
-        insert into zone_menus (zone_id, menu_id)
-        values (${zone!.id}, ${cat.id})`);
-        await tx.execute(sql`
-        update zone_service_policies set default_menu_id = ${cat.id} where zone_id = ${zone!.id}`);
+        const venueScope = { locationId: brandLocationId(loc!.id) };
+        await addDepartmentMenu(tx, venueScope, department!.id, cat.id);
+        await setZoneAllDayMenu(tx, venueScope, zone!.id, cat.id);
         const offer = await addProductToMenu(tx, {
           menuId: cat.id,
           productId: p.id,
@@ -1790,8 +1787,6 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       from zone_service_policies where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
       insert into zone_sale_policies (zone_id, paid_when) values (${second!.id}, 'ticket_then_pay')`);
-    await suite.db.execute(sql`
-      insert into zone_menus (zone_id, menu_id) values (${second!.id}, ${aguaProduct.catalogueId})`);
     try {
       for (const [zoneId, serviceMode] of [
         [counterZoneId, "prepay"],
@@ -1802,7 +1797,6 @@ describe("GET /api/products (session-guarded catalogue)", () => {
         expect(await response.json()).toMatchObject({ context: { zoneId, serviceMode } });
       }
     } finally {
-      await suite.db.execute(sql`delete from zone_menus where zone_id = ${second!.id}`);
       await suite.db.execute(sql`delete from zone_sale_policies where zone_id = ${second!.id}`);
       await suite.db.execute(sql`delete from zone_service_policies where zone_id = ${second!.id}`);
       await suite.db.delete(floorZones).where(eq(floorZones.id, second!.id));
@@ -1883,9 +1877,6 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
       insert into zone_sale_policies (zone_id) values (${second!.id})`);
-    await suite.db.execute(sql`
-      insert into zone_menus (zone_id, menu_id)
-      values (${second!.id}, ${aguaProduct.catalogueId})`);
     await withTransaction(suite.db, async (tx) => {
       const [policy] = await tx
         .select({ departmentId: zoneServicePolicies.departmentId })
@@ -3523,12 +3514,10 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       insert into zone_service_policies
         (location_id, zone_id, department_id)
       values (${cfg.locationId}, ${zoneId}, ${department!.id})`);
-    await suite.db.execute(sql`
-      insert into zone_menus (zone_id, menu_id)
-      values (${zoneId}, ${aguaProduct.catalogueId})`);
-    await suite.db.execute(sql`
-      update zone_service_policies set default_menu_id = ${aguaProduct.catalogueId}
-      where zone_id = ${zoneId}`);
+    await withTransaction(suite.db, async (tx) => {
+      await addDepartmentMenu(tx, cfg, department!.id, aguaProduct.catalogueId);
+      await setZoneAllDayMenu(tx, cfg, zoneId, aguaProduct.catalogueId);
+    });
 
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
       createTable(tx, cfg, { label: "4", zoneId }),
@@ -4316,12 +4305,10 @@ describe("canonical modifier HTTP serialization", () => {
     await suite.db.execute(
       sql`insert into zone_service_policies (location_id,zone_id,department_id) values (${cfg.locationId},${zoneId},${modifierDepartment!.id})`,
     );
-    await suite.db.execute(
-      sql`insert into zone_menus (zone_id,menu_id) values (${zoneId},${aguaProduct.catalogueId})`,
-    );
-    await suite.db.execute(
-      sql`update zone_service_policies set default_menu_id=${aguaProduct.catalogueId} where zone_id=${zoneId}`,
-    );
+    await withTransaction(suite.db, async (tx) => {
+      await addDepartmentMenu(tx, cfg, modifierDepartment!.id, aguaProduct.catalogueId);
+      await setZoneAllDayMenu(tx, cfg, zoneId, aguaProduct.catalogueId);
+    });
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
       createTable(tx, cfg, { label: "Modifiers", zoneId }),
     );

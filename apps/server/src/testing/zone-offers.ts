@@ -17,6 +17,7 @@ import {
   setClaim,
   setZoneSalePolicyOverride,
   listDepartments,
+  zoneAllDayMenus,
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import type { TillConfig } from "../till-config.js";
@@ -69,11 +70,11 @@ export async function offerProducts(
   }
 
   const menuId = await ownMenu(tx);
-  const [policy] = await tx
-    .select({ defaultMenuId: zoneServicePolicies.defaultMenuId })
-    .from(zoneServicePolicies)
-    .where(eq(zoneServicePolicies.zoneId, zoneId));
-  await allowMenuInZone(tx, cfg, zoneId, menuId, { makeDefault: policy!.defaultMenuId === null });
+  const [own] = await tx
+    .select({ menuId: zoneAllDayMenus.menuId })
+    .from(zoneAllDayMenus)
+    .where(eq(zoneAllDayMenus.zoneId, zoneId));
+  await allowMenuInZone(tx, cfg, zoneId, menuId, { makeDefault: own === undefined });
 
   const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx, cfg)))];
   const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);

@@ -2,6 +2,8 @@ import "./errors.js";
 
 export * from "./schema/index.js";
 export * from "./operations.js";
+export * from "./department-menus.js";
+export type { MenuUse } from "./errors.js";
 export * from "./kitchen-notices.js";
 export * from "./profile-access.js";
 export { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";

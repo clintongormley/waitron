@@ -1,11 +1,22 @@
 import "@waitron/shared";
 
+/** Something that still names a menu of a department's list, so the menu cannot leave it. */
+export type MenuUse =
+  | { kind: "department_all_day" }
+  | { kind: "period"; periodId: string }
+  | { kind: "zone_all_day"; zoneId: string }
+  | { kind: "zone_period"; zoneId: string; periodId: string };
+
 declare module "@waitron/shared" {
   interface ErrorParams {
     "department.not_found": { departmentId: string };
     "department.last_active": { departmentId: string };
     "zone.table_in_use": { zoneId: string; tableId: string; tableName: string };
     "service_zone.not_found": { zoneId: string };
+    /** A default names a menu the department's list does not hold. */
+    "department_menu.not_found": { departmentId: string; menuId: string };
+    /** Removing a menu from a department's list that `uses` still name, every one of them. */
+    "department_menu.in_use": { departmentId: string; menuId: string; uses: MenuUse[] };
     "zone.name_taken": { name: string };
     "service_zone.default_missing": Record<string, never>;
     "service_zone.offer_not_allowed": { zoneId: string; menuItemId: string };

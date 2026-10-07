@@ -6,11 +6,12 @@ import {
   departmentSalePolicies,
   departments,
   deviceProfileServiceAccess,
-  zoneMenus,
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./schema/service.js";
 import { serviceSettings } from "./schema/settings.js";
+import { departmentAllDayMenus } from "./schema/menus.js";
+import { addDepartmentMenu } from "./department-menus.js";
 
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
@@ -103,19 +104,12 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
       const menuId = location[0]!.catalogueId;
       if (menuId !== null) {
+        const counterDepartmentId = policy[0]!.departmentId;
+        await addDepartmentMenu(tx, node, counterDepartmentId, menuId, { displayOrder: 0 });
         await tx
-          .insert(zoneMenus)
-          .values({ zoneId, menuId, displayOrder: 0 })
-          .onConflictDoNothing({ target: [zoneMenus.zoneId, zoneMenus.menuId] });
-        await tx
-          .update(zoneServicePolicies)
-          .set({ defaultMenuId: menuId })
-          .where(
-            and(
-              eq(zoneServicePolicies.zoneId, zoneId),
-              sql`${zoneServicePolicies.defaultMenuId} is null`,
-            ),
-          );
+          .insert(departmentAllDayMenus)
+          .values({ departmentId: counterDepartmentId, menuId })
+          .onConflictDoNothing({ target: departmentAllDayMenus.departmentId });
       }
       // A profile that takes orders and has no scope yet orders in the counter's department,
       // starting there. A kitchen display takes no orders, so it gets none. A scope already saved

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import {
   catalogues,
   diningTables,
@@ -33,10 +33,11 @@ import {
   orderServiceContexts,
   saleReceiptHeaders,
   workingLineContexts,
-  zoneMenus,
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./schema/service.js";
+import { departmentAllDayMenus, departmentMenus, zoneAllDayMenus } from "./schema/menus.js";
+import { addDepartmentMenu, setZoneAllDayMenu } from "./department-menus.js";
 import { routeExceptions } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
@@ -73,18 +74,34 @@ export function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
 
+/** A zone's own all-day menu, else its department's; joined beside `zone_service_policies`. */
+const allDayMenuId = sql<
+  string | null
+>`coalesce(${zoneAllDayMenus.menuId}, ${departmentAllDayMenus.menuId})`;
+const zoneAllDayJoin = eq(zoneAllDayMenus.zoneId, zoneServicePolicies.zoneId);
+const departmentAllDayJoin = eq(
+  departmentAllDayMenus.departmentId,
+  zoneServicePolicies.departmentId,
+);
+
+/** Each configured zone's department list, with the zone's effective all-day menu marked. */
 export async function listZoneMenuAssignments(tx: Transaction, cfg: VenueScope) {
   return tx
     .select({
-      zoneId: zoneMenus.zoneId,
-      menuId: zoneMenus.menuId,
-      displayOrder: zoneMenus.displayOrder,
-      defaultMenuId: zoneServicePolicies.defaultMenuId,
+      zoneId: zoneServicePolicies.zoneId,
+      menuId: departmentMenus.menuId,
+      displayOrder: departmentMenus.displayOrder,
+      defaultMenuId: allDayMenuId,
     })
-    .from(zoneMenus)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneMenus.zoneId))
+    .from(departmentMenus)
+    .innerJoin(
+      zoneServicePolicies,
+      eq(zoneServicePolicies.departmentId, departmentMenus.departmentId),
+    )
+    .leftJoin(zoneAllDayMenus, zoneAllDayJoin)
+    .leftJoin(departmentAllDayMenus, departmentAllDayJoin)
     .where(eq(zoneServicePolicies.locationId, cfg.locationId))
-    .orderBy(zoneMenus.zoneId, zoneMenus.displayOrder, zoneMenus.menuId)
+    .orderBy(zoneServicePolicies.zoneId, departmentMenus.displayOrder, departmentMenus.menuId)
     .then((rows) =>
       rows.map(({ defaultMenuId, ...row }) => ({
         ...row,
@@ -345,19 +362,13 @@ export async function listVenueReadiness(
       name: floorZones.name,
       departmentId: zoneServicePolicies.departmentId,
       departmentActive: departments.active,
-      defaultMenuId: zoneServicePolicies.defaultMenuId,
-      assignedMenuId: zoneMenus.menuId,
+      defaultMenuId: allDayMenuId,
     })
     .from(floorZones)
     .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
     .leftJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .leftJoin(
-      zoneMenus,
-      and(
-        eq(zoneMenus.zoneId, zoneServicePolicies.zoneId),
-        eq(zoneMenus.menuId, zoneServicePolicies.defaultMenuId),
-      ),
-    )
+    .leftJoin(zoneAllDayMenus, zoneAllDayJoin)
+    .leftJoin(departmentAllDayMenus, departmentAllDayJoin)
     .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
     .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
 
@@ -366,7 +377,7 @@ export async function listVenueReadiness(
       if (zone.departmentId === null || zone.departmentActive !== true) {
         return [{ code: "zone.department_missing", zoneId: zone.id, zoneName: zone.name }];
       }
-      if (zone.defaultMenuId === null || zone.assignedMenuId === null) {
+      if (zone.defaultMenuId === null) {
         return [{ code: "zone.menu_missing", zoneId: zone.id, zoneName: zone.name }];
       }
       return [];
@@ -374,10 +385,7 @@ export async function listVenueReadiness(
   );
   const ready = zones.filter(
     (zone) =>
-      zone.departmentId !== null &&
-      zone.departmentActive === true &&
-      zone.defaultMenuId !== null &&
-      zone.assignedMenuId !== null,
+      zone.departmentId !== null && zone.departmentActive === true && zone.defaultMenuId !== null,
   );
   if (ready.length === 0) return issues;
   const menusOf = await zoneMenuIdsByZone(tx, cfg);
@@ -423,6 +431,15 @@ export async function configureZone(
   if (department === undefined) {
     throw new AppError("department.not_found", { departmentId: input.departmentId });
   }
+  // A zone moving department drops its override, which named the old department's list.
+  await tx
+    .delete(zoneAllDayMenus)
+    .where(
+      and(
+        eq(zoneAllDayMenus.zoneId, input.zoneId),
+        ne(zoneAllDayMenus.departmentId, input.departmentId),
+      ),
+    );
   await tx
     .insert(zoneServicePolicies)
     .values({
@@ -480,6 +497,10 @@ export async function createServiceZone(
   return { id: zoneId };
 }
 
+/**
+ * Adds the menu to the zone's DEPARTMENT list, so every zone of the department serves it, at
+ * `displayOrder` (0 when absent); `makeDefault` makes it the zone's own all-day menu.
+ */
 export async function allowMenuInZone(
   tx: Transaction,
   cfg: VenueScope,
@@ -493,7 +514,7 @@ export async function allowMenuInZone(
     .where(eq(catalogues.id, menuId));
   if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   const [policy] = await tx
-    .select({ zoneId: zoneServicePolicies.zoneId })
+    .select({ departmentId: zoneServicePolicies.departmentId })
     .from(zoneServicePolicies)
     .where(
       and(
@@ -502,19 +523,10 @@ export async function allowMenuInZone(
       ),
     );
   if (policy === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  await tx
-    .insert(zoneMenus)
-    .values({ zoneId, menuId, displayOrder: options.displayOrder ?? 0 })
-    .onConflictDoUpdate({
-      target: [zoneMenus.zoneId, zoneMenus.menuId],
-      set: { displayOrder: options.displayOrder ?? 0 },
-    });
-  if (options.makeDefault === true) {
-    await tx
-      .update(zoneServicePolicies)
-      .set({ defaultMenuId: menuId })
-      .where(eq(zoneServicePolicies.zoneId, zoneId));
-  }
+  await addDepartmentMenu(tx, cfg, policy.departmentId, menuId, {
+    displayOrder: options.displayOrder ?? 0,
+  });
+  if (options.makeDefault === true) await setZoneAllDayMenu(tx, cfg, zoneId, menuId);
 }
 
 export async function resolveZoneContext(
@@ -535,10 +547,12 @@ export async function resolveZoneContext(
       departmentName: departments.name,
       zoneMode: zoneServicePolicies.serviceMode,
       departmentMode: departments.defaultServiceMode,
-      defaultMenuId: zoneServicePolicies.defaultMenuId,
+      defaultMenuId: allDayMenuId,
     })
     .from(zoneServicePolicies)
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .leftJoin(zoneAllDayMenus, zoneAllDayJoin)
+    .leftJoin(departmentAllDayMenus, departmentAllDayJoin)
     .where(
       and(
         eq(zoneServicePolicies.locationId, cfg.locationId),
@@ -720,16 +734,19 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
     .where(eq(zoneSalePolicies.zoneId, zoneId));
 }
 
-/** The active menus each of the venue's zones may sell from, in each zone's order. */
+/** The active menus each of the venue's zones may sell from, in its department's order. */
 async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<string, string[]>> {
   const byZone = new Map<string, string[]>();
   for (const row of await tx
-    .select({ zoneId: zoneMenus.zoneId, menuId: zoneMenus.menuId })
-    .from(zoneMenus)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneMenus.zoneId))
-    .innerJoin(catalogues, eq(catalogues.id, zoneMenus.menuId))
+    .select({ zoneId: zoneServicePolicies.zoneId, menuId: departmentMenus.menuId })
+    .from(departmentMenus)
+    .innerJoin(
+      zoneServicePolicies,
+      eq(zoneServicePolicies.departmentId, departmentMenus.departmentId),
+    )
+    .innerJoin(catalogues, eq(catalogues.id, departmentMenus.menuId))
     .where(and(eq(zoneServicePolicies.locationId, cfg.locationId), eq(catalogues.active, true)))
-    .orderBy(zoneMenus.displayOrder, zoneMenus.menuId)) {
+    .orderBy(departmentMenus.displayOrder, departmentMenus.menuId)) {
     const menus = byZone.get(row.zoneId);
     if (menus === undefined) byZone.set(row.zoneId, [row.menuId]);
     else menus.push(row.menuId);
@@ -737,14 +754,18 @@ async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<
   return byZone;
 }
 
-/** The active menus a zone may sell from, in the zone's order. */
+/** The active menus a zone may sell from: its department's, in the department's order. */
 async function zoneMenuIds(tx: Transaction, zoneId: string): Promise<string[]> {
   const rows = await tx
-    .select({ id: zoneMenus.menuId })
-    .from(zoneMenus)
-    .innerJoin(catalogues, eq(catalogues.id, zoneMenus.menuId))
-    .where(and(eq(zoneMenus.zoneId, zoneId), eq(catalogues.active, true)))
-    .orderBy(zoneMenus.displayOrder, zoneMenus.menuId);
+    .select({ id: departmentMenus.menuId })
+    .from(departmentMenus)
+    .innerJoin(
+      zoneServicePolicies,
+      eq(zoneServicePolicies.departmentId, departmentMenus.departmentId),
+    )
+    .innerJoin(catalogues, eq(catalogues.id, departmentMenus.menuId))
+    .where(and(eq(zoneServicePolicies.zoneId, zoneId), eq(catalogues.active, true)))
+    .orderBy(departmentMenus.displayOrder, departmentMenus.menuId);
   return rows.map((row) => row.id);
 }
 

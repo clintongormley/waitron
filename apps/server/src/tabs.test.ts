@@ -1006,20 +1006,15 @@ describe("listTablesWithState (occupancy)", () => {
           defaultServiceMode: "table_tab",
         })
         .returning({ id: departments.id });
-      // Insert order: see `zone_service_policies_default_allowed_fk` in
-      // `packages/venue-service/src/schema/service.ts`.
       await tx.execute(sql`
-        insert into zone_service_policies
-          (location_id, zone_id, department_id, service_mode, default_menu_id)
-        values (
-          ${cfg.locationId}, ${zone.id}, ${department!.id},
-          'table_tab', null
-        )`);
+        insert into zone_service_policies (location_id, zone_id, department_id, service_mode)
+        values (${cfg.locationId}, ${zone.id}, ${department!.id}, 'table_tab')`);
       await tx.execute(sql`
-        insert into zone_menus (zone_id, menu_id)
-        values (${zone.id}, ${menuId})`);
+        insert into department_menus (department_id, menu_id)
+        values (${department!.id}, ${menuId})`);
       await tx.execute(sql`
-        update zone_service_policies set default_menu_id = ${menuId} where zone_id = ${zone.id}`);
+        insert into zone_all_day_menus (zone_id, department_id, menu_id)
+        values (${zone.id}, ${department!.id}, ${menuId})`);
       await tx.insert(stationClaims).values({
         locationId: cfg.locationId,
         categoryId,

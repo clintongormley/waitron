@@ -332,24 +332,19 @@ async function placeTable(shop: Shop): Promise<void> {
       from zone_service_policies
       where location_id = ${shop.cfg.locationId}
       limit 1`);
-    // The default-menu key is checked at each statement and `zone_menus` points back at the policy:
-    // insert the policy with a null default, then `zone_menus`, then name the default
-    // (`zoneServicePolicies` in `packages/venue-service/src/schema/service.ts`).
+    const departmentId = department.rows[0]!.department_id;
     await tx.execute(sql`
-      insert into zone_service_policies
-        (location_id, zone_id, department_id, service_mode, default_menu_id)
-      values (
-        ${shop.cfg.locationId}, ${zone.id},
-        ${department.rows[0]!.department_id}, 'table_tab', null
-      )`);
+      insert into zone_service_policies (location_id, zone_id, department_id, service_mode)
+      values (${shop.cfg.locationId}, ${zone.id}, ${departmentId}, 'table_tab')`);
     await tx.execute(sql`
       insert into zone_sale_policies (zone_id) values (${zone.id})`);
     await tx.execute(sql`
-      insert into zone_menus (zone_id, menu_id)
-      values (${zone.id}, ${shop.menuId})`);
+      insert into department_menus (department_id, menu_id)
+      values (${departmentId}, ${shop.menuId})
+      on conflict (department_id, menu_id) do nothing`);
     await tx.execute(sql`
-      update zone_service_policies set default_menu_id = ${shop.menuId}
-      where zone_id = ${zone.id}`);
+      insert into zone_all_day_menus (zone_id, department_id, menu_id)
+      values (${zone.id}, ${departmentId}, ${shop.menuId})`);
     // Through the table definition: `stationClaims.id`
     // (`packages/venue-service/src/schema/routing.ts`) is a `$defaultFn` generator, which a raw
     // statement never reaches.

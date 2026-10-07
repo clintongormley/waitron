@@ -108,9 +108,9 @@ export async function seedCatalogues(
   const menuItemsByProduct = new Map<string, string>();
 
   const { rows: provisionedMenus } = await tx.execute<{ id: string }>(sql`
-    select default_menu_id as id from zone_service_policies
-    where location_id = ${locationId} and is_counter_default
-      and default_menu_id is not null
+    select d.menu_id as id from zone_service_policies p
+    join department_all_day_menus d on d.department_id = p.department_id
+    where p.location_id = ${locationId} and p.is_counter_default
     limit 1`);
 
   const seedOne = async (data: SeedCatalogue, existingMenuId?: string): Promise<string> => {

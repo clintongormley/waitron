@@ -125,12 +125,16 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await db.execute(sql`
       update locations set catalogue_id = ${menus[0]!.id} where id = ${locationId}`);
     await db.execute(sql`
-      insert into zone_menus (zone_id, menu_id, display_order)
-      select zone_id, ${menus[1]!.id}, 1
+      insert into department_menus (department_id, menu_id, display_order)
+      select department_id, ${menus[1]!.id}, 1
+      from zone_service_policies`);
+    await db.execute(sql`
+      insert into department_all_day_menus (department_id, menu_id)
+      select department_id, ${menus[1]!.id}
       from zone_service_policies`);
     await db.execute(sql`
       update zone_service_policies
-      set service_mode = 'ticket_then_pay', default_menu_id = ${menus[1]!.id}`);
+      set service_mode = 'ticket_then_pay'`);
     await runSeed();
 
     const departments = await db.execute<{ count: number }>(sql`

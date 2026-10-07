@@ -831,3 +831,36 @@ describe("validateHolidayConfiguration", () => {
     expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.at(-1)).toEqual({ name: "local_holidays" });
   });
 });
+
+describe("the department menu rows of a bundle", () => {
+  const ZONE = "z-barra";
+  const tables = (departmentId: string): Tables => ({
+    zone_service_policies: [{ zone_id: ZONE, department_id: RESTAURANT }],
+    department_menus: [
+      { department_id: RESTAURANT, menu_id: "m-bebidas", display_order: 0 },
+      { department_id: DELI, menu_id: "m-bebidas", display_order: 0 },
+    ],
+    zone_all_day_menus: [{ zone_id: ZONE, department_id: departmentId, menu_id: "m-bebidas" }],
+  });
+
+  it("are transferred after the departments and zone policies their keys name", () => {
+    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    expect(
+      names.slice(names.indexOf("zone_sale_policies"), names.indexOf("zone_sale_policies") + 4),
+    ).toEqual([
+      "zone_sale_policies",
+      "department_menus",
+      "department_all_day_menus",
+      "zone_all_day_menus",
+    ]);
+  });
+
+  it("refuse a zone's all-day menu filed under a department other than the zone's", () => {
+    const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
+    expect(() => validate(tables(RESTAURANT))).not.toThrow();
+    expect(() => validate(tables(DELI))).toThrowError(refusal("zone_all_day_menus.department_id"));
+    const noPolicy = tables(RESTAURANT);
+    noPolicy.zone_service_policies = [];
+    expect(() => validate(noPolicy)).toThrowError(refusal("zone_all_day_menus.department_id"));
+  });
+});
