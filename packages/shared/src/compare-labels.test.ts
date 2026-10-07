@@ -60,3 +60,10 @@ it("keeps decimal differences smaller than floating-point precision in the name 
   expect(compareLabels("0.10000000000000001 kg", "0,10000000000000002 kg")).toBeLessThan(0);
   expect(compareLabels("9007199254740993.0 kg", "9007199254740992,9 kg")).toBeGreaterThan(0);
 });
+
+it("reads dotted version and address names as decimal runs without special numbering rules", () => {
+  expect(["v2.9.0", "v2.10.0"].sort(compareLabels)).toEqual(["v2.10.0", "v2.9.0"]);
+  expect(
+    ["Printer 192.168.1.9", "Printer 192.168.1.20", "Printer 192.168.1.100"].sort(compareLabels),
+  ).toEqual(["Printer 192.168.1.100", "Printer 192.168.1.20", "Printer 192.168.1.9"]);
+});

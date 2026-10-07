@@ -396,6 +396,18 @@ test("ISO timestamp sort values keep chronological order in both directions", as
   expect(sortedKeys(el)).toEqual(["year", "month", "fraction", "second", "missing"]);
 });
 
+test("negative numeric values retain numeric order rather than text name order", async () => {
+  const el = await sortTable([
+    { id: "five", value: -5 },
+    { id: "ten", value: -10 },
+    { id: "positive", value: 3 },
+  ]);
+  expect(sortedKeys(el)).toEqual(["ten", "five", "positive"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="value"]')!.click();
+  await el.updateComplete;
+  expect(sortedKeys(el)).toEqual(["positive", "five", "ten"]);
+});
+
 test("a column of decimals sorts by size, not as text", async () => {
   const el = await sortTable([
     { id: "larger", value: 1.5 },

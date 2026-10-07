@@ -617,6 +617,8 @@ Text sort values use `compareLabels` from `@waitron/shared`, matching the dashbo
 number runs compare as exact decimals with either comma or point, so "0,25 kg" precedes
 "0,5 kg" and "1.10 Postres" precedes "1.2 Sopas". Number sort values compare numerically;
 a tie preserves the incoming row order, and missing values sort last in either direction.
+The decimal rule also applies to dotted version and address names: "v2.10.0" precedes "v2.9.0",
+and "Printer 192.168.1.100" precedes "Printer 192.168.1.9".
 
 In the options and extras list forms, the reorder grip and other control columns take only the
 width their contents need. The option name takes the spare width; the extras product, quantity and
