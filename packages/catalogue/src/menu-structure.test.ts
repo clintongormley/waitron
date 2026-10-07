@@ -817,7 +817,7 @@ describe("a menu's prices", () => {
 
   it("carries the Active variants as the variants read gives them, and leaves the Inactive one out", async () => {
     const f = await fixture();
-    const { small, jug } = await app(async (tx) => {
+    const { small } = await app(async (tx) => {
       const variants = await setProductVariants(
         tx,
         f.lemonade,
@@ -855,7 +855,6 @@ describe("a menu's prices", () => {
       await addMember(tx, f.dinnerRoot, product(f.lemonade));
       return {
         small: variants.find((variant) => variant.name === "Small")!.id,
-        jug: variants.find((variant) => variant.name === "Jug")!.id,
       };
     });
     const lunchItem = await itemOf(f.lunch, f.lemonade);
@@ -866,13 +865,14 @@ describe("a menu's prices", () => {
       { variantId: f.large, price: "3.25", active: true },
       { variantId: small, price: null, active: true },
     ]);
-    expect(
-      lunchRow!.variants
-        .filter(({ active }) => active)
-        .map(({ variantId, price }) => ({ variantId, price })),
-    ).toEqual(await app((tx) => listMenuVariants(tx, lunchItem)));
+    expect(lunchRow!.variants.map(({ variantId, price }) => ({ variantId, price }))).toEqual(
+      await app((tx) => listMenuVariants(tx, lunchItem)),
+    );
     expect(lunchRow!.combined.variants.map(({ variantId }) => variantId)).toEqual([f.large, small]);
-    expect(dinnerRow!.combined.variants.map(({ variantId }) => variantId)).not.toContain(jug);
+    expect(dinnerRow!.combined.variants.map(({ variantId }) => variantId)).toEqual([
+      f.large,
+      small,
+    ]);
     // Dinner sets nothing for any size, and lists no Inactive Jug either.
     expect(dinnerRow!.variants).toEqual([
       { variantId: f.large, price: null, active: true },

@@ -358,6 +358,22 @@ describe("an Inactive product cannot be added to a menu list", () => {
     ).toBe("menu_section.membership_invalid");
     expect(await memberRowsNaming(gazpacho)).toEqual([]);
   });
+
+  it("and one a list holds anyway, written past the refusing writers, is left out of the menu's offers and prices", async () => {
+    const r = await removalFixture();
+    const gazpacho = await inactive(r);
+    await fx.db
+      .insert(sectionMembers)
+      .values({ sectionId: r.cold, position: 2, productId: gazpacho });
+    await fx.db
+      .insert(menuItems)
+      .values({ menuId: r.terrace, productId: gazpacho, grossPrice: 450 });
+
+    const offered = await app((tx) => listMenuOffers(tx, [r.terrace]));
+    expect(offered.map((offer) => offer.productId)).toEqual([r.tortilla, r.croquetas]);
+    const priced = await app((tx) => menuPrices(tx, r.terrace));
+    expect(priced.map((row) => row.productId)).toEqual([r.tortilla, r.croquetas]);
+  });
 });
 
 /**
