@@ -109,6 +109,34 @@ it.each([
     { kind: "no_preparation" as const },
     "Sin preparación: Drinks, en todas las zonas",
   ],
+  [
+    "en",
+    "a No category zone cell",
+    { row: { kind: "no_category" }, zoneId: "terrace" },
+    station("bar"),
+    "Bar: No category, on the Terrace",
+  ],
+  [
+    "es",
+    "a No category zone cell",
+    { row: { kind: "no_category" }, zoneId: "terrace" },
+    station("bar"),
+    "Bar: Sin categoría, en la zona Terrace",
+  ],
+  [
+    "en",
+    "a No category Every zone cell",
+    { row: { kind: "no_category" }, zoneId: null },
+    { kind: "no_preparation" as const },
+    "No preparation: No category, in every zone",
+  ],
+  [
+    "es",
+    "a No category Every zone cell",
+    { row: { kind: "no_category" }, zoneId: null },
+    { kind: "no_preparation" as const },
+    "Sin preparación: Sin categoría, en todas las zonas",
+  ],
 ] as const)("names %s: %s", (locale, _kind, address, route, sentence) => {
   setLocale(locale);
   expect(decisionSentence(explanation({ route, decidedBy: cell(address) }), names)).toBe(sentence);

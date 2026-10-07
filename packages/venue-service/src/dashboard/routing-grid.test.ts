@@ -599,16 +599,74 @@ describe("venue-routing-grid", () => {
     expect(actions.error).toBe("Drinks › Cocktails › Mojito, Terrace: Rechazado.");
   });
 
-  it("renders no editor for the No category heading", async () => {
-    const { el } = await mount();
-    const heading = bodyRows(el).find((row) => row.textContent!.trim() === "No category")!;
-    expect(heading.querySelector("wt-combobox")).toBeNull();
+  it("the No category row has an editor in every zone column, addressed to No category, never All categories", async () => {
+    const model = routing({
+      cells: [
+        ...routing().cells,
+        { row: { kind: "no_category" }, zoneId: "inside", target: station("bar") },
+      ],
+    });
+    const { el, emitted } = await mount(model);
+    const heading = bodyRows(el).find(
+      (row) => row.querySelector("th")!.textContent!.trim() === "No category",
+    )!;
+    const tds = [...heading.querySelectorAll<HTMLElement>("td[data-row]")];
+    expect(tds.map((td) => `${td.dataset.row}|${td.dataset.zone}`)).toEqual([
+      "no_category|every",
+      "no_category|terrace",
+      "no_category|inside",
+    ]);
+    expect(shown(combo(el, "no_category", "inside")!)).toEqual({ text: "Bar", muted: false });
+    // Inherited from All categories × Terrace.
+    expect(shown(combo(el, "no_category", "terrace")!)).toEqual({
+      text: "No preparation",
+      muted: true,
+    });
+    // Inherited from the default station.
+    expect(shown(combo(el, "no_category", "every")!)).toEqual({ text: "Kitchen", muted: true });
+    // An uncategorised product inherits the No category cell.
+    expect(shown(combo(el, "p:bread", "inside")!)).toEqual({ text: "Bar", muted: true });
+    const every = combo(el, "no_category", "every")!;
+    await userEvent.click(trigger(every));
+    expect(optionLabels(every)).toEqual([
+      "Clear setting",
+      "Kitchen",
+      "Bar",
+      "Terrace bar",
+      "No preparation",
+    ]);
+    const option = [...every.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (o) => o.textContent!.trim() === "No preparation",
+    )!;
+    await userEvent.click(option);
+    await every.updateComplete;
+    expect(emitted.changes).toEqual([
+      {
+        address: { row: { kind: "no_category" }, zoneId: null },
+        target: { kind: "no_preparation" },
+      },
+    ]);
+    expect(emitted.defaults).toEqual([]);
     expect(heading.querySelector("button")).toBeNull();
-    expect(heading.querySelectorAll("td[data-row]")).toHaveLength(0);
-    // Every editor in the grid addresses a real row: All categories, a category or a product.
+    expect(heading.querySelector("th")!.textContent!.trim()).toBe("No category");
+    // Every editor in the grid addresses a real row: All, No category, a category or a product.
     for (const td of root(el).querySelectorAll<HTMLElement>("td[data-row]")) {
-      expect(td.dataset.row).toMatch(/^(all|c:.+|p:.+)$/);
+      expect(td.dataset.row).toMatch(/^(all|no_category|c:.+|p:.+)$/);
     }
+  });
+
+  it.each([
+    ["en", "No category, Inside: Refused."],
+    ["es", "Sin categoría, Inside: Refused."],
+  ] as const)("the bottom refusal names a No category cell in %s", async (locale, text) => {
+    setLocale(locale);
+    const address: CellAddress = { row: { kind: "no_category" }, zoneId: "inside" };
+    const { el } = await mount(routing(), { refusal: { address, message: "Refused." } });
+    const actions = root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
+    expect(actions.error).toBe(text);
+    const box = combo(el, "no_category", "inside")!;
+    expect(box.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe("Refused.");
+    expect((combo(el, "all", "terrace") as unknown as { error: string }).error).toBe("");
   });
 
   it("zone columns share the width evenly however long a cell's warning is", async () => {

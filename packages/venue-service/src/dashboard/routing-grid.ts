@@ -25,10 +25,8 @@ import {
   collapseCategory,
   expandAll,
   expandCategory,
-  isNoCategoryHeading,
   pruneExpanded,
   visibleRoutingRows,
-  type RoutingGridEntry,
 } from "./routing-grid-model.js";
 import { t } from "./strings.js";
 
@@ -46,9 +44,11 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {
 function rowKey(row: RoutingRow): string {
   return row.kind === "all"
     ? "all"
-    : row.kind === "category"
-      ? `c:${row.categoryId}`
-      : `p:${row.productId}`;
+    : row.kind === "no_category"
+      ? "no_category"
+      : row.kind === "category"
+        ? `c:${row.categoryId}`
+        : `p:${row.productId}`;
 }
 
 type Zone = { id: string | null; name: string };
@@ -267,6 +267,7 @@ export class RoutingGrid extends LitElement {
 
   #rowName(entry: GridRow): string {
     if (entry.row.kind === "all") return t("routing.all_categories");
+    if (entry.row.kind === "no_category") return t("routing.no_category");
     return [...entry.path, entry.name].join(" › ");
   }
 
@@ -275,8 +276,7 @@ export class RoutingGrid extends LitElement {
     const model = this.model!;
     const key = rowKey(refusal.address.row);
     const entry = visibleRoutingRows(model, expandAll(model)).find(
-      (candidate): candidate is GridRow =>
-        !isNoCategoryHeading(candidate) && rowKey(candidate.row) === key,
+      (candidate) => rowKey(candidate.row) === key,
     );
     const zoneId = refusal.address.zoneId;
     const zone =
@@ -435,7 +435,7 @@ export class RoutingGrid extends LitElement {
   }
 
   #rowLabel(entry: GridRow, open: ReadonlySet<string>) {
-    if (entry.row.kind === "all") return t("routing.all_categories");
+    if (entry.row.kind === "all" || entry.row.kind === "no_category") return this.#rowName(entry);
     const row = entry.row;
     const parent =
       row.kind === "category"
@@ -465,8 +465,12 @@ export class RoutingGrid extends LitElement {
   }
 
   #row(entry: GridRow, zones: readonly Zone[], open: ReadonlySet<string>) {
-    return html`<tr>
-      <th scope="row" style=${styleMap({ "--routing-depth": String(entry.path.length) })}>
+    const heading = entry.row.kind === "no_category";
+    return html`<tr class=${heading ? "heading" : ""}>
+      <th
+        scope=${heading ? "rowgroup" : "row"}
+        style=${styleMap({ "--routing-depth": String(entry.path.length) })}
+      >
         <span class="label">${this.#rowLabel(entry, open)}</span>
       </th>
       ${repeat(
@@ -484,9 +488,9 @@ export class RoutingGrid extends LitElement {
     </tr>`;
   }
 
-  #rows(entries: readonly RoutingGridEntry[], zones: readonly Zone[], open: ReadonlySet<string>) {
+  #rows(entries: readonly GridRow[], zones: readonly Zone[], open: ReadonlySet<string>) {
     return repeat(
-      entries.filter((entry): entry is GridRow => !isNoCategoryHeading(entry)),
+      entries,
       (entry) => rowKey(entry.row),
       (entry) => this.#row(entry, zones, open),
     );
@@ -500,16 +504,14 @@ export class RoutingGrid extends LitElement {
     // A category's children follow it in place only when it is shown and expanded.
     const open = new Set(
       entries.flatMap((entry) =>
-        !isNoCategoryHeading(entry) &&
-        entry.row.kind === "category" &&
-        this.expanded.has(entry.row.categoryId)
+        entry.row.kind === "category" && this.expanded.has(entry.row.categoryId)
           ? [entry.row.categoryId]
           : [],
       ),
     );
-    const heading = entries.findIndex(isNoCategoryHeading);
+    const heading = entries.findIndex((entry) => entry.row.kind === "no_category");
     const tree = heading < 0 ? entries : entries.slice(0, heading);
-    const uncategorised = heading < 0 ? [] : entries.slice(heading + 1);
+    const uncategorised = heading < 0 ? [] : entries.slice(heading);
     return html`<div class="toolbar">
         <wt-button
           variant="secondary"
@@ -545,11 +547,6 @@ export class RoutingGrid extends LitElement {
             heading < 0
               ? nothing
               : html`<tbody>
-                  <tr class="heading">
-                    <th scope="rowgroup" colspan=${zones.length + 1}>
-                      ${t("routing.no_category")}
-                    </th>
-                  </tr>
                   ${this.#rows(uncategorised, zones, open)}
                 </tbody>`
           }

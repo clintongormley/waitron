@@ -1,13 +1,5 @@
 import type { GridCategory, GridProduct, GridRow, RoutingModel } from "../routing.js";
 
-/** Heads the products with no category. It has no cell address, so nothing can edit it. */
-export type NoCategoryHeading = { readonly kind: "no_category_heading"; readonly row?: never };
-export type RoutingGridEntry = GridRow | NoCategoryHeading;
-
-export function isNoCategoryHeading(entry: RoutingGridEntry): entry is NoCategoryHeading {
-  return "kind" in entry;
-}
-
 interface Hidden {
   categories: number;
   products: number;
@@ -22,15 +14,13 @@ function append<T>(lists: Map<string, T[]>, key: string, value: T): void {
 /**
  * The grid's rows in tree order: All categories, the root categories, every row whose ancestors
  * are all expanded, every category or product holding a cell (at its own place, without its
- * hidden ancestors), then the products with no category under their heading. A shown category's
- * children are shown exactly when its id is in `expanded`, so a category shown only for its cell
- * opens too. A category whose children are not shown counts the rows of its subtree that are
- * absent. Siblings keep the model's order; a category's subcategories come before its products.
+ * hidden ancestors), then the No category row and the products with no category under it. A
+ * shown category's children are shown exactly when its id is in `expanded`, so a category shown
+ * only for its cell opens too. A category whose children are not shown counts the rows of its
+ * subtree that are absent. Siblings keep the model's order; a category's subcategories come before
+ * its products.
  */
-export function visibleRoutingRows(
-  model: RoutingModel,
-  expanded: ReadonlySet<string>,
-): RoutingGridEntry[] {
+export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<string>): GridRow[] {
   const known = new Map(model.categories.map((category) => [category.id, category]));
   const childCategories = new Map<string, GridCategory[]>();
   const productsIn = new Map<string, GridProduct[]>();
@@ -58,7 +48,7 @@ export function visibleRoutingRows(
     if (row.kind === "product") productsWithCells.add(row.productId);
   }
 
-  const entries: RoutingGridEntry[] = [
+  const entries: GridRow[] = [
     { row: { kind: "all" }, name: "", path: [], depth: 0, hiddenProducts: 0, hiddenCategories: 0 },
   ];
   const placed = new Set<string>();
@@ -122,7 +112,14 @@ export function visibleRoutingRows(
   }
 
   if (uncategorised.length > 0) {
-    entries.push({ kind: "no_category_heading" });
+    entries.push({
+      row: { kind: "no_category" },
+      name: "",
+      path: [],
+      depth: 0,
+      hiddenProducts: 0,
+      hiddenCategories: 0,
+    });
     for (const product of uncategorised) {
       entries.push({
         row: { kind: "product", productId: product.id },

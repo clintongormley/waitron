@@ -4,6 +4,7 @@ import {
   selectionRulesFromModel,
   type GridCategory,
   type GridProduct,
+  type GridRow,
   type RouteTarget,
   type RoutingCell,
   type RoutingModel,
@@ -15,10 +16,8 @@ import {
   collapseCategory,
   expandAll,
   expandCategory,
-  isNoCategoryHeading,
   pruneExpanded,
   visibleRoutingRows,
-  type RoutingGridEntry,
 } from "./routing-grid-model.js";
 
 const kitchen: RouteTarget = { kind: "station", stationId: "kitchen" };
@@ -68,9 +67,9 @@ function model(
 }
 
 /** One line per entry: indentation is depth, then the label, path and hidden counts. */
-function outline(entries: RoutingGridEntry[]): string[] {
+function outline(entries: GridRow[]): string[] {
   return entries.map((entry) => {
-    if (isNoCategoryHeading(entry)) return "[No category]";
+    if (entry.row.kind === "no_category") return "[No category]";
     const label =
       entry.row.kind === "all"
         ? "[All]"
@@ -146,10 +145,8 @@ describe("visibleRoutingRows", () => {
       [item("red-1", "wine-1", "House red"), item("red-2", "wine-2", "House red")],
       [productCell("red-1"), productCell("red-2")],
     );
-    const rows = visibleRoutingRows(venue, none).filter(
-      (entry) => !isNoCategoryHeading(entry) && entry.row.kind === "product",
-    );
-    expect(rows.map((entry) => !isNoCategoryHeading(entry) && entry.path)).toEqual([
+    const rows = visibleRoutingRows(venue, none).filter((entry) => entry.row.kind === "product");
+    expect(rows.map((entry) => entry.path)).toEqual([
       ["bar", "Wine"],
       ["dining", "Wine"],
     ]);
@@ -229,7 +226,7 @@ describe("visibleRoutingRows", () => {
     ]);
   });
 
-  it("No category heading lists every active uncategorised product at the bottom and counts nothing", () => {
+  it("the No category row lists every active uncategorised product at the bottom, carries the no_category address and counts nothing", () => {
     const venue = model(
       [folder("food")],
       [item("bread", "food"), item("menu-card", null), item("water", null)],
@@ -242,14 +239,33 @@ describe("visibleRoutingRows", () => {
       "  P:menu-card",
       "  P:water",
     ]);
-    expect(entries.find(isNoCategoryHeading)).toEqual({ kind: "no_category_heading" });
+    const noCategory: GridRow = {
+      row: { kind: "no_category" },
+      name: "",
+      path: [],
+      depth: 0,
+      hiddenProducts: 0,
+      hiddenCategories: 0,
+    };
+    expect(entries.at(-3)).toEqual(noCategory);
+    expect(entries.filter((entry) => entry.row.kind === "all")).toHaveLength(1);
     expect(outline(visibleRoutingRows(venue, expandAll(venue))).slice(-3)).toEqual([
       "[No category]",
       "  P:menu-card",
       "  P:water",
     ]);
+    expect(visibleRoutingRows(venue, expandAll(venue)).at(-3)).toEqual(noCategory);
     const filed = model([folder("food")], [item("bread", "food")]);
-    expect(visibleRoutingRows(filed, none).some(isNoCategoryHeading)).toBe(false);
+    expect(visibleRoutingRows(filed, none).some((entry) => entry.row.kind === "no_category")).toBe(
+      false,
+    );
+    // A stored No category cell does not bring the row back without an uncategorised product.
+    const storedOnly = model(
+      [folder("food")],
+      [item("bread", "food")],
+      [{ row: { kind: "no_category" }, zoneId: "terrace", target: bar }],
+    );
+    expect(outline(visibleRoutingRows(storedOnly, none))).toEqual(["[All]", "  C:food {0,1}"]);
   });
 
   it("a product cell five category levels down stays visible under a collapsed root, once, with its path", () => {
@@ -352,9 +368,10 @@ describe("selectionRulesFromModel", () => {
   type Station = { id: string; name: string; active: boolean; isDefault: boolean };
 
   // `server` is a hand copy of the rules `snapshot` (routing-store.ts) derives from these rows.
-  function both(stations: Station[]) {
+  function both(stations: Station[], extra: RoutingCell[] = []) {
     const folders = [folder("drinks"), folder("cocktails", "drinks"), folder("food")];
     const cells = [
+      ...extra,
       categoryCell("drinks", bar),
       categoryCell("drinks", kitchen, "terrace"),
       categoryCell("food", noPreparation, "garden"),
@@ -390,6 +407,7 @@ describe("selectionRulesFromModel", () => {
     [{ kind: "product", productId: "mojito" }, "cocktails"],
     [{ kind: "product", productId: "soup" }, "food"],
     [{ kind: "product", productId: "loose" }, null],
+    [{ kind: "no_category" }, null],
   ];
   const zones = [null, "terrace", "garden"];
 
@@ -442,6 +460,42 @@ describe("selectionRulesFromModel", () => {
       target: kitchen,
       decidedBy: { kind: "default" },
     });
+
+    // No category's cells decide an uncategorised product before All categories, row first.
+    const noCategory: RoutingRow = { kind: "no_category" };
+    const sorted = both(
+      [
+        { id: "kitchen", name: "Kitchen", active: true, isDefault: true },
+        { id: "bar", name: "Bar", active: true, isDefault: false },
+      ],
+      [
+        { row: noCategory, zoneId: "terrace", target: kitchen },
+        { row: noCategory, zoneId: null, target: noPreparation },
+      ],
+    );
+    const withNoCategory = expectSameSelection(sorted.server, sorted.wire);
+    expect(selectRoutingCell(withNoCategory, noCategory, "terrace")).toEqual({
+      target: kitchen,
+      decidedBy: { kind: "cell", address: { row: noCategory, zoneId: "terrace" } },
+    });
+    // No category × Every zone beats All categories × Garden.
+    expect(selectRoutingCell(withNoCategory, loose, "garden")).toEqual({
+      target: noPreparation,
+      decidedBy: { kind: "cell", address: { row: noCategory, zoneId: null } },
+    });
+    expect(selectRoutingCell(withNoCategory, loose, null)).toEqual({
+      target: noPreparation,
+      decidedBy: { kind: "cell", address: { row: noCategory, zoneId: null } },
+    });
+    // The product's own cell still comes first.
+    expect(selectRoutingCell(withNoCategory, loose, "terrace").decidedBy).toEqual({
+      kind: "cell",
+      address: { row: loose, zoneId: "terrace" },
+    });
+    // A product with a category never reads No category.
+    expect(
+      selectRoutingCell(withNoCategory, { kind: "product", productId: "soup" }, "terrace", "food"),
+    ).toEqual({ target: kitchen, decidedBy: { kind: "default" } });
 
     const inactiveDefault = both([
       { id: "kitchen", name: "Kitchen", active: false, isDefault: true },

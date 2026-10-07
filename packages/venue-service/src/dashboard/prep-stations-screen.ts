@@ -100,9 +100,11 @@ type SettingsDraft = {
 const rowKey = (row: RoutingRow): string =>
   row.kind === "all"
     ? "all"
-    : row.kind === "category"
-      ? `c:${row.categoryId}`
-      : `p:${row.productId}`;
+    : row.kind === "no_category"
+      ? "no_category"
+      : row.kind === "category"
+        ? `c:${row.categoryId}`
+        : `p:${row.productId}`;
 const sameAddress = (a: CellAddress, b: CellAddress) =>
   a.zoneId === b.zoneId && rowKey(a.row) === rowKey(b.row);
 
@@ -3091,12 +3093,14 @@ export class PrepStationsScreen extends LitElement {
       row:
         row.kind === "all"
           ? t("routing.all_categories")
-          : row.kind === "category"
-            ? this.#path(row.categoryId)
-            : [
-                categoryId === null ? "" : `${this.#path(categoryId)} › `,
-                product?.name ?? row.productId,
-              ].join(""),
+          : row.kind === "no_category"
+            ? t("routing.no_category")
+            : row.kind === "category"
+              ? this.#path(row.categoryId)
+              : [
+                  categoryId === null ? "" : `${this.#path(categoryId)} › `,
+                  product?.name ?? row.productId,
+                ].join(""),
       zone:
         zoneId === null
           ? t("routing.every_zone")

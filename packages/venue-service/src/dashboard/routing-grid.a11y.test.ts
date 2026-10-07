@@ -74,6 +74,10 @@ const states: Record<
   collapsed: { model: routing() },
   expanded: { model: routing(), expand: true },
   "editor open": { model: routing(), open: 'td[data-row="all"][data-zone="every"]' },
+  "no category editor open": {
+    model: routing(),
+    open: 'td[data-row="no_category"][data-zone="every"]',
+  },
   "read-only default": { model: routing({ canMakeDefault: false }) },
   repair: { model: routing({ defaultStationId: null }) },
   "repair, read-only": { model: routing({ defaultStationId: null, canMakeDefault: false }) },

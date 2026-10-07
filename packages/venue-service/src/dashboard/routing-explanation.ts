@@ -25,9 +25,11 @@ export function cellPlace(address: CellAddress, names: ExplanationNames): string
   const rowName =
     row.kind === "all"
       ? t("routing.all_categories")
-      : row.kind === "category"
-        ? names.category(row.categoryId)
-        : names.product(row.productId);
+      : row.kind === "no_category"
+        ? t("routing.no_category")
+        : row.kind === "category"
+          ? names.category(row.categoryId)
+          : names.product(row.productId);
   return zoneId === null
     ? format("prep.test_place_every_zone", { row: rowName })
     : format("prep.test_place_zone", { row: rowName, zone: names.zone(zoneId) });

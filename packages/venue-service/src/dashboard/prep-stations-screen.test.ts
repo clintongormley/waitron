@@ -1204,6 +1204,28 @@ it("explains a No preparation cell as the category's chosen value", async () => 
     "Because: No preparation: Drinks › Cocktails, in every zone",
   );
 });
+it("the tester names a No category cell for an uncategorised product", async () => {
+  setLocale("en");
+  const el = await mount(
+    api({
+      explain: vi.fn().mockResolvedValue({
+        route: { kind: "station", stationId: "bar" },
+        decidedBy: { kind: "cell", address: { row: { kind: "no_category" }, zoneId: null } },
+        fallbacks: [],
+        noReplacement: false,
+        stations: [],
+      }),
+    }),
+  );
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+    "Because: Bar: No category, in every zone",
+  );
+});
+
 it("keeps station status and output problems in Stations instead of repeating them in Routing", async () => {
   setLocale("en");
   const next = withUpstairs({ open: false, why: "out_of_hours" });
@@ -5648,6 +5670,57 @@ describe("Routing grid", () => {
       await gridOf(el).updateComplete;
       expect(cellCombo(el, "c:drinks", "terrace").value).toBe("no_preparation");
     });
+  });
+
+  it("a No category cell choice previews under the No category name and saves the no_category address", async () => {
+    setLocale("en");
+    const waterMove = { ...breadMove, productId: "water", productName: "Water" };
+    const { a, el } = await mountGrid({ preview: vi.fn().mockResolvedValue([waterMove]) });
+    const address = { row: { kind: "no_category" }, zoneId: "terrace" };
+    await chooseCell(el, "no_category", "terrace", "Kitchen");
+    expect(a.preview).toHaveBeenCalledExactlyOnceWith({
+      kind: "cell",
+      address,
+      target: kitchenTarget,
+    });
+    const preview = q(el, '[data-test="routing-preview"]')!;
+    expect(preview.textContent).toContain("No category, Terrace: this changes Bar to Kitchen.");
+    expect(preview.textContent).toContain("Water");
+    expect(cellCombo(el, "no_category", "terrace").value).toBe("station:kitchen");
+    expect(cellCombo(el, "all", "terrace").value).toBe("");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(a.setCell).toHaveBeenCalledExactlyOnceWith(address, kitchenTarget);
+  });
+
+  it("Cancel on a pending No category choice restores its own saved value, not the All categories cell at the same zone", async () => {
+    const both = gridView();
+    both.routing.cells = [
+      ...both.routing.cells,
+      { row: { kind: "all" }, zoneId: "terrace", target: { kind: "no_preparation" } },
+      { row: { kind: "no_category" }, zoneId: "terrace", target: kitchenTarget },
+    ] as typeof both.routing.cells;
+    const { a, el } = await mountGrid({
+      load: vi.fn().mockResolvedValue(both),
+      preview: vi.fn().mockResolvedValue([breadMove]),
+    });
+    expect(shownText(cellCombo(el, "no_category", "terrace"))).toBe("Kitchen");
+    await chooseCell(el, "no_category", "terrace", "Clear setting");
+    expect(cellCombo(el, "no_category", "terrace").value).toBe("");
+    // Clearing exposes All categories × Terrace; it does not also drop that cell.
+    expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain(
+      "No category, Terrace: this changes Kitchen to No preparation.",
+    );
+    q(el, '[data-test="cancel-routing"]')!.click();
+    await settle(el);
+    await gridOf(el).updateComplete;
+    const box = cellCombo(el, "no_category", "terrace");
+    await box.updateComplete;
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(box.value).toBe("station:kitchen");
+    expect(shownText(box)).toBe("Kitchen");
+    expect(cellCombo(el, "all", "terrace").value).toBe("no_preparation");
+    expect(a.setCell).not.toHaveBeenCalled();
   });
 
   it("a zero-move choice saves directly", async () => {
