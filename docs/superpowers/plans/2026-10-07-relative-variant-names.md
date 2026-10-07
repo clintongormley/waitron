@@ -52,7 +52,7 @@ Files: `packages/catalogue/src/product-presentation.ts` and its test,
 
 Files selected by `rg 'staffPresentationName|kitchenPresentationName|joinCustomerPresentationText|variant_name|variantName' apps packages`.
 
-- [ ] Record each caller's standalone/nested decision; trace reporting, exports, history,
+- [x] Record each caller's standalone/nested decision; trace reporting, exports, history,
   order detail and reprint. Add failing behavioral cases for uncovered standalone readers.
 - [x] Use shared staff resolver for standalone order detail; leave nested top-seller variants
   relative. Verify parent grouping distinguishes both gin products through real database tests.
@@ -61,7 +61,7 @@ Files selected by `rg 'staffPresentationName|kitchenPresentationName|joinCustome
 
 ## 4. Documentation, rendering and gates
 
-- [ ] Rewrite `docs/developers/products.md` and audit old-rule paraphrases in docs and comments.
+- [x] Rewrite `docs/developers/products.md` and audit old-rule paraphrases in docs and comments.
   Update `docs/backlog.md` with precise completion status. Keep historical docs with dated pointers.
 - [ ] Render long paired receipt/kitchen labels at 58/80 mm; inspect wrapping. Inspect till,
   order detail and relevant reports in EN/ES, both themes, 390/1280. Add FYI image references
