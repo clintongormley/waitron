@@ -13,9 +13,11 @@ afterEach(() => {
 });
 const view: PrepStationsView = {
   routing: {
-    claims: [],
-    exceptions: [],
-    unassigned: { folders: [], products: [] },
+    zones: [],
+    categories: [],
+    products: [],
+    cells: [],
+    canMakeDefault: false,
     defaultStationId: "bar",
     stations: [{ id: "bar", name: "Bar", active: true }],
     stationTimes: [

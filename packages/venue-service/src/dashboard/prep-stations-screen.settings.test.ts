@@ -14,14 +14,21 @@ afterEach(() => {
 });
 const view: PrepStationsView = {
   routing: {
-    claims: [
-      { categoryId: "cocktails", target: { kind: "station", stationId: "bar" }, stationOff: false },
+    zones: [],
+    categories: [
+      { id: "drinks", name: "Drinks", parentId: null },
+      { id: "cocktails", name: "Cocktails", parentId: "drinks" },
+      { id: "food", name: "Food", parentId: null },
     ],
-    exceptions: [],
-    unassigned: {
-      folders: [{ id: "food", name: "Food" }],
-      products: [{ id: "bread", name: "Bread" }],
-    },
+    products: [{ id: "bread", name: "Bread", categoryId: null }],
+    cells: [
+      {
+        row: { kind: "category", categoryId: "cocktails" },
+        zoneId: null,
+        target: { kind: "station", stationId: "bar" },
+      },
+    ],
+    canMakeDefault: true,
     defaultStationId: "bar",
     stations: [{ id: "bar", name: "Bar", active: true }],
     stationTimes: [
