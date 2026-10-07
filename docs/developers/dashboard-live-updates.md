@@ -44,6 +44,9 @@ on being reattached, or in the reload after a save) runs the unfinished part aga
 and only while that load has not completed. That rerun starts the reads the load never reached and
 takes its remaining steps, such as opening the item the page's link names; it performs no mutation.
 
+Cost, before a screen sharing one field remembered which one set it: a recovery that matched the
+message's code, or cleared on any successful read, wiped a save's `connection.failed` (A224).
+
 A screen that waits for the change feed to show its own save shows the old data when the stream
 the browser holds open delivers nothing, as after a tablet wakes or the Wi-Fi changes: a review
 probe on the Hours page reproduced it: the old data stayed, with no error shown, until the page's

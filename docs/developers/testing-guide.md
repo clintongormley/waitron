@@ -183,11 +183,13 @@ found a healthy container with a requested TCP binding but an empty published-po
 focused rerun passed without explaining the first failure. During #329's full gate `docker inspect`
 showed `HostConfig.PortBindings["5432/tcp"] = [{ HostIp: "", HostPort: "0" }]` beside
 `NetworkSettings.Ports["5432/tcp"] = []`. Nothing under `packages/`
-or `apps/` starts a container now, so the live subject is under `bench/`:
-`bench/sqlite-failover/src/store.ts:76` publishes a port with `withExposedPorts(9000)` and reads it
-back with `getMappedPort(9000)`, which is the same shape the failure above took. The rule was
-briefly pruned from `CLAUDE.md` §4 on 2026-09-23 on the ground that no PACKAGE fixture binds a port
-— true, and narrower than "the tree" — and restored with that hedge the same day.
+or `apps/` starts a container now, so the live subjects are the two `bench/` rigs that start a
+container, both of which publish a port: `bench/pglite-throughput/src/bench.ts` starts a
+`PostgreSqlContainer`, and `bench/sqlite-failover/src/store.ts:76` publishes a port with
+`withExposedPorts(9000)` and reads it back with `getMappedPort(9000)`, which is the same shape the
+failure above took. The rule was briefly pruned from `CLAUDE.md` §4 on 2026-09-23 on the ground that
+no PACKAGE fixture binds a port — true, and narrower than "the tree" — and restored with that hedge
+the same day; moved here 2026-10-07.
 
 ## Draw every port a test needs in one `freePorts(n)` call, before binding any of them.
 
@@ -228,6 +230,9 @@ project limit peaked at 4. Configs here depend on the project value winning — 
 `packages/payments-stripe`, `packages/payments-sumup`, `packages/venue-service` and
 `packages/adjustments` each set `maxWorkers: 1` inside a project.
 
+**A cap that must apply to every project still belongs on the outer config**, which a project
+setting none of its own falls back to.
+
 This section came from Vitest 3, where moving `maxForks: 4`
 inside fiscal-verifactu's project in #286 started 17 workers on the local host, observed during a
 Sync migration stall; `ps -axo pid,ppid,etime,pcpu,command` counted them, and #291 moved the limit
@@ -266,7 +271,7 @@ isolation is on — so stating no `groupOrder` at all does not avoid it. The con
 actually be outside is the third: `packages/media` and `apps/dashboard` split into projects too, and
 are unaffected because neither pins a project-level `maxWorkers: 1`. Measured on `packages/bookings`
 against the same run on Vitest 3. Guard: `scripts/bookings-test-budget.test.ts`, which pins bookings
-alone.
+alone, not the other packages with the same shape.
 
 ### A package's `coverage.include` does not mean "this package's src"
 
@@ -294,6 +299,13 @@ The pairs to watch when adding a package, since the hazard is a NAME prefix and 
 prefix of another's, listed on 2026-09-22. Only a pair where the shorter package's own tests load
 the longer one's source is actually exposed. Under `apps/` there is no such pair: `dashboard`,
 `print-agent`, `server`, `setup` and `till`, none of them a prefix of another.
+
+**A package config must name its own source tree in `coverage.include`, or an untested file stops
+being counted.** Without one, Vitest 4 counts only the files a test loaded, so a file nobody imports
+is invisible rather than a zero in the denominator: it can never pull the ratio down, and moving
+code into one RAISES the percentage. Guard: `scripts/coverage-thresholds.test.ts`, which reads the
+configs as TEXT and looks for one exact string, so a config that spells the same include
+differently fails it.
 
 ## Vitest's per-test timeout does not bound a blocking child — it fails healthy runs that outlast it.
 
@@ -434,6 +446,10 @@ or on a template-table `it.each`, a number after some other callback — it goes
 a deliberate hole, and its detector block has a case for each of those shapes recording the decline,
 alongside cases for what it does read and what it is blind to.
 
+**`scripts/spawn-timeout-budget.test.ts` does not cover a `spawnSync` timeout clearing the CHILD's
+own worst case, retry loops included** (the previous section) — it reads a `scripts/` suite's own
+declared waits, never the child's, so nothing guards that rule in general.
+
 ## Build a suite's executable stubs ONCE per file, not once per test.
 
 Executing a FRESHLY WRITTEN file is expensive on macOS and free on Linux, and that asymmetry decides
@@ -493,6 +509,9 @@ Two rigs start a container: `bench/sqlite-failover`, whose `startStore` opens a 
 (`bench/sqlite-failover/src/store.ts`), and `bench/pglite-throughput`, which starts a PostgreSQL one
 (`bench/pglite-throughput/src/bench.ts`). Ryuk hangs on this machine, so it has to be off; with it off
 an interrupted run leaks, which is the next section.
+
+No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do, so a
+package suite that seems to hang is not waiting on Docker.
 
 **A recurrent stall needs a retained log and a snapshot of whatever it was waiting on.** Locate the
 stalled operation before assigning its cause to resource contention.
@@ -559,6 +578,10 @@ command with `--reporter=verbose` printed both, the note naming the missing bina
 command. With `CI=true` added it failed: `Error: stream loop test cannot run: litestream is not
 runnable at /nonexistent`, exit 1. So after a local run of `apps/server`, look for the skip count
 before taking the loop as tested.
+
+**What the guard does not see.** The guard on CI installing both binaries is
+`scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT, so the install commands left only in
+a YAML comment, or in a step an `if:` switches off, pass it.
 
 **The frozen-server stage.** Ten sales are timed with the S3 server up, then it is frozen with
 `SIGSTOP` (every call hangs rather than being refused) and ten more are timed. The slowest frozen sale
@@ -792,6 +815,21 @@ Not measured: a venue's own sale rate, several sellers at once, and the box's ow
 The owner chose on 2026-09-30 to leave both routine checkpoints at Litestream's defaults, so neither
 setting shipped (`docs/backlog.md`, A130's entry).
 
+**A copy behind, the side file's bound, and the guards.** A copy fifteen minutes behind raises
+`backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
+(`apps/server/src/alert-sources.ts`). The side file is bounded by stopping Litestream at a size
+limit (`backup.stream_paused`) and then folding the file back; that fold-back is the server's own
+checkpoint, and it takes its turn in the write queue with no busy wait (`checkpointTruncate`,
+`packages/store/src/index.ts`), so a sale can queue behind it but never waits on the bucket.
+Guards, narrower than the rule: `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket,
+then times the sales of three concurrent sellers on one till session through the server's own
+route against a bound while the side file passes a 16 MiB limit, the server folds it back and the
+pause holds — it does not observe whether a sale's write waited behind the fold-back rather than
+landing before it, nor time the fold-back of a 256 MiB file; the frozen-server stage of
+`apps/server/src/stream-loop.e2e.test.ts` records its sales through `recordOneSale`, a second
+store with its own write queue; both are skipped locally without their binaries (the stream loop
+test's section above); the bucket-copy cases in `apps/server/src/health.test.ts` hold `/health`.
+
 **Printing on real hardware**
 
 ## How long a job of pictures takes to print on the box is not measured
@@ -1020,8 +1058,9 @@ CLAUDE.md — same incident, same fix, same regression test.)*
 run by ci.yml's ungated `lint` job and by the hook on every non-docs push — a package-resident guard
 only runs when its package is in scope, and most pushes never reach `packages/db`. Two costs of
 living there: the root project does not typecheck (§2), and a module tested only from there must be
-in the root `coverage.include` and excluded from its package's. That `include` is one file-type glob
-(`scripts/**/*.mjs`) plus the explicit paths added beside it, so root-level source of another type is
+in the root `coverage.include` IF IT IS TO BE MEASURED AT ALL, and excluded from its package's.
+That `include` is one file-type glob (`scripts/**/*.mjs`) plus the explicit paths added beside it,
+so root-level source of another type is
 measured only when somebody names it, suite or no suite — `scripts/dev-server-proxy.ts` is the one
 such file today, and [ci-and-gates.md](ci-and-gates.md) records what naming it would cost.
 
@@ -1039,6 +1078,9 @@ the flag is still false when each checks it), and turned every concurrent reques
 body, versus merely waiting BEHIND one — is now read from asynchronous context, and the missing case
 is the second caller in `packages/store/src/write-queue.test.ts` ("serves a caller that arrives after
 another body has already started").
+
+Deletion shows the guard catches what it was written for; only a case in the other direction — the
+legitimate call that must still be served — shows it is not too wide.
 
 ## A proof-by-deletion belongs to the SHAPE of the code it was taken against.
 
@@ -1084,6 +1126,11 @@ On 2026-10-03 a reviewer of #1139 ran two checks in a disposable repository: a s
 one worktree appeared in the other's `git stash list`, and the remedy worked — a detached
 `git worktree add` held the old content while the original working file kept its uncommitted edit.
 Nothing else here was re-run.
+
+**The remedy.** `git worktree add --detach <dir> <base-sha>` (a measuring copy, not a feature
+worktree: run `pnpm install` in it before running tests, and `git worktree remove` it after) gives
+the before state without touching your edits; a copy set aside that cannot be avoided goes in
+`mktemp -d`.
 
 ## Vitest 4 ships no default coverage excludes, and `include`/`exclude` replace rather than merge.
 
@@ -1162,6 +1209,20 @@ something an authority will judge, run the real check over it. Pointer:
 
 A key you never list is never checked at all; `toEqual` is what put `memberOf` under a matcher for
 the first time.
+
+## A page asserted as a STRING, or reached only through its API, has nothing checking that it renders.
+
+An invalid CSS value, an unclosed tag, an unreadable dark-theme colour and a screen that throws on
+open all pass every such assertion. Cost: a corrupted colour value on `/setup/trust` that every test
+accepted, caught only by opening the page; and, on another branch, an image library that reached a
+green gate through review and CI and then answered 500 to the first person who opened it. Open it
+and LOOK, in both themes and at phone width. A browser-mode package has the harness already;
+`apps/server`'s string-rendered pages have none, so write the rendered string to a file and open it
+with the workspace's playwright Chromium.
+
+`scripts/trust-page-logo.test.ts` checks only that the logo pasted into the server's source still
+matches the brand lockup; it does not check that the page renders, that either theme is readable,
+or that the logo is visible at all.
 
 ---
 
@@ -1310,6 +1371,9 @@ Both call sites now take one module-level list (`SUPPORTED_ALGORITHM_IDS` in
 the offered `pubKeyCredParams` and the argument handed to the verifier. `verifyAuthenticationResponse`
 takes no such parameter (it verifies against the stored public key), so the assertion ceremony has
 nothing equivalent to pin.
+
+The general rule: state a default at every call site that shares it — the two ends of one ceremony
+drift apart while each looks right.
 
 
 ### Restore the screen language after a test

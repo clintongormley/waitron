@@ -412,6 +412,9 @@ being long. And nothing on a pull request will tell anyone, because `packages/db
 and its job durations belong to the weekly `mutation.yml` run — the table above says so. It is
 recorded as something to check in `docs/backlog.md` under B9.
 
+To see where the mutation half applies: `ls packages/*/stryker.config.json`, then read its `mutate`
+list.
+
 ## CI job layout and scheduling
 
 ### CI's shards run `test:coverage`, not `test`
@@ -642,6 +645,12 @@ push is never grouped with anything, and a pull request keeps the ref so a force
 supersedes the run it made stale. Guard: `scripts/ci-workflow.test.mjs`, which reads the block as
 text — it pins how the expression is written, not what GitHub evaluates it to.
 
+Cost: a code merge that got NO run at all — no image published, no unfiltered main suite, and
+nothing red anywhere, so check after a merge that its own run exists.
+
+**What the guard does not see.** The concurrency cases of `scripts/ci-workflow.test.mjs` read ci.yml
+alone, as TEXT, so another workflow's group is not seen.
+
 ### Separated pushes overlap, so publishing asks before it takes `:main`
 
 Two `main` runs now build at the same time, and the one that finishes LAST is not always the one
@@ -834,6 +843,11 @@ in `.github/workflows/ci.yml`: on a pull request an installer change runs the th
 the push runs `image` and, once `ci` passes, `publish`, which moves `:main` unless
 `scripts/main-tag-guard.sh` holds it for a newer commit.
 
+**What the guard does not see.** `scripts/ci-workflow.test.mjs` is weaker than its name for the
+`TMPDIR=/dev/shm` setting: it reads `ci.yml` as text, so a step an `if:` switches off, or a `run:`
+that sets `TMPDIR` again, passes; and it never reads the step's test files, so one that makes its
+scratch somewhere other than `tmpdir()` passes too.
+
 ## Two TypeScript compilers are installed, and that is deliberate
 
 Since 2026-09-20 a package's `tsc` is **TypeScript 7** — the compiler rewritten in Go. Measured on
@@ -1008,6 +1022,8 @@ changed with `git diff --name-only origin/main..HEAD`, check that the hook typec
 changed packages, and run any missing typechecks. Verify CI’s package scope and coverage results
 on the current head; the PR’s own CI scopes off the PR diff.
 
+In that check, a root script `ROOT_SCOPE_CONSUMERS` lists selects the packages listed against it.
+
 ## Concurrency and machine-resource rules
 
 ### Browser-mode packages run vitest in real headless Chromium
@@ -1072,6 +1088,10 @@ The guard applies everything up to `0003` together for that reason; a future reb
 another set's trigger BODY reads fails it. Until A164 (2026-10-01) it seeded no rows, so a
 migration that failed only on data passed it; the next section says what it carries now.
 
+After `applyMigrations` removes the change feed, `installChangeFeed` in `apps/server/src/boot.ts`
+reinstalls it. Cost, besides the box that failed three starts on 2026-09-26: an earlier bricked box
+that was wiped.
+
 ### The upgrade test carries rows through every step
 
 Since A164 (2026-10-01) `scripts/migration-upgrade.test.ts` tops every table up to two rows after
@@ -1131,6 +1151,14 @@ or loses rows it was given. An entry the walk never reaches fails the guard too;
 
 Runtime, three runs each on the same machine (`CI` unset, agent variables unset), Vitest's `tests`
 figure: 8.05, 8.09 and 8.07 seconds before; 9.93, 9.96 and 9.95 after.
+
+**What the guard does not see.** `scripts/migration-upgrade.test.ts` is weaker than its name. The
+rows it carries through each step are synthetic, read from each step's schema rather than written by
+the product, so a migration that fails only on values the product writes and they lack passes. It
+installs today's change-feed list, and today's append-only list less the tables the previous step
+lacked, at every step. Rows are counted, not compared, so a step that rewrites a value passes. And
+after the final step it also checks the `products_*` triggers it lists, but a rebuild that drops any
+other trigger passes it (SQLite drops one silently: [conventions-data.md](conventions-data.md)).
 
 ### The upgrade test names the phase it stalled in
 

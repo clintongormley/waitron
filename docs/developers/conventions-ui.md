@@ -36,6 +36,9 @@ A short field explanation is the field's hint; one too long for a hint, or on a 
 filled in, uses `wt-help-tooltip`, whose button closes on outside click or Escape (owner,
 2026-10-03).
 
+Nothing guards that hint-or-"?" rule across screens, and other setup screens may still break it
+(backlog A237).
+
 ## A screen does not draw its own form field
 
 A `<select>`, a `<textarea>` or an `<input>` that takes text is drawn by a field primitive
@@ -122,6 +125,9 @@ same product exchange their counts: each is a new pick" pin its refusals, by the
 an id — two picks exchanged
 between a 1.00 list and a 3.00 one cost 5.00, not the 7.00 a crossed pairing charges.
 
+Cost: a comparison that cannot see which LIST a stored row came from bills a moved pick at the
+other list's price.
+
 ## A replay reports the original transaction facts; side effects are gated separately
 
 Cash change was returned as zero on a retry because the receipt reader treated displaying change as
@@ -204,6 +210,16 @@ One path is outside the rule: the dashboard's "Test open drawer" calibration,
 active printer's drawer for a manager holding both `printer.manage` and `cash.drawer`, with no
 device behind it: its audit row names the printer and the manager and no device. The owner chose to
 leave it as it is (2026-10-02, B29).
+
+Printing never opens the cash drawer. A cash payment, or a card hand-keyed on a machine Waitron does
+not talk to (its slip is kept in the drawer, owner 2026-10-01), enqueues a separate audited `drawer`
+job; receipt jobs are `document` jobs and contain no drawer command. Drawer jobs cannot be manually
+resent. The receipt review reproduced a resent cash receipt opening the drawer without a new audit
+row. Pointer: #324.
+
+**Two more guards, each as narrow as the rest.** The calibration case in
+`apps/server/src/print-api.test.ts` and the drawer resend refusal in
+`packages/printing/src/outbox.test.ts` — each holds only the routes or functions it names.
 
 ## A device's profile and the signed-in person must both allow what the device does
 
@@ -394,6 +410,9 @@ membership route, the adjustment approver and the cancel, a malformed one), not 
 suspended or pending person, so for those causes they rest on identity's cases alone; and a new
 sign-in route is seen by none of them. Built in C95, #930.
 
+On a till's PIN sign-in, a person the device's profile does not admit also answers that one code
+(`pin.invalid`) after the same hashing work.
+
 **UI primitives in `packages/ui`**
 
 [design-system.md](design-system.md) is the DESIGN authority for the rules in this group and states
@@ -427,6 +446,9 @@ Cloud services screen's labels rendered at the body weight (C69).
 under `apps/` and `packages/`, as it stands in the working tree, whose name does not end
 `.test.ts`, reading text; its header lists what that cannot see, and its `FALLBACK_READS` names the
 till reads it excuses.
+
+**What the guard does not see.** `scripts/style-token-names.test.ts` is weaker than its name: it
+matches a read against declarations anywhere in the tree, not the ones the reading page loads.
 
 ## Real Chromium only — never jsdom
 

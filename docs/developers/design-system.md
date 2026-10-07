@@ -758,6 +758,13 @@ button, check it by hand — and `scripts/pinned-actions-column.test.ts`. In a t
 `rowClickable` refuses that row, and a click on anything inside the cell does not (the
 pinned-click cases in `wt-data-table.test.ts`).
 
+Cost: most tables put the menu past a phone's right edge.
+
+**What the guard does not see.** `scripts/pinned-actions-column.test.ts` misses a key not written as the
+literal `key: "actions"` (a variable, a shorthand, a computed name, an `as const`). It does not know
+which objects are table columns, so every object with that literal key is held to the rule and a
+data column must take another key.
+
 **`stickyHeader` keeps a table's toolbar and column headings in view while its rows scroll.** With
 it set, the table's box scrolls its own rows, up and down as well as sideways, and the headings stay
 at the top of that box with the rows passing underneath. The toolbar sits above the box, so it does

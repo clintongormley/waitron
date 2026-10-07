@@ -100,6 +100,43 @@ The cheapest habit, and it would have caught nearly all of these: before writing
 names a part of the system you did not edit, open that part. If you cannot open it — because you do
 not know where it is — that is the finding, and the sentence should say "I believe" until you do.
 
+## The costs behind the other section 1 rules
+
+### A claim of necessity or impossibility needs a receipt
+
+Good shape: _"Measured 2026-09-22 on `node:sqlite`, Node v26.7.0, inside one transaction: a
+duplicate key, a null in a `not null` column and an append-only trigger's `raise(abort)` each left
+the transaction usable, and the rows written beside them committed."_ — it names the engine, the
+version, the conditions and what happened, so a reader can re-run it.
+
+### A measurement taken where both answers look alike measures nothing
+
+Cost: a zero-byte `pnpm --filter "...[origin/main]"` reading offered as proof the filter was broken,
+taken where zero was also the correct answer.
+
+### Before asserting a convention, grep the siblings
+
+Cost: an error code prefixed `payments.` landed beside its `payment.` siblings, and a spec used
+`orphan` to mean what `packages/payments/src/reconcile.ts` calls `unmatched`.
+
+### A behaviour change retires every receipt about the old behaviour
+
+Cost: `fix/provisioning-migrate-gate` left three stale claims in two READMEs, one of them a
+documented operator procedure the change had turned into a permission refusal.
+
+**The PATH SET matters:** a sweep scoped to `packages/` and `apps/` cannot see a claim stated in
+prose somewhere else — SP-3b's did exactly that and left a file describing a deleted exclusion list.
+
+### Claims about the outside world need receipts too — and the source's own words
+
+Every external claim gets a provenance row (`2026-07-30-deli-hardware-design.md` sourced eight
+prices, then asserted unsourced that "iOS Safari implements none of those APIs" — its decisive
+claim).
+
+Cost: compressing Square's _"doesn't support splitting a checkout into multiple payments for a
+single checkout request"_ into "no splitting a checkout" turned an API limit into a product
+limitation.
+
 ## How much of the code is comments
 
 `CLAUDE.md` section 1's "about three in ten" was measured on 2026-09-24 with a throwaway script, not
@@ -107,3 +144,9 @@ kept. For every file that `git ls-files '*.ts' '*.mjs' '*.js'` lists and whose n
 `.test.*` or `.spec.*`, it collected the comment ranges around each token the TypeScript parser
 produced. It then counted the non-blank lines whose every non-space character lies inside a comment:
 59,713 of the 198,596 non-blank lines.
+
+**What the sweep check does not see.** A sweep shows it changed nothing but comments with
+`node scripts/comments-only.mjs <base>`, weaker than its name: it reads committed changes only; a
+changed `.md` file is listed as not compared and never read; a comment read by a tool its
+hand-written list does not name is dropped unseen; and a listed tool comment moved to another line
+without crossing a token passes.

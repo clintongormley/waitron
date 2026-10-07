@@ -226,6 +226,11 @@ name, including any sold as the product itself with no variant, and the report's
 products, not variants. It is a staff-facing report, so it shows the names staff use, not the
 wording a diner reads on a receipt.
 
+**Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a
+fixture gives the three DIFFERENT text**, or the test passes whether the surface reads the right
+name or the wrong one. Cost: a report reading the diner's wording, recorded above the fixtures in
+`packages/reporting/src/top-sellers.test.ts`.
+
 ## The translation gap report
 
 `listContentTranslationGaps` (`packages/catalogue/src/content-languages.ts`) is what refuses to let
