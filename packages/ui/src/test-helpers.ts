@@ -137,6 +137,17 @@ export async function chooseOption(el: Element, value: string): Promise<void> {
   await box.updateComplete;
 }
 
+/** Sets `values` on a multiple wt-combobox and sends the `wt-change` (bubbling, composed) a click on
+ * one of its rows sends, carrying every value now ticked. */
+export async function chooseOptions(el: Element, values: string[]): Promise<void> {
+  const box = el as HTMLElement & { values: string[]; updateComplete?: Promise<unknown> };
+  box.values = values;
+  box.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { values }, bubbles: true, composed: true }),
+  );
+  await box.updateComplete;
+}
+
 /**
  * The line boxes of the first non-blank text node inside `element`. A Range over the element's whole
  * contents would also return the boxes of the elements inside it.
