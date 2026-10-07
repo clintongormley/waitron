@@ -408,3 +408,13 @@ it("does not subscribe a Structure-only shared read to unrelated publication tab
     { type: "catalogues" },
   ]);
 });
+
+it("subscribes catalogue defaults to their stored settings", async () => {
+  const api = new DashboardApi(
+    "",
+    async () => new Response('{"defaultProductVatClass":"reduced"}'),
+  );
+  const query = dashboardQuery(api, "getCatalogueSettings", []);
+  expect(query.dependencies).toEqual([{ type: "catalogue_settings" }]);
+  expect(await query.read()).toEqual({ defaultProductVatClass: "reduced" });
+});

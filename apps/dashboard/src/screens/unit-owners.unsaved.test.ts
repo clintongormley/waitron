@@ -30,6 +30,7 @@ class UnitOwnersApp extends LitElement {
 customElements.define("unit-owners-leave-test-app", UnitOwnersApp);
 function api(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const client = {
+    getCatalogueSettings: async () => ({ defaultProductVatClass: "general" }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
     listCategories: async () => [],

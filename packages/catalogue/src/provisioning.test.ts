@@ -66,6 +66,37 @@ async function storedUnits() {
 
 describe("catalogue provisioning", () => {
   it.each([
+    ["ES", "reduced"],
+    ["GB", "general"],
+    ["XX", "general"],
+  ])("seeds the new-product VAT default for %s as %s", async (country, expected) => {
+    const node = await venue(country, "Madrid", "es-ES");
+    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    const names = await suite.db.execute<{ name: string }>(sql`
+      select name from sqlite_master where type = 'table' and name = 'catalogue_settings'`);
+    expect(names.rows).toEqual([{ name: "catalogue_settings" }]);
+    const stored = await suite.db.execute<{ default_product_vat_class: string }>(sql`
+      select default_product_vat_class from catalogue_settings where id = 1`);
+    expect(stored.rows).toEqual([{ default_product_vat_class: expected }]);
+  });
+
+  it("preserves an authored VAT default when another node is seeded", async () => {
+    const node = await venue("ES", "Madrid", "es-ES");
+    const run = () => withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    await run();
+    const names = await suite.db.execute<{ name: string }>(sql`
+      select name from sqlite_master where type = 'table' and name = 'catalogue_settings'`);
+    expect(names.rows).toEqual([{ name: "catalogue_settings" }]);
+    await suite.db.execute(
+      sql`update catalogue_settings set default_product_vat_class = 'zero' where id = 1`,
+    );
+    await run();
+    const stored = await suite.db.execute<{ default_product_vat_class: string }>(sql`
+      select default_product_vat_class from catalogue_settings where id = 1`);
+    expect(stored.rows).toEqual([{ default_product_vat_class: "zero" }]);
+  });
+
+  it.each([
     // A venue starts with its default language, the languages Waitron keeps enabled for its area,
     // and English. The Spanish rows vary both inputs the seed could plausibly read — province AND
     // receipt locale — and the receipt column must never change the result, so do not level it.

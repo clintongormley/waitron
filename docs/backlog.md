@@ -966,6 +966,12 @@ unused `units` property is gone (it closes W75's leftover).
   and 390px cover Add, row Edit (including clicks that do not move focus) and menu Edit, Save
   and Cancel, in EN/ES and both themes; Enter
   from Add variant after Save opens the next variant.
+- **A356, owner 2026-10-07 — DONE:** Venue settings → Venue details lets you choose the VAT class
+  for new products. Spain's country pack presets Reduced; a pack without a preset uses General.
+  Opening a new product starts with the saved class, and later live updates preserve an edited
+  draft. Existing products keep their class. Both product-create APIs still require an explicit
+  class. The singleton setting belongs to the catalogue module and travels with configuration
+  exports; the rate table and product VAT model are unchanged.
 - **A330, owner 2026-10-07 — DONE (#1354; variant rows show their photo):** an opened variant's row
   in the Products list now draws a photo square in its product's column: the variant's own photo,
   else its product's, else the same square its product's row shows. The till draws no variant photo today,

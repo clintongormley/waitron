@@ -1,3 +1,5 @@
+import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
+export type { CatalogueSettings };
 import type {
   Setting,
   CombinedOffer,
@@ -1994,6 +1996,14 @@ export class DashboardApi {
 
   listCatalogues(): Promise<CatalogueSummary[]> {
     return this.#request<CatalogueSummary[]>("/management-api/catalogues", "GET");
+  }
+
+  getCatalogueSettings(): Promise<CatalogueSettings> {
+    return this.#request<CatalogueSettings>("/management-api/catalogue-settings", "GET");
+  }
+
+  saveCatalogueSettings(input: CatalogueSettings): Promise<CatalogueSettings> {
+    return this.#request<CatalogueSettings>("/management-api/catalogue-settings", "PUT", input);
   }
 
   getContentLanguages(): Promise<ContentLanguages> {

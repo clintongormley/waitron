@@ -233,3 +233,28 @@ describe("validateCatalogueConfiguration: many siblings", () => {
     expect(performance.now() - started).toBeLessThan(2_000);
   });
 });
+
+describe("validateCatalogueConfiguration: new-product VAT default", () => {
+  it.each(["general", "reduced", "super_reduced", "zero"])("accepts the %s default", (value) => {
+    expect(() =>
+      validateCatalogueConfiguration({
+        catalogue_settings: [{ id: 1, default_product_vat_class: value }],
+      }),
+    ).not.toThrow();
+  });
+  it.each([null, undefined, "", "unknown", 10, ["reduced"]])(
+    "refuses %j as an imported default",
+    (value) => {
+      expect(() =>
+        validateCatalogueConfiguration({
+          catalogue_settings: [{ id: 1, default_product_vat_class: value }],
+        }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: "catalogue_settings.default_product_vat_class" },
+        }),
+      );
+    },
+  );
+});
