@@ -234,9 +234,12 @@ edition whose time is at or after its own; a move overtakes a lower-numbered que
 time is at or after the new time, and a higher-numbered one whose time is at or before it. An
 overtaking request is refused `menu_publication.overtakes_queued` (409,
 `{ menuId, overtaken: [{ versionId, number, activatesAt }] }`, lowest number first) and writes
-nothing. No request field overrides it: the routes read no field beyond those above. The manager
-clears it by cancelling each edition named, or by moving it out of the way (a lower-numbered one
-earlier, a higher-numbered one later), and then repeats the request.
+nothing. No request field overrides it: the routes read no field beyond those above. A refused
+queue or move is cleared by cancelling each edition named, or by moving it out of the way (a
+lower-numbered one earlier, a higher-numbered one later), and then repeating the request. A refused
+immediate publish is cleared only by cancelling each edition named, or by waiting until its time
+has come: a move must land after now, and the publish overtakes every lower-numbered edition still
+queued at or after now, wherever it is moved.
 
 Tills sell from live versions of active menus. Reading a live version outside document format 3 refuses
 with `menu.reset_required`. Status reads check their requested menus; preview checks its own menu
