@@ -76,7 +76,17 @@ describe("customerProductName", () => {
     ).toBe("Coffee");
   });
 
-  it("is the CUSTOMER text, never the staff name, whenever the product has one", () => {
+  it("does not print stored customer text in a disabled language", () => {
+    setContentLanguages({ defaultLanguage: "ca", languages: ["ca", "en"] });
+    expect(
+      customerProductName(
+        product({ customerName: { es: "Café del cliente", en: "English coffee", ca: "Cafè" } }),
+        "es-ES",
+      ),
+    ).toBe("Coffee");
+  });
+
+  it("uses the customer text when the requested enabled translation exists", () => {
     expect(customerProductName(product(), "es")).not.toBe("Coffee");
   });
 

@@ -30,7 +30,7 @@ language takes the default language's text in the text frozen for the receipt
 (`toInvoiceLineDescriptions`, below), not Name; that per-language step is `resolveContentText`
 (`packages/shared/src/content-languages.ts`), not `product-presentation.ts`. The printed allergen sheet instead requests only its chosen language: the receipt language when
 the till has a catalogue for it, else English. An absent or disabled customer translation uses
-Name, rather than another language under those headings (`customerProductName`,
+Name (untagged staff text), rather than substituting a different customer translation (`customerProductName`,
 `apps/till/src/widgets/product-name.ts`). They do not fall back
 to each other, and a product with a customer-facing name but no kitchen name still prints its staff
 Name to the kitchen.

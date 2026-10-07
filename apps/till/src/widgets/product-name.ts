@@ -38,7 +38,7 @@ export function lineProductName(product: TillProduct): string {
 /** For a document a diner reads (the printed allergen sheet), never for an operator lookup. */
 export function customerProductName(product: TillProduct, locale: string): string {
   if (!currentContentLanguages().languages.includes(locale.split("-")[0]!)) return product.name;
-  // A missing translation must not put another language under the sheet's fixed headings.
+  // The sheet uses staff text when its chosen translation is missing; it does not choose another translation.
   return resolveContentText(product.customerName ?? {}, locale, locale) || product.name;
 }
 

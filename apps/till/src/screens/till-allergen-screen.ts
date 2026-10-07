@@ -51,7 +51,7 @@ type Chrome = "title" | "notice" | "pending" | "contains" | "may_contain" | "pri
  *  - `allergens === {}` — reviewed, none declared: genuinely all-clear.
  *  - `allergens === { code: {…} }` — reviewed with declarations.
  *
- * Printed chrome and customer names share a language with a shipped till catalogue.
+ * Printed chrome chooses a shipped till catalogue; customer translations request that language.
  */
 @customElement("till-allergen-screen")
 export class TillAllergenScreen extends LitElement {
@@ -210,6 +210,7 @@ export class TillAllergenScreen extends LitElement {
     return t(`allergens.${key}`, this.#activeLocale());
   }
 
+  // Diners match the printed sheet against customer names; the screen is a staff lookup.
   #productLabel(product: TillProduct): string {
     return this.printing
       ? customerProductName(product, this.#activeLocale())
