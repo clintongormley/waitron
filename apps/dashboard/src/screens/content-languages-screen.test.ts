@@ -1,7 +1,7 @@
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { capitaliseFirst, type ContentLanguageRules, type ContentLanguages } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, expectFiltersFirst } from "@waitron/ui/src/test-helpers.js";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, LanguageTranslationGaps, TranslationGap } from "../api/client.js";
@@ -9,7 +9,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { AddContentLanguageDialog } from "../widgets/add-content-language.js";
-import { cleanupWidgets, expectFiltersFirst, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./content-languages-screen.js";
 import type { ContentLanguagesScreen } from "./content-languages-screen.js";
 
@@ -853,7 +853,7 @@ describe("missing translations", () => {
       );
       await table(el, "ca")!.updateComplete;
       return table(el, "ca")!;
-    });
+    }, cleanupWidgets);
   });
 
   it("orders the required languages first, then the default, then the rest, and says a language with nothing missing is complete", async () => {

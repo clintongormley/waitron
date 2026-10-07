@@ -1,4 +1,4 @@
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
 import { applyTokens } from "./tokens/index.js";
 import type { WtDialog } from "./components/wt-dialog.js";
 import type { WtFormActions } from "./components/wt-form-actions.js";
@@ -66,6 +66,49 @@ export function expectRowMenusOnScreen(
     expect(at.right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
     const hit = found.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
     expect(hit !== null && button.contains(hit), `row ${index} is covered`).toBe(true);
+  }
+}
+
+/**
+ * Mounts a filtered `wt-data-table` at 1280 and at 390 wide, checks its Filters button starts the
+ * toolbar, before any search box, and opens Filters: beside the rows at 1280, over the whole screen
+ * at 390. `teardown` removes what `mountTable` mounted.
+ */
+export async function expectFiltersFirst(
+  mountTable: () => Promise<HTMLElement>,
+  teardown: () => void,
+): Promise<void> {
+  const { page, userEvent } = await import("vitest/browser");
+  const [width, height] = [window.innerWidth, window.innerHeight];
+  try {
+    for (const [w, h, side] of [
+      [1280, 800, true],
+      [390, 844, false],
+    ] as const) {
+      await page.viewport(w, h);
+      expect(window.innerWidth, `${w}`).toBe(w);
+      const table = await mountTable();
+      const root = table.shadowRoot!;
+      const trigger = root.querySelector<HTMLElement>(".filters-trigger")!;
+      expect(root.querySelector(".table-toolbar")!.firstElementChild, `${w}`).toBe(trigger);
+      const search = root.querySelector<HTMLElement>(".table-search");
+      if (search && side)
+        expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
+          search.getBoundingClientRect().left,
+        );
+      await userEvent.click(trigger);
+      const panel = root.querySelector<HTMLElement>(".filters-panel")!;
+      await vi.waitFor(() =>
+        expect([panel.hasAttribute("data-side"), panel.matches(":popover-open")], `${w}`).toEqual([
+          side,
+          !side,
+        ]),
+      );
+      if (!side) expect(panel.hasAttribute("data-fullscreen")).toBe(true);
+      teardown();
+    }
+  } finally {
+    await page.viewport(width, height);
   }
 }
 

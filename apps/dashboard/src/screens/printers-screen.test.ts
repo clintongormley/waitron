@@ -3,9 +3,10 @@ import { LeaveController, UrlStateController } from "@waitron/ui";
 import { dashboardPath } from "../navigation.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, expectFiltersFirst, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOption as pickOption,
+  expectFiltersFirst,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -9450,6 +9451,6 @@ it.each([
       await flush(el);
       await selectTab(el, tab);
       return q(el, `[data-test="${testId}"]`)!;
-    });
+    }, cleanupWidgets);
   },
 );

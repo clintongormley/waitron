@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
-import { cleanupWidgets, expectFiltersFirst, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOption,
+  expectFiltersFirst,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -2045,6 +2046,6 @@ it.each([
       await vi.waitFor(() => expect(table(el, testId)).not.toBeNull());
       await table(el, testId).updateComplete;
       return table(el, testId);
-    });
+    }, cleanupWidgets);
   },
 );

@@ -4,6 +4,7 @@ import { LiveData, codeMessage, setLocale, tableNoMatches } from "@waitron/dashb
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import {
   chooseOption,
+  expectFiltersFirst,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -1842,27 +1843,10 @@ for (const locale of ["en", "es"]) {
 }
 
 it("starts the reasons table's toolbar with Filters, opening beside the rows on a wide screen and over the screen on a phone", async () => {
-  const [width, height] = [window.innerWidth, window.innerHeight];
-  try {
-    for (const [w, h, side] of [
-      [1280, 800, true],
-      [390, 844, false],
-    ] as const) {
-      await page.viewport(w, h);
-      const root = table(await mount(fakeApi())).shadowRoot!;
-      const trigger = root.querySelector<HTMLElement>(".filters-trigger")!;
-      expect(root.querySelector(".table-toolbar")!.firstElementChild, `${w}`).toBe(trigger);
-      await userEvent.click(trigger);
-      const panel = root.querySelector<HTMLElement>(".filters-panel")!;
-      await vi.waitFor(() =>
-        expect([panel.hasAttribute("data-side"), panel.matches(":popover-open")], `${w}`).toEqual([
-          side,
-          !side,
-        ]),
-      );
+  await expectFiltersFirst(
+    async () => table(await mount(fakeApi())),
+    () => {
       for (const host of hosts.splice(0)) host.remove();
-    }
-  } finally {
-    await page.viewport(width, height);
-  }
+    },
+  );
 });

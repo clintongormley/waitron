@@ -5,9 +5,10 @@ import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { WtCombobox } from "@waitron/ui";
-import { cleanupWidgets, expectFiltersFirst, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOption,
+  expectFiltersFirst,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -1241,5 +1242,8 @@ describe("at phone width", () => {
 });
 
 it("puts the units table's Filters before its search, beside the rows on a wide screen", async () => {
-  await expectFiltersFirst(async () => (await mount()).shadowRoot!.querySelector("wt-data-table")!);
+  await expectFiltersFirst(
+    async () => (await mount()).shadowRoot!.querySelector("wt-data-table")!,
+    cleanupWidgets,
+  );
 });
