@@ -971,6 +971,22 @@ unused `units` property is gone (it closes W75's leftover).
     in a right-to-left layout, a long name in the Products list can run under the pinned Actions
     column (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`, measures the room from the
     left). Not fixed; next: a browser test at 390 px with `dir="rtl"` and a long unbroken name.
+- **A341, owner 2026-10-07 — DONE (every table's filters on the left):** every `wt-data-table` with a
+  filter column (Products, Units, Modifiers' two lists, Content languages' missing translations,
+  Printers and Print agents, a menu's prices, adjustment reasons) draws the funnel Filters button
+  first in its toolbar, before the search box; the panel opens beside the rows while the table is
+  at least 768 px wide and over the whole screen below that. The trailing "Filters" text button,
+  its floating panel and the `leadingFilters` property are gone. A table taken off the page with
+  that full-screen panel open no longer throws when it next updates. A table 640 px wide or less
+  puts its own search box on a line of its own under its buttons, as Products does, rather than
+  spreading the toolbar over three lines at 390 px.
+  - Open, seen in screenshots, not about filters: at 390 px the Printers screen's Add button covers
+    the end of its tab row ("Print A…"), and in Spanish "Añadir un agente de impresión" runs off the
+    right edge; a menu's prices table shows only a sliver of the price box before its pinned Resolve
+    column (whether it scrolls into view was not checked).
+  - Open: at 640 px or less a searchable table draws its own search under the controls that follow
+    it (Expand all, the `toolbar-end` slot, Customise) while Tab reaches the search first — the
+    order W83 left open on Products.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is

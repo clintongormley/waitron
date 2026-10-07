@@ -1,5 +1,5 @@
 import { html } from "lit";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption, cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
@@ -330,9 +330,37 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  test("an open Filters panel with a chosen filter", async () => {
+  test("a phone-width searchable table with its search under its buttons", async () => {
     const el = (await mountThemed(
-      '<wt-data-table aria-label="Users"></wt-data-table>',
+      '<wt-data-table aria-label="Users" style="width: 390px"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      {
+        key: "status",
+        label: "Status",
+        cell: (row) => row.status,
+        filter: {
+          label: "Filter by status",
+          allLabel: "Any status",
+          value: (row) => row.status,
+          options: [{ value: "Active", label: "Active" }],
+        },
+      },
+    ] satisfies DataTableColumn<Row>[];
+    el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+    el.rowKey = (row) => row.id;
+    el.searchable = true;
+    el.searchLabel = "Search users";
+    await el.updateComplete;
+    await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(true));
+    await expectNoA11yViolations(host);
+  });
+
+  test("an open full-screen Filters panel with a chosen filter", async () => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users" style="width: 500px"></wt-data-table>',
       theme,
     )) as WtDataTable<Row>;
     el.columns = [
@@ -353,7 +381,9 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     el.rows = [{ id: "1", name: "Ada", status: "Active" }];
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
-    await el.updateComplete;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
+    expect(panel.hasAttribute("data-fullscreen")).toBe(true);
     await expectNoA11yViolations(host);
   });
 
@@ -577,9 +607,9 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  async function leadingTable(): Promise<WtDataTable<Row>> {
+  async function filteredTable(): Promise<WtDataTable<Row>> {
     const el = (await mountThemed(
-      `<wt-data-table aria-label="Users" leading-filters style="width: 900px"
+      `<wt-data-table aria-label="Users" style="width: 900px"
         ><input slot="toolbar-start" type="search" aria-label="Search users"
       /></wt-data-table>`,
       theme,
@@ -605,8 +635,8 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     return el;
   }
 
-  test("a leading Filters button with a count, its tooltip shown on keyboard focus", async () => {
-    const el = await leadingTable();
+  test("a Filters button with a count, its tooltip shown on keyboard focus", async () => {
+    const el = await filteredTable();
     const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
     (document.activeElement as HTMLElement | null)?.blur();
     await userEvent.tab();
@@ -616,12 +646,12 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  test("a leading Filters panel open beside the rows", async () => {
+  test("a Filters panel open beside the rows", async () => {
     const width = innerWidth,
       height = innerHeight;
     await page.viewport(1280, 900);
     try {
-      const el = await leadingTable();
+      const el = await filteredTable();
       const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
       await userEvent.click(trigger);
       await el.updateComplete;

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOption as pickOption,
+  expectFiltersFirst,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -9436,3 +9437,20 @@ describe("portable printers and their equipment label", () => {
     });
   });
 });
+
+it.each([
+  ["printers", "printers-table"],
+  ["agents", "agents-table"],
+])(
+  "puts the %s table's Filters at the start of its toolbar, beside the rows on a wide screen",
+  async (tab, testId) => {
+    await expectFiltersFirst(async () => {
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      await selectTab(el, tab);
+      return q(el, `[data-test="${testId}"]`)!;
+    }, cleanupWidgets);
+  },
+);

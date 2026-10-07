@@ -8,6 +8,7 @@ import type { WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOption,
+  expectFiltersFirst,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -309,7 +310,7 @@ describe("units-screen", () => {
     setLocale("es-ES");
     const el = await mount();
     const root = el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
-    expect(root.querySelector(".filters-trigger")!.textContent).toContain("Filtros");
+    expect(root.querySelector(".filters-trigger")!.getAttribute("aria-label")).toBe("Filtros");
     expect(root.querySelector(".filters-clear-all")!.textContent).toContain("Borrar todo");
     expect(root.querySelector(".filter-section h3")!.textContent).toBe("Precisión");
     expect(root.querySelector("wt-combobox.table-filter")!.getAttribute("placeholder")).toBe(
@@ -1237,5 +1238,12 @@ describe("at phone width", () => {
         }
       });
     },
+  );
+});
+
+it("puts the units table's Filters before its search, beside the rows on a wide screen", async () => {
+  await expectFiltersFirst(
+    async () => (await mount()).shadowRoot!.querySelector("wt-data-table")!,
+    cleanupWidgets,
   );
 });

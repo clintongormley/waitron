@@ -4,6 +4,7 @@ import { LiveData, codeMessage, setLocale, tableNoMatches } from "@waitron/dashb
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import {
   chooseOption,
+  expectFiltersFirst,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -84,7 +85,9 @@ it("names the reasons Filters panel in Spanish", async () => {
   setLocale("es");
   const el = await mount(fakeApi());
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  expect(table.shadowRoot!.querySelector(".filters-trigger")!.textContent).toContain("Filtros");
+  expect(table.shadowRoot!.querySelector(".filters-trigger")!.getAttribute("aria-label")).toBe(
+    "Filtros",
+  );
 });
 
 type FakeApi = {
@@ -1840,3 +1843,12 @@ for (const locale of ["en", "es"]) {
     );
   });
 }
+
+it("starts the reasons table's toolbar with Filters, opening beside the rows on a wide screen and over the screen on a phone", async () => {
+  await expectFiltersFirst(
+    async () => table(await mount(fakeApi())),
+    () => {
+      for (const host of hosts.splice(0)) host.remove();
+    },
+  );
+});

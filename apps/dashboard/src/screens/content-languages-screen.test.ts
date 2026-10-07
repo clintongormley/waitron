@@ -1,7 +1,7 @@
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { capitaliseFirst, type ContentLanguageRules, type ContentLanguages } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, expectFiltersFirst } from "@waitron/ui/src/test-helpers.js";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, LanguageTranslationGaps, TranslationGap } from "../api/client.js";
@@ -844,6 +844,16 @@ describe("missing translations", () => {
     await found.updateComplete;
     expect(found.shadowRoot!.querySelector("tbody")).toBeNull();
     expect(found.shadowRoot!.querySelector(".empty .message")!.textContent).toBe(tableNoMatches());
+  });
+
+  it("puts a missing-translations table's Filters before its search, beside the rows on a wide screen", async () => {
+    await expectFiltersFirst(async () => {
+      const el = await mount(
+        gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
+      );
+      await table(el, "ca")!.updateComplete;
+      return table(el, "ca")!;
+    }, cleanupWidgets);
   });
 
   it("orders the required languages first, then the default, then the rest, and says a language with nothing missing is complete", async () => {
