@@ -6355,11 +6355,11 @@ describe("publishing", () => {
     it.each([
       [
         "en",
-        "Lunch Menu was not published: version 1 is still live. Your changes are still saved. Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
+        "Lunch Menu was not published: version 1 is still live. Your changes are still saved. Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it, or publish once it is live.",
       ],
       [
         "es-ES",
-        "No se ha publicado Lunch Menu: la versión 1 sigue publicada. Tus cambios siguen guardados. La versión 2, programada para el 8 oct 2026, 08:00, debe publicarse antes. Cancélala o adelántala y vuelve a intentarlo.",
+        "No se ha publicado Lunch Menu: la versión 1 sigue publicada. Tus cambios siguen guardados. La versión 2, programada para el 8 oct 2026, 08:00, debe publicarse antes. Cancélala o publica cuando ya esté publicada.",
       ],
     ])("names the scheduled version in the way, in %s", async (locale, expected) => {
       const before = currentLocale();
@@ -6385,7 +6385,7 @@ describe("publishing", () => {
       await el.updateComplete;
       await vi.waitFor(() =>
         expect(text(inPanel(el, "result"))).toBe(
-          "Lunch Menu was not published: version 1 is still live. Your changes are still saved. Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
+          "Lunch Menu was not published: version 1 is still live. Your changes are still saved. Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it, or publish once it is live.",
         ),
       );
       expect(inPanel(el, "publish-confirmation")).toBeNull();
@@ -6449,7 +6449,7 @@ describe("publishing", () => {
       out.reject(OVERTAKEN);
       await vi.waitFor(() =>
         expect(text(q(el, '[data-test="member-error"]'))).toBe(
-          "Lunch Menu was not published: version 1 is still live. Your changes are still saved. Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
+          "Lunch Menu was not published: version 1 is still live. Your changes are still saved. Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it, or publish once it is live.",
         ),
       );
     });

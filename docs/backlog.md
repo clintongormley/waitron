@@ -1190,19 +1190,21 @@ each version in the way; nothing offers to cancel it from there. The menus list 
 of the publication plan).
 **Left open after W99 (#1358), each an owner question asked in the PR:**
 
-- A refused Publish advises "Cancel it or move it earlier, then try again", but moving a version
-  can never let an immediate publish through (a move must land after now); only cancelling it, or
-  waiting until it is live, clears the refusal. Reviewers suggested a Publish-only sentence such as
-  "Cancel it, or publish once it is live." (`apps/dashboard/src/screens/menus-screen.ts`,
-  `#publishRefusal`).
-- A due version is served as live before anything records it (publication plan Decision 5), so if
+- **DONE (A376):** a refused Publish advised "Cancel it or move it earlier, then try again", but
+  moving a version can never let an immediate publish through (a move must land after now). It
+  now says "Cancel it, or publish once it is live." ("Cancélala o publica cuando ya esté
+  publicada."); the schedule and Change time forms keep their move-earlier and move-later advice
+  (`#publishRefusal` in `apps/dashboard/src/screens/menus-screen.ts`, `overtakeSentence` in
+  `apps/dashboard/src/widgets/menu-publications.ts`).
+- **Left as it is (owner 2026-10-07): a narrow window, and menus are not fiscal records.** A due
+  version is served as live before anything records it (publication plan Decision 5), so if
   the box's clock is stepped backwards past its time before the activation duty records it, reads
   serve the previous version again until the clock catches up. A Codex review reproduced it against
   the real migrations. Closing it means reads recording what they serve, or a never-decreasing
   clock in the process.
-- The schedule and Change time forms close with "Cancel" / "Cancelar" directly under a sentence
-  that says "Cancel it…" / "Cancélala…"; in Spanish it can read as cancelling the version in the
-  way. A label such as "Close" / "Cerrar" would remove the doubt.
+- **DONE (A376):** the schedule and Change time forms closed with "Cancel" / "Cancelar" directly
+  under a sentence that says "Cancel it…" / "Cancélala…", which in Spanish could read as
+  cancelling the version in the way. The button now reads "Close" / "Cerrar".
 - **DONE (A365, 2026-10-07):** `loadConfig` refuses `WAITRON_MAX_TICK_MS` above
   2,147,483,647 with `server.config_invalid` / `above_timer_limit`. The boundary is accepted by
   the config reader; trading boot still applies its stricter filing-duty budget.

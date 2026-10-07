@@ -2367,6 +2367,10 @@ export const en = {
     "Version {number}, scheduled for {time}, must go live after this one. Cancel it or move it later, then try again.",
   "menu_publications.in_the_way_later_many":
     "Versions {list} must go live after this one. Cancel them or move them later, then try again.",
+  "menu_publications.in_the_way_now":
+    "Version {number}, scheduled for {time}, must go live first. Cancel it, or publish once it is live.",
+  "menu_publications.in_the_way_now_many":
+    "Versions {list} must go live first. Cancel them, or publish once they are live.",
   "menu_publications.move": "Change time",
   "menu_publications.move_heading": "Change the time of version {number}",
   "menu_publications.move_intro":
@@ -4836,6 +4840,10 @@ export const es: Record<StringKey, string> = {
     "La versión {number}, programada para el {time}, debe publicarse después de esta. Cancélala o retrásala y vuelve a intentarlo.",
   "menu_publications.in_the_way_later_many":
     "Las versiones {list} deben publicarse después de esta. Cancélalas o retrásalas y vuelve a intentarlo.",
+  "menu_publications.in_the_way_now":
+    "La versión {number}, programada para el {time}, debe publicarse antes. Cancélala o publica cuando ya esté publicada.",
+  "menu_publications.in_the_way_now_many":
+    "Las versiones {list} deben publicarse antes. Cancélalas o publica cuando ya estén publicadas.",
   "menu_publications.move": "Cambiar la hora",
   "menu_publications.move_heading": "Cambiar la hora de la versión {number}",
   "menu_publications.move_intro":

@@ -77,17 +77,17 @@ function versionWords(edition: Edition): string {
 const IN_THE_WAY = {
   earlier: ["menu_publications.in_the_way_earlier", "menu_publications.in_the_way_earlier_many"],
   later: ["menu_publications.in_the_way_later", "menu_publications.in_the_way_later_many"],
+  now: ["menu_publications.in_the_way_now", "menu_publications.in_the_way_now_many"],
 } as const satisfies Record<string, readonly [StringKey, StringKey]>;
 
 /**
  * What to do about the editions an `overtakes_queued` refusal names, one sentence for those that
  * must go live first and one for those that must go live after. `placed` is the number of the
- * edition being moved, or null for one not yet numbered. Null when the list read after the refusal
- * lacks a named edition.
+ * edition being moved, null for one not yet numbered, or "now" for an immediate publish. Null when the list read after the refusal lacks a named edition.
  */
 export function overtakeSentence(
   overtaken: readonly { versionId: string }[],
-  placed: number | null,
+  placed: number | null | "now",
   answer: MenuPublicationsAnswer,
 ): string | null {
   const named: Edition[] = [];
@@ -98,8 +98,14 @@ export function overtakeSentence(
   }
   named.sort((a, b) => a.number - b.number);
   const groups = [
-    [named.filter((edition) => placed === null || edition.number < placed), IN_THE_WAY.earlier],
-    [named.filter((edition) => placed !== null && edition.number > placed), IN_THE_WAY.later],
+    [
+      named.filter((edition) => placed === null || placed === "now" || edition.number < placed),
+      placed === "now" ? IN_THE_WAY.now : IN_THE_WAY.earlier,
+    ],
+    [
+      named.filter((edition) => typeof placed === "number" && edition.number > placed),
+      IN_THE_WAY.later,
+    ],
   ] as const;
   const sentences = groups.flatMap(([group, [one, many]]) => {
     if (group.length === 0) return [];
@@ -783,7 +789,7 @@ export class MenuPublicationsPanel extends LitElement {
           data-test="schedule-close"
           ?disabled=${this.scheduleBusy}
           @click=${() => void this.#scheduleDialog().requestClose("cancel")}
-          >${t("action.cancel")}</wt-button
+          >${t("action.close")}</wt-button
         >
         <wt-button
           variant="primary"
