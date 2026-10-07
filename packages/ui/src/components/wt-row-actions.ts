@@ -96,8 +96,8 @@ export class WtRowActions extends LitElement {
     super.disconnectedCallback();
   }
 
-  private onToggle(event: ToggleEvent): void {
-    this.expanded = event.newState === "open";
+  private onToggle(): void {
+    this.expanded = this.popup.matches(":popover-open");
   }
 
   private onTriggerClick(event: MouseEvent): void {

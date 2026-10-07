@@ -1028,9 +1028,14 @@ unused `units` property is gone (it closes W75's leftover).
     Next: retain a no-match resize regression and handle that table state before measuring names;
     A368 changes toolbar order only.
   - DONE (A369): Chromium detach/reinsert tests reproduced stale `aria-expanded="true"` in
-    `wt-row-actions`, `wt-combobox` and `wt-help-tooltip` after their native popups closed on
+    `wt-row-actions`, `wt-combobox` and `wt-help-tooltip` immediately after reinsertion, with native popups closed by
     removal. Each resets its open state on disconnect. The regressions check closed state on
     reinsertion, then reopening and Escape dismissal; the tooltip also drops its description.
+    Row actions and the tooltip read the native popup state on a late toggle event: same-task
+    opening/removal tests caught a stale disclosure and a detached tooltip consuming Escape.
+  - Open, untested (A369 review): `wt-relative-time` also keeps disclosure state from `toggle`
+    and has document listeners. Next: reproduce open/remove/reinsert, including removal before
+    the opening toggle arrives, before deciding whether it needs the same lifecycle correction.
 - **A342, owner 2026-10-07 — DONE (#1366, several values in one table filter):** a `wt-data-table` filter
   declared with `multiple` takes several values, and keeps a row matching any of them; separate
   filters still all apply, and the Filters badge counts a filter once. Its list keeps the "All …"
