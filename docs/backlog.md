@@ -722,7 +722,7 @@ component rules harden around the dashboard alone.
 
 **Image library: Delete left, Edit right, and a preview showing where an image is used — DONE (W78, #1215;
 the portrait-photo bands W78a, #1280; on a phone a narrow photo centred and at most 40% of the
-window high, A293, #1313; the till allergen test title #1215's review questioned, W78b — in
+window high, A293, #1313; the till allergen test title #1215's review questioned, W78b, #1340 — in
 Playwright's Chromium 153, a real click on the dialog's backdrop left it open and Escape closed it,
 so the title now says Escape).**
 
