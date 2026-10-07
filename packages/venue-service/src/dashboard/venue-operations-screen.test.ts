@@ -3520,8 +3520,9 @@ describe("reserved venue names", () => {
       const control = kind === "department" ? "department-name" : "new-zone-name";
       await type(el, control, name);
       if (kind === "department") await type(el, "trading-name", "Shop");
-      else await chooseOption(field(el, "new-zone-department"), "Restaurant and bar");
+      else await chooseOption(field(el, "new-zone-department"), "d1");
       await action(el, "save-editor");
+      if (kind === "zone") expect(create).toHaveBeenCalledWith({ name, departmentId: "d1" });
       expect(fieldError(el, control)).toBe(
         `A disabled ${kind} already has this name. Enable it instead.`,
       );
@@ -3550,7 +3551,7 @@ describe("reserved venue names", () => {
       const control = kind === "department" ? "department-name" : "new-zone-name";
       await type(el, control, "Reserved");
       if (kind === "department") await type(el, "trading-name", "Shop");
-      else await chooseOption(field(el, "new-zone-department"), "Restaurant and bar");
+      else await chooseOption(field(el, "new-zone-department"), "d1");
       await action(el, "save-editor");
       expect(fieldError(el, control)).toBe(`A ${kind} with this name already exists.`);
       expect(find(el, '[data-test="enable-name-clash"]')).toBeNull();
@@ -3716,7 +3717,7 @@ it("explains a blocked zone Enable beside its reserved name and removes the unus
   } as unknown as VenueServiceApi);
   await action(el, "new-zone");
   await type(el, "new-zone-name", "Dining room");
-  await chooseOption(field(el, "new-zone-department"), "Restaurant and bar");
+  await chooseOption(field(el, "new-zone-department"), "d1");
   await action(el, "save-editor");
   await action(el, "enable-name-clash");
   expect(fieldError(el, "new-zone-name")).toBe(
