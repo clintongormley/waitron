@@ -378,3 +378,51 @@ describe("validateCatalogueConfiguration: include folders", () => {
     }
   });
 });
+
+describe("validateCatalogueConfiguration: Inactive products stay off menus", () => {
+  const sections = [
+    { id: "lunch-root", role: "menu_root" },
+    { id: "home", role: "home_layout" },
+    { id: "beer", role: "section" },
+  ];
+  const bundle = (active: 0 | 1, variantActive: 0 | 1, sectionId: string) => ({
+    sections,
+    products: [
+      { id: "gin", name: "Gin", active, parent_id: null },
+      { id: "single", name: "Single", active: variantActive, parent_id: "gin" },
+    ],
+    section_members: [
+      { id: "m1", section_id: sectionId, child_section_id: null, product_id: "gin" },
+    ],
+    menu_item_variant_overrides: [{ menu_item_id: "i1", product_id: "gin", variant_id: "single" }],
+  });
+  const refusedAs = (field: string) =>
+    expect.objectContaining({ code: "setup.request_invalid", params: { field } });
+
+  it.each(["lunch-root", "beer", "home"])(
+    "refuses an Inactive product placed in %s",
+    (sectionId) => {
+      expect(() => validateCatalogueConfiguration(bundle(0, 1, sectionId))).toThrowError(
+        refusedAs("section_members.product_id"),
+      );
+    },
+  );
+
+  it("refuses a menu price for an Inactive variant", () => {
+    expect(() => validateCatalogueConfiguration(bundle(1, 0, "beer"))).toThrowError(
+      refusedAs("menu_item_variant_overrides.variant_id"),
+    );
+  });
+
+  it("accepts the same rows with the product and variant Active, or with no Active flag", () => {
+    for (const sectionId of ["lunch-root", "beer", "home"])
+      expect(() => validateCatalogueConfiguration(bundle(1, 1, sectionId))).not.toThrow();
+    const flagless = bundle(1, 1, "beer");
+    expect(() =>
+      validateCatalogueConfiguration({
+        ...flagless,
+        products: flagless.products.map((row) => ({ ...row, active: undefined })),
+      }),
+    ).not.toThrow();
+  });
+});
