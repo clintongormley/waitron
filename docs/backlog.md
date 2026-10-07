@@ -1146,9 +1146,9 @@ of the publication plan).
 - The schedule and Change time forms close with "Cancel" / "Cancelar" directly under a sentence
   that says "Cancel it…" / "Cancélala…"; in Spanish it can read as cancelling the version in the
   way. A label such as "Close" / "Cerrar" would remove the doubt.
-- `WAITRON_MAX_TICK_MS` has no upper bound (`apps/server/src/config.ts`); a value above 2^31−1 ms
-  makes Node fire the main loop's timer at once. The menu activation duty caps its own sleep; the
-  main loop does not.
+- **DONE (A365, 2026-10-07):** `loadConfig` refuses `WAITRON_MAX_TICK_MS` above
+  2,147,483,647 with `server.config_invalid` / `above_timer_limit`. The boundary is accepted by
+  the config reader; trading boot still applies its stricter filing-duty budget.
 
 **The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per

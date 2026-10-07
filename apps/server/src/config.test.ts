@@ -509,6 +509,29 @@ describe("loadConfig", () => {
     expect(isAppError(error) && error.params).toEqual({ variable, reason });
   });
 
+  it("rejects a maxTick above Node's timer limit", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig({ ...MIN_ENV, WAITRON_MAX_TICK_MS: "2147483648" }, ROOT, STATE_ROOT),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_MAX_TICK_MS",
+      reason: "above_timer_limit",
+    });
+  });
+
+  it("accepts a maxTick exactly at Node's timer limit", () => {
+    const config = loadConfig({ ...MIN_ENV, WAITRON_MAX_TICK_MS: "2147483647" }, ROOT, STATE_ROOT);
+    expect(config.maxTickMs).toBe(2_147_483_647);
+  });
+
+  it.each([undefined, ""])("defaults maxTick when its value is %s", (value) => {
+    const config = loadConfig({ ...MIN_ENV, WAITRON_MAX_TICK_MS: value }, ROOT, STATE_ROOT);
+    expect(config.maxTickMs).toBe(3_600_000);
+  });
+
   it("rejects a minTick above maxTick, which would make the clamp unsatisfiable", async () => {
     const error = await captureError(() =>
       Promise.resolve(
