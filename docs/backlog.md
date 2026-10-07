@@ -1900,13 +1900,20 @@ the owner says otherwise (plan, "Open points"): a Spanish venue with no known pr
 nothing (setup cannot create one; the owner's reason for Spanish leans towards requiring it there
 too); receipts outside Catalonia stay free, Spanish by default. The new rules reach existing
 venues at their next start; only their stored language list waits for a reset.
-**Setup's side and the pack's rules are BUILT (W109-6, Task 6):** Spain's pack requires Spanish in
+**Setup's side and the pack's rules are BUILT (W109-6, #1320, Task 6):** Spain's pack requires Spanish in
 every area it does not otherwise name and Spanish + Catalan in the Balearic Islands, defaults to
 the regional language in the Valencian Community, the Balearic Islands and Galicia, and a new venue
 starts with `resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`):
 its default, its area's required languages, then English. The dashboard's required-language
 messages now say Waitron keeps the language enabled for the region, not that the region requires
 it. The demo's side is still Tasks 3 and 4.
+Left by #1320, OPEN, unqueued: `resolveInstalledDefaultContentLanguage`
+(`packages/country-packs/src/registry.ts`) is now called only by its own tests; delete it with its
+cases once the demo-data plan's Tasks 3 and 4 no longer name it. And seen during #1320's look
+(2026-10-07, not checked against `main`): after the onboarding wizard provisions, the stack started
+by `wa-wt onboarding <worktree>` restarted into setup mode, because the dev launcher
+(`apps/server/scripts/dev-server.mjs`) looked for `trading.env` only in the state folder
+`apps/server/.env` names, not the one `wa-wt` passes; the look worked round it with links.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
@@ -4349,7 +4356,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 
 ### A9. Product depth — after the primary works
 
-- **Product languages are hard-coded at setup** (owner, 2026-09-13) — **DONE (W109-6, Task 6 of
+- **Product languages are hard-coded at setup** (owner, 2026-09-13) — **DONE (W109-6, #1320, Task 6 of
   `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`).** A new venue starts with
   the languages Waitron keeps enabled for its area plus English, the regional language the default
   where one is kept (owner, 2026-10-06 ~17:23; entry "Content languages per region", A2); the
