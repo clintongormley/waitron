@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { commands, page } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import type { DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
@@ -71,6 +71,46 @@ function paintCanvas(host: HTMLElement): void {
   const bg = getComputedStyle(host).backgroundColor;
   document.body.style.background = bg;
   document.documentElement.style.background = bg;
+}
+
+/**
+ * Mounts a filtered table at 1280 and at 390 wide, checks its Filters button starts the toolbar,
+ * before any search box, and opens Filters: beside the rows at 1280 (`desktop: "fullscreen"` for
+ * a table too narrow there), over the whole screen at 390.
+ */
+export async function expectFiltersFirst(
+  mountTable: () => Promise<HTMLElement>,
+  desktop: "side" | "fullscreen" = "side",
+): Promise<void> {
+  const [width, height] = [window.innerWidth, window.innerHeight];
+  try {
+    for (const [w, h, placement] of [
+      [1280, 800, desktop],
+      [390, 844, "fullscreen"],
+    ] as const) {
+      await page.viewport(w, h);
+      const table = await mountTable();
+      const root = table.shadowRoot!;
+      const trigger = root.querySelector<HTMLElement>(".filters-trigger")!;
+      expect(root.querySelector(".table-toolbar")!.firstElementChild, `${w}`).toBe(trigger);
+      const search = root.querySelector<HTMLElement>(".table-search");
+      if (search && w === 1280)
+        expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
+          search.getBoundingClientRect().left,
+        );
+      await userEvent.click(trigger);
+      const panel = root.querySelector<HTMLElement>(".filters-panel")!;
+      await vi.waitFor(() =>
+        expect([panel.hasAttribute("data-side"), panel.matches(":popover-open")], `${w}`).toEqual(
+          placement === "side" ? [true, false] : [false, true],
+        ),
+      );
+      if (placement === "fullscreen") expect(panel.hasAttribute("data-fullscreen")).toBe(true);
+      cleanupWidgets();
+    }
+  } finally {
+    await page.viewport(width, height);
+  }
 }
 
 export function cleanupWidgets(): void {

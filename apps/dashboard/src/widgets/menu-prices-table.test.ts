@@ -6,7 +6,7 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { MenuPricesTable, type PriceSave } from "./menu-prices-table.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectFiltersFirst, mountWidget } from "./test-helpers.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 
 afterEach(cleanupWidgets);
@@ -3177,4 +3177,8 @@ describe("without a switch of the menu's own", () => {
       setLocale("es-ES");
     }
   });
+});
+
+it("puts the prices table's Filters before its search, beside the rows on a wide screen", async () => {
+  await expectFiltersFirst(async () => table(await mount()));
 });

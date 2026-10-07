@@ -3406,6 +3406,23 @@ it("opens the Products table's Filters from the toolbar's start", async () => {
   );
 });
 
+it("opens the Products table's Filters over the whole screen at phone width", async () => {
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(390, 844);
+  try {
+    const table = await tableOf(await mountBrowser());
+    await userEvent.click(table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!);
+    const panel = table.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
+    expect(panel.hasAttribute("data-side")).toBe(false);
+    expect(panel.hasAttribute("data-fullscreen")).toBe(true);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
 it("clears the selection when a filter is chosen in the panel beside the rows", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,

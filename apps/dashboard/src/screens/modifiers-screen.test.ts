@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, expectFiltersFirst, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOption,
   expectRowMenusOnScreen,
@@ -2032,3 +2032,19 @@ describe("the modifier list tables at phone width", () => {
     },
   );
 });
+
+it.each([
+  ["extras", "extra-lists"],
+  ["options", "option-lists"],
+])(
+  "puts the %s table's Filters before its search, beside the rows on a wide screen",
+  async (tab, testId) => {
+    await expectFiltersFirst(async () => {
+      const el = await mount();
+      await selectTab(el, tab);
+      await vi.waitFor(() => expect(table(el, testId)).not.toBeNull());
+      await table(el, testId).updateComplete;
+      return table(el, testId);
+    });
+  },
+);

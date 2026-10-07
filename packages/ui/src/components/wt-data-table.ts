@@ -931,7 +931,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Below the side width the panel is a full-screen popover, shown once it is rendered as one. */
   #placeLeadingFilters(): void {
     const panel = this.filtersPanel;
-    if (!panel) return;
+    if (!panel || !this.isConnected) return;
     panel.toggleAttribute("data-fullscreen", !this.sideFilters);
     if (this.filtersOpen && !this.sideFilters && !panel.matches(":popover-open"))
       panel.showPopover();

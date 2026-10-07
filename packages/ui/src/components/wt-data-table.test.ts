@@ -6678,6 +6678,18 @@ test("a table with a filter column and no other setting draws the Filters icon b
   });
 });
 
+test("a table taken off the page with its full-screen Filters open accepts new columns", async () => {
+  await inWindow(390, 844, async () => {
+    const { el, trigger, panel } = await leadingTable<StickyRow>(390, leadingSticky);
+    trigger.click();
+    await el.updateComplete;
+    expect(panel.matches(":popover-open")).toBe(true);
+    el.remove();
+    el.columns = [...stickyColumns];
+    await expect(el.updateComplete).resolves.toBe(true);
+  });
+});
+
 test("the leading Filters button's tooltip shows on hover and on keyboard focus, over the sticky headings, and Escape hides it", async () => {
   await inWindow(1280, 900, async () => {
     const { el, root, trigger } = await leadingTable<StickyRow>(900, {
