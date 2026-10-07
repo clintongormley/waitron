@@ -22,7 +22,7 @@ export type EmailDeliveryRequest = {
 
 export type ReceiptDeliveryRequest = {
   requestKey: string;
-  personId: string;
+  personId: string | null;
   medium: "receipt";
   printJobId: string;
 };

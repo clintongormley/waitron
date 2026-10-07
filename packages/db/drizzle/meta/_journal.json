@@ -834,6 +834,13 @@
       "when": 1791378416453,
       "tag": "0118_invoice_receipt_agent",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "6",
+      "when": 1791384532634,
+      "tag": "0119_invoice_receipt_optional_issuer",
+      "breakpoints": true
     }
   ]
 }

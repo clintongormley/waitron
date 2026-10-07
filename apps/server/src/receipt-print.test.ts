@@ -2315,8 +2315,14 @@ describe("automatic F1 receipt delivery enrollment", () => {
     expect(await suite.db.select().from(printJobs)).toEqual([
       expect.objectContaining({ saleId, receiptCopy: false }),
     ]);
-    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+    const [job] = await suite.db.select().from(printJobs);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
+      expect.objectContaining({ saleId, printJobId: job!.id, personId: null, status: "queued" }),
+    ]);
     expect((await suite.db.select().from(sales))[0]!.operatorId).toBeNull();
+    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    expect(await suite.db.select().from(printJobs)).toHaveLength(1);
+    expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
   });
 
   it("queues no delivery for an automatic original without an active receipt printer", async () => {
