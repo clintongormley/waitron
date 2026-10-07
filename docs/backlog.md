@@ -2566,8 +2566,10 @@ are unchanged; new shared and Chromium cases count one name parse per distinct v
 Measured 2026-10-07 on macOS, Node v26.7.0, default collation en-US: three warm-up sorts per
 comparator, nine alternating runs, 100 sorts per sample for demo lists and one for the generated
 5,000-name list. Times below are median milliseconds per sort (minimum–maximum); they measure
-comparison/sorting, not DOM rendering. Demo names come from Casa Delgado's products, categories
-and floor tables; generated names mix number runs, accents and case. The old comparator is the
+comparison/sorting, not DOM rendering. Demo product names follow the locale-specific seed's staff-name writer; the English category
+sample and floor labels match stored rows. The additional Spanish category sample reads translated
+seed labels, not the stored reporting-category names: `seed-catalogue.ts:131` writes
+`cat.categoryName ?? cat.name.en` in either locale. Generated names mix number runs, accents and case. The old comparator is the
 pre-A309 table's numeric/base `localeCompare`; "Before A363" is A309's exact-decimal comparator.
 
 | List | Old table comparison | Before A363 | After, direct | After, table cache |
@@ -2575,7 +2577,7 @@ pre-A309 table's numeric/base `localeCompare`; "Before A363" is A309's exact-dec
 | products-en (45) | 0.2935 (0.2731–0.3137) | 0.6495 (0.5941–0.6844) | 0.0471 (0.0390–0.0556) | 0.0283 (0.0261–0.0304) |
 | categories-en (10) | 0.0333 (0.0331–0.0350) | 0.0705 (0.0688–0.0735) | 0.0039 (0.0039–0.0061) | 0.0072 (0.0029–0.0106) |
 | products-es (45) | 0.2839 (0.2749–0.2923) | 0.6117 (0.5910–0.6355) | 0.0479 (0.0416–0.0536) | 0.0299 (0.0293–0.0312) |
-| categories-es (10) | 0.0330 (0.0316–0.0356) | 0.0765 (0.0681–0.0874) | 0.0044 (0.0041–0.0056) | 0.0034 (0.0031–0.0097) |
+| category seed ES labels (10, additional sample) | 0.0330 (0.0316–0.0356) | 0.0765 (0.0681–0.0874) | 0.0044 (0.0041–0.0056) | 0.0034 (0.0031–0.0097) |
 | tables (16) | 0.0360 (0.0354–0.0378) | 0.0500 (0.0461–0.0520) | 0.0077 (0.0066–0.0138) | 0.0050 (0.0048–0.0095) |
 | generated (5000) | 79.8438 (77.2915–88.6754) | 122.6801 (114.0640–133.4943) | 27.1010 (25.9914–37.3585) | 10.8013 (10.4669–16.3828) |
 
