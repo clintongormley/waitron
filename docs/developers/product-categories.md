@@ -360,8 +360,9 @@ product's `active` flag), and its dialog asks "Disable N products?". Their rows 
 remain, and you can enable the products again later, each from its row menu's **Enable**. The
 dialog adds how many menus the products come off, read from `GET /management-api/products/menus`
 (below): "They come off the 2 menus they are on, which then show unpublished changes.", nothing when
-they are on none, and "They come off every menu they are on." while the count is being read, when
-it cannot be read, and when the selection also holds a category. When
+they are on none, and "They come off every menu they are on." while the count is being read or when
+it cannot be read. With a category in the selection, the count covers only the products selected
+directly. When
 every selected product is disabled already, the toolbar offers no **Disable**; a selection that
 mixes active and disabled products still offers it, and the disabled ones stay disabled. Once a category is in the selection the action
 reads **Delete**, because the category itself is deleted. Products you selected directly are still

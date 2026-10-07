@@ -1122,8 +1122,8 @@ unused `units` property is gone (it closes W75's leftover).
   variant save); the list writers refuse an Inactive product, the size-price route refuses a
   Disabled size, and a configuration import refuses either on a menu (`setup.request_invalid`).
   `GET /management-api/products/menus` counts the menus the products are on, and the Disable
-  dialogs say "They come off the N menus they are on…" (or "every menu" when the count is unknown,
-  and for products picked beside a category).
+  dialogs say "They come off the N menus they are on…" (or "every menu" while the count is
+  unknown), counting only the products picked directly when a category is selected too.
   - Open, found in A347's review, believed to predate it: an imported bundle may carry priced menu
     rows for a product no menu reaches, and adding the product back to a menu revives those prices.
     Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
