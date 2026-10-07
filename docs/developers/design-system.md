@@ -336,10 +336,16 @@ dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
 `--wt-duration-disclosure` is how long a disclosure body takes to open or close (900 ms).
 
 Secondary and ghost `wt-button` variants keep their fill and text at full opacity on hover;
-their border reads `--wt-color-primary-text`. Primary and danger variants use their hover fill
+their default border reads `--wt-color-primary-text`. If your screen paints the border through
+`::part(button)`, give it its own hover cue too: an outside part rule overrides the shared border
+rule. Google sign-in uses its text token for the hovered border, painted tiles use their readable
+ink, and an invalid image choice adds an inset line in the error colour. Primary and danger variants use their hover fill
 tokens at full opacity. A hover must preserve the label's contrast, including coloured text and
-muted prices in a till tile. `--wt-opacity-hover` remains the feedback for the course and options
-list's name controls.
+muted prices in a till tile.
+
+`wt-combobox`'s option rows hover onto `--wt-color-bg`, not the raised surface: the raised
+surface equals the popover panel's own background in the light theme, so a raised-surface hover
+would not show.
 
 `wt-button` also exposes its inner `<button>` as a CSS part (`part="button"`), so a consuming
 screen can layer its own hover accent onto specific buttons — `wt-button.foo::part(button):hover`

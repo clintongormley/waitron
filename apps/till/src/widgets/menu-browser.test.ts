@@ -1758,11 +1758,17 @@ describe("till-menu-browser", () => {
         const el = await mountPainted(theme);
         await userEvent.hover(entry(el, "structure", "Bare"));
         const neutral = opacity(entry(el, "structure", "Bare"));
-        await userEvent.hover(entry(el, "structure", "Blue"));
-        const blueHovered = opacity(entry(el, "structure", "Blue"));
+        const blue = entry(el, "structure", "Blue");
+        const border = getComputedStyle(inner(blue)).borderTopColor;
+        await userEvent.hover(blue);
+        const blueHovered = opacity(blue);
+        expect(getComputedStyle(inner(blue)).borderTopColor).toBe(ink(blue, ".name"));
+        expect(getComputedStyle(inner(blue)).borderTopColor).not.toBe(border);
         expect(neutral).toBe(1);
         expect(blueHovered).toBe(neutral);
         expect(opacity(entry(el, "structure", "Bare"))).toBe(1);
+        await userEvent.unhover(inner(blue));
+        expect(getComputedStyle(inner(blue)).borderTopColor).toBe(border);
       });
 
       it("draws a sold-out tile, painted or not, unfaded and still disabled, saying Sold out in the body colour", async () => {

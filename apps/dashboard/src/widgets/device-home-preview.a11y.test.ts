@@ -9,6 +9,7 @@ import {
   menuDocument,
   mountWidget,
 } from "./test-helpers.js";
+import { page, userEvent } from "vitest/browser";
 import "./device-home-preview.js";
 import type { DeviceHomePreview } from "./device-home-preview.js";
 
@@ -58,6 +59,29 @@ async function search(el: DeviceHomePreview, text: string): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) => {
+  it("painted section tiles keep visible, accessible hover feedback", async () => {
+    const { el, host } = await mountWidget<DeviceHomePreview>(
+      "dashboard-device-home-preview",
+      { document: lunch() },
+      theme,
+    );
+    const tiles = el.shadowRoot!.querySelectorAll("wt-button.tile[data-painted]");
+    expect(tiles.length).toBeGreaterThan(0);
+    for (const tile of tiles) {
+      const inner = tile.shadowRoot!.querySelector("button")!;
+      const border = getComputedStyle(inner).borderTopColor;
+      await userEvent.hover(inner);
+      expect(inner.matches(":hover")).toBe(true);
+      expect(getComputedStyle(inner).opacity).toBe("1");
+      expect(getComputedStyle(inner).borderTopColor).not.toBe(border);
+      await expectNoA11yViolations(host);
+    }
+    await page.screenshot({
+      element: host,
+      path: `__screenshots__/look/a319-preview-${theme}.png`,
+    });
+  });
+
   it.each(["handheld", "till"] as const)("renders %s accessibly", async (device) => {
     const { host } = await mountWidget<DeviceHomePreview>(
       "dashboard-device-home-preview",

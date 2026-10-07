@@ -1231,7 +1231,9 @@ adjust the colour-field width using the shared field contract without changing s
 selected item read `--wt-color-primary-text`.
 
 **Hover contrast A306 (#1336) — DONE (A319).** Secondary and ghost buttons keep text at full
-opacity and accent their border on hover; painted till tiles use their text colour for that border.
+opacity and accent their default border on hover; painted till tiles and home-preview section
+tiles use their text colour for that border. Google sign-in and invalid image choices keep their
+own visible cue where a screen paints the border.
 Real-pointer axe cases scan Account settings' Details and Security actions, content-language
 actions, and plain, painted and sold-out menu tiles in both themes, English and Spanish, at
 390 and 1280 px. The earlier screenshot-only observation remains open: on a hovered Products row
