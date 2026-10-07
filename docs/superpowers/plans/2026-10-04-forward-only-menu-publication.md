@@ -8,8 +8,9 @@
 > under 100 tool calls. An implementer that passes about 150 calls with its task unfinished stops
 > at a passing (or cleanly red) point, commits, and returns a handover: what is done, what is left,
 > the files, and each check's state. A fresh implementer continues from it.
-> **Existing assertions:** no existing assertion is expected to change (see "Assertions" at the
-> end). Adding fixture rows, stub methods, list entries for new tables, or a new key to a
+> **Existing assertions:** one existing test changes its setup for a stated reason (Task 4,
+> `name-only-upgrade.test.ts`; see "Assertions" at the end); no other existing assertion is
+> expected to change. Adding fixture rows, stub methods, list entries for new tables, or a new key to a
 > whole-shape pin is allowed and listed there. Any other existing assertion that turns out to need
 > changing is a STOP: report it, do not edit it.
 
@@ -80,7 +81,7 @@ All live reads go through one private function, `liveVersions(tx, menuIds | unde
   `listZoneOffers` `:750` and `menuState` `:791`); a new line records `versionOf(offer.menuId)`
   (`:1118`). The till learns of a new live version through `GET /api/menu-state`
   (`apps/server/src/till-api.ts:1346`), polled by `MenuStatePoll`
-  (`apps/till/src/till-app.ts:225`) and compared by `versionsMoved` (`till-app.ts:866`, used at
+  (imported at `apps/till/src/till-app.ts:225`, constructed at `:1515`) and compared by `versionsMoved` (`till-app.ts:866`, used at
   `:2741`). **No till code changes in this plan:** a version that becomes live by schedule reaches
   the till exactly as an immediate publish does today.
 - `previewMenu` (`:260-410`): its own live version (`:264`) and every live version for shared
@@ -110,6 +111,11 @@ All live reads go through one private function, `liveVersions(tx, menuIds | unde
   (`packages/migrations/migrations.manifest.json`, order `core, catalogue, media, …`).
   **So today a queued version's photos would be unprotected:** deleting one would leave the edition
   naming a missing photo when it activates. Task 4 closes that.
+- Media's upgrade test `packages/media/src/schema/name-only-upgrade.test.ts` migrates media to
+  `0004` (`BEFORE`, `:33`; staged by `stageMediaBefore`, `:66-80`), snapshots every trigger whose
+  text names `media_images` (`:90-93`), then applies the WHOLE media folder (`:155`) and requires
+  the eleven triggers back word for word (`:209-212`). Task 4's migration rewrites two of them, so
+  this test's setup changes (Task 4, and "Assertions").
 - Live subscriptions: the dashboard's `MENU_PUBLICATION_READS` (`apps/dashboard/src/api/live-queries.ts:4-24`)
   feeds `getMenuRead`, `getMenuStatuses`, `getMenuStatus`, `getMenuPreview` (`:187-192`); media's
   `images` query lists `menu_publications` and `menu_version_images`
@@ -127,6 +133,9 @@ All live reads go through one private function, `liveVersions(tx, menuIds | unde
 - `packages/catalogue/src/menu-publication.test.ts:333-377`: counts statements containing
   `"document"`; the metadata and format reads must not name that column (the format read uses
   `json_extract(…'$.format')`, `menu-publication.ts:53-56`, and does today).
+- Batches bind at most `BATCH_SIZE = 1000` values per statement, because the store passes each bound
+  value as its own function argument (`packages/catalogue/src/batches.ts:1-3`). A statement that
+  names the batch's ids twice (once per half of a union) must take half-size batches.
 
 So the live read stays ONE statement, keeps `from "menu_publications"` in it exactly once, and adds
 the due queued rows to that same statement.
@@ -139,7 +148,7 @@ the due queued rows to that same statement.
   (`:260-310`; `menu.changed_since_preview` 409 at `:285`, `menu.clashes_unresolved` 409 `:286`).
   `POST /management-api/catalogues/:id/publish` (`:973-985`) reads `{ expectedHash }`.
   `requireVenueCfg` (`:1527-1535`) gives the venue's `TillConfig` (`locationId`); the routes
-  already reach venue-service through `VENUE_SERVICE` (`:92, :1181`), and other server files import
+  already reach venue-service through `VENUE_SERVICE` (imported at `:104`, used at `:1181`), and other server files import
   `@waitron/venue-service` directly (`apps/server/src/kitchen.ts`, `tables.ts`, `watchers.ts`).
 - Dashboard: `publishMenu(id, expectedHash)` (`apps/dashboard/src/api/client.ts:2087-2092`); the
   Preview tab is `dashboard-menu-preview` (`apps/dashboard/src/widgets/menu-preview.ts`), which owns
@@ -187,7 +196,7 @@ the due queued rows to that same statement.
   a pass shortens its sleep. Primary-only work reads `holders.singletonRole.current === "primary"`
   per run (`boot.ts:1712, 1858`; a fenced node is demoted on that axis, `:1219-1220`; a mirror is
   always secondary, `:1265`). Every started duty pushes its stop onto `undoOnFailure` at once
-  (`:1560, :2096`) and is listed in `stopWork`'s `closeAll` (`:2158-2175`). A log-only duty need not
+  (the demo printer loop at `:1469`, the main loop at `:2096`) and is listed in `stopWork`'s `closeAll` (`:2158-2175`). A log-only duty need not
   be health-tracked (`:374-377`). Timers: `unrefTimer` (`apps/server/src/unref-timer.ts:9-13`).
 - Failed-start pattern: `apps/server/src/boot.failed-start.test.ts:354-384` (a step after the
   listener throws; mocked starters are asserted stopped). It mocks `subscribeToChanges` with
@@ -403,7 +412,12 @@ export function startMenuActivation(deps: {
 It runs once at start (restart recovery), then after each run arms ONE timer for
 `min(nextDueAt - now, maxWaitMs)` (at least 0). A change whose resources include the type
 `menu_scheduled_publications` on `bus` re-runs it (a queue, reschedule or cancel moves the next due
-time). On a node that is not primary it writes nothing and re-arms at `maxWaitMs`. Runs never
+time). The bus delivers a change on the WRITER's call stack, after its commit
+(`apps/server/src/live-api.ts:36-49`), so the listener only schedules a run (a flag plus
+`queueMicrotask`) and never runs one itself; it ignores the bus's `close` event. The duty's own
+activation writes `menu_scheduled_publications`, so a run that activated something wakes the duty
+once more; that run finds nothing due, writes nothing, raises no change and arms the timer, so
+there is no loop. On a node that is not primary it writes nothing and re-arms at `maxWaitMs`. Runs never
 overlap: a wake during a run runs once more after it. A failed run logs `warn`
 `menu_publication.activation_failed { errorCode }` and re-arms; each activation logs `info`
 `menu_publication.activated { menuId, versionId, number }`; every arm logs `debug`
@@ -428,8 +442,9 @@ a run in flight and arms nothing more.
 > route (real database) and in the browser (the choice is shown, in English and Spanish).
 
 Where they are tested: (1) Task 3 case 1 (catalogue), Task 7 case 1 (route, real database),
-Task 10 case 1 (browser, English and Spanish). (2) Task 3 cases 2–3, Task 7 cases 2–4, Task 10
-cases 2–4.
+Task 11 case 1 (browser, English and Spanish). (2) Task 3 cases 2–3, Task 7 cases 2–4, Task 11
+cases 2–3 (both directions, English and Spanish); the same dialog for an immediate publish and a
+new schedule is Task 10.
 
 The fixed timeline every scenario test uses (`Europe/Madrid`; the instants were measured above):
 now = 2026-10-07 10:00 local (`08:00Z`); "tomorrow" = 2026-10-08 08:00 (`06:00Z`); "the day after"
@@ -452,6 +467,13 @@ now = 2026-10-07 10:00 local (`08:00Z`); "tomorrow" = 2026-10-08 08:00 (`06:00Z`
   `menu_publications`. Each task that adds a write asserts, with a `prepareQuery` spy as
   `menu-publication.test.ts:318-332` does, that every `insert`/`update`/`delete` statement it issues
   names only those tables.
+- **"The draft tables"** below means every table the draft's document is built from: the
+  dashboard's `MENU_PUBLICATION_READS` (`apps/dashboard/src/api/live-queries.ts:4-24`) less
+  `menu_publications` and `menu_versions` — `catalogues`, `categories`, `category_details`,
+  `content_languages`, `extra_list_items`, `extra_lists`, `menu_details`,
+  `menu_item_variant_overrides`, `menu_items`, `option_labels`, `option_lists`,
+  `product_modifiers`, `product_units`, `products`, `section_members`, `sections`, `units`. A
+  "draft snapshot" is every row of each, ordered by its primary key.
 - **Activation never changes a recorded line or a fiscal record:** it writes only
   `menu_scheduled_publications` and `menu_publications` (asserted by the same spy in Task 2), and a
   sale recorded before it keeps its `sale_lines.menu_version_id` and its line contexts (Task 2).
@@ -465,11 +487,17 @@ now = 2026-10-07 10:00 local (`08:00Z`); "tomorrow" = 2026-10-08 08:00 (`06:00Z`
   generated `.sql` before running it; do not edit a shipped migration; no venue reset is needed
   (one new table, two recreated triggers, no rebuild).
 - Coverage holds `98/98/98/95` in every package touched; no new `v8 ignore`, no exclude.
-- Fixtures use distinct, recognisable values: menu **Almuerzo** (the menu under test), products
-  **Croquetas** (€6.50, later €7.00) and **Tortilla** (€5.00), photos **croquetas-a.jpg** and
-  **croquetas-b.jpg** (media task). Venue zone `Europe/Madrid`. Person ids **manager-ana** and
-  **manager-luis** where a test needs two.
-- Inspect every changed screen in both themes at 390 px and 1280 px (Tasks 8–10).
+- Fixtures: use the existing ones and add only what a case needs. Catalogue tests use
+  `menusFixture` (`packages/catalogue/test/menus-fixture.ts:54`): the menu under test is **Lunch**
+  (`f.lunch`, "Lunch Menu", `:60`) and draft edits change **Soup**'s price (`f.soup`, €5.00, `:96`)
+  through `updateProduct`, in steps €5.50, €6.00, €6.50, €7.00, €7.50 so every edition differs; a
+  photo case sets Soup's `image` to `soup-a.jpg` then `soup-b.jpg` (the catalogue suite has no media
+  triggers, so any name is accepted). Media tests use their file's own photos `PRESENT` and `ABSENT`
+  (`packages/media/src/image-references.test.ts:44-45`) and its published menu. Route tests create
+  a menu "Lunch" with a product "Soup" through the routes, as the route harness already does. Browser
+  tests use the screen suite's `menu-lunch`, "Lunch Menu" (`apps/dashboard/src/screens/menus-screen.test.ts:136`).
+  Venue zone `Europe/Madrid`. Person ids **manager-ana** and **manager-luis** where a test needs two.
+- Inspect every changed screen in both themes at 390 px and 1280 px (Tasks 8–11).
 - Schema-change guard commands (Tasks 1 and 4), read each run's `Tests` count:
   `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/module-graph-honesty.test.ts scripts/migration-upgrade.test.ts scripts/id-columns-are-references.test.ts scripts/journal-monotonic.test.ts`
   and `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad src/write-path.e2e.test.ts`.
@@ -493,15 +521,15 @@ CHECKs, add exactly the entries it names, each with a one-line reason.
 
 - [ ] **Failing tests first**, `packages/catalogue/src/menu-schedule.test.ts` (real database,
   `useCatalogueDb()` and `menusFixture` as `menu-publication.test.ts:13-58` do; explicit `at`
-  instants, no fake timers). Almuerzo is published once as version 1 before each case.
-  1. **A queued edition is fixed content.** Preview Almuerzo after raising Croquetas to €7.00 and
-     setting its photo; `queueMenuPublication(…, hash, 2026-10-08T06:00Z, "manager-ana", { at:
+  instants, no fake timers). Lunch is published once as version 1 before each case.
+  1. **A queued edition is fixed content.** Preview Lunch after raising Soup to €5.50 and setting
+     its photo to `soup-a.jpg`; `queueMenuPublication(…, hash, 2026-10-08T06:00Z, "manager-ana", { at:
      2026-10-07T08:00Z })` → `{ number: 2, activatesAt: "2026-10-08T06:00:00.000Z" }`. Then change
-     Croquetas back to €6.50 and change its photo. The version 2 row's `document`, `content_hash`
-     and its `menu_version_images` filenames equal what the preview showed (the €7.00 price, the
-     first photo); `published_by` is manager-ana; the schedule row is `queued`, `queued_at` =
+     Soup back to €5.00 and its photo to `soup-b.jpg`. The version 2 row's `document`,
+     `content_hash` and its `menu_version_images` filenames equal what the preview showed (€5.50,
+     `soup-a.jpg`); `published_by` is manager-ana; the schedule row is `queued`, `queued_at` =
      `at`. Missing behaviour prints "queueMenuPublication is not a function", then a document
-     carrying €6.50.
+     carrying €5.00.
   2. **Numbers increase and are never reused.** Queue for the 8th, edit, queue for the 9th → 2,
      3. Cancel 3 (`cancelMenuPublication`) → its row is `cancelled` with `cancelled_by`
      manager-ana; edit and queue for the 10th → 4. Cancel 2 and queue again → 5.
@@ -528,12 +556,22 @@ CHECKs, add exactly the entries it names, each with a one-line reason.
      `menu_publication.not_queued` `{ state: "cancelled" }`. `listMenuPublications` answers
      `live` `{ number: 1, since }` and the queued editions soonest first, then settled ones newest
      number first, at most ten settled (queue and cancel twelve to see the cap).
-  7. **The schema refuses what the code never writes** (raw SQL, caught outside the transaction):
-     two queued rows for one menu at one instant → the unique index; a `cancelled` row with no
-     `cancelled_by` → `menu_scheduled_publications_settled_ck`; `activates_at` before `queued_at`
-     → `menu_scheduled_publications_after_queue_ck`; a `version_id` of Dinner with `menu_id` of
-     Almuerzo → the version key. Assert the refusal through `isRefusal` and the constraint name in
-     the message (`engineErrorMessage`, imported as `menu-publication.test.ts:5-12` does).
+  7. **The schema refuses what the code never writes** (raw SQL, caught outside the transaction).
+     This engine names only some constraints in its refusals (`packages/db/src/constraint-target.ts:95-106`
+     records what each class reports, driven in `constraint-target.db.test.ts`), so each is
+     identified the way that file says it can be:
+     - two queued rows for one menu at one instant → `refusalOn(error, UNIQUE_VIOLATION, { table:
+       "menu_scheduled_publications", columns: ["menu_id", "activates_at"] })` (`:148`; a column
+       index reports its table and columns, not its name); a second row at that instant in state
+       `cancelled` is accepted (the index is partial);
+     - a `cancelled` row with no `cancelled_by` → `checkFailed(error,
+       "menu_scheduled_publications_settled_ck")` (`:197`); `activates_at` before `queued_at` →
+       `checkFailed(…, "menu_scheduled_publications_after_queue_ck")`; a `state` of `"paused"` →
+       `checkFailed(…, "menu_scheduled_publications_state_ck")`;
+     - a `version_id` of a Dinner version with `menu_id` of Lunch → `isRefusal(error,
+       FOREIGN_KEY_VIOLATION)` (errcode 787; the message says only "FOREIGN KEY constraint failed"),
+       with the control that the same row naming Lunch's own queued version is accepted, so the
+       refusal is the pairing and not a missing row.
   8. **Writes touch only the publication tables:** spy `prepareQuery` around a queue and a cancel;
      every `insert`/`update`/`delete` names only `menu_versions`, `menu_version_images`,
      `menu_scheduled_publications`.
@@ -577,7 +615,7 @@ CHECKs, add exactly the entries it names, each with a one-line reason.
      9th, 10th; at the 11th: every read answers version 4 (never 2 or 3), and
      `activateDueMenuPublications(tx, at)` marks all three `activated` (`activated_at` = `at`),
      moves the pointer once, from 1 to 4, with `published_at` = version 4's `activates_at`, and
-     answers `activated: [{ menuId: <Almuerzo>, versionId: <v4>, number: 4 }]` and `nextDueAt:
+     answers `activated: [{ menuId: <Lunch>, versionId: <v4>, number: 4 }]` and `nextDueAt:
      null`. A spy shows exactly one `update`/`insert` statement on `menu_publications`.
   3. **In sequence:** with the same three, activating at the 8th, then the 9th, then the 10th moves
      the pointer 1 → 2 → 3 → 4, and `nextDueAt` is the next queued instant each time.
@@ -594,17 +632,23 @@ CHECKs, add exactly the entries it names, each with a one-line reason.
   7. **Statement shape kept:** `readLiveDocuments` with a due edition still issues one metadata
      statement and, warm, no statement containing `"document"` (`menu-publication.test.ts:333-377`
      stay green); the live read's SQL contains `from "menu_publications"` exactly once.
+     **Batches:** `readLiveDocuments` over 1,001 published menus (planted rows) succeeds, and every
+     live-read statement binds at most `BATCH_SIZE` values (read `params.length` off the spied
+     queries). **Document mode:** with versions 2, 3 and 4 all due, `previewMenu`'s live document is
+     version 4's, and the live-read statement returns at most two rows for that menu (the pointer's
+     and the highest due one) — counted from the spied statement's result by running the same
+     `.toSQL()` text directly.
   8. `menu-publication.live.test.ts`, a second case: activation announces `menu_publications` and
      `menu_scheduled_publications` to `subscribeToChanges` (the file's existing pattern, `:15-28`).
   **Sale path** (`apps/server/src/till-api.sell-published.test.ts`, a new `describe` "a basket that
   spans a scheduled activation", modelled on "a basket that spans a publish" `:328-462`, faking
-  `Date` only and stepping it with `vi.setSystemTime`): Almuerzo version 1 serves Croquetas at
-  €6.50; queue version 2 (€7.00) one minute ahead; hold an order line priced from version 1;
+  `Date` only and stepping it with `vi.setSystemTime`): that file's menu, version 1, serves its
+  dish at the fixture's price; raise the price by €0.50 and queue version 2 one minute ahead; hold an order line priced from version 1;
   step past the activation (no duty runs):
   9. a line asserting version 1 → 409 `menu.version_changed` `{ menus: [{ menuId, liveVersionId:
-     <v2> }] }` with nothing written; a line with no asserted version is priced €7.00 and records
-     version 2 in `working_line_contexts.menu_version_id`; the held line still names version 1 at
-     €6.50; a sale paid before the step keeps `sale_lines.menu_version_id` = version 1 after
+     <v2> }] }` with nothing written; a line with no asserted version is priced at the raised
+     price and records version 2 in `working_line_contexts.menu_version_id`; the held line still
+     names version 1 at the old price; a sale paid before the step keeps `sale_lines.menu_version_id` = version 1 after
      `activateDueMenuPublications` runs; `/api/menu-state` names version 2.
   Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-schedule.test.ts
   src/menu-publication.live.test.ts` and `pnpm --filter @waitron/server exec vitest run
@@ -613,7 +657,13 @@ CHECKs, add exactly the entries it names, each with a one-line reason.
   menu_versions` part, `union all` the due part (`menu_scheduled_publications` with `state =
   'queued' and activates_at <= at` ⋈ `menu_versions`), each selecting the same columns plus `since`
   (`menu_publications.published_at`, `menu_scheduled_publications.activates_at`); keep, per menu,
-  the row with the highest number. Use drizzle's `unionAll` from `drizzle-orm/sqlite-core` or a raw
+  the row with the highest number. The due part returns only the highest-numbered due row per
+  menu, chosen in SQL (a `row_number() over (partition by menu_id order by number desc)` derived
+  table filtered to 1, or a `max(number)` subquery — if that subquery is correlated, check whether
+  its outer table is the `.from()` base or a join and read `.toSQL()`, CLAUDE.md §3), so document
+  mode never fetches the document of a due edition another due edition hides. The statement names
+  the batch's ids in both halves, so batch at `BATCH_SIZE / 2` (`batches(menuIds, BATCH_SIZE / 2)`).
+  Use drizzle's `unionAll` from `drizzle-orm/sqlite-core` or a raw
   `sql` statement; read the emitted SQL with `.toSQL()` and check with `explain query plan` that
   `menu_versions` is searched by its primary key (no full scan for the every-menu read
   `previewMenu` and `menuStatus` make). `statusOf` reports `since` as `publishedAt`.
@@ -637,15 +687,17 @@ CHECKs, add exactly the entries it names, each with a one-line reason.
 tests in `src/menu-schedule.test.ts`.
 
 - [ ] **Failing tests first** (catalogue, real database, explicit `at`):
-  1. **Owner scenario (1), catalogue level.** v1 live; queue v2 for tomorrow; change Tortilla to
-     €5.50; queue v3 for the day after; take the draft's preview hash and a snapshot of
-     `menu_items`, `sections`, `section_members`, `products`. `rescheduleMenuPublication(v3, this
+  1. **Owner scenario (1), catalogue level.** v1 live (Soup €5.00); queue v2 for tomorrow (Soup
+     €5.50 when queued); change Soup to €6.00; queue v3 for the day after; then change Soup to
+     €7.50, so the draft differs from v1, v2 and v3 (without this edit the draft equals v3 and a
+     draft reset to v3 would go unseen). Take the draft's preview hash and a draft snapshot. `rescheduleMenuPublication(v3, this
      afternoon)` without a decision → `menu_publication.overtakes_queued` naming
      `[{ number: 2, activatesAt: "2026-10-08T06:00:00.000Z" }]`, nothing written. With
      `{ overtaken: "cancel" }` → `{ number: 3, activatesAt: "2026-10-07T14:00:00.000Z" }`; v2 is
-     `cancelled` (`cancelled_by` manager-ana). The draft's preview hash and the snapshot are
-     unchanged. At `14:00Z` every read answers v3; activating then and again at tomorrow `06:00Z`
-     leaves v3 live and v2 `cancelled`. Change Croquetas and queue → number 4.
+     `cancelled` (`cancelled_by` manager-ana). The draft's preview hash and the draft snapshot are
+     unchanged, and the preview still shows Soup at €7.50. At `14:00Z` every read answers v3;
+     activating then and again at tomorrow `06:00Z` leaves v3 live and v2 `cancelled`. Queue the
+     unchanged €7.50 draft → number 4.
   2. **Owner scenario (2), earlier past a lower number:** v2 tomorrow, v3 the day after;
      reschedule v3 to this afternoon → refused naming v2 (as case 1); with the decision, v2
      cancelled.
@@ -666,7 +718,10 @@ tests in `src/menu-schedule.test.ts`.
   7. **Writes touch only the publication tables** (spy, as Task 1 case 8), for reschedule and for a
      publish with the decision.
   8. **Concurrency** (`racePair`, `packages/catalogue/test/fixtures.ts:221`): two queues of
-     different drafts for different times both succeed with numbers 2 and 3; an activation racing
+     different drafts for different times both succeed with numbers 2 and 3 — the first body queues
+     the current draft for the 8th; the second body, which `racePair` holds until the first has
+     committed, first sets Soup to €6.00 and then queues for the 9th using the hash of that new
+     draft (both inside its own transaction); an activation racing
      an immediate publish with the decision leaves the pointer on the higher number whichever
      commits first (run both orders).
   Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-schedule.test.ts` and see the new
@@ -689,27 +744,31 @@ is after Task 1's catalogue migration, so the upgrade walk and every boot create
 `:26-38, 61-62, 296-303, 540-546` that say "live"), `packages/media/src/dashboard/client.ts:24`,
 `image-library.ts:34, 353-354`, `strings.ts` (English and Spanish), `dashboard/live-queries.ts`;
 tests `packages/media/src/image-references.test.ts`, `images.test.ts`,
-`dashboard/image-library.test.ts`; `docs/developers/conventions-data.md:990-1000` (the media
+`dashboard/image-library.test.ts`, `schema/name-only-upgrade.test.ts` (a justified setup change,
+see the step and "Assertions"); `docs/developers/conventions-data.md:990-1000` (the media
 trigger paragraph); the comment of `scripts/behavioural-triggers.test.ts:100-105`.
 
 - [ ] **Failing tests first.** `image-references.test.ts`, a new `describe` "an image a queued menu
-  edition names" (its fixture pattern `:247-300`): Almuerzo live with croquetas-a.jpg; switch
-  Croquetas to croquetas-b.jpg; queue the edition. Then:
-  1. deleting croquetas-b.jpg is refused `menu_version_images_media_image_fk`, and renaming it is
-     refused the same; croquetas-a.jpg is still held by the live version;
-  2. after `cancelMenuPublication` both succeed for croquetas-b.jpg;
-  3. queued again and activated: croquetas-b.jpg is held (now through the pointer) and
-     croquetas-a.jpg, which only the superseded version names, can be deleted;
+  edition names" (the fixture `publishedOnly` at `:247-268`): "Lunch Menu" live with Toast showing
+  `PRESENT`; put `ABSENT` into `media_images` as the case at `:280` does, switch Toast to it, and
+  queue the edition. Then:
+  1. deleting `ABSENT` is refused `menu_version_images_media_image_fk`, and renaming it is refused
+     the same; `PRESENT` is still held by the live version;
+  2. after `cancelMenuPublication` both succeed for `ABSENT`;
+  3. queued again and activated: `ABSENT` is held (now through the pointer) and `PRESENT`, which
+     only the superseded version names, can be deleted;
   4. a due but unmarked edition still holds its photo (its row is still `queued`).
-  `images.test.ts`: `listImageUsages` for croquetas-b.jpg lists `{ kind:
-  "scheduled_menu_version", id, menuId, menuName: "Almuerzo", number: 2, activatesAt }` and
+  `name-only-upgrade.test.ts`: see the step below.
+  `images.test.ts`: `listImageUsages` for the queued photo lists `{ kind:
+  "scheduled_menu_version", id, menuId, menuName: "Lunch Menu", number: 2, activatesAt }` and
   `countUsages` (through `listImages`) counts it — the two stay in step (`images.ts:540-546`);
   `deleteImage` answers `{ deleted: false, uses: [that usage] }`. `image-library.test.ts`: the
-  usage reads "Almuerzo (Scheduled menu)" in English and "Almuerzo (Carta programada)" in Spanish
+  usage reads "Lunch Menu (Scheduled menu)" in English and "Lunch Menu (Carta programada)" in Spanish
   and links to `/manage/menus/menu/<id>`. Run `pnpm --filter @waitron/media exec vitest run
   src/image-references.test.ts src/images.test.ts src/dashboard/image-library.test.ts`; see them
   fail (the delete succeeds; no such usage).
-- [ ] The migration: `DROP TRIGGER` and re-`CREATE TRIGGER`, with the same names and message,
+- [ ] The migration: `DROP TRIGGER IF EXISTS` (as `0007_recreate_product_image_triggers.sql:2`
+  does) and re-`CREATE TRIGGER`, with the same names and message,
   `menu_version_images_media_image_fk_parent_delete` and `…_parent_rename`. Each body keeps today's
   `exists (… JOIN menu_publications ON …)` clause word for word (`0005:143-147, 156-160`) and adds
   `OR exists (SELECT 1 FROM menu_version_images JOIN menu_scheduled_publications ON
@@ -719,13 +778,28 @@ trigger paragraph); the comment of `scripts/behavioural-triggers.test.ts:100-105
   `menu_publications` keeps the edge `scripts/module-graph-honesty.test.ts:434` pins, and the new
   JOIN gives the edge media → catalogue on the new table, which media's `requires` already covers
   (`module.ts:30`). A one-line header names what the triggers guard, as `0006`'s does.
+- [ ] `name-only-upgrade.test.ts`. Its second run applies the whole media folder (`:155`) and then
+  requires all eleven triggers word for word (`:209-212`), which this migration's two rewrites
+  break. Of the two ways to fix it, take the one that stays at least as strict: **stop that run at
+  `0007_recreate_product_image_triggers`** — generalise `stageMediaBefore` (`:66-80`) to cut the
+  journal at a given tag and stage a second folder cut at `0007` for `:155`. The existing
+  word-for-word assertion is unchanged and still covers all eleven triggers through the upgrade it
+  was written for (`0005`'s rebuild, and `0006`–`0007`). The other way, comparing nine word for
+  word and only checking that the two rewritten ones contain the queued clause, would weaken two
+  exact checks to substring checks, so it is not taken. Then ADD one case: apply the rest of the
+  folder to the same database; the nine untouched triggers are still word for word as before, and
+  each rewritten one contains both its original `JOIN menu_publications` clause and the
+  `JOIN menu_scheduled_publications … state = 'queued'` clause. (The new triggers' behaviour is
+  tested in `image-references.test.ts` above.)
 - [ ] Add the usage kind (type in both files), its reads (same join, `state = 'queued'`), label
   strings `image.scheduled_menu` ("Scheduled menu" / "Carta programada"), and
   `menu_scheduled_publications` in media's `images` live query.
 - [ ] Run the media files above, `pnpm --filter @waitron/media exec vitest run
   src/schema/name-only-upgrade.test.ts`, the schema-change guard commands, media typecheck,
   `pnpm format:check`.
-- [ ] Commit: "Keep a photo while a queued menu edition names it, as a live version's photo is
+- [ ] Commit the `name-only-upgrade.test.ts` setup change on its own first, its message naming the
+  file, `:155` and `:209-212`, and the reason ("Assertions"). Then commit the rest: "Keep a photo
+  while a queued menu edition names it, as a live version's photo is
   kept".
 
 ### Task 5: The activation duty, primary-only, started by boot
@@ -741,7 +815,15 @@ trigger paragraph); the comment of `scripts/behavioural-triggers.test.ts:100-105
      names the later overdue one, both overdue rows are `activated`, and the timer is armed for the
      future one (`ms` = its `activates_at` − now).
   2. **Fires at the due instant:** calling the recorded `fn` with `now` at the future instant
-     activates it and arms `maxWaitMs` (nothing left).
+     activates it and arms `maxWaitMs` (nothing left). This case does not connect the change feed
+     to the bus, so the duty's own write wakes nothing here; case 8 covers that.
+  8. **Its own write wakes it once, and only once:** install the catalogue change feed
+     (`installChangeFeed(db, CATALOGUE_CHANGE_SOURCES)`, as `menu-publication.live.test.ts:17` does)
+     and connect it to the bus with `subscribeToChanges(changeSubscriber(bus, log))` (the test may
+     call it; the duty must not). An activation is followed by exactly one more run, which writes
+     nothing (no further change reaches the bus) and leaves the timer armed at `maxWaitMs`; the
+     listener did not run that pass on the writer's stack (the writing run had returned before the
+     extra run's transaction began). A `close` on the bus starts no run.
   3. **Re-armed by a queue change:** with a timer armed for the 9th, queue an edition for the 8th
      and publish `{ resources: [{ type: "menu_scheduled_publications" }] }` on the bus → the timer
      is re-armed for the 8th (the old one cancelled). A change of another type re-arms nothing.
@@ -758,8 +840,15 @@ trigger paragraph); the comment of `scripts/behavioural-triggers.test.ts:100-105
   new case beside `:354` ("in trading mode, when a step after the listener is started throws"),
   assert the duty's `stop` was called once and the folder was given back. A new case under
   "closing a started server" (`:529`): `close()` calls the duty's `stop`.
-  `boot.test.ts`, a new case beside `:2767`: seed (raw SQL into the shared venue database) a menu
-  with version 1 live and versions 2 and 3 queued in the past; `startServer`; wait for the
+  `boot.test.ts`, a new case beside `:2767`, on a FRESH venue folder, not the shared one: the
+  edition rows it writes are append-only and could never be removed from a database every other
+  case boots against. Make the folder with `freshVenue` (`:352`) and give it what a trading boot
+  needs, as the shared folder's setup does (the tenant, location and node rows at `:308-325`), or move
+  that seeding into a helper both use. Close the seeding handle before `startServer` and remove the
+  folder afterwards.
+  Seed through the catalogue functions, never raw SQL: create a menu, `publishMenu` it, then
+  `queueMenuPublication` twice with past `at` values (`at` 2026-01-01, activations 2026-01-02 and
+  2026-01-03, so both are overdue at boot). `startServer` on that folder; wait for the
   `menu_publication.activated` line; the pointer names version 3 and both rows are `activated`.
   Run `pnpm --filter @waitron/server exec vitest run src/menu-activation.test.ts
   src/boot.failed-start.test.ts src/boot.test.ts -t "menu"` and see them fail.
@@ -838,29 +927,41 @@ trigger paragraph); the comment of `scripts/behavioural-triggers.test.ts:100-105
 (the publish route paragraph, plus the new routes and codes).
 
 - [ ] **Failing tests first** (same file and setup as Task 6):
-  1. **Owner scenario (1), through the routes.** Publish v1; `POST` v2 for 2026-10-08 08:00; edit
-     Tortilla through `PATCH …/items/:itemId`; `POST` v3 for 2026-10-09 08:00; read the preview
-     hash and `GET …/structure`. `PATCH …/publications/<v3>` with `{ activatesAt: { date:
+  1. **Owner scenario (1), through the routes.** Publish v1 (Soup at its menu price €5.00); set
+     Soup's menu price to €5.50 through `PATCH …/items/:itemId` and `POST` v2 for 2026-10-08 08:00;
+     set €6.00 and `POST` v3 for 2026-10-09 08:00; then set €7.50, so the draft differs from v1, v2
+     and v3 (without this edit the draft equals v3, and a draft reset to v3 would go unseen). Read
+     the preview hash, `GET …/structure`, and take a draft snapshot straight from the suite's
+     database (every draft table, Global constraints). `PATCH …/publications/<v3>` with `{ activatesAt: { date:
      "2026-10-07", time: "16:00" } }` → 409 `menu_publication.overtakes_queued` `{ overtaken:
      [{ versionId: <v2>, number: 2, activatesAt: "2026-10-08T06:00:00.000Z" }] }`, and `GET
      …/publications` unchanged. Again with `overtaken: "cancel"` → 200 `{ number: 3, activatesAt:
-     "2026-10-07T14:00:00.000Z" }`; v2 `cancelled`. The preview hash and the structure answer are
-     unchanged. Step the clock to 16:00:30 local: `GET …/status` → version 3 live; step to
+     "2026-10-07T14:00:00.000Z" }`; v2 `cancelled`. The preview hash, the structure answer and the
+     draft snapshot are unchanged, and the preview still prices Soup at €7.50. Step the clock to 16:00:30 local: `GET …/status` → version 3 live; step to
      2026-10-08 08:00:30 and call `activateDueMenuPublications`: version 3 still live, v2 still
-     `cancelled`. Edit and `POST` again → `number: 4`.
+     `cancelled`. `POST` the unchanged €7.50 draft → `number: 4`.
   2. **Owner scenario (2), earlier past a lower number:** `PATCH` v3 before v2 without the decision
      → 409 naming v2, nothing changed; with it → v2 cancelled.
   3. **Owner scenario (2), later past a higher number:** `PATCH` v2 to 2026-10-10 08:00 → 409
-     naming v3; with the decision → v3 cancelled, v2 at `2026-10-10T06:00Z`.
+     naming v3, and `GET …/publications` is unchanged (as case 2 checks); with the decision → v3
+     cancelled, v2 at `2026-10-10T06:00Z`.
   4. **The same refusal shape for the three triggers:** the 409 bodies of an overtaking `POST
      …/publications`, `PATCH …/publications/:id` and `POST …/publish` have the same code and the
      same `params.overtaken` element shape.
   5. `PATCH` refusals: a repeated time without occurrence → 400 `time_repeated`; past → 400; a
      cancelled edition → 409 `not_queued`; unknown → 404; staff → 403.
-  6. **Concurrency:** two `POST …/publications` for different times of two different drafts
-     issued together (`Promise.all` of two `app.request` calls: two transactions) → numbers 2 and
-     3, distinct; an activation and a `POST …/publish` with the decision issued together → the
-     pointer ends on the higher number.
+  6. **Concurrency** (`Promise.all` of two `app.request` calls: two transactions, which the write
+     queue runs one after the other). There is one draft, so two different drafts cannot race here;
+     that race is Task 3 case 8, at catalogue level with `racePair`. (a) Two `POST …/publications`
+     of the same draft for the SAME minute: exactly one 201 (number 2), one 409
+     `menu_publication.overtakes_queued` naming number 2 (whichever runs second finds an edition at
+     that instant; equal instants overtake, and the overtake check comes before the unchanged
+     check), and one schedule row. (Different minutes would make the loser's code depend on which
+     ran first: `unchanged` if it was later, `overtakes_queued` if earlier.) (b) A `POST
+     …/publications` without a decision against a `POST …/publish` of the same draft with
+     `overtaken: "cancel"`: whichever runs first, no edition is left queued and the live number is
+     the menu's highest number (queue first: the publish cancels it; publish first: the queue is
+     refused `menu_publication.unchanged`).
   Run the file and see the new cases fail (no `PATCH` route).
 - [ ] Add the route; update `product-categories.md` (state what the routes do and refuse, and that
   `publishedAt` in a status is when the live version became live).
@@ -880,8 +981,16 @@ trigger paragraph); the comment of `scripts/behavioural-triggers.test.ts:100-105
 (a `<slot name="schedule">` after `#renderPublish()`, always rendered), `screens/menus-screen.ts`
 (`#renderPreview` puts `<dashboard-menu-publications slot="schedule" .api menuId menuName
 .preview>` inside the preview element); `i18n/strings.ts`, `i18n/codes.ts`, `i18n/codes.test.ts`;
-`screens/menus-screen.test.ts` (the stub gains `getMenuPublications` answering an empty queue and
-the four write names join `WRITES` — fixture and list growth only).
+stub growth, no assertion changes, in every suite that opens the Preview tab with its own stub
+(the new widget reads `getMenuPublications` there): `screens/menus-screen.test.ts` (its stub at
+`:530-590` gains `getMenuPublications` answering an empty queue and `vi.fn()` mocks for
+`scheduleMenuPublication`, `rescheduleMenuPublication` and `cancelMenuPublication`, and those
+three join `WRITES` `:327-345` — `writeCalls` reads `.mock` of every name in `WRITES`, `:595-598`,
+so each needs a mock function in the stub; `publishMenu` is already there),
+`screens/menus-screen.a11y.test.ts` (its "accessible Preview tab" case, `:368`),
+`screens/menus-screen.heading.test.ts` (its stub `:95-101`, used on `PREVIEW_PATH` `:27`) and
+`screens/menu-details.unsaved.test.ts` (its stub at `:160-170`). Each gains a
+`getMenuPublications` answering an empty queue.
 
 - [ ] **Failing browser tests first** (`menu-publications.test.ts`, a stubbed api as
   `menus-screen.test.ts:530-560` builds one):
@@ -891,7 +1000,7 @@ the four write names join `WRITES` — fixture and list growth only).
      ("25 Oct 2026, 02:30 (UTC+01:00)"); a single one does not. The same in Spanish ("Versión 2",
      "Programada", "Cancelada", "Activada").
   2. The row menu is the `actions` column, `pinned: "end"`, a `wt-row-actions` with "Cancel this
-     version" (and, in Task 10, "Change time") for queued rows only; settled rows have none.
+     version" (and, in Task 11, "Change time") for queued rows only; settled rows have none.
   3. Cancel asks first in a `wt-dialog` ("Cancel version 2, scheduled for 8 Oct 2026, 08:00? Its
      number is not used again."); "Keep it" sends nothing; confirming calls
      `cancelMenuPublication("menu-lunch", <v2>)` once; a refusal (`not_queued`) shows its sentence
@@ -909,8 +1018,9 @@ the four write names join `WRITES` — fixture and list growth only).
   `wt-form-actions`, `wt-button`); cells styled with `part=`; every colour and space a `--wt-*`
   token. The widget owns a `DashboardQueries` for `getMenuPublications`. English and Spanish
   strings for everything shown; wording for all eight codes in `codes.ts`.
-- [ ] Run the files above, `src/screens/menus-screen.test.ts src/widgets/menu-preview.test.ts
-  src/api/live-queries.test.ts`, `pnpm exec vitest run scripts/live-subscriptions.test.ts
+- [ ] Run the files above, `src/screens/menus-screen.test.ts src/screens/menus-screen.a11y.test.ts
+  src/screens/menus-screen.heading.test.ts src/screens/menu-details.unsaved.test.ts
+  src/widgets/menu-preview.test.ts src/api/live-queries.test.ts`, `pnpm exec vitest run scripts/live-subscriptions.test.ts
   scripts/pinned-actions-column.test.ts scripts/native-form-fields.test.ts
   scripts/style-token-names.test.ts`; dashboard typecheck; `pnpm format:check`. Check memory
   headroom before the browser runs (CLAUDE.md §2).
@@ -951,64 +1061,99 @@ a11y file; create `menu-publications.unsaved.test.ts`; `i18n/strings.ts`.
 - [ ] Commit: "Schedule a menu publication for a date and time in the venue's clock, and ask which
   02:30 when the clocks go back".
 
-### Task 10: The overtake choice and rescheduling, in the browser
+### Task 10: The overtake choice for an immediate publish and a new schedule
 
 **Files:** create `apps/dashboard/src/widgets/menu-overtake-dialog.ts`,
-`menu-overtake-dialog.a11y.test.ts`; modify `widgets/menu-publications.ts` ("Change time" dialog,
-overtake handling for schedule and reschedule), `screens/menus-screen.ts` (`#publish` handles the
-refusal, `:1266-1300`), `widgets/menu-preview.ts` (only if the event detail needs `overtaken`);
-tests `menu-publications.test.ts`, `menu-publications.unsaved.test.ts`,
-`screens/menus-screen.test.ts`; `i18n/strings.ts`; `docs/developers/design-system.md` (a paragraph
-after the Menus list one at `:691-700`); `docs/backlog.md` (the entry at `:1023-1033`).
+`menu-overtake-dialog.test.ts`, `menu-overtake-dialog.a11y.test.ts`; modify
+`widgets/menu-publications.ts` (overtake handling for a new schedule), `screens/menus-screen.ts`
+(`#publish` handles the refusal, `:1266-1300`), `widgets/menu-preview.ts` (only if the event detail
+needs `overtaken`); tests `menu-publications.test.ts`, `screens/menus-screen.test.ts`;
+`i18n/strings.ts`.
 
-- [ ] **Failing browser tests first.** The dialog is one component for all three triggers: heading
-  "Cancel the versions this would overtake?"; one line per overtaken edition, "Version 2 — 8 Oct
-  2026, 08:00"; the sentence "They would never become live afterwards, so they are cancelled. Their
-  numbers are not used again."; buttons "Keep them" and "Cancel version 2 and move version 3" (for a
-  reschedule), "Cancel version 2 and schedule" (a new edition), "Cancel version 2 and publish now"
-  (a publish); several overtaken read "Cancel versions 2 and 3 and …". Spanish: "¿Cancelar las
-  versiones que esto adelantaría?", "Versión 2 — 8 oct 2026, 08:00", "Mantenerlas", "Cancelar la
-  versión 2 y mover la versión 3".
-  1. **Owner scenario (1), browser.** A stateful stub (it keeps editions and answers the overtake
-     refusal by the rule) starts with v1 live. Schedule v2 for 2026-10-08 08:00; schedule v3 for
-     2026-10-09 08:00 (the stub's draft hash changes between); "Change time" on v3 to 2026-10-07
-     16:00 → the dialog shows "Version 2 — 8 Oct 2026, 08:00"; "Keep them" → no further request,
-     the list unchanged; again and confirm → `rescheduleMenuPublication("menu-lunch", <v3>, {
-     activatesAt: { date: "2026-10-07", time: "16:00" }, overtaken: "cancel" })` once; the list
-     shows v2 "Cancelled" and v3 "Scheduled" at 16:00. No draft-writing method was called
-     (`writeCalls` names only schedule and reschedule calls). Scheduling again answers version 4.
-     The same run in Spanish shows the Spanish dialog.
-  2. **Owner scenario (2), earlier past a lower number:** as case 1's reschedule, asserted in
-     English and Spanish.
-  3. **Owner scenario (2), later past a higher number:** "Change time" on v2 to 2026-10-10 08:00 →
-     the dialog names version 3 and offers "Cancel version 3 and move version 2"; confirming sends
-     the decision; dismissing sends nothing.
-  4. **Immediate publish** (`menus-screen.test.ts`): `publishMenu` rejecting with
-     `menu_publication.overtakes_queued` shows the same dialog; "Keep them" leaves
+The dialog is one component for all three triggers (Task 11 adds the reschedule one). English:
+heading "Cancel the versions this would overtake?"; one line per overtaken edition, "Version 2 — 8
+Oct 2026, 08:00"; the sentence "They would never become live afterwards, so they are cancelled.
+Their numbers are not used again."; buttons "Keep them" and, by trigger, "Cancel version 2 and
+publish now" (a publish), "Cancel version 2 and schedule" (a new edition), "Cancel version 2 and
+move version 3" (a reschedule, Task 11); several overtaken read "Cancel versions 2 and 3 and …".
+Spanish: "¿Cancelar las versiones que esto adelantaría?", "Versión 2 — 8 oct 2026, 08:00", "Nunca
+llegarían a publicarse después, así que se cancelan. Sus números no se vuelven a usar.",
+"Mantenerlas", "Cancelar la versión 2 y publicar ahora", "Cancelar la versión 2 y programar",
+"Cancelar la versión 2 y mover la versión 3", "Cancelar las versiones 2 y 3 y …".
+
+- [ ] **Failing browser tests first.**
+  1. `menu-overtake-dialog.test.ts`: given one and then three overtaken editions and each trigger,
+     the dialog shows the lines and buttons above, in English and in Spanish (restore the language
+     after each case, CLAUDE.md §4); "Keep them" dispatches a keep event and nothing else; the
+     confirm button dispatches a confirm event once.
+  2. **Immediate publish** (`menus-screen.test.ts`): `publishMenu` rejecting with
+     `menu_publication.overtakes_queued` shows the dialog; "Keep them" leaves
      `client.publishMenu.mock.calls` as `[["menu-lunch", LUNCH_HASH]]`; confirming adds
-     `["menu-lunch", LUNCH_HASH, "cancel"]` and shows "Almuerzo version 3 is now live." In Spanish
-     too. Publishing with nothing queued still sends exactly two arguments (the pins at `:5205,
-     :5269` stay green).
-  5. A new schedule that overtakes shows the dialog with "Cancel version 2 and schedule".
-  6. The "Change time" form starts at the edition's local date and time, follows the Task 9 rules
-     (skipped, repeated, past), and has a draft scope (`menu-publications.unsaved.test.ts` gains its
-     case).
-  a11y: the overtake dialog with one and with three editions, both themes.
-  Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-publications.test.ts
-  src/widgets/menu-publications.unsaved.test.ts src/widgets/menu-overtake-dialog.a11y.test.ts
+     `["menu-lunch", LUNCH_HASH, "cancel"]` and shows "Lunch Menu version 3 is now live." The same
+     in Spanish. Publishing with nothing queued still sends exactly two arguments (the pins at
+     `:5205, :5269` stay green).
+  3. **A new schedule that overtakes** (`menu-publications.test.ts`): `scheduleMenuPublication`
+     rejecting with the refusal shows the dialog with "Cancel version 2 and schedule"; "Keep them"
+     sends nothing more and keeps the schedule form's values; confirming re-sends the same body
+     plus `overtaken: "cancel"` once.
+  a11y (`menu-overtake-dialog.a11y.test.ts`): one and three editions, both themes.
+  Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-overtake-dialog.test.ts
+  src/widgets/menu-overtake-dialog.a11y.test.ts src/widgets/menu-publications.test.ts
   src/screens/menus-screen.test.ts` and see the new cases fail.
 - [ ] Implement. The host's `#publish` keeps the hash, shows the dialog on the refusal, and on
   confirm calls `publishMenu(menuId, hash, "cancel")`; other refusals behave as today.
+- [ ] Run the files above, `src/screens/menus-screen.a11y.test.ts`, dashboard typecheck,
+  `pnpm format:check`.
+- [ ] Commit: "Ask the manager to cancel the versions an immediate publish or a new schedule would
+  overtake".
+
+### Task 11: Change a queued version's time, and the owner's scenarios in the browser
+
+**Files:** `widgets/menu-publications.ts` ("Change time" row action and dialog, overtake handling
+for a reschedule), tests `menu-publications.test.ts`, `menu-publications.unsaved.test.ts`, the
+widget's a11y file; `i18n/strings.ts`; `docs/developers/design-system.md` (a paragraph after the
+Menus list one at `:691-700`); `docs/backlog.md` (the entry at `:1023-1033`).
+
+- [ ] **Failing browser tests first.** A stateful stub keeps the editions, answers the overtake
+  refusal by the rule (the "rule this plan enforces" above), and has a draft hash the test changes
+  to stand for a draft edit.
+  1. **Owner scenario (1), browser.** v1 live. Schedule v2 for 2026-10-08 08:00; change the stub's
+     draft hash (an edit); schedule v3 for 2026-10-09 08:00; change the draft hash again, so the
+     draft differs from v3 (and from v1 and v2). "Change time" on v3 to 2026-10-07 16:00 → the
+     dialog shows "Version 2 — 8 Oct 2026, 08:00" and "Cancel version 2 and move version 3"; "Keep
+     them" → no further request, the list unchanged; again and confirm →
+     `rescheduleMenuPublication("menu-lunch", <v3>, { activatesAt: { date: "2026-10-07", time:
+     "16:00" }, overtaken: "cancel" })` once; the list shows v2 "Cancelled" and v3 "Scheduled" at
+     7 Oct 2026, 16:00. No draft-writing method was called (`writeCalls` names only the two
+     schedules and the reschedule), the preview's hash is the one set before the reschedule, and
+     "Schedule a publication…" is still offered (the draft differs from every edition, so Task 9
+     case 5 does not hide it); scheduling now answers version 4. The same run in Spanish shows
+     "Versión 2 — 8 oct 2026, 08:00" and "Cancelar la versión 2 y mover la versión 3".
+  2. **Owner scenario (2), earlier past a lower number:** "Change time" on v3 to before v2 shows the
+     dialog naming version 2, in English and in Spanish; dismissing sends nothing; confirming sends
+     the decision once.
+  3. **Owner scenario (2), later past a higher number:** "Change time" on v2 to 2026-10-10 08:00 →
+     the dialog names "Version 3 — 9 Oct 2026, 08:00" and offers "Cancel version 3 and move version
+     2"; in Spanish "Versión 3 — 9 oct 2026, 08:00" and "Cancelar la versión 3 y mover la versión
+     2"; dismissing sends nothing and the list is unchanged; confirming sends `overtaken: "cancel"`
+     once and the list shows v3 "Cancelled" and v2 at 10 Oct 2026, 08:00.
+  4. The "Change time" form starts at the edition's local date and time, follows the Task 9 rules
+     (skipped, repeated, past), and has a draft scope (`menu-publications.unsaved.test.ts` gains its
+     case). The row action appears on queued rows only (Task 8 case 2).
+  a11y: the "Change time" form untouched and with the occurrence choice, both themes.
+  Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-publications.test.ts
+  src/widgets/menu-publications.unsaved.test.ts src/widgets/menu-publications.a11y.test.ts` and see
+  the new cases fail.
+- [ ] Implement, reusing Task 9's form and Task 10's dialog.
 - [ ] Visual check: `wa-wt demo <this worktree's name>`, sign in, open a menu's Preview tab, queue
   two editions and trigger each dialog; look in light and dark at 390 px and 1280 px (the row menu
   stays on screen at 390 px; the dialog's lines wrap without overflow).
 - [ ] Docs: the design-system paragraph (where the queue sits, what each state says, the dialog's
   wording rule); `docs/backlog.md`: the entry says W99 is done with this PR, and that the menus list
   still shows "Unpublished" for a menu whose only edition is queued (Decision 11).
-- [ ] Run every dashboard file of Tasks 8–10, the root guards of Task 8, dashboard typecheck,
+- [ ] Run every dashboard file of Tasks 8–11, the root guards of Task 8, dashboard typecheck,
   `pnpm format:check`.
-- [ ] Commit: "Ask the manager to cancel the versions an earlier publication would overtake, for a
-  publish, a new schedule and a change of time".
+- [ ] Commit: "Move a queued menu version to another time, asking before it overtakes another".
 - [ ] During `/finish-branch`: the pre-push hook once; current-head CI for catalogue, media,
   server, dashboard and the root guards; the migration jobs; the duty's failed-start case.
 
@@ -1025,9 +1170,10 @@ after the Menus list one at `:691-700`); `docs/backlog.md` (the entry at `:1023-
    immediate publish, reschedule earlier, reschedule later, equal instants (Task 3 cases 1–5,
    Task 7 cases 1–4).
 4. The decision is explicit and identical for all three triggers; without it nothing is written,
-   settle included (Task 2 case 5, Task 3, Task 7 case 4, Task 10).
+   settle included (Task 2 case 5, Task 3, Task 7 case 4, Tasks 10–11).
 5. The draft is never touched by queue, reschedule, cancel or activation (the write spies; Task 3
-   case 1; Task 7 case 1).
+   case 1 and Task 7 case 1, each with a draft edited after v3 so it differs from every edition,
+   and a snapshot of every draft table; Task 11 case 1).
 6. Clock-change input cannot silently pick the wrong occurrence (Task 6 time cases, Task 9 case 4).
 7. Concurrency: no duplicate number, no backwards pointer (Task 3 case 8, Task 7 case 6).
 8. The live read stays one statement with the pinned SQL shapes, and the sale path is unchanged
@@ -1039,14 +1185,27 @@ after the Menus list one at `:691-700`); `docs/backlog.md` (the entry at `:1023-
 
 ## Assertions
 
-No existing assertion is expected to change. **Growth and fixture edits allowed** (each named in
+**One justified change to an existing test (Task 4).** `packages/media/src/schema/name-only-upgrade.test.ts`
+compares the eleven triggers that name `media_images` word for word after applying the WHOLE
+media folder (`:155`, asserted at `:209-212`). The spec changes what two of them check (a queued
+edition's photos are held, spec §9 "Publication snapshots"), so after Task 4's migration that
+comparison fails by design. The assertion at `:209-212` stays as it is; its run is cut at
+`0007_recreate_product_image_triggers` instead of the folder's end (a setup change, by
+generalising `stageMediaBefore`, `:66-80`), so all eleven keep their word-for-word check across
+the upgrade the file exists to test, and a new case covers the folder's end. This is the stricter
+of the two options (the other compares only nine word for word). Make it in its own commit whose
+message names the file, the lines, and this reason.
+
+No other existing assertion is expected to change. **Growth and fixture edits allowed** (each named in
 its task): `packages/catalogue/src/migrations.test.ts` `TABLES` and its key/check maps gain the new
 table; `scripts/schema-constraints.test.ts` gains its keys, index and checks;
 `packages/composition/src/composition.test.ts:124-127` and
 `apps/server/src/configuration-transfer.test.ts:1332` gain the table name in their "never
 transferred" lists; `scripts/migration-upgrade.test.ts` `CANDIDATES` only as the walk asks;
-`apps/dashboard/src/screens/menus-screen.test.ts` gains a `getMenuPublications` stub and the new
-write names in `WRITES`; the comment (not the list) of `scripts/behavioural-triggers.test.ts:100-105`
+`apps/dashboard/src/screens/menus-screen.test.ts` gains a `getMenuPublications` stub, mock
+functions for the three new writes and their names in `WRITES`, and
+`menus-screen.a11y.test.ts`, `menus-screen.heading.test.ts` and `menu-details.unsaved.test.ts`
+each gain a `getMenuPublications` stub (Task 8); the comment (not the list) of `scripts/behavioural-triggers.test.ts:100-105`
 and the doc comments in `packages/media/src/images.ts` that say "live" now say "live or queued".
 
 **Checked and expected to survive unchanged:** `operations.test.ts:2312, 2384`;
