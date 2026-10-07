@@ -8,7 +8,7 @@ import { addDays, weekdayOf } from "./hours-rules.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { calendarDateOfTime, parseServiceDay } from "./service-day.js";
 import type { SpecialDateParticipant } from "./hours.js";
-import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
+import { CALENDAR_COLOURS, type LocalDate } from "./hours-types.js";
 import {
   invalidTimetable,
   menuPeriodName,
@@ -16,7 +16,7 @@ import {
   slotInForce,
 } from "./menu-timetable-rules.js";
 import type {
-  MenuPeriod,
+  MenuPeriodInput,
   MenuPeriodUse,
   MenuSlot,
   MenuTimetableModel,
@@ -52,7 +52,6 @@ export async function placeOpenPeriod(
     .limit(1);
   if (existing !== undefined) return;
   const { id } = await saveMenuPeriod(tx, cfg, departmentId, {
-    id: null,
     name: "Open",
     menuId,
     staffMenuIds: [],
@@ -329,23 +328,26 @@ export async function saveMenuPeriod(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
-  period: {
-    id?: string | null;
-    name: string;
-    menuId: string;
-    colour?: CalendarColour;
-    staffMenuIds?: readonly string[];
-  },
-): Promise<MenuPeriod> {
+  period: MenuPeriodInput,
+): Promise<{ id: string }> {
+  return writeMenuPeriod(tx, cfg, departmentId, null, period);
+}
+
+async function writeMenuPeriod(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  periodId: string | null,
+  period: MenuPeriodInput,
+): Promise<{ id: string }> {
   const name = menuPeriodName(period.name);
-  const periodId = period.id === undefined ? null : period.id;
   await assertDepartment(tx, cfg, departmentId);
   if (
     period.colour !== undefined &&
     (typeof period.colour !== "string" || !CALENDAR_COLOURS.includes(period.colour))
   )
     throw new AppError("menu_period.invalid", { field: "colour" });
-  const staffMenuIds = period.staffMenuIds === undefined ? [] : period.staffMenuIds;
+  const staffMenuIds = period.staffMenuIds;
   if (!Array.isArray(staffMenuIds))
     throw new AppError("menu_period.invalid", { field: "staffMenuIds" });
   if (staffMenuIds.includes(period.menuId) || new Set(staffMenuIds).size !== staffMenuIds.length)
@@ -408,20 +410,15 @@ export async function saveMenuPeriod(
         displayOrder,
       })),
     );
-  return { id: id!, name, menuId: period.menuId };
+  return { id: id! };
 }
 
 export async function updateMenuPeriod(
   tx: Transaction,
   cfg: VenueScope,
   periodId: string,
-  period: {
-    name?: string;
-    menuId?: string;
-    colour?: CalendarColour;
-    staffMenuIds?: readonly string[];
-  },
-): Promise<MenuPeriod> {
+  period: Partial<MenuPeriodInput>,
+): Promise<void> {
   const stored = await requirePeriod(tx, cfg, periodId);
   const staff = await tx
     .select({ menuId: menuPeriodStaffMenus.menuId })
@@ -432,8 +429,7 @@ export async function updateMenuPeriod(
     .select({ colour: menuPeriods.colour })
     .from(menuPeriods)
     .where(eq(menuPeriods.id, periodId));
-  return saveMenuPeriod(tx, cfg, stored.departmentId, {
-    id: periodId,
+  await writeMenuPeriod(tx, cfg, stored.departmentId, periodId, {
     name: period.name === undefined ? stored.name : period.name,
     menuId: period.menuId === undefined ? stored.menuId : period.menuId,
     colour: period.colour === undefined ? appearance!.colour : period.colour,

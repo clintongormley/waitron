@@ -1,5 +1,12 @@
 // Browser-safe: types only, no database or server imports.
-import type { LocalDate } from "./hours-types.js";
+import type { CalendarColour, LocalDate } from "./hours-types.js";
+
+export interface MenuPeriodInput {
+  name: string;
+  colour?: CalendarColour;
+  menuId: string;
+  staffMenuIds: readonly string[];
+}
 
 /** A department's named period, such as "Mañanas", and the menu its zones start on in it. */
 export interface MenuPeriod {

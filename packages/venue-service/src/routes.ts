@@ -985,7 +985,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const name = requireString(body.name, "name");
         const menuId = requireBodyUuid(body.menuId, "menuId");
         const period = await gated(sessionId, (tx) =>
-          saveMenuPeriod(tx, ctx.cfg, departmentId, { id: null, name, menuId }),
+          saveMenuPeriod(tx, ctx.cfg, departmentId, { name, menuId, staffMenuIds: [] }),
         );
         return c.json(period, 201);
       }),
@@ -1003,9 +1003,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...(body.name === undefined ? {} : { name: requireString(body.name, "name") }),
           ...(body.menuId === undefined ? {} : { menuId: requireBodyUuid(body.menuId, "menuId") }),
         };
-        return c.json(
-          await gated(sessionId, (tx) => updateMenuPeriod(tx, ctx.cfg, periodId, period)),
-        );
+        await gated(sessionId, (tx) => updateMenuPeriod(tx, ctx.cfg, periodId, period));
+        return c.body(null, 204);
       }),
     );
 

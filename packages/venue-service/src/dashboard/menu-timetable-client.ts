@@ -1,10 +1,5 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
-import type {
-  MenuPeriod,
-  MenuSlot,
-  MenuTimetableModel,
-  MenuWeekDay,
-} from "../menu-timetable-types.js";
+import type { MenuSlot, MenuTimetableModel, MenuWeekDay } from "../menu-timetable-types.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { ModelWatches } from "./model-watch.js";
 
@@ -62,7 +57,10 @@ export class MenuTimetableApi {
     return this.request(`${BASE}/zones/${at(zoneId)}/all-day-menu`, "PUT", { menuId });
   }
 
-  createPeriod(departmentId: string, input: { name: string; menuId: string }): Promise<MenuPeriod> {
+  createPeriod(
+    departmentId: string,
+    input: { name: string; menuId: string },
+  ): Promise<{ id: string }> {
     return this.request(`${BASE}/departments/${at(departmentId)}/menu-periods`, "POST", input);
   }
 
@@ -70,7 +68,7 @@ export class MenuTimetableApi {
   updatePeriod(
     periodId: string,
     input: { name: string; menuId?: string } | { name?: string; menuId: string },
-  ): Promise<MenuPeriod> {
+  ): Promise<void> {
     return this.request(`${BASE}/menu-periods/${at(periodId)}`, "PATCH", input);
   }
 
