@@ -815,7 +815,7 @@ describe("a menu's prices", () => {
     ).toEqual([f.lemonade, f.water, f.juice]);
   });
 
-  it("carries every variant, an Inactive one marked, and the Active ones as the variants read gives them", async () => {
+  it("carries the Active variants as the variants read gives them, and leaves the Inactive one out", async () => {
     const f = await fixture();
     const { small, jug } = await app(async (tx) => {
       const variants = await setProductVariants(
@@ -865,7 +865,6 @@ describe("a menu's prices", () => {
     expect(lunchRow!.variants).toEqual([
       { variantId: f.large, price: "3.25", active: true },
       { variantId: small, price: null, active: true },
-      { variantId: jug, price: null, active: false },
     ]);
     expect(
       lunchRow!.variants
@@ -877,11 +876,10 @@ describe("a menu's prices", () => {
       small,
       jug,
     ]);
-    // Dinner sets nothing for any size, the Inactive Jug included.
+    // Dinner sets nothing for any size, and lists no Inactive Jug either.
     expect(dinnerRow!.variants).toEqual([
       { variantId: f.large, price: null, active: true },
       { variantId: small, price: null, active: true },
-      { variantId: jug, price: null, active: false },
     ]);
   });
 

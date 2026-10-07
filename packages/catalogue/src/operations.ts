@@ -687,8 +687,8 @@ async function offersOn(
 }
 
 /**
- * Every product the menu reaches, Active or not, once each in `listMenuOffers`' order, with its own
- * price and its combined decisions. Sold-out and Inactive ones are listed.
+ * Every product the menu reaches, once each in `listMenuOffers`' order, with its own price, its
+ * combined decisions and its Active sizes. Sold-out ones are listed.
  */
 export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuPriceRow[]> {
   const rootSectionId = await requireMenuRoot(tx, menuId);
@@ -701,7 +701,6 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
   const variantsByItem = await menuVariantsOfItems(
     tx,
     rows.map((row) => row.id),
-    true,
   );
   return rows
     .filter((row) => combinedByProduct.has(row.productId))

@@ -3,15 +3,21 @@ import { products, type Transaction } from "@waitron/db";
 import { batches } from "./batches.js";
 import { syncMenuOffers } from "./menu-structure.js";
 import { sectionMembers } from "./schema/sections.js";
+import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { loadSectionGraph, menusContaining } from "./section-graph.js";
 import { renumber } from "./section-members.js";
 
 /**
  * Takes the products off every menu, deleted menus included, as a staff removal from each list
  * would: each list renumbers and each menu that reached it resets the product's settings. A Device
- * Home Page shortcut to one becomes a missing tile in its place, so the grid does not move.
+ * Home Page shortcut to one becomes a missing tile in its place, so the grid does not move. An id
+ * that is a variant loses its price on every menu; it is listed only under its product.
  */
 export async function takeOffMenus(tx: Transaction, productIds: readonly string[]): Promise<void> {
+  for (const batch of batches(productIds))
+    await tx
+      .delete(menuItemVariantOverrides)
+      .where(inArray(menuItemVariantOverrides.variantId, batch));
   const held: { id: string; sectionId: string; productId: string }[] = [];
   for (const batch of batches(productIds))
     for (const row of await tx

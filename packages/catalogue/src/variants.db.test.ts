@@ -177,12 +177,17 @@ describe("setProductVariants stores each variant as a product under its parent",
     ).toEqual([{ active: 1, available: 0 }]);
   });
 
-  it("makes a variant left out of a save Inactive, keeping its row and what refers to it", async () => {
+  it("makes a variant left out of a save Inactive, keeping its row and deleting its menu price", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
       setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
-    await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: "6.00" }]));
+    await app((tx) =>
+      setMenuVariants(tx, f.offerId, [
+        { variantId: w125!.id, price: "4.00" },
+        { variantId: w175!.id, price: "6.00" },
+      ]),
+    );
 
     const afterRemoval = await app((tx) => setProductVariants(tx, f.parentId, [w125!], "en"));
 
@@ -198,7 +203,7 @@ describe("setProductVariants stores each variant as a product under its parent",
       await suite.db
         .select({ variantId: menuItemVariantOverrides.variantId })
         .from(menuItemVariantOverrides),
-    ).toEqual([{ variantId: w175!.id }]);
+    ).toEqual([{ variantId: w125!.id }]);
 
     const restored = await app((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en"));
     expect(restored.map(({ id, active }) => ({ id, active }))).toEqual([
@@ -641,19 +646,19 @@ describe("a variant's per-menu settings", () => {
     expect(await suite.db.select().from(menuItemVariantOverrides)).toEqual([]);
   });
 
-  it("leaves an Inactive variant's override alone when the Active ones are saved", async () => {
+  it("keeps no override for a variant made Inactive, and saving the Active ones brings none back", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
       setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: "6.00" }]));
     await app((tx) => setProductVariants(tx, f.parentId, [w125!], "en"));
-    await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: null }]));
+    await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: "4.00" }]));
     expect(
       await suite.db
         .select({ variantId: menuItemVariantOverrides.variantId })
         .from(menuItemVariantOverrides),
-    ).toEqual([{ variantId: w175!.id }]);
+    ).toEqual([{ variantId: w125!.id }]);
   });
 
   it("refuses an offer on another menu", async () => {
@@ -690,19 +695,22 @@ describe("a variant's per-menu settings", () => {
     ).toEqual([{ variantId: w125!.id, price: 430 }]);
   });
 
-  it("sets an Inactive variant's price, kept for when it is Active again", async () => {
+  it("refuses an Inactive variant's price, writing nothing, and one made Active again has none", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
       setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     await app((tx) => setProductVariants(tx, f.parentId, [w125!], "en"));
-    await app((tx) => setMenuVariantPrice(tx, f.offerId, w175!.id, "6.50"));
+    await expect(
+      app((tx) => setMenuVariantPrice(tx, f.offerId, w175!.id, "6.50")),
+    ).rejects.toMatchObject({ code: "product.variant_not_found", params: { variantId: w175!.id } });
+    expect(await suite.db.select().from(menuItemVariantOverrides)).toEqual([]);
     await app((tx) =>
       setProductVariants(tx, f.parentId, [w125!, { ...w175!, active: true }], "en"),
     );
     expect(await app((tx) => listMenuVariants(tx, f.offerId))).toContainEqual({
       variantId: w175!.id,
-      price: "6.50",
+      price: null,
     });
   });
 
@@ -741,7 +749,7 @@ describe("a variant's per-menu settings", () => {
   });
 });
 
-it("a variant removed while its override is being written ends Inactive, the override kept", async () => {
+it("a variant removed while its override is being written ends Inactive, the override deleted", async () => {
   const f = await fixture();
   const [w125] = await app((tx) =>
     setProductVariants(tx, f.parentId, [wine("125 ml", null)], "en"),
@@ -765,7 +773,7 @@ it("a variant removed while its override is being written ends Inactive, the ove
     await suite.db
       .select({ variantId: menuItemVariantOverrides.variantId })
       .from(menuItemVariantOverrides),
-  ).toEqual([{ variantId: w125!.id }]);
+  ).toEqual([]);
 });
 
 // selectMenuVariant is the pure core of menu-variant resolution — no DB. It decides from the offer

@@ -13,6 +13,8 @@ import {
   createCatalogue,
   createProduct,
   deactivateProduct,
+  listMenuOffers,
+  menuPrices,
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
@@ -21,7 +23,7 @@ import { menuItems } from "./schema/menu.js";
 import { sectionMembers } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { addMember, addProducts, createSectionIn, replaceMember } from "./sections.js";
-import { setMenuVariantPrice, setProductVariants } from "./variants.js";
+import { listProductVariants, setMenuVariantPrice, setProductVariants } from "./variants.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -100,7 +102,18 @@ async function removalFixture() {
     await addShortcut(tx, tapas, product(croquetas));
     await addShortcut(tx, tapas, product(tortilla));
     await addShortcut(tx, tapas, section(fried));
-    return { tapasFolder, tapas, terrace, tapasRoot, fried, cold, tortilla, croquetas };
+    return {
+      tapasFolder,
+      tapas,
+      terrace,
+      tapasRoot,
+      fried,
+      cold,
+      tortilla,
+      croquetas,
+      tortillaHalf,
+      croquetasHalf,
+    };
   });
 }
 
@@ -330,5 +343,162 @@ describe("an Inactive product cannot be added to a menu list", () => {
       await codeOf(() => app((tx) => replaceMember(tx, r.cold, held!.id, product(gazpacho)))),
     ).toBe("menu_section.membership_invalid");
     expect(await memberRowsNaming(gazpacho)).toEqual([]);
+  });
+});
+
+/**
+ * {@link removalFixture} with a second size of Tortilla, Whole, priced on both menus beside Half:
+ * every size of both products then holds a price row on Tapas and on Terrace.
+ */
+async function variantFixture() {
+  const r = await removalFixture();
+  const tortillaWhole = await app(async (tx) => {
+    const [half] = await listProductVariants(tx, r.tortilla);
+    const whole = (
+      await setProductVariants(
+        tx,
+        r.tortilla,
+        [
+          half!,
+          {
+            name: "Whole",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "7.00",
+            available: true,
+          },
+        ],
+        "en",
+      )
+    )[1]!.id;
+    for (const menuId of [r.tapas, r.terrace])
+      await setMenuVariantPrice(tx, await offerOf(tx, menuId, r.tortilla), whole, "6.00", menuId);
+    return whole;
+  });
+  return { ...r, tortillaWhole };
+}
+
+type VariantRemoval = Awaited<ReturnType<typeof variantFixture>>;
+
+/** The menus holding a price row for the variant, in menu-id order. */
+async function menusPricing(variantId: string): Promise<string[]> {
+  const rows = await fx.db
+    .select({ menuId: menuItems.menuId })
+    .from(menuItemVariantOverrides)
+    .innerJoin(menuItems, eq(menuItems.id, menuItemVariantOverrides.menuItemId))
+    .where(eq(menuItemVariantOverrides.variantId, variantId));
+  return rows.map((row) => row.menuId).sort();
+}
+
+const bothMenus = (r: VariantRemoval) => [r.tapas, r.terrace].sort();
+
+describe("a variant made Inactive loses its price on every menu", () => {
+  const ways: [string, (r: VariantRemoval) => Promise<unknown>][] = [
+    [
+      "through its own editor save",
+      (r) =>
+        app(async (tx) => {
+          const value = await readProductEditor(tx, r.tortillaHalf);
+          await saveProductEditor(tx, r.tortillaHalf, r.tapas, { ...value, active: false }, "en");
+        }),
+    ],
+    [
+      "through its product's editor save sending it Inactive",
+      (r) =>
+        app(async (tx) => {
+          const value = await readProductEditor(tx, r.tortilla);
+          const variants = value.variants.map((variant) =>
+            variant.id === r.tortillaHalf ? { ...variant, active: false } : variant,
+          );
+          await saveProductEditor(tx, r.tortilla, r.tapas, { ...value, variants }, "en");
+        }),
+    ],
+    [
+      "through setProductVariants leaving it out",
+      (r) =>
+        app(async (tx) => {
+          const whole = (await listProductVariants(tx, r.tortilla)).find(
+            (variant) => variant.id === r.tortillaWhole,
+          );
+          await setProductVariants(tx, r.tortilla, [whole!], "en");
+        }),
+    ],
+  ];
+
+  it.each(ways)(
+    "%s: both its rows go, every other size keeps its own, and both published menus read changed",
+    async (_, makeInactive) => {
+      const r = await variantFixture();
+      expect(await menusPricing(r.tortillaHalf)).toEqual(bothMenus(r));
+      await publish(r.tapas);
+      await publish(r.terrace);
+      expect(await states([r.tapas, r.terrace])).toEqual(["current", "current"]);
+
+      await makeInactive(r);
+
+      expect(await menusPricing(r.tortillaHalf)).toEqual([]);
+      expect(await menusPricing(r.tortillaWhole)).toEqual(bothMenus(r));
+      expect(await menusPricing(r.croquetasHalf)).toEqual(bothMenus(r));
+      expect(await memberRowsNaming(r.tortilla)).toHaveLength(4);
+      expect(await states([r.tapas, r.terrace])).toEqual(["changed", "changed"]);
+    },
+  );
+
+  it("is left out of each menu's prices, and comes back to both, with no price of its own, when made Active again", async () => {
+    const r = await variantFixture();
+    const sizesPriced = async (menuId: string) =>
+      (await app((tx) => menuPrices(tx, menuId)))
+        .find((row) => row.productId === r.tortilla)!
+        .variants.map(({ variantId, price, active }) => ({ variantId, price, active }));
+    const sizesOffered = async (menuId: string) =>
+      (await app((tx) => listMenuOffers(tx, [menuId])))
+        .find((offer) => offer.productId === r.tortilla)!
+        .variants.map(({ id, menuPrice }) => ({ id, menuPrice }));
+    await app(async (tx) => {
+      const whole = (await listProductVariants(tx, r.tortilla)).find(
+        (variant) => variant.id === r.tortillaWhole,
+      );
+      await setProductVariants(tx, r.tortilla, [whole!], "en");
+    });
+    for (const menuId of [r.tapas, r.terrace]) {
+      expect(await sizesPriced(menuId)).toEqual([
+        { variantId: r.tortillaWhole, price: "6.00", active: true },
+      ]);
+      expect(await sizesOffered(menuId)).toEqual([{ id: r.tortillaWhole, menuPrice: "6.00" }]);
+    }
+
+    await app(async (tx) => {
+      const variants = await listProductVariants(tx, r.tortilla);
+      await setProductVariants(
+        tx,
+        r.tortilla,
+        variants.map((variant) => ({ ...variant, active: true })),
+        "en",
+      );
+    });
+
+    for (const menuId of [r.tapas, r.terrace]) {
+      expect(await sizesPriced(menuId)).toEqual([
+        { variantId: r.tortillaWhole, price: "6.00", active: true },
+        { variantId: r.tortillaHalf, price: null, active: true },
+      ]);
+      expect(await sizesOffered(menuId)).toEqual([
+        { id: r.tortillaWhole, menuPrice: "6.00" },
+        { id: r.tortillaHalf, menuPrice: null },
+      ]);
+    }
+  });
+
+  it("cannot be given a menu price by setMenuVariantPrice", async () => {
+    const r = await variantFixture();
+    await app((tx) => updateProduct(tx, r.tortillaHalf, { active: false }));
+    const offer = await app((tx) => offerOf(tx, r.tapas, r.tortilla));
+    expect(
+      await codeOf(() =>
+        app((tx) => setMenuVariantPrice(tx, offer, r.tortillaHalf, "3.20", r.tapas)),
+      ),
+    ).toBe("product.variant_not_found");
+    expect(await menusPricing(r.tortillaHalf)).toEqual([]);
   });
 });
