@@ -2,7 +2,7 @@
 
 The box image carries software written by others under their own licences. This folder is
 copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream,
-the Iosevka font printed text is drawn from, the Moby template the print agent's AppArmor
+the Iosevka font receipt text is drawn from, the Noto Sans invoice font, the Moby template the print agent's AppArmor
 profile is copied from, the Material Symbols icons the web apps carry, the Google Sans font and
 Google's "G" on the dashboard's Sign in with Google button, and npm packages bundled into the
 server and web apps. The print-agent image, built by the same `deploy/Dockerfile`, has its own
@@ -86,6 +86,13 @@ files says so beside the paths.
 
 - `licenses/Apache-2.0.txt` is that licence.
 
+## Noto Sans
+
+The server embeds Noto Sans in invoice PDFs and draws its glyph outlines for invoice raster pages.
+The font is shipped at `/app/assets/invoice-noto-sans.ttf` under the SIL Open Font License, Version 1.1.
+`noto-sans/OFL.txt` is its unmodified upstream copyright and licence notice.
+`noto-sans/README.md` records the pinned font source, checksums and build paths.
+
 ## Google Sans
 
 The dashboard web app, served from `/app/web/dashboard/` in the image, carries the font Google
@@ -126,7 +133,7 @@ package has no copyright file.
 
 ## Iosevka Term Bold
 
-The server draws the text of every printout as pictures, from a table of letter pictures derived
+Receipt-printer text is drawn as pictures, from a table of letter pictures derived
 from the font Iosevka Term Bold, release 34.9.0, Copyright (c) 2015-2026, Renzhi Li (aka. Belleve
 Invis). The image carries no Iosevka font file, only that table, which is compiled into the server. The
 font and the table derived from it are licensed under the SIL Open Font License, Version 1.1.

@@ -1788,14 +1788,28 @@ it by itself later; its source code waits 7 days before counting such a job fail
 **Next action:** build A231p from the reconciled plan, with email and A4 printing in one PR
 that ends `needs-owner-review`. Physical printer checks need the owner present or an agreed
 arrangement. The build is in progress: the shared document content has been extracted from the roll renderer,
-with captured mixed-rate discounted F1 bytes preserved on 58/80 mm paper. PDF/raster rendering,
-delivery metadata, SMTP, office transport and the delivery UI remain to be built; it settles A3's
+with captured mixed-rate discounted F1 bytes preserved on 58/80 mm paper. The A4 PDF and
+300/600 dpi glyph-outline page renderers now share a paginated layout. Tests extract the saved
+figures, decode the drawn QR, compare raster text with the PDF rendered at 300 dpi, and check
+repeatable PDF bytes. PWG/Apple encoders, delivery metadata, SMTP, office transport and the delivery
+UI remain to be built; it settles A3's
 open "Printing A4 invoices on an office printer" work when complete.
 Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe
 throws when embedding the current Google Sans WOFF2 for “í”; Noto Sans rendered the same probe
 as PDF and glyph outlines. PDFKit's ESM import also collides with the shared bundle banner's
 `createRequire` name, and the notices collector requires upstream notices for brotli 1.3.3,
-dfa 1.2.0 and fontkit 2.0.4. These are implementation findings, not built-image verification.
+dfa 1.2.0 and fontkit 2.0.4. Their upstream licence declarations and terms are now collected,
+including the Apache notice on brotli's Google decompressor. The normal renderer bundle writes
+its notices but still fails Node syntax checking on the duplicate import. Its banner guard
+change awaits the owner's answer recorded in Lane E. These are implementation findings,
+not built-image verification.
+
+Renderer receipt, 2026-10-07: the mixed-rate discounted F1 PDF is 12,353 bytes; the six-page
+35-line fixture is 17,421 bytes. The 600 dpi SVG QR initially had antialiased module seams and
+failed jsQR decoding, including when cropped; hard QR edges make both 300/600 dpi pages decode
+the filed link. Source text retains antialiasing. Noto Sans and its licence match the pinned
+upstream files byte for byte; the build copy matches the source font. Image/box timings and
+physical HP output remain pending.
 
 **Owner decisions in place of the asesor's answers (2026-10-07, under the plan's Task 0.1), so A231p may be built.** Public F1 stays disabled until A231's own enablement gates are met; the asesor is asked to confirm these as [Q44](compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
 
