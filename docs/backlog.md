@@ -1081,13 +1081,13 @@ pre-publish changes list (W51) — DONE (#1160).** The core `working_order_lines
 Reset retained pre-live venues before installing core `0092`, which rebuilds both tables.
 
 **Department menu timetables and queued publication (A204, owner 2026-10-02; refined
-2026-10-04) — department menus and timetable (W98) DONE (#1331, 2026-10-07); queued publication not
-implemented.**
+2026-10-04) — department menus and timetable (W98) DONE (#1331, 2026-10-07); queued publication
+(W99) DONE with the forward-only menu publication pull request.**
 Departments own the available-menu list and the only timetable; zones override defaults within its shared periods.
 An all-day default covers gaps; normal weeks and special dates share A261's calendar. Staff may
 still order from breakfast after it stops being the default. Several future menu editions can be
-queued, always moving forwards; an immediate publication that overtakes queued editions requires
-explicit cancellation or replacement.
+queued, always moving forwards; an immediate publication that overtakes queued editions is refused
+until the manager cancels or moves them.
 [Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md), §§2–3 and the approved details in §9;
 [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md);
 [publication plan](superpowers/plans/2026-10-04-forward-only-menu-publication.md).
@@ -1100,6 +1100,12 @@ the all-day gaps. Managers edit it on a new Menu timetable page (`/manage/menu-t
 drops `zone_menus` and rebuilds `zone_service_policies`, and nothing carries the old per-zone menus
 across. The shared dev venue was reset when it landed (2026-10-07); the owner's box needs a reset
 too.
+W99: on a menu's Preview tab a manager schedules the previewed menu to go live at a later time on
+the venue's clock, changes a scheduled version's time, or cancels it. A schedule, a changed time or
+a Publish that would put a newer version live before an older one is refused with a sentence naming
+each version in the way; nothing offers to cancel it from there. The menus list still shows
+"Unpublished" for a menu whose only version is scheduled, until that version goes live (Decision 11
+of the publication plan).
 
 **The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per

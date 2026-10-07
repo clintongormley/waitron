@@ -733,6 +733,22 @@ the two wider layouts: a choice made on a wide list does not hide Status or the 
 layout, and applies again once the list is wide. The key changed when Changes was added, so a choice
 saved before it, when Status was the only movable column, is not read.
 
+**A menu's queued versions sit on its Preview tab, under Publish.** The "Scheduled versions" panel
+lists every scheduled version, soonest first, then the ten most recently numbered settled ones, each
+with its time on the venue's clock and its state: "Scheduled", "Cancelled" or "Activated", the last
+two in the muted text colour. The time adds its UTC offset only when the venue's clock shows that
+minute twice. The menus list does not show the queue: a menu whose only version is scheduled still
+reads "Unpublished" there until it goes live. "Schedule a publication…" opens a form with a date
+and a time; it is offered only when the preview has loaded with no clashes and the draft
+differs from the version it would follow. Each scheduled row has a row menu, pinned at the end,
+with two separate actions: "Change time", which opens the same form starting at that version's date
+and time, and "Cancel this version", which asks first. A request that would put a newer version live
+before an older one is refused with a sentence naming each version in the way and its time, under
+the time field (for a new schedule or a changed time) or in the publish result (for Publish): those
+that must go live first, then those that must go live after this one. The refusal never offers to
+cancel anything; the manager cancels or moves the version in the way through its own row, then tries
+again.
+
 **Style your own cell markup with `part=` and `::part()`, never with a CSS class.** A cell callback
 returns a template, but the nodes it produces are rendered by `wt-data-table` and so end up inside
 `wt-data-table`'s shadow root — not your screen's. A stylesheet only reaches nodes inside the shadow
