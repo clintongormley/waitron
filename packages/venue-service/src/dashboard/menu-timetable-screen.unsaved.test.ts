@@ -208,6 +208,7 @@ interface Kind {
   edit(screen: MenuTimetableScreen): Promise<void>;
   revert(screen: MenuTimetableScreen): Promise<void>;
   value(screen: MenuTimetableScreen): string;
+  opened: string;
   edited: string;
   body: unknown[];
 }
@@ -222,6 +223,7 @@ const KINDS: Kind[] = [
     edit: moveSecondUp,
     revert: moveSecondUp,
     value: draftList,
+    opened: "Desayunos, Cena, Café, Brunch",
     edited: "Cena, Desayunos, Café, Brunch",
     body: [
       "PUT",
@@ -235,6 +237,7 @@ const KINDS: Kind[] = [
     edit: (screen) => setField(screen, "name", "Cenas"),
     revert: (screen) => setField(screen, "name", " Noches "),
     value: (screen) => fieldValue(screen, "name"),
+    opened: "Noches",
     edited: "Cenas",
     body: [
       "PATCH",
@@ -255,6 +258,7 @@ const KINDS: Kind[] = [
     edit: (screen) => setField(screen, "monday.periods.0.opensAt", "08:30"),
     revert: (screen) => setField(screen, "monday.periods.0.opensAt", "08:00"),
     value: (screen) => fieldValue(screen, "monday.periods.0.opensAt"),
+    opened: "08:00",
     edited: "08:30",
     body: [
       "PUT",
@@ -273,6 +277,7 @@ const KINDS: Kind[] = [
     edit: (screen) => setField(screen, "date.periods.0.opensAt", "10:30"),
     revert: (screen) => setField(screen, "date.periods.0.opensAt", "10:00"),
     value: (screen) => fieldValue(screen, "date.periods.0.opensAt"),
+    opened: "10:00",
     edited: "10:30",
     body: [
       "PUT",
@@ -300,6 +305,36 @@ describe.each(KINDS)("Menu timetable: $name", (kind) => {
     await expect.poll(() => modal(screen)).toBeNull();
     expect(writes).toEqual([]);
     expect(unload()).toBe(false);
+  });
+
+  it("asks when the dashboard leaves, holds the edit on Keep, and on Discard leaves with the opened values back", async () => {
+    const { screen, writes } = await mount();
+    await kind.open(screen);
+    await kind.edit(screen);
+    let left = 0;
+    const leave = () =>
+      app.leave.coordinator.request({
+        scopes: "all",
+        reason: "navigation",
+        proceed: () => {
+          left++;
+        },
+      });
+    const kept = leave();
+    await choose("keep");
+    expect(await kept).toBe("kept");
+    expect(left).toBe(0);
+    expect(dialogOpen(screen)).toBe(true);
+    expect(kind.value(screen)).toBe(kind.edited);
+    expect(unload()).toBe(true);
+    const discarded = leave();
+    await choose("discard");
+    expect(await discarded).toBe("proceeded");
+    expect(left).toBe(1);
+    await settle(screen);
+    expect(kind.value(screen)).toBe(kind.opened);
+    expect(unload()).toBe(false);
+    expect(writes).toEqual([]);
   });
 
   it("closes without a question when nothing was changed, or a change was put back", async () => {
