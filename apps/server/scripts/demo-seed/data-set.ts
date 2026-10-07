@@ -1,5 +1,7 @@
 import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/catalogue";
+import type { CountryDemoIdentity } from "@waitron/country";
 import {
+  getCountryPack,
   resolveInstalledStartingContentLanguages,
   type StartingContentLanguages,
   type VenueGeography,
@@ -135,4 +137,31 @@ export type DemoLanguages = StartingContentLanguages;
 /** Exactly the languages setup gives a new venue in this area. */
 export function demoContentLanguages(geography: VenueGeography): DemoLanguages {
   return resolveInstalledStartingContentLanguages(geography);
+}
+
+const FALLBACK_DEMO_DATA_SET_ID = "casa-delgado-es";
+
+export function demoDataSetFor(identity: CountryDemoIdentity): DemoDataSet {
+  return demoDataSet(identity.dataSet ?? FALLBACK_DEMO_DATA_SET_ID);
+}
+
+/** A fallback demo defaults to English, by the owner's decision for a country with no demo data of
+ * its own; the area's required languages stay on because `writeContentLanguages` refuses a list
+ * without them. */
+function englishFallbackLanguages(starting: StartingContentLanguages): DemoLanguages {
+  const { required } = starting;
+  return {
+    defaultLanguage: "en",
+    languages: ["en", ...required.filter((language) => language !== "en")],
+    required,
+  };
+}
+
+/** The languages a demo from `set` is written in: the area's starting languages when `set` is the
+ * one the venue's pack names, the English fallback otherwise. */
+export function demoLanguagesFor(set: DemoDataSet, geography: VenueGeography): DemoLanguages {
+  const starting = demoContentLanguages(geography);
+  return getCountryPack(geography.country ?? "")?.demo?.dataSet === set.id
+    ? starting
+    : englishFallbackLanguages(starting);
 }

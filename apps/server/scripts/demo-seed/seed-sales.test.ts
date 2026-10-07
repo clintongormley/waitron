@@ -226,4 +226,31 @@ describe("seedSales", () => {
     });
     expect(saleRows.length).toBe(0);
   });
+
+  it("records a United Kingdom venue's practice sales through its own module, with no fiscal record", async () => {
+    const venue = await createDemoVenueProvisioner(() => suite.db, {
+      country: "GB",
+      nifBase: 100_000_000,
+      invoiceLocale: "en-GB",
+    })();
+
+    const { count } = await seedSales(suite.db, {
+      venue: venueFor(venue),
+      invoiceLocale: "en-GB",
+      days: 3,
+      products: PRODUCTS,
+    });
+
+    const { rows: backends } = await suite.db.execute<{ fiscal_backend: string }>(
+      sql`select fiscal_backend from sales`,
+    );
+    const { rows: fiscalRows } = await suite.db.execute<{ registros: number; envios: number }>(
+      sql`select (select count(*) from registros_facturacion) as registros,
+                 (select count(*) from envios) as envios`,
+    );
+    expect(count).toBeGreaterThan(0);
+    expect(backends.length).toBe(count);
+    expect(new Set(backends.map((row) => row.fiscal_backend))).toEqual(new Set(["none"]));
+    expect(fiscalRows[0]).toEqual({ registros: 0, envios: 0 });
+  });
 });

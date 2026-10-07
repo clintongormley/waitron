@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { resolveFiscalJurisdiction } from "@waitron/country";
-import { COUNTRY_PACKS } from "@waitron/country-packs";
+import type { CountryDemoIdentity, CountryPack } from "@waitron/country";
+import { COUNTRY_PACKS, VENUE_SETUP_COUNTRY_PACKS, getCountryPack } from "@waitron/country-packs";
+import { ALL_MODULES } from "../../src/modules.js";
 import { CASA_DELGADO, DELI_TAKEAWAY, MENU_DEL_DIA, PRODUCT_OPTION_LISTS } from "./menu.js";
 import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "./floor.js";
 import { DEMO_STAFF } from "./staff.js";
@@ -9,6 +11,8 @@ import {
   DEMO_DATA_SETS,
   demoContentLanguages,
   demoDataSet,
+  demoDataSetFor,
+  demoLanguagesFor,
   inLanguages,
   type DemoDataSet,
 } from "./data-set.js";
@@ -212,5 +216,68 @@ describe("demo data sets", () => {
       list.map((value) => `${language}:${value}`),
     );
     expect(allowed.filter((entry) => !values.includes(entry))).toEqual([]);
+  });
+});
+
+/** What stops `pack` being offered at setup, in any mode: the venue screen has one country list.
+ * A Demo needs the pack's identity, and the operation description its hidden field is filled
+ * from, which is the filing module's default. */
+function setupProblems(pack: CountryPack): string[] {
+  const problems: string[] = [];
+  if (pack.demo === undefined) problems.push(`${pack.countryCode}: no demo identity`);
+  for (const jurisdiction of pack.fiscalJurisdictions) {
+    if (!jurisdiction.supported || jurisdiction.modules === undefined) continue;
+    const filing = jurisdiction.modules.filing;
+    const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === filing)?.fiscal;
+    if (fiscal?.venueFields?.defaults?.operationDescription === undefined) {
+      problems.push(
+        `${pack.countryCode} ${jurisdiction.id}: ${filing} has no operation description`,
+      );
+    }
+  }
+  return problems;
+}
+
+describe("a country with no demo data", () => {
+  it("writes a United Kingdom demo in English alone", () => {
+    expect(
+      demoLanguagesFor(DEMO_DATA_SETS["casa-delgado-es"]!, { country: "GB", area: null }),
+    ).toEqual({ defaultLanguage: "en", languages: ["en"], required: [] });
+  });
+
+  it("writes a set that is not the pack's own in English, keeping the area's required languages on", () => {
+    expect(
+      demoLanguagesFor(
+        { ...DEMO_DATA_SETS["casa-delgado-es"]!, id: "not-spains" },
+        { country: "ES", area: "08" },
+      ),
+    ).toEqual({ defaultLanguage: "en", languages: ["en", "ca", "es"], required: ["ca", "es"] });
+    expect(
+      demoLanguagesFor(DEMO_DATA_SETS["casa-delgado-es"]!, { country: "ES", area: "08" }),
+    ).toEqual({ defaultLanguage: "ca", languages: ["ca", "es", "en"], required: ["ca", "es"] });
+  });
+
+  it("seeds the pack's own data set, or Casa Delgado when the identity names none", () => {
+    const spain = getCountryPack("ES")!.demo!;
+    const identity: CountryDemoIdentity = {
+      legalName: spain.legalName,
+      taxId: spain.taxId,
+      locationName: spain.locationName,
+      departmentTradingNames: spain.departmentTradingNames,
+    };
+    expect(demoDataSetFor(spain)).toBe(DEMO_DATA_SETS["casa-delgado-es"]);
+    expect(demoDataSetFor(identity)).toBe(DEMO_DATA_SETS["casa-delgado-es"]);
+  });
+
+  it("offers at setup only packs a Demo can be seeded for", () => {
+    expect(VENUE_SETUP_COUNTRY_PACKS.length).toBeGreaterThan(0);
+    expect(VENUE_SETUP_COUNTRY_PACKS.flatMap(setupProblems)).toEqual([]);
+  });
+
+  it("names both problems of a United Kingdom pack offered at setup", () => {
+    expect(setupProblems({ ...getCountryPack("GB")!, availableForVenueSetup: true })).toEqual([
+      "GB: no demo identity",
+      "GB GB-vat: none has no operation description",
+    ]);
   });
 });

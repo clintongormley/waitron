@@ -716,4 +716,46 @@ describe("seedDemoRestaurant", () => {
     expect(read.languages).toEqual({ defaultLanguage: "es", languages: ["es", "en"] });
     expect(read.products.some((product) => product.name === "Mixed salad")).toBe(true);
   });
+
+  it("seeds a United Kingdom demo from Casa Delgado in English, its practice sales with no fiscal record", async () => {
+    const venue = await createDemoVenueProvisioner(() => suite.db, {
+      country: "GB",
+      nifBase: 101_000_000,
+      invoiceLocale: "en-GB",
+    })();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: "en",
+      salesDays: 3,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
+    });
+
+    const read = await withTransaction(suite.db, async (tx) => {
+      const languages = await readContentLanguages(tx, "en");
+      const gaps = await listTranslationGapReport(tx, languages);
+      const { rows: products } = await tx.execute<{ customer_name: string }>(
+        sql`select customer_name from products where name = 'Bravas'`,
+      );
+      const { rows: backends } = await tx.execute<{ fiscal_backend: string }>(
+        sql`select fiscal_backend from sales`,
+      );
+      const { rows: registros } = await tx.execute<{ count: number }>(
+        sql`select count(*) as count from registros_facturacion`,
+      );
+      return {
+        languages,
+        gaps,
+        customerName: JSON.parse(products[0]!.customer_name) as object,
+        backends: backends.map((row) => row.fiscal_backend),
+        registros: registros[0]!.count,
+      };
+    });
+    expect(read.languages).toEqual({ defaultLanguage: "en", languages: ["en"] });
+    expect(read.gaps.flatMap((language) => language.gaps)).toEqual([]);
+    expect(Object.keys(read.customerName)).toEqual(["en"]);
+    expect(read.backends.length).toBeGreaterThan(0);
+    expect(new Set(read.backends)).toEqual(new Set(["none"]));
+    expect(read.registros).toBe(0);
+  });
 });

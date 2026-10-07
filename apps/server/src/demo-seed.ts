@@ -3,7 +3,7 @@ import { getCountryPack } from "@waitron/country-packs";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 import { seedDemoRestaurant } from "../scripts/demo-seed/seed.js";
 import type { SeedLocale } from "../scripts/demo-seed/menu.js";
-import { demoDataSet } from "../scripts/demo-seed/data-set.js";
+import { demoDataSetFor } from "../scripts/demo-seed/data-set.js";
 
 /** Public Demo starts with one month of deterministic practice sales and the full sample restaurant. */
 export const INSTALLED_DEMO_SALES_DAYS = 30;
@@ -29,9 +29,10 @@ export async function seedInstalledDemo(
       seriesId: result.seriesIds[0]!,
       locationId: result.locationId,
     },
-    locale: demoSeedLocale(venue),
+    // A pack with no data set of its own gets English staff names (owner decision, W109 plan).
+    locale: identity.dataSet === undefined ? "en" : demoSeedLocale(venue),
     salesDays: INSTALLED_DEMO_SALES_DAYS,
     departmentTradingNames: identity.departmentTradingNames,
-    dataSet: demoDataSet(identity.dataSet),
+    dataSet: demoDataSetFor(identity),
   });
 }
