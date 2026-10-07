@@ -1,9 +1,4 @@
-import type { Hono } from "hono";
-import type { Database } from "@waitron/db";
 import type { AlertSource } from "@waitron/module";
-import { createErrorBoundary } from "@waitron/server-kit";
-import { requireSession } from "./till-session.js";
-import type { Logger } from "./logger.js";
 import "./errors.js";
 import { execFile } from "node:child_process";
 
@@ -48,8 +43,7 @@ export async function checkTimeHealth(deps: { run?: CommandRunner } = {}): Promi
 }
 
 export type AuthorityClockStatus =
-  | { state: "unknown" | "not-applicable" }
-  | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
+  { state: "unknown" } | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
 
 export function createAuthorityClockStatus(): {
   observe(sample: { authorityTimestamp: string | null; sentAt: Date; receivedAt: Date }): void;
@@ -124,21 +118,4 @@ export function authorityClockAlertSource(read: () => AuthorityClockStatus): Ale
           ];
     },
   };
-}
-
-export function mountAuthorityClockApi(
-  app: Hono,
-  deps: { db: Database; read: () => AuthorityClockStatus },
-  log: Logger,
-): void {
-  const run = createErrorBoundary(
-    { "session.required": 401, "device.unauthorized": 401 },
-    "clock.status_failed",
-  );
-  app.get("/api/clock-status", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      return c.json(deps.read());
-    }),
-  );
 }

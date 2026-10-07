@@ -3179,7 +3179,6 @@ describe("department transfers across operator lifetimes", () => {
           try {
             const { el, host } = await mountApp({
               ...desk.calls,
-              clockStatus: vi.fn().mockResolvedValue({ state: "not-applicable" }),
               listDefaultZoneOffers: vi.fn().mockResolvedValue(
                 zoneOffers(
                   {

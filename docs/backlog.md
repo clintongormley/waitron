@@ -2340,6 +2340,13 @@ buttons and total — both FIXED by A310 (follow-ups below). **A312 OPEN, queued
 dashboard to English left the alert text in Spanish until a reload; not checked further here.
 Screenshots: `~/waitron-campaign/w109-4-shots/`.
 
+**A364 DONE: the till has no technical clock notices (owner, 2026-10-07).**
+The till no longer polls for an authority comparison. Measured drift remains an administrator
+alert, `fiscal.clock_drift`, for people with `fiscal.view`. The existing drift-alert test and the
+real-database warning-state cash-sale check pass in `apps/server/src/time-health.test.ts`.
+A364's synthetic shell captures show the pricing-unit UUID below Café in Spanish, while English
+shows `/ea`. This is an uninvestigated fixture or translation issue; no live-stack check was made.
+
 **Till and dashboard layout points seen during A310's look (2026-10-07), OPEN, unqueued — not
 checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-shots/`.
 - **Tablet widths (641–1024 px): the counter basket's remove button is still cut off.** A310 changed
@@ -2349,8 +2356,9 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
   at the basket's edge.
 - **Desktop till, 1280 px: the total and the Cash/Card/Hold buttons sit below a large empty area**
   and need scrolling. Harness screenshots are identical before and after A310, so A310 did not cause it.
-- **Phone till: the top bar (clock notice and about eight buttons) keeps about 440 of 844 px**,
-  leaving roughly 400 px for selling.
+- **Phone till: the top bar keeps too much space for its buttons (A378, queued).**
+  A310 measured about 440 of 844 px before A364 removed the clock notices. Re-measure the
+  remaining controls for A378; the earlier height includes the removed notice.
 - **Spanish till: the tab buttons still read "Counter" and "Floor"**, the service-area label is cut
   to "Zona de servi…", and some demo dish names ("Spanish omelette", "House bread") stay English.
 - **Dashboard at 1280 px: the overview's top-row cards have uneven heights.**

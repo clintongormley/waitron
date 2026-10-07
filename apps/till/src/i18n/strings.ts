@@ -1096,10 +1096,6 @@ export const en = {
   "server.unreachable": "unreachable",
   "server.standby": "standby, not promoted",
   "server.primary": "accepting sales",
-  "clock.warning":
-    "The server's last clock comparison differed by more than a minute. Check the server's date and time. You can continue selling.",
-  "clock.unknown":
-    "The server's clock has not been verified against the tax authority. You can continue selling.",
   "server.waiting_promotion": "Local server unreachable — waiting for the standby to be promoted",
   "server.check_again": "Check again",
   "server.switched": "Moved to another server. Enter your PIN.",
@@ -2152,10 +2148,6 @@ export const es: Record<StringKey, string> = {
   "server.unreachable": "sin conexión",
   "server.standby": "en espera, sin promover",
   "server.primary": "aceptando ventas",
-  "clock.warning":
-    "La última comparación del reloj del servidor mostró una diferencia de más de un minuto. Comprueba su fecha y hora. Puedes seguir vendiendo.",
-  "clock.unknown":
-    "No se ha verificado el reloj del servidor con la autoridad tributaria. Puedes seguir vendiendo.",
   "server.waiting_promotion":
     "Servidor local sin conexión — esperando a que se promueva el de reserva",
   "server.check_again": "Comprobar de nuevo",

@@ -98,9 +98,9 @@ it("raises a clock alert only for measured drift and clears it when the source i
   expect(await source?.read({} as never)).toEqual([]);
 });
 
-describe("the till clock comparison", () => {
+describe("sales during an authority clock warning", () => {
   let venue: BillVenue;
-  const suite = useVenueDb({
+  useVenueDb({
     migrations: migrationOptionsFor(manifestSets(), null),
     setup: async (db) => {
       venue = await provisionBillVenue(db);
@@ -108,29 +108,24 @@ describe("the till clock comparison", () => {
     timeoutMs: 120_000,
   });
 
-  it("requires a shift session, returns unknown without an authority sample, and warns without preventing a cash sale", async () => {
+  it("keeps the administrator alert without preventing a cash sale", async () => {
     const module = await import("./time-health.js");
     const monitor = module.createAuthorityClockStatus();
-    const app = venue.app;
-    module.mountAuthorityClockApi?.(app, { db: suite.db, read: monitor.read }, () => {});
-    const refused = await app.request("/api/clock-status");
-    expect(refused.status).toBe(401);
-    expect(await refused.json()).toMatchObject({ error: { code: "session.required" } });
-    const headers = { cookie: venue.cookie };
-    const unknown = await app.request("/api/clock-status", { headers });
-    expect(unknown.status).toBe(200);
-    expect(await unknown.json()).toEqual({ state: "unknown" });
     monitor.observe({
       authorityTimestamp: "2026-10-05T12:00:00Z",
       sentAt: new Date("2026-10-06T12:00:00Z"),
       receivedAt: new Date("2026-10-06T12:00:00Z"),
     });
-    const warning = await app.request("/api/clock-status", { headers });
-    expect(await warning.json()).toEqual({
-      state: "warning",
-      driftSeconds: 86400,
-      measuredAt: "2026-10-06T12:00:00.000Z",
-    });
+    expect(await module.authorityClockAlertSource(monitor.read).read({} as never)).toEqual([
+      {
+        key: "fiscal.clock_drift",
+        code: "fiscal.clock_drift",
+        params: { seconds: 86400 },
+        severity: "warning",
+        since: "2026-10-06T12:00:00.000Z",
+      },
+    ]);
+    const headers = { cookie: venue.cookie };
     const sale = await venue.app.request("/api/sales", {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },

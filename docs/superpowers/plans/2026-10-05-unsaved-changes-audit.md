@@ -3822,7 +3822,7 @@ Eight native table-button/Escape/Keep/Discard flows passed in EN/ES, light/dark 
 They assert initial Keep focus and return focus to the same table button, retained lines and no
 party draft read before Discard. Eight warning-only neutral-pointer axe scans passed. Sixteen
 captures were inspected in four contact sheets. The API is synthetic; its kitchen read refusal
-and unknown clock produce banners behind the warning. This is no live-venue or full-shell
+and unknown clock produce banners behind the warning. A364 (2026-10-07) removes the till's authority-comparison notice; that part of this historical capture no longer describes the shell. This is no live-venue or full-shell
 accessibility measurement, and this owner uses dispatched unload events rather than a new
 activated native reload experiment. Earlier actual-Schedule native leave receipts remain separate.
 
