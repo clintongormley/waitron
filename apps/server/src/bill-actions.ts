@@ -196,6 +196,7 @@ export async function mergeCheckedBills(
     .update(workingOrders)
     .set({ status: "abandoned" })
     .where(eq(workingOrders.id, fromBillId));
+  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [fromBillId]);
   if (mainBillId === fromBillId) await setMainBill(tx, partyId, intoBillId);
   if (before !== null) await enqueueMovedSlips(tx, cfg, before, intoBillId);
 }

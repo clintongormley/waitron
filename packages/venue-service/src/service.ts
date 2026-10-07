@@ -1,3 +1,16 @@
+import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
+import {
+  listDepartmentTransferDestinations,
+  listIncomingDepartmentTransfers,
+  readIncomingDepartmentTransfer,
+  listDepartmentSentTransfers,
+  listSentDepartmentTransfers,
+  requestDepartmentTransfer,
+  readDepartmentTransfer,
+  withdrawDepartmentTransfer,
+  acceptDepartmentTransfer,
+  declineDepartmentTransfer,
+} from "./department-transfers.js";
 import {
   describeMakers,
   resolveMakers,
@@ -52,6 +65,17 @@ import {
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
+  withdrawPendingDepartmentTransfers,
+  listDepartmentTransferDestinations,
+  listIncomingDepartmentTransfers,
+  readIncomingDepartmentTransfer,
+  listDepartmentSentTransfers,
+  listSentDepartmentTransfers,
+  requestDepartmentTransfer,
+  readDepartmentTransfer,
+  withdrawDepartmentTransfer,
+  acceptDepartmentTransfer,
+  declineDepartmentTransfer,
   copyOrderContext: copyOrderServiceContext,
   copyLineContext: copyWorkingLineContext,
   findOrderContext: findOrderServiceContext,

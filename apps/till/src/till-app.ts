@@ -25,6 +25,10 @@ import {
 import { carriedText, countText, currentLocale, named, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
+import {
+  DepartmentTransferMonitor,
+  type TransferSnapshot,
+} from "./state/department-transfer-monitor.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi, isNetworkFailure, type MadeHereItem } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
@@ -57,7 +61,9 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./widgets/station-choice-dialog.js";
+import "./widgets/department-transfers.js";
 import { lineProductName } from "./widgets/product-name.js";
+import { optionAnswers } from "./widgets/option-snapshot.js";
 import type {
   AdjustDetail,
   ChangeLineDetail,
@@ -1078,6 +1084,172 @@ export class TillApp extends LitElement {
 
   sessionActivity: SessionActivity = new SessionActivity();
 
+  #departmentTransfers?: DepartmentTransferMonitor;
+  #transferApi?: TillApi;
+  #transferViewRead = 0;
+  #counterRetrievals = new Map<object, string>();
+  @state() private transferSnapshot?: TransferSnapshot;
+  @state() private transferQueueOpen = false;
+  @state() private transferLocalCopies: { label: string; lines: OrderLine[] }[] = [];
+
+  #keepTransferLocalCopy(store: WorkingOrderStore, label: string): void {
+    this.transferLocalCopies = [
+      ...this.transferLocalCopies,
+      {
+        label,
+        lines: store.lines.map((line) => structuredClone(line)),
+      },
+    ];
+  }
+
+  #renderTransferLocalCopy() {
+    const copy = this.transferLocalCopies[0];
+    if (copy === undefined || !this.#inShell()) return nothing;
+    return html`<wt-dialog
+      ${trackDialog()}
+      data-transfer-local-copy
+      .open=${true}
+      .dismissible=${false}
+      .heading=${t("department_transfer.local_copy")}
+    >
+      <p>${t("department_transfer.local_copy_message")}</p>
+      <p>${copy.label}</p>
+      <ul>
+        ${copy.lines.map(
+          (line) =>
+            html`<li data-local-line>
+              ${trimQuantity(line.quantity)} × ${lineProductName(line.product)}
+              ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<div>${answer}</div>`)}
+              ${(line.extras ?? []).map((extra) => html`<div>${extra.quantity} × ${extra.name}</div>`)}
+              ${(line.notOfferedExtras ?? []).map((extra) => html`<div>${extra.quantity} × ${extra.name}</div>`)}
+              ${line.note ? html`<div>${line.note}</div>` : nothing}
+            </li>`,
+        )}
+      </ul>
+      <wt-form-actions slot="footer"
+        ><wt-button
+          data-dismiss-local-copy
+          @click=${() => {
+            this.transferLocalCopies = this.transferLocalCopies.slice(1);
+          }}
+          >${t("department_transfer.dismiss_local_copy")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-dialog>`;
+  }
+
+  #stopDepartmentTransfers(): void {
+    this.#transferViewRead++;
+    this.#departmentTransfers?.stop();
+    this.#departmentTransfers = undefined;
+    this.#transferApi = undefined;
+    this.transferSnapshot = undefined;
+    this.transferQueueOpen = false;
+  }
+
+  #syncDepartmentTransfers(): void {
+    if (
+      !this.isConnected ||
+      this.operatorName === "" ||
+      this.#loginPending ||
+      this.deviceMode ||
+      !this.permissions.includes("sale.take_payment")
+    ) {
+      this.#stopDepartmentTransfers();
+      return;
+    }
+    if (this.#departmentTransfers !== undefined && this.#transferApi === this.api) return;
+    this.#stopDepartmentTransfers();
+    const monitor = new DepartmentTransferMonitor({
+      api: this.api,
+      currentSource: () => this.#currentTransferTabId(),
+      changed: () => {
+        const previous = this.transferSnapshot;
+        const next = monitor.snapshot;
+        this.transferSnapshot = next;
+        if (!this.isConnected || this.operatorName === "" || !monitor.running) return;
+        const accepted = next.sent.filter(
+          (row) =>
+            row.status === "accepted" &&
+            row.currentDepartmentId !== row.sourceDepartmentId &&
+            !previous?.sent.some((old) => old.id === row.id && old.status === "accepted"),
+        );
+        for (const row of accepted) {
+          for (const [read, tabId] of this.#counterRetrievals)
+            if (tabId === row.tabId) this.#counterRetrievals.delete(read);
+          if (this.activeTabId === row.tabId) {
+            const draft = this.#tableDraft();
+            if (draft !== null && draft.lines.length > 0)
+              this.#keepTransferLocalCopy(draft, this.orderParty?.displayName ?? "");
+            this.#resetPartylessDraft();
+            this.#forgetParty();
+            if (this.#tableCatalogueActive()) this.#returnToFloor();
+          }
+          if (this.#store.persisted && this.#store.id === row.tabId) {
+            if (this.#store.dirty || this.#basketPayload() !== this.#basketBaseline)
+              this.#keepTransferLocalCopy(this.#store, this.#store.label ?? "");
+            this.#dismissStationChoices();
+            this.#counterSends++;
+            this.#clearBasket();
+            this.counterLines = null;
+            this.cardOutcome = undefined;
+            this.collectFlow = undefined;
+          }
+        }
+        const received = previous?.incoming.some(
+          (old) => !next.incoming.some((row) => row.id === old.id),
+        );
+        if (accepted.length > 0 || received) void this.#refreshTransferViews();
+      },
+      onAccessLost: (code) => {
+        if (
+          code === "department_transfer.not_allowed" ||
+          code === "device.forbidden_action" ||
+          code === "authorization.not_permitted"
+        )
+          this.#stopDepartmentTransfers();
+        else void this.#onLogout();
+      },
+    });
+    this.#transferApi = this.api;
+    this.#departmentTransfers = monitor;
+    monitor.watchDepartment();
+    monitor.start();
+  }
+
+  #currentTransferTabId(): string | undefined {
+    if (this.#tableCatalogueActive()) return this.activeTabId;
+    const tab = this.#activeTab();
+    const counterVisible =
+      this.drill === undefined &&
+      (tab?.key === "counter" || tab?.cards.some((card) => card.type === "basket"));
+    return counterVisible && this.stage === "order" && this.#store.persisted
+      ? this.#store.id
+      : undefined;
+  }
+
+  async #refreshTransferViews(): Promise<void> {
+    const read = ++this.#transferViewRead;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const replaced = () =>
+      read !== this.#transferViewRead || session !== this.#operatorSession || api !== this.api;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const tables = await api.getTablesState({ signal: limit.signal });
+      if (replaced()) return;
+      this.tables = tables;
+    } catch {
+      if (replaced()) return;
+    } finally {
+      limit.done();
+    }
+    if (replaced()) return;
+    await this.#refreshList("held", "refresh.held_after_move", TABLE_REQUEST_LIMIT_MS, replaced);
+    if (replaced()) return;
+    await this.#refreshList("waiting", "refresh.waiting", TABLE_REQUEST_LIMIT_MS, replaced);
+  }
+
   #deviceKind: DeviceKind = "till";
 
   /** `router` can be set after `connectedCallback`, so both it and `willUpdate` subscribe; a doubled
@@ -1149,9 +1321,11 @@ export class TillApp extends LitElement {
     this.addEventListener("keydown", this.#onInteraction);
     document.addEventListener("visibilitychange", this.#onVisibility);
     void this.sessionActivity.start();
+    this.#syncDepartmentTransfers();
   }
 
   override disconnectedCallback(): void {
+    this.#stopDepartmentTransfers();
     this.#partylessScope?.dispose();
     this.#partylessScope = undefined;
     this.#partylessUnsubscribe?.();
@@ -1980,6 +2154,8 @@ export class TillApp extends LitElement {
     if (!this.#basketScope) this.#syncBasketDraft();
     this.#syncEditDeadEnds();
     if (changed.has("api")) this.api.onMadeHere?.(this.#onMadeHere);
+    if (changed.has("api") || changed.has("operatorName") || changed.has("permissions"))
+      this.#syncDepartmentTransfers();
     if (changed.has("canvas") || changed.has("capabilities"))
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
@@ -2008,6 +2184,7 @@ export class TillApp extends LitElement {
   }
 
   async #boot(): Promise<void> {
+    this.#stopDepartmentTransfers();
     this.#battery?.stop();
     const bootGeneration = ++this.#bootGeneration;
     this.#browserLocale = undefined;
@@ -2163,6 +2340,7 @@ export class TillApp extends LitElement {
     { personId, displayName, permissions }: Omit<LoggedInDetail, "locale">,
     switched = false,
   ): Promise<void> {
+    this.#stopDepartmentTransfers();
     this.#loginPending = true;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
@@ -2225,6 +2403,7 @@ export class TillApp extends LitElement {
     this.#resumeOrderDraft();
     if (switched) this.#endProfileSwitch();
     this.permissions = permissions;
+    this.#syncDepartmentTransfers();
     this.errorKey = offerLoadFailed === false ? undefined : offerLoadFailed;
     this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
@@ -2316,7 +2495,12 @@ export class TillApp extends LitElement {
    * a failure is also thrown to the caller. A read still out after `limitMs` is cancelled and fails
    * like any other failed read.
    */
-  async #refreshList(list: RefreshList, messageKey?: StringKey, limitMs?: number): Promise<void> {
+  async #refreshList(
+    list: RefreshList,
+    messageKey?: StringKey,
+    limitMs?: number,
+    replaced: () => boolean = () => false,
+  ): Promise<void> {
     const request = ++this.#refreshGeneration[list];
     const limit = limitMs === undefined ? undefined : limited(limitMs);
     const options: [] | [ReadOptions] = limit === undefined ? [] : [{ signal: limit.signal }];
@@ -2324,13 +2508,14 @@ export class TillApp extends LitElement {
     try {
       install = await this.#loadList(list, ...options);
     } catch (error) {
+      if (replaced()) return;
       if (request === this.#refreshGeneration[list]) this.#onRefreshFailed(list, messageKey);
       if (messageKey === undefined) throw error;
       return;
     } finally {
       limit?.done();
     }
-    if (request !== this.#refreshGeneration[list]) return;
+    if (request !== this.#refreshGeneration[list] || replaced()) return;
     install();
     this.#endRefreshRetry(list);
   }
@@ -3736,35 +3921,32 @@ export class TillApp extends LitElement {
     }
   }
 
-  /**
-   * Loads a parked order under its own id, so a later payment uses the same idempotency key. The held
-   * list has no live push, so another till may already have paid or discarded the order: that is a
-   * non-fatal `held.stale`, the current basket is untouched, and the list refreshes on both paths.
-   * `cardOutcome` is cleared only on success, because only then is the basket replaced.
-   */
   async #onRetrieveOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
     const session = this.#operatorSession;
     const generation = this.#store.loadGeneration;
     const payload = this.#basketPayload();
+    const read = {};
+    this.#counterRetrievals.set(read, id);
     this.errorKey = undefined;
     try {
       await this.#loadHeldOrder(
         id,
         () =>
+          !this.#counterRetrievals.has(read) ||
           session !== this.#operatorSession ||
           generation !== this.#store.loadGeneration ||
           payload !== this.#basketPayload(),
       );
-      if (session !== this.#operatorSession) return;
+      if (!this.#counterRetrievals.has(read) || session !== this.#operatorSession) return;
       this.#refusePaidInPart();
     } catch {
-      // Paid or discarded on another till; the basket is untouched.
-      if (session !== this.#operatorSession) return;
+      if (!this.#counterRetrievals.has(read) || session !== this.#operatorSession) return;
       this.errorKey = "held.stale";
+    } finally {
+      this.#counterRetrievals.delete(read);
     }
     if (session !== this.#operatorSession) return;
-    // Runs on both paths: on success the list is re-read; on the stale race the vanished row drops off.
     await this.#refreshHeldOrders();
   }
 
@@ -4279,6 +4461,7 @@ export class TillApp extends LitElement {
     }
     try {
       await this.api.switchDeviceProfile(profileId);
+      if (session === this.#operatorSession) this.#stopDepartmentTransfers();
       this.#equipmentChanged++;
     } catch (error) {
       if (session !== this.#operatorSession) return;
@@ -7492,6 +7675,7 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#stopDepartmentTransfers();
     this.#stopClockStatus();
     this.#resetPartylessDraft();
     this.leave.forceReset();
@@ -8464,7 +8648,7 @@ export class TillApp extends LitElement {
   override render() {
     const shellCanvas = this.#inShell() ? this.canvas : undefined;
     return html`
-      ${this.leaveConfirmation()}
+      ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}
       <div
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
@@ -8820,6 +9004,11 @@ export class TillApp extends LitElement {
                       .affordances=${this.#affordanceList}
                       .kiosk=${this.deviceMode}
                       .canSwitchProfile=${this.approvedProfiles.length > 1}
+                      .transferAvailable=${this.transferSnapshot !== undefined}
+                      @open-transfers=${() => {
+                        this.transferQueueOpen = true;
+                      }}
+                      .transferCount=${this.transferSnapshot?.receivingAllowed === true ? this.transferSnapshot.incoming.length : undefined}
                       .loadLocales=${this.#loadLocales}
                       @tab-select=${(e: CustomEvent<{ key: string }>) => {
                         if (!this.canvas?.tabs.some((tab) => tab.key === e.detail.key)) return;
@@ -8827,6 +9016,26 @@ export class TillApp extends LitElement {
                         this.#requestLeave(() => this.#onTabSelect(e.detail.key));
                       }}
                     >
+                      ${
+                        this.transferSnapshot === undefined
+                          ? nothing
+                          : html`<till-department-transfers
+                              .currentTabId=${this.#currentTransferTabId()}
+                              .currentTabLabel=${this.#tableCatalogueActive() ? (this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId)?.label ?? this.orderParty?.displayName ?? "") : (this.#store.label ?? "")}
+                              .serviceZones=${this.counterServiceZones}
+                              @transfer-changed=${() => this.#departmentTransfers?.refresh()}
+                              .api=${this.api}
+                              .snapshot=${this.transferSnapshot}
+                              .open=${this.transferQueueOpen}
+                              @close-transfers=${() => {
+                                this.transferQueueOpen = false;
+                              }}
+                              @dismiss-transfer=${(event: CustomEvent<{ requestId: string }>) => {
+                                event.stopPropagation();
+                                this.#departmentTransfers?.dismiss(event.detail.requestId);
+                              }}
+                            ></till-department-transfers>`
+                      }
                       ${this.#activeTabBody()}
                       ${this.#drillBody() /* the drill overlay, when one is open */}
                     </till-tab-shell>`,

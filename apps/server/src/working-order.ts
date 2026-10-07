@@ -5495,6 +5495,7 @@ export async function abandonHeldOrder(
     await refusePaymentInFlight(tx, [id]);
     await refuseBillHoldingMoney(tx, [id]);
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
+    await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
   });
 }
 
@@ -5717,6 +5718,7 @@ async function cancelPlaced(
     }
 
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
+    await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
 
     const now = deps.clock.now();
     await appendOrderAmendment(tx, {

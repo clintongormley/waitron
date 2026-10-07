@@ -722,6 +722,7 @@ async function issueWhenFullyPaid(
     .update(workingOrders)
     .set({ label: receiptOrder.orderLabel, status: "settled", settledAt })
     .where(eq(workingOrders.id, workingOrderId));
+  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
   await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
   if (notSent !== null) {
     await raiseDishesNotSent(

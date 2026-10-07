@@ -87,6 +87,13 @@ export interface VenueServiceChoices {
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 
+export interface DepartmentTransfersView {
+  departmentId: string;
+  receivingProfileId: string | null;
+  destinationDepartmentIds: string[];
+  profiles: NamedRow[];
+}
+
 export class VenueServiceApi {
   constructor(
     private readonly request: DashboardRequest,
@@ -123,6 +130,26 @@ export class VenueServiceApi {
 
   loadSettingsReadOnly(): Promise<VenueServiceSettingsView> {
     return this.#read<VenueServiceSettingsView>("/management-api/venue-service/settings");
+  }
+
+  async loadDepartmentTransfers(departmentId: string): Promise<DepartmentTransfersView> {
+    const path = `/management-api/venue-service/departments/${departmentId}/transfers`;
+    const [settings, profiles] = await Promise.all([
+      this.#read<Omit<DepartmentTransfersView, "profiles">>(path),
+      this.#read<NamedRow[]>(`${path}/profiles`),
+    ]);
+    return { ...settings, profiles };
+  }
+
+  saveDepartmentTransfers(
+    departmentId: string,
+    input: Pick<DepartmentTransfersView, "receivingProfileId" | "destinationDepartmentIds">,
+  ): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/departments/${departmentId}/transfers`,
+      "PUT",
+      input,
+    );
   }
 
   createDepartment(input: {

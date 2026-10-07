@@ -4801,8 +4801,66 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
   access and switching DONE (W97, #1311; a venue reset is needed after it, its profiles need the new
-  action flags); equipment LANDED except NFC (W100, #1332); transfers queued in
-  lane D, not implemented.**
+  action flags); equipment LANDED except NFC (W100, #1332); transfers DONE (W101).
+  Transfers have request storage, directional
+  settings, withdrawal, manager settings routes and editor, usable receiving-profile choices,
+  configuration export/import and the acceptance/decline service. The editor protects staged desk and
+  destination choices and reports field refusals. Authenticated till writes now request, withdraw,
+  accept and decline through the generic service contract. The route cases include the two-device
+  acceptance race and an issued, placed tab whose fiscal rows, line contexts and queued kitchen work
+  are read back unchanged. Authenticated reads now provide usable destinations, source status,
+  the designated desk's durable pending queue/count and transfer-specific current tab/kitchen
+  detail without granting ordinary cross-department browsing. The server now streams authenticated
+  reload signals for committed transfer changes to tills, rechecks access on signals and heartbeats,
+  and leaves device sightings unchanged. Signals carry no request or tab identity; durable reads
+  remain the queue authority. The till client now provides the transfer reads/writes and consumes
+  authenticated reload frames. Its transfer monitor reloads on reconnect, polls durable reads,
+  separates notification dismissal from the pending queue and forgets its source selection at
+  session end. A department-wide sent-history read now discovers accepted tabs after they leave
+  the source list, including after a fresh login; the monitor can follow this history without a
+  selected tab. Settlement, abandonment, merging and reassignment now withdraw pending requests
+  in the writer's transaction; resolved transfer history stays recorded. The server cases exercise
+  cash, bill and integrated-card settlement, capture recovery, cancellation, party closure, merging
+  and reassignment, including rollback and invoice preservation on retries. Closing a party
+  withdraws requests for its retained unpaid invoices too, and a closed party refuses new requests.
+  The monitor now follows the till's authenticated operator, profile and server lifetimes,
+  discovers department-wide sender history and stops on logout, detachment or replacement.
+  The receiving desk's pending count updates from durable reads; another profile has no count,
+  and an unanswered first read is not shown as zero. A transfer-access refusal clears the monitor
+  without logging out an otherwise signed-in operator. Till notifications now show incoming requests
+  and resolved sender statuses; dismissal leaves the durable queue and history intact. A read-only
+  transfer dialog lists pending requests and sender history, and opens the current ordered items and
+  outstanding kitchen work. Receiving actions now require a chosen destination zone and optional
+  table for acceptance, or a reason for decline, and submit the displayed tab revision. Their drafts
+  use the shared leave confirmation; field refusals retain input and allow a valid retry. Table-choice
+  reads time out after 25 seconds and can be cancelled or retried. A successful receiving write
+  clears the editor and reloads the durable queue. Closing or replacing a detail read aborts it and
+  ignores late replies; a resolved request or lost receiving access clears its displayed detail.
+  Sender controls now request the selected tab through a permitted destination choice and withdraw
+  a pending request. Destination drafts use the shared leave confirmation; successful requests keep
+  their pending result visible while the durable history reloads. A request is offered only while
+  the selected tab surface is showing, including a retrieved named counter tab. Transfer notices,
+  queue rows and sender history now identify the tab and source/destination departments; current
+  work names its recorded station even when switched off. Accepted source tabs leave the ordinary
+  selected-tab surface or matching counter basket, while a different basket stays intact. A resolved
+  receiving request or accepted source request refreshes floor, held and waiting lists. A departed
+  API client cannot install its list reply, and an outstanding retrieval cannot reopen the tab
+  after its transfer is accepted. Department-wide reads retain every pending request and the
+  newest 100 resolved requests; the open tab also reads its older history. A delayed history read
+  cannot announce the previously selected tab after selection changes. Current responsibility is read
+  separately from historical acceptance, so restarting the monitor does not retire a tab that has
+  returned to its source. Unsent counter edits and standalone table drafts are retained as read-only
+  local copies for explicit review and dismissal, rather than silently lost or resubmitted. These
+  copies remain in browser memory across sign-out; reloading the page loses them. Removing a sending
+  direction prevents new requests and leaves existing pending intent actionable; it does not revoke
+  requests already sent. Party-linked bills are refused before
+  queuing, and again at acceptance, rather than moving shared table/group links.**
+  **Unresolved observation from W101 verification:** two full local `@waitron/till test:coverage`
+  runs logged an unhandled rejection in `#holdIdentity` while `#switchProfile` was reading identity:
+  `Cannot read properties of null (reading 'approvedProfiles')`. Both completed with every test
+  passing; the second met coverage. Receipts: `~/waitron-campaign-d/receipts/w101/till-full-coverage.log`
+  and `till-full-coverage2.log`. The triggering test and cause are unverified; isolate the profile-switch
+  case and its identity response before choosing a fix. Transfer-focused runs did not log this rejection.
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
   station/watcher bindings; drawers are independent of receipt
@@ -4979,8 +5037,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
   may set it. Releasing an ALREADY-held group stays with whoever the venue's `fire_control` setting
   names — the waiter asks the kitchen or pass when that is not the waiter.
-- **Handheld live updates** — the app is pull-only, so two waiters on one table see stale data until
-  a refetch. A sizable new subsystem; spec it when it matters.
+- **Handheld shared-table updates** — still queued: automatic table-content refresh while two
+  waiters work on the same table. W101 supplies transfer-specific updates. Spec the wider
+  subscription model when it matters.
 - **Device profile follow-ons**: the aggregated device-profile bundle (till, station, hardware, area,
   order routing, printer target on the profile); the visual theme editor. The canvas-editor
   follow-ons that stood here, and a canvas-driven table-order screen, gave way to A4's A182.

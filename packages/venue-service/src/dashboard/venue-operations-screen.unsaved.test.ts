@@ -91,6 +91,13 @@ async function mount(write?: Promise<void>, refreshFails = false) {
     createZone: record,
     configureZone: record,
     replaceHours: record,
+    loadDepartmentTransfers: async () => ({
+      departmentId: "d1",
+      receivingProfileId: null,
+      destinationDepartmentIds: [],
+      profiles: [{ id: "p1", name: "Restaurant desk" }],
+    }),
+    saveDepartmentTransfers: record,
   } as unknown as VenueServiceApi;
   setLocale("en");
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
@@ -165,6 +172,15 @@ async function choose(decision: "keep" | "discard") {
   await expect.poll(() => q.open).toBe(false);
 }
 const cases = [
+  {
+    label: "Transfers",
+    action: "transfers-tree-department-d1",
+    field: "receiving-profile",
+    initial: "",
+    edited: "p1",
+    setup: [],
+    want: ["d1", { receivingProfileId: "p1", destinationDepartmentIds: [] }],
+  },
   {
     label: "Add department",
     action: "new-department",
@@ -766,4 +782,23 @@ it("a retained removed name does not count as an available department for moving
     "Retained name",
   );
   expect(find(screen.shadowRoot!, "[data-test=move-tree-zone-z1]")).toBeUndefined();
+});
+
+it("transfer destination choices survive Keep editing and Discard closes without a write", async () => {
+  const { screen, writes } = await mount();
+  const modal = await open(screen, "transfers-tree-department-d1");
+  const checkbox = modal.querySelector<HTMLInputElement>('[name="transfer-destination-d2"]')!;
+  await userEvent.click(checkbox);
+  expect(checkbox.checked).toBe(true);
+  expect(unload()).toBe(true);
+  modal.querySelector<HTMLElement>('[data-test="cancel-editor"]')!.click();
+  await choose("keep");
+  expect(checkbox.checked).toBe(true);
+  await userEvent.click(checkbox);
+  expect(unload()).toBe(false);
+  await userEvent.click(checkbox);
+  await userEvent.keyboard("{Escape}");
+  await choose("discard");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(writes).toEqual([]);
 });

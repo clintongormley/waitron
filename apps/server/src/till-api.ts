@@ -1,3 +1,4 @@
+import type { LiveEvents } from "./live-api.js";
 import type { ExtraSelection, OptionSelection, TillReaderProvider } from "@waitron/shared";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -200,6 +201,7 @@ import {
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
+import { mountDepartmentTransferApi } from "./department-transfer-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
@@ -220,6 +222,7 @@ import {
 } from "./zone-access.js";
 
 export interface TillApiDeps {
+  liveEvents?: LiveEvents;
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
@@ -400,6 +403,18 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Adding a line refuses a classification snapshot the catalogue's data cannot make valid:
   // permanent until the catalogue is fixed, and not the till's fault.
   "sale_classification.invalid": 409,
+  "person.suspended": 403,
+  "device_profile.not_admitted": 403,
+  "department.not_found": 404,
+  "department_transfer.not_allowed": 403,
+  "department_transfer.desk_unavailable": 409,
+  "department_transfer.pending": 409,
+  "department_transfer.not_found": 404,
+  "department_transfer.not_pending": 409,
+  "department_transfer.tab_unavailable": 409,
+  "department_transfer.structure_unsupported": 409,
+  "department_transfer.destination_invalid": 400,
+  "department_transfer.reason_required": 400,
   "working_order.not_found": 404,
   "watcher.not_found": 404,
   "working_order.not_open": 409,
@@ -1033,6 +1048,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   mountBillPaymentsApi(app, deps, log, run, pinThrottle);
   mountAdjustmentsApi(app, deps, log, run, pinThrottle);
   mountUnpaidDepartureApi(app, deps, log, run, pinThrottle);
+  mountDepartmentTransferApi(app, deps, log, run);
   mountBillLookupApi(app, deps, log, run);
   mountInvoiceLookupApi(app, deps, log, run);
 
