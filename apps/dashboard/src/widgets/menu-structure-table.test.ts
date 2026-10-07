@@ -338,7 +338,7 @@ it("offers Edit and Delete on an owned section and Remove on a product, naming t
   expect(removes).toEqual([{ path: ["m-drinks"], memberId: "m-lemonade" }]);
 });
 
-it("draws an included menu read-only, with a link to its own editor and a way to remove it", async () => {
+it("draws an included menu read-only, its menu offering Open, Edit and Remove", async () => {
   const el = await mount({ nodes: [...lunchNodes(), wines()] });
   const removes = listen(el, "wt-member-remove");
   const edits = listen(el, "wt-structure-edit");

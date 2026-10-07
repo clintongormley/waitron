@@ -119,8 +119,9 @@ function importedOverrides(row: Record<string, unknown>): Record<string, unknown
   }
   if (overridesShapeProblem(value) !== null) return refuse();
   const { names, image, color } = value as Record<string, unknown>;
-  // `setIncludeFolder` never stores an empty map. Patched with one, `json_patch` answers the included
-  // menu's own names, so the content-language queries would count that menu's gap a second time.
+  // `setIncludeFolder` never stores an empty map. Patched with one, `json_patch` answers the
+  // included menu's own names, so the content-language queries would count that menu's gap a
+  // second time.
   if (names !== undefined && Object.keys(names as object).length === 0) return refuse();
   if (image !== undefined && image !== null && typeof image !== "string") return refuse();
   if (color !== undefined && color !== null && !isStoredColor(color)) return refuse();
@@ -131,7 +132,8 @@ function importedOverrides(row: Record<string, unknown>): Record<string, unknown
  * Refuses (`setup.request_invalid`) an imported member whose folder setting is malformed: a
  * `show_as_folder` other than a flag, `folder_overrides` that are not the JSON text of a sound
  * `IncludeFolderOverrides` or that hold an empty `names` map, or any setting but the default on a
- * member that is not an include of a menu in a list. Whether a named photo is in the library is the media triggers' to refuse.
+ * member that is not an include of a menu in a list. Whether a named photo is in the library is the
+ * media triggers' to refuse.
  */
 export function checkIncludeFolderRows(
   members: Rows | undefined,
