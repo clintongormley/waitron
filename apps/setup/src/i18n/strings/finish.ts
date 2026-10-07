@@ -41,15 +41,19 @@ export const finishEn = {
 
   "done.heading": "Setup complete",
   "done.heading_rebuilt": "Rebuilt from your bucket",
-  "done.restarting": "The server is restarting — once it is back, open it here:",
+  "done.restarting": "The server is restarting to finish setup. Once it is back, open it here:",
+  "done.ready": "The server is ready. Open it here:",
+  "done.description.dashboard":
+    "Set up your menu, staff, devices and settings, and see your sales.",
+  "done.description.till": "Take orders and payments.",
+  "done.description.email":
+    "Read account emails captured locally, such as invitations and password resets.",
   "done.link.till": "Till",
   "done.link.dashboard": "Dashboard",
   "done.link.email": "Email inbox",
   "done.backup_nudge":
     "Your server is trading — but it has no backups yet, so there is no way back from a disk failure.",
   "done.backup_link": "Set up backups now",
-  "done.reload": "Reload to open the till",
-  "done.waiting_online": "Waiting for the server to come back online…",
   "done.devices.intro": "Devices depend on how each was set up:",
   "done.devices.local":
     "Tills, handhelds and kitchen screens that were opened at https://waitron.local reconnect by themselves.",
@@ -113,15 +117,20 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
 
   "done.heading": "Configuración completada",
   "done.heading_rebuilt": "Reconstruido desde tu bucket",
-  "done.restarting": "El servidor se está reiniciando: cuando vuelva, ábrelo desde aquí:",
+  "done.restarting":
+    "El servidor se está reiniciando para terminar la configuración. Cuando vuelva, ábrelo desde aquí:",
+  "done.ready": "El servidor está listo. Ábrelo desde aquí:",
+  "done.description.dashboard":
+    "Configura la carta, el personal, los dispositivos y los ajustes, y consulta tus ventas.",
+  "done.description.till": "Toma pedidos y cobra.",
+  "done.description.email":
+    "Lee los correos de cuentas capturados localmente, como invitaciones y restablecimientos de contraseña.",
   "done.link.till": "Caja",
   "done.link.dashboard": "Panel",
   "done.link.email": "Bandeja de correo",
   "done.backup_nudge":
     "Tu servidor ya está vendiendo, pero aún no tiene copias de seguridad, así que no hay forma de recuperarse de un fallo del disco.",
   "done.backup_link": "Configura ahora las copias de seguridad",
-  "done.reload": "Recargar para abrir la caja",
-  "done.waiting_online": "Esperando a que el servidor vuelva a estar en línea…",
   "done.devices.intro": "Los dispositivos dependen de cómo se configuró cada uno:",
   "done.devices.local":
     "Las cajas, los terminales de mano y las pantallas de cocina que se abrieron en https://waitron.local se vuelven a conectar solos.",

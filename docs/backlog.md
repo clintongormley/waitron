@@ -7531,6 +7531,11 @@ The long form for tracked items, so the tracks above stay readable.
 
 ### Setup wizard — the constraints A2's rework left behind (A2)
 
+**Final setup screen (A324) — DONE.** Dashboard comes first, followed by Till and Email inbox,
+with a short description under each link. The inbox description covers locally captured account
+mail. One status sentence changes from restarting to ready; the reload button is gone. The
+mirror-join screen and the existing restart polling rules are unchanged.
+
 Live A2 work is under _A2_ in Track A. What constrains the next change to the wizard:
 
 - **Detection must PROMOTE the match, not pre-open it in a full list.** The matched guide is
