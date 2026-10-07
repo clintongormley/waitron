@@ -1,6 +1,9 @@
 import { html, type ReactiveController, type ReactiveControllerHost } from "lit";
 import {
   createLeaveCoordinator,
+  trackDraft,
+  type DraftOwner,
+  type DraftScope,
   type LeaveCoordinator,
   type LeaveDecision,
 } from "@waitron/ui-core/unsaved-changes";
@@ -103,4 +106,42 @@ export function leaveCoordinatorFor(host: HTMLElement): LeaveCoordinator | undef
     }),
   );
   return coordinator;
+}
+
+/**
+ * The coordinator comes back beside the scope because a form's leave paths still ask "is there an
+ * application?" — with none, the scope only tracks whether the draft changed.
+ */
+export function draftScopeFor<T>(
+  host: HTMLElement,
+  owner: DraftOwner<T>,
+): { coordinator: LeaveCoordinator | undefined; scope: DraftScope<T> } {
+  const coordinator = leaveCoordinatorFor(host);
+  const scope = coordinator ? coordinator.register(owner) : trackDraft(owner);
+  // A baseline is not a reactive property, so a form left open after a save would keep Save loud.
+  const redraw = () => (host as Partial<ReactiveControllerHost>).requestUpdate?.();
+  return {
+    coordinator,
+    scope: {
+      id: scope.id,
+      changed: () => scope.changed(),
+      isDirty: () => scope.isDirty(),
+      commit(submitted) {
+        scope.commit(submitted);
+        redraw();
+      },
+      dispose() {
+        scope.dispose();
+        redraw();
+      },
+    },
+  };
+}
+
+export function saveActionState(
+  scope: Pick<DraftScope<unknown>, "isDirty"> | undefined,
+  options?: { savableAtOpen?: boolean },
+): { variant: "primary" | "secondary"; unchanged: boolean } {
+  const unchanged = !(options?.savableAtOpen || scope?.isDirty());
+  return { variant: unchanged ? "secondary" : "primary", unchanged };
 }

@@ -1468,21 +1468,21 @@ format. Keep the conversion in the browser so a Spanish keyboard does not change
 
 A form says nothing about errors until the operator first presses its primary action (owner rule,
 2026-09-28). There is no error summary at the top of a form: it makes the page jump when it clears.
-Only the form's own checks ever disable the action; an error that comes back from a request never
-does (owner rule, 2026-09-29).
+Besides an unchanged draft (below), only the form's own checks disable the action; an error that
+comes back from a request never does (owner rule, 2026-09-29).
 
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
   the native constraint. A field with `hide-label` draws no asterisk, so where one sits in a table
   column with a visible heading, that heading carries the `*` while any row's field is required (the
   Extras list's Portion column);
-- the primary action works until the first submission. If that submission is invalid, pass a
-  plain-language sentence to each invalid field's `error` property, pass ONE localized sentence to
-  `wt-form-actions`'s `error` property (it shows on its own line at the bottom of the form, above
-  the buttons — in a dialog, at the end of the dialog's body — and is announced), move
-  focus to the first invalid field with `focusFirstInvalid(form)`, passing the shadow root when it
-  holds only the form, and the form or dialog element when the shadow root holds more (a table,
-  other panels), so focus cannot land on a marked control elsewhere on the page, and keep the
-  entered values;
+- once the draft has changed, the primary action works until the first submission. If that
+  submission is invalid, pass a plain-language sentence to each invalid field's `error` property,
+  pass ONE localized sentence to `wt-form-actions`'s `error` property (it shows on its own line at
+  the bottom of the form, above the buttons — in a dialog, at the end of the dialog's body — and is
+  announced), move focus to the first invalid field with `focusFirstInvalid(form)`, passing the
+  shadow root when it holds only the form, and the form or dialog element when the shadow root
+  holds more (a table, other panels), so focus cannot land on a marked control elsewhere on the
+  page, and keep the entered values;
 - from then on the form re-checks itself on every change: a fixed field loses its message, a field
   broken again gets it back, and the primary action stays disabled while any field still fails the
   form's own checks. When the last one is fixed, the action works again and the bottom message goes;
@@ -1504,7 +1504,39 @@ does (owner rule, 2026-09-29).
   and a marked field together show both, one after the other;
 - a folded section (`wt-disclosure`) holding an invalid field opens on a failed submission, so the
   focus lands on the field;
-- reopening or resetting a form starts it again: no messages, the action enabled.
+- reopening or resetting a form starts it again: no messages, and the action quiet and disabled
+  until something changes (enabled at once for a form that opens already savable).
+
+A form that saves opens with its primary action (Save, Create, Add…) disabled and drawn
+`secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
+`primary`; undoing the change back to the opened values makes it quiet and disabled again (owner
+decision, 2026-10-07, A331). "Changed" is the draft scope's `isDirty()`, never a second comparison
+written per screen:
+
+- take the scope with `draftScopeFor(this, owner)` from `@waitron/ui`. It hands back the
+  application's `coordinator` — `undefined` where no `LeaveController` is above the form, as in a
+  widget test — and a `scope` that follows the draft either way. Keep gating the leave paths
+  (`beforeClose`, Cancel's `requestClose`) on the coordinator, not on the scope. The scope's
+  `commit` and `dispose` redraw the host, so a form left open after a save draws its action quiet
+  again;
+- bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
+  `?disabled=${s.unchanged || <the form's own conditions>}`;
+- return early from the save handler while `saveActionState(scope).unchanged`. `disabled` stops a
+  person, not a test: a `.click()` on the `wt-button` host still reaches the host's click listener
+  while its inner button is disabled;
+- a create form with nothing typed is unchanged. A form whose opened state is already savable (a
+  duplicate, a pre-filled value the operator must confirm) passes `{ savableAtOpen: true }`, so it
+  is never stuck disabled;
+- a changed form that is blocked — failing its own checks after the first press, busy, a nested
+  window open — stays drawn `primary` and disabled. A refused save leaves the draft changed, so the
+  action stays enabled;
+- a second action that saves by itself (the product editor's Enable on an inactive product) is not
+  the form's primary action and is not gated: pressing it is the change. The setup wizard's step
+  navigation is not a save, and neither is a sign-in.
+
+Forms are brought under this rule batch by batch
+(`docs/superpowers/plans/2026-10-07-a331-save-follows-changes.md`); a form not yet brought under it
+does not follow it.
 
 The switch in the include dialog on a menu's Structure tab
 (`apps/dashboard/src/widgets/include-folder-form.ts`) keeps the values of the fields it hides.
@@ -1535,6 +1567,25 @@ while it has a message, as the Add printer dialog's address check does. The sign
 password, passkey and Google screens put their own way in outside `wt-form-actions`, as a
 full-width button with the form's message on its own line directly above it (shown with
 `formMessage`); see the login section.
+
+The sign-in example below is not a save. A form that saves binds its action to its draft:
+
+```ts
+const s = saveActionState(this.#draftScope);
+html`
+  <wt-form-actions .error=${bottomMessage}>
+    <wt-button slot="cancel" variant="secondary">${t("action.cancel")}</wt-button>
+    <wt-button
+      variant=${s.variant}
+      ?disabled=${s.unchanged || busy || (attempted && failsOwnChecks)}
+      @click=${this.save}
+    >
+      ${t("action.save")}
+    </wt-button>
+  </wt-form-actions>
+`;
+// save(): if (saveActionState(this.#draftScope).unchanged) return;
+```
 
 ```ts
 html`

@@ -212,7 +212,9 @@ called weaker than its name, the topic file lists what it does not see.
   one localized message at the bottom of the form, on its own line above the buttons, and the action
   stays disabled until the fields are fixed — no summary at the top. A refusal from a request never
   disables the action by itself, and one that names a shown field says so under that field (owner,
-  2026-09-29). A field's hint is its placeholder. A short explanation is a hint, not a "?" button
+  2026-09-29). A form that saves opens with its action quiet and disabled until its draft changes,
+  through `draftScopeFor` and `saveActionState` plus an early return in its save handler (owner,
+  2026-10-07, A331). A field's hint is its placeholder. A short explanation is a hint, not a "?" button
   (owner, 2026-10-03); nothing guards that across screens (backlog A237). Every input has a semantic
   `name`, never a generated widget id. The owner's other dated decisions, and the sign-in exception,
   are in [conventions-ui.md](docs/developers/conventions-ui.md).
