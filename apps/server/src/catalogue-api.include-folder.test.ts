@@ -264,6 +264,30 @@ describe("PUT /management-api/sections/:id/members/:memberId/folder", () => {
     expect(await folderOf(app, f)).toEqual({ showAsFolder: true, overrides: {} });
   });
 
+  it("refuses a member holding a sub-section of the menu with 409 menu_section.wrong_role", async () => {
+    const app = mountApp();
+    const f = await lunchIncludingDrinks(app);
+    const starters = await created(app, `/management-api/sections/${f.lunchRoot}/sections`, {
+      internalName: `Starters ${crypto.randomUUID()}`,
+      names: { es: "Entrantes de la casa" },
+    });
+    const { nodes } = await structureOf(app, f.lunchId);
+    const member = nodes.find(
+      (node) => node.ref.kind === "section" && node.ref.sectionId === starters.id,
+    )!.memberId;
+
+    const refused = await send(app, "PUT", folderPath(f, member), {
+      body: { showAsFolder: false },
+    });
+
+    expect(await json(refused, 409)).toEqual({
+      error: {
+        code: "menu_section.wrong_role",
+        params: { sectionId: starters.id, role: "section" },
+      },
+    });
+  });
+
   it("a malformed member id is refused before the transaction", async () => {
     const app = mountApp();
     const f = await lunchIncludingDrinks(app);
