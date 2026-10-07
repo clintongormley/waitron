@@ -3176,7 +3176,9 @@ export class PrepStationsScreen extends LitElement {
                     ${pending.moves.map(
                       (move) =>
                         html`<tr>
-                          <td>${move.productName}</td>
+                          <td>
+                            ${move.dish ? format("prep.preview_extra", { extra: move.productName, dish: move.dish.productName }) : move.productName}
+                          </td>
                           <td>${move.zoneName ?? t("prep.any_zone")}</td>
                           <td>${move.from ? this.#targetName(move.from) : t("prep.no_station")}</td>
                           <td>
