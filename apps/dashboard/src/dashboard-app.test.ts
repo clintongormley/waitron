@@ -2705,13 +2705,13 @@ describe("dashboard-app", () => {
     expect(navItem(el, "overview")!.getAttribute("aria-current")).toBeNull();
   });
 
-  it("mutes a resting nav item and paints only the current one from the primary token", async () => {
+  it("mutes a resting nav item and paints only the current one from the primary-text token", async () => {
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
     host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
-    host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
+    host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
     expect(getComputedStyle(navItem(el, "overview")!).color).toBe("rgb(4, 5, 6)");
     expect(getComputedStyle(navItem(el, "catalogue")!).color).toBe("rgb(1, 2, 3)");
   });

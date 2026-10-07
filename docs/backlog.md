@@ -921,15 +921,8 @@ unused `units` property is gone (it closes W75's leftover).
   its photo with an own-or-inherited colour ring, or its colour square; it opens Colour… and
   Change photo…, which opens the existing editor with the photo field focused. Category and
   section squares still open their colour picker directly.
-- **Products maker-link contrast on a focused row, found during A303:** a whole-widget axe scan
-  after clicking a product media trigger reports the made-at link at 3.87:1 in light theme and
-  3.57:1 in dark theme against the focused row background. Reproduced in
-  `product-list.a11y.test.ts` with a native trigger click. In a frozen-installed throwaway checkout
-  of `0f2fe28f1`, clicking the original Actions trigger produced the same failures in both themes;
-  the two unfocused controls passed. Lane D's `receipts/a303/focus-baseline2.log` retains that
-  experiment, and `colour-focus-a11y-green.log` retains the media-trigger diagnostic. Open-menu
-  scans through the component's `show()` method pass in both themes. Fix the row/link contrast
-  separately; no axe rule is excluded here.
+- **Products maker-link contrast on a focused row, found during A303 — DONE (A306):** the link
+  reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
   not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the bottom
   (left alone; not measured).
@@ -1144,7 +1137,10 @@ on a hovered row in the light theme for axe (4.32:1). **Open:** each list still 
 already scrolls, so "+ New options list…" sits at or just below its bottom edge when it opens; and
 `--wt-color-primary-text` has fixed light and dark values that do not follow `--wt-color-primary`,
 and a tenant theme cannot set it (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored
-tenant theme yet.
+tenant theme yet. The same holds for `--wt-color-primary-hover` and `--wt-color-danger-hover`
+(A306), which do not follow `--wt-color-primary` and `--wt-color-danger`, so a tenant or deployment
+that sets only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a
+hovered primary or danger `wt-button`.
 
 **With variants, Pricing folds and Variants becomes its own section (A219) — DONE (#1065).**
 **Decided (owner, 2026-10-02):** the price comes before VAT, everywhere. **Open:** in
@@ -1230,34 +1226,26 @@ EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell
 unverified. W69 changes no field sizing. Next action: reproduce in Venue settings → Tables and
 adjust the colour-field width using the shared field contract without changing status colour data.
 
-**Sidebar contrast (found during W69, 2026-10-06) — OPEN.** At desktop width in the light theme,
-axe reports the selected My schedule navigation button at 4.32:1 against the required 4.5:1.
-A disposable-copy probe using `dashboard-app.ts` from main `fd836ea05f46b03f23803a243b98ba075b4ea22b`
-reproduced it with the profile closed (`baseline-sidebar-contrast.log` in this checkpoint’s local
-receipts). W69 leaves the sidebar palette unchanged. Adjust the selected navigation’s token use,
-then check the real desktop sidebar in both themes. The profile warning/editor scans passed when
-restricted to those visible modal surfaces; the whole-shell scan still reports this separate issue. Full DashboardApp scans of this branch's Venue details warning also flag the light
-sidebar's group headings at 4.32:1 in EN/ES at 1280 px. The scoped warning scan passes; no full-shell
-accessibility pass is claimed. Include these headings in A306's sidebar investigation. Receipt:
-`~/waitron-campaign-e/receipts/w69-venue-container-20261006/visual.log`; main runtime reproduction
-remains unverified.
+**Sidebar contrast (found during W69, 2026-10-06) — DONE (A306).** The group headings and the
+selected item read `--wt-color-primary-text`.
 
-**Dark modal danger-button hover contrast (found during W69, 2026-10-06) — OPEN.**
-Axe reports the hovered Discard button at 4.49:1 against the required 4.5:1. A separate probe
-with a standard `wt-modal` danger footer reproduced the same reading after replacing its
-dialog implementation with main `880ccd113bdb8f69300228123910061a7b6f3c43`'s version in the
-installed disposable copy. The standalone Live confirmation card's hovered danger button
-passed that probe. Button hover opacity and danger colours were unchanged against main;
-`git blame` attributes them to `0a93f4d355` and `b20c267095`. Check the shared danger-button
-hover against modal surfaces in both themes. Normal-state warning scans pass with the pointer
-over the heading; that result does not cover hover. Receipts: Lane E `w69-setup-mode-20261006`,
-`visual.log`, `baseline-modal-hover.log`, `main-dialog-hover.log` and the blame readouts.
+**Hover contrast A306 measured but did not fix — OPEN.** A306's axe probes in real Chromium
+(2026-10-07) also measured two hovered treatments that do not use the filled buttons it fixed:
+(1) card actions drawn as a secondary button with coloured text and the opacity dip — the Account
+settings screen's pending-email "Confirmar" (`apps/dashboard/src/screens/profile-screen.ts`) 3.66:1 light, 4.19:1 dark, and the content-languages page's primary-coloured
+actions 3.61:1 light, 4.21:1 dark (its danger-coloured "Quitar" passed, 5.04:1 and 4.74:1); (2) a
+hovered till tile's muted price and kind text — 4.38:1 on an unpainted tile in light (dark 5.44:1),
+and the price at 4.1:1 on a blue-painted tile in light (dark 4.84:1). The bar is 4.5:1. Not measured: the
+Account settings screen's other card actions, disabled or sold-out tiles, a category row's made-at link, the prep
+stations screen. Next action: an item of its own that moves those hovers off the opacity dip, as
+A306 did for filled buttons, with axe cases that hover. Also seen in A306's screenshots, not
+measured: on a hovered Products row in the dark theme the status and allergen badges' borders
+disappear into the row; A306's review saw the same in a screenshot of the base commit (`53acadca6`), so it does not come
+from A306.
 
-The 2026-10-07 till profile warning's initial pointer-sensitive scans also reported Discard at
-4.21:1 in light and 4.49:1 in dark (`receipts/w69-leave-paths-20261007/profile-family.log` in
-Lane E). The cause of the new light reading and its main reproduction are unverified.
-Eight neutral-pointer warning scans passed; they establish neither hover nor full-shell contrast.
-Keep that light reading beside the existing danger-button investigation. No shared style changed.
+**Dark modal danger-button hover contrast (found during W69, 2026-10-06), and its light reading of
+2026-10-07 — DONE (A306).** Primary and danger buttons hover onto their own fill tokens instead of
+dipping in opacity.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
 redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue
@@ -2171,14 +2159,9 @@ uncovered while the other columns scroll sideways" in
 `apps/dashboard/src/screens/menus-screen.test.ts` requires that overflow. In that middle layout the
 Status column, and on a phone the Name column, hold the Unpublished changes link but do not set
 `activatesRow: false`, so a click beside the link opens the menu; the design system records this as
-a deviation from its `activatesRow` rule, and whether it stays is the owner's call. In the dark
-theme the Unpublished changes link's blue on a highlighted (hovered or focused) row measured 3.57:1
-with axe, below the 4.5:1 minimum for text. Moving the link to `--wt-color-primary-text` did not
-change that, because in the dark theme that token is the same colour (`#4c8dff`) as
-`--wt-color-primary`; in the light theme it now passes at 4.88:1. The product list's maker link
-(`apps/dashboard/src/widgets/product-list.ts`, part `maker-link`) paints `--wt-color-primary`, which
-on a highlighted row is the same colour pair measured at 3.87:1 in light and 3.57:1 in dark, though
-not measured on the product list itself. Its "Made at" column also does not set `activatesRow:
+a deviation from its `activatesRow` rule, and whether it stays is the owner's call. The contrast of
+that link, and of the product list's maker link, on a highlighted row is fixed (A306). The product
+list's "Made at" column (`apps/dashboard/src/widgets/product-list.ts`) also does not set `activatesRow:
 false`, so, judging by the code (not run), a click beside a short station name opens the product
 editor, which the `activatesRow` rule in `docs/developers/design-system.md` forbids. Both predate
 this branch (5b725d672, ca89633f1) and are left for an item of their own.
@@ -2533,9 +2516,10 @@ chose to leave it as it is rather than shorten deep paths on paper (2026-10-05).
 
 **Products: a category's Made at shows where its dishes are made — DONE (W86, #1203; its asterisk
 W86a, #1223, W86b, #1231, W86c, #1234; a product's blank Made at when the read has no entry, A277,
-#1314); left open:** (2) a category's link is the same `maker-link` as a product's, so the contrast concern
-and the missing `activatesRow: false` recorded under W87 apply to category rows too (there a click
-beside the link opens or closes the category; judged from the code, not run); (3) a person who may
+#1314); left open:** (2) a category's link is the same `maker-link` as a product's, so the missing
+`activatesRow: false` recorded under W87 applies to category rows too (there a click
+beside the link opens or closes the category; judged from the code, not run; its contrast is fixed
+with the product's by A306, through the same style rule, not measured on a category row); (3) a person who may
 not read routing sees "Kitchen routing unavailable" on every category, because a refused read
 counts as a failed one; (5) the "some items made elsewhere" note does not look at whether the
 categories involved hold any products, so it can claim items that do not exist yet; the owner chose
@@ -4055,9 +4039,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   that use a colon and lack the `waitron.` prefix — cheap to rename until a venue is live.
 
 - **The sidebar's page search (C46, #836) — left open:** its accessibility case checks the search
-  box and its message only, because at desktop width (1280 px) the light theme's sidebar headers and
-  current page already fail the colour-contrast rule (the primary-blue entry under "Also open, and
-  product-wide"). Two choices are **DECIDED (owner, 2026-09-29): keep both** — "ñ" is matched as
+  box and its message only; the sidebar's headers and current page have their own case since A306
+  (`apps/dashboard/src/dashboard-app.a11y.test.ts`, "the desktop sidebar's group headers and current
+  page are accessible at rest and under the pointer"). Two choices are **DECIDED (owner, 2026-09-29): keep both** — "ñ" is matched as
   "n", so "espana" finds "España"; and the box is not pinned, so it scrolls away with a long
   sidebar.
 
@@ -7901,11 +7885,5 @@ Update it in the change that makes it stale (CLAUDE.md §7). In particular:
   deletion", what a review seat caught), that belongs in the PR thread, not here.
 
 
-**Setup Import button hover contrast (found during W69, 2026-10-06) — OPEN.**
-The temporary `light Import button hover contrast probe` mounted `setup-live-source-screen`
-at 390px, asserted the native primary button matched `:hover`, and ran axe. It failed with white
-text on `#4185ee`, 3.61:1 against 4.5:1 (`primary-hover.log` in Lane E's
-`receipts/w69-setup-empty-20261006`). The ordinary warning and retained-form scans passed with
-the pointer over their heading; they do not cover hover. Follow-up: check the primary button's
-hover opacity against each surface and theme, then correct the shared treatment separately.
-W69 does not change those styles. This probe was not repeated on main.
+**Setup Import button hover contrast (found during W69, 2026-10-06) — DONE (A306)**, with the
+dark modal danger-button entry: primary and danger buttons no longer dip in opacity on hover.

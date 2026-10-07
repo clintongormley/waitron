@@ -387,7 +387,7 @@ export class DashboardApp extends LitElement {
         padding: 0;
         border: none;
         background: transparent;
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
         font: inherit;
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
@@ -452,7 +452,7 @@ export class DashboardApp extends LitElement {
 
       .nav-item[aria-current="page"] {
         border-inline-start-color: var(--wt-color-primary);
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
         font-weight: var(--wt-font-weight-bold);
       }
 

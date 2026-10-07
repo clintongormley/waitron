@@ -45,10 +45,9 @@ export class WtButton extends LitElement {
         ${disabledStyles}
       }
 
-      /* Every variant gets the same feedback: a plain opacity dip. Anything variant-specific (a
-         background swap, a border-colour change) would need a distinct value per variant to stay
-         visible in both themes — --wt-color-surface and --wt-color-surface-raised are identical in
-         the light theme today, so a background-based hover treatment would be invisible there. */
+      /* Secondary and ghost dip in opacity on hover. Primary and danger swap to their hover fill
+         instead (below): a dip fades a filled button and its label toward what is behind them,
+         which took axe's contrast reading below 4.5:1 (wt-button.a11y.test.ts, wt-modal's). */
       button:hover:not(:disabled) {
         opacity: var(--wt-opacity-hover);
       }
@@ -79,6 +78,16 @@ export class WtButton extends LitElement {
       :host([variant="danger"]) button {
         background: var(--wt-color-danger);
         color: var(--wt-color-on-danger);
+      }
+
+      :host([variant="primary"]) button:hover:not(:disabled) {
+        background: var(--wt-color-primary-hover);
+        opacity: 1;
+      }
+
+      :host([variant="danger"]) button:hover:not(:disabled) {
+        background: var(--wt-color-danger-hover);
+        opacity: 1;
       }
 
       :host([variant="ghost"]) button {

@@ -233,3 +233,24 @@ test("round primary paints from the primary token", async () => {
     "rgb(1, 2, 3)",
   );
 });
+
+test.each([
+  ["primary", "--wt-color-primary-hover"],
+  ["danger", "--wt-color-danger-hover"],
+] as const)(
+  "%s variant hovers onto %s at full opacity, and returns on unhover",
+  async (variant, token) => {
+    const el = await mount(`<wt-button variant="${variant}">x</wt-button>`);
+    host.style.setProperty(token, "rgb(4, 5, 6)");
+    host.style.setProperty("--wt-opacity-hover", "0.6");
+    const inner = el.shadowRoot!.querySelector("button")!;
+    const resting = getComputedStyle(inner).backgroundColor;
+    expect(resting).not.toBe("rgb(4, 5, 6)");
+    await userEvent.hover(inner);
+    expect(inner.matches(":hover")).toBe(true);
+    expect(getComputedStyle(inner).backgroundColor).toBe("rgb(4, 5, 6)");
+    expect(getComputedStyle(inner).opacity).toBe("1");
+    await userEvent.unhover(inner);
+    expect(getComputedStyle(inner).backgroundColor).toBe(resting);
+  },
+);

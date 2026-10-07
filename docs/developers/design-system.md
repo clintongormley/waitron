@@ -104,14 +104,19 @@ layer's own specificity). Never patch component styles.
 
 This works whether or not `#app` also carries `data-theme` — see "Themes" above.
 
+Overriding `--wt-color-primary` leaves every token that holds Waitron's blue as its own value at
+that blue — among them `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-focus` and
+`--wt-color-field-label-focus` — and overriding `--wt-color-danger` leaves `--wt-color-danger-hover`
+at Waitron's red. Set each one too, with a light and a dark value (see Tokens → Colour).
+
 ## Tokens
 
 ### Colour
 
 `--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-surface-lifted`,
 `--wt-color-surface-sunken`, `--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`,
-`--wt-color-on-primary`, `--wt-color-primary-text`, `--wt-color-danger`,
-`--wt-color-on-danger`, `--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
+`--wt-color-on-primary`, `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-danger`,
+`--wt-color-on-danger`, `--wt-color-danger-hover`, `--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
 `--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-field-fill`,
 `--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
@@ -149,16 +154,25 @@ way, and the row itself slides into its slot when released, both over `--wt-dura
 reduced motion (`prefers-reduced-motion: reduce`) passed and released rows land at once, while the
 dragged row still follows the pointer.
 
-`--wt-color-primary-text` is the primary blue as small text: `#1a5fd0` light, `#4c8dff` dark (the
-same as `--wt-color-primary` there). `--wt-color-primary` itself is 4.32:1 on the light
-`--wt-color-bg` a hovered `wt-combobox` row paints, which axe refused for 14px text; the new value
-is 4.5:1 or more on `--wt-color-bg`, `--wt-color-surface` and `--wt-color-surface-raised` in both
-themes, which the "primary text" cases in `packages/ui-core/src/tokens/colors.test.ts` hold. It
+`--wt-color-primary-text` is the primary blue as small text: `#1a5fd0` light, `#78a9ff` dark.
+`--wt-color-primary` itself is 4.32:1 on the light `--wt-color-bg` a hovered `wt-combobox` row
+paints, which axe refused for 14px text, and 3.58:1 on the dark `--wt-color-surface-lifted` of a
+highlighted table row; the new value is 4.5:1 or more on `--wt-color-bg`, `--wt-color-surface`,
+`--wt-color-surface-raised` and `--wt-color-surface-lifted` in both themes, which the "primary
+text" cases in `packages/ui-core/src/tokens/colors.test.ts` hold. It
 holds its own value rather than reading `--wt-color-primary`, so a deployment that overrides the
 primary colour has to override this one as well, with a light and a dark value: no single colour
 reaches 4.5:1 on both themes' `--wt-color-bg`. A tenant theme cannot set it: `THEMEABLE_TOKENS`
 (`packages/layouts/src/theme.ts`) does not list it, and no screen applies a stored tenant theme
 yet.
+
+`--wt-color-primary-hover` and `--wt-color-danger-hover` are the fills a primary and a danger
+`wt-button` take under the pointer: `#1a5fd0` and `#9a1f18` light, `#78a9ff` and `#ff8a7f` dark,
+each further from its button's text colour than the resting fill, so the label reads at 4.5:1 or
+more on it (the "hover fills" cases in `colors.test.ts`). Like `--wt-color-primary-text` they hold
+their own values, so a deployment rule that overrides `--wt-color-primary` or `--wt-color-danger`
+must set the matching hover token too, in both
+themes; and `THEMEABLE_TOKENS` does not list them either, so a tenant theme cannot set them.
 
 The Hours calendar (`packages/venue-service/src/dashboard/hours-calendar.ts`) paints dates
 with eight fills. A special date picks one of six palette colours, `--wt-color-palette-red`,
@@ -321,9 +335,12 @@ and till app suites: one for the app's own text, one for text on the page outsid
 dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
 `--wt-duration-disclosure` is how long a disclosure body takes to open or close (900 ms).
 
-`--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
-opacity dip, the same treatment for every variant. A variant-specific background or border-colour
-change would need a distinct value per variant to stay visible in both themes: `--wt-color-surface`
+`--wt-opacity-hover` is the hover feedback of `wt-button`'s secondary and ghost variants
+(`button:hover:not(:disabled)`) — a plain opacity dip. The primary and danger variants hover onto
+`--wt-color-primary-hover` and `--wt-color-danger-hover` at full opacity instead: the dip faded a
+filled button and its label together, and axe measured the hovered light primary at 3.61:1 and,
+inside a dialog, the dark danger at 4.49:1 (A306). A background or border-colour change for the
+unfilled variants would need a distinct value per variant to stay visible in both themes: `--wt-color-surface`
 and `--wt-color-surface-raised`, the pair other primitives already hover onto (`wt-tabs`, and
 `wt-data-table`'s rows that open nothing), are identical in the light theme today, so that idiom would be invisible on
 `wt-button`'s own secondary variant, which already rests on `--wt-color-surface`. For the same
@@ -1886,7 +1903,10 @@ idiom `wt-tabs` already uses for its selected tab (`border-bottom-color` there,
 calm list. Hovering a row moves it to full-strength text plus a `--wt-color-surface` background —
 visible here because the sidebar itself sits on `--wt-color-bg`, unlike `wt-button`'s own secondary
 variant (see `--wt-opacity-hover` above). A `.nav-group` header takes a small-caps treatment
-(uppercase, `letter-spacing: 0.04em`) so it reads as a label, not a fainter link.
+(uppercase, `letter-spacing: 0.04em`) so it reads as a label, not a fainter link. The headers' text
+and the selected item's text read `--wt-color-primary-text`, and the selected item's leading edge
+reads `--wt-color-primary`: `--wt-color-primary` measured 4.32:1 as text on the light
+`--wt-color-bg` the sidebar sits on (A306).
 
 A headed group (the pinned first group — Overview alone — has no header and is never collapsible)
 is also its own disclosure toggle, except while a search term is typed (below): the header is a
@@ -2200,6 +2220,9 @@ render solid at rest everywhere else (the till's checkout button, for one, needs
 all). The part hook lets a screen layer an accent onto specific buttons without touching that
 contract.
 
+Under the pointer the primary accent measured 3.61 to 4.21:1 wherever A306 measured it
+(2026-10-07), under the 4.5:1 bar; see the backlog entry "Hover contrast A306 measured but did not fix".
+
 Give every card action a fixed `min-width` (`ch`-based — see `--dashboard-sidebar-width` in
 `dashboard-app.ts` for the same reasoning) so a row of differently-worded actions still reads as
 one uniform set rather than a jumble of pill widths, and keep labels short — reuse the small shared
@@ -2370,7 +2393,13 @@ pairing actually used by every primitive in the table above, in either theme, ac
 invalid, `wt-switch` checked/unchecked, `wt-dialog` open, `wt-button` icon-only and every variant,
 disabled and loading states; `wt-spinner` as a status region and decorative — all verified
 2026-09-11; `wt-button` as a menu trigger, open and closed — verified 2026-09-27 by running
-`packages/ui-core/src/components/wt-button.a11y.test.ts`; `wt-combobox` closed, closed and named only by a forwarded `aria-label`, open with
+`packages/ui-core/src/components/wt-button.a11y.test.ts`; `wt-button` in each variant under the
+pointer on `--wt-color-surface` and `--wt-color-surface-raised`, and primary and danger focused from
+the keyboard and then hovered — verified 2026-10-07 by running
+`packages/ui-core/src/components/wt-button.a11y.test.ts`; `wt-modal` with a primary or a danger
+footer button under the pointer, and `wt-unsaved-changes`' Discard under the pointer — verified
+2026-10-07 by running `packages/ui/src/components/wt-modal.a11y.test.ts` and
+`packages/ui/src/components/wt-unsaved-changes.a11y.test.ts`, both themes; `wt-combobox` closed, closed and named only by a forwarded `aria-label`, open with
 results, open with the add row, open with no matches, multi-select with a selection, invalid with an
 error message, disabled and required — verified 2026-09-13 by running
 `packages/ui/src/components/wt-combobox.a11y.test.ts`, which covers those states in both themes —

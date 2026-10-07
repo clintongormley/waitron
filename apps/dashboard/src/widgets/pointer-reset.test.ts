@@ -10,8 +10,8 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 
 afterEach(cleanupWidgets);
 
-// The primary variant is the one that paints `--wt-color-primary`, which is what the hover rule dims.
-const BUTTON_PROPS = { variant: "primary", textContent: "Add" };
+// The secondary variant is one that `wt-button`'s hover rule dims.
+const BUTTON_PROPS = { variant: "secondary", textContent: "Add" };
 
 it("parks the cursor on a button, so the next test starts with a stale hover to clear", async () => {
   const { el } = await mountWidget<HTMLElement & { shadowRoot: ShadowRoot }>(
