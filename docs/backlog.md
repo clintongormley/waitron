@@ -2563,7 +2563,7 @@ The timing follow-up is DONE (A363): one shared `Intl.Collator` reuses the local
 rules, and each table sort takes a fresh `createLabelComparator` whose name keys are cached only
 for that sort. The pickers keep `byLabel` and also use the reused collator. Existing order checks
 are unchanged; new shared and Chromium cases count one name parse per distinct value per sort.
-Measured 2026-10-07 on macOS, Node v26.7.0, default collation en-US: three warm-up sorts per
+Measured 2026-10-07 on macOS, Node v26.7.0, default collation en-US: three warm-up samples per
 comparator, nine alternating runs, 100 sorts per sample for demo lists and one for the generated
 5,000-name list. Times below are median milliseconds per sort (minimum–maximum); they measure
 comparison/sorting, not DOM rendering. Demo product names follow the locale-specific seed's staff-name writer; the English category
