@@ -3286,8 +3286,16 @@ describe("a product's variants in the list", () => {
     probe.style.color = "var(--wt-color-text-muted)";
     probe.style.fontSize = "var(--wt-font-size-sm)";
     probe.style.paddingInlineEnd = "var(--wt-space-1)";
-    el.parentElement!.append(probe);
-    onTestFinished(() => probe.remove());
+    // A button no author style reaches carries the browser's own button font, which A221's arrow keeps.
+    const host = document.createElement("div");
+    const plainButton = host
+      .attachShadow({ mode: "open" })
+      .appendChild(document.createElement("button"));
+    el.parentElement!.append(probe, host);
+    onTestFinished(() => {
+      probe.remove();
+      host.remove();
+    });
     const style = getComputedStyle(arrow);
     const want = getComputedStyle(probe);
     expect({
@@ -3301,7 +3309,7 @@ describe("a product's variants in the list", () => {
       fontSize: want.fontSize,
       paddingInlineEnd: want.paddingInlineEnd,
       textAlign: "end",
-      fontFamily: "Arial",
+      fontFamily: getComputedStyle(plainButton).fontFamily,
     });
   });
 
