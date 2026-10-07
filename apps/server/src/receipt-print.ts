@@ -206,7 +206,7 @@ export async function enqueueSaleReceipt(
   printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
   const [sale] = await tx
-    .select({ workingOrderId: sales.workingOrderId })
+    .select({ workingOrderId: sales.workingOrderId, operatorId: sales.operatorId })
     .from(sales)
     .where(eq(sales.id, saleId));
   const context = sale?.workingOrderId
@@ -219,7 +219,7 @@ export async function enqueueSaleReceipt(
     ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
     : "auto";
   if (ticket.invoiceType !== "F1" && mode !== "auto") return;
-  await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers);
+  await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers, sale?.operatorId ?? undefined);
 }
 
 /** A collection number is a separate document, never a fiscal receipt or a drawer command. */

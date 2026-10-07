@@ -121,9 +121,14 @@ helper now enroll newly rendered F1 jobs with the requesting staff member; the j
 and dashboard copy audit share the caller's transaction. Synthetic cases cover replayed
 original requests, a paper duplicate after completed email, active-email refusal with no
 job/audit left behind, expired-email original retry and the F2/no-printer controls. Eight
-independent deletions fail the intended case beside a valid passing control. Automatic
-issuance enrollment, bill staging, A4 references and restart/retry workers remain. No Task 2
-completion claim.
+independent deletions fail the intended case beside a valid passing control. The automatic
+receipt hook now enrolls F1 originals with the operator recorded on the sale, including under
+`on_request` and `never` receipt policies. Synthetic cases cover original replay, cross-medium
+refusal and rollback, absent printers and sales with no recorded operator. Such unattributed
+sales still print without delivery metadata; no staff identity is invented. Removing the
+forwarded operator makes the attributed-original case fail beside the unattributed-sale
+control. Enrollment for unattributed sales, bill staging, A4 references and restart/retry
+workers remain. No Task 2 completion claim.
 
 ## 3. Set up email for a live venue, without a terminal
 
