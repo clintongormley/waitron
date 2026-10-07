@@ -38,7 +38,7 @@ const changed: MenuStatus = {
   hash: "a".repeat(64),
 };
 
-function api(): DashboardApi {
+function api(status: MenuStatus = changed): DashboardApi {
   return {
     listCatalogues: vi
       .fn()
@@ -60,8 +60,8 @@ function api(): DashboardApi {
       includedBy: [],
       nodes,
     }),
-    getMenuStatuses: vi.fn().mockResolvedValue({ "menu-lunch": changed }),
-    getMenuStatus: vi.fn().mockResolvedValue(changed),
+    getMenuStatuses: vi.fn().mockResolvedValue({ "menu-lunch": status }),
+    getMenuStatus: vi.fn().mockResolvedValue(status),
   } as unknown as DashboardApi;
 }
 
@@ -79,6 +79,21 @@ describe.each(["light", "dark"] as const)("menu editor heading (%s)", (theme) =>
       expect(root.querySelector("dashboard-menu-structure-table")).not.toBeNull();
     });
     expect(root.querySelector('[data-test="menu-breadcrumb"] a')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible state line saying publishing waits on clashes", async () => {
+    history.replaceState(null, "", "/manage/menus/menu/menu-lunch/view/structure");
+    const { el, host } = await mountWidget<MenusScreen>(
+      "dashboard-menus-screen",
+      { api: api({ ...changed, clashes: 3 }) },
+      theme,
+    );
+    const root = el.shadowRoot!;
+    await vi.waitFor(() => {
+      expect(root.querySelector('[data-test="status-clashes"]')).not.toBeNull();
+      expect(root.querySelector("dashboard-menu-structure-table")).not.toBeNull();
+    });
     await expectNoA11yViolations(host);
   });
 });

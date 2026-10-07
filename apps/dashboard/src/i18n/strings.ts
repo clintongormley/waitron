@@ -2109,6 +2109,8 @@ export const en = {
   "menus.included_in": "Included in",
   "menus.clash": "clash",
   "menus.clashes": "clashes",
+  "menus.publish_waits_clash": "Publishing waits on 1 clash",
+  "menus.publish_waits_clashes": "Publishing waits on {count} clashes",
   "menus.edit_section": "Edit section",
   "menus.delete_section": "Delete section",
   "menus.delete_section_note":
@@ -4580,6 +4582,8 @@ export const es: Record<StringKey, string> = {
   "menus.included_in": "Incluido en",
   "menus.clash": "conflicto",
   "menus.clashes": "conflictos",
+  "menus.publish_waits_clash": "No se puede publicar hasta resolver 1 conflicto",
+  "menus.publish_waits_clashes": "No se puede publicar hasta resolver {count} conflictos",
   "menus.edit_section": "Editar sección",
   "menus.delete_section": "Eliminar sección",
   "menus.delete_section_note":

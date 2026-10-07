@@ -427,6 +427,9 @@ export class MenusScreen extends LitElement {
       .status-line .time {
         white-space: nowrap;
       }
+      .status-line .clashes {
+        color: var(--wt-color-danger);
+      }
       .list,
       .sizer {
         container-type: inline-size;
@@ -2543,7 +2546,21 @@ export class MenusScreen extends LitElement {
                 >`,
             )
           : statusLine(this.status);
-    return html`<p class="status-line" data-test="menu-status">${words}</p>`;
+    const clashes = this.statusError ? 0 : (this.status?.clashes ?? 0);
+    return html`<p class="status-line" data-test="menu-status">
+      ${words}${
+        clashes
+          ? html` ·
+              <span class="clashes" data-test="status-clashes"
+                >${
+                  clashes === 1
+                    ? t("menus.publish_waits_clash")
+                    : t("menus.publish_waits_clashes").replace("{count}", String(clashes))
+                }</span
+              >`
+          : nothing
+      }
+    </p>`;
   }
 
   #renderIncludeEdit() {
