@@ -5860,6 +5860,12 @@ approved.
   child exit code when available, whether the restore was abandoned, and whatever Litestream
   output was captured; output may be empty on abandonment. The cause of the one-off failure remains
   open. Next action: inspect those details from any new failing run before choosing a repair.
+  **Observed again during A364, 2026-10-07:** PR #1386, run `37690377712`, job
+  `113028865726`, final restore at step 10. The retained log now reports
+  `exitCode=null, abandoned=true`, empty Litestream output and `diskFull=false`,
+  about 31 seconds after resuming. The earlier frozen/pause sale timings passed.
+  Cause remains open; inspect the waiting restore process and bucket requests in a retained
+  reproduction before choosing a repair. A364 changes no restore or stream-loop code.
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
   container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
