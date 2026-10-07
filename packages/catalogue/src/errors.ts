@@ -95,8 +95,6 @@ declare module "@waitron/shared" {
       time: string;
       occurrences: { at: string; offset: string }[];
     };
-    /** The location's stored time zone is not a named zone. */
-    "menu_publication.clock_unreadable": Record<string, never>;
     /** A Device Home Page shortcut names a product or section the menu's working structure does not reach. */
     "menu.shortcut_unreachable": { ref: MemberRef };
     /** A home display setting is outside what its device takes (device-home.ts). */

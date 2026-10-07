@@ -389,6 +389,8 @@ wording in `apps/dashboard/src/i18n/codes.ts` (Task 8) and a `STATUS` entry in `
 | `menu_publication.time_repeated` | `{ date, time, occurrences: { at: string; offset: string }[] }` | 400 | route: shown twice, no `occurrence` sent |
 | `menu_publication.clock_unreadable` | `{}` | 409 | route: the location's time zone cannot be read |
 
+> Note (2026-10-07, finish-branch): `menu_publication.clock_unreadable` was replaced by the existing `time_zone.unreadable`.
+
 Reused: `catalogue.not_found`, `menu.clashes_unresolved`, `menu.changed_since_preview`,
 `management.request_invalid`, `shared.invalid_id`, `authorization.not_permitted`.
 

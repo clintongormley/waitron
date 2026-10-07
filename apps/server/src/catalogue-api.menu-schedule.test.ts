@@ -317,7 +317,7 @@ describe("queuing, listing and cancelling menu editions through the routes", () 
     const tables = await publicationTables();
     await setVenueZone("Mars/Olympus");
     try {
-      const refusal = { error: { code: "menu_publication.clock_unreadable", params: {} } };
+      const refusal = { error: { code: "time_zone.unreadable", params: {} } };
       expect(await json(await queue(app, menuId, TOMORROW), 409)).toEqual(refusal);
       const listed = await send(app, "GET", `/management-api/catalogues/${menuId}/publications`);
       expect(await json(listed, 409)).toEqual(refusal);

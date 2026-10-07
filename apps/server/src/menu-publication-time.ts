@@ -11,12 +11,12 @@ function invalid(field: string): never {
   throw new AppError("management.request_invalid", { field });
 }
 
-/** The zone, refused `menu_publication.clock_unreadable` unless it is a named zone. */
+/** The zone, refused `time_zone.unreadable` unless it is a named zone. */
 export function checkedTimeZone(timeZone: string): string {
   try {
     validateTimeZone(timeZone);
   } catch {
-    throw new AppError("menu_publication.clock_unreadable", {});
+    throw new AppError("time_zone.unreadable", {});
   }
   return timeZone;
 }

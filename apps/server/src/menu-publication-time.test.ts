@@ -81,7 +81,7 @@ describe("activationInstant", () => {
   it("refuses a zone the venue clock cannot be read in", () => {
     expect(
       refusal(() => activationInstant({ date: "2026-10-08", time: "08:00" }, "Mars/Olympus")),
-    ).toMatchObject({ code: "menu_publication.clock_unreadable", params: {} });
+    ).toMatchObject({ code: "time_zone.unreadable", params: {} });
   });
 });
 
@@ -89,11 +89,11 @@ describe("checkedTimeZone", () => {
   it("passes a named zone through and refuses one that cannot be read", () => {
     expect(checkedTimeZone(MADRID)).toBe(MADRID);
     expect(refusal(() => checkedTimeZone("Mars/Olympus"))).toMatchObject({
-      code: "menu_publication.clock_unreadable",
+      code: "time_zone.unreadable",
       params: {},
     });
     expect(refusal(() => checkedTimeZone("+02:00"))).toMatchObject({
-      code: "menu_publication.clock_unreadable",
+      code: "time_zone.unreadable",
     });
   });
 });

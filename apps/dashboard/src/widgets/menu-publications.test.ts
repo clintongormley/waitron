@@ -506,10 +506,10 @@ describe("a menu's scheduled versions", () => {
   it("shows a failed read with Try again, which reads the list again", async () => {
     const read = vi
       .fn()
-      .mockRejectedValueOnce({ code: "menu_publication.clock_unreadable", params: {} })
+      .mockRejectedValueOnce({ code: "time_zone.unreadable", params: {} })
       .mockResolvedValue(queue());
     const el = await mount(stubApi({ getMenuPublications: read }));
-    expect(table(el).errorMessage).toBe(codeMessage("menu_publication.clock_unreadable"));
+    expect(table(el).errorMessage).toBe(codeMessage("time_zone.unreadable"));
     inShadow(el, "editions-retry")!.click();
     await flush(el);
     await flush(el);

@@ -269,7 +269,7 @@ it("has English and Spanish copy for each menu publication code", () => {
     "menu_publication.unchanged",
     "menu_publication.time_skipped",
     "menu_publication.time_repeated",
-    "menu_publication.clock_unreadable",
+    "time_zone.unreadable",
   ]) {
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));

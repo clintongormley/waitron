@@ -295,7 +295,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_publication.unchanged": 409,
   "menu_publication.time_skipped": 400,
   "menu_publication.time_repeated": 400,
-  "menu_publication.clock_unreadable": 409,
+  "time_zone.unreadable": 409,
   "menu.shortcut_unreachable": 409,
   "menu.home_display_invalid": 400,
   // The product editor refuses a course this venue does not have.
