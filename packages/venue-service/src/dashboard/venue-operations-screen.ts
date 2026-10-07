@@ -1468,10 +1468,9 @@ export class VenueOperationsScreen extends LitElement {
             : `department-${row.departmentId}`}
         .rowCollapsible=${(row: PolicyRow) => row.kind === "department"}
         .rowToggleLabel=${(row: PolicyRow, expanded: boolean) =>
-          t(expanded ? "venue.collapse_department" : "venue.expand_department").replace(
-            "{name}",
-            row.kind === "department" ? row.department.name : row.zone.name,
-          )}
+          format(expanded ? "venue.collapse_department" : "venue.expand_department", {
+            name: row.kind === "department" ? row.department.name : row.zone.name,
+          })}
         .rowActivation=${() => "none" as const}
         .emptyMessage=${t("venue.no_departments")}
         .noMatchesMessage=${tableNoMatches()}
