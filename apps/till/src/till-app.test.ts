@@ -1356,6 +1356,40 @@ describe("till-app", () => {
     expect(ticket(el)).toBeNull();
   });
 
+  it("a server switch rebuilds a mounted PIN owner and protects later input", async () => {
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    currentApi = stubApi();
+    const { el } = await mountWidget<TillApp>("till-app", { api: currentApi, router });
+    await flush(el);
+    const before = lock(el)!;
+    before.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await before.updateComplete;
+    const pad = before.shadowRoot!.querySelector("till-numeric-pad")!;
+    await pad.updateComplete;
+    pad.shadowRoot!.querySelector<HTMLElement>("[data-key='0']")!.click();
+    await before.updateComplete;
+    router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }));
+    await flush(el);
+    const after = lock(el)!;
+    expect(after).not.toBe(before);
+    expect(after.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    after.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await after.updateComplete;
+    const newPad = after.shadowRoot!.querySelector("till-numeric-pad")!;
+    await newPad.updateComplete;
+    newPad.shadowRoot!.querySelector<HTMLElement>("[data-key='0']")!.click();
+    await after.updateComplete;
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(currentApi.login).not.toHaveBeenCalled();
+  });
+
   it("changing the lock screen language asks before dropping its typed PIN", async () => {
     const { el } = await mountApp();
     await flush(el);
@@ -2612,6 +2646,36 @@ describe("till-app", () => {
       expect(enrolScreen(el)).toBe(screen);
     },
   );
+
+  it("a server switch rebuilds enrolment and protects a new device name", async () => {
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    currentApi = stubApi({
+      getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api: currentApi, router });
+    await flush(el);
+    const before = enrolScreen(el)!;
+    expect(before).not.toBeNull();
+    const name =
+      before.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-name]")!;
+    emit(name, "wt-change", { value: "Old server name" });
+    router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }));
+    await expect.poll(() => enrolScreen(el)).not.toBe(before);
+    await expect.poll(() => enrolScreen(el)).not.toBeNull();
+    const after = enrolScreen(el)!;
+    await (after as HTMLElementTagNameMap["till-enrol-screen"]).updateComplete;
+    const next = after.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-name]")!;
+    expect(next.value).toBe("");
+    emit(next, "wt-change", { value: "New server name" });
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(currentApi.join).not.toHaveBeenCalled();
+  });
 
   it("a NON-401 identity-probe failure (transient) stays on the LOGIN screen, never the enrol front door", async () => {
     // `getTill` succeeds but `getDeviceIdentity` fails transiently — a 5xx or a network blip carrying NO

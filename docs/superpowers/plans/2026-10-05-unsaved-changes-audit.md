@@ -3998,3 +3998,50 @@ and payment screens; the W69 queue explicitly waives that overlap. No foreign so
 The complete repeated source search is retained in Lane E's
 `receipts/w69-final-audit-20261007/form-discovery.json`. A search result is an inventory,
 not runtime evidence. Whole-branch review and required current-head CI remain outstanding.
+
+
+## Whole-branch review and history corrections, 2026-10-07
+
+The single Claude run-it review used an independently cloned, frozen-installed candidate at
+`a08c20bd611579cfafa83337dd627c57afb5fcbc`, base
+`34be43393ff99f9e86dd5dbca406f215265ffdc7`. Its complete report, 559-second timing and JSON token
+usage are retained in Lane E `receipts/w69-final-audit-20261007/review-report.md*`.
+
+All four findings were accepted at their observed boundary:
+
+- The new catalogue consumer test failed with `?field=name` after closing the linked editor;
+  the Google callback test failed with `?login=google` after a later controller write. Both
+  raw replacements now use guarded updates; path and field-query removal share one controller
+  write. The initial reopened-editor expectation used `null` where its declared default is
+  an empty string; that fixture expectation was corrected, separate from the two actual reds.
+- Opening hours used a copied position tag. The actual venue-operations control's Back/Keep
+  case failed by returning to `before-operations` instead of Operations on a subsequent clean
+  Back. Its guarded write now retains Operations and supports Forward back to Hours.
+- The copied-position approval test failed because the old epoch was reused. Approval now
+  creates a fresh epoch. The unknown-position fallback still replaces the traversed entry;
+  the test's initial single-Forward expectation was corrected to the two actual entries that
+  this documented fallback leaves, without changing the original epoch assertion.
+- `forceReset` intentionally unregisters old handles, as its existing core test requires.
+  The real till server-switch case exposed the retained PIN component after that reset.
+  Its locale/operator-session key now rebuilds the credential form, clears its old PIN and
+  registers fresh input protection. The additional enrolment server-switch case passes
+  without changing enrolment: boot already rebuilds that form.
+
+The reviewer additionally searched for a missing `changed()` in image-upload. That component
+registers an intentionally clean ancestry scope; its image child owns authored values. The
+existing nested child/parent cases pass in the focused dashboard run. No picker change was
+made. Existing dashboard session-invalid cases clear credentials and assert that fresh email
+input again protects unload. The reviewer did not run every editor or live server; its
+read-only claims about exact decimals, child commits, dialog close reports and till navigation
+remain unverified by that review alone, rather than newly established by reading.
+
+Four independent installed candidate mutations each produced one intended regression failure
+beside one passing legitimate control: remove query cleanup, bypass the Hours guard, reuse
+history's epoch, and remove the operator-session key. All four restored pairs passed. Twelve
+changed source/test files matched the feature checkout byte for byte before removing the exact
+candidate. Commands, full outputs and comparison are in `review-controls.json`,
+`review-control-*.log`, `review-restored-*.log` and `review-candidate-match.json` in the same
+local receipt folder. No previous behavioral assertion was changed by these corrections.
+
+Current-head push-hook and CI results still belong to the delivery checkpoint; this review
+receipt does not claim full-package coverage, live venue writes or all-platform native prompts.

@@ -414,3 +414,28 @@ it("an accepted-route observer can normalize the URL without adding another hist
   expect(location.pathname).toBe("/guarded/current");
   expect(history.length).toBe(length + 1);
 });
+
+it("accepting an entry with a copied position retires the old history epoch", async () => {
+  const f = fixture();
+  await guard.write("/guarded/b");
+  await guard.write("/guarded/c");
+  const oldEpoch = history.state.__wtNavigation.epoch;
+  history.pushState(history.state, "", "/guarded/external");
+  f.edit();
+  history.back();
+  await expect.poll(() => f.answers.length).toBe(1);
+  f.answers[0]!("discard");
+  await idle();
+  expect(history.state.__wtNavigation.epoch).not.toBe(oldEpoch);
+  f.edit();
+  history.back();
+  await expect.poll(() => f.answers.length).toBe(2);
+  expect(location.pathname).toBe("/guarded/c");
+  f.answers[1]!("keep");
+  await idle();
+  f.scope.commit(f.value);
+  history.forward();
+  await expect.poll(() => guard.href).toBe(new URL("/guarded/c", location.origin).href);
+  history.forward();
+  await expect.poll(() => location.pathname).toBe("/guarded/external");
+});

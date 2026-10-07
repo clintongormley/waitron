@@ -863,7 +863,9 @@ export class DashboardApp extends LitElement {
     const preference = consumeGoogleLoginPreference(googleCallback);
     if (googleCallback) {
       url.searchParams.delete("login");
-      history.replaceState(history.state, "", url);
+      const guard = navigationGuardFor(window);
+      if (guard) await guard.write(url, true);
+      else history.replaceState(history.state, "", url);
     }
     if (url.searchParams.has("token")) {
       await this.#seedLocale();

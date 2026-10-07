@@ -1,4 +1,4 @@
-import { LeaveController } from "@waitron/ui";
+import { LeaveController, NavigationGuard } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
@@ -3416,4 +3416,28 @@ describe("W69 catalogue colour lifecycle", () => {
     expect(coordinator.isDirty([form])).toBe(false);
     expect(api.setProductColor).not.toHaveBeenCalled();
   });
+});
+
+it("closing a guarded linked product retires its field query before opening another editor", async () => {
+  history.replaceState(null, "", "/manage/catalogue");
+  const guard = new NavigationGuard(window, {
+    isDirty: () => false,
+    request: async (proceed) => {
+      await proceed();
+      return "proceeded";
+    },
+  });
+  onTestFinished(() => guard.dispose());
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  await guard.write("/manage/catalogue/product/p1?field=name");
+  await expect.poll(() => editor(el).value?.id).toBe("p1");
+  emit(editor(el), "wt-cancel", {});
+  await expect.poll(() => location.pathname).toBe("/manage/catalogue");
+  expect(location.search).toBe("");
+  emit(list(el), "edit-product", { productId: "p1" });
+  await expect.poll(() => editor(el).open).toBe(true);
+  expect(editor(el).initialField).toBe("");
 });

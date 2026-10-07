@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { navigationGuardFor } from "@waitron/ui";
+import { navigationGuardFor, UrlStateController } from "@waitron/ui";
 import type { DashboardApi } from "./api/client.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
@@ -213,3 +213,17 @@ it.each(["management_session.expired", "management_session.required", "person.su
     expect(unload()).toBe(true);
   },
 );
+
+it("a Google callback marker stays removed after a guarded page write", async () => {
+  const app = await mount("/manage/?login=google");
+  expect(location.search).toBe("");
+  await new UrlStateController(app, () => {}, {
+    basePath: "/manage",
+    primary: "dashboard",
+    children: {},
+  }).write({ dashboard: "overview" });
+  expect(location.search).toBe("");
+  await navigationGuardFor(window)!.write(new URL("/manage/", navigationGuardFor(window)!.href));
+  expect(location.search).toBe("");
+  app.remove();
+});

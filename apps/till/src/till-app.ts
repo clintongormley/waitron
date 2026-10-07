@@ -8717,7 +8717,7 @@ export class TillApp extends LitElement {
                     </till-tab-shell>`,
                   )
                 : keyed(
-                    currentLocale(),
+                    `${currentLocale()}:${this.#operatorSession}`,
                     html`<till-lock-screen
                       .api=${this.api}
                       .deviceName=${this.deviceName}

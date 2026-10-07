@@ -10,6 +10,7 @@ import {
   baseStyles,
   focusFirstInvalid,
   leaveCoordinatorFor,
+  navigationGuardFor,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -36,14 +37,14 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
     t(key) as string,
   );
 
-/** The dashboard shell changes page on `popstate`, not on a pushed address alone. */
 function openHoursPage(departmentId: string): void {
-  history.pushState(
-    history.state,
-    "",
-    `/manage/hours/department/${encodeURIComponent(departmentId)}`,
-  );
-  dispatchEvent(new PopStateEvent("popstate"));
+  const url = `/manage/hours/department/${encodeURIComponent(departmentId)}`;
+  const guard = navigationGuardFor(window);
+  if (guard) void guard.write(url);
+  else {
+    history.pushState(history.state, "", url);
+    dispatchEvent(new PopStateEvent("popstate"));
+  }
 }
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "ticket_then_pay"];

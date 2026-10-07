@@ -782,3 +782,21 @@ before redirect, and disconnect clears sensitive input/output and invalidates in
 Focused command: `pnpm --filter @waitron/dashboard exec vitest run
 src/screens/profile-screen.unsaved.test.ts src/screens/profile-screen.test.ts`. Outer Profile
 navigation remains separate Task 5 work.
+
+
+### Guarded history writes and forced draft teardown (W69, 2026-10-07)
+
+Every app-owned history write uses the shared navigation guard when one exists. A direct
+`replaceState` changes the browser URL without changing the guard's accepted URL; a later
+`UrlStateController.write` can restore a query parameter that the direct write removed.
+Query removal travels with the controller's path replacement in one guarded write. A direct
+`pushState` copying the current state also copies its position tag; route links therefore use
+`navigationGuardFor(window)?.write(...)` and reserve direct history writes for their unguarded
+fallback. Unknown positions start a new epoch before old indices can imply a traversal distance.
+
+`forceReset()` retires draft handles. A sensitive form retained across that boundary must rebuild
+or register a new scope before accepting fresh input. The till lock screen is keyed by locale
+and operator-session generation so a server switch rebuilds its credential form. Regression
+receipts are in the dated W69 audit; `navigation-guard.test.ts`, `url-state.unsaved.test.ts`, the
+catalogue/login shell cases, the venue-operations Hours case and till-app server-switch cases
+exercise these behaviors.

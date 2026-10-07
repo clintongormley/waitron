@@ -1184,8 +1184,10 @@ field-tag discovery search. Cancel, locale replacement and unload now use the sa
 explicit login submission remains direct. Later digits during an in-flight login stay protected. The [dated owner audit](superpowers/plans/2026-10-05-unsaved-changes-audit.md)
 records the original failing tests, deliberate fixture changes, deletion controls and native
 language/theme/width checks for each rollout checkpoint. Earlier rollout-status paragraphs are
-superseded by its dated receipts. Whole-branch review, the normal push hook and required CI on
-the current head remain outstanding.
+superseded by its dated receipts. The whole-branch Claude review found stale URL query writes, a copied Hours history position,
+a reused history epoch and a retained PIN owner after a forced server switch. Those findings
+have focused regression tests and installed deletion controls. The normal push hook and required
+CI on the current head remain outstanding.
 
 Activated desktop Chromium checks cover reload, external navigation and closing with the
 Schedule owner; the implementation does not promise prompts on every browser or after mobile

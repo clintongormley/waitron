@@ -477,10 +477,7 @@ export class CatalogueScreen extends LitElement {
     this.editorValue = null;
     this.#linkedProduct = null;
     if (writeUrl) {
-      const url = new URL(location.href);
-      url.searchParams.delete("field");
-      history.replaceState(history.state, "", url);
-      if (this.#url.read("product") !== null) this.#url.write({ product: null }, true);
+      void this.#url.write({ product: null }, true, ["field"]);
     }
   }
 

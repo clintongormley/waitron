@@ -79,7 +79,11 @@ export class UrlStateController implements ReactiveController {
     return this.#read()[key] ?? null;
   }
 
-  write(changes: Record<string, string | null>, replace = false): void | Promise<LeaveOutcome> {
+  write(
+    changes: Record<string, string | null>,
+    replace = false,
+    removeQuery: readonly string[] = [],
+  ): void | Promise<LeaveOutcome> {
     if (!this.host.isConnected) return;
     const values = { ...this.#read(), ...changes };
     const primary = values[this.config.primary];
@@ -94,6 +98,7 @@ export class UrlStateController implements ReactiveController {
     const guard = navigationGuardFor(window);
     const url = new URL(guard?.href ?? location.href);
     url.pathname = `${this.config.basePath}/${parts.join("/")}`;
+    for (const key of removeQuery) url.searchParams.delete(key);
     if (guard) return guard.write(url, replace);
     if (url.href === location.href) return;
     if (replace) history.replaceState(history.state, "", url);

@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
-import { applyTokens, setContentLanguages } from "@waitron/ui";
+import { applyTokens, NavigationGuard, setContentLanguages } from "@waitron/ui";
 import {
   chooseOption,
   expectRowMenusOnScreen,
@@ -3674,3 +3674,35 @@ it.each([
     expect(box.shadowRoot!.textContent).toContain(empty);
   },
 );
+
+it("Opening hours uses a distinct history position and Keep preserves the Operations entry", async () => {
+  history.replaceState(null, "", "/manage/before-operations");
+  let dirty = false;
+  let asks = 0;
+  const guard = new NavigationGuard(window, {
+    isDirty: () => dirty,
+    request: async () => {
+      asks++;
+      return "kept";
+    },
+  });
+  onTestFinished(() => guard.dispose());
+  await guard.write("/manage/venue-operations");
+  const el = await mount({ load: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi);
+  const hours = table(el, "policy-tree").shadowRoot!.querySelector<HTMLElement>(
+    '[data-test="hours-tree-department-d2"]',
+  )!;
+  hours.closest("wt-row-actions")!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  hours.click();
+  await expect.poll(() => location.pathname).toBe("/manage/hours/department/d2");
+  dirty = true;
+  history.back();
+  await expect.poll(() => asks).toBe(1);
+  expect(location.pathname).toBe("/manage/hours/department/d2");
+  await expect.poll(() => guard.write(guard.href)).toBe("proceeded");
+  dirty = false;
+  history.back();
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+  history.forward();
+  await expect.poll(() => location.pathname).toBe("/manage/hours/department/d2");
+});

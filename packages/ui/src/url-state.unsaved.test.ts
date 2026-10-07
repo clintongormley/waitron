@@ -6,6 +6,7 @@ import {
   type LeaveCoordinator,
 } from "@waitron/ui-core/unsaved-changes";
 import { UrlStateController } from "./url-state.js";
+import { navigationGuardFor } from "./navigation-guard.js";
 import { cleanup, mount } from "./test-helpers.js";
 
 const originalUrl = location.href;
@@ -190,4 +191,25 @@ it("disconnected URL controllers cannot leave or push, and their late decision c
   const length = history.length;
   await el.url.write({ tab: "kitchen" });
   expect(history.length).toBe(length);
+});
+
+it("query removal and path replacement share the leave decision and preserve unrelated URL parts", async () => {
+  const { el, scope } = await screen();
+  await el.url.write({ tab: "floor" }, true);
+  const guard = navigationGuardFor(window)!;
+  await guard.write("/guarded/floor?field=image&dev=1#kept", true);
+  value = "edited";
+  scope.changed();
+  const kept = el.url.write({ tab: "counter" }, true, ["field"]);
+  expect(location.search).toBe("?field=image&dev=1");
+  decisions[0]!("keep");
+  await kept;
+  expect(location.pathname).toBe("/guarded/floor");
+  expect(location.search).toBe("?field=image&dev=1");
+  const discarded = el.url.write({ tab: "counter" }, true, ["field"]);
+  decisions[1]!("discard");
+  await discarded;
+  expect(location.pathname).toBe("/guarded/counter");
+  expect(location.search).toBe("?dev=1");
+  expect(location.hash).toBe("#kept");
 });

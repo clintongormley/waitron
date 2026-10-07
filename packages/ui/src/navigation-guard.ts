@@ -221,7 +221,7 @@ export class NavigationGuard {
         this.target.history.go(entry.position!.index - this.accepted.position!.index);
         return arrived;
       }
-      this.publish(this.indexed(entry, { epoch: this.accepted.position!.epoch, index: 0 }));
+      this.publish(this.indexed(entry, { epoch: crypto.randomUUID(), index: 0 }));
     });
   };
 
