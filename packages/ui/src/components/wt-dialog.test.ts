@@ -74,6 +74,23 @@ test("renders the heading", async () => {
   expect(el.shadowRoot!.querySelector("h2")?.textContent?.trim()).toBe("Void sale");
 });
 
+test("wraps a long unbroken heading inside the dialog at phone width", async () => {
+  await page.viewport(390, 844);
+  try {
+    const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable & { heading: string };
+    el.heading = `Add variant to: ${"Tortilla".repeat(12)}`;
+    el.open = true;
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector("dialog")!;
+    const heading = el.shadowRoot!.querySelector("h2")!;
+    expect(heading.textContent).toContain("TortillaTortilla");
+    expect(dialog.getBoundingClientRect().width).toBeLessThanOrEqual(390);
+    expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
 test("associates the heading with the dialog so it has an accessible name", async () => {
   const el = await mount('<wt-dialog heading="Void sale">body</wt-dialog>');
   const dialog = el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
