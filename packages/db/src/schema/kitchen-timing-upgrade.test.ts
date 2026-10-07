@@ -11,11 +11,10 @@ import { installChangeFeed } from "../change-feed.js";
 import { runMigrations } from "../migrate.js";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedDevice, freshNif } from "../testing/seed.js";
+import { freshNif } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
 import { kitchenStations } from "./kitchen-stations.js";
-import { printers } from "./printers.js";
 import { stationPrinters } from "./station-printers.js";
 import { locations } from "./tenants.js";
 import { watchers, watcherStations } from "./watchers.js";
@@ -69,20 +68,24 @@ it("adds timing storage without rewriting populated stations, mappings, keys or 
     })
     .returning();
   const stationId = station!.id;
-  const [printer] = await db
-    .insert(printers)
-    .values({ locationId, name: "Grill printer", transport: "usb", localKey: "grill-fixture" })
-    .returning();
-  await db.insert(stationPrinters).values({ stationId, printerId: printer!.id });
+  // By hand, like `device_profiles` and `devices` below: the table definition names `printers`
+  // columns later migrations add.
+  const printerId = randomUUID();
+  await db.run(sql`insert into printers (id, location_id, name, transport, local_key)
+    values (${printerId}, ${locationId}, 'Grill printer', 'usb', 'grill-fixture')`);
+  await db.insert(stationPrinters).values({ stationId, printerId });
   const [watcher] = await db.insert(watchers).values({ locationId, name: "Pass" }).returning();
   await db.insert(watcherStations).values({ watcherId: watcher!.id, stationId });
-  // By hand: the table definition names `device_profiles` columns later migrations add, which this
-  // schema does not have yet.
+  // By hand: the table definitions name `device_profiles` and `devices` columns later migrations
+  // add, which this schema does not have yet.
   const profileId = randomUUID();
   const now = new Date().toISOString();
   await db.run(sql`insert into device_profiles (id, name, form_factor, capabilities, created_at, updated_at)
     values (${profileId}, 'Till', 'till', '[]', ${now}, ${now})`);
-  const { deviceId } = await seedDevice(db, { locationId, profileId });
+  const deviceId = randomUUID();
+  await db.run(sql`insert into devices
+    (id, location_id, device_profile_id, label, token_hash, enrolled_at, created_at)
+    values (${deviceId}, ${locationId}, ${profileId}, 'Device', 'seeded', ${now}, ${now})`);
   await db.insert(deviceMadeHereStations).values({ deviceId, stationId });
 
   const tables = db
