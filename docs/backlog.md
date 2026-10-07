@@ -6895,7 +6895,8 @@ bump it when a fixed version is published, and run the certificate suites in tho
   as it is — a department's zones stay disabled, a zone's tables stay disabled, and its routing
   exceptions and watcher zones stay gone (a profile's starting zone is kept since W97, 2026-10-06:
   `readProfileZones` falls back to the profile's first usable zone while it is disabled). A282 is DONE:
-  moving, creating or placing an active table requires an active zone and an active department;
+  moving, creating or placing an active table in a zone requires that zone and its department
+  to be active;
   enabling a zone requires an active department, and moving an active zone to a disabled
   department is refused. Disabled tables can move into disabled zones; disabled zones can move
   to a disabled department.
