@@ -119,31 +119,39 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     const paintedNodes = nodes.map((node) =>
       node.memberId === "m-drinks" ? { ...node, color: "#aa3300" } : node,
     );
-    const { el, host } = await mountWidget<MenuStructureTable>(
-      "dashboard-menu-structure-table",
-      { nodes: paintedNodes, products: painted, categories, menuName: "Lunch Menu" },
-      theme,
-    );
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    for (let round = 0; round < 3; round++) await table.updateComplete;
-    for (const key of ["m-drinks", "included-wine", "included-wine/wine-red"]) {
-      table
-        .shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .row-activate`)!
-        .click();
-      await table.updateComplete;
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    // At 440px or less the tree hides every swatch, so the link could not take focus.
+    await page.viewport(1280, 900);
+    try {
+      const { el, host } = await mountWidget<MenuStructureTable>(
+        "dashboard-menu-structure-table",
+        { nodes: paintedNodes, products: painted, categories, menuName: "Lunch Menu" },
+        theme,
+      );
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      for (let round = 0; round < 3; round++) await table.updateComplete;
+      await expect.poll(() => table.hasAttribute("narrow")).toBe(false);
+      for (const key of ["m-drinks", "included-wine", "included-wine/wine-red"]) {
+        table
+          .shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .row-activate`)!
+          .click();
+        await table.updateComplete;
+      }
+      expect(table.shadowRoot!.querySelectorAll('[part~="color-swatch"]').length).toBe(8);
+      await expectNoA11yViolations(host);
+      const link = table.shadowRoot!.querySelector<HTMLAnchorElement>(
+        'a[data-test="color-m-burger"]',
+      )!;
+      expect(link.getAttribute("aria-label")).toBe(
+        t("product.edit_named").replace("{name}", "Burger"),
+      );
+      link.focus();
+      expect(table.shadowRoot!.activeElement).toBe(link);
+      expect(getComputedStyle(link).outlineStyle).not.toBe("none");
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(before.width, before.height);
     }
-    expect(table.shadowRoot!.querySelectorAll('[part~="color-swatch"]').length).toBe(8);
-    await expectNoA11yViolations(host);
-    const link = table.shadowRoot!.querySelector<HTMLAnchorElement>(
-      'a[data-test="color-m-burger"]',
-    )!;
-    expect(link.getAttribute("aria-label")).toBe(
-      t("product.edit_named").replace("{name}", "Burger"),
-    );
-    link.focus();
-    expect(table.shadowRoot!.activeElement).toBe(link);
-    expect(getComputedStyle(link).outlineStyle).not.toBe("none");
-    await expectNoA11yViolations(host);
   });
 
   it("renders accessibly mid-drag, with the dragged row faded, the ghost and the gap", async () => {

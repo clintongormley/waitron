@@ -404,28 +404,33 @@ describe.each(["light", "dark"] as const)("product media link a11y (%s)", (theme
   it.each([null, "soup.webp"])(
     "names the swatch link to the product's Edit, at rest and focused, with image %s",
     async (image) => {
-      await page.viewport(1280, 844);
-      const { el, host } = await mountWidget<ProductList>(
-        "dashboard-product-list",
-        {
-          products: [
-            { ...products[0]!, primaryCategoryId: null, image, color: "#b12525", variants: [] },
-          ],
-        },
-        theme,
-      );
-      const table = el.shadowRoot!.querySelector("wt-data-table")!;
-      await table.updateComplete;
-      const media = table.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="color-p1"]')!;
-      expect(media.tagName).toBe("A");
-      expect(media.getAttribute("aria-label")).toBe(
-        t("product.edit_named").replace("{name}", products[0]!.name),
-      );
-      await expectNoA11yViolations(host);
-      media.focus();
-      expect(table.shadowRoot!.activeElement).toBe(media);
-      expect(getComputedStyle(media).outlineStyle).not.toBe("none");
-      await expectNoA11yViolations(host);
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(1280, 844);
+        const { el, host } = await mountWidget<ProductList>(
+          "dashboard-product-list",
+          {
+            products: [
+              { ...products[0]!, primaryCategoryId: null, image, color: "#b12525", variants: [] },
+            ],
+          },
+          theme,
+        );
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        await table.updateComplete;
+        const media = table.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="color-p1"]')!;
+        expect(media.tagName).toBe("A");
+        expect(media.getAttribute("aria-label")).toBe(
+          t("product.edit_named").replace("{name}", products[0]!.name),
+        );
+        await expectNoA11yViolations(host);
+        media.focus();
+        expect(table.shadowRoot!.activeElement).toBe(media);
+        expect(getComputedStyle(media).outlineStyle).not.toBe("none");
+        await expectNoA11yViolations(host);
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
     },
   );
 });
