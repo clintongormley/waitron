@@ -28,16 +28,16 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import type {
-  RouteTarget,
-  ExceptionInput,
-  RouteException,
-  RoutingDecision,
-  RouteExplanation,
-} from "../routing.js";
+import type { RouteTarget, ExceptionInput, RouteException, RouteExplanation } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
 import { exceptionSentence } from "./exception-sentence.js";
 import { formatDate } from "./hours-view.js";
+import {
+  decisionSentence,
+  extraSentence,
+  fallbackSentences,
+  type ExplanationNames,
+} from "./routing-explanation.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
   PrepStation,
@@ -1403,82 +1403,16 @@ export class PrepStationsScreen extends LitElement {
       this.explanation?.stations.find((station) => station.id === id)?.name ?? this.#stationName(id)
     );
   }
-  #testRule(decision: RoutingDecision): string {
-    if (decision.kind === "default") return t("prep.test_default");
-    if (decision.kind === "claim") {
-      const folder = this.#path(decision.categoryId).split(" › ").at(-1)!;
-      if (this.explanation?.route?.kind === "no_preparation")
-        return t("prep.test_no_prep_claim")
-          .replace("{folder}", folder)
-          .replace("{target}", t("prep.no_preparation"));
-      const claimed =
-        this.explanation?.fallbacks[0]?.stationId ??
-        (this.explanation?.route?.kind === "station" ? this.explanation.route.stationId : null);
-      const name = claimed === null ? t("prep.no_preparation") : this.#testStationName(claimed);
-      return t("prep.test_claim").replace("{station}", name).replace("{folder}", folder);
-    }
-    const exception = this.view?.routing.exceptions.find((row) => row.id === decision.exceptionId);
-    return t("prep.test_exception").replace("{rule}", this.#exceptionText(exception));
-  }
-  #fallbackReason(step: RouteExplanation["fallbacks"][number]): string {
-    return format(step.why === "switched_off" ? "prep.test_disabled" : `prep.test_${step.why}`, {
-      station: this.#testStationName(step.stationId),
-    });
-  }
-  #testFallback(step: RouteExplanation["fallbacks"][number], index: number): string {
-    const explanation = this.explanation!;
-    const reason = this.#fallbackReason(step);
-    const next = explanation.fallbacks[index + 1]?.stationId;
-    if (next === undefined && explanation.noReplacement)
-      return format("prep.test_no_replacement", { reason });
-    const destination =
-      next ?? (explanation.route?.kind === "station" ? explanation.route.stationId : "");
-    return format("prep.test_fallback_step", {
-      reason,
-      destination: this.#testStationName(destination),
-    });
-  }
-  #extraSentence(extra: RouteExplanation["extras"][number]): string {
-    const name =
-      this.view?.testProducts.find((product) => product.id === extra.productId)?.name ??
-      extra.productId;
-    const outcome = extra.outcome;
-    if (outcome.kind === "follows_dish") {
-      const station = extra.fallbacks[0] ? this.#testStationName(extra.fallbacks[0].stationId) : "";
-      return format(`prep.test_extra_${outcome.why}`, {
-        name,
-        station,
-        dishStation:
-          this.explanation?.route?.kind === "station"
-            ? this.#testStationName(this.explanation.route.stationId)
-            : "",
-      });
-    }
-    const decision = extra.decidedBy;
-    const reason =
-      decision?.kind === "claim"
-        ? format("prep.test_extra_claim", {
-            station: this.#testStationName(extra.fallbacks[0]?.stationId ?? outcome.stationId),
-            folder: this.#path(decision.categoryId),
-          })
-        : decision?.kind === "exception"
-          ? format("prep.test_extra_exception", {
-              rule: this.#exceptionText(
-                this.view?.routing.exceptions.find((row) => row.id === decision.exceptionId),
-              ),
-            })
-          : t("prep.test_default");
-    const fallbacks = extra.fallbacks
-      .map((step, index) =>
-        format("prep.test_fallback_step", {
-          reason: this.#fallbackReason(step),
-          destination: this.#testStationName(
-            extra.fallbacks[index + 1]?.stationId ?? outcome.stationId,
-          ),
-        }),
-      )
-      .join(" ");
-    return `${fallbacks}${fallbacks ? " " : ""}${format("prep.test_extra_made", { name, station: this.#testStationName(outcome.stationId), reason })}`;
+  #testNames(): ExplanationNames {
+    const named = (rows: readonly { id: string; name: string }[] | undefined, id: string) =>
+      rows?.find((row) => row.id === id)?.name ?? id;
+    return {
+      station: (id) => this.#testStationName(id),
+      product: (id) =>
+        named([...(this.view?.testProducts ?? []), ...(this.view?.products ?? [])], id),
+      category: (id) => this.#path(id),
+      zone: (id) => named(this.view?.zones, id),
+    };
   }
   #tester() {
     const explanation = this.explanation;
@@ -1644,7 +1578,7 @@ export class PrepStationsScreen extends LitElement {
       <div data-test="test-answer" aria-live="polite">
         ${this.testError ? html`<p class="error" role="alert">${this.testError}</p>` : nothing}
         ${explanation?.clockReadable === false ? html`<p>${t("prep.test_clock_unreadable")}</p>` : nothing}
-        ${explanation?.fallbacks.map((step, index) => html`<p>${this.#testFallback(step, index)}</p>`)}
+        ${explanation ? fallbackSentences(explanation, this.#testNames()).map((sentence) => html`<p>${sentence}</p>`) : nothing}
         ${explanation?.route === null && explanation.decidedBy === null ? html`<p>${t("prep.test_no_route")}</p>` : nothing}
         ${explanation?.route ? html`<p>${t("prep.test_made_at")}: ${explanation.route.kind === "station" ? this.#testStationName(explanation.route.stationId) : t("prep.no_preparation")}</p>` : nothing}
         ${
@@ -1661,9 +1595,9 @@ export class PrepStationsScreen extends LitElement {
               })()
             : nothing
         }
-        ${explanation?.decidedBy ? html`<p>${t("prep.test_because")}: ${this.#testRule(explanation.decidedBy)}</p>` : nothing}
+        ${explanation?.decidedBy ? html`<p>${t("prep.test_because")}: ${decisionSentence(explanation, this.#testNames())}</p>` : nothing}
         ${explanation?.extrasWaitOnDish && this.testExtras.length ? html`<p>${t("prep.test_extras_wait")}</p>` : nothing}
-        ${explanation?.extras?.map((extra) => html`<p>${this.#extraSentence(extra)}</p>`)}
+        ${explanation?.extras?.map((extra) => html`<p>${extraSentence(extra, explanation, this.#testNames())}</p>`)}
       </div>
     </wt-card>`;
   }

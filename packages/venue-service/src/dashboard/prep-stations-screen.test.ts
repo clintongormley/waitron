@@ -731,39 +731,27 @@ it("shows no replacement in the confirmation when a closed station has no fallba
     "the till will ask where to send its dishes, until 06:00 today.",
   );
 });
-it("explains exceptions, claims, defaults and an unroutable product", async () => {
+it("explains product and category cells, defaults and an unroutable product", async () => {
   setLocale("en");
   const a = api({
-    load: vi.fn().mockResolvedValue({
-      ...view,
-      routing: {
-        ...view.routing,
-        exceptions: [
-          {
-            id: "ex",
-            position: 0,
-            zoneId: null,
-            categoryId: "cocktails",
-            productId: null,
-            target: { kind: "station", stationId: "bar" },
-            neverMatches: false,
-            stationOff: false,
-          },
-        ],
-      },
-    }),
     explain: vi
       .fn()
       .mockResolvedValueOnce({
         route: { kind: "station", stationId: "bar" },
-        decidedBy: { kind: "exception", exceptionId: "ex" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "product", productId: "bread" }, zoneId: null },
+        },
         fallbacks: [],
         noReplacement: false,
         stations: [{ id: "bar", name: "Bar", active: true }],
       })
       .mockResolvedValueOnce({
         route: { kind: "station", stationId: "bar" },
-        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+        },
         fallbacks: [],
         noReplacement: false,
         stations: [{ id: "bar", name: "Bar", active: true }],
@@ -786,9 +774,9 @@ it("explains exceptions, claims, defaults and an unroutable product", async () =
   const el = await mount(a);
   const select = q(el, '[data-test="test-product"]')!;
   for (const expected of [
-    "Because: the exception 'Cocktails → Bar'",
-    "Because: Bar claims Cocktails",
-    "Because: nothing else matched, so the default station takes it",
+    "Because: Bar: Bread, in every zone",
+    "Because: Bar: Drinks › Cocktails, in every zone",
+    "Because: Bar: All categories, in every zone — the default station",
     "Nothing can make this: no rule matched and no default station is active.",
   ]) {
     select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
@@ -1025,6 +1013,91 @@ it("opens a product tester link with its product selected", async () => {
   }
 });
 
+it.each([
+  ["en", "Made at: Terrace bar", "Because: Terrace bar: Drinks, on the Terrace"],
+  ["es", "Se prepara en: Terrace bar", "Porque: Terrace bar: Drinks, en la zona Terrace"],
+])("the tester names the winning cell in %s", async (locale, madeAt, because) => {
+  setLocale(locale);
+  const explain = vi.fn().mockResolvedValue({
+    route: { kind: "station", stationId: "terrace" },
+    decidedBy: {
+      kind: "cell",
+      address: { row: { kind: "category", categoryId: "drinks" }, zoneId: "terrace" },
+    },
+    fallbacks: [],
+    noReplacement: false,
+    clockReadable: true,
+    stations: [{ id: "terrace", name: "Terrace bar", active: true }],
+    extras: [],
+    extrasWaitOnDish: false,
+  });
+  const el = await mount(
+    api({
+      load: vi.fn().mockResolvedValue({ ...view, zones: [{ id: "terrace", name: "Terrace" }] }),
+      explain,
+    }),
+  );
+  q(el, '[data-test="test-zone"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
+  );
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  expect(explain).toHaveBeenLastCalledWith("bread", "terrace");
+  const answer = q(el, '[data-test="test-answer"]')!.textContent!;
+  expect(answer).toContain(madeAt);
+  expect(answer).toContain(because);
+  expect(answer.indexOf(madeAt)).toBeLessThan(answer.indexOf(because));
+});
+
+it.each([
+  ["lager", "Lager"],
+  ["large", "Lager · Large"],
+])("a product tester link opens Routing with the product or variant selected (%s)", async (id) => {
+  setLocale("en");
+  const before = location.href;
+  history.replaceState(null, "", `/manage/prep-stations/test/${id}`);
+  try {
+    const explain = vi.fn().mockResolvedValue({
+      route: { kind: "station", stationId: "bar" },
+      decidedBy: {
+        kind: "cell",
+        address: { row: { kind: "product", productId: "lager" }, zoneId: null },
+      },
+      fallbacks: [],
+      noReplacement: false,
+      clockReadable: true,
+      stations: [{ id: "bar", name: "Bar", active: true }],
+      extras: [],
+      extrasWaitOnDish: false,
+    });
+    const el = await mount(
+      api({
+        load: vi.fn().mockResolvedValue({
+          ...view,
+          products: [{ id: "lager", name: "Lager" }],
+          testProducts: [
+            { id: "lager", name: "Lager" },
+            { id: "large", name: "Lager · Large" },
+          ],
+        }),
+        explain,
+      }),
+    );
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    await tabs.updateComplete;
+    expect(tabs.value).toBe("routing");
+    expect((q(el, '[data-test="test-product"]') as WtCombobox).value).toBe(id);
+    expect(explain).toHaveBeenLastCalledWith(id, null);
+    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+      "Because: Bar: Lager, in every zone",
+    );
+  } finally {
+    history.replaceState(null, "", before);
+  }
+});
+
 it("keeps inactive product names in retained exceptions without offering variants as exception subjects", async () => {
   setLocale("en");
   const named: PrepStationsView = {
@@ -1129,22 +1202,16 @@ it("ignores a pending tester answer after Back removes the product", async () =>
   }
 });
 
-it("explains a no-preparation claim as an assignment", async () => {
+it("explains a No preparation cell as the category's chosen value", async () => {
   setLocale("en");
   const el = await mount(
     api({
-      load: vi.fn().mockResolvedValue({
-        ...view,
-        routing: {
-          ...view.routing,
-          claims: [
-            { categoryId: "cocktails", target: { kind: "no_preparation" }, stationOff: false },
-          ],
-        },
-      }),
       explain: vi.fn().mockResolvedValue({
         route: { kind: "no_preparation" },
-        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+        },
         fallbacks: [],
         noReplacement: false,
         stations: [],
@@ -1156,7 +1223,7 @@ it("explains a no-preparation claim as an assignment", async () => {
   );
   await settle(el);
   expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-    "Cocktails is assigned to No preparation",
+    "Because: No preparation: Drinks › Cocktails, in every zone",
   );
 });
 it("shows station claims by full folder path and unassigned work with default destination", async () => {
@@ -5705,7 +5772,7 @@ it("a missing watcher refusal keeps the printer draft retryable", async () => {
   expect(q(el, '[data-test="save-watcher-printers-pass"]')!.hasAttribute("disabled")).toBe(false);
 });
 
-it("describes extras with default, claim and exception decisions across fallback hops", async () => {
+it("describes extras with default, category-cell and product-cell decisions across fallback hops", async () => {
   const a = api({
     explain: vi.fn().mockResolvedValue({
       route: { kind: "no_preparation" },
@@ -5717,20 +5784,26 @@ it("describes extras with default, claim and exception decisions across fallback
       extras: [
         {
           productId: "unknown-default",
-          outcome: { kind: "made", stationId: "bar" },
-          decidedBy: null,
+          outcome: { kind: "follows_dish", why: "no_rule" },
+          decidedBy: { kind: "default" },
           fallbacks: [],
         },
         {
-          productId: "unknown-claim",
+          productId: "unknown-category",
           outcome: { kind: "made", stationId: "bar" },
-          decidedBy: { kind: "claim", categoryId: "cocktails" },
+          decidedBy: {
+            kind: "cell",
+            address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+          },
           fallbacks: [],
         },
         {
-          productId: "unknown-exception",
+          productId: "unknown-product",
           outcome: { kind: "made", stationId: "bar" },
-          decidedBy: { kind: "exception", exceptionId: "missing" },
+          decidedBy: {
+            kind: "cell",
+            address: { row: { kind: "product", productId: "unknown-product" }, zoneId: null },
+          },
           fallbacks: [
             { stationId: "closed", why: "out_of_hours" },
             { stationId: "disabled", why: "switched_off" },
@@ -5746,12 +5819,16 @@ it("describes extras with default, claim and exception decisions across fallback
   await settle(el);
   const answer = q(el, '[data-test="test-answer"]')!.textContent!;
   expect(answer).toContain(
-    "unknown-default: made at Bar, because nothing else matched, so the default station takes it",
+    "unknown-default: follows the dish — only the default station covers it",
   );
-  expect(answer).toContain("unknown-claim: made at Bar, because Bar claims Drinks › Cocktails");
+  expect(answer).toContain(
+    "unknown-category: made separately at Bar, as set for Drinks › Cocktails, in every zone",
+  );
   expect(answer).toContain("closed is closed outside its opening hours");
   expect(answer).toContain("disabled is disabled, so its work goes to Bar.");
-  expect(answer).toContain("unknown-exception: made at Bar, because of the exception");
+  expect(answer).toContain(
+    "unknown-product: made separately at Bar, as set for unknown-product, in every zone",
+  );
 });
 
 it.each(["cancel", "dismiss"])("%s abandons watcher removal without writing", async (how) => {
