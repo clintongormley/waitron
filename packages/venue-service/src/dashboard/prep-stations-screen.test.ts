@@ -107,10 +107,6 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
         outputsDown: { printersDown: [], screensDark: [] },
       };
     }),
-    setClaim: vi.fn(),
-    createException: vi.fn(),
-    assignProduct: vi.fn(),
-    removeClaim: vi.fn(),
     preview: vi.fn().mockResolvedValue([]),
     explain: vi.fn().mockResolvedValue({
       route: null,
