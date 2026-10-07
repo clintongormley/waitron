@@ -7,7 +7,6 @@ import { setLocale, t } from "../i18n/t.js";
 import type { Unit, UnitInput } from "../api/client.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import "./unit-form.js";
-import "./product-color-form.js";
 import "./category-color-form.js";
 
 registerIcons(DASHBOARD_ICONS);
@@ -23,13 +22,12 @@ const unit: Unit = {
 };
 class CatalogueFormsApp extends LitElement {
   readonly leave = new LeaveController(this);
-  kind: "unit" | "product-color" | "category-color" = "unit";
+  kind: "unit" | "category-color" = "unit";
   value: Unit | null = unit;
   open = true;
   cancelled = 0;
   submitted: unknown[] = [];
   chosen: unknown[] = [];
-  productId = "coffee";
   readonly cancel = () => {
     this.cancelled++;
     this.open = false;
@@ -46,24 +44,14 @@ class CatalogueFormsApp extends LitElement {
             @wt-submit=${(event: CustomEvent<{ value: UnitInput }>) =>
               this.submitted.push(event.detail.value)}
           ></dashboard-unit-form>`
-        : this.kind === "product-color"
-          ? html`<dashboard-product-color-form
-              .open=${this.open}
-              name="Coffee"
-              .productId=${this.productId}
-              .color=${"#b12525"}
-              @wt-cancel=${this.cancel}
-              @wt-submit=${(event: CustomEvent<{ color: string | null }>) =>
-                this.submitted.push(event.detail.color)}
-            ></dashboard-product-color-form>`
-          : html`<dashboard-category-color-form
-              .open=${this.open}
-              heading="Category colour"
-              .color=${"#b12525"}
-              @wt-cancel=${this.cancel}
-              @wt-choose=${(event: CustomEvent<{ color: string | null }>) =>
-                this.chosen.push(event.detail.color)}
-            ></dashboard-category-color-form>`
+        : html`<dashboard-category-color-form
+            .open=${this.open}
+            heading="Category colour"
+            .color=${"#b12525"}
+            @wt-cancel=${this.cancel}
+            @wt-choose=${(event: CustomEvent<{ color: string | null }>) =>
+              this.chosen.push(event.detail.color)}
+          ></dashboard-category-color-form>`
     }${this.leave.render({
       heading: t("unsaved.heading"),
       message: t("unsaved.message"),
@@ -206,110 +194,23 @@ it("Unit success commits submitted translations without clearing edits made duri
   expect((await question(app)).open).toBe(false);
 });
 
-async function mountColor(kind: "product-color" | "category-color" = "product-color") {
+async function mountCategoryColor() {
   const { el: app } = await mountWidget<CatalogueFormsApp>("catalogue-forms-leave-test-app", {
-    kind,
+    kind: "category-color",
   });
-  const form = app.shadowRoot!.querySelector("dashboard-product-color-form")!;
   const category = app.shadowRoot!.querySelector("dashboard-category-color-form")!;
-  const owner = form ?? category;
-  await owner.updateComplete;
-  await owner.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+  await category.updateComplete;
+  await category.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   expect(
-    owner.shadowRoot!.querySelector('[data-color="#b12525"]')!.getAttribute("aria-checked"),
+    category.shadowRoot!.querySelector('[data-color="#b12525"]')!.getAttribute("aria-checked"),
   ).toBe("true");
-  return { app, form, category };
+  return { app, category };
 }
 function chooseColor(form: HTMLElement, color: string) {
   form.shadowRoot!.querySelector<HTMLElement>(`[data-color="${color}"]`)!.click();
 }
-for (const route of ["cancel", "escape"] as const) {
-  it(`Product colour ${route} retains the chosen colour through Keep and discards only once`, async () => {
-    const { app, form } = await mountColor();
-    chooseColor(form, "#256bb1");
-    await form.updateComplete;
-    if (route === "cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
-    const q = await question(app);
-    expect(app.cancelled).toBe(0);
-    expect(q.open).toBe(true);
-    expect(
-      form.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open,
-    ).toBe(true);
-    q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
-    await expect.poll(() => q.open).toBe(false);
-    await closeReportsDelivered();
-    expect(
-      form.shadowRoot!.querySelector('[data-color="#256bb1"]')!.getAttribute("aria-checked"),
-    ).toBe("true");
-    cancel(form);
-    await question(app);
-    q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
-    await expect.poll(() => app.cancelled).toBe(1);
-    await closeReportsDelivered();
-    expect(app.cancelled).toBe(1);
-    expect(
-      form.shadowRoot!.querySelector('[data-color="#b12525"]')!.getAttribute("aria-checked"),
-    ).toBe("true");
-    expect(app.submitted).toEqual([]);
-  });
-}
-it("Product colour revert closes directly and a refused inherited-colour write remains protected", async () => {
-  const { app, form } = await mountColor();
-  chooseColor(form, "#256bb1");
-  await form.updateComplete;
-  chooseColor(form, "#b12525");
-  await form.updateComplete;
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-  chooseColor(form, "");
-  await form.updateComplete;
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
-  expect(app.submitted).toEqual([null]);
-  form.errors = { color: "Refused colour" };
-  await form.updateComplete;
-  cancel(form);
-  expect((await question(app)).open).toBe(true);
-  expect(app.cancelled).toBe(0);
-});
-it("committing a successful Product colour write invalidates a pending question", async () => {
-  const { app, form } = await mountColor();
-  chooseColor(form, "#256bb1");
-  await form.updateComplete;
-  cancel(form);
-  expect((await question(app)).open).toBe(true);
-  form.commitSaved("#256bb1");
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  expect(app.cancelled).toBe(0);
-  chooseColor(form, "");
-  await form.updateComplete;
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-});
-it("switching the Product colour identity invalidates a pending question without resetting on a live colour read", async () => {
-  const { app, form } = await mountColor();
-  chooseColor(form, "#256bb1");
-  await form.updateComplete;
-  form.color = "#447b23";
-  await form.updateComplete;
-  expect(
-    form.shadowRoot!.querySelector('[data-color="#256bb1"]')!.getAttribute("aria-checked"),
-  ).toBe("true");
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(form);
-  expect((await question(app)).open).toBe(true);
-  app.productId = "tea";
-  app.requestUpdate();
-  await app.updateComplete;
-  await form.updateComplete;
-  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-  expect(
-    form.shadowRoot!.querySelector<HTMLInputElement>('input[name="product-color"]')!.value,
-  ).toBe("#447b23");
-  expect(app.cancelled).toBe(0);
-});
 it("category colour choices submit immediately and Cancel remains direct without a second warning", async () => {
-  const { app, category } = await mountColor("category-color");
+  const { app, category } = await mountCategoryColor();
   chooseColor(category, "#256bb1");
   await category.updateComplete;
   expect(app.chosen).toEqual(["#256bb1"]);

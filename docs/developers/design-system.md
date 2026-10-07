@@ -742,9 +742,11 @@ inheritance. For a property whose token is a shared scale value it would be wron
 (its padding or weight), or one it reads no token for (an underline), put
 `exportparts="button: <name>"` on the `wt-button` and style `wt-data-table::part(<name>)`, as
 `apps/dashboard/src/screens/modifiers-screen.ts` does for its Used by count. The tree swatches
-follow this: the Products tree and the Structure tree mark them `part="swatch-button"` (or
-`part="swatch-box"` where the swatch opens nothing) around `part="color-swatch"`, and both take
-the rules from one shared block, `swatchPartStyles` (`apps/dashboard/src/widgets/swatch-styles.ts`).
+follow this: a category's or section's swatch is `part="swatch-button"` (or `part="swatch-box"`
+where it opens nothing) around `part="color-swatch"`, styled by `swatchPartStyles`
+(`apps/dashboard/src/widgets/swatch-styles.ts`); a product's is `part="product-media media-link"`,
+plus `media-link-busy` while the tree is busy (or `product-media swatch-box` where it opens
+nothing), styled by `productMediaStyles` (`apps/dashboard/src/widgets/product-media.ts`).
 Cost: the categories
 screen's colour swatches, thumbnail boxes and ancestor-row muting
 never rendered at all in the browser, through a full review and a green suite — DOM-presence tests
@@ -878,10 +880,12 @@ Reserve that column on the menu's, Home's and read-only rows. Keep the arrow and
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
 holds a section's colour square, a product's colour square or photo, or nothing on the Home and
 menu rows. A photo has a ring in the product's own colour, falling back to its category's inherited
-colour. The product slot opens Colour… and Change photo…; the latter opens the existing product
-editor with its photo field focused. Section squares still open their colour picker directly. Hide
-media in both trees when the tree's box is at most 440px wide; the product editor remains available
-through the row's Actions menu.
+colour. On an owned row the product slot is a link to the product's Edit dialog on the Catalogue
+screen, which opens with its photo field focused; on an included menu's row, or for a product the
+library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide
+media in both trees when the tree's box is at most 440px wide. In the Products list the product
+editor remains available through the row's Actions menu; a Menus Structure product row's Actions
+menu holds only Remove, so at that width the tree offers no way to open the product (backlog, A327).
 
 The grips show only in Reorder mode, so a menu is not rearranged by a stray drag while you browse
 it. The tab's toolbar starts with a Reorder icon button (a grip mark, Reordenar in Spanish; "Icon
@@ -1040,8 +1044,7 @@ Last comes a slot a product photo wide: on a category
 row it holds the category's colour square, centred; on a product row, the product's photo with a
 colour ring, or a filled colour square when it has no photo. Both use the product's own colour,
 falling back to its category's inherited colour; without either colour the frame is empty. Clicking
-the product slot opens Colour… and Change photo… (Color… and Cambiar foto… in Spanish); Change
-photo… opens the existing editor with its photo field focused. Category squares still open their
+the product slot opens the product's Edit dialog with its photo field focused. Category squares still open their
 colour picker directly. On All products and on a category being added or renamed the slot is blank. No row draws a folder icon, though the picture that follows the pointer while you drag
 a category keeps one. Then come `--wt-space-3` and the name. So on those rows names step in by the
 table's indent per level whether the row is a category or a product, and the Name heading, which
@@ -1539,7 +1542,10 @@ Its leave callback receives the destination URL so Account settings can retain u
 page drafts. Sidebar and product-link requests defer screen changes until acceptance. Plain
 same-app anchors use the dispatched click's composed path; modified clicks, new-tab targets
 and downloads keep browser handling. Fragment-only form links keep their target's handler,
-which owns any leave request. Preview department changes and same-page receipt Back retain
+which owns any leave request. The dashboard catches a link click before the link's own handler
+sees it, so a link that handles a plain click itself (the product swatch that opens Edit in
+place) carries `data-own-click` to keep it, and a link with `aria-disabled="true"` is cancelled
+there and goes nowhere. Preview department changes and same-page receipt Back retain
 staged inputs; a tab or management-link departure asks before leaving them.
 
 Each form owns its comparison and successful-write boundary. Compare membership for selected

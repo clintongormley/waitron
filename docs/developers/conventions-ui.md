@@ -728,10 +728,8 @@ renderer/security cases in each shell's suite.
 The Unit form compares its trimmed translated request body, preserving translations it does not
 show and invalid precision input. A Related Unit registers under its Product, and its successful
 write commits the child before the Product accepts the new unit id. The Units screen commits
-before its lookup refresh. Product colour compares its explicit override, including null for
-inheritance; an answer for an earlier opening cannot commit a replacement Product. Behavioral
-cases: `catalogue-forms.unsaved.test.ts`, `unit-owners.unsaved.test.ts` and
-`menu-colour.unsaved.test.ts` under `apps/dashboard/src/`. Category colour selection submits
+before its lookup refresh. Behavioral cases: `catalogue-forms.unsaved.test.ts` and
+`unit-owners.unsaved.test.ts` under `apps/dashboard/src/`. Category colour selection submits
 immediately and remains exempt.
 
 _Historical implementation checkpoints, 2026-10-06: the modal receipts below describe the

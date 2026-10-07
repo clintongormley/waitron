@@ -308,23 +308,6 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible product colour dialog, opened from a product's swatch", async () => {
-    const frame = { width: window.innerWidth, height: window.innerHeight };
-    await page.viewport(1280, 900);
-    onTestFinished(() => page.viewport(frame.width, frame.height));
-    const { el, host } = await mount("populated", theme, LUNCH);
-    await editDrinks(el);
-    const media = treeRows(el).querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-      '[data-test="color-m-drinks/m-lager"]',
-    )!;
-    await media.updateComplete;
-    await userEvent.click(media.shadowRoot!.querySelector("button")!);
-    await userEvent.click(media.querySelector<HTMLElement>('[data-test="media-colour"]')!);
-    const form = q(el, "dashboard-product-color-form") as HTMLElement & { open: boolean };
-    await vi.waitFor(() => expect(form.open).toBe(true));
-    await expectNoA11yViolations(host);
-  });
-
   it("accessible include-menu picker", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     await editDrinks(el);

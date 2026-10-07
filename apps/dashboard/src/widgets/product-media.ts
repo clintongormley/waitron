@@ -1,6 +1,5 @@
 import { css, html, nothing } from "lit";
 import { isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
-import "@waitron/ui/src/components/wt-row-actions.js";
 import { t } from "../i18n/t.js";
 
 export const productMediaStyles = css`
@@ -15,11 +14,16 @@ export const productMediaStyles = css`
   wt-data-table[narrow]::part(product-media) {
     display: none;
   }
-  wt-data-table::part(media-trigger) {
-    display: flex;
-    padding: 0;
-    width: var(--wt-tap-min);
-    height: var(--wt-tap-min);
+  wt-data-table::part(media-link) {
+    border-radius: var(--wt-radius-md);
+  }
+  wt-data-table::part(media-link-busy) {
+    cursor: default;
+    opacity: var(--wt-opacity-disabled);
+  }
+  wt-data-table::part(media-link):focus-visible {
+    outline: var(--wt-focus-ring);
+    outline-offset: var(--wt-focus-offset);
   }
   wt-data-table::part(media-frame) {
     margin-inline-end: 0;
@@ -33,12 +37,6 @@ export const productMediaStyles = css`
   wt-data-table::part(photo-ring) {
     border-width: var(--wt-space-1);
   }
-  wt-data-table::part(media-photo-link) {
-    padding: var(--wt-space-3);
-    color: var(--wt-color-text);
-    border-radius: var(--wt-radius-md);
-    text-decoration: none;
-  }
 `;
 
 export function productMedia(options: {
@@ -49,23 +47,12 @@ export function productMedia(options: {
   color: string | null;
   editable?: boolean;
   busy: boolean;
-  colour: () => void;
-  photo?: () => void;
+  /** Opens the product's Edit in place; without it the click follows the link. */
+  open?: () => void;
 }) {
-  const {
-    key,
-    productId = key,
-    name,
-    image,
-    color,
-    editable = true,
-    busy,
-    colour,
-    photo,
-  } = options;
+  const { key, productId = key, name, image, color, editable = true, busy, open } = options;
   const painted = isStoredColor(color);
   const frame = html`<span
-    slot="trigger"
     part=${`${image ? "thumb-frame media-photo-frame" : "thumb-placeholder"} color-swatch media-frame${image && painted ? " photo-ring" : ""}${painted ? "" : " empty"}`}
     data-test=${image ? "thumb" : "thumb-placeholder"}
     style=${painted ? `--product-media-color:${color}` : nothing}
@@ -76,40 +63,25 @@ export function productMedia(options: {
     return html`<span part="product-media swatch-box" data-test=${`color-${key}`} aria-hidden="true"
       >${frame}</span
     >`;
-  return html`<wt-row-actions
-    part="product-media"
-    exportparts="trigger:media-trigger"
+  return html`<a
+    part=${busy ? "product-media media-link media-link-busy" : "product-media media-link"}
     data-test=${`color-${key}`}
-    label=${t("product.media_actions").replace("{name}", name)}
-    .disabled=${busy}
-    @click=${(event: Event) => event.stopPropagation()}
-    >${frame}
-    <wt-button
-      data-test="media-colour"
-      align="start"
-      variant="secondary"
-      .disabled=${busy}
-      @click=${() => {
-        if (!busy) colour();
-      }}
-      >${t("product.media_colour")}</wt-button
-    >
-    <a
-      part="media-photo-link"
-      data-test="media-photo"
-      href=${`/manage/catalogue/product/${encodeURIComponent(productId)}?field=image`}
-      @click=${(event: MouseEvent) => {
-        if (busy) {
-          event.preventDefault();
-          return;
-        }
-        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
-          return;
-        if (!photo) return;
+    ?data-own-click=${open !== undefined}
+    href=${`/manage/catalogue/product/${encodeURIComponent(productId)}?field=image`}
+    aria-label=${t("product.edit_named").replace("{name}", name)}
+    aria-disabled=${busy ? "true" : nothing}
+    @click=${(event: MouseEvent) => {
+      event.stopPropagation();
+      if (busy) {
         event.preventDefault();
-        photo();
-      }}
-      >${t("product.media_photo")}</a
-    >
-  </wt-row-actions>`;
+        return;
+      }
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+        return;
+      if (!open) return;
+      event.preventDefault();
+      open();
+    }}
+    >${frame}</a
+  >`;
 }

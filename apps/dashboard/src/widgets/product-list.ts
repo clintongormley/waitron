@@ -989,9 +989,7 @@ export class ProductList extends LitElement {
                   color:
                     product.color ?? categoryColor(product.primaryCategoryId, this.#categoryById),
                   busy: false,
-                  colour: () => this.#send("product-colour", { productId: product.id }),
-                  photo: () =>
-                    this.#send("edit-product", { productId: product.id, field: "image" }),
+                  open: () => this.#send("edit-product", { productId: product.id, field: "image" }),
                 })}<span part="name-stack"
                   ><strong>${product.name}</strong>${this.#variantCount(product)}</span
                 >

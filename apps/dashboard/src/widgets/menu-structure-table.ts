@@ -762,7 +762,6 @@ export class MenuStructureTable extends LitElement {
         color: product?.color ?? categoryColor(product?.categoryId ?? null, this.#categoryById),
         editable: !row.readOnly && product !== undefined,
         busy: this.busy,
-        colour: () => this.#send("wt-product-color", { productId }),
       });
     }
     const sectionId = node.ref.sectionId;

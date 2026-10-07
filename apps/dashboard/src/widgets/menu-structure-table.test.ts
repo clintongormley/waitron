@@ -1480,21 +1480,36 @@ describe("colour swatches", () => {
     },
   );
 
-  it("sends a product's colour request from its swatch, toggling no row and starting no drag", async () => {
+  /** Records whether the widget's own handlers cancelled each click on `link`, then cancels it so
+   * the test page never navigates. Registered after render, so it runs after the widget's handler. */
+  function clicksOn(link: HTMLElement): boolean[] {
+    const prevented: boolean[] = [];
+    link.addEventListener("click", (event) => {
+      prevented.push(event.defaultPrevented);
+      event.preventDefault();
+    });
+    return prevented;
+  }
+
+  it("makes a product's swatch a link to its Edit at the photo, toggling no row and starting no drag", async () => {
     const el = await mountColoured();
     await toggle(el, "m-drinks");
     const sent = sentEvents(el);
     const swatch = swatchOf(el, "m-drinks/m-lemonade");
-    expect(swatch.tagName).toBe("WT-ROW-ACTIONS");
-    await (swatch as HTMLElementTagNameMap["wt-row-actions"]).updateComplete;
-    expect(swatch.getAttribute("label")).toBe(
-      t("product.media_actions").replace("{name}", "Lemonade"),
+    expect(swatch.tagName).toBe("A");
+    expect(swatch.getAttribute("href")).toBe("/manage/catalogue/product/p-lemonade?field=image");
+    expect(swatch.getAttribute("aria-label")).toBe(
+      t("product.edit_named").replace("{name}", "Lemonade"),
     );
-    await userEvent.click(swatch.shadowRoot!.querySelector("button")!);
-    expect(sent).toEqual([]);
-    swatch.querySelector<HTMLElement>('[data-test="media-colour"]')!.click();
+    expect(swatch.querySelector("wt-row-actions, button")).toBeNull();
+    const reachedRow: Event[] = [];
+    row(el, "m-drinks/m-lemonade")!.addEventListener("click", (event) => reachedRow.push(event));
+    const prevented = clicksOn(swatch);
+    await userEvent.click(swatch);
     await settle(el);
-    expect(sent).toEqual([["wt-product-color", { productId: "p-lemonade" }]]);
+    expect(prevented).toEqual([false]);
+    expect(reachedRow).toEqual([]);
+    expect(sent).toEqual([]);
     expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
 
     pointer(swatch, "pointerdown");
@@ -1502,7 +1517,7 @@ describe("colour swatches", () => {
     pointer(swatch, "pointerup", nameAt(el, "m-fav"));
     await settle(el);
     expect(ghost(el)).toBeNull();
-    expect(sent).toEqual([["wt-product-color", { productId: "p-lemonade" }]]);
+    expect(sent).toEqual([]);
   });
 
   it("paints a section's own colour, and its swatch asks for the section's Edit without opening or closing it", async () => {
@@ -1553,7 +1568,8 @@ describe("colour swatches", () => {
     ] as const) {
       const swatch = swatchOf(el, key);
       expect(swatch.tagName, key).not.toBe("BUTTON");
-      expect(swatch.querySelector("button"), key).toBeNull();
+      expect(swatch.tagName, key).not.toBe("A");
+      expect(swatch.querySelector("button, a"), key).toBeNull();
       expect(getComputedStyle(chipOf(el, key)).backgroundColor, key).toBe(colour);
       swatch.click();
     }
@@ -1568,7 +1584,8 @@ describe("colour swatches", () => {
     const sent = sentEvents(el);
     const swatch = swatchOf(el, "m-gone");
     expect(swatch.tagName).not.toBe("BUTTON");
-    expect(swatch.querySelector("button")).toBeNull();
+    expect(swatch.tagName).not.toBe("A");
+    expect(swatch.querySelector("button, a")).toBeNull();
     expect(chipOf(el, "m-gone").part.contains("color-swatch")).toBe(true);
     expect(chipOf(el, "m-gone").part.contains("empty")).toBe(true);
     swatch.click();
@@ -1578,13 +1595,29 @@ describe("colour swatches", () => {
   it("disables the swatches while busy, and a click on one sends nothing", async () => {
     const el = await mountColoured({ busy: true });
     const sent = sentEvents(el);
-    for (const key of ["m-burger", "m-drinks"]) {
-      const swatch = swatchOf(el, key) as HTMLButtonElement;
-      const trigger = swatch.shadowRoot?.querySelector("button") ?? swatch;
-      expect((trigger as HTMLButtonElement).disabled, key).toBe(true);
-      swatch.click();
-    }
+    const section = swatchOf(el, "m-drinks") as HTMLButtonElement;
+    expect(section.disabled).toBe(true);
+    section.click();
+    const product = swatchOf(el, "m-burger");
+    expect(product.tagName).toBe("A");
+    expect(product.getAttribute("aria-disabled")).toBe("true");
+    const prevented = clicksOn(product);
+    product.click();
+    expect(prevented).toEqual([true]);
     expect(sent).toEqual([]);
+  });
+
+  it("dims a busy product swatch the way it dims a busy section swatch", async () => {
+    const el = await mountColoured({ busy: true });
+    const section = getComputedStyle(swatchOf(el, "m-drinks"));
+    const product = getComputedStyle(swatchOf(el, "m-burger"));
+    expect(Number(section.opacity)).toBeLessThan(1);
+    expect(product.opacity).toBe(section.opacity);
+    expect(product.cursor).toBe("default");
+    el.busy = false;
+    await settle(el);
+    expect(getComputedStyle(swatchOf(el, "m-burger")).opacity).toBe("1");
+    expect(getComputedStyle(swatchOf(el, "m-burger")).cursor).toBe("pointer");
   });
 });
 
@@ -1896,23 +1929,16 @@ describe("Structure product media", () => {
       products: [{ ...products[2]!, categoryId: "c1" }],
       categories: [{ id: "c1", parentId: null, name: "Food", color: "#256bb1" }],
     });
-    const media = row(el, "m-burger")!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    const media = row(el, "m-burger")!.querySelector<HTMLAnchorElement>(
       '[data-test="color-m-burger"]',
     );
     expect(media).not.toBeNull();
-    expect(media!.tagName).toBe("WT-ROW-ACTIONS");
-    await media!.updateComplete;
+    expect(media!.tagName).toBe("A");
     const frame = media!.querySelector<HTMLElement>('[data-test="thumb"]')!;
     expect(getComputedStyle(frame).borderTopColor).toBe("rgb(37, 107, 177)");
     expect(parseFloat(getComputedStyle(frame).borderTopWidth)).toBeGreaterThan(1);
-    expect(media!.querySelector("a")!.getAttribute("href")).toBe(
-      "/manage/catalogue/product/p-burger?field=image",
-    );
-    await userEvent.click(media!.shadowRoot!.querySelector("button")!);
-    const photoLink = media!.querySelector<HTMLAnchorElement>("a")!;
-    photoLink.focus();
-    expect(table(el).shadowRoot!.activeElement).toBe(photoLink);
-    await userEvent.keyboard("{Escape}");
-    expect(media!.shadowRoot!.activeElement).toBe(media!.shadowRoot!.querySelector("button"));
+    expect(media!.getAttribute("href")).toBe("/manage/catalogue/product/p-burger?field=image");
+    media!.focus();
+    expect(table(el).shadowRoot!.activeElement).toBe(media);
   });
 });

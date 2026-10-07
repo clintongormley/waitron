@@ -4592,18 +4592,22 @@ it.each([390, 1280])(
   },
 );
 
-describe("product media actions", () => {
-  it("paints the leading photo ring with inherited colour and sends separate colour/photo actions", async () => {
+describe("product media link", () => {
+  it("paints the leading photo ring with inherited colour, and its swatch opens the product's Edit at the photo", async () => {
     const { el, root } = await mountTree({
       products: [product({ id: "cola", name: "Cola", primaryCategoryId: "d", image: "cola.webp" })],
       categories: [{ ...drinks, color: "#256bb1" }],
     });
     await openRow(el, "folder:d");
-    const media = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-      '[data-test="color-cola"]',
-    );
+    const media = root.querySelector<HTMLAnchorElement>('[data-test="color-cola"]');
     expect(media).not.toBeNull();
-    await media!.updateComplete;
+    expect(media!.tagName).toBe("A");
+    expect(media!.getAttribute("href")).toBe("/manage/catalogue/product/cola?field=image");
+    expect(media!.getAttribute("aria-label")).toBe(
+      t("product.edit_named").replace("{name}", "Cola"),
+    );
+    expect(media!.querySelector("wt-row-actions, button")).toBeNull();
+    expect(root.querySelector("wt-row-actions[data-test='color-cola']")).toBeNull();
     const frame = media!.querySelector<HTMLElement>('[data-test="thumb"]')!;
     expect(getComputedStyle(frame).borderTopColor).toBe("rgb(37, 107, 177)");
     expect(parseFloat(getComputedStyle(frame).borderTopWidth)).toBeGreaterThan(1);
@@ -4611,21 +4615,36 @@ describe("product media actions", () => {
     expect(media!.getBoundingClientRect().right).toBeLessThanOrEqual(
       name.getBoundingClientRect().left,
     );
+    const expandedBefore = root
+      .querySelector('tr[data-row-key="folder:d"]')!
+      .getAttribute("aria-expanded");
     const sent: unknown[] = [];
     for (const type of ["edit-product", "product-colour"])
       el.addEventListener(type, (e) => sent.push([type, (e as CustomEvent).detail]));
-    await userEvent.click(media!.shadowRoot!.querySelector("button")!);
-    expect(sent).toEqual([]);
-    media!.querySelector<HTMLElement>('[data-test="media-colour"]')!.click();
-    expect(sent).toEqual([["product-colour", { productId: "cola" }]]);
-    await userEvent.click(media!.shadowRoot!.querySelector("button")!);
-    media!.querySelector<HTMLElement>('[data-test="media-photo"]')!.click();
+    const prevented: boolean[] = [];
+    media!.addEventListener("click", (e) => {
+      prevented.push(e.defaultPrevented);
+      e.preventDefault();
+    });
+    const reachedRow: Event[] = [];
+    media!.closest("tr")!.addEventListener("click", (e) => reachedRow.push(e));
+    await userEvent.click(media!);
+    expect(prevented).toEqual([true]);
+    expect(reachedRow).toEqual([]);
+    expect(sent).toEqual([["edit-product", { productId: "cola", field: "image" }]]);
+    media!.focus();
+    expect(root.activeElement).toBe(media);
+    await userEvent.keyboard("{Enter}");
     expect(sent).toEqual([
-      ["product-colour", { productId: "cola" }],
+      ["edit-product", { productId: "cola", field: "image" }],
       ["edit-product", { productId: "cola", field: "image" }],
     ]);
+    expect(root.querySelector('tr[data-row-key="folder:d"]')!.getAttribute("aria-expanded")).toBe(
+      expandedBefore,
+    );
+    expect(root.querySelector("[popover]:popover-open")).toBeNull();
   });
-  it("fills a product without a photo with its own colour and hides the whole menu at phone width", async () => {
+  it("fills a product without a photo with its own colour and hides the swatch at phone width", async () => {
     const { el, root } = await mountTree({
       products: [product({ id: "plain", name: "Plain", color: "#b12525" })],
     });

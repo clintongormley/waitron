@@ -920,6 +920,23 @@ unused `units` property is gone (it closes W75's leftover).
   its photo with an own-or-inherited colour ring, or its colour square; it opens Colour… and
   Change photo…, which opens the existing editor with the photo field focused. Category and
   section squares still open their colour picker directly.
+- **A327, owner 2026-10-07 — DONE (the swatch opens the product's Edit dialog):** a product's
+  leading slot, in the Products list and in the Menus Structure tree, is now one link named
+  "Edit <name>" that opens the product's Edit dialog with its photo field focused; the menu holding
+  Colour… and Change photo… is gone. A product's colour is set in that dialog. The product colour
+  dialog (`product-color-form.ts`), which only that menu opened, is retired with the dashboard
+  client's `setProductColor`.
+  - Open: `PATCH /management-api/products/:id` (`apps/server/src/catalogue-api.ts`) now has no
+    caller in `apps/` outside tests; the dashboard's `setProductColor` was its only one. Deleting
+    the route, or keeping it on purpose, is not decided.
+  - Open: `wt-row-actions` (`packages/ui/src/components/wt-row-actions.ts`) keeps the `disabled`
+    property and the `trigger` slot and part that A303 added for the retired menu. Nothing outside
+    its own tests uses them now, and those tests still name Colour… and Change photo…. Retiring
+    them, or keeping them on purpose, is not decided.
+  - Open, found during A327's look and believed to predate it (the base hid the swatch at the same
+    width): at 440px or narrower the Menus Structure tree hides every swatch, and a product row's
+    Actions menu holds only "Remove from <section>", so on a phone that tree offers no way to open
+    the product. The Products list's Actions menu still offers Edit.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
@@ -2213,8 +2230,7 @@ native-input EN/ES regressions to `wt-price-input.test.ts` and runs the menu-pri
 Left open:
 
 - In the Structure tree, closing the section form opened from a section's swatch puts focus on the
-  row's ⋮ menu, while the product colour dialog puts it back on the swatch. Neither is pinned by a
-  test, and the two should agree.
+  row's ⋮ menu rather than back on the swatch that opened it. No test pins it.
 - At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
   swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
   on the W92 branch, not on `main`) _(2026-10-06: W85e gives it 12 px more; it still clips)_
@@ -2235,12 +2251,6 @@ Left open:
 - A292's look is the owner's to judge (#1310's "Looks for the owner to judge"; screenshots in lane
   C's `a292-shots/`): in the dark theme an available plain tile is only about 1.10:1 lighter than a
   sold-out one, and in the light theme a pale stripe shows mostly through the dark line beside it.
-- The category colour chooser (`category-color-form.ts`) and the product colour dialog
-  (`product-color-form.ts`) share most of their code; a review suggested one component. Kept as two
-  in W92 because the plan modelled one on the other.
-- The product colour dialog opened from Menu Structure does not pick up another manager's change to
-  that product's own colour while it is open. I believe this predates the last review round; not
-  checked against earlier commits.
 
 **Menu search lists the shown menu first, then each other menu the device is served — DONE (W94,
 #1291, 2026-10-06).** The till's menu search groups matches by menu, the shown one first, each tile

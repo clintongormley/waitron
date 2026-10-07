@@ -289,12 +289,11 @@ screen draws its usual neutral look. The rule lives in one place, `effectiveColo
 dashboard both call. So colouring a category colours every product under it, at any depth, that
 has no colour of its own and no coloured category nearer to it.
 
-You set a product's own colour in two places. The product editor has a colour chooser after Name;
+You set a product's own colour in the product editor, which has a colour chooser after Name;
 its first choice, "Use category colour", shows the colour the product would take from its category
 (following a category you change in the editor before saving), or says "Its category has no
-colour." Choosing it saves no colour of the product's own. In a menu's Structure tree, a product's
-swatch opens a "Colour of …" dialog that says the change applies on every menu that uses the
-product; it sends `PATCH /management-api/products/:id` with `{ "color": … }`. A colour is
+colour." Choosing it saves no colour of the product's own. `PATCH /management-api/products/:id`
+also accepts `{ "color": … }`, though no dashboard screen sends it. A colour is
 lowercase `#rrggbb`, or null for none. A save refuses anything else, an empty string included, as
 `product.invalid` with `field: "color"`; at the PATCH route a value that is neither a string nor
 null is refused first, as `management.request_invalid`. A configuration import refuses the whole
