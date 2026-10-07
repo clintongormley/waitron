@@ -384,6 +384,12 @@ describe("then upgrading to the end of media's folder", () => {
   const QUEUED_JOIN =
     "JOIN menu_scheduled_publications ON menu_scheduled_publications.version_id = menu_version_images.version_id";
   const QUEUED_STATE = "menu_scheduled_publications.state = 'queued'";
+  const ADDED = [
+    "section_members_media_image_fk_insert",
+    "section_members_media_image_fk_parent_delete",
+    "section_members_media_image_fk_parent_rename",
+    "section_members_media_image_fk_update",
+  ];
   type Trigger = { name: string; sql: string };
   let latest: Trigger[];
 
@@ -400,7 +406,9 @@ describe("then upgrading to the end of media's folder", () => {
     const untouched = (triggers: unknown[]) =>
       (triggers as Trigger[]).filter((trigger) => !REWRITTEN.includes(trigger.name));
     expect(untouched(after.triggers)).toHaveLength(9);
-    expect(untouched(latest)).toEqual(untouched(after.triggers));
+    expect(untouched(latest).filter((trigger) => !ADDED.includes(trigger.name))).toEqual(
+      untouched(after.triggers),
+    );
   });
 
   it("gives each of the two rewritten triggers the live join, the queued join and the queued-state filter", () => {
