@@ -972,6 +972,33 @@ The printer modal close test stalled on its own paused `requestAnimationFrame`; 
 native dialog's closed state avoids mixing that clock with the browser's queued close event
 (`apps/dashboard/src/screens/printers-screen.test.ts`, "closing Add printer…").
 
+## A test waits for a browser grant by tracking the request, never by a fixed sleep.
+
+Where the browser has Web Locks, the Payments screen asks for one before it reads a card reader's
+status, and the read starts only after the browser answers. How long that answer takes is the
+browser's business, so a test that sleeps a fixed time before reading the screen is betting on a
+runner's speed. Nothing guards it.
+
+That bet failed in CI, in `apps/dashboard/src/screens/payments-screen.test.ts`:
+
+- **W59 (#1168).** PR #1165's run 37186851640 failed at line 2008 of the file as it then stood,
+  with one reader-status call where the test expected two, and main's run 37188446283 failed its
+  first attempt at the reordered-readers count. The fix waits for the call count to reach the
+  expected number (`waitForReaderStatusCalls`, a `vi.waitFor`) before checking it.
+- **A320 (#1342).** Main's run 37585788177 (job `test-dashboard`) failed "isolates a status request
+  failure to its row": the second reader's row read `Checking…` where the test expected `Offline`.
+  The file's shared `flush` helper gave the lock answer a fixed 10 ms. #1342 reports that with
+  every grant made to reach the page 40 ms late, in real Chromium on the owner's Mac, the old file
+  failed 29 of its 109 tests (this one with the CI failure's `Checking…`) and the new one passed
+  all 109.
+
+A320 wraps `navigator.locks.request` for the whole file, recording each request the page makes, and
+`flush` now waits (`lockGrantsSettled`) until each one has been granted or is queued behind one of
+the page's own callbacks that still holds its lock. That wait moves to the next task through a
+`MessageChannel`, not a timer, so fake timers do not hold it up. Its accepted limit,
+from #1342's review: it counts only this page's own lock holders, so a lock another page held and
+never gave back would keep `flush` waiting until the test's timeout.
+
 ## The mouse cursor belongs to the shared page, so a hover outlives the test — and the file — that moved it.
 
 In browser mode every test file in a worker runs in its own iframe but shares ONE browser page, and

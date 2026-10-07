@@ -5513,6 +5513,8 @@ approved.
   Accepted limit (#1342's Codex review): the wait counts only this page's own lock holders, so a
   lock another page held and never gave back would keep `flush` waiting until the test's timeout.
   No dashboard test file that mounts the Payments screen holds one that long (listed in #1342).
+  The rule it taught — a test waits for a browser grant by tracking it, never a fixed sleep — is
+  in CLAUDE.md §4, with this receipt in `docs/developers/testing-guide.md` (A340).
 - **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
   attempt 1, job 111163230954, 2026-10-03; passed on re-run).** In
   `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after
