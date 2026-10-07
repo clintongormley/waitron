@@ -5396,7 +5396,7 @@ approved.
 - **A Payments screen test checked a reader's row before the browser had granted that reader's Web
   Lock (main CI run 37585788177; a local failure on 2026-10-05 on W111's branch,
   `feat/receipt-top-block`, kept no message and is assumed to be the same) — DONE (A320,
-  2026-10-07).**
+  #1342, 2026-10-07).**
   `apps/dashboard/src/screens/payments-screen.test.ts`, "isolates a status request failure to its
   row", failed once while the till's coverage run ran beside the dashboard's; it passed three runs
   of its own, and the whole dashboard suite passed when re-run alone. W111's branch changes no
@@ -5413,6 +5413,9 @@ approved.
   owner's Mac: with every grant made to reach the page 40 ms late, the old file failed 29 of its
   109 tests (this one with the CI failure's `Checking…`) and the new one passed all 109; the new
   one also passed 5 plain runs and 5 runs beside 16 busy CPU loops.
+  Accepted limit (#1342's Codex review): the wait counts only this page's own lock holders, so a
+  lock another page held and never gave back would keep `flush` waiting until the test's timeout.
+  No dashboard test file that mounts the Payments screen holds one that long (listed in #1342).
 - **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
   attempt 1, job 111163230954, 2026-10-03; passed on re-run).** In
   `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after
