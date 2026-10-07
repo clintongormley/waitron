@@ -1884,7 +1884,7 @@ choices, and the Catalan "Salsitxó", "Llom embotit", "Filet al whisky", "Error 
 "Invitació de l'encarregat".
 
 **Content languages per region, for real venues and the demo — owner DECIDED 2026-10-06 ~17:23
-(W109; was "Demo languages per region — owner decision pending") — DONE (W109-4, 2026-10-07); two
+(W109; was "Demo languages per region — owner decision pending") — DONE (W109-4, #1322, 2026-10-07); two
 leftovers left open, below.** As relayed in lane A's queue (`~/waitron-campaign/queue.md`, WATCHER
 NOTE of 17:23 above W109-1) and `~/waitron-campaign/questions.md` ("2026-10-06 17:23 — OWNER
 ANSWERS"):
@@ -1917,7 +1917,7 @@ language in the Valencian Community, the Balearic Islands and Galicia, and a new
 `resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`): its default,
 its area's required languages, then English. The dashboard's required-language messages now say
 Waitron keeps the language enabled for the region, not that the region requires it. **The demo's
-side is BUILT too (W109-4, Task 4), so this entry is DONE:** a demo keeps the languages setup gives
+side is BUILT too (W109-4, #1322, Task 4), so this entry is DONE:** a demo keeps the languages setup gives
 its area, writes every customer-facing text in each of them (menus' customer names included), and
 saves its row through the required-language check; a Barcelona demo is Catalan (default), Spanish
 and English with nothing listed as missing. Left by #1320, OPEN, unqueued:
@@ -1927,7 +1927,15 @@ works out the default itself, and only the demo-data plan's Task 6 sketch still 
 during #1320's look (2026-10-07, not checked against `main`): after the onboarding wizard
 provisions, the stack started by `wa-wt onboarding <worktree>` restarted into setup mode, because
 the dev launcher (`apps/server/scripts/dev-server.mjs`) looked for `trading.env` only in the state
-folder `apps/server/.env` names, not the one `wa-wt` passes; the look worked round it with links.
+folder `apps/server/.env` names, not the one `wa-wt` passes; the look worked round it with links. #1322's
+look (2026-10-07, a Barcelona demo) met the same restart. Seen in that look, in files #1322 did not
+touch, not checked further, OPEN, unqueued: the till's printed allergen sheet lists dishes in
+Catalan under English fixed text (title, column headings, "Allergen info pending"), because the
+till has no Catalan wording; the Missing translations section says "Every name has a English
+translation"; at 390px the dashboard shows a strip about 24px wide of the hidden side menu along
+the left edge (the #1320 shots show it too), and the till's basket squeezes into a narrow column
+that cuts off its prices, remove buttons and total; switching the dashboard to English left the
+alert text in Spanish until a reload. Screenshots: `~/waitron-campaign/w109-4-shots/`.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
@@ -4378,7 +4386,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **One writer still skips the required-language check (`content.language_required`) — OPEN.**
   The Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`)
   copies the saved row as it is, unplanned. The demo seed
-  (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4.
+  (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 - **A visible list of missing translations (C122, owner 2026-10-01) — DONE (#1006).** The
   Content languages page's **Missing translations** section lists, per enabled language, what has
   no customer-facing name in it.
