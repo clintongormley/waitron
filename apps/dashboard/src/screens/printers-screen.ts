@@ -2537,6 +2537,7 @@ export class PrintersScreen extends LitElement {
     const back = html`<nav aria-label=${t("printers.filter_all")} data-test="printer-breadcrumb">
       <a
         data-test="all-printers-link"
+        data-own-click
         href=${`${listUrl.pathname}${listUrl.search}`}
         @click=${(event: MouseEvent) => {
           if (leftToBrowser(event)) return;
