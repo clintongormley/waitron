@@ -192,8 +192,9 @@ the basket resolved, and decides what is stored:
   The child's stored quantity is dish quantity × pick quantity × the item's frozen portion. Its
   `price_quantity` stores that portion, so its price remains per portion when the physical amount
   is fractional.
-  If its routing rule sends it to another station, that child also gets its own kitchen record at
-  that station. Its `+` line on the dish becomes a cross-reference, retaining the extra's allergen
+  If a cell in the routing grid sends it to another station (the default station alone never
+  does; `chooseExtraMaker`, `packages/venue-service/src/routing.ts`), that child also gets its
+  own kitchen record at that station. Its `+` line on the dish becomes a cross-reference, retaining the extra's allergen
   and dietary marks; paper prints cross-references on `> ` lines (`readQueueSubItems`,
   `apps/server/src/working-order.ts`; `buildTicketItems`, `apps/server/src/kitchen-print.ts`).
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,

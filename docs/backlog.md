@@ -293,7 +293,7 @@ older build before using the new published document. Status and remaining work:
   Take a manager's PIN as the cash drawer route does (`POST /api/drawer/open`,
   `apps/server/src/till-api.ts`).
 - **Deleting or moving a folder does not show which products change station** (slice 3a, approved
-  R6). The delete dialog counts claims and exceptions removed but lists no products whose
+  R6). The delete dialog counts the routing cells removed but lists no products whose
   destination changes, and **Move to…** changes folder ancestry without a routing preview. Add that
   preview before extending these operations during service.
 - **A future rebuild of `categories` can empty its routing rules.** `routing_cells_category_fk`
@@ -4725,7 +4725,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   [approved routing design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)
   replaces the former label-driven proposal. Prep stations claim folders, with ordered exceptions
   and fallbacks. Slice 3a builds folder claims and ordered exceptions; opening hours and fallbacks
-  are slice 3b, and watcher copies are slice 3d. Reporting attribution stays separate so one sale is
+  are slice 3b, and watcher copies are slice 3d. (2026-10-07: A261 step 4 replaced the claims and
+  ordered exceptions with the routing grid's cells, below.) Reporting attribution stays separate so one sale is
   counted once.
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
   fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
@@ -4864,14 +4865,33 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       gap. The address-change warning names only the new city, though a province change also
       triggers it. The owner decided on 2026-10-06 not to queue these, or the clear-area control
       above.
-    [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) was approved on
-    2026-10-05; the grid and row-first cell storage are not implemented. Its Prep stations dependency
-    is landed; follow the lane queue for the build. Approved decisions cover the No category group,
-    nested collapsed counts, configured
-    versus fallback cell presentation,
-    read-only default-cell permissions, retained disabled targets, zone cleanup and pre-live routing
-    reset. It replaces claims/ordered exceptions without conversion, with five stored coordinate
-    classes and populated-upgrade/configuration-transfer checks.
+    [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) — DONE (A261-4,
+    branch `feat/routing-grid`). Prep stations' Routing tab is a grid of categories, products, No
+    category and All categories against Every zone and each active service zone, stored one cell
+    per coordinate in `routing_cells`; `station_claims` and `route_exceptions` are dropped
+    (venue-service `0031_retire_routing_lists`), with no conversion, so a venue is reset and its
+    routing set again. The No category row has cells of its own (owner, 2026-10-07, Q1 "(c)").
+    The grid keeps the server's row order until A323 (lane C queue) moves it to the shared name
+    comparison. Left open:
+    - **Prep stations' Settings cell saves have the shape commit `af44835d0` changed for routing
+      cells.** `#saveSettingsCell`
+      (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
+      releases its unsaved-changes registration as soon as the save succeeds, before the refresh
+      that follows has settled. A routing cell now keeps its registration until that refresh
+      settles. Not changed in A261-4.
+    - **A pending routing choice can vanish without a word.** When a refresh removes the row or
+      zone of a choice whose preview moved nothing, the screen drops the choice and tells the
+      person nothing (commit `59bca9c5c`).
+    - **Owner question: should a configuration import refuse a routing cell on a zone in a
+      switched-off department, as a save would?** Since main's A282 (#1339) no product path leaves
+      such a cell in a venue (probe receipt in the A261-4 Task 8b brief), so only a hand-built or
+      older bundle can carry one, and `validateRoutingConfiguration`
+      (`packages/venue-service/src/configuration-transfer.ts`) still accepts it, pinned by
+      "accepts a cell for a zone whose department is switched off" in
+      `packages/venue-service/src/configuration-transfer.test.ts`. The two stale claims the Task 4b
+      notes named (that case's old title, "…as a zone can be moved there", and the doc comment's
+      reason "because `configureZone` moves a zone holding cells into one") were already removed
+      on the branch by commit `57cbc1459`; the acceptance itself is unchanged.
     [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) — DONE (#1281).
     Changes needing another fiscal/geographic context or
     history removal use a separately approved setup/reset instead. Later
@@ -4882,7 +4902,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     authorization unconditional, and preserves device/profile/printer gates, automatic drawer jobs
     and receipt/replay safeguards. The owner approved the reset release and the exact core/0109
     upgrade-test reset entry on 2026-10-06. Old bookmarks use the surviving Tickets destination;
-    older configuration exports are refused before staging. Step 4 remains with its owning lane.
+    older configuration exports are refused before staging.
     [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
   access and switching DONE (W97, #1311; a venue reset is needed after it, its profiles need the new

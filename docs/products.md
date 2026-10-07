@@ -53,8 +53,11 @@ with **Move to…**. The main category also plays a part in choosing the kitchen
 to, as described below.
 
 Use the **Default course** field under **Kitchen** to decide when the product fires. It saves with
-the product. Prep stations choose where the dish is made: an ordered exception applies first, then
-the nearest claimed folder, then the venue's default station.
+the product. Where the dish is made is set in the routing grid, on the **Routing** tab of **Prep
+stations**. The product's own row decides first, then its category's row and each parent
+category's in turn (the **No category** row for a product with no category), then **All
+categories**. Within a row, a cell for the order's service zone comes before the row's **Every
+zone** cell. When no cell applies, the dish goes to the venue's default station.
 
 You can create a unit, an extras list or an options list without abandoning a product
 you are editing. Open the nested form, save the new item and select it when you return. The unsaved
