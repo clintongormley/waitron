@@ -6118,6 +6118,22 @@ describe("publishing", () => {
       expect(client.getMenuPublications.mock.calls.length).toBe(reads);
     });
 
+    it("gives the general failure, and offers Publish again, when the refusal carries nothing", async () => {
+      const client = refusedClient([]);
+      client.publishMenu.mockRejectedValue(undefined);
+      const el = await mountPreview(client);
+      await vi.waitFor(() => expect(client.getMenuPublications).toHaveBeenCalled());
+      const reads = client.getMenuPublications.mock.calls.length;
+      await publish(el);
+      await vi.waitFor(() =>
+        expect(text(inPanel(el, "result"))).toBe(
+          `Lunch Menu was not published: version 1 is still live. Your changes are still saved. ${codeMessage("server.internal")}`,
+        ),
+      );
+      expectPublishOfferedAgain(el);
+      expect(client.getMenuPublications.mock.calls.length).toBe(reads);
+    });
+
     it("names the scheduled version beside the list when the refusal lands after the person left", async () => {
       const out = deferred<never>();
       const client = refusedClient([]);

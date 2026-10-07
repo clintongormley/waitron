@@ -1269,9 +1269,9 @@ export class MenusScreen extends LitElement {
 
   /** An overtake refusal names the scheduled versions in the way, read from the menu's list. */
   async #publishRefusal(menuId: string, code: string, error: unknown): Promise<string> {
+    if (code !== "menu_publication.overtakes_queued") return codeMessage(code);
     const overtaken = (error as { params?: { overtaken?: unknown } }).params?.overtaken;
-    if (code !== "menu_publication.overtakes_queued" || !Array.isArray(overtaken))
-      return codeMessage(code);
+    if (!Array.isArray(overtaken)) return codeMessage(code);
     try {
       const answer = await this.api.getMenuPublications(menuId);
       return (
