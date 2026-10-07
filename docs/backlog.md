@@ -1791,6 +1791,11 @@ arrangement. The build is in progress: the shared document content has been extr
 with captured mixed-rate discounted F1 bytes preserved on 58/80 mm paper. PDF/raster rendering,
 delivery metadata, SMTP, office transport and the delivery UI remain to be built; it settles A3's
 open "Printing A4 invoices on an office printer" work when complete.
+Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe
+throws when embedding the current Google Sans WOFF2 for “í”; Noto Sans rendered the same probe
+as PDF and glyph outlines. PDFKit's ESM import also collides with the shared bundle banner's
+`createRequire` name, and the notices collector requires upstream notices for brotli 1.3.3,
+dfa 1.2.0 and fontkit 2.0.4. These are implementation findings, not built-image verification.
 
 **Owner decisions in place of the asesor's answers (2026-10-07, under the plan's Task 0.1), so A231p may be built.** Public F1 stays disabled until A231's own enablement gates are met; the asesor is asked to confirm these as [Q44](compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
 
