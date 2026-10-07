@@ -12,6 +12,7 @@ import type { CombinedOffer, MenuClash, ValueSource } from "./menu-combine-types
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
 import { homeDisplaysOf } from "./menu-home.js";
+import { FOLLOWING_FOLDER, folderPresentation } from "./include-folder-presentation.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels } from "./schema/options.js";
 import { sections } from "./schema/sections.js";
@@ -176,7 +177,7 @@ export async function buildMenuDocuments(
     );
     const reachedSections = new Set<string>();
     const listOf = (sectionId: string, path: readonly string[]): DocumentMember[] =>
-      loaded.children(sectionId).flatMap(({ ref }): DocumentMember[] => {
+      loaded.children(sectionId).flatMap(({ id: memberId, ref }): DocumentMember[] => {
         if (ref.kind === "product") {
           const offer = onMenu.get(ref.productId);
           return offer === undefined
@@ -189,6 +190,8 @@ export async function buildMenuDocuments(
         if (includedMenuId !== null && !loaded.menu(includedMenuId)?.active) return [];
         reachedSections.add(ref.sectionId);
         const section = sectionById.get(ref.sectionId)!;
+        const folder = includedMenuId === null ? FOLLOWING_FOLDER : loaded.folder(memberId);
+        const shown = folderPresentation(section, folder);
         return [
           {
             kind: "section",
@@ -196,10 +199,14 @@ export async function buildMenuDocuments(
             ...(includedMenuId === null
               ? {}
               : { includedMenu: { id: includedMenuId, name: loaded.menu(includedMenuId)!.name } }),
+            ...(folder.showAsFolder ? {} : { direct: true as const }),
+            ...(folder.showAsFolder && Object.keys(folder.overrides).length > 0
+              ? { fixed: folder.overrides }
+              : {}),
             internalName: section.internalName,
-            names: section.names,
-            image: section.image,
-            color: section.color,
+            names: shown.names,
+            image: shown.image,
+            color: shown.color,
             members: listOf(section.id, [...path, section.id]),
           },
         ];

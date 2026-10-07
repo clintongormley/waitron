@@ -7,6 +7,7 @@ import type {
   OfferedOptionsList,
 } from "./menu-types.js";
 import type { OptionLabel } from "./modifier-list-types.js";
+import type { IncludeFolderOverrides } from "./section-types.js";
 
 /**
  * The published-menu wire shapes, for the dashboard and the till to import. A browser-safe LEAF:
@@ -51,6 +52,10 @@ export type DocumentMember =
   | {
       kind: "section";
       includedMenu?: { id: string; name: string };
+      /** Its members are drawn in its place; a shortcut to it still opens it. */
+      direct?: true;
+      /** What the include fixes, so a change list can tell it from a change to the included menu. */
+      fixed?: IncludeFolderOverrides;
       sectionId: string;
       internalName: string;
       names: Record<string, string>;

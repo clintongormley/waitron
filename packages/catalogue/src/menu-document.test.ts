@@ -1,4 +1,4 @@
-import type { MenuChange, MenuChangeBody } from "./menu-document-types.js";
+import type { DocumentMember, MenuChange, MenuChangeBody } from "./menu-document-types.js";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
@@ -17,6 +17,7 @@ import {
   applyLiveFields,
   buildMenuDocument,
   diffMenuDocuments,
+  documentImages,
   menuDocumentHash,
   readDishFacts,
   type MenuDocument,
@@ -27,20 +28,31 @@ import { createCategory, updateCategory } from "./categories.js";
 import {
   createCatalogue,
   createProduct,
+  deactivateCatalogue,
   deactivateProduct,
   updateMenuDetails,
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
-import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
+import {
+  addMember,
+  createSectionIn,
+  moveMember,
+  removeMember,
+  updateSection,
+  deleteSection,
+} from "./sections.js";
+import { setIncludeFolder } from "./include-folder.js";
+import { readMenuStructure, type MenuStructureNode } from "./menu-structure.js";
+import type { IncludeFolderInput } from "./section-types.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { createUnit, EACH_UNIT, updateUnit } from "./units.js";
 import { extraListItems } from "./schema/extras.js";
 import { createExtraList } from "./extras.js";
 import { menuDetails } from "./schema/menu.js";
-import { HOME_DISPLAY_DEFAULTS } from "./device-home.js";
-import { setHomeDisplay } from "./menu-home.js";
+import { HOME_DISPLAY_DEFAULTS, shownMembers } from "./device-home.js";
+import { addShortcut, setHomeDisplay } from "./menu-home.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 
@@ -1518,6 +1530,272 @@ describe("diffMenuDocuments", () => {
       { kind: "home_shortcuts_changed", source: "this_menu" },
       { kind: "home_display_changed", device: "till", source: "this_menu" },
     ]);
+  });
+});
+
+describe("an include shown as a folder or directly", () => {
+  type DocumentSection = Extract<DocumentMember, { kind: "section" }>;
+
+  /** The member of `listId`, somewhere in `menuId`'s structure, that includes `sectionId`. */
+  async function includeIn(menuId: string, listId: string, sectionId: string): Promise<string> {
+    const structure = await app((tx) => readMenuStructure(tx, menuId));
+    const find = (nodes: readonly MenuStructureNode[], holder: string): string | undefined => {
+      for (const node of nodes) {
+        if (holder === listId && node.ref.kind === "section" && node.ref.sectionId === sectionId)
+          return node.memberId;
+        if (node.ref.kind === "section" && node.children !== undefined) {
+          const found = find(node.children, node.ref.sectionId);
+          if (found !== undefined) return found;
+        }
+      }
+      return undefined;
+    };
+    return find(structure.nodes, structure.rootSectionId)!;
+  }
+  const setFolder = (listId: string, memberId: string, input: IncludeFolderInput) =>
+    app((tx) => setIncludeFolder(tx, listId, memberId, input));
+  const sectionAt = (members: readonly DocumentMember[], sectionId: string) =>
+    members.find(
+      (member): member is DocumentSection =>
+        member.kind === "section" && member.sectionId === sectionId,
+    )!;
+  const idsOf = (members: readonly DocumentMember[]) =>
+    members.map((member) => (member.kind === "product" ? member.productId : member.sectionId));
+  const fixBar = (f: Awaited<ReturnType<typeof menusFixture>>, memberId: string) =>
+    setFolder(f.lunchRoot, memberId, {
+      showAsFolder: true,
+      overrides: { names: { en: "Bar" }, color: "#112233" },
+    });
+
+  it("a folder include is unchanged, and so is the hash of a menu with no direct include", async () => {
+    const f = await menusFixture(fx.db);
+    const before = await build(f.lunch);
+    const hash = menuDocumentHash(before);
+    await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
+      showAsFolder: true,
+    });
+    const after = await build(f.lunch);
+    expect(after).toEqual(before);
+    expect(menuDocumentHash(after)).toBe(hash);
+  });
+
+  it("an include shown directly keeps its node, marked direct, with its members in their order", async () => {
+    const f = await menusFixture(fx.db);
+    await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
+      showAsFolder: false,
+    });
+    const document = await build(f.lunch);
+    const lemonade = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
+    const lager = await app((tx) => offerOf(tx, f.lunch, f.lager));
+    const soup = await app((tx) => offerOf(tx, f.lunch, f.soup));
+    expect(document.root.members).toEqual([
+      {
+        kind: "section",
+        sectionId: f.drinks,
+        direct: true,
+        internalName: "Drinks",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
+        names: { en: "Something to drink" },
+        image: null,
+        color: null,
+        members: [
+          { kind: "product", menuItemId: lemonade, productId: f.lemonade },
+          {
+            kind: "section",
+            sectionId: f.beer,
+            internalName: "Beer",
+            names: { en: "On tap" },
+            image: null,
+            color: null,
+            members: [{ kind: "product", menuItemId: lager, productId: f.lager }],
+          },
+        ],
+      },
+      { kind: "product", menuItemId: soup, productId: f.soup },
+    ]);
+    expect(idsOf(shownMembers(document.root.members))).toEqual([f.lemonade, f.beer, f.soup]);
+  });
+
+  it("the same menu is a folder in one including menu and direct in another", async () => {
+    const f = await menusFixture(fx.db);
+    await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
+      showAsFolder: false,
+    });
+    expect(sectionAt((await build(f.lunch)).root.members, f.drinks).direct).toBe(true);
+    const dinner = sectionAt((await build(f.dinner)).root.members, f.drinks);
+    expect(dinner).not.toHaveProperty("direct");
+    expect(idsOf(shownMembers((await build(f.dinner)).root.members))).toEqual([f.drinks, f.mains]);
+  });
+
+  it("an include inside the flattened menu keeps its own setting", async () => {
+    const f = await menusFixture(fx.db);
+    const wineRoot = await app(async (tx) => {
+      const wine = await createCatalogue(tx, { name: "Wine", names: { en: "Something red" } });
+      const root = (await readMenuStructure(tx, wine.id)).rootSectionId;
+      await addMember(tx, root, product(f.burger));
+      await addMember(tx, f.drinks, section(root));
+      return root;
+    });
+    await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
+      showAsFolder: false,
+    });
+    const wineInclude = await includeIn(f.drinksMenu, f.drinks, wineRoot);
+    await setFolder(f.drinks, wineInclude, { showAsFolder: true });
+    const folder = shownMembers((await build(f.lunch)).root.members);
+    expect(idsOf(folder)).toEqual([f.lemonade, f.beer, wineRoot, f.soup]);
+    expect(folder[2]).not.toHaveProperty("direct");
+    await setFolder(f.drinks, wineInclude, { showAsFolder: false });
+    expect(idsOf(shownMembers((await build(f.lunch)).root.members))).toEqual([
+      f.lemonade,
+      f.beer,
+      f.burger,
+      f.soup,
+    ]);
+  });
+
+  it("a section named like one of the including menu's shows beside it", async () => {
+    const f = await menusFixture(fx.db);
+    const ownBeer = await app(
+      async (tx) =>
+        (await createSectionIn(tx, f.lunchRoot, { internalName: "Beer", names: { en: "Cerveza" } }))
+          .id,
+    );
+    await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
+      showAsFolder: false,
+    });
+    const shown = shownMembers((await build(f.lunch)).root.members).filter(
+      (member): member is DocumentSection =>
+        member.kind === "section" && member.internalName === "Beer",
+    );
+    expect(shown.map((member) => member.sectionId)).toEqual([f.beer, ownBeer]);
+  });
+
+  it("an inactive included menu still drops out", async () => {
+    const f = await menusFixture(fx.db);
+    const memberId = await includeIn(f.lunch, f.lunchRoot, f.drinks);
+    await app((tx) => deactivateCatalogue(tx, f.drinksMenu));
+    const soup = await app((tx) => offerOf(tx, f.lunch, f.soup));
+    for (const showAsFolder of [true, false]) {
+      await setFolder(f.lunchRoot, memberId, { showAsFolder });
+      expect((await build(f.lunch)).root.members).toEqual([
+        { kind: "product", menuItemId: soup, productId: f.soup },
+      ]);
+    }
+  });
+
+  it("the folder shows the fixed names and colour, and follows every field left alone", async () => {
+    const f = await menusFixture(fx.db);
+    await fixBar(f, await includeIn(f.lunch, f.lunchRoot, f.drinks));
+    const fixed = { names: { en: "Bar" }, color: "#112233" };
+    const node = sectionAt((await build(f.lunch)).root.members, f.drinks);
+    expect(node).toMatchObject({ names: { en: "Bar" }, color: "#112233", image: null, fixed });
+    expect(node).not.toHaveProperty("direct");
+    await app(async (tx) => {
+      await updateMenuDetails(tx, f.drinksMenu, {
+        names: { en: "Drinks and more", es: "Bebidas" },
+      });
+      await tx.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.drinks));
+    });
+    expect(sectionAt((await build(f.lunch)).root.members, f.drinks)).toMatchObject({
+      names: { en: "Bar", es: "Bebidas" },
+      image: "drinks.jpg",
+      color: "#112233",
+      fixed,
+    });
+    expect(sectionAt((await build(f.dinner)).root.members, f.drinks)).toMatchObject({
+      names: { en: "Drinks and more", es: "Bebidas" },
+      image: "drinks.jpg",
+      color: null,
+    });
+    expect(sectionAt((await build(f.dinner)).root.members, f.drinks)).not.toHaveProperty("fixed");
+  });
+
+  it("a fixed photo, and a fixed no-photo, replace the included menu's", async () => {
+    const f = await menusFixture(fx.db);
+    const memberId = await includeIn(f.lunch, f.lunchRoot, f.drinks);
+    const fixPhoto = (image: string | null) =>
+      app(async (tx) => {
+        await tx.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.drinks));
+        await tx
+          .update(sectionMembers)
+          .set({ folderOverrides: { image } })
+          .where(eq(sectionMembers.id, memberId));
+      });
+    await fixPhoto("bar.jpg");
+    const photo = await build(f.lunch);
+    expect(sectionAt(photo.root.members, f.drinks)).toMatchObject({
+      image: "bar.jpg",
+      fixed: { image: "bar.jpg" },
+    });
+    expect(documentImages(photo)).toContain("bar.jpg");
+    expect(documentImages(photo)).not.toContain("drinks.jpg");
+    await fixPhoto(null);
+    const none = await build(f.lunch);
+    expect(sectionAt(none.root.members, f.drinks)).toMatchObject({
+      image: null,
+      fixed: { image: null },
+    });
+    expect(documentImages(none)).not.toContain("drinks.jpg");
+  });
+
+  it("switched off, the node shows the included menu's own presentation and keeps the stored overrides", async () => {
+    const f = await menusFixture(fx.db);
+    const memberId = await includeIn(f.lunch, f.lunchRoot, f.drinks);
+    await fixBar(f, memberId);
+    await setFolder(f.lunchRoot, memberId, { showAsFolder: false });
+    const direct = sectionAt((await build(f.lunch)).root.members, f.drinks);
+    expect(direct).toMatchObject({
+      direct: true,
+      names: { en: "Something to drink" },
+      image: null,
+      color: null,
+    });
+    expect(direct).not.toHaveProperty("fixed");
+    await setFolder(f.lunchRoot, memberId, { showAsFolder: true });
+    expect(sectionAt((await build(f.lunch)).root.members, f.drinks)).toMatchObject({
+      names: { en: "Bar" },
+      color: "#112233",
+      fixed: { names: { en: "Bar" }, color: "#112233" },
+    });
+  });
+
+  it("a home shortcut to an included menu shown directly is kept", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => addShortcut(tx, f.lunch, section(f.drinks)));
+    await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
+      showAsFolder: false,
+    });
+    expect((await build(f.lunch)).home.shortcuts).toEqual([
+      { kind: "section", sectionId: f.drinks },
+    ]);
+  });
+
+  it("the same included menu in two lists of one menu keeps each list's setting", async () => {
+    const f = await menusFixture(fx.db);
+    const bar = await app(async (tx) => {
+      const id = (
+        await createSectionIn(tx, f.lunchRoot, { internalName: "Bar", names: { en: "At the bar" } })
+      ).id;
+      await addMember(tx, id, section(f.drinks));
+      return id;
+    });
+    await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
+      showAsFolder: false,
+    });
+    await setFolder(bar, await includeIn(f.lunch, bar, f.drinks), {
+      showAsFolder: true,
+      overrides: { names: { en: "Bar drinks" } },
+    });
+    const { members } = (await build(f.lunch)).root;
+    const atRoot = sectionAt(members, f.drinks);
+    const nested = sectionAt(sectionAt(members, bar).members, f.drinks);
+    expect(atRoot).toMatchObject({ direct: true, names: { en: "Something to drink" } });
+    expect(atRoot).not.toHaveProperty("fixed");
+    expect(nested).toMatchObject({
+      names: { en: "Bar drinks" },
+      fixed: { names: { en: "Bar drinks" } },
+    });
+    expect(nested).not.toHaveProperty("direct");
   });
 });
 
