@@ -330,6 +330,21 @@ export interface MenuPublications {
   editions: MenuEdition[];
 }
 
+/** An instant as the venue clock shows it; `repeated` when the clock shows that minute twice. */
+export interface LocalTime {
+  date: string;
+  time: string;
+  offset: string;
+  repeated: boolean;
+}
+
+/** `GET /management-api/catalogues/:id/publications`. */
+export interface MenuPublicationsAnswer {
+  timeZone: string;
+  live: (NonNullable<MenuPublications["live"]> & { local: LocalTime }) | null;
+  editions: (MenuEdition & { local: LocalTime })[];
+}
+
 /** What a zone's live menus hold that cannot be sold now — `GET /api/menu-state`'s `unavailable`. */
 export interface MenuUnavailable {
   /** Every product or variant that is Inactive or Unavailable, extras items' products included. */

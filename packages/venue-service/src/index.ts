@@ -62,6 +62,8 @@ export {
 export type * from "./holiday-types.js";
 export { LOCAL_HOLIDAY_NAME_MAX } from "./holiday-types.js";
 export { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
+export { localTimeOccurrences, offsetMinutes } from "./hours-occurrences.js";
+export { isLocalDate } from "./hours-rules.js";
 export type * from "./hours-types.js";
 export { CALENDAR_COLOURS, HOURS_RANGE_MAX_DAYS, WEEK_DISPLAY_ORDER } from "./hours-types.js";
 export * from "./department-transfers.js";

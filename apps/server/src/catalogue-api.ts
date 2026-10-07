@@ -56,6 +56,10 @@ import {
   menuStatus,
   previewMenu,
   publishMenu,
+  cancelMenuPublication,
+  listMenuPublications,
+  queueMenuPublication,
+  type MenuPublicationsAnswer,
   readMenuStructure,
   listOptionLists,
   getOptionList,
@@ -102,6 +106,8 @@ import { setProductCourse } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { readLocationClock } from "@waitron/reporting";
+import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
 import { kitchenStations } from "@waitron/db";
 import { inArray } from "drizzle-orm";
 
@@ -284,6 +290,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
   "menu.clashes_unresolved": 409,
+  // An edition placed here would go live before a lower-numbered one still queued.
+  "menu_publication.overtakes_queued": 409,
+  "menu_publication.not_found": 404,
+  "menu_publication.not_queued": 409,
+  "menu_publication.time_past": 400,
+  "menu_publication.unchanged": 409,
+  "menu_publication.time_skipped": 400,
+  "menu_publication.time_repeated": 400,
+  "menu_publication.clock_unreadable": 409,
   "menu.shortcut_unreachable": 409,
   "menu.home_display_invalid": 400,
   // The product editor refuses a course this venue does not have.
@@ -981,6 +996,58 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           publishMenu(tx, menuId, expectedHash, personId),
         ),
       );
+    }),
+  );
+
+  const venueTimeZone = async (tx: Transaction): Promise<string> =>
+    (await readLocationClock(tx, requireVenueCfg(deps).locationId)).timeZone;
+
+  app.post("/management-api/catalogues/:id/publications", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const body = await readJsonBody<{ expectedHash?: unknown; activatesAt?: unknown }>(c);
+      const expectedHash = requireString(body.expectedHash, "expectedHash");
+      const queued = await gated(c, sessionId, async (tx, personId) => {
+        const activatesAt = activationInstant(body.activatesAt, await venueTimeZone(tx));
+        return queueMenuPublication(tx, menuId, expectedHash, activatesAt, personId);
+      });
+      return c.json(queued, 201);
+    }),
+  );
+
+  app.get("/management-api/catalogues/:id/publications", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const answer = await gated(c, sessionId, async (tx): Promise<MenuPublicationsAnswer> => {
+        if (!(await catalogueExists(tx, menuId)))
+          throw new AppError("catalogue.not_found", { catalogueId: menuId });
+        const timeZone = checkedTimeZone(await venueTimeZone(tx));
+        const { live, editions } = await listMenuPublications(tx, menuId);
+        return {
+          timeZone,
+          live:
+            live === null ? null : { ...live, local: localTimeOf(new Date(live.since), timeZone) },
+          editions: editions.map((edition) => ({
+            ...edition,
+            local: localTimeOf(new Date(edition.activatesAt), timeZone),
+          })),
+        };
+      });
+      return c.json(answer);
+    }),
+  );
+
+  app.post("/management-api/catalogues/:id/publications/:versionId/cancel", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const versionId = requireUuidParam(c.req.param("versionId"), "MenuVersionId");
+      await gated(c, sessionId, (tx, personId) =>
+        cancelMenuPublication(tx, menuId, versionId, personId),
+      );
+      return c.body(null, 204);
     }),
   );
 

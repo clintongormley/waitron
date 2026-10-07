@@ -87,6 +87,16 @@ declare module "@waitron/shared" {
     "menu_publication.time_past": { activatesAt: string };
     /** The draft is identical to the edition it would follow, live or queued. */
     "menu_publication.unchanged": { menuId: string; number: number };
+    /** The venue clock never shows this date and time: a forward clock change skips it. */
+    "menu_publication.time_skipped": { date: string; time: string };
+    /** The venue clock shows this date and time twice, and the request chose neither occurrence. */
+    "menu_publication.time_repeated": {
+      date: string;
+      time: string;
+      occurrences: { at: string; offset: string }[];
+    };
+    /** The location's time zone cannot be read, so no venue-local time can be placed. */
+    "menu_publication.clock_unreadable": Record<string, never>;
     /** A Device Home Page shortcut names a product or section the menu's working structure does not reach. */
     "menu.shortcut_unreachable": { ref: MemberRef };
     /** A home display setting is outside what its device takes (device-home.ts). */
