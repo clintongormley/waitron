@@ -1881,6 +1881,16 @@ and `seedSales` (`apps/server/scripts/demo-seed/seed-sales.ts`) takes the locati
 language, so a Barcelona demo set up in Spanish gets Spanish staff-facing names and Catalan practice
 sales. The plan's last step, Task 2 (W109-2, a country with no demo data), is still to come.
 
+Seen during W109-5's look at a Barcelona demo set up in Spanish (2026-10-07), OPEN, unqueued:
+(1) practice-sale invoice numbers run backwards in time — FS/1 is the newest sale and the highest
+number the oldest, because `seedSales` fills days from today backwards (`dayIndex` loop in
+`apps/server/scripts/demo-seed/seed-sales.ts`, unchanged since #165, 2026-08-30); (2) the
+dashboard's order detail dialog (Pedidos → Ver detalle) shows a quantity of one as "× 1.000",
+which a Spanish reader takes as a thousand; (3) product groups and prep stations stay English
+under Spanish staff-facing dish names (the plan's known limit). Stored practice sales cannot be
+reprinted or looked up on the till: both look a sale up through its till order, which a practice
+sale does not have (the look's reading, not checked against the code).
+
 **The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the
 text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** Every customer-facing text
 in `casa-delgado-es` (`apps/server/scripts/demo-seed/menu.ts`, `seed-adjustments.ts`,
