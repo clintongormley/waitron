@@ -147,17 +147,17 @@ describe("service-status config CRUD (venue.configure)", () => {
   });
 
   it("rejects a malformed color (management.request_invalid, naming the field)", async () => {
-    expect(
-      await codeOf(() =>
-        asApp((tx) =>
-          createStatus(tx, {
-            managementSessionId: managerSession,
-            label: "Bad",
-            color: "red; drop table x",
-          }),
-        ),
+    const error = await captureError(() =>
+      asApp((tx) =>
+        createStatus(tx, {
+          managementSessionId: managerSession,
+          label: "Bad",
+          color: "red; drop table x",
+        }),
       ),
-    ).toBe("management.request_invalid");
+    );
+    expect(isAppError(error) && error.code).toBe("management.request_invalid");
+    expect(isAppError(error) && error.params).toEqual({ field: "color" });
   });
 
   it("refuses a staff-role session on status reads and writes (authorization.not_permitted)", async () => {

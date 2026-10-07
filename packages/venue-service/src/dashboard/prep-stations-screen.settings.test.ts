@@ -460,7 +460,9 @@ it.each([
       expect(window.innerWidth).toBe(width);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
-      await page.screenshot({ path: `look/settings-choice-${locale}-${theme}-${width}-saved.png` });
+      await page.screenshot({
+        path: `__screenshots__/look/settings-choice-${locale}-${theme}-${width}-saved.png`,
+      });
       await page.elementLocator(q(el, "[data-test=edit-settings-rest-bar]")!).click();
       await settle(el);
       const combo = q(el, "[data-test=settings-choice]") as WtCombobox;
@@ -473,7 +475,7 @@ it.each([
       expect(list.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/settings-choice-${locale}-${theme}-${width}-picker.png`,
+        path: `__screenshots__/look/settings-choice-${locale}-${theme}-${width}-picker.png`,
       });
       await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
       choose(el, "yes");
@@ -483,7 +485,7 @@ it.each([
       expect(combo.error).toContain(locale === "en" ? "could not be saved" : "No se pudo guardar");
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/settings-choice-${locale}-${theme}-${width}-refused.png`,
+        path: `__screenshots__/look/settings-choice-${locale}-${theme}-${width}-refused.png`,
       });
       q(el, "[data-test=cancel-settings-cell]")!.click();
       await settle(el);
@@ -497,7 +499,7 @@ it.each([
       expect(q(el, "[data-test=settings-fallback-confirmation]")?.textContent).toContain("Bar");
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/settings-choice-${locale}-${theme}-${width}-confirmation.png`,
+        path: `__screenshots__/look/settings-choice-${locale}-${theme}-${width}-confirmation.png`,
       });
       await page.elementLocator(q(el, "[data-test=save-settings-cell]")!).click();
       await settle(el);
@@ -510,7 +512,7 @@ it.each([
       expect(save.right).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/settings-choice-${locale}-${theme}-${width}-fallback-refused.png`,
+        path: `__screenshots__/look/settings-choice-${locale}-${theme}-${width}-fallback-refused.png`,
       });
     } finally {
       document.body.style.margin = "";
@@ -719,14 +721,18 @@ it.each([
       );
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
-      await page.screenshot({ path: `look/timing-${locale}-${theme}-${width}-saved.png` });
+      await page.screenshot({
+        path: `__screenshots__/look/timing-${locale}-${theme}-${width}-saved.png`,
+      });
       await page.elementLocator(override).click();
       await settle(el);
       const input = q(el, "[data-test=settings-minutes]") as WtInput;
       await input.updateComplete;
       expect(input.label).toContain(locale === "en" ? "Warm" : "Aviso");
       await expectNoA11yViolations(host);
-      await page.screenshot({ path: `look/timing-${locale}-${theme}-${width}-editor.png` });
+      await page.screenshot({
+        path: `__screenshots__/look/timing-${locale}-${theme}-${width}-editor.png`,
+      });
       minutes(el, "7");
       await settle(el);
       await page.elementLocator(q(el, "[data-test=save-settings-cell]")!).click();
@@ -737,7 +743,9 @@ it.each([
       const save = q(el, "[data-test=save-settings-cell]")!.getBoundingClientRect();
       expect(save.left).toBeGreaterThanOrEqual(0);
       expect(save.right).toBeLessThanOrEqual(width);
-      await page.screenshot({ path: `look/timing-${locale}-${theme}-${width}-refused.png` });
+      await page.screenshot({
+        path: `__screenshots__/look/timing-${locale}-${theme}-${width}-refused.png`,
+      });
     } finally {
       await page.viewport(previous.width, previous.height);
     }
