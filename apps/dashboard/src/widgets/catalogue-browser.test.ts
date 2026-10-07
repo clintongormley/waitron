@@ -1606,7 +1606,7 @@ it("requires a move destination, excludes selected folders and descendants, and 
   expect(combo.required).toBe(true);
   expect(combo.value).toBe("");
   expect(combo.options).toEqual([
-    { value: "top", label: "All products (top level)" },
+    { value: "top", label: "No category" },
     { value: "f", label: "Food", depth: 0, valueLabel: "Food" },
   ]);
   expect(
@@ -1659,7 +1659,7 @@ it("shows a delete refused because a moved-up category's name is taken in the de
     ),
   );
 });
-it("lists move destinations as the category tree, each level in label order, after the top level, leaving out the moved subtree", async () => {
+it("lists move destinations as the category tree, each level in label order, after No category, leaving out the moved subtree", async () => {
   const el = await mountBrowser({
     categories: [
       folder("s", "Starters", null),
@@ -1682,7 +1682,7 @@ it("lists move destinations as the category tree, each level in label order, aft
   await selectKeys(el, ["folder:x"]);
   await press(el, "move");
   expect(el.shadowRoot!.querySelector("wt-combobox")!.options).toEqual([
-    { value: "top", label: "All products (top level)" },
+    { value: "top", label: "No category" },
     { value: "ac", label: "Accompaniments", depth: 0, valueLabel: "Accompaniments" },
     { value: "ds", label: "desserts", depth: 0, valueLabel: "desserts" },
     { value: "dn", label: "Dinner", depth: 0, valueLabel: "Dinner" },
@@ -1711,11 +1711,29 @@ it("leaves out a moved category nested below the top level, and everything under
   await selectKeys(el, ["folder:m"]);
   await press(el, "move");
   expect(el.shadowRoot!.querySelector("wt-combobox")!.options).toEqual([
-    { value: "top", label: "All products (top level)" },
+    { value: "top", label: "No category" },
     { value: "f", label: "Food", depth: 0, valueLabel: "Food" },
     { value: "s", label: "Starters", depth: 1, valueLabel: "Food › Starters" },
   ]);
 });
+it.each([
+  ["en-GB", "No category"],
+  ["es", "Sin categoría"],
+] as const)(
+  "offers No category as the first move destination, in the session's language (%s)",
+  async (locale, label) => {
+    setLocale(locale);
+    const el = await mountBrowser();
+    await selectKeys(el, ["bread"]);
+    await press(el, "move");
+    const combo = el.shadowRoot!.querySelector("wt-combobox")!;
+    expect(combo.options[0]).toEqual({ value: "top", label });
+    await userEvent.click(combo.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    await combo.updateComplete;
+    const firstRow = combo.shadowRoot!.querySelector<HTMLElement>('[role="option"]')!;
+    expect(firstRow.textContent!.trim()).toBe(label);
+  },
+);
 it.each([
   ["en-GB", "Search", "No results"],
   ["es", "Buscar", "Sin resultados"],
@@ -3066,7 +3084,7 @@ it("Move to… on a category's menu opens the move dialog for that category alon
   await el.updateComplete;
   expect(dialog(el)!.heading).toBe("Move 1 item");
   expect(el.shadowRoot!.querySelector("wt-combobox")!.options).toEqual([
-    { value: "top", label: "All products (top level)" },
+    { value: "top", label: "No category" },
     { value: "f", label: "Food", depth: 0, valueLabel: "Food" },
   ]);
   await destination(el, "f");

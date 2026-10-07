@@ -1970,7 +1970,7 @@ it("chooses the main category in the editor itself, and saves no categoryIds or 
   expect("labelIds" in value).toBe(false);
 });
 
-it("offers Uncategorised as the main category, and saves it as none", async () => {
+it("offers No category as the main category, and saves it as none", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, primaryCategoryId: "drinks" },
@@ -1981,13 +1981,13 @@ it("offers Uncategorised as the main category, and saves it as none", async () =
   });
   expect(combobox(el, "primary")!.options[0]).toEqual({
     value: "",
-    label: t("categories.uncategorised"),
+    label: t("categories.none"),
   });
   await pickIn(el, "primary", { value: "" });
   const categoryText = combobox(el, "primary")!.shadowRoot!.querySelector<HTMLElement>(
     ".trigger .value",
   )!;
-  expect(categoryText.textContent!.trim()).toBe(t("categories.uncategorised"));
+  expect(categoryText.textContent!.trim()).toBe(t("categories.none"));
   expect(categoryText.classList.contains("placeholder")).toBe(false);
   expect(getComputedStyle(categoryText).fontStyle).toBe("normal");
   const submit = vi.fn();
@@ -2222,12 +2222,12 @@ it("puts the category path above the notice that the product is Inactive", async
   expect(link.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-it("lists Uncategorised and then every category as a tree, each under its parent and siblings by name", async () => {
+it("lists No category and then every category as a tree, each under its parent and siblings by name", async () => {
   const el = await mountCategorised();
   const link = await categoryLink(el);
   expect(link.showEmptyOption).toBe(true);
   expect(link.options).toEqual([
-    { value: "", label: t("categories.uncategorised") },
+    { value: "", label: t("categories.none") },
     { value: "z-snacks", label: "Aperitivos", depth: 0, valueLabel: "Aperitivos" },
     { value: "drinks", label: "Bebidas", depth: 0, valueLabel: "Bebidas" },
     {
@@ -2250,7 +2250,7 @@ it("orders numbered sibling categories by value, as the category list does", asy
   ];
   await el.updateComplete;
   expect((await categoryLink(el)).options.map((option) => option.label)).toEqual([
-    t("categories.uncategorised"),
+    t("categories.none"),
     "Cat 9",
     "Cat 10",
   ]);
@@ -2274,9 +2274,9 @@ it("changes the category from Change: the path shown follows, and Save sends the
   expect(submit.mock.calls[0]![0].detail.value.primaryCategoryId).toBe("cocktails");
 });
 
-it("reads Uncategorised for a product with no category, and the path for a new one made in a category", async () => {
+it("reads No category for a product with no category, and the path for a new one made in a category", async () => {
   const uncategorised = await mountCategorised({ primaryCategoryId: null });
-  expect(linkPath(await categoryLink(uncategorised))).toBe(t("categories.uncategorised"));
+  expect(linkPath(await categoryLink(uncategorised))).toBe(t("categories.none"));
   cleanupWidgets();
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -2288,7 +2288,24 @@ it("reads Uncategorised for a product with no category, and the path for a new o
   expect(linkPath(await categoryLink(el))).toBe(cocktailsPath);
 });
 
-it("names a category missing from the list as unavailable, never as Uncategorised", async () => {
+it.each([
+  { locale: "en-GB", label: "No category" },
+  { locale: "es-ES", label: "Sin categoría" },
+])(
+  "in $locale, reads $label for a product with no category, and offers it first",
+  async ({ locale, label }) => {
+    setLocale(locale);
+    try {
+      const link = await categoryLink(await mountCategorised({ primaryCategoryId: null }));
+      expect(linkPath(link)).toBe(label);
+      expect(link.options[0]).toEqual({ value: "", label });
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("names a category missing from the list as unavailable, never as No category", async () => {
   const el = await mountCategorised({ primaryCategoryId: "gone" });
   expect(linkPath(await categoryLink(el))).toBe(t("editor.missing_choice"));
 });
@@ -2335,10 +2352,10 @@ it("shows a variant's product's path as plain text, with no Change, and saves no
   expect(submit.mock.calls[0]![0].detail.value.primaryCategoryId).toBeNull();
 });
 
-it("reads Uncategorised, or unavailable, on a variant whose product has no category or a missing one", async () => {
+it("reads No category, or unavailable, on a variant whose product has no category or a missing one", async () => {
   const label = t("editor.classification");
   for (const [primaryCategoryId, shown] of [
-    [null, t("categories.uncategorised")],
+    [null, t("categories.none")],
     ["gone", t("editor.missing_choice")],
   ] as const) {
     const el = await mountVariant({
@@ -3948,7 +3965,7 @@ it("hints what a variant will actually use where its parent names nothing there"
       dietaryDeclarations: [],
     },
   });
-  expect(variantPath(el)).toBe(`${t("editor.classification")}: ${t("categories.uncategorised")}`);
+  expect(variantPath(el)).toBe(`${t("editor.classification")}: ${t("categories.none")}`);
   expect(combobox(el, "product-course")!.placeholder).toBe(t("product.no_course"));
   expect(
     combobox(el, "product-course")!
@@ -4040,7 +4057,7 @@ it.each([
   {
     locale: "en-GB",
     unit: "Each",
-    category: "Uncategorised",
+    category: "No category",
     course: "— none —",
     allergens: "Allergens: None",
     dietary: "Dietary preferences: None",

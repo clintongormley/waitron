@@ -820,12 +820,12 @@ export class MenuPricesTable extends LitElement {
   }
 
   #categoryName(row: MenuPriceRow): string {
-    if (row.categoryId === null) return t("categories.uncategorised");
+    if (row.categoryId === null) return t("categories.none");
     return this.#categoryPaths.get(row.categoryId) ?? t("editor.missing_choice");
   }
 
   #categorySearchText(row: MenuPriceRow): string {
-    if (row.categoryId === null) return t("categories.uncategorised");
+    if (row.categoryId === null) return t("categories.none");
     return this.#categorySearchTexts.get(row.categoryId) ?? t("editor.missing_choice");
   }
 
