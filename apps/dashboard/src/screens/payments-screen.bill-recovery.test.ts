@@ -479,6 +479,119 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(await bottomOf(el)).toBe("");
     expect(attestDisabled(el)).toBe(false);
   });
+
+  it.each([
+    ["attempting", "payments.bill.state_attempting"],
+    ["declined", "payments.bill.state_failed"],
+    ["voided", "payments.bill.state_failed"],
+    ["captured", "payments.bill.state_charged"],
+    ["settled", "payments.bill.state_charged"],
+    ["refunded", "payments.bill.state_charged"],
+    ["partially_refunded", "payments.bill.state_charged"],
+    ["accepted_offline", "payments.bill.state_charged"],
+    ["initiated", "payments.bill.state_started"],
+    [null, "payments.bill.state_missing"],
+  ] as const)(
+    "says what the provider has for a pending payment in state %s",
+    async (providerState, key) => {
+      const el = await mount(
+        stubApi({
+          listStuckBillPayments: vi.fn().mockResolvedValue([{ ...PAYMENT, providerState }]),
+        }),
+      );
+      const label = [...q(el, "[data-test=bill-payment-bp-1]")!.querySelectorAll("dt")].find(
+        (dt) => dt.textContent!.trim() === t("payments.bill.provider_state"),
+      )!;
+      expect(label.nextElementSibling!.textContent!.trim()).toBe(t(key));
+    },
+  );
+
+  it("says when a pending payment's provider was not recorded, and a refund was never sent", async () => {
+    const el = await mount(
+      stubApi({
+        listStuckBillPayments: vi.fn().mockResolvedValue([{ ...PAYMENT, provider: null }]),
+        listStuckBillRefunds: vi.fn().mockResolvedValue([{ ...REFUND, sentAt: null }]),
+      }),
+    );
+    expect(q(el, "[data-test=bill-payment-bp-1]")!.textContent).toContain(
+      t("payments.bill.provider_unknown"),
+    );
+    const refund = q(el, "[data-test=bill-refund-br-1]")!;
+    expect(refund.textContent).toContain(t("payments.bill.not_sent"));
+  });
+
+  it.each([
+    [
+      "payment",
+      "bill.payment_outcome_unconfirmed",
+      "attempting",
+      "payments.bill.payment_attempting",
+    ],
+    [
+      "payment",
+      "bill.payment_outcome_unconfirmed",
+      "unreachable",
+      "payments.bill.payment_unreachable",
+    ],
+    ["payment", "bill.payment_outcome_unconfirmed", "ambiguous", "payments.bill.payment_ambiguous"],
+    [
+      "payment",
+      "bill.payment_outcome_unconfirmed",
+      "mismatched",
+      "payments.bill.payment_mismatched",
+    ],
+    ["refund", "bill.refund_outcome_unconfirmed", "pending", "payments.bill.refund_pending"],
+    ["refund", "bill.refund_outcome_unconfirmed", "not_found", "payments.bill.refund_not_found"],
+    ["refund", "bill.refund_outcome_unconfirmed", "ambiguous", "payments.bill.refund_ambiguous"],
+    [
+      "refund",
+      "bill.refund_outcome_unconfirmed",
+      "unreachable",
+      "payments.bill.refund_unreachable",
+    ],
+  ] as const)(
+    "a %s check left unconfirmed by %s, reason %s, says why",
+    async (kind, code, reason, key) => {
+      const refusal = vi.fn().mockRejectedValue({ code, params: { reason } });
+      const el = await mount(
+        stubApi(
+          kind === "payment"
+            ? { resolveStuckBillPayment: refusal }
+            : { resolveStuckBillRefund: refusal },
+        ),
+      );
+      q(el, `[data-test=check-bill-${kind}-${kind === "payment" ? "bp-1" : "br-1"}]`)!.click();
+      await flush(el);
+      q(el, "[data-test=confirm-bill-check]")!.click();
+      await flush(el);
+      const order = kind === "payment" ? "Order 12 · Terrace 3" : "Order 13";
+      expect(q(el, "[data-test=bill-action-result]")!.textContent!.trim()).toBe(
+        `${order}: ${t(key)}`,
+      );
+    },
+  );
+
+  it.each([
+    ["payment", "bill.payment_outcome_unconfirmed"],
+    ["refund", "bill.refund_outcome_unconfirmed"],
+  ] as const)(
+    "a %s check left unconfirmed for a reason it does not know says the code's own message",
+    async (kind, code) => {
+      const refusal = vi.fn().mockRejectedValue({ code, params: { reason: "something_new" } });
+      const el = await mount(
+        stubApi(
+          kind === "payment"
+            ? { resolveStuckBillPayment: refusal }
+            : { resolveStuckBillRefund: refusal },
+        ),
+      );
+      q(el, `[data-test=check-bill-${kind}-${kind === "payment" ? "bp-1" : "br-1"}]`)!.click();
+      await flush(el);
+      q(el, "[data-test=confirm-bill-check]")!.click();
+      await flush(el);
+      expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain(codeMessage(code));
+    },
+  );
 });
 
 describe("bill recovery's outcome field", () => {

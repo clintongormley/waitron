@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { toDataURL } from "qrcode";
 import { formatEquipmentCode } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { decodeQrImage } from "../testing/decode-qr.js";
 import { printEquipmentLabel, type EquipmentLabel } from "./equipment-label.js";
 import { t } from "../i18n/t.js";
+
+// Spied, not replaced: every QR is drawn for real unless a test holds one back.
+vi.mock("qrcode", { spy: true });
 
 afterEach(cleanupWidgets);
 
@@ -47,6 +51,71 @@ describe("dashboard-equipment-label", () => {
       const qr = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=equipment-label-qr]");
       expect(qr && (await decodeQrImage(qr.src))).toBe(formatEquipmentCode("printer", other));
     });
+  });
+
+  it("keeps its QR, and Print, when only the name changes", async () => {
+    const { el, qr } = await mount("printer");
+    const src = qr.src;
+    el.name = "Terraza";
+    await el.updateComplete;
+    const shown = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=equipment-label-qr]");
+    expect(shown?.src).toBe(src);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=equipment-label-name]")!.textContent!.trim(),
+    ).toBe("Terraza");
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-test=print-equipment-label]",
+      )!.disabled,
+    ).toBe(false);
+  });
+
+  it("never shows the QR of an item it was moved off while that QR was still being drawn", async () => {
+    const { el } = await mount("printer");
+    const { toDataURL: draw } = await vi.importActual<typeof import("qrcode")>("qrcode");
+    let finishFirst!: () => void;
+    const held = new Promise<void>((resolve) => (finishFirst = resolve));
+    vi.mocked(toDataURL).mockImplementationOnce((async (text: string) => {
+      await held;
+      return draw(text, { margin: 2, width: 320 });
+    }) as typeof toDataURL);
+    const middle = "7d2c9a10-5b3e-4f61-8a2d-1c0e9b8a7f65";
+    const last = "3e9a1c55-0f2b-4d7c-9e81-6a5b4c3d2e1f";
+    const shownCode = async () => {
+      const qr = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=equipment-label-qr]");
+      return qr && (await decodeQrImage(qr.src));
+    };
+    el.itemId = middle;
+    await el.updateComplete;
+    el.itemId = last;
+    await vi.waitFor(async () =>
+      expect(await shownCode()).toBe(formatEquipmentCode("printer", last)),
+    );
+
+    finishFirst();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(await shownCode()).toBe(formatEquipmentCode("printer", last));
+  });
+
+  it("prints its own label from a frame of its own when Print is pressed", async () => {
+    const { el } = await mount("reader");
+    const printed = vi.fn();
+    const watch = new MutationObserver((records) => {
+      for (const node of records.flatMap((record) => [...record.addedNodes]))
+        if (node instanceof HTMLIFrameElement)
+          node.addEventListener("load", () => (node.contentWindow!.print = printed));
+    });
+    watch.observe(document.body, { childList: true });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=print-equipment-label]")!.click();
+    await vi.waitFor(() => expect(printed).toHaveBeenCalledTimes(1));
+    watch.disconnect();
+    const view = printed.mock.contexts[0] as Window;
+    expect([...view.document.body.querySelectorAll("p")].map((p) => p.textContent)).toEqual([
+      "Mano de sala",
+      formatEquipmentCode("reader", ID),
+    ]);
+    view.dispatchEvent(new Event("afterprint"));
   });
 
   it("closes, and says so", async () => {

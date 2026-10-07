@@ -115,9 +115,8 @@ export class EquipmentLabel extends LitElement {
   }
 
   /** Closes the dialog; `wt-close` follows once it has. */
-  close(): void {
-    const modal = this.renderRoot.querySelector<WtModal>("wt-modal");
-    if (modal) modal.open = false;
+  #close(): void {
+    this.renderRoot.querySelector<WtModal>("wt-modal")!.open = false;
   }
 
   override render(): TemplateResult {
@@ -145,7 +144,7 @@ export class EquipmentLabel extends LitElement {
         <code data-test="equipment-label-code">${code}</code>
       </figure>
       <wt-form-actions slot="footer">
-        <wt-button slot="cancel" data-test="close-equipment-label" @click=${() => this.close()}
+        <wt-button slot="cancel" data-test="close-equipment-label" @click=${() => this.#close()}
           >${t("action.close")}</wt-button
         >
         <wt-button

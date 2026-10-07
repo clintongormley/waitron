@@ -17,6 +17,7 @@ import type {
   DeviceRow,
   JoinRequestRow,
   Printer,
+  ProfileReaderList,
   ReaderRow,
   Station,
   Watcher,
@@ -2820,6 +2821,166 @@ describe("the Edit dialog", () => {
       expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
         "cashDrawerPrinterId",
       );
+    });
+
+    it("a reader the device's profile does not allow is refused under the reader as not allowed", async () => {
+      const api = equipmentApi({
+        setDeviceReader: vi.fn().mockRejectedValue({
+          code: "device.binding_invalid",
+          params: { field: "cardReaderId" },
+        }),
+      });
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() =>
+        expect(field(el, "edit-reader").error).toBe(t("devices.err_reader_not_allowed")),
+      );
+      expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+    });
+
+    it("a till with no profile offers only Use default, then the readers of the profile chosen for it", async () => {
+      const unprofiled: DeviceRow = { ...onDefault, deviceProfileId: null };
+      const api = equipmentApi({
+        listDevices: vi.fn().mockResolvedValue([unprofiled]),
+        getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
+        getProfileReaders: vi.fn().mockResolvedValue({ readerIds: ["r2"], defaultReaderId: "r2" }),
+      });
+      const el = await openEdit(api);
+      for (const id of [
+        "edit-receipt-printer",
+        "edit-slip-printer",
+        "edit-cash-drawer",
+        "edit-reader",
+      ])
+        expect(field(el, id).options).toEqual([
+          { value: "", label: useDefault(t("equipment.none")) },
+        ]);
+      expect(api.getProfileReaders).not.toHaveBeenCalled();
+
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pa");
+      await vi.waitFor(() =>
+        expect(field(el, "edit-reader").options).toEqual([
+          { value: "", label: useDefault("Bar (Zeta Pay)") },
+          { value: "r2", label: "Bar (Zeta Pay)" },
+        ]),
+      );
+      expect(api.getProfileReaders).toHaveBeenCalledExactlyOnceWith("pa");
+    });
+
+    function deferred<T>(): {
+      promise: Promise<T>;
+      resolve: (value: T) => void;
+      reject: (error: unknown) => void;
+    } {
+      let resolve!: (value: T) => void;
+      let reject!: (error: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    it("a profile changed and changed back while the reader loads leaves the reader on Use default, reading that profile's readers once", async () => {
+      const stored = deferred<{ readerId: string | null }>();
+      const api = equipmentApi({
+        getDeviceReader: vi.fn().mockReturnValue(stored.promise),
+        getProfileReaders: vi
+          .fn()
+          .mockResolvedValue({ readerIds: ["r1", "r2"], defaultReaderId: null }),
+      });
+      const el = await openEdit(api);
+      expect(field(el, "edit-reader").disabled).toBe(true);
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+      await flush(el);
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pa");
+      await flush(el);
+
+      stored.resolve({ readerId: "r2" });
+      await vi.waitFor(() => expect(field(el, "edit-reader").disabled).toBe(false));
+      expect(field(el, "edit-reader").value).toBe("");
+      expect(field(el, "edit-reader").options.map((option) => option.value)).toEqual([
+        "",
+        "r1",
+        "r2",
+      ]);
+      expect(api.getProfileReaders).toHaveBeenCalledExactlyOnceWith("pa");
+    });
+
+    it("a chosen profile's readers that cannot be read are said at the bottom of Edit", async () => {
+      const api = equipmentApi({
+        getProfileReaders: vi
+          .fn()
+          .mockImplementation((id: string) =>
+            id === "pb"
+              ? Promise.reject({ code: "connection.failed" })
+              : Promise.resolve({ readerIds: ["r1"], defaultReaderId: null }),
+          ),
+      });
+      const el = await openEdit(api);
+      expect(await bottom(el)).toBe("");
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+      await vi.waitFor(async () => expect(await bottom(el)).toBe(codeMessage("connection.failed")));
+      expect(field(el, "edit-reader").options).toEqual([
+        { value: "", label: useDefault(t("equipment.none")) },
+      ]);
+    });
+
+    describe("a chosen profile's readers answering after Edit was saved and opened again", () => {
+      const paReaders: ProfileReaderList = { readerIds: ["r2"], defaultReaderId: null };
+
+      async function saveWhilePbLoads(late: Promise<ProfileReaderList>, fresh: ProfileReaderList) {
+        const api = equipmentApi({
+          getProfileReaders: vi
+            .fn()
+            .mockResolvedValueOnce(paReaders)
+            .mockReturnValueOnce(late)
+            .mockResolvedValueOnce(paReaders)
+            .mockResolvedValueOnce(fresh),
+        });
+        const el = await openEdit(api);
+        await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+        await flush(el);
+        await save(el);
+        await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+        dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+        await vi.waitFor(() => expect(field(el, "edit-reader")?.disabled).toBe(false));
+        return { api, el };
+      }
+
+      it("are not used: choosing that profile again reads its readers afresh", async () => {
+        const late = deferred<ProfileReaderList>();
+        const { api, el } = await saveWhilePbLoads(late.promise, {
+          readerIds: ["r1"],
+          defaultReaderId: null,
+        });
+        late.resolve({ readerIds: ["r2"], defaultReaderId: "r2" });
+        await flush(el);
+        await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+        await vi.waitFor(() =>
+          expect(field(el, "edit-reader").options.map((option) => option.value)).toEqual([
+            "",
+            "r1",
+          ]),
+        );
+        expect(vi.mocked(api.getProfileReaders).mock.calls.map(([id]) => id)).toEqual([
+          "pa",
+          "pb",
+          "pa",
+          "pb",
+        ]);
+      });
+
+      it("say nothing at the bottom when they fail", async () => {
+        const late = deferred<ProfileReaderList>();
+        const { el } = await saveWhilePbLoads(late.promise, paReaders);
+        late.reject({ code: "connection.failed" });
+        await flush(el);
+        await flush(el);
+        expect(await bottom(el)).toBe("");
+      });
     });
   });
 });
