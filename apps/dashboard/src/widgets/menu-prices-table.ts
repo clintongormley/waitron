@@ -78,7 +78,7 @@ const parentPriceOf = (draft: string | undefined): ParentPrice => {
 const samePrice = (a: string | null, b: string | null): boolean =>
   a === null || b === null ? a === b : stringToCents(a) === stringToCents(b);
 
-/** A table row: a product the menu reaches, or one of its sizes, Active or not, drawn under it. */
+/** A table row: an Active product the menu reaches, or one of its Active sizes, drawn under it. */
 interface Line {
   item: MenuPriceRow;
   variant: MenuPriceVariant | null;
@@ -142,7 +142,7 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
         .replace("{high}", format(span.high));
 
 /**
- * One menu's price overrides: a row per product the menu reaches, Active or not, with its sizes
+ * One menu's price overrides: a row per Active product the menu reaches, with its Active sizes
  * under it, each showing its Active state and a field for the price this menu sets for it. A field
  * asks for its own save on Enter or on leaving it, through `wt-price-save`; the host performs the
  * writes and says which are out (`saving`), which were refused for the price typed (`refusals`) and

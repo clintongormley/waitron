@@ -468,7 +468,7 @@ while it is Available (`readOfferVariants` in `listMenuOffers`,
 variant. To take a product off a menu, change the structure so that nothing in it places the
 product; one that comes through an included menu goes when that menu's structure stops placing it or
 the menu is no longer included. Disabling a product takes it off every menu, and disabling a
-variant deletes its price on every menu. Enabling the product again puts it on no menu; enabling the
+variant deletes its price on every menu. Enabling the product again does not put it back on any menu; enabling the
 variant again puts it back wherever its product is listed, with no menu price of its own
 ([product-categories.md](product-categories.md), "Moving and deleting").
 

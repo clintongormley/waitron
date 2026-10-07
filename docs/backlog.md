@@ -359,7 +359,7 @@ the 2026-09-30 folders design; what remains:
   from reading only, a Columns panel wider than a very narrow screen would not shrink to fit, and is
   not re-placed on resize.
 - **Publishing (#677).** After a publish the editor's heading shows the browser's clock until the
-  next read; a re-enabled product's "added" change can name its section as the source; the status
+  next read; the status
   and preview reads build every menu's frozen copy inside `withTransaction`, the venue's write lock
   — about 21 ms median for 4 menus and 300 dishes on a dev laptop, not measured on the box; at
   phone width the list keeps a fixed room for the row menu, and a status sort falls back to a name
@@ -1114,8 +1114,8 @@ unused `units` property is gone (it closes W75's leftover).
     clash count, as the rest of that line already does (`#menuReadFailed`, from A290, #1307).
 - **A347, owner 2026-10-07 — DONE (branch `fix/inactive-off-menus`, a disabled product or size is on
   no menu):** disabling a product takes it off every menu list in the same transaction and clears
-  its prices on every menu, so each menu that reached it shows unpublished changes; a Device Home
-  Page shortcut to it becomes a missing tile, and enabling it again puts it on no menu. Disabling a
+  its prices on every menu, so each menu's next publish leaves it out; a Device Home Page shortcut
+  to it becomes a missing tile, and enabling it again does not put it back on any menu. Disabling a
   size deletes its price on every menu; enabled again, it follows its product back with no menu
   price of its own. Every writer does it (`takeOffMenus`, `packages/catalogue/src/menu-removal.ts`:
   the product save and editor, the Products list's Disable, a category deleted with its contents, a
@@ -1128,8 +1128,9 @@ unused `units` property is gone (it closes W75's leftover).
     rows for a product no menu reaches, and adding the product back to a menu revives those prices.
     Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
     reaches.
-  - Open: a bulk Disable of about 400 or more products cannot read the count, because the ids go in
-    the URL (A347's review measured 500 ids answered HTTP 431), so the dialog says "every menu".
+  - Open: a bulk Disable of 500 products could not read the count in A347's review (HTTP 431,
+    because the ids go in the URL), so the dialog says "every menu"; the smallest count that fails
+    was not measured.
   - Open: deleting a category with its contents says its products come off every menu, with no
     count.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link

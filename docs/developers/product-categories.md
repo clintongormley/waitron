@@ -359,7 +359,7 @@ With only products selected, the toolbar's action reads **Disable**: it switches
 product's `active` flag), and its dialog asks "Disable N products?". Their rows and previous sales
 remain, and you can enable the products again later, each from its row menu's **Enable**. The
 dialog adds how many menus the products come off, read from `GET /management-api/products/menus`
-(below): "They come off the 2 menus they are on, which then show unpublished changes.", nothing when
+(below): "They come off the 2 menus they are on.", nothing when
 they are on none, and "They come off every menu they are on." while the count is being read or when
 it cannot be read. With a category in the selection, the count covers only the products selected
 directly. When
@@ -373,14 +373,15 @@ come off every menu they are on.", with no count.
 
 A disabled product is on no menu. Disabling one, whichever way (this toolbar, a category deleted
 with its contents, the product's row menu or its editor), takes it off every list that holds it in
-the same transaction and clears its prices on every menu; each menu that reached it then shows
-unpublished changes. A Device Home Page shortcut to it becomes a missing tile in its place. Enabling
-it again puts it back on no menu. A disabled size holds no menu price: disabling one deletes its
+the same transaction and clears its prices on every menu; each menu's next publish leaves it out. A Device Home Page
+shortcut to it becomes a missing tile in its place. Enabling it again does not put it back on any
+menu. A disabled size holds no menu price: disabling one deletes its
 price on every menu, and enabling it again brings it back wherever its product is listed, with no
 menu price of its own until one is set. A configuration import refuses a bundle that puts a
 disabled product in a list or a shortcut (`setup.request_invalid`,
 `field: "section_members.product_id"`) or gives a disabled size a menu price
 (`field: "menu_item_variant_overrides.variant_id"`).
+
 Before deleting a category that holds active products or subcategories, the compact dialog asks
 "What happens to what is inside?". Each answer names what it does, counting only active products
 and leaving out anything that is zero. The place named is the shared parent's path, **No
