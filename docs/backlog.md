@@ -996,8 +996,9 @@ unused `units` property is gone (it closes W75's leftover).
   spreading the toolbar over three lines at 390 px.
   - Open, seen in screenshots, not about filters: at 390 px the Printers screen's Add button covers
     the end of its tab row ("Print A…"), and in Spanish "Añadir un agente de impresión" runs off the
-    right edge; a menu's prices table shows only a sliver of the price box before its pinned Resolve
-    column (whether it scrolls into view was not checked).
+    right edge. A menu's prices table showing only a sliver of the price box at 390 px — DONE (A344):
+    the Resolve column is gone and a name wraps under a phone-width cap, so each price box is whole
+    on screen in English and Spanish.
   - Open: at 640 px or less a searchable table draws its own search under the controls that follow
     it (Expand all, the `toolbar-end` slot, Customise) while Tab reaches the search first — the
     order W83 left open on Products.
@@ -1037,12 +1038,33 @@ unused `units` property is gone (it closes W75's leftover).
     "8.00 – 12.00" with full stops (the field's hint is written as typed, from W89, 53a76dce9a);
     a refused field is drawn about 14 px wider than the others, pushing its "?" to the right; and at
     390 wide a refusal's focus scrolls the table only part way sideways, leaving Spanish prices
-    half-hidden behind the pinned Resolve column.
+    half-hidden behind the pinned Resolve column. (A344 removed the "?" and the Resolve column and keeps each price
+    box on screen at 390 px; the wider refused field and the placeholder's full stops were not
+    re-checked.)
   - Open, from #1368's review (read, not tested): closing a refusal's message now clears the
     outcome, so a later save's "Saved …" message with its Undo can appear where before it stayed
     hidden — the docs say so, but no test covers that case. And when the message closes (its ×, or
     Undo replacing it), keyboard focus is not put back where it was, unlike the dashboard's alert
     toast. Next: a test for the first, and return focus to the field the save came from.
+- **A344, owner 2026-10-07 — DONE (a menu's Price overrides tab shows its clashes):** a red line
+  above the table says how many prices clash and that they must be settled before the menu can be
+  published, counted by the same per-product rule as `clashesOf` (a product without variants once,
+  else each clashing variant). The Price filter offers Overridden only, Not overridden and, while
+  anything clashes, Clashes; a load with a clash starts on Clashes. Under each clashing field a red
+  sentence names every place and its price ("Price set to €2.80 in this menu's sections, €3.00 in
+  Drinks."; a product whose variant clashes names that variant), and it is also the field's hidden
+  hint, so a screen reader hears it on the field. The "?" explanations and the Resolve column are
+  gone. At 390 px a product's name and its note wrap under a cap so each price box is on screen.
+  - Decided as built: a filter choice the person made earlier in the browser tab (the table keeps
+    one for every menu) wins over starting on Clashes; the red line still gives the count. Under
+    Clashes a product that clashes itself stays folded until opened, as the table folds any row
+    that matches a filter in its own right. Once a load has had no clash, a clash that comes back
+    (Undo, a live re-read) does not switch the filter back to Clashes.
+  - Open, for A345 (the campaign queue's item "A menu with clashes cannot be published, from
+    anywhere"; not yet in this backlog): a product with variants whose own price clashes while no variant's does is
+    marked red and offered under Clashes, but not counted, because `clashesOf` counts only its
+    variants. And the tab counts Inactive products and variants, which the publish check leaves
+    out. Whether the tab or the publish check is right is A345's question.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
@@ -2357,7 +2379,7 @@ a clash came from.
 **Resolve follows an unsaved price — DONE (A280, 2026-10-06).** A valid draft hides the
 row's Resolve menu. Blank or invalid text and Escape leave the saved clash available. Product
 and size rows have regression checks; no existing test check changed. A valid draft still hides
-Resolve during a save and after a refusal; clear it or press Escape to restore the candidate list.
+Resolve during a save and after a refusal; clear it or press Escape to restore the candidate list. (A344 removed the Resolve menu, 2026-10-07.)
 
 **Price overrides accept either decimal mark — DONE (A284, A280 visual follow-up).**
 The shared price field converts comma or point to an exact dot-decimal draft and displays the

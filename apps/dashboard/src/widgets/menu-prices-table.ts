@@ -5,12 +5,9 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
-import "@waitron/ui/src/components/wt-help-tooltip.js";
-import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-price-input.js";
-import { describeSetting, placeName } from "./price-source.js";
 import {
   productInherited,
   sizeClash,
@@ -45,6 +42,7 @@ import {
   PATH_SEPARATOR,
 } from "./category-form.js";
 import { priceSearchText, priceText } from "./form-fields.js";
+import { placeName } from "./price-source.js";
 
 /** One field's value to write. `previous` is the value it replaces in the order writes are made,
  * which Undo writes back. */
@@ -99,6 +97,23 @@ const keepsVariantOrder = ({ variant }: Line): boolean => variant === null;
 const pricesASize = (item: MenuPriceRow): boolean =>
   item.variants.some(({ price }) => price !== null);
 
+const candidatesText = (setting: Setting<Decimal>): string =>
+  setting.state !== "clash"
+    ? ""
+    : setting.candidates
+        .map((candidate) => {
+          const place = placeName(candidate.place, t);
+          return "value" in candidate
+            ? t("menu_prices.source_candidate")
+                .replace("{price}", priceText(candidate.value))
+                .replace("{place}", () => place)
+            : t("menu_prices.candidate_undecided").replace("{place}", () => place);
+        })
+        .join(", ");
+
+const pricesSentence = (setting: Setting<Decimal>): string =>
+  t("menu_prices.clash_prices").replace("{candidates}", () => candidatesText(setting));
+
 type Span = { low: string; high: string };
 
 const oneAmount = ({ low, high }: Span): boolean => stringToCents(low) === stringToCents(high);
@@ -125,6 +140,14 @@ export class MenuPricesTable extends LitElement {
     css`
       :host {
         display: block;
+        container-type: inline-size;
+      }
+      .error {
+        margin-block: 0 var(--wt-space-3);
+        color: var(--wt-color-danger);
+      }
+      wt-data-table::part(name-box) {
+        display: contents;
       }
       wt-data-table::part(name) {
         overflow-wrap: anywhere;
@@ -140,13 +163,10 @@ export class MenuPricesTable extends LitElement {
       }
       wt-data-table::part(price-cell) {
         display: inline-grid;
-        grid-template-columns: auto auto;
-        align-items: center;
         gap: var(--wt-space-1);
       }
-      /* Contained, so a note wraps inside the field and its "?" rather than widening the column. */
+      /* Contained, so a note wraps inside the field's width rather than widening the column. */
       wt-data-table::part(price-notes) {
-        grid-column: 1 / -1;
         contain: inline-size;
       }
       wt-data-table::part(clash),
@@ -190,7 +210,7 @@ export class MenuPricesTable extends LitElement {
         padding-inline: var(--wt-space-4);
         font-size: var(--wt-font-size-sm);
       }
-      /* Above wt-data-table's pinned column (2) and sticky header (3). */
+      /* Above wt-data-table's sticky header (3). */
       wt-toast {
         position: fixed;
         inset-block-end: var(--wt-space-3);
@@ -201,6 +221,26 @@ export class MenuPricesTable extends LitElement {
       /* Room for the open message after the table, so the page can scroll the last row clear of it. */
       wt-toast[open] + .outcome-room {
         block-size: calc(var(--outcome-height, 0px) + var(--wt-space-3));
+      }
+      /* The table is never narrower than its cells' unwrapped text, so at phone width a name, and
+         the note under it, is capped at the room the price column leaves beside the cell's padding
+         and the tree's toggle. A size's name is indented one tree step further. */
+      @container (max-width: 30rem) {
+        wt-data-table {
+          --price-column: calc(
+            var(--wt-price-range-field-width) + var(--wt-space-4) + 2 * var(--wt-space-3)
+          );
+          --name-room: calc(
+            100cqi - var(--price-column) - 2 * var(--wt-space-3) - var(--wt-tap-min)
+          );
+        }
+        wt-data-table::part(name-box) {
+          display: block;
+          max-inline-size: max(var(--wt-tap-min), var(--name-room));
+        }
+        wt-data-table::part(variant-name) {
+          max-inline-size: max(var(--wt-tap-min), var(--name-room) - var(--wt-space-2));
+        }
       }
       @media (max-width: 48rem) {
         wt-toast {
@@ -253,6 +293,17 @@ export class MenuPricesTable extends LitElement {
     MenuPriceRow,
     { inherited: Inherited; sizes: ReturnType<typeof sizesInheritedFrom> }
   > = new Map();
+  /** Each row that clashes as this menu stores it, drafts aside, so a row under the Clashes filter
+   * stays while a price is typed into it. */
+  #clashing: ReadonlyMap<string, "size" | "own"> = new Map();
+  /** Clashing prices, by the same per-product rule as `clashesOf`
+   * (packages/catalogue/src/menu-combine.ts): a product with variants by its clashing variants.
+   * Unlike the publish check, Inactive products and variants are counted too. */
+  #clashCount = 0;
+  /** Whether the price filter starts on Clashes, decided on the first loaded update of each load;
+   * undefined until then. Dropped for the rest of a load once it has no clash, so a clash that
+   * comes back does not move the filter. */
+  #startOnClashes: boolean | undefined = undefined;
   /** Per row key, what depends on its product's field, with the reading of that field it was
    * worked out for. */
   readonly #underParent = new Map<
@@ -273,13 +324,21 @@ export class MenuPricesTable extends LitElement {
         ]),
       );
       this.#underParent.clear();
+      this.#readClashes();
     }
     if (changed.has("products"))
       this.#variants = new Map(
         this.products.flatMap(({ variants }) => variants.map((variant) => [variant.id, variant])),
       );
     if (changed.has("rows") || changed.has("products")) this.#readLines();
-    if (changed.has("sections") || changed.has("categories") || changed.has("rows"))
+    const startedOnClashes = this.#startOnClashes;
+    this.#decideStart();
+    if (
+      changed.has("sections") ||
+      changed.has("categories") ||
+      changed.has("rows") ||
+      this.#startOnClashes !== startedOnClashes
+    )
       this.#columns = this.#buildColumns();
     if (changed.has("refusals")) {
       const before = changed.get("refusals") ?? {};
@@ -298,6 +357,33 @@ export class MenuPricesTable extends LitElement {
         changed.has("refusals") ? (changed.get("refusals") ?? {}) : this.refusals,
         changed.has("outcome") ? (changed.get("outcome") ?? null) : this.outcome,
       );
+  }
+
+  #readClashes(): void {
+    const clashing = new Map<string, "size" | "own">();
+    let count = 0;
+    for (const item of this.rows) {
+      const own =
+        item.override === null &&
+        (item.combined.price.state === "clash" ||
+          this.#productInheritance.get(item)!.inherited.state === "clash");
+      const product = sizeClash(item) ? "size" : own ? "own" : null;
+      if (product !== null) clashing.set(item.menuItemId, product);
+      if (product !== null && item.variants.length === 0) count++;
+      for (const { variantId, price } of item.variants) {
+        if (price !== null || variantInherited(item, variantId, undefined).state !== "clash")
+          continue;
+        clashing.set(`${item.menuItemId}:${variantId}`, "own");
+        count++;
+      }
+    }
+    this.#clashing = clashing;
+    this.#clashCount = count;
+  }
+
+  #decideStart(): void {
+    if (this.loading || this.failed) this.#startOnClashes = undefined;
+    else if (this.#startOnClashes !== false) this.#startOnClashes = this.#clashing.size > 0;
   }
 
   /** A refused price nothing says was refused any longer would read as stored and be sent again
@@ -515,6 +601,30 @@ export class MenuPricesTable extends LitElement {
       : null;
   }
 
+  #clashSentence(line: Line, clash: "size" | "own"): string {
+    const { item, variant } = line;
+    if (variant) return pricesSentence(this.#withParent(line).from!.setting);
+    const own = withoutOwn(item.combined.price);
+    if (clash === "own" && own.state === "clash") return pricesSentence(own);
+    const sizes =
+      clash === "size"
+        ? item.variants
+            .filter(({ active }) => active)
+            .map(({ variantId }) => ({ variantId, setting: sizeSetting(item, variantId) }))
+            .filter(({ setting }) => setting.level === "size")
+        : this.#productInheritance.get(item)!.sizes;
+    return [
+      t("menu_prices.size_clash_lead"),
+      ...sizes
+        .filter(({ setting }) => setting.state === "clash")
+        .map(({ variantId, setting }) =>
+          t("menu_prices.variant_clash")
+            .replace("{variant}", () => this.#variantName(variantId))
+            .replace("{candidates}", () => candidatesText(setting)),
+        ),
+    ].join(" ");
+  }
+
   /** Whether the row's field holds a price, typed (`draft`) or stored. */
   #holds(line: Line, draft: string | undefined): boolean {
     const text = draft?.trim();
@@ -523,38 +633,6 @@ export class MenuPricesTable extends LitElement {
 
   #lineName({ item, variant }: Line): string {
     return variant ? `${item.name} — ${this.#variantName(variant.variantId)}` : item.name;
-  }
-
-  /** Where the price a blank field would take comes from, read from the same settings as its
-   * placeholder; a product with sizes explains each of its Active sizes. */
-  #tip(line: Line) {
-    const { item, variant } = line;
-    const names = { product: item.name };
-    const explain = ({ setting, follows }: InheritedFrom) =>
-      follows
-        ? `${t("menu_prices.source_parent").replace("{name}", item.name)}. ${describeSetting(setting, names, t)}`
-        : describeSetting(setting, names, t);
-    let explanation: string;
-    if (variant) explanation = explain(this.#withParent(line).from!);
-    else {
-      const { sizes } = this.#productInheritance.get(item)!;
-      explanation =
-        sizes.length === 0
-          ? describeSetting(withoutOwn(item.combined.price), names, t)
-          : sizes
-              .map((size) => {
-                const price =
-                  size.setting.state === "decided"
-                    ? priceText(size.setting.value)
-                    : t("menu_prices.clash");
-                return `${this.#variantName(size.variantId)}: ${price}. ${explain(size)}`;
-              })
-              .join(" ");
-    }
-    return html`<wt-help-tooltip
-      aria-label=${t("menu_prices.tip_inherited").replace("{name}", this.#lineName(line))}
-      >${explanation}</wt-help-tooltip
-    >`;
   }
 
   #status(line: Line) {
@@ -588,15 +666,16 @@ export class MenuPricesTable extends LitElement {
     const { item, variant } = line;
     const key = keyOf(line);
     const clash = this.#clash(line);
+    const sentence = clash === null ? "" : this.#clashSentence(line, clash);
     const inherited = this.#inherited(line);
     let placeholder: string;
     let hint: string;
     if (clash === "size") {
       placeholder = "—";
-      hint = t("menu_prices.size_clash");
+      hint = sentence;
     } else if (inherited.state === "clash" || clash === "own") {
       placeholder = t("menu_prices.clash_placeholder");
-      hint = t("menu_prices.override_help_clash");
+      hint = clash === "own" ? sentence : t("menu_prices.override_help_clash");
     } else {
       // As typed into a price field, which draws no sign.
       placeholder = spanText(inherited, (amount) => amount);
@@ -622,15 +701,13 @@ export class MenuPricesTable extends LitElement {
         @keydown=${(event: KeyboardEvent) => this.#onKeydown(event, line)}
         @focusout=${() => this.#commit(line, "leave")}
       ></wt-price-input
-      >${this.#tip(line)}${
+      >${
         clash !== null || sizesSetOne
           ? html`<span part="price-notes"
               >${
                 clash === null
                   ? nothing
-                  : html`<span part="clash"
-                      >${t(clash === "size" ? "menu_prices.size_clash" : "menu_prices.clash")}</span
-                    >`
+                  : html`<span part="clash" aria-hidden="true">${sentence}</span>`
               }${
                 sizesSetOne
                   ? html`<span part="muted price-note">${t("menu_prices.variant_overrides")}</span>`
@@ -758,54 +835,6 @@ export class MenuPricesTable extends LitElement {
     this.#sent.delete(key);
   }
 
-  /** A candidate chosen in Resolve is sent as if typed into the row's field. */
-  #resolve(line: Line, price: string): void {
-    const key = keyOf(line);
-    this.drafts = new Map(this.drafts).set(key, price);
-    this.hiddenRefusals = new Set([...this.hiddenRefusals, key]);
-    this.#checking.delete(key);
-    this.#mark(key, false);
-    this.#send(line, price);
-  }
-
-  #resolveActions(line: Line) {
-    const price = this.#priceSetting(line);
-    const draft = this.drafts.get(keyOf(line));
-    if (price.state !== "clash" || (draft !== undefined && this.#holds(line, draft)))
-      return nothing;
-    return html`<wt-row-actions
-      part="resolve"
-      align="end"
-      label=${`${t("menu_prices.resolve")} ${this.#lineName(line)}`}
-    >
-      ${price.candidates.map((candidate) =>
-        "value" in candidate
-          ? html`<wt-button
-              variant="secondary"
-              @click=${(event: Event) => {
-                event.stopPropagation();
-                (event.currentTarget as HTMLElement)
-                  .closest<HTMLElementTagNameMap["wt-row-actions"]>("wt-row-actions")!
-                  .hide();
-                this.#resolve(line, candidate.value);
-              }}
-              >${t("menu_prices.use_candidate").replace("{price}", priceText(candidate.value)).replace("{place}", placeName(candidate.place, t))}</wt-button
-            >`
-          : nothing,
-      )}<wt-button
-        variant="secondary"
-        @click=${(event: Event) => {
-          event.stopPropagation();
-          (event.currentTarget as HTMLElement)
-            .closest<HTMLElementTagNameMap["wt-row-actions"]>("wt-row-actions")!
-            .hide();
-          this.#field(keyOf(line))?.focus();
-        }}
-        >${t("menu_prices.set_price")}</wt-button
-      >
-    </wt-row-actions>`;
-  }
-
   #variantName(variantId: string): string {
     return this.#variants.get(variantId)?.name ?? t("members.missing");
   }
@@ -850,11 +879,13 @@ export class MenuPricesTable extends LitElement {
         cell: ({ item, variant }) =>
           variant
             ? html`<span part="variant-name">${this.#variantName(variant.variantId)}</span>`
-            : html`<span part="name">${item.name}</span> ${
+            : html`<span part="name-box"
+                ><span part="name">${item.name}</span> ${
                   item.variants.length
                     ? html`<span part="note">${t("menu_prices.has_variants")}</span>`
                     : nothing
-                }`,
+                }</span
+              >`,
       },
       {
         key: "override",
@@ -874,8 +905,19 @@ export class MenuPricesTable extends LitElement {
         filter: {
           label: t("menu_prices.price_filter"),
           allLabel: t("menu_prices.all_prices"),
-          value: (line) => (this.#overridden(line) ? "overridden" : "product"),
-          options: [{ value: "overridden", label: t("menu_prices.overridden_only") }],
+          value: (line) => [
+            this.#overridden(line) ? "overridden" : "not_overridden",
+            ...(this.#clashing.has(keyOf(line)) ? ["clash"] : []),
+          ],
+          options: [
+            { value: "overridden", label: t("menu_prices.overridden_only") },
+            { value: "not_overridden", label: t("menu_prices.not_overridden") },
+            ...(this.#clashing.size > 0
+              ? [{ value: "clash", label: t("menu_prices.clashes_only") }]
+              : []),
+          ],
+          // Never absent: the table forgets a chosen All prices on a column with no `initial`.
+          initial: this.#startOnClashes ? "clash" : "",
         },
       },
       {
@@ -926,17 +968,21 @@ export class MenuPricesTable extends LitElement {
         searchValue: (line) => productStatusName(this.#active(line), line.variant !== null),
         cell: (line) => this.#status(line),
       },
-      {
-        key: "actions",
-        label: t("menu_prices.resolve"),
-        pinned: "end",
-        cell: (line) => this.#resolveActions(line),
-      },
     ];
   }
 
+  #clashMessage() {
+    const count = this.#clashCount;
+    if (this.loading || this.failed || count === 0) return nothing;
+    const words =
+      count === 1
+        ? t("menu_prices.clash_message_one")
+        : t("menu_prices.clash_message").replace("{count}", String(count));
+    return html`<p class="error" role="status" data-test="clash-message">${words}</p>`;
+  }
+
   override render() {
-    return html`<wt-data-table
+    return html`${this.#clashMessage()}<wt-data-table
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
