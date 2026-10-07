@@ -1,6 +1,13 @@
 import { catalogues, type Transaction } from "@waitron/db";
+import { FOLLOWING_FOLDER } from "./include-folder-presentation.js";
 import { sectionMembers, sections } from "./schema/sections.js";
-import type { SectionMember, SectionRole, TileRef } from "./section-types.js";
+import type {
+  IncludeFolder,
+  IncludeFolderOverrides,
+  SectionMember,
+  SectionRole,
+  TileRef,
+} from "./section-types.js";
 
 export interface SectionRow {
   id: string;
@@ -19,6 +26,8 @@ export interface MemberRow {
   productId: string | null;
   childSectionId: string | null;
   missingName?: string | null;
+  showAsFolder?: boolean;
+  folderOverrides?: IncludeFolderOverrides;
 }
 
 /** Every section and every membership, held in memory for one operation. */
@@ -33,6 +42,8 @@ export interface SectionGraph {
   section(sectionId: string): SectionRow | undefined;
   menu(menuId: string): { name: string; active: boolean } | undefined;
   roots(): { menuId: string; sectionId: string }[];
+  /** How an include shows its menu; a member with no stored setting is a folder that follows. */
+  folder(memberId: string): IncludeFolder;
 }
 
 export function toSectionMember(row: MemberRow): SectionMember<TileRef> {
@@ -57,6 +68,7 @@ export function buildSectionGraph(
   const byId = new Map(sections.map((row) => [row.id, row]));
   const children = new Map<string, SectionMember<TileRef>[]>();
   const parents = new Map<string, Set<string>>();
+  const folders = new Map<string, IncludeFolder>();
   const ordered = [...members].sort(
     (a, b) => a.position - b.position || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
@@ -64,6 +76,9 @@ export function buildSectionGraph(
     const list = children.get(row.sectionId) ?? [];
     list.push(toSectionMember(row));
     children.set(row.sectionId, list);
+    const overrides = row.folderOverrides ?? {};
+    if (row.showAsFolder === false || Object.keys(overrides).length > 0)
+      folders.set(row.id, { showAsFolder: row.showAsFolder ?? true, overrides });
     if (row.childSectionId !== null) {
       const holders = parents.get(row.childSectionId) ?? new Set<string>();
       holders.add(row.sectionId);
@@ -87,6 +102,7 @@ export function buildSectionGraph(
     parents: (sectionId) => [...(parents.get(sectionId) ?? [])],
     role: (sectionId) => byId.get(sectionId)?.role,
     ownerMenu: (sectionId) => byId.get(sectionId)?.ownerMenuId ?? null,
+    folder: (memberId) => folders.get(memberId) ?? FOLLOWING_FOLDER,
   };
 }
 
@@ -100,6 +116,8 @@ export async function loadSectionGraph(tx: Transaction): Promise<SectionGraph> {
       productId: sectionMembers.productId,
       childSectionId: sectionMembers.childSectionId,
       missingName: sectionMembers.missingName,
+      showAsFolder: sectionMembers.showAsFolder,
+      folderOverrides: sectionMembers.folderOverrides,
     })
     .from(sectionMembers);
   const menus = await tx

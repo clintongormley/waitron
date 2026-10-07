@@ -357,6 +357,9 @@ function fieldsOf(change: MenuChangeBody): readonly string[] | undefined {
 /** One shared edit shows up in two menus as the same change from the same source. */
 function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
   if (a.change.source !== b.change.source || changeSubject(a) !== changeSubject(b)) return false;
+  // Another menu shows this menu's own sections as an included menu's, so a section change
+  // credited to this menu in both is two includes' separate settings.
+  if (a.change.kind === "section_changed" && a.change.source === "this_menu") return false;
   const fields = fieldsOf(a.change);
   return fields === undefined || fields.some((field) => fieldsOf(b.change)!.includes(field));
 }

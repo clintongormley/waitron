@@ -879,24 +879,27 @@ tests ran rows 30.3 px tall at a device pixel ratio of 1, each revealed from the
 correction.
 
 **A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
-`apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row is
-the menu's Device Home Page (W93): no grip (in Reorder mode, below, only the grip's blank space),
-closed at first, with "No
-shortcuts yet." under its name while it has none. Its ⋮ holds Add a product shortcut and Add a
-section shortcut; each opens a window whose one dropdown offers what the menu reaches and is not
-already a shortcut, and choosing adds it at once. Its children are the shortcuts in order, each with
-a grip in Reorder mode, no colour square or photo, and a ⋮ holding Remove shortcut; one whose target the menu no longer
-reaches reads "Missing: <name>", its kind "No longer available". The menu's own row,
-"Menu: <name>", comes next. It has no grip (in Reorder mode, only the grip's blank space) and cannot be closed, and its ⋮ holds the adds: New section here,
-Include a menu and Add products. Under it the menu's members follow in menu order, with no sort.
-A row's key is the member ids from the top level down to it, so a section shown in two places is
-two rows. The ⋮ of a section the menu owns holds the same three adds, then Edit and Delete; an add
-acts on that section from whichever place it was chosen, and makes that row the current one, whose
-name is drawn bold and underlined with `aria-current="true"`. A product's ⋮ holds "Remove from
-<list>", naming the list that holds it. An included menu's row reads "Menu: <name>" with
-"Read-only here" under it, and its ⋮ holds a link to that menu's own Structure tab and "Remove from
-this menu". The rows inside an included menu open and close for browsing but have no grip, no ⋮ and
-a muted name; in Reorder mode each keeps an unseen grip-sized space. Only an owned row has a grip.
+`apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row is the
+menu's Device Home Page (W93): no grip (in Reorder mode, below, only the grip's blank space), closed
+at first, with "No shortcuts yet." under its name while it has none. Its ⋮ holds Add a product
+shortcut and Add a section shortcut; each opens a window whose one dropdown offers what the menu
+reaches and is not already a shortcut, and choosing adds it at once. Its children are the shortcuts
+in order, each with a grip in Reorder mode, no colour square or photo, and a ⋮ holding Remove
+shortcut; one whose target the menu no longer reaches reads "Missing: <name>", its kind "No longer
+available". The menu's own row, "Menu: <name>", comes next. It has no grip (in Reorder mode, only
+the grip's blank space) and cannot be closed, and its ⋮ holds the adds: New section here, Include a
+menu and Add products. Under it the menu's members follow in menu order, with no sort. A row's key
+is the member ids from the top level down to it, so a section shown in two places is two rows. The ⋮
+of a section the menu owns holds the same three adds, then Edit and Delete; an add acts on that
+section from whichever place it was chosen, and makes that row the current one, whose name is drawn
+bold and underlined with `aria-current="true"`. A product's ⋮ holds "Remove from <list>", naming the
+list that holds it. An included menu's row reads "Menu: <name>" with "Read-only here" under it, then
+"Shown as a folder" or "Sections shown directly". Its ⋮ holds "Open <name>", a link to that menu's
+own Structure tab; Edit, which opens the include's dialog (`dashboard-include-folder-form`) with a
+"Show as a folder" switch and, while the switch is on, the folder's customer-facing names, colour
+and photo, each following the included menu until it is changed; and "Remove from this menu". The
+rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name; in
+Reorder mode each keeps an unseen grip-sized space. Only an owned row has a grip.
 In Reorder mode, put every grip in one leading column before the tree arrow and indentation.
 Reserve that column on the menu's, Home's and read-only rows. Keep the arrow and media slot inside
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
@@ -1486,6 +1489,15 @@ does (owner rule, 2026-09-29).
 - a folded section (`wt-disclosure`) holding an invalid field opens on a failed submission, so the
   focus lands on the field;
 - reopening or resetting a form starts it again: no messages, the action enabled.
+
+The switch in the include dialog on a menu's Structure tab
+(`apps/dashboard/src/widgets/include-folder-form.ts`) keeps the values of the fields it hides.
+Switching it off hides the fields without clearing them, and switching it back on shows what they
+held. A save with the switch off sends the switch alone, and the values stored for the hidden fields
+stay as they were. Its cases "switching off hides the names, colour and photo, and switching on
+shows the values again" and "submits only the switch when it is off" in
+`apps/dashboard/src/widgets/include-folder-form.test.ts`, and "leaves the stored overrides alone
+when none are sent" in `packages/catalogue/src/include-folder.db.test.ts`, hold it.
 
 Give every field an explicit semantic `name`. Use the standard autocomplete purposes where they
 exist: `username` for a login email, `current-password` for a login password, and `new-password`

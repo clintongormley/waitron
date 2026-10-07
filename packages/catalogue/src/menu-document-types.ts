@@ -7,6 +7,7 @@ import type {
   OfferedOptionsList,
 } from "./menu-types.js";
 import type { OptionLabel } from "./modifier-list-types.js";
+import type { IncludeFolderOverrides } from "./section-types.js";
 
 /**
  * The published-menu wire shapes, for the dashboard and the till to import. A browser-safe LEAF:
@@ -51,6 +52,11 @@ export type DocumentMember =
   | {
       kind: "section";
       includedMenu?: { id: string; name: string };
+      /** Its members are drawn in its place; a shortcut to it still opens it. */
+      direct?: true;
+      /** What the include fixes, present only while it is shown as a folder (absent when shown
+       * directly, whatever it stores), so a change list can tell it from the included menu's change. */
+      fixed?: IncludeFolderOverrides;
       sectionId: string;
       internalName: string;
       names: Record<string, string>;
@@ -150,7 +156,8 @@ export type MenuField =
         | "allergens"
         | "diet"
         | "vat"
-        | "ordering";
+        | "ordering"
+        | "direct";
     }
   | { kind: "variants" | "extras" | "options" }
   | { kind: "portion" | "maxQuantity" | "limits" | "default" | "members" };
@@ -261,7 +268,7 @@ export type ProductChangeField =
   | "extras"
   | "options";
 
-export type SectionChangeField = "names" | "image" | "color";
+export type SectionChangeField = "names" | "image" | "color" | "direct";
 
 export type MenuStatus =
   | { state: "unpublished"; clashes: number }

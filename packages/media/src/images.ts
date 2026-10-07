@@ -6,6 +6,7 @@ import {
   parentJoin,
   parentProducts,
   readContentLanguages,
+  sectionMembers,
   sections,
   staffPresentationName,
   validateContentTranslations,
@@ -18,6 +19,7 @@ import {
   resolveContentText,
 } from "@waitron/shared";
 import { and, count, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { mediaImageData, mediaImages } from "./schema/images.js";
 import { IMAGE_LIST_COLUMNS, datedImagePageQuery } from "./image-page-query.js";
 import type { PreparedImage } from "./prepare.js";
@@ -31,10 +33,10 @@ export interface ImageRecord extends ImageMetadataInput {
   filename: string;
   createdAt: Date;
   updatedAt: Date;
-  /** How many products (variants among them), sections, live or queued menu versions and receipt
-   * logos reference this photo. `readImage` uses `listImageUsagesForFilename` and `listImages` uses
-   * `countUsages`; the counters must stay in step or the library shows a free photo that then
-   * refuses to delete. */
+  /** How many products (variants among them), sections, include folders, live or queued menu
+   * versions and receipt logos reference this photo. `readImage` uses `listImageUsagesForFilename`
+   * and `listImages` uses `countUsages`; the counters must stay in step or the library shows a free
+   * photo that then refuses to delete. */
   usageCount: number;
 }
 export type ImageUsage =
@@ -59,6 +61,18 @@ export type ImageUsage =
       /** The variant AND its product are Active. */
       active: boolean;
     }
+  /**
+   * An include's folder photo, held whether or not the include shows as a folder. `id` is the
+   * member; `menuId` owns the list it sits in; `includedMenuName` is the included root's staff name,
+   * or the member's missing name when it includes no section.
+   */
+  | {
+      kind: "menu_include";
+      id: string;
+      menuId: string;
+      menuName: string;
+      includedMenuName: string;
+    }
   /** A menu's LIVE version; a version another has replaced holds no use. */
   | { kind: "menu_version"; id: string; menuId: string; menuName: string; number: number }
   /**
@@ -76,6 +90,9 @@ export type ImageUsage =
   /** The receipt prints it as its logo. */
   | { kind: "receipt" };
 const receiptLogo = sql<string | null>`json_extract(${tenantReceipts.receipt}, '$.logo')`;
+// The expression `section_members_folder_image_idx` indexes.
+const folderImage = sql<string | null>`${sectionMembers.folderOverrides} ->> '$.image'`;
+const includedRoots = alias(sections, "included_roots");
 
 export interface UploadImageOptions {
   fallbackLanguage?: string;
@@ -168,6 +185,21 @@ async function listImageUsagesForFilename(
     .from(sections)
     .where(eq(sections.image, filename))
     .orderBy(sections.id);
+  const includeRows = await tx
+    .select({
+      id: sectionMembers.id,
+      menuId: sections.ownerMenuId,
+      menuName: catalogues.name,
+      // Left-joined so a member that names no section is still listed, as `countUsages` and the
+      // delete trigger still see it, under its own missing name.
+      includedMenuName: sql<string>`coalesce(${includedRoots.internalName}, ${sectionMembers.missingName}, '')`,
+    })
+    .from(sectionMembers)
+    .innerJoin(sections, eq(sections.id, sectionMembers.sectionId))
+    .innerJoin(catalogues, eq(catalogues.id, sections.ownerMenuId))
+    .leftJoin(includedRoots, eq(includedRoots.id, sectionMembers.childSectionId))
+    .where(eq(folderImage, filename))
+    .orderBy(catalogues.name, sectionMembers.id);
   const versionRows = await tx
     .select({
       id: menuVersions.id,
@@ -219,6 +251,7 @@ async function listImageUsagesForFilename(
   return [
     ...productRows.map(usage),
     ...sectionRows.map((row): ImageUsage => ({ kind: "section", ...row })),
+    ...includeRows.map((row): ImageUsage => ({ kind: "menu_include", ...row })),
     ...versionRows.flatMap(({ livePointer, activatesAt, ...row }): ImageUsage[] => [
       ...(livePointer === null ? [] : [{ kind: "menu_version" as const, ...row }]),
       ...(activatesAt === null
@@ -337,8 +370,9 @@ export async function deleteImage(
   // `packages/catalogue/src/extras.ts`).
   //
   // The triggers in `packages/media/drizzle/` refuse the delete at the database as well for a
-  // product, section or live or queued menu version, but not for the receipt's logo, so for that
-  // use this check is the only refusal. It returns the uses, which is what the library screen shows.
+  // product, section, include folder or live or queued menu version, but not for the receipt's
+  // logo, so for that use this check is the only refusal. It returns the uses, which is what the
+  // library screen shows.
   const [image] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
@@ -567,8 +601,8 @@ export async function listImages(
 }
 
 /**
- * How many products (variants among them), sections, live or queued menu versions and receipt
- * logos name each of `filenames`.
+ * How many products (variants among them), sections, include folders, live or queued menu versions
+ * and receipt logos name each of `filenames`.
  *
  * The reads count the sources `listImageUsages` lists, and a source added there is added here too
  * — or the library shows a free photo that then refuses to delete. They are separate statements on
@@ -594,6 +628,12 @@ async function countUsages(
     .select({ image: sections.image })
     .from(sections)
     .where(inArray(sections.image, wanted))) {
+    tally(row.image);
+  }
+  for (const row of await tx
+    .select({ image: folderImage })
+    .from(sectionMembers)
+    .where(inArray(folderImage, wanted))) {
     tally(row.image);
   }
   for (const row of await tx

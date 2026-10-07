@@ -55,6 +55,7 @@ const SECTION_FIELDS: Record<SectionChangeField, StringKey> = {
   names: "menu_preview.field_name",
   image: "menu_preview.field_image",
   color: "menu_preview.field_color",
+  direct: "menu_preview.field_direct",
 };
 
 const SOURCES: Record<MenuChange["source"], StringKey> = {
@@ -275,6 +276,8 @@ export class MenuPreviewPanel extends LitElement {
       no: "diet.no",
       meat: "diet.contains_meat",
       fish: "diet.contains_fish",
+      direct: "menu_preview.field_direct",
+      shown_directly: "menu_preview.shown_directly",
     };
     const candidate = known[key] ?? `customer_menu.${key}`;
     return candidate in en ? fill(candidate as StringKey, { ...values }) : key;

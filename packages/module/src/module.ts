@@ -201,6 +201,8 @@ export type ZoneMenuMember =
   | {
       readonly kind: "section";
       readonly sectionId: string;
+      /** Its members are drawn in its place; a shortcut to it still opens it. */
+      readonly direct?: true;
       readonly internalName: string;
       /** The customer-facing name, locale -> text. */
       readonly names: Readonly<Record<string, string>>;

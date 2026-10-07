@@ -78,7 +78,7 @@ claims and ordered exceptions of
 
 **Sections** arrange products for selling, independently of their reporting category and kitchen
 route. Each section belongs to one menu. To share a set of products, include its menu in another
-menu as a folder; you cannot attach another menu's individual section. Adding, moving or removing
+menu (shown as one folder, or with its sections directly); you cannot attach another menu's individual section. Adding, moving or removing
 products in a section does not change their category or prep-station rules
 (`apps/server/src/catalogue-api.full-manifest.test.ts`).
 
@@ -101,6 +101,7 @@ permission as the category routes below. A section answer is
 | `POST /management-api/sections/:id/members/products` | `{ productIds }`; 200, `{ added }`; skips products already held |
 | `DELETE /management-api/sections/:id/members/:memberId` | 204 |
 | `PUT /management-api/sections/:id/members/:memberId/position` | `{ to }`; 200, the members in their new order |
+| `PUT /management-api/sections/:id/members/:memberId/folder` | `{ showAsFolder, overrides? }` sets how an included menu held by this list shows: as one folder, or with its sections directly in its place. `overrides` holds what the folder fixes — `names` by language, `image`, `color` — and a key or language left out follows the included menu; without `overrides` the stored ones are kept; 200, `{ showAsFolder, overrides }` |
 | `POST /management-api/sections/:id/members/:memberId/replace` | `{ ref }`; 200, the member, keeping its id and position |
 
 The collection routes, usages routes and section duplication route have been removed. Create
@@ -131,10 +132,11 @@ customer-name map without text in the default language; invalid language keys an
 
 `GET /management-api/catalogues/:id/structure` gives
 `{ rootSectionId, root, nodes, includable, includedBy }`. Section nodes carry presentation fields,
-`ownerMenuId` and `children`; an included menu root also carries `includedMenuId`. `includable`
-lists active menus that would make no cycle as `{ id, name, rootSectionId }`; `includedBy` lists
-direct including menus as `{ id, name }`. Write the menu's top level through the member routes on
-`rootSectionId`. An unknown menu answers `catalogue.not_found` (404).
+`ownerMenuId` and `children`; an included menu root also carries `includedMenuId`, and `folder`
+(`{ showAsFolder, overrides }`), how this include shows it. `includable` lists active menus that
+would make no cycle as `{ id, name, rootSectionId }`; `includedBy` lists direct including menus as
+`{ id, name }`. Write the menu's top level through the member routes on `rootSectionId`. An
+unknown menu answers `catalogue.not_found` (404).
 
 `PATCH /management-api/catalogues/:id/items/:itemId` returns 204. Set `grossPrice` to a price or
 null. Null clears this menu's price so the combined menu can supply it; omitting it keeps the saved

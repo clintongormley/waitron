@@ -1,6 +1,6 @@
 import type { MenuChange, MenuChangeBody } from "./menu-document-types.js";
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   captureError,
@@ -45,6 +45,7 @@ import { moveCatalogueItems } from "./catalogue-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { extraListItems } from "./schema/extras.js";
 import { createUnit, updateUnit } from "./units.js";
+import { setIncludeFolder } from "./include-folder.js";
 import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { listProductVariants, setProductVariants, setMenuVariants } from "./variants.js";
 import { menuDetails } from "./schema/menu.js";
@@ -869,6 +870,80 @@ describe("menuStatus", () => {
       const status = await app((tx) => menuStatus(tx, [f.lunch, f.dinner]));
       expect(status.get(f.lunch)).toMatchObject({ version: 2 });
       expect(status.get(f.dinner)).toMatchObject({ version: 1 });
+    });
+
+    it("an include's new setting makes the including menu changed and leaves the included menu current", async () => {
+      const f = await published();
+      await publish(f.drinksMenu);
+      const [include] = await fx.db
+        .select({ id: sectionMembers.id })
+        .from(sectionMembers)
+        .where(
+          and(
+            eq(sectionMembers.sectionId, f.lunchRoot),
+            eq(sectionMembers.childSectionId, f.drinks),
+          ),
+        );
+      await app((tx) => setIncludeFolder(tx, f.lunchRoot, include!.id, { showAsFolder: false }));
+      const status = await app((tx) => menuStatus(tx, [f.lunch, f.dinner, f.drinksMenu]));
+      expect(status.get(f.lunch)!.state).toBe("changed");
+      expect(status.get(f.dinner)!.state).toBe("current");
+      expect(status.get(f.drinksMenu)!.state).toBe("current");
+      expect(changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)).toEqual([
+        {
+          kind: "section_changed",
+          sectionId: f.drinks,
+          name: "Drinks",
+          fields: ["direct"],
+          source: "this_menu",
+        },
+      ]);
+    });
+
+    it("an include's setting is never also on another menu that changed its own include", async () => {
+      const f = await published();
+      await publish(f.drinksMenu);
+      const includeOf = async (listId: string) =>
+        (
+          await fx.db
+            .select({ id: sectionMembers.id })
+            .from(sectionMembers)
+            .where(
+              and(
+                eq(sectionMembers.sectionId, listId),
+                eq(sectionMembers.childSectionId, f.drinks),
+              ),
+            )
+        )[0]!.id;
+      const lunchInclude = await includeOf(f.lunchRoot);
+      const dinnerRoot = await app(async (tx) => requireMenuRoot(tx, f.dinner));
+      const dinnerInclude = await includeOf(dinnerRoot);
+      const drinksChange = async () =>
+        changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes).filter(
+          (change) => change.kind === "section_changed" && change.sectionId === f.drinks,
+        );
+      await app(async (tx) => {
+        await updateSection(tx, f.beer, { internalName: "Beers" });
+        await setIncludeFolder(tx, f.lunchRoot, lunchInclude, {
+          showAsFolder: false,
+        });
+      });
+      const switched = {
+        kind: "section_changed",
+        sectionId: f.drinks,
+        name: "Drinks",
+        fields: ["direct"],
+        source: "this_menu",
+      };
+      expect(await drinksChange()).toEqual([switched]);
+      await app((tx) => setIncludeFolder(tx, dinnerRoot, dinnerInclude, { showAsFolder: false }));
+      expect(await drinksChange()).toEqual([switched]);
+      const bar = { showAsFolder: true, overrides: { names: { en: "Bar" }, color: "#112233" } };
+      await app(async (tx) => {
+        await setIncludeFolder(tx, f.lunchRoot, lunchInclude, bar);
+        await setIncludeFolder(tx, dinnerRoot, dinnerInclude, bar);
+      });
+      expect(await drinksChange()).toEqual([{ ...switched, fields: ["names", "color"] }]);
     });
 
     it("flags neither for a reporting category", async () => {

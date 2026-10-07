@@ -76,7 +76,28 @@ const nodes: MenuStructureNode[] = [
   },
 ];
 
-type State = "empty-list" | "populated" | "empty-menu" | "failed" | "structure-failed" | "loading";
+/** Wines, another menu, included after Drinks; its staff, own customer and folder names differ. */
+const wines: MenuStructureNode = {
+  memberId: "included-wine",
+  ref: { kind: "section", sectionId: "wine-root" },
+  internalName: "Wines",
+  names: { es: "Carta de vinos" },
+  image: null,
+  color: "#112233",
+  includedMenuId: "wine",
+  ownerMenuId: "wine",
+  folder: { showAsFolder: true, overrides: { names: { es: "Nuestros vinos" } } },
+  children: [],
+};
+
+type State =
+  | "empty-list"
+  | "populated"
+  | "empty-menu"
+  | "failed"
+  | "structure-failed"
+  | "loading"
+  | "included";
 
 function api(state: State): DashboardApi {
   const never = () => new Promise(() => undefined);
@@ -113,7 +134,7 @@ function api(state: State): DashboardApi {
             },
             includable: [],
             includedBy: [],
-            nodes: state === "empty-menu" ? [] : nodes,
+            nodes: state === "empty-menu" ? [] : state === "included" ? [...nodes, wines] : nodes,
           }),
     listSectionUsages: vi.fn().mockResolvedValue({
       "s-drinks": {
@@ -126,6 +147,10 @@ function api(state: State): DashboardApi {
     }),
     createSection: vi.fn(),
     duplicateSection: vi.fn(),
+    setIncludeFolder: vi.fn().mockRejectedValue({
+      code: "menu_section.translation_required",
+      params: { field: "names", language: "es" },
+    }),
     getMenuStatuses: vi.fn().mockResolvedValue({
       "menu-lunch": {
         state: "changed",
@@ -315,6 +340,27 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const { el, host } = await mount("populated", theme, LUNCH);
     await editDrinks(el);
     await rowAction(el, "m-drinks", "include-menu");
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([false, true])("accessible include's Edit dialog, refused: %s", async (refused) => {
+    const { el, host } = await mount("included", theme, LUNCH);
+    await vi.waitFor(() =>
+      expect(treeRows(el).querySelector('[data-test="actions-included-wine"]')).not.toBeNull(),
+    );
+    await rowAction(el, "included-wine", "edit");
+    const form = q(el, '[data-test="include-folder-form"]');
+    await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-modal")!.open).toBe(true));
+    if (refused) {
+      form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+      await vi.waitFor(() =>
+        expect(
+          form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+            'wt-input[name="names-es"]',
+          )!.error,
+        ).not.toBe(""),
+      );
+    }
     await expectNoA11yViolations(host);
   });
 

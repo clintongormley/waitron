@@ -418,6 +418,40 @@ describe("diff cyclic paths", () => {
   });
 });
 
+describe("an include's own changes", () => {
+  function include(direct = false): DocumentMember {
+    return {
+      ...(section("drinks", [section("beer")]) as Extract<DocumentMember, { kind: "section" }>),
+      includedMenu: { id: "drinks-menu", name: "Drinks" },
+      ...(direct ? { direct: true as const } : {}),
+    };
+  }
+  const direct = (sectionIds: string[]) => ({
+    kind: "section" as const,
+    sectionIds,
+    field: { kind: "direct" as const },
+  });
+
+  it("a direct change targets the include's direct field before and after", () => {
+    const [change, ...rest] = diffMenuDocuments(document([include()]), document([include(true)]));
+    expect(rest).toEqual([]);
+    expect(change).toMatchObject({ kind: "section_changed", fields: ["direct"] });
+    expect(change!.targets).toEqual({ before: [direct(["drinks"])], after: [direct(["drinks"])] });
+  });
+
+  it("a change to the second copy targets that copy's path", () => {
+    const live = document([include(), section("bar", [include()])]);
+    const proposed = document([include(), section("bar", [include(true)])]);
+    const [change, ...rest] = diffMenuDocuments(live, proposed);
+    expect(rest).toEqual([]);
+    expect(change).toMatchObject({ kind: "section_changed", sectionId: "drinks" });
+    expect(change!.targets).toEqual({
+      before: [direct(["bar", "drinks"])],
+      after: [direct(["bar", "drinks"])],
+    });
+  });
+});
+
 function changeBodies(changes: readonly MenuChange[]): MenuChangeBody[] {
   return changes.map((change) => {
     expect(change.id).toEqual(expect.any(String));

@@ -140,6 +140,9 @@ export const customerMenuStyles: CSSResult = css`
   .image [hidden] {
     display: none;
   }
+  .image[data-painted] .note {
+    color: inherit;
+  }
   .note,
   .empty {
     font-size: var(--wt-font-size-sm);
@@ -157,7 +160,7 @@ export const customerMenuStyles: CSSResult = css`
   }
   .change-marker {
     font-weight: var(--wt-font-weight-bold);
-    color: var(--wt-color-primary);
+    color: var(--wt-color-primary-text);
   }
 `;
 
@@ -473,6 +476,41 @@ function detail(input: CustomerMenuRenderInput): TemplateResult | typeof nothing
     >${value(input, base, html`<h2>${named(input, offer)}</h2>`)}${value(input, fieldTarget(itemBase, { kind: "image" }), image(input, item.image, "color" in item ? (item.color ?? null) : null))}${selected ? value(input, fieldTarget(itemBase, { kind: "summary" }), html`<h3>${named(input, selected)}</h3>`) : nothing}${price(input, itemBase, item.unitPrice)}${unit(input, itemBase, item)}${description.text ? html`<p>${text(input, offer.description, null)}</p>` : nothing}${inspection(input, base, offer)}${selected ? inspection(input, itemBase, selected) : nothing}${value(input, fieldTarget(itemBase, { kind: "allergens" }), allergens(input, item.allergens))}${value(input, fieldTarget(itemBase, { kind: "diet" }), diet(input, item))}${value(input, fieldTarget(base, { kind: "ordering" }), html`<span class="note">${input.label("ordering")}: ${input.label(offer.ordering ?? "public")}</span>`)}${value(input, fieldTarget(base, { kind: "variants" }), html`<div class="choices">${offer.variants.map((variant) => html`<button type="button" data-variant=${variant.id} aria-pressed=${String(variant.id === input.selectedVariantId)} @click=${() => input.onVariant(variant.id)}>${named(input, variant)} · ${input.label("amount", { amount: variant.unitPrice })}</button>`)}</div>`)}${value(input, fieldTarget(base, { kind: "extras" }), html`${input.label("extras")}`)}${value(input, fieldTarget(base, { kind: "options" }), html`${input.label("options")}`)}${modifiers(input, base, offer)}
   </section>`;
 }
+type SectionMember = Extract<DocumentMember, { kind: "section" }>;
+/** Marks where a sentence takes a name, so the name can be drawn with its own language tag. */
+const NAME_SLOT = "\u{E000}";
+/** An include shown directly has no box of its own, so one line stands for it and is where a
+ * change to the include lands, an order change among the members drawn beside it included. */
+function directly(
+  input: CustomerMenuRenderInput,
+  member: SectionMember,
+  base: SectionTarget,
+): TemplateResult {
+  const [before = "", after = ""] = input
+    .label("shown_directly", { name: NAME_SLOT })
+    .split(NAME_SLOT);
+  const note = html`${before}${text(input, member.names, member.internalName)}${after}`;
+  const path = JSON.stringify(base.sectionIds);
+  const fields: MenuField[] = [
+    { kind: "direct" },
+    { kind: "image" },
+    { kind: "color" },
+    { kind: "name", audience: "staff" },
+    ...Object.keys(member.names).map((language): MenuField => ({
+      kind: "name",
+      audience: "customer",
+      language,
+    })),
+  ];
+  const targets: MenuTarget[] = [
+    ...fields.map((field) => fieldTarget(base, field)),
+    { kind: "list", sectionIds: base.sectionIds },
+  ];
+  return html`${targets.reduce(
+    (body, target) => value(input, target, body),
+    value(input, base, html`<p class="note" data-direct=${path}>${note}</p>`),
+  )}${members(input, member.members, base.sectionIds)}`;
+}
 function members(
   input: CustomerMenuRenderInput,
   list: readonly DocumentMember[],
@@ -486,9 +524,14 @@ function members(
             if (path.includes(member.sectionId)) return nothing;
             const sectionIds = [...path, member.sectionId];
             const base: SectionTarget = { kind: "section", sectionIds, field: { kind: "summary" } };
+            if (member.direct === true) return directly(input, member, base);
             const expanded = input.expanded.has(menuTargetKey(base));
+            const switchable = (heading: TemplateResult) =>
+              member.includedMenu === undefined
+                ? heading
+                : value(input, fieldTarget(base, { kind: "direct" }), heading);
             return html`<section class="section" data-section=${JSON.stringify(sectionIds)}>
-              ${value(input, base, html`<div class="heading">${value(input, fieldTarget(base, { kind: "image" }), image(input, member.image, member.color))}<button type="button" aria-expanded=${String(expanded)} @click=${() => input.onExpand(base)}>${text(input, member.names, member.internalName)}</button></div>`)}${inspection(input, base, member)}${expanded ? value(input, { kind: "list", sectionIds }, html`<div class="members">${members(input, member.members, sectionIds)}</div>`) : nothing}
+              ${switchable(value(input, base, html`<div class="heading">${value(input, fieldTarget(base, { kind: "image" }), image(input, member.image, member.color))}<button type="button" aria-expanded=${String(expanded)} @click=${() => input.onExpand(base)}>${text(input, member.names, member.internalName)}</button></div>`))}${inspection(input, base, member)}${expanded ? value(input, { kind: "list", sectionIds }, html`<div class="members">${members(input, member.members, sectionIds)}</div>`) : nothing}
             </section>`;
           }
           const offer = input.document.offers[member.menuItemId];

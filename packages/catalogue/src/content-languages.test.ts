@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import {
+  captureError,
+  catalogues,
+  CORE_MIGRATIONS,
+  products,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -10,13 +18,16 @@ import {
   findContentTranslationGap,
   listContentTranslationGaps,
 } from "./content-languages.js";
+import { setIncludeFolder } from "./include-folder.js";
 import { createCatalogue, createProduct } from "./operations.js";
+import { addMember } from "./sections.js";
 import { setProductVariants } from "./variants.js";
 import { createUnit } from "./units.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { extraLists } from "./schema/extras.js";
 import { units } from "./schema/units.js";
 import { sections } from "./schema/sections.js";
+import { menuDetails } from "./schema/menu.js";
 
 // Every row below is written through its drizzle table: an `id` comes from the table's own
 // `$defaultFn` rather than from a SQL default. The serialisation cases are in
@@ -290,6 +301,119 @@ describe("site content languages", () => {
       await expect(
         writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
       ).rejects.toMatchObject({ code: "content.default_missing", params: { language: "en" } });
+    });
+  });
+
+  describe("an include's folder", () => {
+    const rootOf = async (tx: Transaction, menuId: string) =>
+      (
+        await tx
+          .select({ root: menuDetails.rootSectionId })
+          .from(menuDetails)
+          .where(eq(menuDetails.menuId, menuId))
+      )[0]!.root;
+
+    /** Lunch includes Drinks. The staff name "STAFF Drinks", Drinks' own customer names and the
+     * folder's fixed ones are three different texts. */
+    async function lunchIncludingDrinks(tx: Transaction, drinksNames: Record<string, string>) {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
+      const lunch = await createCatalogue(tx, {
+        name: "STAFF Lunch",
+        names: { en: "CLIENT-EN Lunch", es: "CLIENT-ES Almuerzo" },
+      });
+      const drinks = await rootOf(tx, (await createCatalogue(tx, { name: "STAFF Drinks" })).id);
+      // Written straight into the row, which `createCatalogue` refuses without the default language.
+      await tx.update(sections).set({ names: drinksNames }).where(eq(sections.id, drinks));
+      const lunchRoot = await rootOf(tx, lunch.id);
+      const member = await addMember(tx, lunchRoot, { kind: "section", sectionId: drinks });
+      return { lunchRoot, member: member.id };
+    }
+
+    it("refuses a default language a folder's names would lack", async () => {
+      await withTransaction(suite.db, async (tx) => {
+        const { lunchRoot, member } = await lunchIncludingDrinks(tx, {});
+        await setIncludeFolder(tx, lunchRoot, member, {
+          showAsFolder: true,
+          overrides: { names: { en: "FOLDER-EN Bar" } },
+        });
+
+        expect(await listContentTranslationGaps(tx, "es")).toEqual([
+          { kind: "menu_include", id: member },
+        ]);
+        expect(await listContentTranslationGaps(tx, "en")).toEqual([]);
+        await expect(
+          captureError(() =>
+            writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] }),
+          ),
+        ).resolves.toMatchObject({
+          code: "content.default_missing",
+          params: { language: "es", count: 1 },
+        });
+
+        await setIncludeFolder(tx, lunchRoot, member, {
+          showAsFolder: true,
+          overrides: { names: { en: "FOLDER-EN Bar", es: "FOLDER-ES Barra" } },
+        });
+        await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
+        expect((await readContentLanguages(tx, "en")).defaultLanguage).toBe("es");
+      });
+    });
+
+    it("still counts the fixed names while the include shows its sections directly", async () => {
+      await withTransaction(suite.db, async (tx) => {
+        const { lunchRoot, member } = await lunchIncludingDrinks(tx, {});
+        await setIncludeFolder(tx, lunchRoot, member, {
+          showAsFolder: true,
+          overrides: { names: { en: "FOLDER-EN Bar" } },
+        });
+        await setIncludeFolder(tx, lunchRoot, member, { showAsFolder: false });
+
+        expect(await listContentTranslationGaps(tx, "es")).toEqual([
+          { kind: "menu_include", id: member },
+        ]);
+      });
+    });
+
+    it("is no gap where it fixes nothing, however the included menu's own names stand", async () => {
+      await withTransaction(suite.db, async (tx) => {
+        const { member } = await lunchIncludingDrinks(tx, { en: "CLIENT-EN Drinks" });
+
+        expect(await listContentTranslationGaps(tx, "es")).not.toContainEqual({
+          kind: "menu_include",
+          id: member,
+        });
+      });
+    });
+
+    it("takes the included menu's own name in a language it does not fix", async () => {
+      await withTransaction(suite.db, async (tx) => {
+        const { lunchRoot, member } = await lunchIncludingDrinks(tx, {
+          es: "CLIENT-ES Bebidas",
+        });
+        await setIncludeFolder(tx, lunchRoot, member, {
+          showAsFolder: true,
+          overrides: { names: { en: "FOLDER-EN Bar" } },
+        });
+
+        expect(await listContentTranslationGaps(tx, "es")).toEqual([]);
+      });
+    });
+
+    it("is no gap in any language when every name it shows is fixed blank, so the default can change", async () => {
+      await withTransaction(suite.db, async (tx) => {
+        const { lunchRoot, member } = await lunchIncludingDrinks(tx, {
+          en: "CLIENT-EN Drinks",
+          es: "CLIENT-ES Bebidas",
+        });
+        await setIncludeFolder(tx, lunchRoot, member, {
+          showAsFolder: true,
+          overrides: { names: { en: "", es: "" } },
+        });
+
+        expect(await listContentTranslationGaps(tx, "en")).toEqual([]);
+        expect(await listContentTranslationGaps(tx, "es")).toEqual([]);
+        await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
+      });
     });
   });
 

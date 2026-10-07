@@ -23,15 +23,24 @@ const KIND_ORDER: readonly TranslationGapKind[] = [
   "extra_list",
   "menu",
   "section",
+  "included_menu",
   "unit",
 ];
 
 /** One row of a table the report names; `absent` uses the gap query's own test, null or `'{}'`. */
 type NamedRow = {
-  source: "product" | "option_list" | "option_label" | "extra_list" | "section" | "menu" | "unit";
+  source:
+    | "product"
+    | "option_list"
+    | "option_label"
+    | "extra_list"
+    | "section"
+    | "menu"
+    | "included_menu"
+    | "unit";
   id: string;
   name: string;
-  /** A product's parent product, an option's list, a section's menu. */
+  /** A product's parent product, an option's list, a section's menu, an include's including menu. */
   owner: string | null;
   active: number;
   absent: number;
@@ -43,7 +52,8 @@ type NamedRow = {
  * left-out rows below; a non-default language also lists what has no customer-facing name at all
  * (`absent`), which shows the staff name there. An extras list's own name reaches no order or
  * receipt, so an absent one is never listed, and a unit has no staff name to stand in for its own.
- * Left out: a deleted product, a removed variant or any variant of a deleted product, a switched-off
+ * An include's folder is never `absent`: fixing no name, it shows the included menu's own, listed
+ * under that menu. Left out: a deleted product, a removed variant or any variant of a deleted product, a switched-off
  * options or extras list or its options, or what a switched-off menu owns.
  */
 export async function listTranslationGapReport(
@@ -64,6 +74,10 @@ export async function listTranslationGapReport(
     union all select case role when 'menu_root' then 'menu' else 'section' end, id, internal_name,
         owner_menu_id, 1, names = '{}'
       from sections where role in ('section', 'menu_root')
+    union all select 'included_menu', m.id, s.internal_name, l.owner_menu_id, 1, 0
+      from section_members m join sections s on s.id = m.child_section_id
+        join sections l on l.id = m.section_id
+      where s.role = 'menu_root'
     union all select 'catalogue', id, name, null, active, 0 from catalogues
     union all select 'unit', id, name, null, 1, 0 from units
   `);
@@ -102,7 +116,8 @@ export async function listTranslationGapReport(
           : null;
       }
       case "menu":
-      case "section": {
+      case "section":
+      case "included_menu": {
         const section = row(kind, id)!;
         const menu = menuOf(section);
         return menu.active
@@ -162,6 +177,7 @@ function candidateKind(
   row: (source: string, id: string) => NamedRow | undefined,
 ): TranslationGapKind {
   if (kind === "menu_section") return row("menu", id) ? "menu" : "section";
+  if (kind === "menu_include") return "included_menu";
   return kind as TranslationGapKind;
 }
 

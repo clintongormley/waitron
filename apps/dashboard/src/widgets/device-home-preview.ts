@@ -15,8 +15,13 @@ import {
   arrangeHome,
   foldForSearch,
   indexDocument,
+  openedSection,
+  sectionTrail,
+  shownMembers,
   tileFill,
+  tilePaths,
   type HomeIndex,
+  type SectionStep,
 } from "@waitron/catalogue/src/device-home.js";
 import type { DocumentTile, HomeTileMode } from "@waitron/catalogue/src/menu-document-types.js";
 import type {
@@ -240,9 +245,8 @@ export class DeviceHomePreview extends LitElement {
   /** Which device's display it draws. */
   @property() device: HomeDevice = "handheld";
 
-  /** The open section's path of section ids: its first found anywhere in the menu, each next among
-   * the previous one's members. Empty is home. */
-  @state() private path: string[] = [];
+  /** The open section's path, as {@link sectionTrail} reads it. Empty is home. */
+  @state() private path: SectionStep[] = [];
 
   @state() private query = "";
 
@@ -266,27 +270,10 @@ export class DeviceHomePreview extends LitElement {
     return this.#indexed;
   }
 
-  #trail(path: string[], index: PreviewIndex): SectionNode[] | null {
-    const trail: SectionNode[] = [];
-    for (const id of path) {
-      const previous = trail.at(-1);
-      const next =
-        previous === undefined
-          ? index.sections.get(id)
-          : previous.members.find(
-              (member): member is SectionNode =>
-                member.kind === "section" && member.sectionId === id && index.sections.has(id),
-            );
-      if (next === undefined) return null;
-      trail.push(next);
-    }
-    return trail;
-  }
-
   /** A new document that no longer holds the open section shows home instead. */
   override willUpdate(): void {
     if (this.document === null) return;
-    const trail = this.#trail(this.path, this.#index(this.document).index);
+    const trail = sectionTrail(this.path, this.#index(this.document).index);
     if (trail === null) this.path = [];
     this.#trailShown = trail ?? [];
   }
@@ -318,7 +305,7 @@ export class DeviceHomePreview extends LitElement {
     </div>`;
   }
 
-  #sectionTile(section: SectionNode, mode: HomeTileMode, path: string[]): TemplateResult {
+  #sectionTile(section: SectionNode, mode: HomeTileMode, opens: SectionStep[]): TemplateResult {
     const fill = tileFill(mode, section.image, section.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
     return html`<wt-button
@@ -327,7 +314,7 @@ export class DeviceHomePreview extends LitElement {
       style=${paint ?? nothing}
       ?data-painted=${paint !== undefined}
       @click=${() => {
-        this.path = [...path, section.sectionId];
+        this.path = opens;
       }}
     >
       <span class="label">
@@ -338,30 +325,45 @@ export class DeviceHomePreview extends LitElement {
     </wt-button>`;
   }
 
-  /** The tile for a section or product the index holds, else nothing; `path` is where a section
-   * opens beneath. */
+  /** The tile for a section or product the index holds, else nothing; `opens` is the path a
+   * section tile opens. A structural member is drawn from itself, a shortcut from the copy it
+   * opens. */
   #tile(
     ref: DocumentTile | DocumentMember,
-    path: string[],
+    opens: SectionStep[],
     index: PreviewIndex,
     mode: HomeTileMode,
   ): TemplateResult | typeof nothing {
     if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
-      const section = index.sections.get(ref.sectionId);
-      return section === undefined ? nothing : this.#sectionTile(section, mode, path);
+      if (!index.sections.has(ref.sectionId)) return nothing;
+      const section = "members" in ref ? ref : openedSection(ref.sectionId, index)!;
+      return this.#sectionTile(section, mode, opens);
     }
     const offer = index.products.get(ref.productId);
     return offer === undefined ? nothing : this.#productTile(offer, mode);
   }
 
+  #listTiles(
+    list: readonly DocumentMember[],
+    path: SectionStep[],
+    index: PreviewIndex,
+    mode: HomeTileMode,
+  ): (TemplateResult | typeof nothing)[] {
+    const opens = tilePaths(list, path);
+    return list.map((member, place) => this.#tile(member, opens[place]!, index, mode));
+  }
+
   #home(document: MenuDocument, index: PreviewIndex, display: HomeDisplay): TemplateResult {
     const shortcuts = document.home.shortcuts.map((tile) =>
-      this.#tile(tile, [], index, display.tiles),
+      this.#tile(
+        tile,
+        tile.kind === "section" ? [{ sectionId: tile.sectionId, copy: 0 }] : [],
+        index,
+        display.tiles,
+      ),
     );
-    const members = document.root.members.map((member) =>
-      this.#tile(member, [], index, display.tiles),
-    );
+    const members = this.#listTiles(index.home, [], index, display.tiles);
     const { blocks, divider } = arrangeHome(
       display.order,
       shortcuts.some((cell) => cell !== nothing),
@@ -419,7 +421,7 @@ export class DeviceHomePreview extends LitElement {
         </ol>
       </nav>
       ${this.#grid(
-        current.members.map((member) => this.#tile(member, this.path, index, display.tiles)),
+        this.#listTiles(shownMembers(current.members), this.path, index, display.tiles),
         display,
       )}
     </section>`;

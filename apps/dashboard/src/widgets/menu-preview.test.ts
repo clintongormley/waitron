@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { page } from "vitest/browser";
 import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -1001,6 +1002,66 @@ it.each([
     expect(words).toContain(source);
     expect(words).toContain("Bar {source}");
     expect(words).toContain(also);
+  },
+);
+
+it.each([
+  ["en", "Counter bar menu: shown as a folder or directly", "this menu", "Bebidas: shown directly"],
+  [
+    "es-ES",
+    "Counter bar menu: mostrada como carpeta o directamente",
+    "esta carta",
+    "Bebidas: se muestra directamente",
+  ],
+])(
+  "names an include switched between a folder and its sections, and draws it in place, in %s",
+  async (locale, words, source, note) => {
+    setLocale(locale);
+    const content = currentContentLanguages();
+    setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+    onTestFinished(() => setContentLanguages(content));
+    const document = menuDocument(
+      [
+        {
+          kind: "section",
+          sectionId: "s-bar",
+          internalName: "Counter bar menu",
+          names: { en: "Drinks", es: "Bebidas" },
+          image: null,
+          color: null,
+          includedMenu: { id: "menu-bar", name: "Bar list" },
+          direct: true,
+          members: [documentSection("s-cold", "Cold", [documentProduct("mi-cola", "p-cola")])],
+        },
+      ],
+      { "p-cola": "Cola" },
+    );
+    const el = await mount({
+      preview: {
+        ...preview([
+          {
+            id: "switched",
+            targets: {
+              before: [],
+              after: [{ kind: "section", sectionIds: ["s-bar"], field: { kind: "direct" } }],
+            },
+            kind: "section_changed",
+            sectionId: "s-bar",
+            name: "Counter bar menu",
+            fields: ["direct"],
+            source: "this_menu",
+          },
+        ]),
+        document,
+      },
+    });
+    expect(text(q(el, 'button[data-change-id="switched"]'))).toBe(words);
+    expect(text(q(el, '[data-test="changes"] .source'))).toBe(`— ${source}`);
+    expect(text(q(el, 'button[data-side="after"]'))).toContain(words.split(": ")[1]);
+    const view = q<CustomerMenu>(el, "dashboard-customer-menu")!;
+    await view.updateComplete;
+    expect(text(view.shadowRoot!.querySelector("[data-direct]"))).toBe(note);
+    expect(view.shadowRoot!.querySelector("[data-direct] span")!.getAttribute("lang")).toBe("es");
   },
 );
 

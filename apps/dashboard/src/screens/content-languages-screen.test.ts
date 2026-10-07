@@ -1052,6 +1052,31 @@ describe("missing translations", () => {
     );
   });
 
+  it("names an included menu's folder by its kind and links it to the including menu's structure", async () => {
+    const folder: TranslationGap = {
+      kind: "included_menu",
+      id: "member-1",
+      name: "STAFF Drinks",
+      reason: "partial",
+      parent: { id: "menu-1", name: "Lunch" },
+    };
+    const el = await mount(
+      gapsApi(SPANISH_DEFAULT, NOTHING_REQUIRED, report({ es: [], ca: [folder], en: [] })),
+    );
+    disclosure(el, "ca")!.open = true;
+    await flush(el);
+    const [link] = await links(el, "ca");
+    expect(link!.getAttribute("href")).toBe("/manage/menus/menu/menu-1/view/structure");
+    expect(link!.getAttribute("aria-label")).toBe(
+      t("content_gaps.open_named").replace("{name}", "Lunch › STAFF Drinks"),
+    );
+    const kind = table(el, "ca")!.columns.find((column) => column.key === "kind")!;
+    expect(kind.filter!.options).toEqual([
+      { value: "included_menu", label: "Carpeta de carta incluida" },
+    ]);
+    expect(en["content_gaps.kind_included_menu"]).toBe("Included menu folder");
+  });
+
   it("opens a product's editor inside the dashboard rather than reloading the page", async () => {
     const el = await mount(
       gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),

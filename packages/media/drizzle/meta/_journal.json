@@ -64,6 +64,13 @@
       "when": 1791368349951,
       "tag": "0008_queued_edition_image_references",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1791385312943,
+      "tag": "0009_include_folder_image_references",
+      "breakpoints": true
     }
   ]
 }

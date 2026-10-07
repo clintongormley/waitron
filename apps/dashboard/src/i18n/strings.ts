@@ -425,6 +425,7 @@ export const en = {
   "content_gaps.kind_extra_list": "Extras list",
   "content_gaps.kind_menu": "Menu",
   "content_gaps.kind_section": "Section",
+  "content_gaps.kind_included_menu": "Included menu folder",
   "content_gaps.kind_unit": "Unit",
   "action.close": "Close",
   "action.delete": "Delete",
@@ -2109,9 +2110,21 @@ export const en = {
   "menus.delete_section_note":
     "Delete {name} and the {count} sections below it? Its products stay.",
   "menus.menu_prefix": "Menu: {name}",
-  "menus.edit_included": "Edit {name}",
+  "menus.open_included": "Open {name}",
   "menus.remove_included": "Remove from this menu",
   "menus.read_only_here": "Read-only here",
+  "menus.include_as_folder": "Shown as a folder",
+  "menus.include_direct": "Sections shown directly",
+  "menus.include_edit_heading": "{name} in this menu",
+  "menus.include_show_as_folder": "Show as a folder",
+  "menus.include_direct_hint":
+    "Off: its sections and products appear in this list directly, in their own order.",
+  "menus.include_names_required":
+    "Add the folder's customer-facing name in the default content language, or remove all of the folder's customer-facing names.",
+  "menus.include_image_invalid":
+    "The folder's image is not in the library. Choose another, or remove it.",
+  "menus.include_color_invalid":
+    "The folder's colour was not accepted. Choose another colour, or no colour.",
 
   "menus.new_section_heading": "New section in {list}",
   "menus.section_not_added":
@@ -2280,6 +2293,8 @@ export const en = {
   "menu_preview.field_extras": "extras",
   "menu_preview.field_options": "options",
   "menu_preview.field_color": "colour",
+  "menu_preview.field_direct": "shown as a folder or directly",
+  "menu_preview.shown_directly": "{name}: shown directly",
   "menu_preview.source_this_menu": "this menu",
   "menu_preview.source_shared_product": "shared product",
   "menu_preview.source_included_menu": "included menu",
@@ -2862,6 +2877,7 @@ export const es: Record<StringKey, string> = {
   "content_gaps.kind_extra_list": "Lista de extras",
   "content_gaps.kind_menu": "Carta",
   "content_gaps.kind_section": "Sección",
+  "content_gaps.kind_included_menu": "Carpeta de carta incluida",
   "content_gaps.kind_unit": "Unidad",
   "action.close": "Cerrar",
   "action.delete": "Eliminar",
@@ -4557,9 +4573,20 @@ export const es: Record<StringKey, string> = {
   "menus.delete_section_note":
     "¿Eliminar {name} y las {count} secciones debajo? Sus productos se conservan.",
   "menus.menu_prefix": "Carta: {name}",
-  "menus.edit_included": "Editar {name}",
+  "menus.open_included": "Abrir {name}",
   "menus.remove_included": "Quitar de esta carta",
   "menus.read_only_here": "Solo lectura aquí",
+  "menus.include_as_folder": "Se muestra como carpeta",
+  "menus.include_direct": "Sus secciones se muestran directamente",
+  "menus.include_edit_heading": "{name} en esta carta",
+  "menus.include_show_as_folder": "Mostrar como carpeta",
+  "menus.include_direct_hint":
+    "Desactivado: sus secciones y productos aparecen directamente en esta lista, en su propio orden.",
+  "menus.include_names_required":
+    "Añade el nombre de la carpeta para el cliente en el idioma de contenido predeterminado, o quita todos los nombres de la carpeta para el cliente.",
+  "menus.include_image_invalid":
+    "La imagen de la carpeta no está en la biblioteca. Elige otra o quítala.",
+  "menus.include_color_invalid": "No se aceptó el color de la carpeta. Elige otro color o ninguno.",
 
   "menus.new_section_heading": "Nueva sección en {list}",
   "menus.section_not_added":
@@ -4731,6 +4758,8 @@ export const es: Record<StringKey, string> = {
   "menu_preview.field_extras": "extras",
   "menu_preview.field_options": "opciones",
   "menu_preview.field_color": "color",
+  "menu_preview.field_direct": "mostrada como carpeta o directamente",
+  "menu_preview.shown_directly": "{name}: se muestra directamente",
   "menu_preview.source_this_menu": "esta carta",
   "menu_preview.source_shared_product": "producto compartido",
   "menu_preview.source_included_menu": "carta incluida",

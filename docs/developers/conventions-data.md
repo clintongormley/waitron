@@ -996,10 +996,20 @@ two of them on catalogue's `sections`. `drizzle/0003_published_image_references.
 whose bodies read catalogue's `menu_version_images` and `menu_publications` — edges
 `scripts/module-graph-honesty.test.ts` now reads from their trigger bodies.
 `drizzle/0008_queued_edition_image_references.sql` re-creates those two so their bodies also read
-catalogue's `menu_scheduled_publications`, keeping a photo a queued edition names. A
-catalogue rebuild of any of the three tables is the trigger-body shape described below, which fails
-on an upgrade. A rebuild of `menu_version_images` that got past that, by removing media's two body
-triggers first, would also drop the insert trigger ON it with no error — inferred from the
+catalogue's `menu_scheduled_publications`, keeping a photo a queued edition names.
+`drizzle/0009_include_folder_image_references.sql` adds four for the photo an include's folder
+names (`section_members.folder_overrides`, key `image`): two ON catalogue's `section_members`, and
+two on `media_images` whose bodies read `section_members`. A catalogue rebuild of any catalogue
+table these bodies read — `sections`, `section_members`, `menu_version_images`,
+`menu_publications` or `menu_scheduled_publications` — is the trigger-body shape described below,
+which fails on an upgrade. Measured 2026-10-07 on `node:sqlite` (Node v26.7.0), with media's `0009`
+applied to a stand-in `media_images` and `section_members`: drizzle's create-copy-drop-rename of
+`section_members` inside `begin` failed with `error in trigger
+section_members_media_image_fk_parent_delete: no such table: main.section_members`, and without
+media's triggers the same rebuild committed. With the two body triggers dropped first, the rebuild
+committed and the two triggers ON `section_members` were gone afterwards, with no error. A
+rebuild of `menu_version_images` that got past that, by removing media's two body triggers first,
+would also drop the insert trigger ON it with no error — inferred from the
 `products` measurement below, not measured on this table. Media's two edges, to core and to
 catalogue, are both declared — media's descriptor reads
 `requires: { core: "*", modules: { catalogue: "*" } }` (`packages/media/src/module.ts`) — and for
@@ -1662,6 +1672,7 @@ rebuild of `working_orders`),
 `packages/media/drizzle/0006_recreate_section_image_triggers.sql`,
 `packages/media/drizzle/0007_recreate_product_image_triggers.sql`,
 `packages/media/drizzle/0008_queued_edition_image_references.sql`,
+`packages/media/drizzle/0009_include_folder_image_references.sql`,
 `packages/catalogue/drizzle/0013_drop_category_image_triggers.sql`,
 `packages/catalogue/drizzle/0018_sections_owned_prepare.sql` and
 `packages/catalogue/drizzle/0021_sections_owned_restore.sql`) each carry their own
@@ -1677,7 +1688,8 @@ rebuild of `working_orders`),
 `0006_recreate_section_image_triggers.sql` and `0007_recreate_product_image_triggers.sql`, and
 catalogue `0013_drop_category_image_triggers.sql`, `0018_sections_owned_prepare.sql` and
 `0021_sections_owned_restore.sql`, and 2026-10-04 for core `0066`, `0072`, `0080`, `0082`, `0083`,
-`0086`, `0089` and `0091`, and 2026-10-07 for media `0008_queued_edition_image_references.sql`)
+`0086`, `0089` and `0091`, and 2026-10-07 for media `0008_queued_edition_image_references.sql` and
+`0009_include_folder_image_references.sql`)
 each of those files equalled the one before it once `id` and
 `prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript

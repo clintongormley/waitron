@@ -7,7 +7,7 @@ import { sections } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { loadSectionGraph, reachableProducts, type SectionGraph } from "./section-graph.js";
 import { directIncludedMenus, includableMenus } from "./menu-inclusion.js";
-import type { MemberRef, SectionInput, SectionDetails } from "./section-types.js";
+import type { IncludeFolder, MemberRef, SectionInput, SectionDetails } from "./section-types.js";
 import "./errors.js";
 
 /** One member of a menu's structure; `children` is present exactly when the member is a section. */
@@ -21,6 +21,8 @@ export interface MenuStructureNode {
   color?: string | null;
   ownerMenuId?: string;
   includedMenuId?: string;
+  /** How this include shows its menu; present exactly when `includedMenuId` is. */
+  folder?: IncludeFolder;
 }
 
 const HOME_SECTION_NAME = "Home";
@@ -91,7 +93,7 @@ function nodesOf(graph: SectionGraph, sectionId: string): MenuStructureNode[] {
           color: graph.section(ref.sectionId)!.color!,
           ownerMenuId: graph.ownerMenu(ref.sectionId)!,
           ...(graph.role(ref.sectionId) === "menu_root"
-            ? { includedMenuId: graph.ownerMenu(ref.sectionId)! }
+            ? { includedMenuId: graph.ownerMenu(ref.sectionId)!, folder: graph.folder(id) }
             : {}),
         },
   );

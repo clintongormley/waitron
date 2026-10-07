@@ -22,6 +22,7 @@ import {
   publishMenu,
   readMenuStructure,
   readSection,
+  sectionMembers,
   sections,
   setProductVariants,
   updateOptionList,
@@ -1249,6 +1250,74 @@ it("transfers sections and their members, remapping ids, with a section's image"
     expect((await readMenuStructure(tx, menu!.id)).rootSectionId).toBe(root!.id);
     expect((await readSection(tx, root!.id)).members.map((member) => member.ref)).toEqual([
       { kind: "section", sectionId: drinks!.id },
+    ]);
+  });
+});
+
+it("an include's folder photo travels with the configuration", async () => {
+  const photo = await samplePreparedImage({ width: 8 });
+  const source = await applyVenue(planVenue(venue("B55667711"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const fixed = await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(
+      tx,
+      { image: photo, names: { es: "Foto de la barra" } },
+      {},
+    );
+    const lunch = await createCatalogue(tx, { name: "Folder lunch" });
+    const drinks = await createCatalogue(tx, { name: "Drinks (staff)", names: { es: "Bebidas" } });
+    const desserts = await createCatalogue(tx, { name: "Desserts (staff)" });
+    const { rootSectionId } = await readMenuStructure(tx, lunch.id);
+    const folder = await addMember(tx, rootSectionId, {
+      kind: "section",
+      sectionId: (await readMenuStructure(tx, drinks.id)).rootSectionId,
+    });
+    const direct = await addMember(tx, rootSectionId, {
+      kind: "section",
+      sectionId: (await readMenuStructure(tx, desserts.id)).rootSectionId,
+    });
+    const overrides = { image: image.filename, names: { en: "Bar", es: "" }, color: "#112233" };
+    await tx
+      .update(sectionMembers)
+      .set({ folderOverrides: overrides })
+      .where(eq(sectionMembers.id, folder.id));
+    await tx
+      .update(sectionMembers)
+      .set({ showAsFolder: false, folderOverrides: { image: null } })
+      .where(eq(sectionMembers.id, direct.id));
+    return overrides;
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-07T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B11776655"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  await withTransaction(targetSuite.db, async (tx) => {
+    const included = await tx
+      .select({
+        staffName: catalogues.name,
+        showAsFolder: sectionMembers.showAsFolder,
+        overrides: sectionMembers.folderOverrides,
+      })
+      .from(sectionMembers)
+      .innerJoin(sections, eq(sections.id, sectionMembers.childSectionId))
+      .innerJoin(catalogues, eq(catalogues.id, sections.ownerMenuId))
+      .where(eq(sections.role, "menu_root"))
+      .orderBy(catalogues.name);
+    expect(included).toEqual([
+      { staffName: "Desserts (staff)", showAsFolder: false, overrides: { image: null } },
+      { staffName: "Drinks (staff)", showAsFolder: true, overrides: fixed },
     ]);
   });
 });

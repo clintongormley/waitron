@@ -24,6 +24,33 @@ export interface SectionDetails {
   members: SectionMember[];
 }
 
+/** What one include fixes for its folder. A key that is absent follows the included menu. */
+export interface IncludeFolderOverrides {
+  /** Only the languages fixed here; a blank value fixes "no name in this language". */
+  names?: Record<string, string>;
+  image?: string | null;
+  color?: string | null;
+}
+
+/** How one include shows the menu it includes. */
+export interface IncludeFolder {
+  showAsFolder: boolean;
+  overrides: IncludeFolderOverrides;
+}
+
+/** The body that sets one include's folder; the dashboard imports it, so it lives in this leaf. */
+export interface IncludeFolderInput {
+  showAsFolder: boolean;
+  overrides?: IncludeFolderOverrides;
+}
+
+/** A section's customer-facing presentation. */
+export interface Presentation {
+  names: Record<string, string>;
+  image: string | null;
+  color: string | null;
+}
+
 /** Details for creating or changing an owned section. */
 export interface SectionInput {
   internalName: string;

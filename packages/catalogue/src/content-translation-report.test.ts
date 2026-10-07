@@ -13,6 +13,8 @@ import {
   deactivateCatalogue,
   deactivateProduct,
 } from "./operations.js";
+import { setIncludeFolder } from "./include-folder.js";
+import { addMember, createSectionIn } from "./sections.js";
 import { setProductVariants } from "./variants.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { extraLists } from "./schema/extras.js";
@@ -58,6 +60,26 @@ async function bread(
 async function report(tx: Transaction, config: ContentLanguages = SPANISH_DEFAULT) {
   const languages = await listTranslationGapReport(tx, config);
   return (language: string) => languages.find((entry) => entry.language === language)!.gaps;
+}
+
+/** Lunch includes Drinks. Drinks' staff name, its own customer names and the folder's fixed ones
+ * are three different texts, so a report naming the folder by the wrong one fails. */
+async function lunchIncludingDrinks(tx: Transaction, lunchId: string) {
+  const rootOf = async (menuId: string) =>
+    (
+      await tx
+        .select({ root: menuDetails.rootSectionId })
+        .from(menuDetails)
+        .where(eq(menuDetails.menuId, menuId))
+    )[0]!.root;
+  const drinks = await createCatalogue(tx, {
+    name: "STAFF Drinks",
+    names: { es: "CLIENT-ES Bebidas", ca: "CLIENT-CA Begudes", en: "CLIENT-EN Drinks" },
+  });
+  const lunchRoot = await rootOf(lunchId);
+  const drinksRoot = await rootOf(drinks.id);
+  const added = await addMember(tx, lunchRoot, { kind: "section", sectionId: drinksRoot });
+  return { lunchRoot, drinksRoot, member: added.id };
 }
 
 describe("the missing-translations report", () => {
@@ -235,6 +257,86 @@ describe("the missing-translations report", () => {
     });
   });
 
+  it("lists a folder's fixed names missing a language as an included menu, under the including menu", async () => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const lunch = await venue(tx);
+      const { member, lunchRoot } = await lunchIncludingDrinks(tx, lunch.id);
+      expect((await report(tx))("ca")).toEqual([]);
+
+      await setIncludeFolder(tx, lunchRoot, member, {
+        showAsFolder: true,
+        overrides: { names: { es: "FOLDER-ES Barra", ca: "" } },
+      });
+      // A section and a unit missing Catalan too, so the order of the kinds shows.
+      const [desserts] = await tx
+        .insert(sections)
+        .values({
+          internalName: "STAFF Desserts",
+          names: { es: "CLIENT-ES Postres" },
+          ownerMenuId: lunch.id,
+        })
+        .returning({ id: sections.id });
+      const [unit] = await tx
+        .insert(units)
+        .values({ name: { es: "ración" }, abbreviation: { es: "rac" }, precision: 0 })
+        .returning({ id: units.id });
+
+      const gaps = await report(tx);
+      const lunchParent = { id: lunch.id, name: "Lunch" };
+      expect(gaps("ca")).toEqual([
+        {
+          kind: "section",
+          id: desserts!.id,
+          name: "STAFF Desserts",
+          reason: "partial",
+          parent: lunchParent,
+        },
+        {
+          kind: "included_menu",
+          id: member,
+          name: "STAFF Drinks",
+          reason: "partial",
+          parent: lunchParent,
+        },
+        { kind: "unit", id: unit!.id, name: "ración", reason: "partial" },
+      ]);
+      expect(gaps("es")).toEqual([]);
+      expect(gaps("en").map((gap) => gap.kind)).toEqual(["section", "unit"]);
+    });
+  });
+
+  it("lists an include placed under a sub-section under the including menu, not the included one", async () => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const lunch = await venue(tx);
+      const { lunchRoot, drinksRoot } = await lunchIncludingDrinks(tx, lunch.id);
+      const bar = await createSectionIn(tx, lunchRoot, {
+        internalName: "STAFF Bar",
+        names: { es: "CLIENT-ES Barra", ca: "CLIENT-CA Barra", en: "CLIENT-EN Bar" },
+      });
+      const wineBar = await createSectionIn(tx, bar.id, {
+        internalName: "STAFF Wine bar",
+        names: { es: "CLIENT-ES Vinoteca", ca: "CLIENT-CA Vinoteca", en: "CLIENT-EN Wine bar" },
+      });
+      const nested = await addMember(tx, wineBar.id, { kind: "section", sectionId: drinksRoot });
+      await setIncludeFolder(tx, wineBar.id, nested.id, {
+        showAsFolder: true,
+        overrides: { names: { es: "FOLDER-ES Barra", ca: "" } },
+      });
+
+      expect((await report(tx))("ca")).toEqual([
+        {
+          kind: "included_menu",
+          id: nested.id,
+          name: "STAFF Drinks",
+          reason: "partial",
+          parent: { id: lunch.id, name: "Lunch" },
+        },
+      ]);
+    });
+  });
+
   it("names a unit with no text in the default language by the text it has", async () => {
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, SPANISH_DEFAULT);
@@ -371,6 +473,21 @@ describe("the missing-translations report", () => {
         expect((await report(tx))("ca")).toEqual([]);
         await tx.update(extraLists).set({ active: true });
         expect((await report(tx))("ca")).toHaveLength(1);
+      });
+    });
+
+    it("the folder an include of a switched-off menu fixes", async () => {
+      await seedTenant(suite.db);
+      await withTransaction(suite.db, async (tx) => {
+        const lunch = await venue(tx);
+        const { member, lunchRoot } = await lunchIncludingDrinks(tx, lunch.id);
+        await setIncludeFolder(tx, lunchRoot, member, {
+          showAsFolder: true,
+          overrides: { names: { es: "FOLDER-ES Barra", ca: "" } },
+        });
+        expect((await report(tx))("ca")).toHaveLength(1);
+        await deactivateCatalogue(tx, lunch.id);
+        expect((await report(tx))("ca")).toEqual([]);
       });
     });
 

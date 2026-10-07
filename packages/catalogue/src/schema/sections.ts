@@ -5,6 +5,7 @@ import {
   count,
   enumCheck,
   enumType,
+  flag,
   id,
   json,
   label,
@@ -12,7 +13,7 @@ import {
   products,
   table,
 } from "@waitron/db";
-import type { SectionRole } from "../section-types.js";
+import type { IncludeFolderOverrides, SectionRole } from "../section-types.js";
 
 // Not in section-types.ts: the dashboard imports that file, and
 // scripts/dashboard-browser-purity.test.ts refuses a runtime value in it.
@@ -59,6 +60,8 @@ export const sectionMembers = table(
     productId: id("product_id"),
     childSectionId: id("child_section_id"),
     missingName: label("missing_name"),
+    showAsFolder: flag("show_as_folder").notNull().default(true),
+    folderOverrides: json<IncludeFolderOverrides>("folder_overrides").notNull().default({}),
   },
   (t) => [
     foreignKey({
@@ -85,5 +88,12 @@ export const sectionMembers = table(
     index("section_members_order_idx").on(t.sectionId, t.position),
     index("section_members_child_idx").on(t.childSectionId),
     index("section_members_product_idx").on(t.productId),
+    // `->>`, not `json_extract(…, …)`: drizzle-kit splits an index expression at its commas. SQLite
+    // uses the index only for this exact expression, which media's photo delete and rename triggers,
+    // and its reads, repeat. A drizzle-kit table rebuild writes an expression index back wrongly: take this out for
+    // any generation that rebuilds the table and add it back in one of its own (CLAUDE.md §3).
+    index("section_members_folder_image_idx")
+      .on(sql`${t.folderOverrides} ->> '$.image'`)
+      .where(sql`${t.folderOverrides} ->> '$.image' is not null`),
   ],
 );

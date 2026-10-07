@@ -101,7 +101,8 @@ import {
  * and for `menu_version_images.filename`, keeping a photo a live menu version or a queued edition
  * names (`packages/media/drizzle/0003_published_image_references.sql`, and `0008` for a queued
  * edition). Media's `0005_photo_name_only.sql` drops and re-creates all eleven around its rebuild
- * of `media_images`.
+ * of `media_images`. `0009_include_folder_image_references.sql` adds four more, holding the photo an
+ * include's folder names in `section_members.folder_overrides`.
  * Named here only because the assertion below is an EQUALITY over every non-append-only trigger.
  */
 const IMAGE_REFERENCE_TRIGGERS = [
@@ -112,6 +113,10 @@ const IMAGE_REFERENCE_TRIGGERS = [
   "products_media_image_fk_parent_delete",
   "products_media_image_fk_parent_rename",
   "products_media_image_fk_update",
+  "section_members_media_image_fk_insert",
+  "section_members_media_image_fk_parent_delete",
+  "section_members_media_image_fk_parent_rename",
+  "section_members_media_image_fk_update",
   "sections_media_image_fk_insert",
   "sections_media_image_fk_parent_delete",
   "sections_media_image_fk_parent_rename",

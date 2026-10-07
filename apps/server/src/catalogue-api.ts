@@ -49,6 +49,8 @@ import {
   type MemberRef,
   type SectionInput,
   type SectionPatch,
+  setIncludeFolder,
+  type IncludeFolderInput,
   type CategoryInput,
   createProduct,
   listCatalogues,
@@ -155,7 +157,8 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
   return result;
 }
 
-/** A section body's fields, shape only: `createSectionIn`/`updateSection` check the values. */
+/** A section's, a menu's or an include folder's presentation body, shape only: the catalogue
+ * function each route hands it to checks the values. */
 function sectionInput(body: Record<string, unknown>, creating: true): SectionInput;
 function sectionInput(body: Record<string, unknown>, creating: false): SectionPatch;
 function sectionInput(body: Record<string, unknown>, creating: boolean): SectionPatch {
@@ -181,6 +184,22 @@ function sectionInput(body: Record<string, unknown>, creating: boolean): Section
     result[field] = value;
   }
   return result;
+}
+
+const INCLUDE_FOLDER_OVERRIDES: readonly string[] = ["names", "image", "color"];
+
+/** An include's folder body, shape only: `setIncludeFolder` checks the values. */
+function includeFolderInput(body: unknown): IncludeFolderInput {
+  const invalid = (field: string) => new AppError("management.request_invalid", { field });
+  if (!isPlainObject(body) || typeof body.showAsFolder !== "boolean") throw invalid("showAsFolder");
+  if (body.overrides === undefined) return { showAsFolder: body.showAsFolder };
+  const overrides = body.overrides;
+  if (
+    !isPlainObject(overrides) ||
+    Object.keys(overrides).some((key) => !INCLUDE_FOLDER_OVERRIDES.includes(key))
+  )
+    throw invalid("overrides");
+  return { showAsFolder: body.showAsFolder, overrides: sectionInput(overrides, false) };
 }
 
 function memberRef(value: unknown): MemberRef {
@@ -616,6 +635,17 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const body = await readJsonBody<{ to?: unknown }>(c);
       const to = numberField(body.to, "to");
       return c.json(await gated(c, session, (tx) => moveMember(tx, id, held, to)));
+    }),
+  );
+  app.put(`${member}/folder`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      const held = memberId(c);
+      const input = includeFolderInput(await readJsonBody<unknown>(c));
+      return c.json(
+        await gated(c, session, (tx) => setIncludeFolder(tx, id, held, input, venueLocale)),
+      );
     }),
   );
   app.post(`${member}/replace`, (c) =>

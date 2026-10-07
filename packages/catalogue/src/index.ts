@@ -71,6 +71,8 @@ export * from "./section-types.js";
 export * from "./section-graph.js";
 export * from "./menu-inclusion.js";
 export * from "./sections.js";
+export * from "./include-folder-presentation.js";
+export { setIncludeFolder } from "./include-folder.js";
 export * from "./menu-home.js";
 export * from "./device-home.js";
 export {

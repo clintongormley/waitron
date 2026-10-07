@@ -170,6 +170,14 @@ edited only in that menu's editor. That editor must therefore edit every section
 - An included menu appears in the including menu as **one folder**, placed anywhere in its
   structure. For example, Evening's top level reads "Starters, Mains, Drinks", and Drinks opens to
   its own Beers, Wines and Cocktails. Its sections are not laid out at the including menu's level.
+  _Amended 2026-10-07 by A322 (owner, in the watcher session, ~10:05 and ~10:50): one folder is
+  now the default, not the only choice. Each include (the `section_members` row holding the
+  included menu's root) has a "Show as a folder" switch, on by default. Switched off, the included
+  menu's top-level sections and loose products stand in the folder's place, in their own order,
+  still read-only, and priced exactly as they are inside the folder (the switch changes no offer); an include inside it keeps its own setting,
+  and a section of the same name as one of the including menu's is shown beside it, not merged. A
+  Device Home Page shortcut to an included menu shown this way still opens it as a folder. Plan:
+  [A322](../plans/2026-10-07-a322-included-menu-direct-sections.md)._
 - So a menu needs the same presentation fields as a section: a customer-facing name with
   translations, and an optional image and colour. These are what the folder shows.
 - A menu that is included elsewhere is still a menu in its own right. A bar till can run on Drinks
@@ -591,6 +599,12 @@ These were not discussed. Each is the default this document takes.
    lists' prices ([slice 2 plan](../plans/2026-09-30-menus-include-menus-slice-2.md))._
 3. **An included menu's folder shows the included menu's customer-facing name.** The including menu
    cannot rename it. To show a different name, include it inside a section of your own.
+   _Reversed 2026-10-07 by A322 (owner, ~10:50): the include's own Edit dialog can give its folder
+   different customer-facing names, image and colour. A field left equal to the included menu's
+   value keeps following it, so a later rename of that menu still reaches the folder; only a field
+   the manager changed is fixed on the include. The dashboard row still reads "Menu: <name>" with
+   the included menu's own name. Plan:
+   [A322](../plans/2026-10-07-a322-included-menu-direct-sections.md)._
 4. **A folder with a claim that is deleted** takes its claim with it. Its products then fall to the
    nearest claim above, or appear on the unassigned list. Deleting it shows this in the routing
    preview (§5.12).

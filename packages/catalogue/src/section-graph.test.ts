@@ -249,3 +249,26 @@ it("reads missing rows only as layout tiles, keeping structural walks and placem
   expect(reachableFrom(graph, "lunch")).toEqual({ products: ["soup"], sections: new Set() });
   expect(placementsByProduct(graph, "lunch")).toEqual(new Map([["soup", [["lunch"]]]]));
 });
+
+describe("folder", () => {
+  it("answers a following folder for a member with no stored setting", () => {
+    const rows = list("lunch", ["s:drinks"]);
+    const graph = buildSectionGraph(
+      [root("lunch", "menu-lunch"), root("drinks", "menu-drinks")],
+      rows,
+    );
+    expect(graph.folder(rows[0]!.id)).toEqual({ showAsFolder: true, overrides: {} });
+  });
+
+  it("answers the stored setting for an include", () => {
+    const [row] = list("lunch", ["s:drinks"]);
+    const graph = buildSectionGraph(
+      [root("lunch", "menu-lunch"), root("drinks", "menu-drinks")],
+      [{ ...row!, showAsFolder: false, folderOverrides: { color: "#112233" } }],
+    );
+    expect(graph.folder(row!.id)).toEqual({
+      showAsFolder: false,
+      overrides: { color: "#112233" },
+    });
+  });
+});

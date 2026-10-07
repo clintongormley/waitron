@@ -3896,6 +3896,7 @@ describe("a menu's structure", () => {
         color: null,
         ownerMenuId: drinksMenu,
         includedMenuId: drinksMenu,
+        folder: { showAsFolder: true, overrides: {} },
         children: [],
       },
       { memberId: ((await item.json()) as { id: string }).id, ref: { kind: "product", productId } },
@@ -5084,6 +5085,7 @@ describe("mountCatalogueApi — sections", () => {
       ["DELETE", `/management-api/sections/${id}/members/${member}`],
       ["PUT", `/management-api/sections/${id}/members/${member}/position`, { to: 0 }],
       ["POST", `/management-api/sections/${id}/members/${member}/replace`, { ref: section(id) }],
+      ["PUT", `/management-api/sections/${id}/members/${member}/folder`, { showAsFolder: false }],
     ];
     for (const [method, path, body] of routes) {
       const options = body === undefined ? {} : { body };

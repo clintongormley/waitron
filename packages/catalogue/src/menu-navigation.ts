@@ -1,4 +1,5 @@
 import { HOME_DISPLAY_DEFAULTS } from "./device-home.js";
+import { fixedNameLanguages } from "./include-folder-presentation.js";
 import type {
   DocumentMember,
   FrozenOffer,
@@ -7,6 +8,7 @@ import type {
   FrozenOfferedModifier,
   MenuChange,
   MenuChangeBody,
+  MenuChangeSource,
   ProductChangeField,
   MenuDocument,
   MenuField,
@@ -119,6 +121,10 @@ function changedText(
       result.after.push(field(language));
   }
   return result;
+}
+
+function filterFields(fields: Fields, keep: (field: MenuField) => boolean): Fields {
+  return { before: fields.before.filter(keep), after: fields.after.filter(keep) };
 }
 
 function changedNames(
@@ -365,6 +371,8 @@ function extraFields(
   return result;
 }
 
+export const pathKey = (path: readonly string[]): string => JSON.stringify(path);
+
 export function navigateMenuChanges(
   live: MenuDocument | null,
   proposed: MenuDocument,
@@ -372,6 +380,13 @@ export function navigateMenuChanges(
 ): MenuChange[] {
   const beforeOccurrences = live === null ? [] : indexMenuOccurrences(live).map((o) => o.target);
   const afterOccurrences = indexMenuOccurrences(proposed).map((o) => o.target);
+  const sectionSources = new Map<string, Set<MenuChangeSource>>();
+  for (const change of changes)
+    if (change.kind === "section_changed")
+      sectionSources.set(
+        change.sectionId,
+        (sectionSources.get(change.sectionId) ?? new Set()).add(change.source),
+      );
   return changes.map((change) => {
     const targets: { before: MenuTarget[]; after: MenuTarget[] } = { before: [], after: [] };
     const productTargets = (
@@ -480,28 +495,48 @@ export function navigateMenuChanges(
           }
         break;
       case "section_changed": {
-        const before = beforeOccurrences.find(
-          (t) => t.kind === "section" && t.sectionIds.at(-1) === change.sectionId,
-        );
-        const after = afterOccurrences.find(
-          (t) => t.kind === "section" && t.sectionIds.at(-1) === change.sectionId,
-        );
-        if (before?.kind !== "section" || after?.kind !== "section" || live === null) break;
-        const was = sectionAt(live, before.sectionIds),
-          node = sectionAt(proposed, after.sectionIds);
-        for (const field of change.fields) {
-          const changed =
-            field === "names"
-              ? changedNames(
-                  { name: was.internalName, customerName: was.names },
-                  { name: node.internalName, customerName: node.names },
-                )
-              : same(was[field], node[field])
-                ? { before: [], after: [] }
-                : { before: [{ kind: field }], after: [{ kind: field }] };
-          for (const side of ["before", "after"] as const)
-            for (const value of changed[side]) sections(side, change.sectionId, value as MenuField);
-        }
+        if (live === null) break;
+        const copies = (occurrences: readonly MenuTarget[]) =>
+          occurrences.flatMap((t) =>
+            t.kind === "section" && t.sectionIds.at(-1) === change.sectionId ? [t.sectionIds] : [],
+          );
+        const before = copies(beforeOccurrences),
+          after = copies(afterOccurrences);
+        const split = sectionSources.get(change.sectionId)!.size > 1;
+        const compare = (from: string[], to: string[], parent?: readonly string[]) => {
+          const was = sectionAt(live, from),
+            node = sectionAt(proposed, to);
+          // An include's names changed by both menus are two events: the languages the include
+          // fixes are this menu's, the rest the included menu's.
+          const fixed = fixedNameLanguages(was.fixed, node.fixed);
+          const ownName = (name: MenuField) =>
+            !split ||
+            (name.kind === "name" && name.audience === "customer" && fixed.has(name.language!)) ===
+              (change.source === "this_menu");
+          for (const field of change.fields) {
+            const changed =
+              field === "names"
+                ? filterFields(
+                    changedNames(
+                      { name: was.internalName, customerName: was.names },
+                      { name: node.internalName, customerName: node.names },
+                    ),
+                    ownName,
+                  )
+                : same(was[field], node[field])
+                  ? { before: [], after: [] }
+                  : { before: [{ kind: field }], after: [{ kind: field }] };
+            for (const side of ["before", "after"] as const)
+              for (const value of changed[side])
+                sections(side, change.sectionId, value as MenuField, parent);
+          }
+        };
+        const held = new Set(before.map(pathKey));
+        const paired = after.filter((path) => held.has(pathKey(path)));
+        for (const path of paired) compare(path, path, path.slice(0, -1));
+        // A section that moved holds no path it held before: its first copies are compared.
+        if (paired.length === 0 && before[0] !== undefined && after[0] !== undefined)
+          compare(before[0], after[0]);
         break;
       }
       case "price_changed":

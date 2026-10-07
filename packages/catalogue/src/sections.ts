@@ -60,14 +60,23 @@ async function namesOf(
   if (typeof value !== "object" || value === null || Array.isArray(value))
     throw new AppError("menu_section.invalid", { field: "names" });
   const names = value as Record<string, string>;
-  if (Object.keys(names).length === 0) return names;
+  await requireDefaultLanguageName(tx, names, fallbackLanguage);
+  return names;
+}
+
+/** Refuses a names map that has entries but no text in the venue's default content language. */
+export async function requireDefaultLanguageName(
+  tx: Transaction,
+  names: Record<string, string>,
+  fallbackLanguage: string,
+): Promise<void> {
+  if (Object.keys(names).length === 0) return;
   const gap = await findContentTranslationGap(tx, [names], fallbackLanguage);
   if (gap !== null)
     throw new AppError("menu_section.translation_required", {
       field: "names",
       language: gap.language,
     });
-  return names;
 }
 
 /** Does the media library hold this file? Never, where the media module is not installed. */
@@ -80,13 +89,13 @@ async function mediaImageExists(tx: Transaction, filename: string): Promise<bool
   return image.rows.length > 0;
 }
 
-function colorOf(value: unknown): string | null {
+export function sectionColorOf(value: unknown): string | null {
   return colorOrNull(value, () => {
     throw new AppError("menu_section.invalid", { field: "color" });
   });
 }
 
-async function imageOf(tx: Transaction, value: unknown): Promise<string | null> {
+export async function sectionImageOf(tx: Transaction, value: unknown): Promise<string | null> {
   if (value === null) return null;
   if (typeof value !== "string" || !(await mediaImageExists(tx, value)))
     throw new AppError("menu_section.invalid", { field: "image" });
@@ -101,7 +110,11 @@ function requireWritableList(graph: SectionGraph, sectionId: string): void {
   if (role === "home_layout") throw new AppError("menu_section.wrong_role", { sectionId, role });
 }
 
-function writableMember(graph: SectionGraph, sectionId: string, memberId: string): SectionMember {
+export function writableMember(
+  graph: SectionGraph,
+  sectionId: string,
+  memberId: string,
+): SectionMember {
   requireWritableList(graph, sectionId);
   return heldMember(graph.children(sectionId), sectionId, memberId);
 }
@@ -157,8 +170,8 @@ export async function createSectionIn(
   requirePosition(position);
   const internalName = internalNameOf(input.internalName);
   const names = input.names === undefined ? {} : await namesOf(tx, input.names, fallbackLanguage);
-  const color = input.color === undefined ? null : colorOf(input.color);
-  const image = input.image === undefined ? null : await imageOf(tx, input.image);
+  const color = input.color === undefined ? null : sectionColorOf(input.color);
+  const image = input.image === undefined ? null : await sectionImageOf(tx, input.image);
   const [created] = await tx
     .insert(sections)
     .values({
@@ -317,7 +330,18 @@ export async function replaceMember(
   const current = writableMember(graph, sectionId, memberId);
   refuseOwnedMember(graph, current);
   await checkListRef(tx, graph, sectionId, ref, current);
-  await tx.update(sectionMembers).set(refColumns(ref)).where(eq(sectionMembers.id, memberId));
+  const sameInclude =
+    ref.kind === "section" &&
+    current.ref.kind === "section" &&
+    ref.sectionId === current.ref.sectionId;
+  await tx
+    .update(sectionMembers)
+    .set(
+      sameInclude
+        ? refColumns(ref)
+        : { ...refColumns(ref), showAsFolder: true, folderOverrides: {} },
+    )
+    .where(eq(sectionMembers.id, memberId));
   // A replace changes what the list holds, never which menus reach the list.
   await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
   return { ...current, ref };
@@ -339,7 +363,7 @@ export async function sectionPatchValues(
   const values: SectionPatch = {};
   if (patch.internalName !== undefined) values.internalName = internalNameOf(patch.internalName);
   if (patch.names !== undefined) values.names = await namesOf(tx, patch.names, fallbackLanguage);
-  if (patch.color !== undefined) values.color = colorOf(patch.color);
-  if (patch.image !== undefined) values.image = await imageOf(tx, patch.image);
+  if (patch.color !== undefined) values.color = sectionColorOf(patch.color);
+  if (patch.image !== undefined) values.image = await sectionImageOf(tx, patch.image);
   return values;
 }

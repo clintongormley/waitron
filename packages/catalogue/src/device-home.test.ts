@@ -8,7 +8,11 @@ import {
   foldForSearch,
   homeDisplayProblem,
   indexDocument,
+  openedSection,
+  sectionTrail,
+  shownMembers,
   tileFill,
+  tilePaths,
 } from "./device-home.js";
 import type { DocumentMember } from "./menu-document-types.js";
 
@@ -117,6 +121,156 @@ describe("indexDocument", () => {
       ["p-cola", "mi-cola-2"],
       ["p-water", "mi-water"],
     ]);
+  });
+  it("still indexes a direct node, so a shortcut can open it", () => {
+    const direct: DocumentMember = {
+      ...(section("bar", [product("cola")]) as Extract<DocumentMember, { kind: "section" }>),
+      direct: true,
+    };
+    const index = indexDocument([direct], (menuItemId) => menuItemId);
+    expect(index.sections.get("bar")).toBe(direct);
+    expect([...index.products.keys()]).toEqual(["p-cola"]);
+  });
+});
+
+describe("shownMembers", () => {
+  const product = (id: string): DocumentMember => ({
+    kind: "product",
+    menuItemId: `mi-${id}`,
+    productId: `p-${id}`,
+  });
+  const section = (id: string, members: DocumentMember[], direct = false): DocumentMember => ({
+    kind: "section",
+    sectionId: id,
+    internalName: id,
+    names: {},
+    image: null,
+    color: null,
+    ...(direct ? { direct: true as const } : {}),
+    members,
+  });
+  const ids = (members: DocumentMember[]) =>
+    members.map((member) => (member.kind === "section" ? member.sectionId : member.productId));
+  it("puts a direct node's members in its place, one level at a time", () => {
+    const folderB = section("folderB", [product("b1")]);
+    const directC = section("directC", [product("c1")], true);
+    const direct = section("direct", [product("a"), folderB, directC], true);
+    const shown = shownMembers([product("x"), direct, product("y")]);
+    expect(ids(shown)).toEqual(["p-x", "p-a", "folderB", "p-c1", "p-y"]);
+    expect(shown[2]).toBe(folderB);
+  });
+});
+
+describe("openedSection", () => {
+  const product = (id: string): DocumentMember => ({
+    kind: "product",
+    menuItemId: `mi-${id}`,
+    productId: `p-${id}`,
+  });
+  const section = (
+    id: string,
+    name: string,
+    members: DocumentMember[],
+    direct = false,
+  ): DocumentMember => ({
+    kind: "section",
+    sectionId: id,
+    internalName: name,
+    names: {},
+    image: null,
+    color: null,
+    ...(direct ? { direct: true as const } : {}),
+    members,
+  });
+  const offer = (menuItemId: string) => menuItemId;
+  it("opens the copy home draws, else the copy the index holds", () => {
+    const top = section("drinks", "bar", [product("cola")]);
+    const nested = section("drinks", "drinks", [product("cola")]);
+    const home = [top, section("food", "food", [nested])];
+    const index = indexDocument(home, offer);
+    expect(index.sections.get("drinks")).toBe(nested);
+    expect(openedSection("drinks", index)).toBe(top);
+
+    const directTop = section("drinks", "bar", [product("cola")], true);
+    const directHome = [directTop, section("food", "food", [nested])];
+    expect(openedSection("drinks", indexDocument(directHome, offer))).toBe(nested);
+  });
+  it("looks through a direct node on home, and answers nothing for a section the index lacks", () => {
+    const beer = section("beer", "beer", [product("cana")]);
+    const home = [section("drinks", "drinks", [beer], true)];
+    const index = indexDocument(home, offer);
+    expect(openedSection("beer", index)).toBe(beer);
+    const empty = indexDocument(home, () => undefined);
+    expect(openedSection("beer", empty)).toBeUndefined();
+  });
+});
+
+describe("sectionTrail", () => {
+  type Section = Extract<DocumentMember, { kind: "section" }>;
+  const product = (id: string): DocumentMember => ({
+    kind: "product",
+    menuItemId: `mi-${id}`,
+    productId: `p-${id}`,
+  });
+  const section = (id: string, name: string, members: DocumentMember[]): Section => ({
+    kind: "section",
+    sectionId: id,
+    internalName: name,
+    names: {},
+    image: null,
+    color: null,
+    members,
+  });
+  const offer = (menuItemId: string) => menuItemId;
+  const beer = section("beer", "beer", [product("cana")]);
+  const first = section("drinks", "first bar", [beer]);
+  const second = section("drinks", "second bar", [beer]);
+  const home = [
+    { ...section("left", "left", [first]), direct: true as const },
+    { ...section("right", "right", [product("cola"), second]), direct: true as const },
+  ];
+  const internalNames = (trail: Section[] | null) => trail?.map((each) => each.internalName);
+
+  it("numbers each copy a drawn list holds of one section, and leaves a product no path", () => {
+    const drawn = indexDocument(home, offer).home;
+    expect(tilePaths(drawn, [{ sectionId: "food", copy: 0 }])).toEqual([
+      [
+        { sectionId: "food", copy: 0 },
+        { sectionId: "drinks", copy: 0 },
+      ],
+      [],
+      [
+        { sectionId: "food", copy: 0 },
+        { sectionId: "drinks", copy: 1 },
+      ],
+    ]);
+  });
+  it("opens the copy a tile was drawn from, and the steps beneath it", () => {
+    const index = indexDocument(home, offer);
+    const [toFirst, , toSecond] = tilePaths(index.home, []);
+    expect(internalNames(sectionTrail(toFirst!, index))).toEqual(["first bar"]);
+    expect(internalNames(sectionTrail(toSecond!, index))).toEqual(["second bar"]);
+    const toBeer = tilePaths(second.members, toSecond!)[0]!;
+    expect(internalNames(sectionTrail(toBeer, index))).toEqual(["second bar", "beer"]);
+  });
+  it("answers null for a copy its list no longer draws, or a section the index lacks", () => {
+    const index = indexDocument(home, offer);
+    expect(sectionTrail([{ sectionId: "drinks", copy: 2 }], index)).toBeNull();
+    expect(
+      sectionTrail(
+        [
+          { sectionId: "drinks", copy: 0 },
+          { sectionId: "beer", copy: 1 },
+        ],
+        index,
+      ),
+    ).toBeNull();
+    expect(
+      sectionTrail(
+        [{ sectionId: "drinks", copy: 0 }],
+        indexDocument(home, () => undefined),
+      ),
+    ).toBeNull();
   });
 });
 

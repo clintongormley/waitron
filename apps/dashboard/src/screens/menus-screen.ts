@@ -29,7 +29,12 @@ import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { memberName } from "../widgets/member-names.js";
 import "../widgets/menu-structure-table.js";
-import { HOME_KEY, ROOT_KEY, type StructureAddAction } from "../widgets/menu-structure-table.js";
+import {
+  HOME_KEY,
+  ROOT_KEY,
+  ownPresentation,
+  type StructureAddAction,
+} from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
@@ -37,6 +42,7 @@ import { overtakeSentence } from "../widgets/menu-publications.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
+import "../widgets/include-folder-form.js";
 import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
 import type {
   CatalogueSummary,
@@ -44,6 +50,7 @@ import type {
   DashboardApi,
   HomeDevice,
   HomeDisplay,
+  IncludeFolderInput,
   MenuHome,
   MenuReadModels,
   MenuReadPart,
@@ -124,6 +131,19 @@ function publishedStatus(number: number, hash: string, before: MenuStatus | null
 
 function refusal(error: unknown): Record<string, string> {
   return { [fieldOf(error)]: codeMessage(codeOf(error)) };
+}
+
+/** The include dialog's refusals worded for the folder; codes.ts's sentences speak of a section. */
+function includeRefusal(error: unknown): Record<string, string> {
+  const code = codeOf(error);
+  const field = fieldOf(error);
+  if (code === "menu_section.translation_required")
+    return { [field]: t("menus.include_names_required") };
+  if (code === "menu_section.invalid" && field === "image")
+    return { image: t("menus.include_image_invalid") };
+  if (code === "menu_section.invalid" && field === "color")
+    return { color: t("menus.include_color_invalid") };
+  return refusal(error);
 }
 
 /** Whether a refusal is about the price typed, so it belongs under that field, as
@@ -562,6 +582,13 @@ export class MenusScreen extends LitElement {
   @state() private includedRoot = "";
   @state() private includeError = "";
   @state() private menuDetails: SectionDetails | null = null;
+  /** The include whose Edit dialog is open, as the structure held it when the dialog opened. */
+  @state() private editingInclude: {
+    listId: string;
+    memberId: string;
+    node: MenuStructureNode;
+  } | null = null;
+  @state() private includeErrors: Record<string, string> = {};
   @state() private newSectionErrors: Record<string, string> = {};
 
   /** The list the product picker adds to, while it is open. */
@@ -1387,8 +1414,7 @@ export class MenusScreen extends LitElement {
     this.requestUpdate();
   }
 
-  /** Waits for the write out to be read back: the tree's rows are not keyed, so a ⋮ focused
-   * before the read lands can end up on another row. */
+  /** Waits for the write out to be read back: the row whose ⋮ had focus may be gone after it. */
   #returnFocus(): void {
     const target = this.#focusReturn;
     if (!target || !this.#windowShut || this.busy) return;
@@ -1421,6 +1447,29 @@ export class MenusScreen extends LitElement {
       this.editingSection = null;
       await this.#refresh();
       if (target) this.#reportSavedToLost(target);
+      this.busy = false;
+    });
+  }
+
+  #saveInclude(input: IncludeFolderInput): void {
+    const editing = this.editingInclude;
+    if (this.busy || !editing) return;
+    const { listId, memberId } = editing;
+    this.busy = true;
+    this.includeErrors = {};
+    this.#writes.run(listId, async () => {
+      try {
+        await this.api.setIncludeFolder(listId, memberId, input);
+      } catch (error) {
+        this.includeErrors = includeRefusal(error);
+        this.busy = false;
+        return;
+      }
+      this.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-include-folder-form"]>(
+        '[data-test="include-folder-form"]',
+      )!.closeSaved(input);
+      this.editingInclude = null;
+      await this.#refresh();
       this.busy = false;
     });
   }
@@ -2134,6 +2183,15 @@ export class MenusScreen extends LitElement {
           this.#returnFocusTo(path, true);
           this.#listWrite(path, (id) => this.api.removeSectionMember(id, memberId));
         }}
+        @wt-include-edit=${(event: CustomEvent<{ path: string[]; memberId: string }>) => {
+          event.stopPropagation();
+          const { path, memberId } = event.detail;
+          const node = trailOf(this.structure, [...path, memberId]).at(-1);
+          if (node?.memberId !== memberId || !node.includedMenuId) return;
+          this.#returnFocusTo([...path, memberId]);
+          this.editingInclude = { listId: this.#targetAt(path).listId, memberId, node };
+          this.includeErrors = {};
+        }}
         @wt-member-move=${(
           event: CustomEvent<{ path: string[]; memberId: string; to: number }>,
         ) => {
@@ -2488,6 +2546,34 @@ export class MenusScreen extends LitElement {
     return html`<p class="status-line" data-test="menu-status">${words}</p>`;
   }
 
+  #renderIncludeEdit() {
+    const node = this.editingInclude?.node;
+    return html`<dashboard-include-folder-form
+      data-test="include-folder-form"
+      .open=${node !== undefined}
+      .busy=${this.busy}
+      .api=${this.api}
+      .languages=${currentContentLanguages()}
+      menuName=${node ? this.#nodeName(node) : ""}
+      .own=${node ? ownPresentation(node) : { names: {}, image: null, color: null }}
+      .value=${node?.folder ?? null}
+      .fieldErrors=${this.includeErrors}
+      @wt-close=${{
+        // The form stops its dialog's close, so it is caught on its way in.
+        handleEvent: () => this.#windowClosed(),
+        capture: true,
+      }}
+      @wt-submit=${(event: CustomEvent<IncludeFolderInput>) => {
+        event.stopPropagation();
+        this.#saveInclude(event.detail);
+      }}
+      @wt-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.editingInclude = null;
+      }}
+    ></dashboard-include-folder-form>`;
+  }
+
   #renderNewSection() {
     return html`<dashboard-section-details-form
         data-test="section-form"
@@ -2698,7 +2784,8 @@ export class MenusScreen extends LitElement {
         <div slot="home" class="home">${this.#renderHome()}</div>
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
-      ${this.#renderNewSection()} ${this.#renderAddProducts()} ${this.#renderShortcutPicker()}`;
+      ${this.#renderNewSection()} ${this.#renderIncludeEdit()} ${this.#renderAddProducts()}
+      ${this.#renderShortcutPicker()}`;
   }
 
   override render() {

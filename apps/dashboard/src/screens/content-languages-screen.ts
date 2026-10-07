@@ -40,6 +40,7 @@ const GAP_KINDS: readonly TranslationGapKind[] = [
   "extra_list",
   "menu",
   "section",
+  "included_menu",
   "unit",
 ];
 const GAP_REASONS: readonly TranslationGapReason[] = ["partial", "absent"];
@@ -65,6 +66,7 @@ function gapHref(gap: TranslationGap): string {
       return `/manage/modifiers/view/extras/list/${id}`;
     case "menu":
     case "section":
+    case "included_menu":
       return `/manage/menus/menu/${parent}/view/structure`;
     case "unit":
       return "/manage/units";

@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type {
+  DocumentMember,
   FrozenOfferVariant,
   MenuDocument,
   MenuTarget,
@@ -156,6 +157,7 @@ const labels: Record<string, string> = {
   diet: "Diet",
   contains: "Contains",
   may_contain: "May contain",
+  shown_directly: "{name}: shown directly",
 };
 function label(key: string, values?: Readonly<Record<string, string>>) {
   let result = labels[key] ?? key;
@@ -415,6 +417,22 @@ it("uses a validated colour only when a thumbnail is absent", async () => {
   expect(
     q(el, "button[data-product-open] .image").style.getPropertyValue("--menu-image-fill"),
   ).toBe("");
+});
+it("writes the missing-photo note on a colour in the colour's readable ink", async () => {
+  const doc = fixture();
+  doc.offers.mi!.image = null;
+  doc.offers.mi!.color = "#2e7d6b";
+  const { el } = await mount(doc);
+  await el.reveal({ kind: "section", sectionIds: ["drinks"], field: { kind: "summary" } });
+  const swatch = q(el, "button[data-product-open] .image");
+  const ink = swatch.style.getPropertyValue("--menu-image-ink");
+  expect(ink).not.toBe("");
+  const probe = document.createElement("span");
+  probe.style.color = ink;
+  document.body.append(probe);
+  const expected = getComputedStyle(probe).color;
+  probe.remove();
+  expect(getComputedStyle(swatch.querySelector(".note")!).color).toBe(expected);
 });
 it("keeps source data unchanged through all local inspection selections", async () => {
   const doc = fixture();
@@ -779,4 +797,104 @@ it("does not announce untagged staff fallbacks in the inherited interface langua
     (node) => node.textContent === "KITCHEN",
   )!;
   expect(kitchen.matches(":lang(es)")).toBe(false);
+});
+
+/** The fixture with the menu "Drinks" included at the top, shown directly, before Counter drinks. */
+function directFixture(direct = true): MenuDocument {
+  const doc = fixture();
+  const include: DocumentMember = {
+    kind: "section",
+    sectionId: "drinks-menu",
+    internalName: "Counter drinks menu",
+    names: { en: "Drinks", es: "Bebidas" },
+    image: "drinks.jpg",
+    color: "#336699",
+    includedMenu: { id: "menu-drinks", name: "Drinks list" },
+    ...(direct ? { direct: true as const } : {}),
+    members: [
+      documentSection("cold", "Counter cold", [documentProduct("mi", "burger")]),
+      documentSection("hot", "Counter hot", []),
+    ],
+  };
+  doc.root.members.unshift(include);
+  return doc;
+}
+const directSection = (field: Extract<MenuTarget, { kind: "section" }>["field"]): MenuTarget => ({
+  kind: "section",
+  sectionIds: ["drinks-menu"],
+  field,
+});
+
+it("draws an included menu shown directly as one line and its members at the same level", async () => {
+  const { el } = await mount(directFixture());
+  expect(el.shadowRoot!.querySelector("[data-section='[\"drinks-menu\"]']")).toBeNull();
+  expect(
+    [...el.shadowRoot!.querySelectorAll("button")].some((b) => b.textContent!.includes("Drinks:")),
+  ).toBe(false);
+  expect(q(el, "[data-direct]").textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "Drinks: shown directly",
+  );
+  expect(q(el, "[data-direct] span").getAttribute("lang")).toBe("en");
+  el.view = { kind: "customer", language: "es" };
+  await el.updateComplete;
+  expect(q(el, "[data-direct]").textContent).toBe("Bebidas: shown directly");
+  expect(q(el, "[data-direct] span").getAttribute("lang")).toBe("es");
+  el.view = { kind: "internal" };
+  await el.updateComplete;
+  expect(q(el, "[data-direct]").textContent).toBe("Counter drinks menu: shown directly");
+  expect(q(el, "[data-direct] span").getAttribute("lang")).toBe("");
+  el.view = { kind: "customer", language: "en" };
+  for (const id of ["cold", "hot"]) {
+    const section = q(el, `[data-section='["drinks-menu","${id}"]']`);
+    expect(section.parentElement!.closest(".section")).toBeNull();
+    expect(section.querySelector("button[aria-expanded]")).not.toBeNull();
+  }
+  const dish = target({ sectionIds: ["drinks-menu", "cold"] });
+  await el.reveal(dish);
+  expect(destination(el, dish)).toBe(el.shadowRoot!.activeElement);
+});
+it("the note is the include's change target", async () => {
+  const { el } = await mount(directFixture());
+  for (const field of [
+    { kind: "direct" },
+    { kind: "name", audience: "customer", language: "en" },
+    { kind: "name", audience: "customer", language: "es" },
+    { kind: "name", audience: "staff" },
+    { kind: "image" },
+    { kind: "color" },
+    { kind: "summary" },
+  ] as const) {
+    const changed = directSection(field);
+    el.highlighted = [changed];
+    await el.updateComplete;
+    const node = destination(el, changed);
+    expect(node.hasAttribute("data-highlighted")).toBe(true);
+    expect(node.querySelector("[data-direct]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("[data-highlighted]")).toHaveLength(1);
+    expect(await el.reveal(changed)).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(node);
+  }
+});
+it("an order change inside the included menu still has a target", async () => {
+  const { el } = await mount(directFixture());
+  const order: MenuTarget = { kind: "list", sectionIds: ["drinks-menu"] };
+  el.highlighted = [order];
+  await el.updateComplete;
+  const node = destination(el, order);
+  expect(node.hasAttribute("data-highlighted")).toBe(true);
+  expect(node.querySelector("[data-direct]")).not.toBeNull();
+  expect(await el.reveal(order)).toBe(true);
+  expect(el.shadowRoot!.activeElement).toBe(node);
+});
+it("an include switched back to a folder takes the change on its heading", async () => {
+  const { el } = await mount(directFixture(false));
+  expect(el.shadowRoot!.querySelector("[data-direct]")).toBeNull();
+  const changed = directSection({ kind: "direct" });
+  el.highlighted = [changed];
+  await el.updateComplete;
+  const node = destination(el, changed);
+  expect(node.hasAttribute("data-highlighted")).toBe(true);
+  expect(node.querySelector("button[aria-expanded]")!.textContent).toContain("Drinks");
+  const plain = { ...changed, sectionIds: ["drinks"] };
+  expect(destination(el, plain)).toBeUndefined();
 });

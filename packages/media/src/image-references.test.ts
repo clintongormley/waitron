@@ -14,6 +14,7 @@ import {
   menuScheduledPublications,
   menuVersions,
   previewMenu,
+  sectionMembers,
   publishMenu,
   queueMenuPublication,
   readMenuStructure,
@@ -27,13 +28,15 @@ import { mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**
- * `products.image`, `sections.image` and `menu_version_images.filename` may only name a photo
- * that exists, and a photo one of the first two still names cannot be deleted or renamed. Nor can a
- * photo a LIVE menu version or a queued edition names. The rules are triggers, not keys
+ * `products.image`, `sections.image`, `section_members.folder_overrides`'s `image` key and
+ * `menu_version_images.filename` may only name a photo that exists, and a photo one of the first
+ * three still names cannot be deleted or renamed. Nor can a photo a LIVE menu version or a queued
+ * edition names. The rules are triggers, not keys
  * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why,
  * `0002_section_image_references.sql` for `sections.image`,
- * `0003_published_image_references.sql` for a published version's photos, and
- * `0008_queued_edition_image_references.sql` for a queued edition's).
+ * `0003_published_image_references.sql` for a published version's photos,
+ * `0008_queued_edition_image_references.sql` for a queued edition's, and
+ * `0009_include_folder_image_references.sql` for the photo an include's folder names).
  *
  * READING `sqlite_master` IS NOT ENOUGH, so the names are pinned AND every rule has a real
  * offending write with an ACCEPTING control in the other direction — without the control a trigger
@@ -113,6 +116,10 @@ it("creates the triggers that stand in for the foreign keys", async () => {
     "products_media_image_fk_parent_delete",
     "products_media_image_fk_parent_rename",
     "products_media_image_fk_update",
+    "section_members_media_image_fk_insert",
+    "section_members_media_image_fk_parent_delete",
+    "section_members_media_image_fk_parent_rename",
+    "section_members_media_image_fk_update",
     "sections_media_image_fk_insert",
     "sections_media_image_fk_parent_delete",
     "sections_media_image_fk_parent_rename",
@@ -247,6 +254,132 @@ describe("an image a catalogue row still names", () => {
     await suite.db.execute(sql`update sections set image = null`);
     await removeImages();
     expect(await imageCount()).toBe(0);
+  });
+});
+
+describe("an image an include's folder names", () => {
+  let memberId: string;
+
+  /** A second catalogue, "Drinks", whose root is included in Lunch's root. */
+  beforeEach(async () => {
+    const [lunchRoot] = await suite.db
+      .insert(sections)
+      .values({ internalName: "Lunch", role: "menu_root", ownerMenuId: ids.catalogueId })
+      .returning({ id: sections.id });
+    const [drinks] = await suite.db.insert(catalogues).values({ name: "Drinks" }).returning({
+      id: catalogues.id,
+    });
+    const [drinksRoot] = await suite.db
+      .insert(sections)
+      .values({ internalName: "Drinks", role: "menu_root", ownerMenuId: drinks!.id })
+      .returning({ id: sections.id });
+    const [member] = await suite.db
+      .insert(sectionMembers)
+      .values({ sectionId: lunchRoot!.id, position: 0, childSectionId: drinksRoot!.id })
+      .returning({ id: sectionMembers.id });
+    memberId = member!.id;
+  });
+
+  const setFolder = async (overrides: object, showAsFolder = true): Promise<void> => {
+    await suite.db.execute(
+      sql`update section_members set folder_overrides = ${JSON.stringify(overrides)},
+        show_as_folder = ${showAsFolder ? 1 : 0} where id = ${memberId}`,
+    );
+  };
+  const storedOverrides = async (): Promise<unknown> => {
+    const rows = await suite.db.execute<{ overrides: string }>(
+      sql`select folder_overrides as overrides from section_members where id = ${memberId}`,
+    );
+    return JSON.parse(rows.rows[0]!.overrides);
+  };
+
+  it("refuses a folder image that is not in the library", async () => {
+    await expect(setFolder({ image: ABSENT })).rejects.toMatchObject({
+      message: "section_members_media_image_fk",
+    });
+    expect(await storedOverrides()).toEqual({});
+    await setFolder({ image: PRESENT });
+    expect(await storedOverrides()).toEqual({ image: PRESENT });
+    await setFolder({ image: null });
+    expect(await storedOverrides()).toEqual({ image: null });
+  });
+
+  it("refuses an include inserted with a folder image that is not in the library", async () => {
+    /** Includes a new section with `image` as its folder photo, and answers that section's id. */
+    const insert = async (image: string | null): Promise<string> => {
+      const [extra] = await suite.db
+        .insert(sections)
+        .values({ internalName: "Extra", ownerMenuId: ids.catalogueId })
+        .returning({ id: sections.id });
+      await suite.db.insert(sectionMembers).values({
+        sectionId: ids.sectionId,
+        position: 0,
+        childSectionId: extra!.id,
+        folderOverrides: { image },
+      });
+      return extra!.id;
+    };
+    const stored = async (childId: string): Promise<unknown> =>
+      suite.db
+        .select({ overrides: sectionMembers.folderOverrides })
+        .from(sectionMembers)
+        .where(sql`${sectionMembers.childSectionId} = ${childId}`);
+    await expect(insert(ABSENT)).rejects.toMatchObject({
+      message: "section_members_media_image_fk",
+    });
+    expect(await stored(await insert(PRESENT))).toEqual([{ overrides: { image: PRESENT } }]);
+    expect(await stored(await insert(null))).toEqual([{ overrides: { image: null } }]);
+  });
+
+  it("refuses deleting or renaming a photo a folder names, and allows it once the folder stops naming it", async () => {
+    await setFolder({ image: PRESENT });
+    await expect(removeImages()).rejects.toMatchObject({
+      message: "section_members_media_image_fk",
+    });
+    await expect(renameImages()).rejects.toMatchObject({
+      message: "section_members_media_image_fk",
+    });
+    expect(await imageCount()).toBe(1);
+    await setFolder({});
+    await renameImages();
+    const rows = await suite.db.execute<{ filename: string }>(
+      sql`select filename from media_images`,
+    );
+    expect(rows.rows.map((row) => row.filename)).toEqual([ABSENT]);
+    await removeImages();
+    expect(await imageCount()).toBe(0);
+  });
+
+  it("can be renamed to itself while a folder names it", async () => {
+    await setFolder({ image: PRESENT });
+    await suite.db.execute(sql`update media_images set filename = filename`);
+    expect(await imageCount()).toBe(1);
+  });
+
+  it("a folder switched off still holds its stored photo", async () => {
+    await setFolder({ image: PRESENT }, false);
+    await expect(removeImages()).rejects.toMatchObject({
+      message: "section_members_media_image_fk",
+    });
+    expect(await imageCount()).toBe(1);
+  });
+
+  it("finds a folder's photo through section_members_folder_image_idx, not a scan of every member", async () => {
+    const lookup = "section_members WHERE folder_overrides ->> '$.image' = old.filename";
+    const triggers = await suite.db.execute<{ name: string; sql: string }>(
+      sql`select name, sql from sqlite_master where type = 'trigger'
+        and name glob 'section_members_media_image_fk_parent_*' order by name`,
+    );
+    expect(triggers.rows.map((row) => [row.name, row.sql.includes(lookup)])).toEqual([
+      ["section_members_media_image_fk_parent_delete", true],
+      ["section_members_media_image_fk_parent_rename", true],
+    ]);
+    const plan = await suite.db.execute<{ detail: string }>(
+      sql`explain query plan select 1 from section_members where folder_overrides ->> '$.image' = ${PRESENT}`,
+    );
+    expect(plan.rows.map((row) => row.detail)).toEqual([
+      "SEARCH section_members USING COVERING INDEX section_members_folder_image_idx (<expr>=?)",
+    ]);
   });
 });
 

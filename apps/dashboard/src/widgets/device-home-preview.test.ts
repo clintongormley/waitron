@@ -589,6 +589,168 @@ describe("dashboard-device-home-preview", () => {
     });
   });
 
+  describe("an included menu shown directly", () => {
+    type SectionNode = Extract<DocumentMember, { kind: "section" }>;
+    const beer = () => documentSection("s-beer", "Beer", [documentProduct("mi-beer", "p-beer")]);
+    const lemonade = () => documentProduct("mi-lemonade", "p-lemonade");
+    const ham = () => documentProduct("mi-ham", "p-ham");
+    /** The included Drinks menu: Beer's section, then Water. */
+    const included = (extra: Partial<SectionNode> = {}): DocumentMember => ({
+      ...(documentSection("s-drinks", "Drinks", [
+        beer(),
+        documentProduct("mi-water", "p-water"),
+      ]) as SectionNode),
+      includedMenu: { id: "menu-drinks", name: "Drinks staff" },
+      ...extra,
+    });
+    const direct = () => included({ direct: true });
+    /** Drinks at the top level as a folder named "Bar", and inside Food under its own name. */
+    const bar = (extra: Partial<SectionNode> = {}) =>
+      included({
+        names: { es: "Barra para clientes" },
+        fixed: { names: { es: "Barra para clientes" } },
+        ...extra,
+      });
+    const twice = (top: DocumentMember, shortcuts: DocumentTile[] = []) =>
+      lunch(shortcuts, [top, documentSection("s-food", "Food", [ham(), included()])]);
+
+    it("shows its sections and products on the home page in its place", async () => {
+      const { el } = await mount({ document: lunch([], [lemonade(), direct(), ham()]) });
+      expect(names(tiles(el, "structure"))).toEqual([
+        "Lemonade",
+        "Beer para clientes",
+        "Water",
+        "Ham",
+      ]);
+    });
+
+    it("opens one of its sections with a breadcrumb that skips the included menu", async () => {
+      const { el } = await mount({ document: lunch([], [lemonade(), direct()]) });
+      await click(el, tile(el, "structure", "Beer para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Beer para clientes");
+      expect(names(tiles(el, "section"))).toEqual(["Beer"]);
+    });
+
+    it("inside a section, shows its members in its place", async () => {
+      const { el } = await mount({
+        document: lunch([], [documentSection("s-food", "Food", [ham(), direct()])]),
+      });
+      await click(el, tile(el, "structure", "Food para clientes"));
+      expect(names(tiles(el, "section"))).toEqual(["Ham", "Beer para clientes", "Water"]);
+      await click(el, tile(el, "section", "Beer para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Food para clientes › Beer para clientes");
+    });
+
+    it("a shortcut to the included menu still opens it as a folder", async () => {
+      const { el } = await mount({
+        document: lunch([sectionTile("s-drinks")], [lemonade(), direct()]),
+      });
+      await click(el, tile(el, "shortcuts", "Drinks para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Drinks para clientes");
+      expect(names(tiles(el, "section"))).toEqual(["Beer para clientes", "Water"]);
+    });
+
+    it("draws each copy of a menu included in two lists with its own name", async () => {
+      const { el } = await mount({ document: twice(bar()) });
+      expect(names(tiles(el, "structure"))).toEqual(["Barra para clientes", "Food para clientes"]);
+      await click(el, tile(el, "structure", "Barra para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Barra para clientes");
+      await click(el, home(el));
+      await click(el, tile(el, "structure", "Food para clientes"));
+      expect(names(tiles(el, "section"))).toEqual(["Ham", "Drinks para clientes"]);
+
+      const shownDirectly = await mount({ document: twice(bar({ direct: true })) });
+      expect(names(tiles(shownDirectly.el, "structure"))).toEqual([
+        "Beer para clientes",
+        "Water",
+        "Food para clientes",
+      ]);
+      await click(shownDirectly.el, tile(shownDirectly.el, "structure", "Food para clientes"));
+      expect(names(tiles(shownDirectly.el, "section"))).toEqual(["Ham", "Drinks para clientes"]);
+    });
+
+    it("keeps an open folder open when a new document shows it directly", async () => {
+      const { el } = await mount({ document: twice(bar()) });
+      await click(el, tile(el, "structure", "Food para clientes"));
+      await click(el, tile(el, "section", "Drinks para clientes"));
+      el.document = lunch(
+        [],
+        [bar(), documentSection("s-food", "Food", [ham(), included({ direct: true })])],
+      );
+      await el.updateComplete;
+      expect(breadcrumb(el)).toBe("Home › Food para clientes › Drinks para clientes");
+    });
+
+    describe("two direct includes each holding one menu as a folder of its own name", () => {
+      const named = (es: string) => included({ names: { es }, fixed: { names: { es } } });
+      const shownDirectly = (id: string, name: string, folder: DocumentMember): DocumentMember => ({
+        ...(documentSection(id, name, [folder]) as SectionNode),
+        direct: true,
+      });
+      const sides = (second = "Second bar") =>
+        lunch(
+          [],
+          [
+            shownDirectly("s-left", "Left", named("First bar")),
+            shownDirectly("s-right", "Right", named(second)),
+          ],
+        );
+
+      it("opens the folder clicked, not the first copy drawn", async () => {
+        const { el } = await mount({ document: sides() });
+        expect(names(tiles(el, "structure"))).toEqual(["First bar", "Second bar"]);
+        await click(el, tile(el, "structure", "Second bar"));
+        expect(breadcrumb(el)).toBe("Home › Second bar");
+        await click(el, tile(el, "section", "Beer para clientes"));
+        expect(breadcrumb(el)).toBe("Home › Second bar › Beer para clientes");
+        await click(
+          el,
+          [...root(el).querySelectorAll<HTMLElement>("nav.breadcrumb li wt-button")][1]!,
+        );
+        expect(breadcrumb(el)).toBe("Home › Second bar");
+        await click(el, home(el));
+        await click(el, tile(el, "structure", "First bar"));
+        expect(breadcrumb(el)).toBe("Home › First bar");
+      });
+
+      it("keeps the copy open when a new document still draws it", async () => {
+        const { el } = await mount({ document: sides() });
+        await click(el, tile(el, "structure", "Second bar"));
+        el.document = sides("Second bar, renamed");
+        await el.updateComplete;
+        expect(breadcrumb(el)).toBe("Home › Second bar, renamed");
+      });
+    });
+
+    it("opens the top-level copy from a shortcut to a menu included twice, drawn from that copy", async () => {
+      const painted = bar({
+        color: "#256bb1",
+        image: "bar-folder.webp",
+        fixed: { names: { es: "Barra para clientes" }, color: "#256bb1", image: "bar-folder.webp" },
+      });
+      const shortcut = [sectionTile("s-drinks")];
+      const { el } = await mount({ document: twice(painted, shortcut) });
+      expect(names(tiles(el, "shortcuts"))).toEqual(["Barra para clientes"]);
+      expect(fillOf(tile(el, "shortcuts", "Barra para clientes"))).toBe("rgb(37, 107, 177)");
+      const thumbnails = await mount({
+        document: display("handheld", { tiles: "thumbnails" }, twice(painted, shortcut)),
+      });
+      expect(
+        image(tile(thumbnails.el, "shortcuts", "Barra para clientes"))!.getAttribute("src"),
+      ).toBe("/media/bar-folder.webp");
+      await click(el, tile(el, "shortcuts", "Barra para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Barra para clientes");
+
+      // Shown directly, the top level holds no copy: the shortcut opens, and names, Food's.
+      const shownDirectly = await mount({
+        document: twice(bar({ direct: true }), shortcut),
+      });
+      expect(names(tiles(shownDirectly.el, "shortcuts"))).toEqual(["Drinks para clientes"]);
+      await click(shownDirectly.el, tile(shownDirectly.el, "shortcuts", "Drinks para clientes"));
+      expect(breadcrumb(shownDirectly.el)).toBe("Home › Drinks para clientes");
+    });
+  });
+
   it("lets no event from its search reach the page around it", async () => {
     const { el, host } = await mount();
     const heard: string[] = [];

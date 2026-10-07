@@ -258,3 +258,96 @@ describe("validateCatalogueConfiguration: new-product VAT default", () => {
     },
   );
 });
+
+describe("validateCatalogueConfiguration: include folders", () => {
+  const sections = [
+    { id: "lunch-root", role: "menu_root" },
+    { id: "drinks-root", role: "menu_root" },
+    { id: "home", role: "home_layout" },
+    { id: "beer", role: "section" },
+  ];
+  const include = { id: "m1", section_id: "lunch-root", child_section_id: "drinks-root" };
+  const bundle = (member: Record<string, unknown>) => ({
+    sections,
+    section_members: [{ ...include, ...member }],
+  });
+  const refusedAs = (field: string) =>
+    expect.objectContaining({ code: "setup.request_invalid", params: { field } });
+
+  it("refuses imported folder overrides that are not an object or carry a bad colour", () => {
+    for (const folder_overrides of [
+      "not json",
+      "[]",
+      '"Bar"',
+      "5",
+      "null",
+      { names: { en: "Bar" } },
+      '{"color":"#ABCDEF"}',
+      '{"color":5}',
+      '{"image":5}',
+      '{"image":true}',
+      '{"names":"Bar"}',
+      '{"names":{"en":7}}',
+      '{"names":["Bar"]}',
+      '{"names":{"not a language":"Bar"}}',
+      '{"names":{"EN":"Bar"}}',
+      '{"names":{"en":"Bar"},"note":"x"}',
+      '{"names":{}}',
+      '{"names":{},"color":null}',
+      null,
+      7,
+    ])
+      expect(
+        () => validateCatalogueConfiguration(bundle({ folder_overrides })),
+        JSON.stringify(folder_overrides),
+      ).toThrowError(refusedAs("section_members.folder_overrides"));
+  });
+
+  it("accepts a well-formed folder on an include, and a row without the columns", () => {
+    for (const member of [
+      {
+        show_as_folder: 0,
+        folder_overrides: '{"names":{"en":"Bar","es":""},"image":"bar.jpg","color":"#112233"}',
+      },
+      { show_as_folder: 1, folder_overrides: '{"image":null,"color":null}' },
+      { show_as_folder: false, folder_overrides: "{}" },
+      { show_as_folder: true },
+      {},
+    ])
+      expect(
+        () => validateCatalogueConfiguration(bundle(member)),
+        JSON.stringify(member),
+      ).not.toThrow();
+  });
+
+  it.each(["yes", 2, null, "1"])("refuses a show_as_folder of %j", (show_as_folder) => {
+    expect(() => validateCatalogueConfiguration(bundle({ show_as_folder }))).toThrowError(
+      refusedAs("section_members.show_as_folder"),
+    );
+  });
+
+  it("refuses a folder setting on a member that is not an include, and accepts the defaults there", () => {
+    const placements = [
+      { section_id: "lunch-root", child_section_id: null, product_id: "p1" },
+      { section_id: "lunch-root", child_section_id: "beer" },
+      { section_id: "home", child_section_id: "drinks-root" },
+      { section_id: "lunch-root", child_section_id: "not-in-bundle" },
+      { section_id: "not-in-bundle", child_section_id: "drinks-root" },
+      { section_id: "home", child_section_id: null, missing_name: "Gone" },
+    ];
+    for (const placement of placements) {
+      for (const [folder, field] of [
+        [{ show_as_folder: 0 }, "show_as_folder"],
+        [{ folder_overrides: '{"color":null}' }, "folder_overrides"],
+      ] as const)
+        expect(
+          () => validateCatalogueConfiguration(bundle({ ...placement, ...folder })),
+          JSON.stringify({ ...placement, ...folder }),
+        ).toThrowError(refusedAs(`section_members.${field}`));
+      for (const folder of [{}, { show_as_folder: 1, folder_overrides: "{}" }])
+        expect(() =>
+          validateCatalogueConfiguration(bundle({ ...placement, ...folder })),
+        ).not.toThrow();
+    }
+  });
+});
