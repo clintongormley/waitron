@@ -47,6 +47,11 @@ section with some names and none in the new default language does. Edit a sectio
 names on its menu's **Structure** tab, in **Products and menus**, **Menus**. A menu's own
 customer-facing names are edited through **Rename** on the menu's row in that list, not on its
 **Structure** tab, although the **Missing translations** link for a menu's own name opens that tab.
+A menu included in another menu can give its folder customer-facing names of its own: choose
+**Edit** in that include's ⋮ on the including menu's **Structure** tab. When such a folder's names,
+its own together with the ones it takes from the included menu, are filled in for some languages but
+not the new default, it holds the change up too, and **Missing translations** lists it as
+**Included menu folder**.
 
 **Missing translations** lists, for each of your content languages, the customer-facing names that
 have no text in it. A language marked **Required** comes first, opens by itself when something is
@@ -129,7 +134,12 @@ including disabled products, and to those sections, a section shown by its inter
 the photograph from each of them before trying deletion again. A section's link opens its menu's
 **Structure** tab, in **Products and menus**, **Menus**, where **Remove image** in the section's
 editor clears it when you save the section. A menu's own photograph is removed the same way
-through **Rename** on the menu's row in **Products and menus**, **Menus**.
+through **Rename** on the menu's row in **Products and menus**, **Menus**. A menu included in
+another one can hold a photograph of its own for its folder. The library lists that use as
+**<included menu> folder in <including menu>**, and its link opens the including menu's
+**Structure** tab: choose **Edit** in that include's ⋮, then **Remove image**, and save. The
+photograph still blocks deletion while the include shows its sections directly; turn **Show as a
+folder** on to see the photo field.
 
 A published menu also holds every photograph its last publish included, even after you remove the
 photograph from a product or section. The library lists that menu by name, followed by

@@ -84,10 +84,10 @@ export type ContentTranslationCandidate = {
 export async function readContentTranslationCandidates(
   tx: Transaction,
 ): Promise<ContentTranslationCandidate[]> {
-  // `product`, `variant`, `option_list`, `option_label`, `extra_list` and `menu_section` are the
-  // kinds whose customer-facing name is optional, so the query filters a wholly-absent one (null or {}) out of
-  // them: absent is not a gap, only a partly filled map is. The unfiltered `unit` kind
-  // has no optional customer name; its name stays required.
+  // `product`, `variant`, `option_list`, `option_label`, `extra_list`, `menu_section` and
+  // `menu_include` are the kinds whose customer-facing name is optional, so the query filters a
+  // wholly-absent one (null or {}) out of them: absent is not a gap, only a partly filled map is.
+  // The unfiltered `unit` kind has no optional customer name; its name stays required.
   // `translations` arrives as the JSON TEXT the column stores: this is a raw statement, so no
   // drizzle column mapping runs over the result.
   // A variant is a `products` row with a `parent_id`, so the product branch keeps to top-level

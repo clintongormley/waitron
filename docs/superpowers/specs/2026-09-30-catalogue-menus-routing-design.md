@@ -174,7 +174,7 @@ edited only in that menu's editor. That editor must therefore edit every section
   now the default, not the only choice. Each include (the `section_members` row holding the
   included menu's root) has a "Show as a folder" switch, on by default. Switched off, the included
   menu's top-level sections and loose products stand in the folder's place, in their own order,
-  still read-only and at the included menu's prices; an include inside it keeps its own setting,
+  still read-only, and priced exactly as they are inside the folder (the switch changes no offer); an include inside it keeps its own setting,
   and a section of the same name as one of the including menu's is shown beside it, not merged. A
   Device Home Page shortcut to an included menu shown this way still opens it as a folder. Plan:
   [A322](../plans/2026-10-07-a322-included-menu-direct-sections.md)._

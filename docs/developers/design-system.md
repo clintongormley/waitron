@@ -1490,14 +1490,14 @@ does (owner rule, 2026-09-29).
   focus lands on the field;
 - reopening or resetting a form starts it again: no messages, the action enabled.
 
-A switch that hides fields keeps their values. Switching it off hides the fields without clearing
-them, and switching it back on shows what they held. A save with the switch off sends the switch
-alone, and the values stored for the hidden fields stay as they were. The include dialog on a
-menu's Structure tab works this way (`apps/dashboard/src/widgets/include-folder-form.ts`): its
-cases "switching off hides the names, colour and photo, and switching on shows the values again"
-and "submits only the switch when it is off" in
+The switch in the include dialog on a menu's Structure tab
+(`apps/dashboard/src/widgets/include-folder-form.ts`) keeps the values of the fields it hides.
+Switching it off hides the fields without clearing them, and switching it back on shows what they
+held. A save with the switch off sends the switch alone, and the values stored for the hidden fields
+stay as they were. Its cases "switching off hides the names, colour and photo, and switching on
+shows the values again" and "submits only the switch when it is off" in
 `apps/dashboard/src/widgets/include-folder-form.test.ts`, and "leaves the stored overrides alone
-when none are sent" in `packages/catalogue/src/include-folder.db.test.ts`.
+when none are sent" in `packages/catalogue/src/include-folder.db.test.ts`, hold it.
 
 Give every field an explicit semantic `name`. Use the standard autocomplete purposes where they
 exist: `username` for a login email, `current-password` for a login password, and `new-password`

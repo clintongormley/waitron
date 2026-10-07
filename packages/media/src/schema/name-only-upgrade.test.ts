@@ -414,8 +414,10 @@ describe("then upgrading to the end of media's folder", () => {
   it("adds the four include-folder image triggers", () => {
     for (const name of ADDED) {
       const trigger = latest.find((each) => each.name === name);
-      expect(trigger?.sql).toContain("json_extract");
       expect(trigger?.sql).toContain("folder_overrides");
+      if (name.endsWith("_insert") || name.endsWith("_update"))
+        expect(trigger?.sql).toContain("json_extract");
+      else expect(trigger?.sql).toContain("->> '$.image'");
     }
   });
 

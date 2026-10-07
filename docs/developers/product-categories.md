@@ -78,7 +78,7 @@ claims and ordered exceptions of
 
 **Sections** arrange products for selling, independently of their reporting category and kitchen
 route. Each section belongs to one menu. To share a set of products, include its menu in another
-menu as a folder; you cannot attach another menu's individual section. Adding, moving or removing
+menu (shown as one folder, or with its sections directly); you cannot attach another menu's individual section. Adding, moving or removing
 products in a section does not change their category or prep-station rules
 (`apps/server/src/catalogue-api.full-manifest.test.ts`).
 

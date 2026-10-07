@@ -90,7 +90,7 @@ export type ImageUsage =
   /** The receipt prints it as its logo. */
   | { kind: "receipt" };
 const receiptLogo = sql<string | null>`json_extract(${tenantReceipts.receipt}, '$.logo')`;
-// The expression `section_members_folder_image_idx` indexes; any other spelling scans the table.
+// The expression `section_members_folder_image_idx` indexes.
 const folderImage = sql<string | null>`${sectionMembers.folderOverrides} ->> '$.image'`;
 const includedRoots = alias(sections, "included_roots");
 
