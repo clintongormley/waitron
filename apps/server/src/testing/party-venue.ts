@@ -22,7 +22,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
-import { allowMenuInZone } from "@waitron/venue-service/testing/zone-menus.js";
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { VenueResult } from "@waitron/provisioning";
 import {
   locationId as brandLocationId,
@@ -424,7 +424,7 @@ export async function pricedInZone(
       productId: v.productId(productName),
       grossPrice: price,
     });
-    await allowMenuInZone(tx, v.cfg, zoneId, menu.id, { makeDefault: true });
+    await offerMenuThroughZone(tx, v.cfg, zoneId, menu.id, { makeDefault: true });
     await publishWorkingMenu(tx, menu.id);
     return offer.id;
   });

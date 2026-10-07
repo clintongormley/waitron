@@ -11,7 +11,7 @@ import "../errors.js";
  * Adds the menu to the zone's DEPARTMENT list, so every zone of the department serves it, at
  * `displayOrder` (0 when absent); `makeDefault` makes it the zone's own all-day menu.
  */
-export async function allowMenuInZone(
+export async function offerMenuThroughZone(
   tx: Transaction,
   cfg: VenueScope,
   zoneId: string,

@@ -12,7 +12,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { getOrderServiceContext, resolveZoneContext } from "@waitron/venue-service";
-import { allowMenuInZone } from "@waitron/venue-service/testing/zone-menus.js";
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -191,7 +191,7 @@ describe("offerProducts", () => {
         productId: venue.cafe,
         grossPrice: "2.50",
       });
-      await allowMenuInZone(tx, venue.cfg, offers.zoneId, venue.catalogueId);
+      await offerMenuThroughZone(tx, venue.cfg, offers.zoneId, venue.catalogueId);
     });
 
     const id = randomUUID();

@@ -19,7 +19,7 @@ import {
   zoneAllDayMenus,
   zoneServicePolicies,
 } from "@waitron/venue-service";
-import { allowMenuInZone } from "@waitron/venue-service/testing/zone-menus.js";
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { TillConfig } from "../till-config.js";
 import { publishWorkingMenu } from "./publish-menu.js";
 
@@ -74,7 +74,7 @@ export async function offerProducts(
     .select({ menuId: zoneAllDayMenus.menuId })
     .from(zoneAllDayMenus)
     .where(eq(zoneAllDayMenus.zoneId, zoneId));
-  await allowMenuInZone(tx, cfg, zoneId, menuId, { makeDefault: own === undefined });
+  await offerMenuThroughZone(tx, cfg, zoneId, menuId, { makeDefault: own === undefined });
 
   const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx, cfg)))];
   const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);
