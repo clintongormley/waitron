@@ -338,12 +338,17 @@ asked about contents: the dialog neither counts those products nor asks about th
 request carries the counts
 the dashboard read before deleting, the number of all products, disabled ones included, among them,
 and the server compares them again inside the delete itself: if
-they no longer match, nothing is deleted and the dialog shows the new counts with the refusal's own
-message. If a category with nothing in it at all, which is deleted without confirmation, has
-gained subcategories, products (disabled ones included) or routing rules by then, the server
-refuses and the dialog opens with that message, showing the new counts of subcategories, active
-products and routing rules; when all it gained is disabled products, it shows the message but no
-counts of contents, asks nothing about contents, and its **Delete** moves them up.
+they no longer match, nothing is deleted and the dialog reads the counts again. When a count it
+shows (subcategories, active products or routing rules) has changed, it shows the new counts with
+the refusal's own message; when none has (only disabled products changed, or the change was undone
+before the dialog read again), it says the contents changed, that what it shows is up to date, and
+asks you to choose **Delete** again. If a category with nothing in it at all, which is deleted
+without confirmation, has gained anything by then, the server refuses and the dialog opens,
+choosing its message the same way: when it now holds subcategories, active products or routing
+rules, it shows their counts with the refusal's message; when all it gained is disabled products,
+or the gain was undone before the dialog read again, it opens with that second message instead,
+shows no counts of contents, asks nothing about contents, and its **Delete** moves any disabled
+products up.
 A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes its station claim and every exception naming it, because both tables

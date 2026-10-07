@@ -416,9 +416,8 @@ export class CatalogueBrowser extends LitElement {
     return fresh as FolderSummary[];
   }
   /** When the subcategories, switched-on products or routing rules the dialog showed have changed,
-   * shows the new counts instead. A change in disabled products alone is not compared: the dialog
-   * neither counts them nor asks about them. The delete sends this read's counts, disabled products
-   * included, for the server to check against. */
+   * shows the new counts instead. The delete sends this read's counts, disabled products included,
+   * for the server to check against. */
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
@@ -428,6 +427,8 @@ export class CatalogueBrowser extends LitElement {
     this.operationError = t("folders.summary_changed");
     return false;
   }
+  /** A change in disabled products alone is not compared: the dialog neither counts them nor asks
+   * about them. */
   #showsSame(fresh: readonly FolderSummary[]): boolean {
     return fresh.every((summary, index) => {
       const shown = this.summaries[index];
