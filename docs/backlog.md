@@ -1615,7 +1615,7 @@ offline and zero-total public-path acceptance checks. F3 conversion, F1's R1–R
 and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Follow the campaign's current
 queue order; this landing does not start another fiscal item.
 
-### A231d. Full invoices by email as a PDF, and on an office printer — THIRD VERSION FOR OWNER REVIEW (2026-10-03)
+### A231d. Full invoices by email as a PDF, and on an office printer — APPROVED BUILD, PLAN RECONCILED (2026-10-07)
 
 The owner asked, approving A231's design, that an F1 can also be emailed to the customer as a PDF and
 printed on an ordinary office printer. The [design](superpowers/specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md)
@@ -1642,15 +1642,17 @@ agent's download and bring Ghostscript (GNU Affero GPL). CUPS converted a PDF fo
 printer. Its own driverless setup refused a printer taking only PWG Raster (apparently a mistake in
 CUPS 2.4.10 that later versions fix; Debian testing's 2.4.18 accepted it), and that printer did
 print through a route CUPS calls deprecated. CUPS held a job while the printer was away and printed
-it by itself later; its source code waits 7 days before counting such a job failed. The third version recommends drawing pages ourselves (decision 10). It builds after A231's build. **Next action:** owner decides 10, and the asesor answers the
-five questions. This settles A3's open "Printing A4 invoices on an office printer" design when
-built.
+it by itself later; its source code waits 7 days before counting such a job failed. The owner approved drawing pages ourselves (decision 10), and A231 has landed.
+**Next action:** build A231p from the reconciled plan, with email and A4 printing in one PR
+that ends `needs-owner-review`. Physical printer checks need the owner present or an agreed
+arrangement. The build remains unimplemented; it settles A3's open "Printing A4 invoices on
+an office printer" work when complete.
 
 **Owner decisions in place of the asesor's answers (2026-10-07, under the plan's Task 0.1), so A231p may be built.** Public F1 stays disabled until A231's own enablement gates are met; the asesor is asked to confirm these as [Q44](compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
 
 1. A PDF emailed after a paper original, or paper after an emailed original, is a «duplicado» and is marked so.
 2. Consent to email: staff ask the customer and record the answer on the till. The customer does not sign or confirm anything themselves.
-3. Keeping: the same as a printed F1 — the invoice's database record. No copy of the PDF file is stored, so the design's append-only table of delivered PDFs is dropped; A231p revises its plan to match.
+3. Keeping: the same as a printed F1 — the invoice's database record. No copy of the PDF file is stored. The reconciled plan drops the proposed delivered-PDF table and keeps delivery metadata only.
 4. An unsigned PDF is a valid original for a business customer before the business regime below applies, carrying the same QR and legend as paper. Receipts, each found word for word in the source fetched 2026-10-07: RD 1619/2012 art. 8.4, «se presumirá acreditada cuando se haya expedido utilizando un sistema o programa informático en conformidad con los requisitos»; DGT binding ruling V2891-18 (08/11/2018), an emailed PDF «con independencia de que no haya sido firmada digitalmente por el emisor de la misma, tendrá la calificación de factura electrónica»; AEAT's Veri*Factu FAQ, the QR on a PDF «no tendrá especialidades respecto de la que corresponde a la emisión en papel».
 5. A retry after a failed or uncertain send is still the original.
 

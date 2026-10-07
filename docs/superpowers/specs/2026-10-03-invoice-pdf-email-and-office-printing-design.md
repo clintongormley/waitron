@@ -1,5 +1,7 @@
 # Full invoices by email as a PDF, and on an office printer (A231d)
 
+> **Owner overrides, 2026-10-07:** Build from the [reconciled plan](../plans/2026-10-03-invoice-pdf-email-and-office-printing.md) and the [recorded answers](../../backlog.md). The owner now requires invoice records without stored PDF copies, staff-recorded consent, and original retries after failed or uncertain sends. A later delivery after a completed original is marked «duplicado». These replace the corresponding proposals below; the dated research remains historical. Public F1 issuance stays disabled pending A231’s enablement gates.
+
 > **Update, 2026-10-05 (A261 step 2):** The receipt-printing setting described under
 > **What is already there** records the location-wide setting at the time of this design. The
 > [Departments and zones plan](../plans/2026-10-04-departments-and-zones.md) moves that choice to a
