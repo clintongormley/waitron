@@ -856,5 +856,7 @@ written rule with standing violations needs a guard, not another paragraph.
 its size, and is never purged because it is a few bytes over a number. Keeping it small is regular
 housekeeping: move a receipt to its topic file and delete a superseded rule whenever you touch an
 entry, and run a pruning sweep when the file has grown noticeably — as a loose guide, past roughly
-the size the 2026-10-07 sweep left it (about 71 KB). Cost: the always-loaded files, this one among
-them, came to roughly 14% of all subagent cost across the campaign lanes (measured 2026-10-07).
+the size the 2026-10-07 sweep left it (about 71 KB). Cost: this file is re-read on every step of
+every session and subagent; on 2026-10-07 the always-loaded files were ESTIMATED, not measured, at
+roughly 14% of the campaign lanes' subagent cost (their size times the lanes' step count since
+2026-10-05, at the cache-read price).
