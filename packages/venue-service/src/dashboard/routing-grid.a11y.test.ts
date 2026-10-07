@@ -69,15 +69,19 @@ const disabledTarget = routing({
 
 const states: Record<
   string,
-  { model: RoutingView; expand?: boolean; open?: boolean; refusal?: RoutingGrid["refusal"] }
+  { model: RoutingView; expand?: boolean; open?: string; refusal?: RoutingGrid["refusal"] }
 > = {
   collapsed: { model: routing() },
   expanded: { model: routing(), expand: true },
-  "editor open": { model: routing(), open: true },
+  "editor open": { model: routing(), open: 'td[data-row="all"][data-zone="every"]' },
   "read-only default": { model: routing({ canMakeDefault: false }) },
   repair: { model: routing({ defaultStationId: null }) },
   "repair, read-only": { model: routing({ defaultStationId: null, canMakeDefault: false }) },
   "disabled target": { model: disabledTarget },
+  "disabled target, editor open": {
+    model: disabledTarget,
+    open: 'td[data-row="c:drinks"][data-zone="inside"]',
+  },
   refusal: {
     model: routing(),
     refusal: {
@@ -100,7 +104,7 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
       await el.updateComplete;
     }
     if (state.open) {
-      const box = el.shadowRoot!.querySelector('wt-combobox[name="routing-target"]')!;
+      const box = el.shadowRoot!.querySelector(`${state.open} wt-combobox[name="routing-target"]`)!;
       const popup = box.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
       box.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
       await vi.waitFor(() => {

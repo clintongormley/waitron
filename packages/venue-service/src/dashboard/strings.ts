@@ -727,7 +727,8 @@ const en = {
   "routing.default_read_only":
     "Only someone who can configure the venue can change the default station.",
   "routing.default_repair":
-    "There is no default station. Choose one so that work no other cell sends anywhere has somewhere to go.",
+    "No default prep station is active. Choose one so items with no other setting have a station to go to.",
+  "routing.refusal_at": "{row}, {zone}: {message}",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -1480,7 +1481,8 @@ const es: Record<keyof typeof en, string> = {
   "routing.default_read_only":
     "Solo quien puede configurar el local puede cambiar la estación predeterminada.",
   "routing.default_repair":
-    "No hay estación predeterminada. Elige una para que el trabajo que ninguna otra celda envía a ningún sitio tenga adónde ir.",
+    "Ninguna estación de preparación predeterminada está activa. Elige una para que los artículos sin otro ajuste tengan una estación a la que ir.",
+  "routing.refusal_at": "{row}, {zone}: {message}",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };

@@ -246,17 +246,92 @@ describe("venue-routing-grid", () => {
       "Terrace bar",
       "No preparation",
     ]);
+    expect(optionLabels(box).join()).not.toContain("Old kitchen");
     const food = cell(el, "c:food", "inside");
     const old = combo(el, "c:food", "inside")!;
-    expect(optionLabels(old)).not.toContain("Old kitchen");
     // The disabled station is named, warned about and its fallback outcome given, beside the field.
     const warning = food.querySelector('[data-test="disabled-target"]')!;
     expect(warning.textContent!.replace(/\s+/g, " ").trim()).toBe(
       "Old kitchen: Disabled. Its work goes to Kitchen.",
     );
-    expect(shown(old).text).toBe("Old kitchen");
     expect(trigger(old).getAttribute("aria-label")).toBe(
       "Food, Inside: Old kitchen (Disabled), set here",
+    );
+  });
+
+  it("a saved disabled station is drawn as the saved value, never muted, and cannot be chosen again", async () => {
+    const { el, emitted } = await mount();
+    const old = combo(el, "c:food", "inside")!;
+    // Muted means no saved cell; this cell has one.
+    expect(shown(old)).toEqual({ text: "Old kitchen (Disabled)", muted: false });
+    expect(old.value).toBe("station:old");
+    await userEvent.click(trigger(old));
+    const rows = [...old.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+    const state = rows.map((row) => [
+      row.textContent!.trim(),
+      row.getAttribute("aria-selected"),
+      row.getAttribute("aria-disabled"),
+    ]);
+    expect(state).toEqual([
+      ["Clear setting", "false", null],
+      ["Kitchen", "false", null],
+      ["Bar", "false", null],
+      ["Terrace bar", "false", null],
+      ["Old kitchen (Disabled)", "true", "true"],
+      ["No preparation", "false", null],
+    ]);
+    // A real pointer refuses an aria-disabled row outright, so press it directly, and by keyboard.
+    rows[4]!.click();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(emitted.changes).toEqual([]);
+    expect(old.value).toBe("station:old");
+    expect(shown(old)).toEqual({ text: "Old kitchen (Disabled)", muted: false });
+  });
+
+  it("a saved disabled station is repaired by Clear setting or by an active station", async () => {
+    const address: CellAddress = {
+      row: { kind: "category", categoryId: "food" },
+      zoneId: "inside",
+    };
+    const { el, emitted } = await mount();
+    await choose(combo(el, "c:food", "inside")!, "Clear setting");
+    await choose(combo(el, "c:food", "inside")!, "Bar");
+    expect(emitted.changes).toEqual([
+      { address, target: null },
+      { address, target: { kind: "station", stationId: "bar" } },
+    ]);
+  });
+
+  it("the fallback line follows the fallback chain with no time applied, not the model's current answer", async () => {
+    // Old kitchen falls back to the Terrace bar, closed at the model's time so that right now its
+    // work reaches the Bar; the line describes the station chain, which ends at the Terrace bar.
+    const model = routing({
+      stationTimes: [
+        {
+          stationId: "old",
+          status: { open: false, why: "switched_off" },
+          nextTransition: null,
+          hours: [],
+          fallbackStationId: "tbar",
+          today: null,
+          closedSendsTo: "bar",
+        },
+        {
+          stationId: "tbar",
+          status: { open: false, why: "closed_by_hand" },
+          nextTransition: null,
+          hours: [],
+          fallbackStationId: "bar",
+          today: "closed",
+          closedSendsTo: "bar",
+        },
+      ],
+    });
+    const { el } = await mount(model);
+    const warning = cell(el, "c:food", "inside").querySelector('[data-test="disabled-target"]')!;
+    expect(warning.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      "Old kitchen: Disabled. Its work goes to Terrace bar.",
     );
   });
 
@@ -292,17 +367,26 @@ describe("venue-routing-grid", () => {
 
   it("blank emits target null; No preparation emits the no_preparation target", async () => {
     const { el, emitted } = await mount();
+    // As the screen does: the choice it is previewing is shown until it settles.
+    el.addEventListener("routing-cell-change", (event) => {
+      el.pending = (event as CustomEvent<NonNullable<RoutingGrid["pending"]>>).detail;
+    });
     const drinks = combo(el, "c:drinks", "every")!;
     await choose(drinks, "Clear setting");
     expect(emitted.changes).toEqual([
       { address: { row: { kind: "category", categoryId: "drinks" }, zoneId: null }, target: null },
     ]);
-    // Until the model answers, the field shows what the row would inherit once cleared.
+    // While the clear is pending, the field shows what the row would inherit once cleared.
+    await el.updateComplete;
     expect(shown(drinks)).toEqual({ text: "Kitchen", muted: true });
+    expect(drinks.value).toBe("");
 
     const bread = combo(el, "p:bread", "inside")!;
     await choose(bread, "No preparation");
+    await el.updateComplete;
     expect(shown(bread)).toEqual({ text: "No preparation", muted: false });
+    // One pending choice at a time: Drinks is back to its saved value.
+    expect(shown(drinks)).toEqual({ text: "Bar", muted: false });
     await choose(bread, "Bar");
     expect(emitted.changes.slice(1)).toEqual([
       {
@@ -314,7 +398,84 @@ describe("venue-routing-grid", () => {
         target: { kind: "station", stationId: "bar" },
       },
     ]);
+    await el.updateComplete;
     expect(shown(bread)).toEqual({ text: "Bar", muted: false });
+    expect(bread.value).toBe("station:bar");
+  });
+
+  it("after a choice the field shows the saved value again unless the host sets it pending", async () => {
+    const { el, emitted } = await mount();
+    const model = el.model!;
+    const drinks = combo(el, "c:drinks", "every")!;
+    await choose(drinks, "Clear setting");
+    expect(emitted.changes).toHaveLength(1);
+    await el.updateComplete;
+    expect(shown(drinks)).toEqual({ text: "Bar", muted: false });
+    expect(drinks.value).toBe("station:bar");
+
+    // A cancelled preview: the host clears pending and hands back the very same model.
+    el.pending = { address: emitted.changes[0]!.address, target: null };
+    await el.updateComplete;
+    expect(shown(drinks)).toEqual({ text: "Kitchen", muted: true });
+    el.pending = null;
+    el.model = model;
+    await el.updateComplete;
+    expect(shown(drinks)).toEqual({ text: "Bar", muted: false });
+    expect(drinks.value).toBe("station:bar");
+  });
+
+  it("a pending choice survives a refresh that replaces the model, and only at its own address", async () => {
+    const address: CellAddress = { row: { kind: "product", productId: "bread" }, zoneId: "inside" };
+    const { el } = await mount(routing(), {
+      pending: { address, target: { kind: "station", stationId: "bar" } },
+    });
+    const bread = combo(el, "p:bread", "inside")!;
+    expect(shown(bread)).toEqual({ text: "Bar", muted: false });
+    el.model = structuredClone(el.model!);
+    await el.updateComplete;
+    expect(shown(bread)).toEqual({ text: "Bar", muted: false });
+    expect(trigger(bread).getAttribute("aria-label")).toBe("Bread, Inside: Bar, set here");
+    expect(shown(combo(el, "p:bread", "terrace")!)).toEqual({
+      text: "No preparation",
+      muted: true,
+    });
+    el.pending = null;
+    await el.updateComplete;
+    expect(shown(bread)).toEqual({ text: "Kitchen", muted: true });
+  });
+
+  it("removing a zone destroys its open editor instead of handing it to the neighbouring zone", async () => {
+    const { el, emitted } = await mount();
+    const box = combo(el, "c:drinks", "terrace")!;
+    const popup = box.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await userEvent.click(trigger(box));
+    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+    el.model = routing({ zones: [{ id: "inside", name: "Inside" }] });
+    await el.updateComplete;
+    expect(box.isConnected).toBe(false);
+    expect(combo(el, "c:drinks", "inside")).not.toBe(box);
+    expect(root(el).querySelector('td[data-zone="terrace"]')).toBeNull();
+    const headers = [...root(el).querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+    expect(headers).toEqual(["Category or product", "Every zone", "Inside"]);
+    // A pick in the departed editor reaches nobody.
+    const kitchen = [...box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (option) => option.textContent!.trim() === "Kitchen",
+    )!;
+    kitchen.click();
+    await el.updateComplete;
+    expect(emitted.changes).toEqual([]);
+  });
+
+  it("the grid's events reach an ancestor outside it, and the inner field's change event does not", async () => {
+    const { el } = await mount();
+    const outside = el.parentElement!;
+    const heard: string[] = [];
+    for (const name of ["routing-cell-change", "routing-make-default", "wt-change"]) {
+      outside.addEventListener(name, () => heard.push(name));
+    }
+    await choose(combo(el, "c:drinks", "every")!, "Kitchen");
+    await choose(combo(el, "all", "every")!, "Bar");
+    expect(heard).toEqual(["routing-cell-change", "routing-make-default"]);
   });
 
   it("choosing the value already saved emits nothing", async () => {
@@ -363,7 +524,7 @@ describe("venue-routing-grid", () => {
     const repair = await mount(routing({ defaultStationId: null }));
     const missing = cell(repair.el, "all", "every");
     expect(missing.querySelector('[data-test="default-repair"]')!.textContent!.trim()).toBe(
-      "There is no default station. Choose one so that work no other cell sends anywhere has somewhere to go.",
+      "No default prep station is active. Choose one so items with no other setting have a station to go to.",
     );
     const choices = combo(repair.el, "all", "every")!;
     expect(optionLabels(choices)).toEqual(["Kitchen", "Bar", "Terrace bar"]);
@@ -386,7 +547,7 @@ describe("venue-routing-grid", () => {
     const box = combo(el, "c:drinks", "every")!;
     expect(box.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(message);
     const actions = root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
-    expect(actions.error).toBe(message);
+    expect(actions.error).toBe(`Drinks, Every zone: ${message}`);
     // Nowhere else: only one field and the bottom message carry it.
     const carrying = [...root(el).querySelectorAll<Combo>("wt-combobox")].filter(
       (other) => (other as unknown as { error: string }).error !== "",
@@ -404,6 +565,32 @@ describe("venue-routing-grid", () => {
     expect((box as unknown as { error: string }).error).toBe("");
   });
 
+  it("the No category heading heads its own row group and nothing above it", async () => {
+    const { el } = await mount();
+    const heading = [...root(el).querySelectorAll("th")].find(
+      (th) => th.textContent!.trim() === "No category",
+    )!;
+    expect(heading.getAttribute("scope")).toBe("rowgroup");
+    const group = heading.closest("tbody")!;
+    expect(
+      [...group.querySelectorAll("tr")].map((row) => row.querySelector("th")!.textContent!.trim()),
+    ).toEqual(["No category", "Bread"]);
+    expect(root(el).querySelectorAll("tbody")).toHaveLength(2);
+    expect(root(el).querySelector("tbody")!.textContent).not.toContain("No category");
+  });
+
+  it("the bottom refusal names a product cell by its path and zone, in Spanish too", async () => {
+    setLocale("es");
+    const address: CellAddress = {
+      row: { kind: "product", productId: "mojito" },
+      zoneId: "terrace",
+    };
+    const { el } = await mount(routing(), { refusal: { address, message: "Rechazado." } });
+    const actions = root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
+    // Mojito sits under a collapsed category, so its row is not even shown.
+    expect(actions.error).toBe("Drinks › Cocktails › Mojito, Terrace: Rechazado.");
+  });
+
   it("renders no editor for the No category heading", async () => {
     const { el } = await mount();
     const heading = bodyRows(el).find((row) => row.textContent!.trim() === "No category")!;
@@ -414,6 +601,48 @@ describe("venue-routing-grid", () => {
     for (const td of root(el).querySelectorAll<HTMLElement>("td[data-row]")) {
       expect(td.dataset.row).toMatch(/^(all|c:.+|p:.+)$/);
     }
+  });
+
+  it("zone columns share the width evenly however long a cell's warning is", async () => {
+    const { el } = await mount();
+    const widths = ["every", "terrace", "inside"].map(
+      (zone) => cell(el, "c:food", zone).getBoundingClientRect().width,
+    );
+    expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(1);
+    // The warning wraps inside its column.
+    const warning = cell(el, "c:food", "inside").querySelector<HTMLElement>(
+      '[data-test="disabled-target"]',
+    )!;
+    expect(warning.getBoundingClientRect().width).toBeLessThanOrEqual(widths[2]!);
+  });
+
+  it("the expand toggle's arrow is drawn at a comfortable size", async () => {
+    const { el } = await mount();
+    const arrow = root(el).querySelector<HTMLElement>('button[data-category="drinks"] .arrow')!;
+    expect(arrow.getBoundingClientRect().width).toBeGreaterThanOrEqual(24);
+    expect(parseFloat(getComputedStyle(arrow).fontSize)).toBeGreaterThanOrEqual(18);
+  });
+
+  it("at phone width the row label column is capped and the zones take most of the width", async () => {
+    await page.viewport(390, 800);
+    const { el } = await mount();
+    const scroller = root(el).querySelector<HTMLElement>('[data-test="grid-scroll"]')!;
+    const first = root(el).querySelector("thead th")!.getBoundingClientRect().width;
+    expect(first).toBeLessThanOrEqual(140);
+    expect(first).toBeLessThan(scroller.clientWidth / 2);
+    // A long label wraps instead of widening the column.
+    const long = await mount(
+      routing({
+        products: [
+          ...routing().products,
+          { id: "x", name: "A very long uncategorised product name", categoryId: null },
+        ],
+      }),
+    );
+    const label = [...root(long.el).querySelectorAll("tbody th")].find((th) =>
+      th.textContent!.includes("A very long"),
+    )!;
+    expect(label.getBoundingClientRect().width).toBeLessThanOrEqual(140);
   });
 
   it("scrolls sideways at phone width with the row labels kept in view", async () => {

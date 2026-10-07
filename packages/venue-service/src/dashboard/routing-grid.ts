@@ -28,11 +28,14 @@ import {
   isNoCategoryHeading,
   pruneExpanded,
   visibleRoutingRows,
+  type RoutingGridEntry,
 } from "./routing-grid-model.js";
 import { t } from "./strings.js";
 
 export type RoutingRefusal = { address: CellAddress; message: string };
 export type RoutingCellChange = { address: CellAddress; target: RouteTarget | null };
+/** A choice the host has not saved yet, shown at its address in place of the saved value. */
+export type RoutingPending = RoutingCellChange;
 
 const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {}) =>
   Object.entries(values).reduce(
@@ -48,6 +51,7 @@ function rowKey(row: RoutingRow): string {
       : `p:${row.productId}`;
 }
 
+type Zone = { id: string | null; name: string };
 const zoneKey = (zoneId: string | null) => zoneId ?? "every";
 const coordinate = (row: RoutingRow, zoneId: string | null) => `${rowKey(row)}|${zoneKey(zoneId)}`;
 
@@ -78,8 +82,16 @@ export class RoutingGrid extends LitElement {
     baseStyles,
     css`
       :host {
+        --routing-first: calc(var(--wt-cell-name-max-width) * 1.5);
+        --routing-zone: calc(var(--wt-space-6) * 5);
         display: block;
         min-width: 0;
+        container-type: inline-size;
+      }
+      @container (max-width: 40rem) {
+        .scroll {
+          --routing-first: var(--wt-cell-name-max-width);
+        }
       }
       .toolbar {
         display: flex;
@@ -92,10 +104,15 @@ export class RoutingGrid extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
       }
+      /* Fixed layout: a long warning or label wraps inside its column instead of widening it. */
       table {
+        table-layout: fixed;
         border-collapse: separate;
         border-spacing: 0;
-        min-width: 100%;
+        inline-size: max(
+          100%,
+          calc(var(--routing-first) + var(--routing-zone) * var(--routing-zones))
+        );
       }
       th,
       td {
@@ -105,20 +122,19 @@ export class RoutingGrid extends LitElement {
         vertical-align: top;
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
+        overflow-wrap: anywhere;
       }
       thead th {
         font-weight: var(--wt-font-weight-medium);
         font-size: var(--wt-font-size-sm);
-        white-space: nowrap;
       }
-      td {
-        min-inline-size: calc(var(--wt-space-6) * 5);
+      thead th:first-child {
+        inline-size: var(--routing-first);
       }
       th:first-child {
         position: sticky;
         inset-inline-start: 0;
         z-index: 1;
-        min-inline-size: var(--wt-cell-name-max-width);
         border-inline-end: 1px solid var(--wt-color-border);
       }
       tbody th {
@@ -141,6 +157,13 @@ export class RoutingGrid extends LitElement {
         font: inherit;
         text-align: start;
         cursor: pointer;
+      }
+      .arrow {
+        display: inline-flex;
+        justify-content: center;
+        inline-size: var(--wt-space-5);
+        font-size: var(--wt-font-size-xl);
+        line-height: 1;
       }
       .toggle:focus-visible {
         outline: var(--wt-focus-ring);
@@ -182,6 +205,8 @@ export class RoutingGrid extends LitElement {
   @property({ attribute: false }) model: RoutingView | null = null;
   /** A refused write: its message shows beside that cell and once at the bottom of the grid. */
   @property({ attribute: false }) refusal: RoutingRefusal | null = null;
+  /** Set by the host while it previews or saves a choice, and cleared when that settles. */
+  @property({ attribute: false }) pending: RoutingPending | null = null;
 
   @state() private expanded: ReadonlySet<string> = new Set();
 
@@ -245,6 +270,27 @@ export class RoutingGrid extends LitElement {
     return [...entry.path, entry.name].join(" › ");
   }
 
+  /** The refused cell named by its row path and zone, whether or not its row is shown. */
+  #refusalText(refusal: RoutingRefusal): string {
+    const model = this.model!;
+    const key = rowKey(refusal.address.row);
+    const entry = visibleRoutingRows(model, expandAll(model)).find(
+      (candidate): candidate is GridRow =>
+        !isNoCategoryHeading(candidate) && rowKey(candidate.row) === key,
+    );
+    const zoneId = refusal.address.zoneId;
+    const zone =
+      zoneId === null
+        ? t("routing.every_zone")
+        : model.zones.find((candidate) => candidate.id === zoneId)?.name;
+    if (entry === undefined || zone === undefined) return refusal.message;
+    return format("routing.refusal_at", {
+      row: this.#rowName(entry),
+      zone,
+      message: refusal.message,
+    });
+  }
+
   #refusalAt(address: CellAddress): string {
     return this.refusal !== null && sameAddress(this.refusal.address, address)
       ? this.refusal.message
@@ -255,31 +301,45 @@ export class RoutingGrid extends LitElement {
     return this.model!.stations.filter((station) => station.active);
   }
 
+  /** The field drew the user's pick; a render puts back what the properties say it shows. */
   #emit<T>(name: string, detail: T): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+    this.requestUpdate();
   }
 
-  #editor(entry: GridRow, zone: { id: string | null; name: string }) {
+  /** A field a refresh has removed can still hold an open list; its pick addresses nothing now. */
+  #fromLiveField(event: Event): boolean {
+    event.stopPropagation();
+    return (event.currentTarget as Element).isConnected;
+  }
+
+  #editor(entry: GridRow, zone: Zone) {
     const address: CellAddress = { row: entry.row, zoneId: zone.id };
     const own = this.#cells.get(coordinate(entry.row, zone.id));
     const inherited = this.#inherited(entry.row, zone.id, own);
-    const saved = own?.target ?? null;
+    const pending = this.pending;
+    const shown =
+      pending !== null && sameAddress(pending.address, address)
+        ? pending.target
+        : (own?.target ?? null);
     const disabled =
-      saved?.kind === "station" && this.#station(saved.stationId)?.active !== true ? saved : null;
-    const offered = own !== undefined && disabled === null;
+      shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
     const options: ComboboxOption[] = [
       { value: "", label: t("routing.clear") },
       ...this.#activeStations().map((station) => ({
         value: `${STATION}${station.id}`,
         label: station.name,
       })),
+      ...(disabled === null
+        ? []
+        : [{ value: encode(disabled), label: this.#targetText(disabled), disabled: true }]),
       { value: NO_PREPARATION, label: t("prep.no_preparation") },
     ];
     const label = format("routing.cell_label", {
       row: this.#rowName(entry),
       zone: zone.name,
-      value: this.#targetText(own === undefined ? inherited : saved),
-      state: t(own === undefined ? "routing.inherited" : "routing.set_here"),
+      value: this.#targetText(shown ?? inherited),
+      state: t(shown === null ? "routing.inherited" : "routing.set_here"),
     });
     return html`<wt-combobox
         name="routing-target"
@@ -289,17 +349,13 @@ export class RoutingGrid extends LitElement {
         searchPlaceholder=${t("venue.combobox_search")}
         noResultsLabel=${t("venue.combobox_no_results")}
         .options=${options}
-        .value=${live(offered ? encode(saved) : "")}
-        placeholder=${
-          disabled !== null
-            ? (this.#station(disabled.stationId)?.name ?? disabled.stationId)
-            : this.#targetText(inherited)
-        }
+        .value=${live(encode(shown))}
+        placeholder=${this.#targetText(inherited)}
         error=${this.#refusalAt(address)}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
+          if (!this.#fromLiveField(event)) return;
           const target = decode(event.detail.value);
-          if (target === undefined || encode(target) === encode(saved)) return;
+          if (target === undefined || encode(target) === encode(shown)) return;
           this.#emit<RoutingCellChange>("routing-cell-change", { address, target });
         }}
       ></wt-combobox
@@ -350,7 +406,7 @@ export class RoutingGrid extends LitElement {
         placeholder=${t("routing.no_station")}
         error=${this.#refusalAt(address)}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
+          if (!this.#fromLiveField(event)) return;
           const target = decode(event.detail.value);
           if (target?.kind !== "station" || target.stationId === active?.id) return;
           this.#emit("routing-make-default", { stationId: target.stationId });
@@ -404,15 +460,43 @@ export class RoutingGrid extends LitElement {
             : expandCategory(this.expanded, id);
         }}
       >
-        <span aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${entry.name}</button
+        <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${entry.name}</button
       >${hidden ? html` <span class="hidden">${hidden}</span>` : nothing}`;
+  }
+
+  #row(entry: GridRow, zones: readonly Zone[], open: ReadonlySet<string>) {
+    return html`<tr>
+      <th scope="row" style=${styleMap({ "--routing-depth": String(entry.path.length) })}>
+        <span class="label">${this.#rowLabel(entry, open)}</span>
+      </th>
+      ${repeat(
+        zones,
+        (zone) => zoneKey(zone.id),
+        (zone) =>
+          html`<td data-row=${rowKey(entry.row)} data-zone=${zoneKey(zone.id)}>
+            ${
+              entry.row.kind === "all" && zone.id === null
+                ? this.#defaultCell()
+                : this.#editor(entry, zone)
+            }
+          </td>`,
+      )}
+    </tr>`;
+  }
+
+  #rows(entries: readonly RoutingGridEntry[], zones: readonly Zone[], open: ReadonlySet<string>) {
+    return repeat(
+      entries.filter((entry): entry is GridRow => !isNoCategoryHeading(entry)),
+      (entry) => rowKey(entry.row),
+      (entry) => this.#row(entry, zones, open),
+    );
   }
 
   override render() {
     const model = this.model;
     if (model === null) return nothing;
     const entries = visibleRoutingRows(model, this.expanded);
-    const zones = [{ id: null, name: t("routing.every_zone") }, ...model.zones];
+    const zones: Zone[] = [{ id: null, name: t("routing.every_zone") }, ...model.zones];
     // A category's children follow it in place only when it is shown and expanded.
     const open = new Set(
       entries.flatMap((entry) =>
@@ -423,6 +507,9 @@ export class RoutingGrid extends LitElement {
           : [],
       ),
     );
+    const heading = entries.findIndex(isNoCategoryHeading);
+    const tree = heading < 0 ? entries : entries.slice(0, heading);
+    const uncategorised = heading < 0 ? [] : entries.slice(heading + 1);
     return html`<div class="toolbar">
         <wt-button
           variant="secondary"
@@ -437,47 +524,40 @@ export class RoutingGrid extends LitElement {
         >
       </div>
       <div class="scroll" data-test="grid-scroll">
-        <table aria-label=${t("routing.grid")}>
+        <table
+          aria-label=${t("routing.grid")}
+          style=${styleMap({ "--routing-zones": String(zones.length) })}
+        >
           <thead>
             <tr>
               <th scope="col">${t("routing.row_heading")}</th>
-              ${zones.map((zone) => html`<th scope="col">${zone.name}</th>`)}
+              ${repeat(
+                zones,
+                (zone) => zoneKey(zone.id),
+                (zone) => html`<th scope="col">${zone.name}</th>`,
+              )}
             </tr>
           </thead>
           <tbody>
-            ${repeat(
-              entries,
-              (entry) => (isNoCategoryHeading(entry) ? "heading" : rowKey(entry.row)),
-              (entry) =>
-                isNoCategoryHeading(entry)
-                  ? html`<tr class="heading">
-                      <th scope="rowgroup" colspan=${zones.length + 1}>
-                        ${t("routing.no_category")}
-                      </th>
-                    </tr>`
-                  : html`<tr>
-                      <th
-                        scope="row"
-                        style=${styleMap({ "--routing-depth": String(entry.path.length) })}
-                      >
-                        <span class="label">${this.#rowLabel(entry, open)}</span>
-                      </th>
-                      ${zones.map(
-                        (zone) =>
-                          html`<td data-row=${rowKey(entry.row)} data-zone=${zoneKey(zone.id)}>
-                            ${
-                              entry.row.kind === "all" && zone.id === null
-                                ? this.#defaultCell()
-                                : this.#editor(entry, zone)
-                            }
-                          </td>`,
-                      )}
-                    </tr>`,
-            )}
+            ${this.#rows(tree, zones, open)}
           </tbody>
+          ${
+            heading < 0
+              ? nothing
+              : html`<tbody>
+                  <tr class="heading">
+                    <th scope="rowgroup" colspan=${zones.length + 1}>
+                      ${t("routing.no_category")}
+                    </th>
+                  </tr>
+                  ${this.#rows(uncategorised, zones, open)}
+                </tbody>`
+          }
         </table>
       </div>
-      <wt-form-actions .error=${this.refusal?.message ?? ""}></wt-form-actions>`;
+      <wt-form-actions
+        .error=${this.refusal === null ? "" : this.#refusalText(this.refusal)}
+      ></wt-form-actions>`;
   }
 }
 
