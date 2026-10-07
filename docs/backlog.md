@@ -4867,8 +4867,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     per coordinate in `routing_cells`; `station_claims` and `route_exceptions` are dropped
     (venue-service `0031_retire_routing_lists`), with no conversion, so a venue is reset and its
     routing set again. The No category row has cells of its own (owner, 2026-10-07).
-    The grid keeps the server's row order; moving it to the shared name comparison is a follow-up
-    (A323). Left open:
+    The grid keeps the server's row order; moving it to the shared name comparison is a follow-up.
+    Left open:
     - **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells.**
       `#saveSettingsCell`
       (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
@@ -4883,17 +4883,17 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       `packages/venue-service/src/routing-store.ts`), as it did before A261-4. Giving an extra a
       cell that names the default station, while its dish is made elsewhere, moves that extra off
       its dish's station, yet the preview lists no move, so the screen saves without asking; clearing
-      that cell is missed the same way. Both run-it reviews of the A261-4 PR reproduced it against
+      that cell is missed the same way. Both run-it reviews of the A261-4 branch reproduced it against
       the real migrations. What the preview should say about an extra is for the owner.
-    - **The No category row is hidden while no product is uncategorised, and so are its saved
-      cells.** They cannot be seen or cleared then; they apply again, and the row comes back, when a
-      product next has no category (`visibleRoutingRows`,
+    - **The No category row is hidden while no active product is uncategorised, and so are its
+      saved cells.** They cannot be seen or cleared then; they apply again, and the row comes back,
+      when an active product next has no category (`visibleRoutingRows`,
       `packages/venue-service/src/dashboard/routing-grid-model.ts`). This matches how an inactive
       product's cells are kept out of sight until it is active again; whether the row should stay
       visible while it holds cells is for the owner.
     - **A routing preview works out every active product in every active zone twice**, whatever the
-      change; only products under the changed row, and only the changed zone, can move. The
-      preview before A261-4 looped the same way.
+      change; only products under the changed row can move, and a change to one zone's cell moves
+      products in that zone only. The preview before A261-4 looped the same way.
     - **Owner question: should a configuration import refuse a routing cell on a zone in a
       switched-off department, as a save would?** Since main's A282 (#1339) no product path leaves
       such a cell in a venue (probe receipt in the A261-4 PR), so only a hand-built or
