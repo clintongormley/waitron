@@ -177,3 +177,113 @@ changed checks goes in lane B's `questions.md`.
 shows typing lag, cache the result per update.
 
 Then `/finish-branch` (light path: no migration, no risk trigger).
+
+## Batch order change (2026-10-08)
+
+Batch 2 waits: lane A's open #1392 (A347) changes `catalogue-browser.ts` and `menus-screen.ts`, and
+lane A's next menus items change the same area. Batch 3 overlaps no open pull request, so it goes
+first, split in two pull requests: **3a** (venue settings, service and people, below) and **3b**
+(printers, devices, device profiles, payments, canvases — task list appended when 3a lands).
+`login-screen.ts` is excluded: every action on it is a sign-in, not a save.
+
+## Batch 3a — venue settings, service and people
+
+Branch `feat/save-follows-changes-venue`. The pattern is batch 1's, copied from
+`apps/dashboard/src/widgets/variant-form.ts` (~113, ~169, ~240, ~325) and its
+`variant-form.save-state.test.ts`.
+
+**Rules for every task (read before each):**
+
+- Every `leaveCoordinatorFor(this)?.register(owner)` / `coordinator.register(owner)` that backs a
+  gated Save becomes `draftScopeFor(this, owner)`. A scope that today exists only when a coordinator
+  exists (an early `return` on no coordinator, or `?.register`) must exist without one too, or Save
+  is stuck disabled in every widget test (`saveActionState(undefined)` is `unchanged`). Every leave
+  path (Cancel's `requestClose`, `beforeClose`, an `if (!scope) proceed()`) keeps gating on the
+  COORDINATOR, never on "a scope exists".
+- Save binds `variant=${s.variant}` (replacing a fixed `variant="primary"`, or adding one where none
+  is set) and `?disabled=${s.unchanged || <its existing conditions>}`; its handler returns early
+  while `s.unchanged`. A changed form that its own checks block stays drawn primary and disabled.
+- Where one Save covers several scopes, pass `{ isDirty: () => a.isDirty() || b.isDirty() }`
+  (a scope's `isDirty()` covers itself only).
+- Immediate actions (deactivate, test, acknowledge, resend invitation, a download) are not gated.
+- Tests first, in real Chromium, in a new `<file>.save-state.test.ts` beside the screen: opens with
+  Save `disabled` on the host AND its inner `<button>` and `variant="secondary"` (a PRE-FILLED form
+  is the case that matters: fill every field it shows, in the spellings a stored value comes back
+  in); one edit makes it enabled and `primary`; typing the original value back makes it disabled
+  and `secondary`; an untouched Save press sends nothing (the early return — prove "cannot save"
+  by the handler's absence of a request/event, or a real pointer click on the inner button, never
+  only an outer `.click()`); after a save that leaves the form open, Save is quiet again. Axe both
+  states, both themes: in the screen's existing `*.a11y.test.ts` where one exists, otherwise in
+  the new file. Prove the gate by deletion (drop `s.unchanged ||` and the early return; the new
+  cases fail; restore).
+- Then run the screen's existing suites (named per task). A test that fails because it pressed
+  Save on an untouched form gets one edit before the press, or asserts the disabled state instead
+  — at least as strict as before; list each (`file:line`, before → after) in the SDD ledger for the
+  PR's "Changed test checks". A failure for any OTHER reason is a regression: stop and report it.
+  An "empty submit shows errors" test on a create form becomes: type something invalid, then press
+  (the empty form now cannot be pressed).
+- Each task ends with `pnpm --filter @waitron/dashboard typecheck`, `pnpm format:check`,
+  `pnpm lint`, and a `git commit -s`.
+
+### Task 3a.1 — floor and service status (`floor-screen.ts`, `service-status-screen.ts`)
+
+Both hold an inline "new" form (`#newScope`) and one scope per existing row registered in a loop
+(floor ~198, service status ~135). Each row's Save (`table-save-${id}`, `save-${id}`) gates on its
+OWN row scope; the add action (floor's `data-add-table` button ~646, service status `add` ~423)
+gates on `#newScope`. `deactivate` is immediate. Rewrite the row loop to `draftScopeFor`. Floor's
+`#acceptTables` returns early without a coordinator: make the scopes exist without one. Suites:
+`src/screens/floor-screen src/screens/service-status-screen`.
+
+### Task 3a.2 — kitchen timing, venue details, my schedule
+
+- `kitchen-screen.ts`: `save-timing` (~354, no variant today) on `#timingScope` (~203).
+  `#cancelTiming` (~160) does `if (!this.#timingScope) proceed()`: make it gate on the coordinator.
+- `venue-details-panel.ts`: `save` (~562) on `#scope` (~184); `#registerDraft` returns early
+  without a coordinator and `#requestCancel` checks `!scope || !this.#leave` — fix both as above.
+  `acknowledge` is immediate.
+- `my-schedule-screen.ts`: `cover-submit` (~514) and `abs-submit` (~611) on their own scopes (~170,
+  ~181). Both are submissions of staged input, so both are gated.
+Suites: `src/screens/kitchen-screen src/screens/venue-details-panel src/screens/my-schedule-screen`
+(and any `venue-*` screen test that mounts the panel: `git grep -l venue-details-panel
+apps/dashboard/src`).
+
+### Task 3a.3 — receipts (`receipts-screen.ts`)
+
+One `save` (~1084) covers three child scopes (language ~220, description ~237, trim ~257): gate on
+their OR. `use-fixed-language` is immediate. Its seven test files (`receipts-screen*.test.ts`)
+carry the most changed checks of the batch (about 15 "Save works on a pristine page" or
+empty-field cases): if the task nears ~80 tool calls, commit at a green point and hand over.
+Suites: `src/screens/receipts-screen`.
+
+### Task 3a.4 — backup and the bucket stream (`backup-screen.ts`, `stream-settings-panel.ts`)
+
+- Backup: `apply` (~1007, `#archiveScope` ~293, which re-registers per mode) and `save-settings`
+  (~1034, pre-filled from the status) are gated; `rotate-confirm` and `configuration-export` are
+  immediate. `#exportScope` (~335) backs the export passphrase of a DOWNLOAD — not gated.
+- Stream settings: `save` (~773) on `#scope` (~296); `test` (~765) is immediate. Editing blanks the
+  secret, so a first edit is the change.
+Suites: `src/screens/backup-screen src/screens/stream-settings-panel`.
+
+### Task 3a.5 — your profile (`profile-screen.ts`)
+
+One `save` (~1122) serves every mode through one `#scope` (~276) holding the current mode's
+fields. Gate it in every mode whose draft holds TYPED fields (details, password, PIN, …): with
+nothing typed the form is unchanged. A mode that only confirms an immediate action and holds no
+field (a removal, a disconnect) passes `savableAtOpen: true`. Name each mode and its choice in the
+ledger. This changes when the button is enabled, not what any credential route checks. Suites:
+`src/screens/profile-screen`.
+
+### Task 3a.6 — people, purchases and shifts (`widgets/person-edit.ts`, `person-form.ts`, `purchase-form.ts`, `shift-dialog.ts`)
+
+`person-edit` `save` (~377, pre-filled; `resend-invitation` immediate), `person-form` `confirm`
+(~296, a create), `purchase-form` `confirm` (~672; a new invoice is blank, an edit pre-filled),
+`shift-dialog` `confirm` (~241). Suites: `src/widgets/person-edit src/widgets/person-form
+src/widgets/purchase-form src/widgets/shift-dialog src/screens/staff src/screens/purchases
+src/screens/roster`.
+
+### Task 3a.7 — look, docs, backlog
+
+LOOK at each screen unchanged and changed, EN and ES, light and dark, desktop and 390px (dev stack
+from the worktree; check port 8080 and the venue folder's holders first). design-system.md →
+Forms and the CLAUDE.md §3 line say which forms follow the rule: extend the list. Update the A331
+backlog entry (batches 1 and 3a landed; 2, 3b, 4–7 open). Light review path.
