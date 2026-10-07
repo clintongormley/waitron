@@ -20,7 +20,7 @@ import {
   readContentLanguages,
 } from "@waitron/catalogue";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { readWeekHours, resolveMakers, setClaim } from "@waitron/venue-service";
+import { readWeekHours, resolveMakers, setRoutingCell } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
@@ -224,7 +224,12 @@ describe("seedDemoRestaurant", () => {
         unitPrice: "2.00",
         vatClass: "general",
       });
-      await setClaim(tx, cfg, folder.id, { kind: "no_preparation" });
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "category", categoryId: folder.id }, zoneId: null },
+        { kind: "no_preparation" },
+      );
       for (const zone of [downstairs, upstairs]) {
         expect(
           await resolveMakers(tx, cfg, zone.id, [snack.id], new Date("2026-10-02T18:30:00Z")),
@@ -418,15 +423,15 @@ describe("seedDemoRestaurant", () => {
         station_name: string;
       }>(sql`
         select z.name as zone_name, s.name as station_name
-        from route_exceptions r
+        from routing_cells r
         join categories c on c.id = r.category_id
         join floor_zones z on z.id = r.zone_id
         join kitchen_stations s on s.id = r.station_id
         where c.name = 'Drinks'
         order by z.name`);
       const { rows: cocktailClaims } = await tx.execute<{ station_name: string }>(sql`
-        select s.name as station_name from station_claims r
-        join categories c on c.id = r.category_id
+        select s.name as station_name from routing_cells r
+        join categories c on c.id = r.category_id and r.zone_id is null
         join kitchen_stations s on s.id = r.station_id
         where c.name = 'Drinks'`);
       const published = await menuStatus(

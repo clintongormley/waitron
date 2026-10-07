@@ -198,13 +198,13 @@ describe("seedCatalogues", () => {
       const { rows: drinksRoute } = await tx.execute<{ station_name: string | null }>(sql`
         select ks.name as station_name
         from categories c
-        join station_claims sc on sc.category_id = c.id and sc.location_id = ${locationId}
+        join routing_cells sc on sc.category_id = c.id and sc.zone_id is null and sc.location_id = ${locationId}
         left join kitchen_stations ks on ks.id = sc.station_id
         where c.name = 'Drinks'`);
       const { rows: charcuterieRoute } = await tx.execute<{ station_name: string | null }>(sql`
         select ks.name as station_name
         from categories c
-        join station_claims sc on sc.category_id = c.id and sc.location_id = ${locationId}
+        join routing_cells sc on sc.category_id = c.id and sc.zone_id is null and sc.location_id = ${locationId}
         left join kitchen_stations ks on ks.id = sc.station_id
         where c.name = 'Charcuterie'`);
       const { rows: editorDemoRaw } = await tx.execute<{

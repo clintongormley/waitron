@@ -8,10 +8,10 @@ import {
   createServiceZone,
   departmentSalePolicies,
   departments,
-  createException,
   replaceWeekHours,
   addDepartmentMenu,
   setDepartmentAllDayMenu,
+  setRoutingCell,
   setStationFallback,
   zoneServicePolicies,
 } from "@waitron/venue-service";
@@ -169,15 +169,11 @@ export async function seedFloor(
         ),
       );
     for (const category of barCategories) {
-      await createException(
+      await setRoutingCell(
         tx,
         { locationId: brandLocationId(locationId) },
-        {
-          zoneId: upstairsBarZone.id,
-          categoryId: category.id,
-          productId: null,
-          target: { kind: "station", stationId: upstairsStationId },
-        },
+        { row: { kind: "category", categoryId: category.id }, zoneId: upstairsBarZone.id },
+        { kind: "station", stationId: upstairsStationId },
       );
     }
   }
