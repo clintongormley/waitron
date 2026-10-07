@@ -592,7 +592,7 @@ describe("routing cells in a staged import", () => {
     expect(versions["venue-service"]).toBe(journal.entries.length);
     const older: ConfigurationBundle = {
       ...bundle,
-      modules: { ...bundle.modules, "venue-service": versions["venue-service"]! - 1 },
+      modules: { ...bundle.modules, "venue-service": routingMigration },
     };
     const { stateDir, result } = await staged(older, versions);
     await expect(result).rejects.toMatchObject({

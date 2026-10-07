@@ -776,6 +776,13 @@ describe("stored preparation rules", () => {
     });
   });
 
+  it("exports routing cells with their location column", () => {
+    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables).toContainEqual({
+      name: "routing_cells",
+      locationColumns: ["location_id"],
+    });
+  });
+
   it("names the default even when switched off without a cell", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
