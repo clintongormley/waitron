@@ -992,6 +992,17 @@ unused `units` property is gone (it closes W75's leftover).
     `wt-help-tooltip` set their open state only from the popover's toggle events, so one taken off
     the page while open may come back with its button still marked open — the bug #1362 fixed in
     `wt-data-table`'s Filters. A359 has since changed `wt-row-actions`; check it first.
+- **A342, owner 2026-10-07 — DONE (several values in one table filter):** a `wt-data-table` filter
+  declared with `multiple` takes several values, and keeps a row matching any of them; separate
+  filters still all apply, and the Filters badge counts a filter once. Its list keeps the "All …"
+  row first, which clears it. Multi-select: a menu's prices (Section, Main category — a category
+  still keeps the ones inside it), Products' Ordering, Units' Precision, Content languages' Kind.
+  Every two-value filter (each Status, Content languages' Why) and a menu's Price filter stay
+  single. A view a tab saved before this change with a single value for a filter that is now
+  multi-select is dropped, not converted.
+  - Not changed, single-choice dropdowns outside `wt-data-table`: the Add products dialog's
+    Category, the Staff screen's Role and the Orders screen's Status (a server query). Each could
+    take several values later if wanted.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
