@@ -76,6 +76,7 @@ export class WtHelpTooltip extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.open = false;
     document.removeEventListener("keydown", this.onDocumentKeydown, { capture: true });
     document.removeEventListener("focusin", this.onDocumentFocusin, { capture: true });
     super.disconnectedCallback();

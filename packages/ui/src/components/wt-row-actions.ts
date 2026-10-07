@@ -91,6 +91,11 @@ export class WtRowActions extends LitElement {
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
 
+  override disconnectedCallback(): void {
+    this.expanded = false;
+    super.disconnectedCallback();
+  }
+
   private onToggle(event: ToggleEvent): void {
     this.expanded = event.newState === "open";
   }

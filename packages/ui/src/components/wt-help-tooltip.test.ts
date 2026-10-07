@@ -329,3 +329,28 @@ test("tells its controllers when the tooltip leaves the page", async () => {
 
   expect(stops).toEqual(["stopped"]);
 });
+
+test("reinserted after removal while open reports closed and opens normally again", async () => {
+  const el = (await mount(
+    '<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>',
+  )) as WtHelpTooltip;
+  const trigger = el.shadowRoot!.querySelector("button")!;
+  const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+  expect(popup.matches(":popover-open")).toBe(true);
+
+  el.remove();
+  host.append(el);
+  await el.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  expect(trigger.hasAttribute("aria-describedby")).toBe(false);
+
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+  expect(popup.matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+  expect(popup.matches(":popover-open")).toBe(false);
+});
