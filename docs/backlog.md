@@ -897,7 +897,7 @@ product editor, the menu prices table, the sales-by-category report on screen an
 dialog all read **No category** / **Sin categoría**; the Products tree's heading row keeps "All
 products". Point (2) — the SERVER refusing a delete with `category.contents_changed` when only
 disabled products changed, whose message said to check counts this dialog no longer shows — is
-DONE by A304 (#PRNUM, owner 2026-10-06): after the refusal the dialog re-reads, and when nothing it
+DONE by A304 (#1338, owner 2026-10-06): after the refusal the dialog re-reads, and when nothing it
 shows changed it says the contents changed, that what it shows is up to date, and asks to choose
 Delete again (`folders.changed_unshown`); when a shown count changed the old message stays. The
 server's refusal is unchanged. Re-sending the delete automatically was considered and not built.
