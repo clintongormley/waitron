@@ -2453,7 +2453,7 @@ export class TillApp extends LitElement {
     if (retry === undefined || retry.inFlight) return;
     clearTimeout(this.#refreshTimers.get(list));
     this.#setRefreshRetry(list, { ...retry, inFlight: true });
-    await this.#refreshList(list, retry.messageKey);
+    await this.#refreshAfterWrite(list, retry.messageKey);
   }
 
   #endRefreshRetry(list: RefreshList): void {
@@ -3691,6 +3691,7 @@ export class TillApp extends LitElement {
     const lines = this.#currentSaleLines();
     this.errorKey = undefined;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
+    let parked = false;
     let recheck = false;
     let inactiveChoice = false;
     try {
@@ -3705,7 +3706,7 @@ export class TillApp extends LitElement {
       this.#dismissStationChoices();
       this.#clearBasket();
       this.cardOutcome = undefined;
-      await this.#refreshAfterWrite("held", "refresh.held_after_park");
+      parked = true;
     } catch (error) {
       if (session !== this.#operatorSession) return;
       if (
@@ -3722,6 +3723,7 @@ export class TillApp extends LitElement {
       this.parking = false;
     }
     if (session !== this.#operatorSession) return;
+    if (parked) void this.#refreshListsAfterWrite(session, [["held", "refresh.held_after_park"]]);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onParkOrder(event, true));
     if (recheck) {
