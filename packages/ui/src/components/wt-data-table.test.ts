@@ -2873,43 +2873,74 @@ test("the search box rounds its corners to the medium radius, not into a pill", 
   ]).toEqual(["7px", "7px", "7px", "7px"]);
 });
 
-test("at phone width the toolbar gives the search box its own full-width line below the Filters button", async () => {
-  const el = await tableS({ searchable: true, columns: withStatus });
-  el.style.width = "360px";
-  await el.updateComplete;
-  const toolbar = el
-    .shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!
-    .getBoundingClientRect();
-  const search = el
-    .shadowRoot!.querySelector<HTMLElement>(".table-search")!
-    .getBoundingClientRect();
-  const filters = el
-    .shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!
-    .getBoundingClientRect();
-  expect(search.top).toBeGreaterThanOrEqual(filters.bottom);
-  expect(filters.left).toBeCloseTo(toolbar.left, 0);
-  expect(search.width).toBeCloseTo(toolbar.width, 0);
-});
+const withStatusAndChooser: DataTableColumn<RowS>[] = [
+  withStatus[0]!,
+  { ...withStatus[1]!, choosable: "shown" },
+  { key: "id", label: "ID", cell: (r: RowS) => r.id },
+];
 
-test("the toolbar keeps the Filters button and the search box after it on one line when wide", async () => {
-  const el = await tableS({ searchable: true, columns: withStatus });
-  el.style.width = "1000px";
-  await el.updateComplete;
-  const toolbar = el
-    .shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!
-    .getBoundingClientRect();
-  const search = el
-    .shadowRoot!.querySelector<HTMLElement>(".table-search")!
-    .getBoundingClientRect();
-  const filter = el
-    .shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!
-    .getBoundingClientRect();
-  expect(filter.top).toBeLessThan(search.bottom);
-  expect(filter.right).toBeLessThan(search.left);
-  expect(filter.left).toBeCloseTo(toolbar.left, 0);
-  expect(search.right).toBeCloseTo(toolbar.right, 0);
-  // Natural width, not stretched: the dropdown is far narrower than the space the search box fills.
-  expect(filter.width).toBeLessThan(search.width / 2);
+function toolbarBoxes(el: WtDataTable<RowS>) {
+  const box = (selector: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+  return {
+    toolbar: box(".table-toolbar"),
+    filters: box(".filters-trigger"),
+    search: box(".table-search"),
+    chooser: box(".columns-trigger"),
+  };
+}
+
+test.each([390, 640])(
+  "in a table %i px wide, Filters and the chooser share the first line and the search takes the full-width line below them",
+  async (width) => {
+    const el = await tableS({ searchable: true, columns: withStatusAndChooser });
+    el.style.width = `${width}px`;
+    await el.updateComplete;
+    await vi.waitFor(() => {
+      const { toolbar, filters, search, chooser } = toolbarBoxes(el);
+      expect(chooser.top).toBeLessThan(filters.bottom);
+      expect(filters.top).toBeLessThan(chooser.bottom);
+      expect(search.top).toBeGreaterThanOrEqual(Math.max(filters.bottom, chooser.bottom));
+      expect(filters.left).toBeCloseTo(toolbar.left, 0);
+      expect(chooser.right).toBeGreaterThanOrEqual(toolbar.right - 8);
+      expect(search.left).toBeCloseTo(toolbar.left, 0);
+      expect(search.width).toBeCloseTo(toolbar.width, 0);
+    });
+  },
+);
+
+test.each([641, 1280])(
+  "in a table %i px wide, Filters, the search and the chooser share one line in that order",
+  async (width) => {
+    const el = await tableS({ searchable: true, columns: withStatusAndChooser });
+    el.style.width = `${width}px`;
+    await el.updateComplete;
+    await vi.waitFor(() => {
+      const { toolbar, filters, search, chooser } = toolbarBoxes(el);
+      expect(search.top).toBeLessThan(filters.bottom);
+      expect(chooser.top).toBeLessThan(search.bottom);
+      expect(filters.left).toBeCloseTo(toolbar.left, 0);
+      expect(filters.right).toBeLessThan(search.left);
+      expect(search.right).toBeLessThan(chooser.left);
+      expect(chooser.right).toBeGreaterThanOrEqual(toolbar.right - 8);
+      // The search grows into the room the buttons leave; they keep their natural width.
+      expect(filters.width).toBeLessThan(search.width / 2);
+    });
+  },
+);
+
+test("a table hidden after it stacked its search shows Filters, the search and the chooser on one line as soon as it is shown wide", async () => {
+  const el = await tableS({ searchable: true, columns: withStatusAndChooser });
+  el.style.width = "390px";
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(true));
+  el.style.display = "none";
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(false));
+  el.style.display = "";
+  el.style.width = "1280px";
+  const { filters, search, chooser } = toolbarBoxes(el);
+  expect(search.top).toBeLessThan(filters.bottom);
+  expect(chooser.top).toBeLessThan(search.bottom);
+  expect(filters.right).toBeLessThan(search.left);
 });
 
 test("search and filter combine with AND", async () => {

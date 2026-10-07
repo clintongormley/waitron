@@ -74,6 +74,10 @@ function repeatKeys(keys: readonly string[]): (_item: unknown, index: number) =>
  * the rows beside it stay wider than NARROW_TREE_WIDTH at the default tokens. */
 const SIDE_FILTERS_WIDTH = 768;
 
+/** The host width, in px, at or below which the table's own search box takes a line of its own
+ * under the toolbar's buttons: the Products list's catalogue browser moves its search at 40rem. */
+const STACKED_SEARCH_WIDTH = 640;
+
 @customElement("wt-data-table")
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
@@ -341,6 +345,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
         background: var(--wt-color-bg);
         color: var(--wt-color-text);
         font: inherit;
+      }
+
+      :host([stacked-search]) .table-search {
+        order: 1;
+        flex-basis: 100%;
       }
 
       /* Its primary border marks focus; an outer outline would draw a second line. */
@@ -863,6 +872,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
   });
   #hostWidth = 0;
   #widthsReleased = false;
+  /** Its effect waits a frame for the same reason as the host observer's. A hidden table measures
+   * 0 wide and is not stacked, so it is not drawn stacked for a frame when shown in a wide window. */
+  readonly #searchObserver = new ResizeObserver(([entry]) => {
+    const width = entry!.borderBoxSize[0]!.inlineSize;
+    this.#searchFrame = requestAnimationFrame(() => {
+      this.toggleAttribute("stacked-search", width > 0 && width <= STACKED_SEARCH_WIDTH);
+    });
+  });
+  #searchFrame = 0;
   #observedScroll: Element | null = null;
   /** Keeps a revealed or focused row clear of the headings held over the top of the box. */
   readonly #headObserver = new ResizeObserver(() => this.#padScroll());
@@ -940,6 +958,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#observeHost();
+    this.#searchObserver.observe(this);
     if (this.hasUpdated) {
       this.#observeScroll();
       this.#observeHead();
@@ -952,6 +971,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#hostObserver.disconnect();
     if (this.#resizeFrame !== null) cancelAnimationFrame(this.#resizeFrame);
     this.#resizeFrame = null;
+    this.#searchObserver.disconnect();
+    cancelAnimationFrame(this.#searchFrame);
     this.#scrollObserver.disconnect();
     this.#cancelNarrowFrame();
     this.#observedScroll = null;

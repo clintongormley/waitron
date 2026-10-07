@@ -977,10 +977,9 @@ unused `units` property is gone (it closes W75's leftover).
   first in its toolbar, before the search box; the panel opens beside the rows while the table is
   at least 768 px wide and over the whole screen below that. The trailing "Filters" text button,
   its floating panel and the `leadingFilters` property are gone. A table taken off the page with
-  that full-screen panel open no longer throws when it next updates.
-  - Open, seen in screenshots, not fixed: at 390 px every filtered table but Products spreads its
-    toolbar over three lines — Filters alone, then the search box, then Customise columns alone —
-    where Products puts its buttons on one line and the search under them.
+  that full-screen panel open no longer throws when it next updates. A table 640 px wide or less
+  puts its own search box on a line of its own under its buttons, as Products does, rather than
+  spreading the toolbar over three lines at 390 px.
   - Open, seen in screenshots, not about filters: at 390 px the Printers screen's Add button covers
     the end of its tab row ("Print A…"), and in Spanish "Añadir un agente de impresión" runs off the
     right edge; a menu's prices table shows only a sliver of the price box before its pinned Resolve
