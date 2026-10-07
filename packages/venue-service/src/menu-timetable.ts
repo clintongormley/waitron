@@ -164,7 +164,9 @@ function skippedSlot(
     for (const end of ["startsAt", "endsAt"] as const)
       if (
         localTimeOccurrences(
-          calendarDateOfTime(date, slot[end], clock.cutover),
+          end === "endsAt" && slot[end] === clock.cutover
+            ? addDays(date, 1)
+            : calendarDateOfTime(date, slot[end], clock.cutover),
           slot[end],
           clock.zone,
         ).length === 0

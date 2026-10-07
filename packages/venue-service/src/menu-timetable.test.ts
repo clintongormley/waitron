@@ -141,6 +141,84 @@ describe("service-period writers", () => {
     });
   });
 
+  it("checks a start equal to the changeover on the business date", async () => {
+    const v = await venue();
+    await db
+      .update(locations)
+      .set({ dayCutover: "02:30:00" })
+      .where(eq(locations.id, v.locationId));
+    const before = await makeDate(v, "2026-03-28");
+    await dateMenus(v, before.id, [slot(v.periods!.mananas, "02:30", "21:00")]);
+    const skipped = await makeDate(v, "2026-03-29");
+    await expect(
+      dateMenus(v, skipped.id, [slot(v.periods!.mananas, "02:30", "21:00")]),
+    ).rejects.toMatchObject({
+      code: "menu_timetable.invalid",
+      params: { field: "slots.0.startsAt", reason: "clock_skips" },
+    });
+    const stored = await db
+      .select({ startsAt: menuSlots.startsAt, endsAt: menuSlots.endsAt })
+      .from(menuSlots)
+      .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
+      .where(eq(menuDayTimetables.specialDateId, before.id));
+    expect(stored).toEqual([{ startsAt: "02:30:00", endsAt: "21:00:00" }]);
+  });
+
+  it.each(["copy", "move"] as const)(
+    "checks changeover ends on the next calendar date during a %s",
+    async (action) => {
+      expect(localTimeOccurrences("2027-03-27", "02:30", ZONE)).toHaveLength(1);
+      expect(localTimeOccurrences("2027-03-28", "02:30", ZONE)).toEqual([]);
+      const v = await venue();
+      await db
+        .update(locations)
+        .set({ dayCutover: "02:30:00" })
+        .where(eq(locations.id, v.locationId));
+      const source = await makeDate(v, "2027-03-20");
+      await dateMenus(v, source.id, [slot(v.periods!.noches, "21:00", "02:30")]);
+      const change = () =>
+        scoped<unknown>((tx) =>
+          action === "copy"
+            ? duplicateHolidayNamedSpecialDates(
+                tx,
+                v.cfg,
+                source.id,
+                ["2027-03-25", "2027-03-27"],
+                AT,
+                VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+              )
+            : saveSpecialDate(
+                tx,
+                v.cfg,
+                source.id,
+                dateInput("2027-03-27"),
+                AT,
+                VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+              ),
+        );
+      await expect(change()).rejects.toMatchObject({
+        code: "menu_timetable.invalid",
+        params: {
+          field: "date",
+          date: "2027-03-27",
+          departmentId: v.restaurant,
+          reason: "clock_skips",
+        },
+      });
+      const dates = await db
+        .select({ date: specialDates.date })
+        .from(specialDates)
+        .where(eq(specialDates.locationId, v.locationId));
+      expect(dates).toEqual([{ date: "2027-03-20" }]);
+      const stored = await db
+        .select({ startsAt: menuSlots.startsAt, endsAt: menuSlots.endsAt })
+        .from(menuSlots)
+        .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
+        .where(eq(menuDayTimetables.specialDateId, source.id));
+      expect(stored).toEqual([{ startsAt: "21:00:00", endsAt: "02:30:00" }]);
+    },
+  );
+
   it("refuses explicit null fields rather than treating them as omitted", async () => {
     const v = await venue({ timetable: false });
     const { id } = await scoped((tx) =>
