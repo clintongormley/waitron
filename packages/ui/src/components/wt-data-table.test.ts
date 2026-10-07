@@ -377,6 +377,24 @@ test("text names compare decimal runs in both directions like the dashboard pick
   expect(sortedKeys(el)).toEqual(["ten", "two-eighty", "one-two", "one-ten", "half", "quarter"]);
 });
 
+test("text sorting parses each distinct name once during each sort", async () => {
+  const names = ["Pack 10,5 kg", "Pack 2.25 kg", "Pack 0,5 kg", "Pack 0.25 kg", "Pack 2.25 kg"];
+  const parsed: string[] = [];
+  const match = String.prototype.match;
+  vi.spyOn(String.prototype, "match").mockImplementation(function (this: string, pattern) {
+    if (names.includes(String(this))) parsed.push(String(this));
+    return match.call(this, pattern);
+  });
+  const el = await sortTable(names.map((value, index) => ({ id: String(index), value })));
+  expect(sortedKeys(el)).toEqual(["3", "2", "1", "4", "0"]);
+  expect(parsed.sort()).toEqual([...new Set(names)].sort());
+  parsed.length = 0;
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="value"]')!.click();
+  await el.updateComplete;
+  expect(sortedKeys(el)).toEqual(["0", "1", "4", "2", "3"]);
+  expect(parsed.sort()).toEqual([...new Set(names)].sort());
+});
+
 test("text decimal ties keep incoming order even across separators and zeros", async () => {
   const el = await sortTable([
     { id: "first", value: "Pack 00,50" },

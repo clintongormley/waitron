@@ -2559,10 +2559,31 @@ directions, equal-decimal ties, and ISO timestamp order; numeric sort values ret
 separate comparison. Names such as "1.10 Postres" are read as decimals (1.1), so they
 precede "1.2 Sopas"; this change does not infer outline or version numbering from names. Since
 W85a, product variants retain the product's own order.
-A309's review reported one 5,000-name sorting sample at 95.2 ms with the old comparison and
-124.4 ms with the shared comparison; the sample was not repeated, so the cost on a dashboard
-list is unverified. **Next action:** repeat timings with representative list sizes before
-considering cached name tokens; no sorting optimisation is part of A309.
+The timing follow-up is DONE (A363): one shared `Intl.Collator` reuses the locale comparison
+rules, and each table sort takes a fresh `createLabelComparator` whose name keys are cached only
+for that sort. The pickers keep `byLabel` and also use the reused collator. Existing order checks
+are unchanged; new shared and Chromium cases count one name parse per distinct value per sort.
+Measured 2026-10-07 on macOS, Node v26.7.0, default collation en-US: three warm-up sorts per
+comparator, nine alternating runs, 100 sorts per sample for demo lists and one for the generated
+5,000-name list. Times below are median milliseconds per sort (minimum–maximum); they measure
+comparison/sorting, not DOM rendering. Demo names come from Casa Delgado's products, categories
+and floor tables; generated names mix number runs, accents and case. The old comparator is the
+pre-A309 table's numeric/base `localeCompare`; "Before A363" is A309's exact-decimal comparator.
+
+| List | Old table comparison | Before A363 | After, direct | After, table cache |
+| --- | --- | --- | --- | --- |
+| products-en (45) | 0.2935 (0.2731–0.3137) | 0.6495 (0.5941–0.6844) | 0.0471 (0.0390–0.0556) | 0.0283 (0.0261–0.0304) |
+| categories-en (10) | 0.0333 (0.0331–0.0350) | 0.0705 (0.0688–0.0735) | 0.0039 (0.0039–0.0061) | 0.0072 (0.0029–0.0106) |
+| products-es (45) | 0.2839 (0.2749–0.2923) | 0.6117 (0.5910–0.6355) | 0.0479 (0.0416–0.0536) | 0.0299 (0.0293–0.0312) |
+| categories-es (10) | 0.0330 (0.0316–0.0356) | 0.0765 (0.0681–0.0874) | 0.0044 (0.0041–0.0056) | 0.0034 (0.0031–0.0097) |
+| tables (16) | 0.0360 (0.0354–0.0378) | 0.0500 (0.0461–0.0520) | 0.0077 (0.0066–0.0138) | 0.0050 (0.0048–0.0095) |
+| generated (5000) | 79.8438 (77.2915–88.6754) | 122.6801 (114.0640–133.4943) | 27.1010 (25.9914–37.3585) | 10.8013 (10.4669–16.3828) |
+
+The probe (`node ~/waitron-campaign-d/receipts/a363/benchmark-after.mjs`, bundled with esbuild
+from the recorded `benchmark-after.ts`) also compared every full list and 30,000 deterministic
+pairs against the pre-optimisation comparator: all matched. Raw runs and probe source are retained
+in `~/waitron-campaign-d/receipts/a363/`. These are local measurements, not a browser-wide
+latency bound.
 
 **Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
 DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**

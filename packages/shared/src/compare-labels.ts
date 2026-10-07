@@ -1,25 +1,49 @@
-import { compareDecimal, decimal } from "./money.js";
+import { compareDecimal, decimal, type Decimal } from "./money.js";
 
-export function compareLabels(a: string, b: string): number {
-  const left = a.match(/\d+(?:[.,]\d+)?|\D+/g) ?? [];
-  const right = b.match(/\d+(?:[.,]\d+)?|\D+/g) ?? [];
-  for (let index = 0; index < Math.min(left.length, right.length); index++) {
-    const x = left[index]!;
-    const y = right[index]!;
-    const numbers = /^\d/.test(x) && /^\d/.test(y);
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+type LabelKey = { parts: string[]; numbers: (Decimal | null)[] };
+
+function labelKey(label: string): LabelKey {
+  const parts = label.match(/\d+(?:[.,]\d+)?|\D+/g) ?? [];
+  return {
+    parts,
+    numbers: parts.map((part) =>
+      /^\d/.test(part) ? decimal(part.replace(",", ".").replace(/^0+(?=\d)/, "")) : null,
+    ),
+  };
+}
+
+function compareKeys(left: LabelKey, right: LabelKey): number {
+  for (let index = 0; index < Math.min(left.parts.length, right.parts.length); index++) {
+    const x = left.numbers[index]!;
+    const y = right.numbers[index]!;
+    const numbers = x !== null && y !== null;
     const compared = numbers
-      ? compareDecimal(
-          decimal(x.replace(",", ".").replace(/^0+(?=\d)/, "")),
-          decimal(y.replace(",", ".").replace(/^0+(?=\d)/, "")),
-        )
-      : x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" });
+      ? compareDecimal(x, y)
+      : collator.compare(left.parts[index]!, right.parts[index]!);
     if (compared !== 0)
       return numbers
         ? compared
-        : left.slice(index).join("").localeCompare(right.slice(index).join(""), undefined, {
-            numeric: true,
-            sensitivity: "base",
-          });
+        : collator.compare(left.parts.slice(index).join(""), right.parts.slice(index).join(""));
   }
-  return left.length - right.length;
+  return left.parts.length - right.parts.length;
+}
+
+export function compareLabels(a: string, b: string): number {
+  return compareKeys(labelKey(a), labelKey(b));
+}
+
+/** Keep the name cache within one sort so changed lists do not retain old keys. */
+export function createLabelComparator(): (a: string, b: string) => number {
+  const keys = new Map<string, LabelKey>();
+  const keyFor = (label: string): LabelKey => {
+    let key = keys.get(label);
+    if (key === undefined) {
+      key = labelKey(label);
+      keys.set(label, key);
+    }
+    return key;
+  };
+  return (a, b) => compareKeys(keyFor(a), keyFor(b));
 }

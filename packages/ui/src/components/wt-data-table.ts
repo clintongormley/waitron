@@ -1,4 +1,4 @@
-import { compareLabels } from "@waitron/shared";
+import { createLabelComparator } from "@waitron/shared";
 import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
@@ -1583,6 +1583,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const group = this.rowGroup;
     if (column?.sortValue === undefined && group === undefined) return [...rows];
     const direction = this.sortDirection === "ascending" ? 1 : -1;
+    const compareLabels = createLabelComparator();
     return [...rows]
       .map((row) => ({
         row,
