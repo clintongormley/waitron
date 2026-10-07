@@ -20,7 +20,7 @@ import {
   writeContentLanguages,
 } from "@waitron/catalogue";
 import type { SeedLocale } from "./menu.js";
-import type { DemoDataSet, SeedCatalogue } from "./data-set.js";
+import { demoContentLanguages, type DemoDataSet, type SeedCatalogue } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 
 export interface SeedCataloguesInput {
@@ -88,8 +88,21 @@ export async function seedCatalogues(
   { locationId, locale, dataSet }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
   const stationIds = await resolveStationIds(tx, locationId);
-  const languages = locale === "en" ? ["en", "es"] : ["es", "en"];
-  await writeContentLanguages(tx, { defaultLanguage: locale, languages });
+  const { rows: geography } = await tx.execute<{ province: string | null; country: string }>(sql`
+    select l.province, t.country from locations l
+    cross join tenants t
+    where l.id = ${locationId}`);
+  const { defaultLanguage, languages, required } = demoContentLanguages({
+    country: geography[0]?.country,
+    area: geography[0]?.province,
+  });
+  await writeContentLanguages(
+    tx,
+    { defaultLanguage, languages: [...languages] },
+    defaultLanguage,
+    undefined,
+    required,
+  );
   const translated = (text: Readonly<Record<string, string>>) => inLanguages(text, languages);
   const productsByImage = new Map<string, string>();
   const menuItemsByProduct = new Map<string, string>();
@@ -103,10 +116,16 @@ export async function seedCatalogues(
   const seedOne = async (data: SeedCatalogue, existingMenuId?: string): Promise<string> => {
     const catalogue =
       existingMenuId === undefined
-        ? await createCatalogue(tx, { name: data.name[locale] })
+        ? await createCatalogue(tx, {
+            name: data.name[locale],
+            names: translated(data.customerName),
+          })
         : { id: existingMenuId };
     if (existingMenuId !== undefined)
-      await updateMenuDetails(tx, existingMenuId, { name: data.name[locale] });
+      await updateMenuDetails(tx, existingMenuId, {
+        name: data.name[locale],
+        names: translated(data.customerName),
+      });
     const rootSectionId = await requireMenuRoot(tx, catalogue.id);
     for (const cat of data.categories) {
       const category = await createCategory(tx, { name: cat.categoryName ?? cat.name.en });

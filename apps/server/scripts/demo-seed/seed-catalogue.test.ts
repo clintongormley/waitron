@@ -305,8 +305,8 @@ describe("seedCatalogues", () => {
     expect(res.menus.find((m) => m.name === "Casa Delgado")!.isDefault).toBe(true);
     expect(res.menus.find((m) => m.name === "Menú del Día")!.isDefault).toBe(false);
     expect(res.contentLanguages).toEqual({
-      defaultLanguage: "en",
-      languages: ["en", "es"],
+      defaultLanguage: "es",
+      languages: ["es", "en"],
     });
 
     expect(res.products.length).toBeGreaterThan(35);
