@@ -452,13 +452,6 @@ export class VenueOperationsScreen extends LitElement {
     const normalized = (name: string, value: string | boolean) => {
       if (typeof value !== "string") return value;
       if (["department-name", "trading-name", "new-zone-name"].includes(name)) return value.trim();
-      if (
-        name === "assignment-order" &&
-        value.trim() !== "" &&
-        Number.isInteger(Number(value)) &&
-        Number(value) >= 0
-      )
-        return Number(value);
       return value;
     };
     return (
