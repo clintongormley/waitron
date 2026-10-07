@@ -4819,7 +4819,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     must both allow what the device does".
   - **Handed on.** The [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md)
     replaces A261 step 2's Task 8 (zone-by-zone menus, the interim path) on
-    `feat/department-menu-timetable`, in pull request #1331, awaiting landing: a menu is offered to
+    W98 (#1331, landed 2026-10-07): a menu is offered to
     a department by its own list, and `zone_menus` and the per-zone menu editor are gone. The [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
     must define portable assignment, Use default, busy-terminal protection and a drawer
     independent of receipt printers before it removes today's printer choice, which a switch keeps
@@ -5400,6 +5400,10 @@ approved.
   of its own, and the whole dashboard suite passed when re-run alone. W111's branch changes no
   Payments screen file. Standing rule: a flaky test is fixed at the
   root; on a recurrence, keep the log.
+  It recurred in A284's exact merge CI on `1b9c38397d35427c222e55f5aaac65cb94df2f25`
+  ([run 37585788177](https://github.com/clintongormley/waitron/actions/runs/37585788177),
+  2026-10-07): the second row was “Checking…” instead of “Offline”; 8,416 other dashboard
+  tests passed. Lane E retained the failed-job log. The cause is still unverified.
 - **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
   attempt 1, job 111163230954, 2026-10-03; passed on re-run).** In
   `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after
@@ -6874,18 +6878,21 @@ bump it when a fixed version is published, and run the certificate suites in tho
   the way, each left as it is: enabling a zone or a department leaves what disabling switched off
   as it is — a department's zones stay disabled, a zone's tables stay disabled, and its routing
   exceptions and watcher zones stay gone (a profile's starting zone is kept since W97, 2026-10-06:
-  `readProfileZones` falls back to the profile's first usable zone while it is disabled); `PATCH /management-api/zones/:id`
-  sets `active: true` on a zone whose department is disabled, with no refusal (`updateZone`,
-  `apps/server/src/tables.ts`; run on W110e's branch: 204), though the screen does not offer
-  Enable there; `PATCH /management-api/tables/:id` with a `zoneId` and no `active` moves an
-  active table into a disabled zone and leaves it active (run on W110e's branch: 204), though the
-  floor screen offers only active zones; creating a department with a name another department has
-  answers 500 `server.internal`, because there is no `department.name_taken` code (run on W110d's branch: a
-  second `POST /management-api/venue-service/departments` with the same name); a table can still
-  be enabled, or created, in an active zone that has no department, and staff then cannot open a
-  bill on it, because `resolveZoneContext` (`packages/venue-service/src/operations.ts`)
-  inner-joins `zone_service_policies` and `openTab` answers `service_zone.not_found` (read, not
-  run); and an active
+  `readProfileZones` falls back to the profile's first usable zone while it is disabled). A282 is DONE:
+  moving, creating or placing an active table in a zone requires that zone and its department
+  to be active;
+  enabling a zone requires an active department, and moving an active zone to a disabled
+  department is refused. Disabled tables can move into disabled zones; disabled zones can move
+  to a disabled department.
+  `POST /management-api/zones` and the old dashboard creation method are retired; the demo seed
+  and creation fixtures use `createServiceZone`, which writes the zone and its department policy
+  in one transaction. You create zones through Departments and zones. The Enable refusal tells
+  you to enable or assign a department, in English or Spanish. The policy-tree row withholds
+  Enable until that assignment is active. The table-with-no-department gap is closed by the
+  same checks, with direct unassigned-row fixtures covering create, move and placement.
+  Creating a department with a name another department has still answers 500 `server.internal`,
+  because there is no `department.name_taken` code (run on W110d's branch: a second
+  `POST /management-api/venue-service/departments` with the same name); and an active
   zone with no department had its "Not configured" note run onto its name with no space before
   it (the owner's screenshot read "Private roomNot configured") — DONE by A301: the note now has
   its own gap and the muted colour. (e) a test gap,

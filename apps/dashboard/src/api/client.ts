@@ -2529,10 +2529,6 @@ export class DashboardApi {
     return this.#request<FloorZone[]>("/management-api/zones", "GET");
   }
 
-  createZone(input: { name: string; displayOrder?: number }): Promise<{ id: string }> {
-    return this.#request<{ id: string }>("/management-api/zones", "POST", input);
-  }
-
   updateZone(
     id: string,
     patch: { name?: string; displayOrder?: number; active?: boolean },

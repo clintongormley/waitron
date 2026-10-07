@@ -2,15 +2,10 @@
 
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import {
-  categories,
-  floorZones,
-  kitchenStations,
-  tableServiceStatuses,
-  type Transaction,
-} from "@waitron/db";
+import { categories, kitchenStations, tableServiceStatuses, type Transaction } from "@waitron/db";
 import type { WeekCell, WeekDay } from "@waitron/venue-service";
 import {
+  createServiceZone,
   departmentSalePolicies,
   departments,
   createException,
@@ -18,7 +13,6 @@ import {
   addDepartmentMenu,
   setDepartmentAllDayMenu,
   setStationFallback,
-  zoneSalePolicies,
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import {
@@ -27,7 +21,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { CountryDemoIdentity } from "@waitron/country";
-import { createTable, createZone, setTablePlacement } from "../../src/tables.js";
+import { createTable, setTablePlacement } from "../../src/tables.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import type { DemoDataSet } from "./data-set.js";
@@ -49,7 +43,7 @@ const opening = (opensAt: string, closesAt: string): WeekCell => ({
 const weekOf = (cell: (weekday: number) => WeekCell): WeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: cell(weekday) }));
 
-/** `createZone`, `createTable` and `setTablePlacement` read only `locationId`; every other field is
+/** `createServiceZone`, `createTable` and `setTablePlacement` read only `locationId`; every other field is
  *  a placeholder that satisfies the type. */
 function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
   return {
@@ -108,7 +102,8 @@ export async function seedFloor(
       zone.key === "bar"
         ? defaultPolicy.zone_id
         : (
-            await createZone(tx, cfg, {
+            await createServiceZone(tx, cfg, {
+              departmentId: defaultPolicy.department_id,
               name: zone.name[locale],
               displayOrder: zone.displayOrder,
             })
@@ -120,31 +115,19 @@ export async function seedFloor(
       await tx.execute(sql`
         update zone_service_policies set service_mode = 'prepay'
         where zone_id = ${zoneId}`);
-    } else {
-      await tx.insert(zoneServicePolicies).values({
-        locationId,
-        zoneId,
-        departmentId: defaultPolicy.department_id,
-        serviceMode: null,
-        isCounterDefault: false,
-      });
-      await tx.insert(zoneSalePolicies).values({ zoneId });
     }
     zoneIds.set(zone.key, zoneId);
   }
 
-  const upstairsBarZone = await createZone(tx, cfg, {
+  const upstairsBarZone = await createServiceZone(tx, cfg, {
+    departmentId: defaultPolicy.department_id,
     name: floor.upstairsBarZone[locale],
     displayOrder: 3,
   });
-  await tx.insert(zoneServicePolicies).values({
-    locationId,
-    zoneId: upstairsBarZone.id,
-    departmentId: defaultPolicy.department_id,
-    serviceMode: "prepay",
-    isCounterDefault: false,
-  });
-  await tx.insert(zoneSalePolicies).values({ zoneId: upstairsBarZone.id });
+  await tx
+    .update(zoneServicePolicies)
+    .set({ serviceMode: "prepay" })
+    .where(eq(zoneServicePolicies.zoneId, upstairsBarZone.id));
 
   if (menuIds !== undefined) {
     const downstairsBarZoneId = zoneIds.get("bar");
@@ -199,25 +182,11 @@ export async function seedFloor(
     }
   }
 
-  const [deliZoneRow] = await tx
-    .insert(floorZones)
-    .values({
-      locationId,
-      name: floor.deliCounterZone[locale],
-      displayOrder: 4,
-      active: true,
-    })
-    .returning({ id: floorZones.id });
-  const deliZoneId = deliZoneRow?.id;
-  if (deliZoneId === undefined) throw new Error("seedFloor: failed to create deli service zone");
-  await tx.insert(zoneServicePolicies).values({
-    locationId,
-    zoneId: deliZoneId,
+  await createServiceZone(tx, cfg, {
     departmentId: deliDepartmentId,
-    serviceMode: null,
-    isCounterDefault: false,
+    name: floor.deliCounterZone[locale],
+    displayOrder: 4,
   });
-  await tx.insert(zoneSalePolicies).values({ zoneId: deliZoneId });
   if (menuIds !== undefined) {
     const restaurantId = defaultPolicy.department_id;
     for (const [displayOrder, menuId] of [menuIds.restaurant, menuIds.lunch].entries())

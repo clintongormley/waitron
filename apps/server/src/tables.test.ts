@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -35,7 +36,6 @@ import type { OriginConfig } from "./till-config.js";
 import {
   clearPlacement,
   createTable,
-  createZone,
   deactivateTable,
   deactivateZone,
   listTables,
@@ -516,15 +516,20 @@ describe("zone CRUD", () => {
     ).toEqual({ active: true });
   });
 
-  it("createZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
+  it("service zone creation rethrows a non-unique insert refusal raw", async () => {
     const cfg = await setupVenue();
-    // A location id that names no row: the location foreign key refuses, not the name unique.
-    const badCfg: OriginConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
-    const err = await asApp(cfg, (tx) => createZone(tx, badCfg, { name: "Big" })).catch(
-      (e: unknown) => e,
-    );
-    expect(err).toBeInstanceOf(Error); // rejected (a resolved {id} would fail this)
-    expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
+    await db.execute(sql`create trigger refuse_zone_insert before insert on floor_zones
+      begin select raise(abort, 'zone insert refused'); end`);
+    try {
+      const err = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Big" })).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(Error);
+      expect(err).not.toBeInstanceOf(AppError);
+      expect(String(err)).toMatch(/zone insert refused/);
+    } finally {
+      await db.execute(sql`drop trigger refuse_zone_insert`);
+    }
   });
 
   it("updateZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {

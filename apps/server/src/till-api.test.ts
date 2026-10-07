@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -3743,11 +3744,8 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     // the roster's `[abel, ana]` invariant untouched (no extra staff person seeded).
     staffCookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
-    const [zoneRow] = await suite.db
-      .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "Sala" })
-      .returning({ id: floorZones.id });
-    zoneId = zoneRow!.id;
+    const zone = await withTransaction(suite.db, (tx) => createZone(tx, cfg, { name: "Sala" }));
+    zoneId = zone.id;
   });
 
   // Remove the seeded manager (and its session) so `GET /api/staff`'s EXACT `[abel, ana]` roster
@@ -3786,6 +3784,32 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     }>(sql`select pos_x, pos_y, shape, rotation, zone_id from dining_tables where id = ${tableId}`);
     return rows.rows[0]!;
   }
+
+  it("refuses placement into a department-less zone with 409 and leaves the table unplaced", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const tableId = await makeTable();
+    const [zone] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: cfg.locationId, name: `Unassigned-${randomUUID()}` })
+      .returning({ id: floorZones.id });
+    const response = await app.request(`/api/tables/${tableId}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: JSON.stringify({ ...place(), zoneId: zone!.id }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "table.zone_inactive", params: { tableId, zoneId: zone!.id } },
+    });
+    expect(await placementOf(tableId)).toEqual({
+      pos_x: null,
+      pos_y: null,
+      shape: null,
+      rotation: null,
+      zone_id: null,
+    });
+  });
 
   it("a MANAGER operator places a table (204, placement landed); a STAFF operator is 403", async () => {
     const app = new Hono();

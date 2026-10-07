@@ -583,6 +583,7 @@ export class VenueOperationsScreen extends LitElement {
     if (closed) this.#returnFocus();
   }
   #refusal(code: string, error?: unknown): string {
+    if (code === "zone.department_inactive") return t("venue.zone_department_inactive");
     if (code === "department.last_active") return t("venue.department_last_active");
     if (code === "zone.table_in_use") {
       const tableName = (error as { params?: { tableName?: unknown } } | undefined)?.params
@@ -1393,10 +1394,7 @@ export class VenueOperationsScreen extends LitElement {
                         run: () => void this.#confirmZone(row.zone, row.departmentId),
                       },
                     ]
-                  : // `listServiceZones` leaves out an active zone of a disabled department, so
-                    // enabling one there would not put it back in service.
-                    row.departmentId === null ||
-                      departments.some(
+                  : departments.some(
                         (department) => department.id === row.departmentId && department.active,
                       )
                     ? [

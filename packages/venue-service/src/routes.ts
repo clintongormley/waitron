@@ -102,6 +102,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department.not_found": 404,
   "department.last_active": 409,
   "zone.table_in_use": 409,
+  "zone.department_inactive": 409,
   "service_zone.not_found": 404,
   "department_menu.not_found": 404,
   "department_menu.in_use": 409,
@@ -163,6 +164,18 @@ function requireMode(value: unknown, field: string): ServiceMode {
     throw new AppError("management.request_invalid", { field });
   }
   return value as ServiceMode;
+}
+
+function requireDisplayOrder(value: unknown): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < -2_147_483_648 ||
+    value > 2_147_483_647
+  ) {
+    throw new AppError("management.request_invalid", { field: "displayOrder" });
+  }
+  return value;
 }
 
 const MAX_RELEASE_REMINDER_MINUTES = 120;
@@ -869,11 +882,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
+        if (Array.isArray(body))
+          throw new AppError("management.request_invalid", { field: "body" });
         const name = requireString(body.name, "name").trim();
         if (name === "") throw new AppError("management.request_invalid", { field: "name" });
         const zone = await gated(sessionId, (tx) =>
           createServiceZone(tx, ctx.cfg, {
             name,
+            displayOrder:
+              body.displayOrder === undefined ? undefined : requireDisplayOrder(body.displayOrder),
             departmentId: requireBodyUuid(body.departmentId, "departmentId"),
           }),
         );

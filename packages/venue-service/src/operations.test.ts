@@ -930,6 +930,23 @@ describe("routing outcomes and menu readiness", () => {
 });
 
 describe("service zone name refusals", () => {
+  it("creates a service zone with its requested display order and department", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Ordered zones")) };
+    const department = await scoped((tx) =>
+      createDepartment(tx, cfg, { name: "Restaurant", defaultServiceMode: "prepay" }),
+    );
+    const input = { name: "Terrace", departmentId: department.id, displayOrder: 7 };
+    const zone = await scoped((tx) => createServiceZone(tx, cfg, input));
+    const rows = await db
+      .select({ displayOrder: floorZones.displayOrder })
+      .from(floorZones)
+      .where(eq(floorZones.id, zone.id));
+    expect(rows).toEqual([{ displayOrder: 7 }]);
+    expect(await scoped((tx) => listServiceZones(tx, cfg))).toEqual([
+      expect.objectContaining({ id: zone.id, departmentId: department.id }),
+    ]);
+  });
+
   it("keeps a primary-key clash as an internal database error", async () => {
     const cfg = { locationId: brandLocationId(await seedLocation("Zone key collision")) };
     const department = await scoped((tx) =>

@@ -399,16 +399,19 @@ export async function configureZone(
   input: { zoneId: string; departmentId: string; serviceMode?: ServiceMode | null },
 ): Promise<void> {
   const [zone] = await tx
-    .select({ id: floorZones.id })
+    .select({ id: floorZones.id, active: floorZones.active })
     .from(floorZones)
     .where(and(eq(floorZones.id, input.zoneId), eq(floorZones.locationId, cfg.locationId)));
   if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId: input.zoneId });
   const [department] = await tx
-    .select({ id: departments.id })
+    .select({ id: departments.id, active: departments.active })
     .from(departments)
     .where(and(eq(departments.id, input.departmentId), eq(departments.locationId, cfg.locationId)));
   if (department === undefined) {
     throw new AppError("department.not_found", { departmentId: input.departmentId });
+  }
+  if (zone.active && !department.active) {
+    throw new AppError("zone.department_inactive", { zoneId: input.zoneId });
   }
   // A zone moving department drops its own menus, which named the old department's list and periods.
   await tx
@@ -449,7 +452,7 @@ export async function configureZone(
 export async function createServiceZone(
   tx: Transaction,
   cfg: VenueScope,
-  input: { name: string; departmentId: string },
+  input: { name: string; departmentId: string; displayOrder?: number },
 ): Promise<{ id: string }> {
   const [department] = await tx
     .select({ id: departments.id })
@@ -467,7 +470,11 @@ export async function createServiceZone(
   try {
     const [zone] = await tx
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: input.name })
+      .values({
+        locationId: cfg.locationId,
+        name: input.name,
+        displayOrder: input.displayOrder ?? 0,
+      })
       .returning({ id: floorZones.id });
     zoneId = zone!.id;
   } catch (error) {
