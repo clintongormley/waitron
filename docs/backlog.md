@@ -1179,9 +1179,9 @@ before loading products. Adding that method to the temporary probe and waiting f
 read opens the confirmation. Follow-up: complete that accessibility fixture and assert the native
 dialog is open before its scan. The existing suite was not changed by W70a.
 
-**Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
+**Warn before discarding unsaved changes (W69, owner 2026-10-04) — DONE (#1325, 2026-10-07).**
 
-The branch implements one shared warning for staged forms, modal close requests, page navigation
+You get one shared warning for staged forms, modal close requests, page navigation
 and browser leaving across the dashboard, setup wizard, till and contributed screens. Keep
 retains the affected draft; Discard resets only that local draft before the requested leave.
 Successful writes commit independently before refresh. Forced security exits cancel pending
@@ -1194,11 +1194,12 @@ records the original failing tests, deliberate fixture changes, deletion control
 language/theme/width checks for each rollout checkpoint. Earlier rollout-status paragraphs are
 superseded by its dated receipts. The whole-branch Claude review found stale URL query writes, a copied Hours history position,
 a reused history epoch and a retained PIN owner after a forced server switch. Those findings
-have focused regression tests and installed deletion controls. PR #1325 remains a draft until its required current-head CI passes. The normal hook passed
-on `c940a9a26a69088ff51f5c79c6b6ecd484c6a7f4`; CI run `37568443521` passed every package
-test but refused dashboard branch coverage at 94.79%. Additional stale-operation, independent-write
-and busy-input cases now pass the full dashboard run: 8,371 tests, branch coverage 95%.
-The next pushed head still needs its normal hook and required CI.
+have focused regression tests and installed deletion controls. PR #1325 landed as
+`d5de03678d996e7fce04205259c93d350b7af38b`. The normal hook and every selected CI job passed
+on `31479aae30f5e29fab397b96aa30357221041243` (CI `37571245178`, CodeQL `37571242705`,
+licence `37571244942`). Earlier CI `37568443521` passed the package tests but refused dashboard
+branch coverage at 94.79%; the added stale-operation, independent-write and busy-input cases
+passed the local full dashboard run with 8,371 tests and 95% branch coverage before the final CI pass.
 
 The printer detail's inline name and network connection now register independent drafts with
 the shared leave controller. Focused browser cases cover Cancel, breadcrumb and Back decisions,
@@ -1209,7 +1210,8 @@ cover both editors through sidebar navigation, language change, sign-out, Forwar
 switching and forced session expiry. Sixteen EN/ES, light/dark, phone/desktop cases cover native
 focus, scoped accessibility and activated Chromium reload; 32 captures were inspected. The APIs
 in these checks are synthetic. The dated audit records the commands and fixture corrections.
-The remaining delivery steps are the normal push hook and current-head CI.
+The merge’s own CI is tracked separately in the lane’s progress log; a passing PR run does not
+establish the merged main result.
 
 Activated desktop Chromium checks cover reload, external navigation and closing with the
 Schedule owner; the implementation does not promise prompts on every browser or after mobile
@@ -1271,9 +1273,8 @@ The [design](superpowers/specs/2026-10-05-unsaved-changes-warning-design.md),
 [owner audit](superpowers/plans/2026-10-05-unsaved-changes-audit.md) and
 [implementation plan](superpowers/plans/2026-10-05-unsaved-changes-warning.md) retain the rollout
 inventory and dated behavioral receipts. The audit's later checkpoints supersede the earlier
-partial-rollout notes. The implementation and acceptance checks are complete on PR #1325;
-required current-head CI and landing remain. Immediate writes, read-only confirmations and
-submitted command phases keep the exemptions recorded in the design and audit.
+partial-rollout notes. The implementation and acceptance checks landed in PR #1325 after its required current-head
+checks passed. Immediate writes, read-only confirmations and submitted command phases keep the exemptions recorded in the design and audit.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
