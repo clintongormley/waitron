@@ -881,8 +881,9 @@ menu rows. A photo has a ring in the product's own colour, falling back to its c
 colour. On an owned row the product slot is a link to the product's Edit dialog on the Catalogue
 screen, which opens with its photo field focused; on an included menu's row, or for a product the
 library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide
-media in both trees when the tree's box is at most 440px wide; the product editor remains available
-through the row's Actions menu.
+media in both trees when the tree's box is at most 440px wide. In the Products list the product
+editor remains available through the row's Actions menu; a Menus Structure product row's Actions
+menu holds only Remove, so at that width the tree offers no way to open the product (backlog, A327).
 
 The grips show only in Reorder mode, so a menu is not rearranged by a stray drag while you browse
 it. The tab's toolbar starts with a Reorder icon button (a grip mark, Reordenar in Spanish; "Icon
@@ -1041,8 +1042,7 @@ Last comes a slot a product photo wide: on a category
 row it holds the category's colour square, centred; on a product row, the product's photo with a
 colour ring, or a filled colour square when it has no photo. Both use the product's own colour,
 falling back to its category's inherited colour; without either colour the frame is empty. Clicking
-the product slot opens the product's Edit dialog with its photo field focused; the slot is a link to
-that dialog's address, so it can also open in a new tab. Category squares still open their
+the product slot opens the product's Edit dialog with its photo field focused. Category squares still open their
 colour picker directly. On All products and on a category being added or renamed the slot is blank. No row draws a folder icon, though the picture that follows the pointer while you drag
 a category keeps one. Then come `--wt-space-3` and the name. So on those rows names step in by the
 table's indent per level whether the row is a category or a product, and the Name heading, which

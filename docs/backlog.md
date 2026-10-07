@@ -929,6 +929,10 @@ unused `units` property is gone (it closes W75's leftover).
   - Open: `PATCH /management-api/products/:id` (`apps/server/src/catalogue-api.ts`) now has no
     caller in `apps/` outside tests; the dashboard's `setProductColor` was its only one. Deleting
     the route, or keeping it on purpose, is not decided.
+  - Open, found during A327's look and believed to predate it (the base hid the swatch at the same
+    width): at 440px or narrower the Menus Structure tree hides every swatch, and a product row's
+    Actions menu holds only "Remove from <section>", so on a phone that tree offers no way to open
+    the product. The Products list's Actions menu still offers Edit.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
