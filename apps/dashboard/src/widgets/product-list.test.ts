@@ -2892,7 +2892,7 @@ describe("the product list as a tree", () => {
     ["en-GB", "Choose the colour"],
     ["es-ES", "Elegir el color"],
   ])(
-    "puts a colour square showing the box's colour inside the name box, for a new category and a rename (%s)",
+    "puts a colour square showing the box's colour in the named row's leading slot, for a new category and a rename (%s)",
     async (locale, label) => {
       const before = currentLocale();
       onTestFinished(() => setLocale(before));
@@ -2902,9 +2902,12 @@ describe("the product list as a tree", () => {
       });
       const square = () => {
         const box = root.querySelector('wt-input[name="category-name"]')!;
-        const button = box.querySelector<HTMLButtonElement>(
-          ':scope > [slot="end"][data-test="name-box-color"]',
-        )!;
+        expect(box.querySelector(':scope > [slot="end"]')).toBeNull();
+        const button = box
+          .closest("tr")!
+          .querySelector<HTMLButtonElement>(
+            '[part~="folder-frame"] > [data-test="name-box-color"]',
+          )!;
         return { button, chip: button.querySelector<HTMLElement>('[part~="color-swatch"]')! };
       };
       el.nameDraft = { kind: "create", parentId: "d" };
@@ -2943,7 +2946,7 @@ describe("the product list as a tree", () => {
     const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
       'wt-input[name="category-name"]',
     )!;
-    const square = box.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
+    const square = root.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
     el.addEventListener("name-color", () => (el.choosingColor = true));
     await userEvent.click(square);
     expect(focusedName(el)).toBe("category-name");
@@ -3274,6 +3277,40 @@ describe("a product's variants in the list", () => {
       arrow.getBoundingClientRect().width / 2,
     );
     expect(grip.getBoundingClientRect().right).toBeLessThan(arrow.getBoundingClientRect().left);
+  });
+
+  it("draws a product's variant arrow small and muted, in the browser's own button font", async () => {
+    const { el, root } = await mountDeli();
+    const arrow = root.querySelector<HTMLElement>('tr[data-row-key="cecina"] .tree-toggle')!;
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-text-muted)";
+    probe.style.fontSize = "var(--wt-font-size-sm)";
+    probe.style.paddingInlineEnd = "var(--wt-space-1)";
+    // A button no author style reaches carries the browser's own button font, which a product's arrow keeps.
+    const host = document.createElement("div");
+    const plainButton = host
+      .attachShadow({ mode: "open" })
+      .appendChild(document.createElement("button"));
+    el.parentElement!.append(probe, host);
+    onTestFinished(() => {
+      probe.remove();
+      host.remove();
+    });
+    const style = getComputedStyle(arrow);
+    const want = getComputedStyle(probe);
+    expect({
+      color: style.color,
+      fontSize: style.fontSize,
+      paddingInlineEnd: style.paddingInlineEnd,
+      textAlign: style.textAlign,
+      fontFamily: style.fontFamily,
+    }).toEqual({
+      color: want.color,
+      fontSize: want.fontSize,
+      paddingInlineEnd: want.paddingInlineEnd,
+      textAlign: "end",
+      fontFamily: getComputedStyle(plainButton).fontFamily,
+    });
   });
 
   it.each([
@@ -4402,7 +4439,7 @@ describe("a category row's leading slot", () => {
   );
 
   it.each([true, false])(
-    "draws one colour square on a category being renamed, the name box's own (reordering: %s)",
+    "draws one colour square on a category being renamed, the name box's own, in the row's leading slot (reordering: %s)",
     async (reordering) => {
       const { el, root } = await mountTree({
         reordering,
@@ -4415,9 +4452,111 @@ describe("a category row's leading slot", () => {
       const squares = row.querySelectorAll('[part~="color-swatch"]');
       expect(squares).toHaveLength(1);
       expect(squares[0]!.closest('[data-test="name-box-color"]')).not.toBeNull();
-      const frame = row.querySelector('[part~="folder-frame"]')!;
-      expect(frame.childElementCount).toBe(0);
+      const frames = row.querySelectorAll('[part~="folder-frame"]');
+      expect(frames).toHaveLength(1);
+      expect(frames[0]!.childElementCount).toBe(1);
+      expect(frames[0]!.firstElementChild!.getAttribute("data-test")).toBe("name-box-color");
     },
+  );
+
+  const rectValues = (rect: DOMRect) => ({
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  });
+
+  it.each([true, false])(
+    "keeps a renamed category's square where it was and starts the name box where the name started at 1280 px (reordering: %s)",
+    (reordering) =>
+      atWidth(1280, async () => {
+        const { el, root } = await mountTree({
+          reordering,
+          categories: [{ ...drinks, color: "#b12525" }, beer, food],
+        });
+        const row = 'tr[data-row-key="folder:d"]';
+        const squareAtRest = rectValues(rectOf(root, `${row} [data-test="color-d"]`));
+        const nameLeft = rectOf(root, `${row} strong`).left;
+        el.nameColor = "#b12525";
+        el.nameDraft = { kind: "rename", categoryId: "d" };
+        await el.updateComplete;
+        await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+        const square = root.querySelector<HTMLElement>(
+          `${row} [part~="folder-frame"] > [data-test="name-box-color"]`,
+        )!;
+        expect(square).not.toBeNull();
+        expect(rectValues(square.getBoundingClientRect())).toEqual(squareAtRest);
+        expect(rectOf(root, `${row} wt-input[name="category-name"]`).left).toBe(nameLeft);
+        expect(root.querySelector('wt-input[name="category-name"] > [slot="end"]')).toBeNull();
+      }),
+  );
+
+  it("draws a renamed category's arrow in the size, colour and font of its arrow at rest", async () => {
+    const { el, root } = await mountTree({
+      categories: [{ ...drinks, color: "#b12525" }, beer, food],
+    });
+    const row = 'tr[data-row-key="folder:d"]';
+    const look = (selector: string) => {
+      const style = getComputedStyle(root.querySelector<HTMLElement>(selector)!);
+      return { fontSize: style.fontSize, color: style.color, fontFamily: style.fontFamily };
+    };
+    const atRest = look(`${row} .tree-arrow`);
+    el.nameDraft = { kind: "rename", categoryId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    expect(look(`${row} .tree-toggle`)).toEqual(atRest);
+  });
+
+  it("puts a new category's square in its leading slot, lined up with its siblings' squares, at 1280 px", () =>
+    atWidth(1280, async () => {
+      const { el, root } = await mountTree({
+        categories: [{ ...drinks, color: "#b12525" }, beer, food],
+      });
+      el.nameDraft = { kind: "create", parentId: null };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      const square = root.querySelector<HTMLElement>(
+        'tr[data-row-key="draft:new"] [part~="folder-frame"] > [data-test="name-box-color"]',
+      )!;
+      expect(square).not.toBeNull();
+      const sibling = rectOf(root, '[data-test="color-d"]');
+      expect(square.getBoundingClientRect().left).toBe(sibling.left);
+      expect(square.getBoundingClientRect().width).toBe(sibling.width);
+      expect(root.querySelector('wt-input[name="category-name"] > [slot="end"]')).toBeNull();
+    }));
+
+  it.each(
+    [
+      { kind: "rename", categoryId: "d" } as const,
+      { kind: "create", parentId: "d" } as const,
+    ].flatMap((draft) => [true, false].map((reordering) => ({ draft, reordering }))),
+  )(
+    "shows the square in the row's leading slot above the name box at 390 px ($draft.kind, reordering: $reordering)",
+    ({ draft, reordering }) =>
+      atWidth(390, async () => {
+        const { el, root, table } = await mountTree({
+          reordering,
+          categories: [{ ...drinks, color: "#b12525" }, beer, food],
+        });
+        await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+        expect(window.innerWidth).toBe(390);
+        el.nameDraft = draft;
+        await el.updateComplete;
+        await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+        const box = root.querySelector<HTMLElement>('wt-input[name="category-name"]')!;
+        const row = box.closest("tr")!;
+        const square = row.querySelector<HTMLElement>(
+          '[part~="folder-frame"] > [data-test="name-box-color"]',
+        )!;
+        expect(square).not.toBeNull();
+        const rect = square.getBoundingClientRect();
+        expect(rect.width).toBeGreaterThan(0);
+        expect(rect.height).toBeGreaterThan(0);
+        expect(rect.bottom).toBeLessThanOrEqual(box.getBoundingClientRect().top);
+        const cell = row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect();
+        expect(box.getBoundingClientRect().left).toBeCloseTo(cell.left, 0);
+        expect(box.querySelector(':scope > [slot="end"]')).toBeNull();
+      }),
   );
 });
 

@@ -1184,6 +1184,11 @@ async function rowChip(el: CatalogueBrowser, id: string) {
     `[data-test="color-${id}"] [part~="color-swatch"]`,
   )!;
 }
+async function boxSquare(el: CatalogueBrowser) {
+  return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
+    '[data-test="name-box-color"]',
+  )!;
+}
 async function boxChip(el: CatalogueBrowser) {
   return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
     '[data-test="name-box-color"] [part~="color-swatch"]',
@@ -1303,7 +1308,7 @@ it.each([
     await menuAction(el, "add-category-d");
     const box = await nameBox(el);
     await userEvent.keyboard("Juice");
-    await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+    await userEvent.click(await boxSquare(el));
     const form = await colorChooser(el);
     expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe(heading);
     expect(form.shadowRoot!.querySelector('[data-color=""]')!.getAttribute("aria-checked")).toBe(
@@ -1328,7 +1333,7 @@ it("hands the cursor back to a new category's box, its name kept, when its colou
   await menuAction(el, "add-category-d");
   const box = await nameBox(el);
   await userEvent.keyboard("Juice");
-  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  await userEvent.click(await boxSquare(el));
   await colorChooser(el);
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
@@ -1348,9 +1353,9 @@ it("opens no colour chooser from a box whose name is already saving", async () =
     () => new Promise((resolve) => (finish = resolve)),
   );
   await menuAction(el, "add-category-d");
-  const box = await nameBox(el);
+  await nameBox(el);
   await userEvent.keyboard("Juice{Enter}");
-  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  await userEvent.click(await boxSquare(el));
   await el.updateComplete;
   expect(chooserClosed(el)).toBe(true);
   finish(folder("j", "Juice", "d"));
@@ -1363,8 +1368,8 @@ it("opens no colour chooser from a box whose name is already saving", async () =
 it("drops a colour chosen in a box that is then left with Esc", async () => {
   const el = await mountBrowser();
   await menuAction(el, "add-category-d");
-  const box = await nameBox(el);
-  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  await nameBox(el);
+  await userEvent.click(await boxSquare(el));
   await choose(el, "#256bb1");
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   await nameBox(el);
@@ -1384,9 +1389,9 @@ it("sends a rename's colour with its name only when the box changed it", async (
     categories: [{ ...folder("d", "Drinks", null), color: "#b12525" }, ...CATEGORIES.slice(1)],
   });
   await menuAction(el, "rename-d");
-  let box = await nameBox(el);
+  await nameBox(el);
   expect(getComputedStyle(await boxChip(el)).backgroundColor).toBe("rgb(177, 37, 37)");
-  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  await userEvent.click(await boxSquare(el));
   const form = await colorChooser(el);
   expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Colour of Drinks");
   await choose(el, "#256bb1");
@@ -1396,8 +1401,8 @@ it("sends a rename's colour with its name only when the box changed it", async (
   await vi.waitFor(() => expect(el.api.updateCategory).toHaveBeenCalledOnce());
   await vi.waitFor(async () => expect(await rowKeys(el)).toContain("folder:d"));
   await menuAction(el, "rename-d");
-  box = await nameBox(el);
-  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  await nameBox(el);
+  await userEvent.click(await boxSquare(el));
   await choose(el, "#b12525");
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   await nameBox(el);

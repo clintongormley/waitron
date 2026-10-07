@@ -4,6 +4,10 @@
 > is superseded. Unsupported live menu documents refuse with `menu.reset_required`; reset the
 > venue. See [the current contract](../../developers/product-categories.md).
 
+> **2026-10-07, A328:** the category name box no longer holds a colour square at its end; while a
+> category is being added or renamed, the box's square sits in the row's leading colour-square
+> slot. See [product-categories.md](../../developers/product-categories.md).
+
 Status: design, 2026-10-05, amended the same day after the plan review. Branch
 `feat/product-colours`, rebased onto `main` c2b886e99, which holds W72e (#1241, f556de968: the
 Products tree's category name box keeps its refusal in view at 390 px). Its own PR, before W93. W88

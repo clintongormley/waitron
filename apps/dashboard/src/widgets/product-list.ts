@@ -145,6 +145,12 @@ export class ProductList extends LitElement {
         width: var(--wt-tap-min);
         margin-inline-end: var(--wt-space-3);
       }
+      /* As a block, the frame's baseline is that of the line its middle-aligned square sits on, as a
+         resting row's is, so a naming row lines up by the same baseline. */
+      wt-data-table::part(naming-frame) {
+        display: inline-block;
+        align-self: baseline;
+      }
       wt-data-table::part(tree-heading) {
         margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
       }
@@ -250,7 +256,13 @@ export class ProductList extends LitElement {
         display: inline-flex;
         flex-direction: column;
       }
+      /* A category's toggle, drawn while it is renamed, takes its resting arrow's font, so the row
+         keeps its baseline and its square stays put. */
       wt-data-table::part(tree-toggle) {
+        font-family: inherit;
+      }
+      wt-data-table::part(variant-toggle) {
+        font-family: revert;
         padding-inline-end: var(--wt-space-1);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -298,6 +310,9 @@ export class ProductList extends LitElement {
       wt-data-table[narrow]::part(name-after) {
         display: block;
         overflow-wrap: anywhere;
+      }
+      wt-data-table[narrow]::part(naming-frame) {
+        display: inline-block;
       }
       wt-data-table[narrow]::part(name-box) {
         grid-row: 2;
@@ -695,10 +710,31 @@ export class ProductList extends LitElement {
     this.#send("name-cancel", {});
   }
 
+  /** The open name box's colour square, in the row's leading slot. A press keeps the cursor in the
+   * input; it is no Tab stop, so Tab still leaves the box. On a phone the slot shows only while
+   * naming, as `naming-frame`. */
+  #nameFrame() {
+    return html`<span part="folder-frame naming-frame"
+      ><button
+        part="swatch-button"
+        type="button"
+        tabindex="-1"
+        data-test="name-box-color"
+        aria-label=${t("folders.choose_color")}
+        @mousedown=${(event: Event) => event.preventDefault()}
+        @click=${(event: Event) => {
+          event.stopPropagation();
+          if (this.#nameSent) return;
+          this.#send("name-color", {});
+        }}
+      >
+        ${swatchChip(this.nameColor)}
+      </button></span
+    >`;
+  }
+
   #nameBox() {
     const draft = this.nameDraft;
-    // A press on the square keeps the cursor in the input. The square is no Tab stop, so Tab still
-    // leaves the box; the keyboard reaches a category's colour by its row's square.
     return html`<wt-input
       part="name-box"
       name="category-name"
@@ -726,23 +762,7 @@ export class ProductList extends LitElement {
         if (this.#nameValue.trim() === "") this.#cancelName();
         else this.#commitName();
       }}
-      ><button
-        slot="end"
-        part="swatch-button"
-        type="button"
-        tabindex="-1"
-        data-test="name-box-color"
-        aria-label=${t("folders.choose_color")}
-        @mousedown=${(event: Event) => event.preventDefault()}
-        @click=${(event: Event) => {
-          event.stopPropagation();
-          if (this.#nameSent) return;
-          this.#send("name-color", {});
-        }}
-      >
-        ${swatchChip(this.nameColor)}
-      </button></wt-input
-    >`;
+    ></wt-input>`;
   }
 
   #watchTable(): void {
@@ -1213,7 +1233,7 @@ export class ProductList extends LitElement {
         if (row.kind === "draft")
           return column.key === "name"
             ? html`<span part="folder-cell naming"
-                >${this.#nameLine()}${folderFrame()}${this.#nameBox()}</span
+                >${this.#nameLine()}${this.#nameFrame()}${this.#nameBox()}</span
               >`
             : nothing;
         if (row.kind === "root") {
@@ -1254,7 +1274,8 @@ export class ProductList extends LitElement {
           return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
             >${
               this.#renaming(folder.id)
-                ? html`${this.#nameLine()}${folderFrame()}${this.#nameBox()}<span part="name-after"
+                ? html`${this.#nameLine()}${this.#nameFrame()}${this.#nameBox()}<span
+                      part="name-after"
                       >${after}</span
                     >`
                 : html`${folderFrame(
@@ -1448,6 +1469,7 @@ export class ProductList extends LitElement {
             : row.kind === "product"
               ? "click"
               : "none"}
+        .rowToggleParts=${(row: ListRow) => (row.kind === "product" ? "variant-toggle" : "")}
         .rowToggleLabel=${(row: ListRow, expanded: boolean) =>
           row.kind === "folder"
             ? t(expanded ? "folders.close_named" : "folders.open_named").replace(
