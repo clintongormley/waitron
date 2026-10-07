@@ -1,5 +1,6 @@
 import { expect, it, onTestFinished } from "vitest";
 import {
+  byLabel,
   categoryAncestors,
   categoryPath,
   categoryPathSearchText,
@@ -22,6 +23,47 @@ const child: CategorySummary = {
   parentId: "food",
   color: null,
 };
+
+it.each([",", "."])("orders decimal weights by value with a %s separator", (separator) => {
+  const names = [`0${separator}5 kg`, `1${separator}2 kg`, `0${separator}25 kg`];
+  expect(names.sort(byLabel)).toEqual([
+    `0${separator}25 kg`,
+    `0${separator}5 kg`,
+    `1${separator}2 kg`,
+  ]);
+});
+
+it("compares both decimal separators in names containing several numbers", () => {
+  expect(["Pack 10 / 0,25 kg", "Pack 2 / 0.5 kg", "Pack 2 / 0,25 kg"].sort(byLabel)).toEqual([
+    "Pack 2 / 0,25 kg",
+    "Pack 2 / 0.5 kg",
+    "Pack 10 / 0,25 kg",
+  ]);
+});
+
+it("keeps integer names in number order and text insensitive to case and accents", () => {
+  expect(["Table 10", "Table 2", "Table 1"].sort(byLabel)).toEqual([
+    "Table 1",
+    "Table 2",
+    "Table 10",
+  ]);
+  expect(byLabel("CAFÉ", "cafe")).toBe(0);
+  expect(byLabel("", "")).toBe(0);
+  expect(byLabel("", "Table 2")).toBeLessThan(0);
+  expect(byLabel("Table 2", "")).toBeGreaterThan(0);
+});
+
+it("compares equal decimal values by the remaining text, including leading and trailing zeros", () => {
+  expect(byLabel("Pack 00,50 A", "Pack 0.5 B")).toBeLessThan(0);
+  expect(byLabel("Pack 00,50", "Pack 0.5")).toBe(0);
+  expect(byLabel("Pack 2", "Pack 2.0")).toBe(0);
+  expect(byLabel("Pack 2.5", "Pack 2.5 kg")).toBeLessThan(0);
+});
+
+it("keeps decimal differences smaller than floating-point precision in the name order", () => {
+  expect(byLabel("0.10000000000000001 kg", "0,10000000000000002 kg")).toBeLessThan(0);
+  expect(byLabel("9007199254740993.0 kg", "9007199254740992,9 kg")).toBeGreaterThan(0);
+});
 
 it("names a category by the path of names down to it, joined by the shared separator or the one it is given", () => {
   expect(categoryPath(child, [food, child])).toBe("Food › Sandwiches");

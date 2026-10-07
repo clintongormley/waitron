@@ -2423,11 +2423,14 @@ category that does not exist (`packages/db/src/schema/catalogue.ts:51`, a foreig
 so this is expected only while the dashboard's category list is behind.
 
 **Products: a product's variants are listed by name — DONE (W85, #1200); replaced by W85a (#1207,
-owner 2026-10-05), which lists them in the product's own order.** Left open, for the owner to
-decide whether it needs an item: the dashboard's number-aware name order (`byLabel`) reads each run
-of digits as a whole number, so a decimal weight sorts wrongly — "0,5 kg" before "0,25 kg" (tried
-in Node with the same comparison, not in the dashboard). The rest of the dashboard sorts names this
-way; since W85a it no longer applies to a product's variants.
+owner 2026-10-05), which lists them in the product's own order.** The decimal name-order
+follow-up is DONE (A300): `byLabel` compares number runs as exact decimals with either comma or
+point, so "0,25 kg" precedes "0,5 kg". Chromium checks cover both separators, mixed names, equal
+values, integer order and differences below floating-point precision. This changes category
+pickers in the product editor and catalogue browser, the section's Add products list and category
+filter, menu price section/category filters, and the member-list editor's product/section choices
+until that unused editor is retired by A299. `wt-data-table` uses its own comparison and is outside
+this item's scope. Since W85a, product variants retain the product's own order.
 
 **Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
 DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
