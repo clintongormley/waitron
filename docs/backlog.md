@@ -4794,8 +4794,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
   access and switching DONE (W97, #1311; a venue reset is needed after it, its profiles need the new
-  action flags); equipment LANDED except NFC (W100, #1332); transfers IN PROGRESS
-  in lane D on `feat/departmental-tab-transfers`. The branch has request storage, directional
+  action flags); equipment LANDED except NFC (W100, #1332); transfers DONE (W101).
+  Transfers have request storage, directional
   settings, withdrawal, manager settings routes and editor, usable receiving-profile choices,
   configuration export/import and the acceptance/decline service. The editor protects staged desk and
   destination choices and reports field refusals. Authenticated till writes now request, withdraw,
@@ -4845,8 +4845,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   local copies for explicit review and dismissal, rather than silently lost or resubmitted. These
   copies remain in browser memory across sign-out; reloading the page loses them. Removing a sending
   direction prevents new requests and leaves existing pending intent actionable; it does not revoke
-  requests already sent. The whole-branch run-it review and focused fixes are complete; the normal
-  push hook and current-head CI remain before landing. Party-linked bills are refused before
+  requests already sent. Party-linked bills are refused before
   queuing, and again at acceptance, rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
