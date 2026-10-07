@@ -124,6 +124,27 @@ const weekOf = (fill: (weekday: number) => MenuSlot[]): MenuWeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: fill(weekday) }));
 
 describe("service-period writers", () => {
+  it("returns only the new period id and updates without a response body", async () => {
+    const v = await venue({ timetable: false });
+    const created = await scoped((tx) =>
+      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: "Lunch",
+        menuId: v.menus.Almuerzo,
+        staffMenuIds: [],
+      }),
+    );
+    expect(created).toEqual({ id: expect.any(String) });
+    await expect(
+      scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { name: "Afternoon" })),
+    ).resolves.toBeUndefined();
+    expect(
+      await db
+        .select({ name: menuPeriods.name })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, created.id)),
+    ).toEqual([{ name: "Afternoon" }]);
+  });
+
   it("checks an end equal to the changeover on the following calendar date", async () => {
     expect(localTimeOccurrences("2026-03-28", "02:30", ZONE)).toHaveLength(1);
     expect(localTimeOccurrences("2026-03-29", "02:30", ZONE)).toEqual([]);
@@ -219,6 +240,36 @@ describe("service-period writers", () => {
     },
   );
 
+  it("always creates a new period even if an untyped caller sends an existing id", async () => {
+    const v = await venue({ timetable: false });
+    const original = await scoped((tx) =>
+      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: "Lunch",
+        menuId: v.menus.Almuerzo,
+        staffMenuIds: [],
+      }),
+    );
+    const created = await scoped((tx) =>
+      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        id: original.id,
+        name: "Afternoon",
+        menuId: v.menus.Café,
+        staffMenuIds: [],
+      } as never),
+    );
+    expect(created.id).not.toBe(original.id);
+    expect(
+      await db
+        .select({ id: menuPeriods.id, name: menuPeriods.name, menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.departmentId, v.restaurant))
+        .orderBy(menuPeriods.name),
+    ).toEqual([
+      { id: created.id, name: "Afternoon", menuId: v.menus.Café },
+      { id: original.id, name: "Lunch", menuId: v.menus.Almuerzo },
+    ]);
+  });
+
   it("refuses explicit null fields rather than treating them as omitted", async () => {
     const v = await venue({ timetable: false });
     const { id } = await scoped((tx) =>
@@ -307,7 +358,6 @@ describe("service-period writers", () => {
     await expect(
       scoped((tx) =>
         saveMenuPeriod(tx, v.cfg, v.restaurant, {
-          id: null,
           name: "Lunch",
           menuId: v.menus.Bebidas,
           staffMenuIds: [],
@@ -321,7 +371,6 @@ describe("service-period writers", () => {
     const v = await venue({ timetable: false });
     const { id } = await scoped((tx) =>
       saveMenuPeriod(tx, v.cfg, v.restaurant, {
-        id: null,
         name: "Lunch",
         menuId: v.menus.Bebidas,
         staffMenuIds: [v.menus.Café],
@@ -394,7 +443,6 @@ describe("service-period writers", () => {
     for (let index = 0; index < 7; index++) {
       const { id } = await scoped((tx) =>
         saveMenuPeriod(tx, v.cfg, v.restaurant, {
-          id: null,
           name: `Period ${index}`,
           menuId: v.menus.Bebidas,
           staffMenuIds: [],
@@ -417,7 +465,6 @@ describe("service-period writers", () => {
       await expect(
         scoped((tx) =>
           saveMenuPeriod(tx, v.cfg, v.restaurant, {
-            id: null,
             name: "Lunch",
             menuId: kind === "customer" ? v.menus.Café : v.menus.Bebidas,
             staffMenuIds: kind === "staff" ? [v.menus.Café] : [],
@@ -440,7 +487,6 @@ describe("service-period writers", () => {
       await expect(
         scoped((tx) =>
           saveMenuPeriod(tx, v.cfg, v.restaurant, {
-            id: null,
             name: "Lunch",
             menuId: v.menus.Bebidas,
             staffMenuIds: kind === "customer" ? [v.menus.Bebidas] : [v.menus.Café, v.menus.Café],
@@ -510,7 +556,8 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
     const v = { cfg, locationId, restaurant, deli, barra, sala, terraza, mostrador, menus };
     if (options.timetable === false) return { ...v, periods: null };
     const period = async (departmentId: string, name: string, menu: MenuName) =>
-      (await saveMenuPeriod(tx, cfg, departmentId, { id: null, name, menuId: menus[menu] })).id;
+      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menus[menu], staffMenuIds: [] }))
+        .id;
     const periods = {
       mananas: await period(restaurant, "Mañanas", "Desayunos"),
       mediodia: await period(restaurant, "Mediodía", "Almuerzo"),
@@ -960,9 +1007,9 @@ describe("the timetable's writers", () => {
     await expect(
       scoped((tx) =>
         saveMenuPeriod(tx, v.cfg, v.restaurant, {
-          id: null,
           name: "Para llevar",
           menuId: absentMenu,
+          staffMenuIds: [],
         }),
       ),
     ).rejects.toMatchObject({
@@ -1017,10 +1064,10 @@ describe("the timetable's writers", () => {
       });
     await expect(
       scoped((tx) =>
-        saveMenuPeriod(tx, v.cfg, v.restaurant, {
-          id: other.periods.mananas,
+        updateMenuPeriod(tx, v.cfg, other.periods.mananas, {
           name: "Mañanas",
           menuId: menus.Desayunos,
+          staffMenuIds: [],
         }),
       ),
     ).rejects.toMatchObject({
@@ -1030,9 +1077,9 @@ describe("the timetable's writers", () => {
     await expect(
       scoped((tx) =>
         saveMenuPeriod(tx, v.cfg, other.restaurant, {
-          id: null,
           name: "Tardes",
           menuId: menus.Desayunos,
+          staffMenuIds: [],
         }),
       ),
     ).rejects.toMatchObject({
@@ -1045,13 +1092,18 @@ describe("the timetable's writers", () => {
     const v = await timed();
     const { menus, periods } = v;
     const renamed = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
-        id: periods.noches,
+      updateMenuPeriod(tx, v.cfg, periods.noches, {
         name: " Cenas ",
         menuId: menus.Cócteles,
       }),
     );
-    expect(renamed).toEqual({ id: periods.noches, name: "Cenas", menuId: menus.Cócteles });
+    expect(renamed).toBeUndefined();
+    expect(
+      await db
+        .select({ name: menuPeriods.name, menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, periods.noches)),
+    ).toEqual([{ name: "Cenas", menuId: menus.Cócteles }]);
     expect((await resolve(v, v.sala, madrid(MONDAY, "18:30"))).defaultMenuId).toBe(menus.Cócteles);
     const taken = {
       code: "menu_period.name_taken",
@@ -1064,29 +1116,36 @@ describe("the timetable's writers", () => {
       [null, "  ", invalid("name")],
     ] as const)
       await expect(
-        scoped((tx) => saveMenuPeriod(tx, v.cfg, v.restaurant, { id, name, menuId: menus.Café })),
+        scoped<unknown>((tx) =>
+          id === null
+            ? saveMenuPeriod(tx, v.cfg, v.restaurant, {
+                name,
+                menuId: menus.Café,
+                staffMenuIds: [],
+              })
+            : updateMenuPeriod(tx, v.cfg, id, { name, menuId: menus.Café }),
+        ),
       ).rejects.toMatchObject(refusal);
     // The same name in another department is its own period.
     await scoped((tx) =>
       saveMenuPeriod(tx, v.cfg, v.deli, {
-        id: null,
         name: "Mañanas",
+        menuId: menus["Deli para llevar"],
+        staffMenuIds: [],
+      }),
+    );
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, periods.noches, {
+        name: "Noches",
         menuId: menus["Deli para llevar"],
       }),
     );
-    // A period moved to a department other than its own is unknown there.
-    await expect(
-      scoped((tx) =>
-        saveMenuPeriod(tx, v.cfg, v.deli, {
-          id: periods.noches,
-          name: "Noches",
-          menuId: menus["Deli para llevar"],
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: "menu_period.not_found",
-      params: { periodId: periods.noches },
-    });
+    expect(
+      await db
+        .select({ departmentId: menuPeriods.departmentId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, periods.noches)),
+    ).toEqual([{ departmentId: v.restaurant }]);
   });
 
   it("keep a period's stored name when only its menu changes, and its stored menu when only its name does", async () => {
@@ -1098,10 +1157,22 @@ describe("the timetable's writers", () => {
     );
     expect(
       await scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: menus.Cócteles })),
-    ).toEqual({ id: periods.noches, name: "Cenas", menuId: menus.Cócteles });
+    ).toBeUndefined();
+    expect(
+      await db
+        .select({ name: menuPeriods.name, menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, periods.noches)),
+    ).toEqual([{ name: "Cenas", menuId: menus.Cócteles }]);
     expect(
       await scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { name: "Noches tarde" })),
-    ).toEqual({ id: periods.noches, name: "Noches tarde", menuId: menus.Cócteles });
+    ).toBeUndefined();
+    expect(
+      await db
+        .select({ name: menuPeriods.name, menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, periods.noches)),
+    ).toEqual([{ name: "Noches tarde", menuId: menus.Cócteles }]);
     const model = await scoped((tx) => readMenuTimetableModel(tx, v.cfg, AT));
     const restaurant = model.departments.find((entry) => entry.id === v.restaurant)!;
     expect(restaurant.periods.find((period) => period.id === periods.noches)).toMatchObject({

@@ -226,7 +226,8 @@ async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
     await setDepartmentAllDayMenu(tx, cfg, deli, menus["Deli para llevar"]);
     if (options.timetable) {
       const period = async (name: string, menu: MenuName) =>
-        (await saveMenuPeriod(tx, cfg, restaurant, { id: null, name, menuId: menus[menu] })).id;
+        (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId: menus[menu], staffMenuIds: [] }))
+          .id;
       const mananas = await period("Mañanas", "Desayunos");
       const mediodia = await period("Mediodía", "Almuerzo");
       await replaceMenuWeek(

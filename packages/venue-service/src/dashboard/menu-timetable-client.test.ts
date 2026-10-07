@@ -16,11 +16,9 @@ const PATH = "/management-api/venue-service/menu-timetable";
 
 describe("MenuTimetableApi writes", () => {
   it("sends each write to its route with exactly its body, encoding ids into the path", async () => {
-    const period = { id: "p1", name: "Mañanas", menuId: "m1" };
+    const period = { id: "p1" };
     const request = vi.fn(async (_path: string, method: string) =>
-      method === "POST" || (method === "PATCH" && _path.includes("/menu-periods/"))
-        ? period
-        : undefined,
+      method === "POST" ? period : undefined,
     );
     const api = new MenuTimetableApi(request as DashboardRequest);
     const slot = { periodId: "p1", startsAt: "08:00", endsAt: "12:00" };
@@ -28,7 +26,8 @@ describe("MenuTimetableApi writes", () => {
     await api.setDepartmentAllDayMenu("d1", null);
     await api.setZoneAllDayMenu("z1", "m1");
     expect(await api.createPeriod("d1", { name: "Mañanas", menuId: "m1" })).toEqual(period);
-    expect(await api.updatePeriod("p1", { name: "Mañanas", menuId: "m1" })).toEqual(period);
+    const updated: void = await api.updatePeriod("p1", { name: "Mañanas", menuId: "m1" });
+    expect(updated).toBeUndefined();
     await api.deletePeriod("p1");
     await api.saveWeek("d1", [{ weekday: 1, slots: [slot] }]);
     await api.saveDateMenus("s1", "d1", [slot]);

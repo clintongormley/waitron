@@ -103,7 +103,11 @@ async function routed() {
     await setDepartmentAllDayMenu(tx, cfg, restaurant, almuerzo);
     await setDepartmentMenus(tx, cfg, deli, [deliParaLlevar]);
     const mananas = (
-      await saveMenuPeriod(tx, cfg, restaurant, { id: null, name: "Mañanas", menuId: desayunos })
+      await saveMenuPeriod(tx, cfg, restaurant, {
+        name: "Mañanas",
+        menuId: desayunos,
+        staffMenuIds: [],
+      })
     ).id;
     const christmas = (
       await saveSpecialDate(
@@ -184,15 +188,21 @@ describe("the menu timetable routes", () => {
       menuId: r.almuerzo,
     });
     expect(created.status).toBe(201);
-    const mediodia = (await created.json()) as { id: string; name: string; menuId: string };
-    expect(mediodia).toEqual({ id: mediodia.id, name: "Mediodía", menuId: r.almuerzo });
+    const mediodia = (await created.json()) as { id: string };
+    expect(mediodia).toEqual({ id: expect.any(String) });
+    expect(
+      restaurantOf(await r.model(), r).periods.find((period) => period.id === mediodia.id),
+    ).toMatchObject({ name: "Mediodía", menuId: r.almuerzo });
 
     const renamed = await r.send("PATCH", `/menu-periods/${mediodia.id}`, r.manager, {
       name: "Comidas",
       menuId: r.cafe,
     });
-    expect(renamed.status).toBe(200);
-    expect(await renamed.json()).toEqual({ id: mediodia.id, name: "Comidas", menuId: r.cafe });
+    expect(renamed.status).toBe(204);
+    expect(await renamed.text()).toBe("");
+    expect(
+      restaurantOf(await r.model(), r).periods.find((period) => period.id === mediodia.id),
+    ).toMatchObject({ name: "Comidas", menuId: r.cafe });
 
     const monday = [{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }];
     await answers(
@@ -239,21 +249,21 @@ describe("the menu timetable routes", () => {
         name: "Desayunos tempranos",
         menuId: r.desayunos,
       }),
-      200,
+      204,
     );
     const pointed = await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
       menuId: r.cafe,
     });
-    expect(pointed.status).toBe(200);
-    expect(await pointed.json()).toEqual({
-      id: r.mananas,
-      name: "Desayunos tempranos",
-      menuId: r.cafe,
-    });
+    expect(pointed.status).toBe(204);
+    expect(await pointed.text()).toBe("");
+    expect(
+      restaurantOf(await r.model(), r).periods.find((period) => period.id === r.mananas),
+    ).toMatchObject({ name: "Desayunos tempranos", menuId: r.cafe });
     const renamed = await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
       name: "Mañanas",
     });
-    expect(await renamed.json()).toEqual({ id: r.mananas, name: "Mañanas", menuId: r.cafe });
+    expect(renamed.status).toBe(204);
+    expect(await renamed.text()).toBe("");
     expect(
       restaurantOf(await r.model(), r).periods.find((period) => period.id === r.mananas),
     ).toMatchObject({ name: "Mañanas", menuId: r.cafe });
