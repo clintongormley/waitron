@@ -165,6 +165,13 @@ function requireMode(value: unknown, field: string): ServiceMode {
   return value as ServiceMode;
 }
 
+function requireDisplayOrder(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new AppError("management.request_invalid", { field: "displayOrder" });
+  }
+  return value;
+}
+
 const MAX_RELEASE_REMINDER_MINUTES = 120;
 
 function requireReleaseReminderMinutes(value: unknown): number | null {
