@@ -11,6 +11,7 @@ import {
   menuDocumentHash,
   publishMenu,
   readContentLanguages,
+  readReceiptLanguage,
 } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { seedFloor } from "./seed-floor.js";
@@ -48,7 +49,7 @@ export async function seedDemoRestaurant(
   const { locationId } = venue;
   demoSeedEnvironment(process.env);
 
-  const products = await withTransaction(db, async (tx) => {
+  const { products, invoiceLocale } = await withTransaction(db, async (tx) => {
     const { productsByImage, menuIds, stationIds } = await seedCatalogues(tx, {
       locationId,
       locale,
@@ -77,7 +78,10 @@ export async function seedDemoRestaurant(
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "demo-seed");
     }
-    return (await listAvailableProducts(tx, locationId)).products;
+    return {
+      products: (await listAvailableProducts(tx, locationId)).products,
+      invoiceLocale: (await readReceiptLanguage(tx, locationId)).locale,
+    };
   });
 
   const salesProducts: SeedSalesProduct[] = products.map((p) => ({
@@ -93,7 +97,7 @@ export async function seedDemoRestaurant(
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
     },
-    locale,
+    invoiceLocale,
     days: salesDays,
     products: salesProducts,
   });

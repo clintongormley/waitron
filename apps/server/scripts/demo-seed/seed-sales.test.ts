@@ -89,7 +89,7 @@ describe("seedSales", () => {
 
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
-      locale: LOCALE,
+      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
       days: 3,
       products: PRODUCTS,
     });
@@ -168,7 +168,7 @@ describe("seedSales", () => {
     // the future, so only yesterday guarantees any.
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
-      locale: LOCALE,
+      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
       days: 2,
       products: PRODUCTS,
     });
@@ -191,7 +191,12 @@ describe("seedSales", () => {
     vi.stubEnv("WAITRON_ENV", "production");
 
     await expect(
-      seedSales(suite.db, { venue: venueFor(venue), locale: LOCALE, days: 3, products: PRODUCTS }),
+      seedSales(suite.db, {
+        venue: venueFor(venue),
+        invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+        days: 3,
+        products: PRODUCTS,
+      }),
     ).rejects.toMatchObject({ code: "deployment.demo_data_refused" });
 
     const read = await withTransaction(suite.db, async (tx) => ({
@@ -209,7 +214,7 @@ describe("seedSales", () => {
 
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
-      locale: LOCALE,
+      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
       days: 0,
       products: PRODUCTS,
     });

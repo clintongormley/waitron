@@ -18,6 +18,7 @@ import type { Database } from "@waitron/db";
 import {
   customerPresentationText,
   localCalendarDate,
+  readContentLanguages,
   toInvoiceLineDescriptions,
   vatRateOn,
 } from "@waitron/catalogue";
@@ -40,7 +41,6 @@ import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
 import type { DeploymentEnvironment } from "../../src/config.js";
 import "../../src/errors.js";
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 /** `seriesId` is the standard series, the first of `applyVenue`'s `seriesIds`. */
 export interface SeedSalesVenue {
@@ -67,7 +67,11 @@ export interface BackDatingClock {
 
 export interface SeedSalesInput {
   venue: SeedSalesVenue;
-  locale: SeedLocale;
+  /**
+   * The full receipt-language tag (`ca-ES`) each line's description is stored under; a dish with no
+   * text in it falls back to the content default.
+   */
+  invoiceLocale: string;
   /** How many trailing days to fill. `0` writes nothing and returns `{ count: 0 }`. */
   days: number;
   /** The pool of items sales are drawn from — must be non-empty when `days > 0`. */
@@ -153,7 +157,7 @@ export function demoSeedEnvironment(env: NodeJS.ProcessEnv): DeploymentEnvironme
 /** Returns how many sales were recorded. */
 export async function seedSales(
   db: Database,
-  { venue, locale, days, products, clock }: SeedSalesInput,
+  { venue, invoiceLocale, days, products, clock }: SeedSalesInput,
 ): Promise<{ count: number }> {
   const environment = demoSeedEnvironment(process.env);
   if (days <= 0) {
@@ -163,8 +167,11 @@ export async function seedSales(
     throw new Error("seedSales: products must be non-empty when days > 0");
   }
 
-  // A filed sale takes the FULL tag (`es-ES`), not the bare content locale.
-  const invoiceLocale = SEED_INVOICE_LOCALE[locale];
+  // Falls back to the content default, as a till sale does (`working-order.ts`): the demo writes its
+  // text in every content language, and the receipt language may not be one of them.
+  const { defaultLanguage } = await withTransaction(db, (tx) =>
+    readContentLanguages(tx, invoiceLocale),
+  );
 
   const backDating = clock ?? backDatingClock();
   const backend = new VerifactuBackend({
@@ -238,10 +245,10 @@ export async function seedSales(
                 variantCustomerName: null,
                 variantKitchenName: null,
               },
-              invoiceLocale,
+              defaultLanguage,
             ).product,
             [invoiceLocale],
-            invoiceLocale,
+            defaultLanguage,
           ),
           quantity: "1",
           unitPrice: base,
