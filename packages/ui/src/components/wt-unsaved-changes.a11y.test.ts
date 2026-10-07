@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { userEvent } from "vitest/browser";
+import type { WtButton } from "./wt-button.js";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import { WtUnsavedChanges } from "./wt-unsaved-changes.js";
@@ -52,6 +54,22 @@ describe.each(["light", "dark"] as const)("unsaved changes a11y (%s)", (theme) =
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     await modal.updateComplete;
     expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(false);
+    await expectNoA11yViolations(host);
+  });
+  test("the Discard button under the pointer", async () => {
+    const el = (await mountThemed(
+      '<wt-unsaved-changes heading="Discard unsaved changes?" message="Your changes have not been saved." keepLabel="Keep editing" discardLabel="Discard changes"></wt-unsaved-changes>',
+      theme,
+    )) as WtUnsavedChanges;
+    el.open = true;
+    await el.updateComplete;
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    const discard = modal.querySelector<WtButton>("[data-choice=discard]")!;
+    await discard.updateComplete;
+    const inner = discard.shadowRoot!.querySelector("button")!;
+    await userEvent.hover(inner);
+    expect(inner.matches(":hover")).toBe(true);
     await expectNoA11yViolations(host);
   });
 });

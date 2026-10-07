@@ -47,6 +47,8 @@ test("defines the core colour contract", () => {
     "--wt-color-on-primary",
     "--wt-color-danger",
     "--wt-color-on-danger",
+    "--wt-color-primary-hover",
+    "--wt-color-danger-hover",
     "--wt-color-warning",
     "--wt-color-on-warning",
     "--wt-color-border",
@@ -224,10 +226,15 @@ test("the OS light preference gives the field tokens the same values as an expli
 
 describe.each(["light", "dark"] as const)("primary text (%s)", (theme) => {
   // --wt-color-primary itself is 4.32:1 on the light --wt-color-bg a hovered list row paints.
-  test("reads at 4.5:1 or more on the page background and on both surfaces", () => {
+  test("reads at 4.5:1 or more on the page background, both surfaces and a highlighted row", () => {
     const el = mount(theme);
     const text = token(el, "--wt-color-primary-text");
-    for (const surface of ["--wt-color-bg", "--wt-color-surface", "--wt-color-surface-raised"]) {
+    for (const surface of [
+      "--wt-color-bg",
+      "--wt-color-surface",
+      "--wt-color-surface-raised",
+      "--wt-color-surface-lifted",
+    ]) {
       expect(ratio(text, token(el, surface)), `${theme}: on ${surface}`).toBeGreaterThanOrEqual(
         4.5,
       );
@@ -240,6 +247,31 @@ describe.each(["light", "dark"] as const)("primary text (%s)", (theme) => {
     const fromPreference = token(byPreference, "--wt-color-primary-text");
     byPreference.remove();
     expect(fromPreference).toBe(token(mount(theme), "--wt-color-primary-text"));
+  });
+});
+
+const HOVER_FILLS = [
+  ["--wt-color-primary-hover", "--wt-color-primary", "--wt-color-on-primary"],
+  ["--wt-color-danger-hover", "--wt-color-danger", "--wt-color-on-danger"],
+] as const;
+
+describe.each(["light", "dark"] as const)("hover fills (%s)", (theme) => {
+  test("each keeps its button's text at 4.5:1 or more and differs from the resting fill", () => {
+    const el = mount(theme);
+    for (const [hover, base, text] of HOVER_FILLS) {
+      expect(ratio(token(el, text), token(el, hover)), `${theme}: ${text} on ${hover}`).toBeGreaterThanOrEqual(4.5);
+      expect(token(el, hover), `${theme}: ${hover}`).not.toBe(token(el, base));
+    }
+  });
+
+  test("the OS preference gives them the same values as the explicit theme", async () => {
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    const fromPreference = HOVER_FILLS.map(([hover]) => token(byPreference, hover));
+    byPreference.remove();
+    expect(fromPreference).not.toContain("");
+    const explicit = mount(theme);
+    expect(fromPreference).toEqual(HOVER_FILLS.map(([hover]) => token(explicit, hover)));
   });
 });
 

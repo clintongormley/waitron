@@ -1,7 +1,8 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
+import type { WtButton } from "./wt-button.js";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { WtModal } from "./wt-modal.js";
 import "./wt-form-actions.js";
 import "./wt-button.js";
@@ -82,4 +83,27 @@ describe.each(["light", "dark"] as const)("wt-modal a11y (%s theme)", (theme) =>
     await modal.updateComplete;
     await expectNoA11yViolations(host);
   });
+  test.each(["danger", "primary"] as const)(
+    "a %s footer button under the pointer",
+    async (variant) => {
+      const modal = (await mountThemed(
+        `<wt-modal heading="Delete printer">
+          <p>The printer stops receiving tickets.</p>
+          <wt-form-actions slot="footer">
+            <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+            <wt-button variant="${variant}">Delete</wt-button>
+          </wt-form-actions>
+        </wt-modal>`,
+        theme,
+      )) as WtModal;
+      modal.open = true;
+      await modal.updateComplete;
+      const button = modal.querySelector<WtButton>(`wt-button[variant="${variant}"]`)!;
+      await button.updateComplete;
+      const inner = button.shadowRoot!.querySelector("button")!;
+      await userEvent.hover(inner);
+      expect(inner.matches(":hover")).toBe(true);
+      await expectNoA11yViolations(host);
+    },
+  );
 });
