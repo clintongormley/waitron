@@ -4,11 +4,29 @@ import { receiptLabelsFor } from "@waitron/country-packs";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import type { InvoiceDeliveryOutcome } from "./invoice-delivery.js";
+import type { Database } from "@waitron/db";
+import type { KeyRing } from "@waitron/credentials";
+import type { OnboardingIntent } from "./trading-config.js";
+import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
 
 export type InvoiceEmailSender = (message: {
   recipient: string;
   document: ReceiptDocumentInput;
 }) => Promise<InvoiceDeliveryOutcome>;
+
+export function createRoutedInvoiceEmailSender(deps: {
+  db: Database;
+  ring: KeyRing;
+  config: { onboardingIntent: OnboardingIntent | undefined; devMode: boolean };
+}): InvoiceEmailSender {
+  return async (message) => {
+    const delivery = await resolveInvoiceEmailDelivery(deps.db, deps.ring, deps.config);
+    if (delivery.mode === "unconfigured") {
+      return { status: "failed", failureCode: "transport_failed" };
+    }
+    return createInvoiceEmailSender(delivery.smtp)(message);
+  };
+}
 
 export function createInvoiceEmailSender(config: {
   url: string;

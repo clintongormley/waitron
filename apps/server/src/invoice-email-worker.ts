@@ -9,6 +9,7 @@ import {
 } from "./invoice-delivery.js";
 import type { InvoiceEmailSender } from "./invoice-email.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
+import { realSleep } from "./loop.js";
 
 type InvoiceEmailPassDeps = {
   db: Database;
@@ -17,6 +18,27 @@ type InvoiceEmailPassDeps = {
   readDocument: (tx: Transaction, delivery: InvoiceDelivery) => Promise<ReceiptDocumentInput>;
   send: InvoiceEmailSender;
 };
+
+export async function runInvoiceEmailLoop(
+  deps: InvoiceEmailPassDeps & {
+    signal: AbortSignal;
+    isPrimary: () => boolean;
+    onError: (error: unknown) => void;
+    sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+  },
+): Promise<void> {
+  const sleep = deps.sleep ?? realSleep;
+  while (!deps.signal.aborted) {
+    try {
+      if (deps.isPrimary()) await runInvoiceEmailPass(deps);
+    } catch (error) {
+      deps.onError(error);
+    }
+    // A stop signal does not abandon an SMTP send whose acceptance may already have happened.
+    if (deps.signal.aborted) break;
+    await sleep(500, deps.signal);
+  }
+}
 
 export async function runInvoiceEmailPass(
   deps: InvoiceEmailPassDeps,

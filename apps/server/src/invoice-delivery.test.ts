@@ -22,7 +22,7 @@ import { jobOrigin, locationId, nodeId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { claimInvoicePrintJobs, reportInvoicePrintJob } from "./invoice-print.js";
 import { venueModuleConfig } from "./provision.js";
-import { runInvoiceEmailPass } from "./invoice-email-worker.js";
+import { runInvoiceEmailPass, runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as documentFixture } from "./testing/full-invoice-fixture.js";
 import type { InvoiceDeliveryOutcome } from "./invoice-delivery.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
@@ -1385,6 +1385,179 @@ describe("invoice email automatic retries", () => {
 });
 
 describe("invoice email worker pass", () => {
+  it("stops the default idle wait when shutdown arrives", async () => {
+    const controller = new AbortController();
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let iterations = 0;
+    const work = runInvoiceEmailLoop({
+      db: suite.db,
+      holder: "server-one",
+      now: () => start,
+      readDocument: documentFor,
+      send: async () => {
+        throw new Error("Secondary cannot send");
+      },
+      signal: controller.signal,
+      isPrimary: () => {
+        iterations++;
+        entered();
+        return false;
+      },
+      onError: () => {
+        throw new Error("Unexpected loop failure");
+      },
+    });
+    try {
+      await within(started);
+      controller.abort();
+      await within(work);
+      expect(iterations).toBe(1);
+    } finally {
+      controller.abort();
+      await within(work);
+    }
+  });
+
+  it("does not claim or send when already stopped", async () => {
+    await queued();
+    const controller = new AbortController();
+    controller.abort();
+    await runInvoiceEmailLoop({
+      db: suite.db,
+      holder: "server-one",
+      now: () => start,
+      readDocument: documentFor,
+      send: async () => {
+        throw new Error("Stopped worker cannot send");
+      },
+      signal: controller.signal,
+      isPrimary: () => true,
+      onError: () => {
+        throw new Error("Unexpected loop failure");
+      },
+    });
+    expect((await rows())[0]).toMatchObject({ status: "queued", attempts: 0 });
+  });
+  it("checks primary status on every iteration before claiming invoice email", async () => {
+    await queued();
+    const controller = new AbortController();
+    let primary = false;
+    let sleeps = 0;
+    let sent = 0;
+    await runInvoiceEmailLoop({
+      db: suite.db,
+      holder: "server-one",
+      now: () => start,
+      readDocument: documentFor,
+      send: async () => {
+        sent++;
+        return { status: "sent" };
+      },
+      signal: controller.signal,
+      isPrimary: () => primary,
+      onError: () => {
+        throw new Error("Unexpected loop failure");
+      },
+      sleep: async () => {
+        if (sleeps++ === 0) {
+          expect(sent).toBe(0);
+          expect((await rows())[0]).toMatchObject({ status: "queued", attempts: 0 });
+          primary = true;
+        } else controller.abort();
+      },
+    });
+    expect(sent).toBe(1);
+    expect((await rows())[0]).toMatchObject({ status: "sent", attempts: 1 });
+  });
+
+  it("finishes and records an in-flight send before shutdown without another iteration", async () => {
+    await queued();
+    const controller = new AbortController();
+    let answer!: (outcome: InvoiceDeliveryOutcome) => void;
+    const pending = new Promise<InvoiceDeliveryOutcome>((resolve) => {
+      answer = resolve;
+    });
+    let started!: () => void;
+    const sending = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let finished = false;
+    let slept = false;
+    const work = runInvoiceEmailLoop({
+      db: suite.db,
+      holder: "server-one",
+      now: () => start,
+      readDocument: documentFor,
+      send: async () => {
+        started();
+        return pending;
+      },
+      signal: controller.signal,
+      isPrimary: () => true,
+      onError: () => {
+        throw new Error("Unexpected loop failure");
+      },
+      sleep: async () => {
+        slept = true;
+      },
+    }).then(() => {
+      finished = true;
+    });
+    try {
+      await within(
+        Promise.race([
+          sending,
+          work.then(() => {
+            throw new Error("Worker ended before send");
+          }),
+        ]),
+      );
+      controller.abort();
+      await Promise.resolve();
+      expect(finished).toBe(false);
+      expect((await rows())[0]).toMatchObject({ status: "sending" });
+    } finally {
+      controller.abort();
+      answer({ status: "sent" });
+      await within(work);
+    }
+    expect(slept).toBe(false);
+    expect((await rows())[0]).toMatchObject({ status: "sent", reported_outcome: "sent" });
+  });
+
+  it("contains a pass failure and retries the still-queued delivery on the next iteration", async () => {
+    await queued();
+    const controller = new AbortController();
+    const failure = new Error("Unexpected clock failure");
+    let broken = true;
+    const errors: unknown[] = [];
+    await runInvoiceEmailLoop({
+      db: suite.db,
+      holder: "server-one",
+      now: () => {
+        if (broken) throw failure;
+        return start;
+      },
+      readDocument: documentFor,
+      send: async () => {
+        controller.abort();
+        return { status: "sent" };
+      },
+      signal: controller.signal,
+      isPrimary: () => true,
+      onError: (error) => {
+        errors.push(error);
+      },
+      sleep: async () => {
+        broken = false;
+      },
+    });
+    expect(errors).toEqual([failure]);
+    expect((await rows())[0]).toMatchObject({ status: "sent", attempts: 1 });
+  });
   it("expires abandoned claims before selecting new work without replaying them", async () => {
     const { delivery } = await queued();
     await claim(delivery.id);

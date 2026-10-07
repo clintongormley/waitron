@@ -5,7 +5,16 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { setTimeout as deadline } from "node:timers/promises";
 import { describe, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { createInvoiceEmailSender } from "./invoice-email.js";
+import { createInvoiceEmailSender, createRoutedInvoiceEmailSender } from "./invoice-email.js";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  CREDENTIALS_MIGRATIONS,
+  loadKeyRing,
+  putCredential,
+  deleteCredential,
+} from "@waitron/credentials";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 
 type Reply = "accepted" | "recipient-refused" | "data-refused" | "lost-ack" | "silent";
@@ -14,6 +23,12 @@ const tls = mintSelfSignedServerCert({
   hostnames: ["localhost"],
   ipAddresses: ["127.0.0.1"],
   now: new Date(),
+});
+
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const ring = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
 async function smtpRig(reply: Reply, secure = false) {
@@ -114,6 +129,62 @@ async function attachmentText(message: string) {
 }
 
 describe("invoice SMTP transport", () => {
+  it("routes successive invoices through rotated stored credentials without restarting the sender", async () => {
+    await seedTenant(suite.db);
+    const first = await smtpRig("accepted");
+    const second = await smtpRig("accepted");
+    try {
+      const send = createRoutedInvoiceEmailSender({
+        db: suite.db,
+        ring,
+        config: { onboardingIntent: "live", devMode: false },
+      });
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, ring, { purpose: "email.smtp", value: first.config }),
+      );
+      expect(await send({ recipient: "first@example.test", document: fixture })).toEqual({
+        status: "sent",
+      });
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, ring, {
+          purpose: "email.smtp",
+          value: { ...second.config, from: "new@example.test" },
+        }),
+      );
+      expect(
+        await send({ recipient: "second@example.test", document: { ...fixture, duplicate: true } }),
+      ).toEqual({ status: "sent" });
+      expect(first.messages).toHaveLength(1);
+      expect(first.messages[0]).toContain("To: first@example.test");
+      expect(second.messages).toHaveLength(1);
+      expect(second.messages[0]).toContain("To: second@example.test");
+      expect(second.messages[0]).toContain("From: new@example.test");
+      expect(await attachmentText(second.messages[0]!)).toContain("DUPLICADO");
+      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+      expect(await send({ recipient: "third@example.test", document: fixture })).toEqual({
+        status: "failed",
+        failureCode: "transport_failed",
+      });
+      expect(first.messages).toHaveLength(1);
+      expect(second.messages).toHaveLength(1);
+    } finally {
+      await first.close();
+      await second.close();
+    }
+  });
+
+  it("reports a live invoice with no SMTP configuration as a certain failure", async () => {
+    await seedTenant(suite.db);
+    const send = createRoutedInvoiceEmailSender({
+      db: suite.db,
+      ring,
+      config: { onboardingIntent: "live", devMode: false },
+    });
+    expect(await send({ recipient: "customer@example.test", document: fixture })).toEqual({
+      status: "failed",
+      failureCode: "transport_failed",
+    });
+  });
   it.each([false, true])(
     "implicit TLS validates certificates with test trust override=%s",
     async (trustTestCertificate) => {
