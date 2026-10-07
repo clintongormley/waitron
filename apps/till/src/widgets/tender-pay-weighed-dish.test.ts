@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTenderPay } from "./tender-pay.js";
@@ -144,4 +145,18 @@ it("weighing only, shows nothing until a weighed dish is selected, then weighs i
 
   expect(store.lines).toEqual([{ product: jamon, quantity: "0.250" }]);
   expect(query(el, "wt-button")).toBeNull();
+});
+
+it("decimal input weight is shown in Spanish and stored at the same quantity", async () => {
+  setLocale("es");
+  const store = new WorkingOrderStore();
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+  store.emit("product-selected", jamon);
+  await el.updateComplete;
+  await type(el, "0.250");
+  expect(query(el, ".kg")!.textContent).toBe("0,250");
+  click(el, ".add");
+  await el.updateComplete;
+  expect(store.lines[0]!.quantity).toBe("0.250");
+  setLocale("en");
 });

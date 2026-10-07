@@ -13,6 +13,8 @@ import {
 import { formatMoney } from "@waitron/shared";
 import {
   baseStyles,
+  parseDecimalInput,
+  formatDecimalInput,
   ContentLanguageController,
   currentContentLanguages,
   focusFirstInvalid,
@@ -88,7 +90,8 @@ type Editor =
 function percentBp(text: string): number | null | undefined {
   const value = text.trim();
   if (value === "") return null;
-  const match = PERCENT.exec(value);
+  const parsed = parseDecimalInput(value);
+  const match = parsed === null ? null : PERCENT.exec(parsed);
   if (match === null) return undefined;
   const bp = Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
   return bp > 0 && bp <= 10000 ? bp : undefined;
@@ -98,17 +101,14 @@ function percentBp(text: string): number | null | undefined {
 function amount(text: string): string | null | undefined {
   const value = text.trim();
   if (value === "") return null;
-  const match = AMOUNT.exec(value);
+  const parsed = parseDecimalInput(value);
+  const match = parsed === null ? null : AMOUNT.exec(parsed);
   if (match === null) return undefined;
   const whole = String(Number(match[1]));
   if (whole === "0" && Number(match[2] ?? "0") === 0) return undefined;
   return match[2] === undefined ? whole : `${whole}.${match[2]}`;
 }
 
-const decimalMark = perLocale(
-  (locale) =>
-    new Intl.NumberFormat(locale).formatToParts(1.5).find((part) => part.type === "decimal")!.value,
-);
 const percentFormat = perLocale(
   (locale) => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
 );
@@ -118,7 +118,7 @@ const languageNames = perLocale(
 
 /** A decimal string written with the dashboard language's decimal mark, as the list shows it. */
 function localDecimal(value: string): string {
-  return value.replace(".", decimalMark(currentLocale()));
+  return formatDecimalInput(value, currentLocale());
 }
 
 function languageName(code: string): string {
@@ -735,6 +735,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     ].join(" ");
     return html`<wt-price-input
         name="maxBillDiscount"
+        decimal-locale=${currentLocale()}
         unit="%"
         fixed-unit
         label=${t("adjustments.limit.field")}
@@ -990,6 +991,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       </fieldset>
       <wt-input
         name="maxPercent"
+        decimal-locale=${currentLocale()}
         label=${t("adjustments.field.max_percent")}
         hint=${t("adjustments.field.max_percent_hint")}
         .value=${percent.value}

@@ -334,3 +334,19 @@ describe("till-bill-refund-dialog: a card keyed on a separate terminal", () => {
     expect(text(button(el, "[data-refund-terminal-done]"))).toBe(t("bill_refund.terminal_done"));
   });
 });
+
+for (const locale of ["en", "es"]) {
+  it(`decimal input amount follows ${locale}`, async () => {
+    setLocale(locale);
+    const el = await mount();
+    await pick(el, "part");
+    const control = field(el, "amount")! as HTMLElement & { updateComplete: Promise<unknown> };
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector("input")!;
+    for (const separator of [".", ","]) {
+      await type(el, "amount", `2${separator}80`);
+      await control.updateComplete;
+      expect(native.value).toBe(locale === "es" ? "2,80" : "2.80");
+    }
+  });
+}

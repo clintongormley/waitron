@@ -1,3 +1,4 @@
+import { parseDecimalInput } from "@waitron/ui";
 import {
   MONEY_SCALE,
   addDecimal,
@@ -39,12 +40,12 @@ export const PAY_WAYS = [
   { way: "share", label: "bill_pay.way_share" },
 ] as const satisfies readonly { way: PayChoice["kind"]; label: StringKey }[];
 
-const TYPED_AMOUNT = /^\d{1,9}([.,]\d{1,2})?$/;
+const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 
 /** A typed amount with a decimal comma read as a point, or null when it is not an amount. */
 export function typedAmount(value: string): string | null {
-  const typed = value.trim();
-  return TYPED_AMOUNT.test(typed) ? typed.replace(",", ".") : null;
+  const typed = parseDecimalInput(value);
+  return typed !== null && TYPED_AMOUNT.test(typed) ? typed : null;
 }
 
 /** Two amounts added, at the money scale. */

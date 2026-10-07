@@ -870,3 +870,47 @@ describe("purchase-form — a server refusal", () => {
     expect(await bottomOf(el)).toBeNull();
   });
 });
+
+for (const locale of ["en", "es"]) {
+  it(`decimal input in purchase rates and amounts follows ${locale}`, async () => {
+    setLocale(locale);
+    const { el } = await mountWidget<PurchaseForm>(
+      "dashboard-purchase-form",
+      baseProps({ invoice: EDIT_INVOICE }),
+    );
+    const emitted: unknown[] = [];
+    el.addEventListener("update-purchase", (event) => emitted.push((event as CustomEvent).detail));
+    for (const [id, saved] of [
+      ["line-rate-0", "10.00"],
+      ["deductible-proportion", "50.00"],
+      ["line-base-0", "100.00"],
+      ["line-tax-0", "10.00"],
+      ["total", "242.00"],
+    ]) {
+      const control = el.shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<unknown> }
+      >(`[data-test=${id}]`)!;
+      await control.updateComplete;
+      const native = control.shadowRoot!.querySelector("input")!;
+      expect(native.value, id).toBe(locale === "es" ? saved!.replace(".", ",") : saved);
+      for (const separator of [".", ","]) {
+        native.value = saved!.replace(".", separator);
+        native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await el.updateComplete;
+        await control.updateComplete;
+        expect(native.value, id).toBe(locale === "es" ? saved!.replace(".", ",") : saved);
+      }
+    }
+    await click(el, "confirm");
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      patch: {
+        header: { total: "242.00", deductibleProportion: "50.00" },
+        lines: [
+          { rate: "10.00", base: "100.00", tax: "10.00" },
+          { rate: "21.00", base: "100.00", tax: "21.00" },
+        ],
+      },
+    });
+  });
+}

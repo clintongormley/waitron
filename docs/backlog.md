@@ -4024,14 +4024,19 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   field's refusal); and the two staff forms turn the refusal into a field message inside the form,
   where other dashboard forms receive field messages from their parent screen.
 
-- **Money in the dashboard shows its currency sign (C43, #830) — left open:** (1) the catalogue,
-  menu and purchase price fields accept and show a dot decimal only, so a Spanish field shows `9.00`
-  with the sign after it while the same amount displayed beside it reads `9,00 €` (the adjustments
-  limit field shows its saved value with a comma); (2) the alert check that every money slot is
-  marked looks only at slots named `amount`, `captured` and `expected`, so a new money slot under
-  another name is seen by nothing; (3) the purchase form's VAT line still lets its other fields
-  shrink to `min-width: 5rem` (`apps/dashboard/src/widgets/purchase-form.ts`), a `rem` the
-  design-token rule forbids.
+- **Money in the dashboard shows its currency sign (C43, #830).** Decimal entry consistency is
+  DONE (A284): shared exact string parsing and display in `ui-core`, consumed by `wt-price-input`
+  and the decimal mode of `wt-input`. Catalogue/product/variant and menu prices, extras prices and
+  portions, purchases (amounts and percentages), adjustment limits, till discounts, bill
+  contributions/cash/tips, partial refunds, finding and collecting a debt, measured bill splits,
+  and the cash/weight keypad display use the screen's decimal mark and accept comma or point.
+  Multiple marks and grouping spaces are refused by the form's own checks. The cents conversion
+  and server request contracts are unchanged. `payments-screen.ts` was surveyed: its inputs on this tree
+  are reader names, an attestation note and PIN, with no decimal entry. Browser regressions live
+  beside the shared controls and the purchase, extras, adjustment and till consumers.
+  Left open: (1) the alert check that every money slot is marked looks only at slots named `amount`,
+  `captured` and `expected`, so a new money slot under another name is unseen; (2) the purchase VAT
+  line's other fields still use `min-width: 5rem`, which the design-token rule forbids.
 
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
   (1) tables inside a dialog or picker offer no chooser, by choice; (2) the servers list

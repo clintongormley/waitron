@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import { TillNumericPad, nextPadValue, nextPinValue } from "./numeric-pad.js";
 
 afterEach(cleanupWidgets);
@@ -183,4 +184,14 @@ describe("till-numeric-pad", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-key="backspace"]')!.click();
     expect(spy).toHaveBeenCalledWith({ value: "000" });
   });
+});
+
+it("decimal input pad shows the Spanish mark and keeps exact dot-decimal state", async () => {
+  setLocale("es");
+  const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", { value: "2" });
+  const decimal = el.shadowRoot!.querySelector<HTMLElement>('[data-key="."]')!;
+  expect(decimal.textContent).toContain(",");
+  expect(nextPadValue("2", ",")).toBe("2.");
+  expect(nextPadValue("2.8", ",")).toBe("2.8");
+  setLocale("en");
 });

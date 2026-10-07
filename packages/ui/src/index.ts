@@ -24,6 +24,7 @@ export { WtCard } from "./components/wt-card.js";
 export { WtDisclosure } from "./components/wt-disclosure.js";
 export type { SummaryField } from "./components/wt-disclosure.js";
 export { WtInput } from "./components/wt-input.js";
+export { parseDecimalInput, formatDecimalInput, decimalMark } from "@waitron/ui-core";
 export { WtTextarea } from "./components/wt-textarea.js";
 export { WtPriceInput } from "./components/wt-price-input.js";
 export { WtNumberStepper } from "./components/wt-number-stepper.js";

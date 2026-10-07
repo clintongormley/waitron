@@ -7,6 +7,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import { trackDialog } from "./track-dialog.js";
+import { parseDecimalInput } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -110,7 +111,7 @@ const DO: Record<AdjustKind, StringKey> = {
 };
 
 /** A typed amount: digits, then at most two decimals after a point or a comma. */
-const TYPED_AMOUNT = /^\d{1,9}([.,]\d{1,2})?$/;
+const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 
 /**
  * Cancels, gives away or discounts one dish, or discounts the whole bill (service plan Task 11).
@@ -259,13 +260,13 @@ export class TillAdjustmentDialog extends LitElement {
 
   #comparable(draft: AdjustmentDraft): string {
     const typed = draft.value.trim();
-    const number = typed.replace(",", ".");
+    const number = parseDecimalInput(typed) ?? typed;
     const percent = Number(number);
     const value =
       this.kind !== "discount"
         ? null
         : draft.discountKind === "percent" &&
-            TYPED_AMOUNT.test(typed) &&
+            TYPED_AMOUNT.test(number) &&
             percent > 0 &&
             percent <= 100
           ? Math.round(percent * 100)
@@ -371,7 +372,7 @@ export class TillAdjustmentDialog extends LitElement {
 
   /** The typed value with a decimal comma read as a point. */
   #typedNumber(): string {
-    return this.value.trim().replace(",", ".");
+    return parseDecimalInput(this.value) ?? this.value.trim();
   }
 
   /** The form's own checks, by field; an empty map when it can be sent. */
@@ -386,9 +387,9 @@ export class TillAdjustmentDialog extends LitElement {
       const number = this.#typedNumber();
       if (this.discountKind === "percent") {
         const percent = Number(number);
-        if (!TYPED_AMOUNT.test(typed) || percent <= 0 || percent > 100)
+        if (!TYPED_AMOUNT.test(number) || percent <= 0 || percent > 100)
           errors.set("value", t("adjust.percent_invalid"));
-      } else if (!TYPED_AMOUNT.test(typed) || Number(number) <= 0) {
+      } else if (!TYPED_AMOUNT.test(number) || Number(number) <= 0) {
         errors.set("value", t("adjust.amount_invalid"));
       } else if (compareDecimal(decimal(number), decimal(this.#covered())) > 0) {
         errors.set(
@@ -677,6 +678,7 @@ export class TillAdjustmentDialog extends LitElement {
       }
       <wt-input
         name=${this.discountKind}
+        decimal-locale=${currentLocale()}
         autocomplete="off"
         .disabled=${this.busy}
         required

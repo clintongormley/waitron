@@ -1043,6 +1043,7 @@ export class TillBillPayDialog extends LitElement {
   ): TemplateResult {
     return html`<wt-input
       name=${name}
+      decimal-locale=${name !== "externalRef" && name !== "people" ? currentLocale() : nothing}
       autocomplete="off"
       .disabled=${this.busy}
       .label=${label}

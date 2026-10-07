@@ -472,6 +472,7 @@ export class PurchaseForm extends LitElement {
         class="line-field"
         ?disabled=${this.busy}
         name=${`line-${index}-rate`}
+        decimal-locale=${currentLocale()}
         data-test=${`line-rate-${index}`}
         label=${t("purchase.line_rate")}
         required
@@ -635,6 +636,7 @@ export class PurchaseForm extends LitElement {
           class="field"
           ?disabled=${this.busy}
           name="deductible-proportion"
+          decimal-locale=${currentLocale()}
           data-test="deductible-proportion"
           required
           error=${errors["deductible-proportion"] ?? ""}

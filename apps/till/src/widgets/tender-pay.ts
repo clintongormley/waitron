@@ -2,6 +2,9 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   submitOnEnter,
+  formatDecimalInput,
+  formMessage,
+  formMessageStyles,
   baseStyles,
   leaveCoordinatorFor,
   type DraftScope,
@@ -15,6 +18,7 @@ import {
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
+import { typedAmount } from "../state/bill-payment.js";
 import { currentLocale, t } from "../i18n/t.js";
 import "./numeric-pad.js";
 import "./reader-picker.js";
@@ -71,6 +75,7 @@ type View = "idle" | "paying" | "weighing" | "holding" | "card" | "collecting" |
 export class TillTenderPay extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       :host {
         display: block;
@@ -204,6 +209,7 @@ export class TillTenderPay extends LitElement {
   @state() private refEntry = "";
   @state() private selected?: TillProduct;
   @state() private tipEntry = "";
+  @state() private tipAttempted = false;
   @state() private allowOffline = false;
   @state() private simulationOutcome: "captured" | "declined" = "captured";
   /** Replayed by `#retryCard`: the idle screen's tip and offline fields are gone by the time
@@ -438,7 +444,21 @@ export class TillTenderPay extends LitElement {
     this.view = "card";
   }
 
+  #tipInvalid(): boolean {
+    return (
+      this.tipsEnabled &&
+      this.cardProvider !== "none" &&
+      this.tipEntry.trim() !== "" &&
+      typedAmount(this.tipEntry) === null
+    );
+  }
+
   #onCardTap(): void {
+    this.tipAttempted = true;
+    if (this.#tipInvalid()) {
+      this.shadowRoot!.querySelector<HTMLElement>(".tip-input")?.focus();
+      return;
+    }
     this.#checkBeforeTender(() => {
       if (this.cardProvider === "none") {
         this.#startCard();
@@ -645,7 +665,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #entryDisplay(): string {
-    return this.entry === "" ? "0" : this.entry;
+    return formatDecimalInput(this.entry === "" ? "0" : this.entry, currentLocale());
   }
 
   /** Ignore insignificant zeroes, matching the server's exact decimal-string check. */
@@ -712,7 +732,7 @@ export class TillTenderPay extends LitElement {
         class="pay-card"
         variant="primary"
         size="lg"
-        ?disabled=${disabled}
+        ?disabled=${disabled || (this.tipAttempted && this.#tipInvalid())}
         @click=${() => this.#onCardTap()}
       >
         ${t("tender.card")}
@@ -759,6 +779,7 @@ export class TillTenderPay extends LitElement {
   #renderIdleCollect(disabled: boolean) {
     return html`
       ${this.#renderCardExtras()}
+      ${formMessage(this.tipAttempted && this.#tipInvalid() ? t("form.fix_fields") : "")}
       <div class="actions">${this.#renderTenderButtons(disabled)}</div>
     `;
   }
@@ -767,6 +788,7 @@ export class TillTenderPay extends LitElement {
   #renderIdlePay(disabled: boolean, withPlace: boolean) {
     return html`
       ${this.#renderCardExtras()}
+      ${formMessage(this.tipAttempted && this.#tipInvalid() ? t("form.fix_fields") : "")}
       <div class="actions">
         ${this.#renderTenderButtons(disabled)} ${this.#renderInvoiceButton(disabled)}
         ${
@@ -871,7 +893,8 @@ export class TillTenderPay extends LitElement {
                   @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".pay-card"))}
                   name="tip"
                   class="tip-input"
-                  type="number"
+                  decimal-locale=${currentLocale()}
+                  .error=${this.tipAttempted && this.#tipInvalid() ? t("bill_pay.tip_invalid") : ""}
                   .value=${live(this.tipEntry)}
                   .label=${t("card.tip")}
                   @wt-change=${(event: Event) => this.#onTipChange(event)}

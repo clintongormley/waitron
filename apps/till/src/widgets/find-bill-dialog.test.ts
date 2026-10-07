@@ -295,3 +295,29 @@ describe("Find a bill", () => {
     }
   });
 });
+
+it("decimal input cash collection shows Spanish and refuses grouped or over-precision text", async () => {
+  setLocale("es");
+  const el = await mount();
+  const paid: unknown[] = [];
+  el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
+  await type(el, "bill-search", "A/12");
+  await click(el, "[data-search]");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
+  await click(el, "[data-bill]");
+  const control = input(el, "cash-received") as HTMLElement & { updateComplete: Promise<unknown> };
+  await control.updateComplete;
+  const native = control.shadowRoot!.querySelector("input")!;
+  expect(native.value).toBe("30,00");
+  for (const bad of ["40,123", "1,234.56", "1.234,56", "1 234,56"]) {
+    await type(el, "cash-received", bad);
+    await click(el, "[data-collect]");
+    expect(paid).toEqual([]);
+    expect(control.error).not.toBe("");
+  }
+  await type(el, "cash-received", "40,80");
+  await click(el, "[data-collect]");
+  expect(paid).toEqual([
+    { workingOrderId: "wo-1", tender: { method: "cash", amount: "40.80" }, invoiced: true },
+  ]);
+});

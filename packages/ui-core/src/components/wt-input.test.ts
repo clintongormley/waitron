@@ -720,3 +720,29 @@ test("a read-only field holds an end action inside its box at the trailing end",
   expect(actionBox.right).toBeLessThanOrEqual(fieldBox.right);
   expect(actionBox.left).toBeGreaterThan(fieldBox.left + fieldBox.width / 2);
 });
+
+for (const locale of ["en", "es"]) {
+  test(`decimal input displays ${locale} while forwarding exact dot decimals`, async () => {
+    const el = await mount(
+      `<wt-input decimal-locale="${locale}" value="0.125" name="portion"></wt-input>`,
+    );
+    const input = parts(el).input;
+    expect(input.value).toBe(locale === "es" ? "0,125" : "0.125");
+    expect(input.inputMode).toBe("decimal");
+    for (const separator of [".", ","]) {
+      let value = "";
+      el.addEventListener(
+        "wt-change",
+        (event) => {
+          value = (event as CustomEvent<{ value: string }>).detail.value;
+        },
+        { once: true },
+      );
+      input.value = `12${separator}34567890123456789`;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await (el as LitElement).updateComplete;
+      expect(value).toBe("12.34567890123456789");
+      expect(input.value).toBe(locale === "es" ? "12,34567890123456789" : "12.34567890123456789");
+    }
+  });
+}

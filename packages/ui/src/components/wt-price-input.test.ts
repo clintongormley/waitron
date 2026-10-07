@@ -1,4 +1,5 @@
 import { expect, test, afterEach } from "vitest";
+import { stringToCents } from "@waitron/shared";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import { applyTokens } from "../tokens/index.js";
 import "./wt-price-input.js";
@@ -1045,4 +1046,51 @@ test("while the label rests, a fixed unit is hidden under it and still describes
   expect(input.getAttribute("aria-describedby")).toBe(unit.id);
   input.focus();
   expect(visibility(el, ".unit")).toBe("visible");
+});
+
+for (const locale of ["en", "es"]) {
+  for (const separator of [".", ","]) {
+    test(`decimal input accepts ${separator} in ${locale} without changing cents`, async () => {
+      const el = (await mount(
+        `<wt-price-input locale="${locale}" value="2.80" fixed-unit></wt-price-input>`,
+      )) as WtPriceInput;
+      const input = el.shadowRoot!.querySelector("input")!;
+      expect(input.value).toBe(locale === "es" ? "2,80" : "2.80");
+      const values: string[] = [];
+      el.addEventListener("wt-change", (event) =>
+        values.push((event as CustomEvent<{ value: string }>).detail.value),
+      );
+      input.value = `5${separator}50`;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      expect(values).toEqual(["5.50"]);
+      expect(stringToCents(values[0]!)).toBe(550);
+      expect(input.value).toBe(locale === "es" ? "5,50" : "5.50");
+      el.value = "9.00";
+      await el.updateComplete;
+      expect(input.value).toBe(locale === "es" ? "9,00" : "9.00");
+    });
+  }
+}
+
+test("decimal input preserves ambiguous text for the form's refusal", async () => {
+  const el = (await mount(
+    '<wt-price-input locale="es" fixed-unit></wt-price-input>',
+  )) as WtPriceInput;
+  const input = el.shadowRoot!.querySelector("input")!;
+  for (const text of ["1,234.56", "1.234,56", "1 234,56", "1,2,3", "1.2.3"]) {
+    let received = "";
+    el.addEventListener(
+      "wt-change",
+      (event) => {
+        received = (event as CustomEvent<{ value: string }>).detail.value;
+      },
+      { once: true },
+    );
+    input.value = text;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(received).toBe(text);
+    expect(input.value).toBe(text);
+  }
 });

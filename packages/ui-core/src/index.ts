@@ -11,4 +11,5 @@ export * from "./interactive.js";
 export * from "./submit-on-enter.js";
 export * from "./base-styles.js";
 export * from "./field-styles.js";
+export * from "./decimal-input.js";
 export * from "./unsaved-changes.js";

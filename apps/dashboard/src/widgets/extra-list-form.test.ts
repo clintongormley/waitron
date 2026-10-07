@@ -2700,3 +2700,26 @@ it("opens in the wide modal size on a desktop, for the items table", async () =>
     await page.viewport(width, height);
   }
 });
+
+it("decimal input extra portion shows Spanish and submits the exact portion", async () => {
+  setLocale("es");
+  const { el, host } = await mount({
+    products: [product({ unitId: KG.id, unit: KG, unitPrice: "100.00" })],
+  });
+  const submitted = record(host);
+  await type(el, "name", "Extras");
+  await addItem(el, "Bacon");
+  const control = field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-portion");
+  await control.updateComplete;
+  const native = control.shadowRoot!.querySelector("input")!;
+  for (const separator of [".", ","]) {
+    native.value = `0${separator}125`;
+    native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    await control.updateComplete;
+    expect(native.value).toBe("0,125");
+  }
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.items[0]!.portion).toBe("0.125");
+});

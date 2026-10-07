@@ -1238,3 +1238,19 @@ describe("till-bill-pay-dialog: the bill's payments", () => {
     expect(await said(null)).toBe("");
   });
 });
+
+for (const locale of ["en", "es"]) {
+  it(`decimal input amount follows ${locale}`, async () => {
+    setLocale(locale);
+    const el = await mount({ way: "contribution" });
+
+    const control = field(el, "amount")! as HTMLElement & { updateComplete: Promise<unknown> };
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector("input")!;
+    for (const separator of [".", ","]) {
+      await type(el, "amount", `2${separator}80`);
+      await control.updateComplete;
+      expect(native.value).toBe(locale === "es" ? "2,80" : "2.80");
+    }
+  });
+}

@@ -1,7 +1,7 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, dispatchWtChange } from "@waitron/ui";
-import { t } from "../i18n/t.js";
+import { baseStyles, dispatchWtChange, decimalMark } from "@waitron/ui";
+import { currentLocale, t } from "../i18n/t.js";
 
 /**
  * A PARTIAL number the parent normalises before it reaches `decimal()`: never a leading zero
@@ -12,7 +12,7 @@ export function nextPadValue(value: string, key: string): string {
   if (key === "backspace") {
     return value.slice(0, -1);
   }
-  if (key === ".") {
+  if (key === "." || key === ",") {
     if (value.includes(".")) return value;
     return value === "" ? "0." : `${value}.`;
   }
@@ -111,7 +111,7 @@ export class TillNumericPad extends LitElement {
       { key: "1", glyph: "1" },
       { key: "2", glyph: "2" },
       { key: "3", glyph: "3" },
-      { key: ".", glyph: ".", label: t("pad.decimal") },
+      { key: ".", glyph: decimalMark(currentLocale()), label: t("pad.decimal") },
       { key: "0", glyph: "0" },
       { key: "backspace", glyph: "⌫", label: t("pad.backspace") },
     ];
