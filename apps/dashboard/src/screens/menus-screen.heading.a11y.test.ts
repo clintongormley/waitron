@@ -82,7 +82,7 @@ describe.each(["light", "dark"] as const)("menu editor heading (%s)", (theme) =>
     await expectNoA11yViolations(host);
   });
 
-  it("accessible state line saying publishing waits on clashes", async () => {
+  it("accessible state line saying publishing waits on clashes, as a link to the Prices tab", async () => {
     history.replaceState(null, "", "/manage/menus/menu/menu-lunch/view/structure");
     const { el, host } = await mountWidget<MenusScreen>(
       "dashboard-menus-screen",
@@ -94,6 +94,7 @@ describe.each(["light", "dark"] as const)("menu editor heading (%s)", (theme) =>
       expect(root.querySelector('[data-test="status-clashes"]')).not.toBeNull();
       expect(root.querySelector("dashboard-menu-structure-table")).not.toBeNull();
     });
+    expect(root.querySelector('[data-test="status-clashes"]')!.tagName).toBe("A");
     await expectNoA11yViolations(host);
   });
 });

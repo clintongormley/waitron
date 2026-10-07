@@ -4584,8 +4584,8 @@ export const es: Record<StringKey, string> = {
   "menus.included_in": "Incluido en",
   "menus.clash": "conflicto",
   "menus.clashes": "conflictos",
-  "menus.publish_waits_clash": "No se puede publicar hasta resolver 1 conflicto",
-  "menus.publish_waits_clashes": "No se puede publicar hasta resolver {count} conflictos",
+  "menus.publish_waits_clash": "No se puede publicar hasta resolver 1 discrepancia",
+  "menus.publish_waits_clashes": "No se puede publicar hasta resolver {count} discrepancias",
   "menus.edit_section": "Editar sección",
   "menus.delete_section": "Eliminar sección",
   "menus.delete_section_note":
