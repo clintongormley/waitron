@@ -127,7 +127,7 @@ const products: Product[] = [
         name: "Vino 175",
         customerName: { es: "Copa grande" },
         kitchenName: "V175",
-        image: null,
+        image: "v1.webp",
         unitPrice: "4.50",
         available: false,
         active: true,
@@ -217,6 +217,9 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await table.updateComplete;
     expect(table.shadowRoot!.querySelectorAll("[data-test=active-badge]")).toHaveLength(6);
     expect(table.shadowRoot!.querySelector("[data-test=vat-note]")).not.toBeNull();
+    expect(
+      table.shadowRoot!.querySelector('[data-test="color-v2"] [data-test="thumb-placeholder"]'),
+    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -232,6 +235,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await table.updateComplete;
     expect(table.shadowRoot!.querySelector('tr[data-row-key="p4:v1"].joined')).not.toBeNull();
     expect(table.shadowRoot!.querySelector('[data-test="variant-count"]')).not.toBeNull();
+    expect(table.shadowRoot!.querySelector('[data-test="color-v1"] img')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

@@ -1064,8 +1064,10 @@ tree visually hides each category's count, including All products', with the sha
 pattern. The text remains in the row's accessible name, so screen readers retain the contents count
 while the visible name gets more room. A category's cell is laid out as a product's is, so when its
 name wraps, keep its grip and wider-layout colour square beside the name's first line. A
-variant's row draws no grip and no photo slot; its name is indented to start under its product's
-name, at phone width too. Each name, with what follows it on its row (a category's count and the asterisk that marks a
+variant's row draws no grip. Its photo square sits in its product's column and shows the variant's
+own photo, else its product's, in the same frame its product's square uses; it opens the variant's own
+editor at its photo. At phone width the square is hidden, as a product's is, and the name starts
+under its product's name. Each name, with what follows it on its row (a category's count and the asterisk that marks a
 category with no active station; a product's variant count), takes
 only the room between its own start and the row's pinned Actions cell, measured as if the table
 were unscrolled, and wraps inside it, a single long word included; a name that fits stays on one

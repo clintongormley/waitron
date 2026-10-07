@@ -160,7 +160,8 @@ export class ProductList extends LitElement {
         display: none;
       }
       /* Keep wrapped names on their first-line baseline beside the media slot. */
-      wt-data-table::part(product-cell) {
+      wt-data-table::part(product-cell),
+      wt-data-table::part(variant-cell) {
         display: block;
       }
       wt-data-table::part(drop-target) {
@@ -252,7 +253,8 @@ export class ProductList extends LitElement {
       }
       /* A column flex box takes its first item's baseline, so the row still lines up by the name. */
       wt-data-table::part(folder-name),
-      wt-data-table::part(name-stack) {
+      wt-data-table::part(name-stack),
+      wt-data-table::part(variant-name) {
         display: inline-flex;
         flex-direction: column;
       }
@@ -267,12 +269,6 @@ export class ProductList extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         text-align: end;
-      }
-      wt-data-table::part(variant-name) {
-        padding-inline-start: calc(var(--wt-tap-min) + var(--wt-space-3));
-      }
-      wt-data-table[narrow]::part(variant-name) {
-        padding-inline-start: 0;
       }
       wt-data-table::part(price-unit) {
         color: var(--wt-color-text-muted);
@@ -998,22 +994,33 @@ export class ProductList extends LitElement {
             ...product.variants.map(({ name }) => name),
             this.#categorySearchText(product.primaryCategoryId),
           ].join(" "),
-        cell: ({ product, variant }, { ancestorOnly }) =>
-          variant
-            ? html`<span part="variant-name">${variant.name}</span>`
+        cell: ({ product, variant }, { ancestorOnly }) => {
+          const color =
+            product.color ?? categoryColor(product.primaryCategoryId, this.#categoryById);
+          return variant
+            ? html`<span part="variant-cell"
+                >${productMedia({
+                  key: variant.id,
+                  name: variant.name,
+                  image: variant.image ?? product.image,
+                  color,
+                  busy: false,
+                  open: () => this.#send("edit-product", { productId: variant.id, field: "image" }),
+                })}<span part="variant-name">${variant.name}</span></span
+              >`
             : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
                 ${productMedia({
                   key: product.id,
                   name: product.name,
                   image: product.image,
-                  color:
-                    product.color ?? categoryColor(product.primaryCategoryId, this.#categoryById),
+                  color,
                   busy: false,
                   open: () => this.#send("edit-product", { productId: product.id, field: "image" }),
                 })}<span part="name-stack"
                   ><strong>${product.name}</strong>${this.#variantCount(product)}</span
                 >
-              </span>`,
+              </span>`;
+        },
       },
       {
         key: "made-at",

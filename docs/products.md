@@ -124,8 +124,10 @@ variants says how many under its name, such as **2 variants**, and the small arr
 opens them. The list shows a product's variants in the product's own order, the
 order of the variant list in the product editor, whichever column the list is sorted by; drag them
 in the editor to change it.
-Each variant's row shows its own name, the price it sells at, its status and its
-row menu. If a variant's VAT differs
+Each variant's row shows its photo, its own name, the price it sells at, its status and its
+row menu. A variant with no photo of its own shows its product's or, when neither has one, the
+same square as its product's row. Choose the photo or square to open the variant's own page at its
+photo. On a phone the photo is hidden. If a variant's VAT differs
 from its product's, the list notes it under the variant's price. A variant's row menu offers
 **Disable** or **Enable** there too, as a product's own row does: **Enable** once it is disabled.
 A disabled variant is listed once you change the **Status** filter from **Active**.
