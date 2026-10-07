@@ -3753,6 +3753,8 @@ it("shows no standalone ordering choice on a variant's page, and keeps the varia
   el.addEventListener("wt-submit", submit);
   save(el);
   expect(submit.mock.calls[0]![0].detail.value.ordering).toBe("public");
+  expect(submit.mock.calls[0]![0].detail.value.name).toBe("Glass of coffee");
+  expect(submit.mock.calls[0]![0].detail.value).not.toHaveProperty("inherited");
 });
 
 it("shows a variant's inherited price and description empty, with the parent's value as the hint", async () => {
