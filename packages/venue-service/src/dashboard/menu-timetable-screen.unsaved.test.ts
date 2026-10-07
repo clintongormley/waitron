@@ -237,7 +237,7 @@ const KINDS: Kind[] = [
     value: (screen) => fieldValue(screen, "name"),
     edited: "Cenas",
     body: [
-      "PUT",
+      "PATCH",
       "/management-api/venue-service/menu-periods/noches",
       { name: "Cenas", menuId: "m-Cena" },
     ],

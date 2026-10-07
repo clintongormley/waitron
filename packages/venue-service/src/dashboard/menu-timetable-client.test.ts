@@ -18,7 +18,7 @@ describe("MenuTimetableApi writes", () => {
   it("sends each write to its route with exactly its body, encoding ids into the path", async () => {
     const period = { id: "p1", name: "Mañanas", menuId: "m1" };
     const request = vi.fn(async (_path: string, method: string) =>
-      method === "POST" || (method === "PUT" && _path.includes("/menu-periods/"))
+      method === "POST" || (method === "PATCH" && _path.includes("/menu-periods/"))
         ? period
         : undefined,
     );
@@ -40,7 +40,7 @@ describe("MenuTimetableApi writes", () => {
       [`${base}/departments/d1/all-day-menu`, "PUT", { menuId: null }],
       [`${base}/zones/z1/all-day-menu`, "PUT", { menuId: "m1" }],
       [`${base}/departments/d1/menu-periods`, "POST", { name: "Mañanas", menuId: "m1" }],
-      [`${base}/menu-periods/p1`, "PUT", { name: "Mañanas", menuId: "m1" }],
+      [`${base}/menu-periods/p1`, "PATCH", { name: "Mañanas", menuId: "m1" }],
       [`${base}/menu-periods/p1`, "DELETE"],
       [`${base}/departments/d1/menu-week`, "PUT", { days: [{ weekday: 1, slots: [slot] }] }],
       [`${base}/special-dates/s1/menu-timetables/d1`, "PUT", { slots: [slot] }],

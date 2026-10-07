@@ -138,7 +138,7 @@ async function routed() {
   const app = new Hono();
   VENUE_SERVICE_ROUTES.mount(app, { db, cfg, core: {} as ModuleRouteContext["core"] }, noopLog);
   const send = (
-    method: "GET" | "POST" | "PUT" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     cookie: string,
     body?: unknown,
@@ -187,7 +187,7 @@ describe("the menu timetable routes", () => {
     const mediodia = (await created.json()) as { id: string; name: string; menuId: string };
     expect(mediodia).toEqual({ id: mediodia.id, name: "Mediodía", menuId: r.almuerzo });
 
-    const renamed = await r.send("PUT", `/menu-periods/${mediodia.id}`, r.manager, {
+    const renamed = await r.send("PATCH", `/menu-periods/${mediodia.id}`, r.manager, {
       name: "Comidas",
       menuId: r.cafe,
     });
@@ -235,13 +235,13 @@ describe("the menu timetable routes", () => {
   it("change only what a period update sends, keeping a rename made in the meantime", async () => {
     const r = await routed();
     await answers(
-      await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, {
+      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
         name: "Desayunos tempranos",
         menuId: r.desayunos,
       }),
       200,
     );
-    const pointed = await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, {
+    const pointed = await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
       menuId: r.cafe,
     });
     expect(pointed.status).toBe(200);
@@ -250,19 +250,19 @@ describe("the menu timetable routes", () => {
       name: "Desayunos tempranos",
       menuId: r.cafe,
     });
-    const renamed = await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, {
+    const renamed = await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
       name: "Mañanas",
     });
     expect(await renamed.json()).toEqual({ id: r.mananas, name: "Mañanas", menuId: r.cafe });
     expect(
       restaurantOf(await r.model(), r).periods.find((period) => period.id === r.mananas),
     ).toMatchObject({ name: "Mañanas", menuId: r.cafe });
-    await answers(await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, {}), 400, {
+    await answers(await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {}), 400, {
       code: "management.request_invalid",
       params: { field: "body" },
     });
     await answers(
-      await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, { menuId: r.cafe, name: 7 }),
+      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, { menuId: r.cafe, name: 7 }),
       400,
       { code: "management.request_invalid", params: { field: "name" } },
     );
@@ -276,7 +276,7 @@ describe("the menu timetable routes", () => {
     });
     const tardes = ((await created.json()) as { id: string }).id;
     await answers(
-      await r.send("PUT", `/menu-periods/${tardes}`, r.manager, { name: " Mañanas " }),
+      await r.send("PATCH", `/menu-periods/${tardes}`, r.manager, { name: " Mañanas " }),
       409,
       { code: "menu_period.name_taken", params: { departmentId: r.restaurant, name: "Mañanas" } },
     );
@@ -297,9 +297,9 @@ describe("the menu timetable routes", () => {
   it("refuse every write to anyone who may not manage venue service, changing nothing", async () => {
     const r = await routed();
     const before = await r.model();
-    const writes: ["POST" | "PUT" | "DELETE", string, unknown][] = [
+    const writes: ["POST" | "PUT" | "PATCH" | "DELETE", string, unknown][] = [
       ["POST", `/departments/${r.restaurant}/menu-periods`, { name: "Tardes", menuId: r.cafe }],
-      ["PUT", `/menu-periods/${r.mananas}`, { name: "Tardes", menuId: r.cafe }],
+      ["PATCH", `/menu-periods/${r.mananas}`, { name: "Tardes", menuId: r.cafe }],
       ["DELETE", `/menu-periods/${r.mananas}`, undefined],
       ["PUT", `/departments/${r.restaurant}/menu-week`, { days: week([]) }],
       ["PUT", `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`, { slots: [] }],
@@ -336,7 +336,7 @@ describe("the menu timetable routes", () => {
       { code: "menu_period.name_taken", params: { departmentId: r.restaurant, name: "Mañanas" } },
     );
     await answers(
-      await r.send("PUT", `/menu-periods/${unknown}`, r.manager, { name: "X", menuId: r.cafe }),
+      await r.send("PATCH", `/menu-periods/${unknown}`, r.manager, { name: "X", menuId: r.cafe }),
       404,
       { code: "menu_period.not_found", params: { periodId: unknown } },
     );
@@ -403,7 +403,7 @@ describe("the menu timetable routes", () => {
         { name: "X", menuId: r.cafe, departmentId: r.deli },
         "departmentId",
       ],
-      ["PUT", `/menu-periods/${r.mananas}`, { name: "X", menuId: "x" }, "menuId"],
+      ["PATCH", `/menu-periods/${r.mananas}`, { name: "X", menuId: "x" }, "menuId"],
       ["PUT", `/departments/${r.restaurant}/menu-week`, { days: [], extra: 1 }, "extra"],
       ["PUT", `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`, { at: 1 }, "at"],
       ["PUT", `/zones/${r.barra}/period-menus/${r.mananas}`, { menuId: "x" }, "menuId"],
@@ -414,7 +414,7 @@ describe("the menu timetable routes", () => {
       });
     for (const [method, path] of [
       ["POST", "/departments/x/menu-periods"],
-      ["PUT", "/menu-periods/x"],
+      ["PATCH", "/menu-periods/x"],
       ["DELETE", "/menu-periods/x"],
       ["PUT", "/departments/x/menu-week"],
       ["PUT", `/special-dates/x/menu-timetables/${r.restaurant}`],

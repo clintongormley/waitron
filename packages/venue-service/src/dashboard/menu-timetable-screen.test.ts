@@ -629,7 +629,7 @@ describe("Menu timetable: named periods", () => {
         { name: "Merienda", menuId: m("Café") },
       ],
       [
-        "PUT",
+        "PATCH",
         "/management-api/venue-service/menu-periods/noches",
         { name: "Cenas", menuId: m("Cena") },
       ],
@@ -935,7 +935,7 @@ describe("Menu timetable: menus by zone", () => {
         "/management-api/venue-service/departments/restaurant/all-day-menu",
         { menuId: m("Cena") },
       ],
-      ["PUT", "/management-api/venue-service/menu-periods/mediodia", { menuId: m("Bebidas") }],
+      ["PATCH", "/management-api/venue-service/menu-periods/mediodia", { menuId: m("Bebidas") }],
     ]);
   });
 
@@ -944,7 +944,7 @@ describe("Menu timetable: menus by zone", () => {
     const el = await mount(api);
     await choose(el, "periods.noches.menuId", m("Cócteles"));
     expect(writes()).toEqual([
-      ["PUT", "/management-api/venue-service/menu-periods/noches", { menuId: m("Cócteles") }],
+      ["PATCH", "/management-api/venue-service/menu-periods/noches", { menuId: m("Cócteles") }],
     ]);
   });
 
