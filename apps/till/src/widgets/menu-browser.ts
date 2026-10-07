@@ -490,7 +490,7 @@ export class TillMenuBrowser extends LitElement {
 
   /** The button for a section or product the index holds, a greyed one for a section only the
    * unfiltered index holds, else nothing; `path` is where a section opens beneath. A structural
-   * member is drawn from itself, a shortcut from the index. */
+   * section is drawn from itself, a section shortcut from the copy it opens. */
   #tile(
     ref: DocumentTile | DocumentMember,
     path: string[],
