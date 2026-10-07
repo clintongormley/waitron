@@ -1943,6 +1943,36 @@ describe("routing cell route", () => {
     expect(await cellsOf(fx)).toEqual([]);
   });
 
+  it("refuses a preview with a key it does not read, or a malformed address", async () => {
+    const fx = await fixture();
+    await servedZone(fx);
+    const extra = await send(fx.app, "POST", `${base}/preview`, fx.managerCookie, {
+      kind: "cell",
+      address: categoryCell(fx.categoryId),
+      target: noPrep,
+      position: 0,
+    });
+    expect(extra.status).toBe(400);
+    expect(await extra.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "position" } },
+    });
+    for (const address of [
+      { row: { kind: "category", categoryId: "bad-id" }, zoneId: null },
+      { row: { kind: "all" }, zoneId: null },
+      { row: { kind: "category", categoryId: fx.categoryId }, zoneId: "terrace" },
+    ]) {
+      const response = await send(fx.app, "POST", `${base}/preview`, fx.managerCookie, {
+        kind: "cell",
+        address,
+        target: noPrep,
+      });
+      expect(response.status, JSON.stringify(address)).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "address" } },
+      });
+    }
+  });
+
   it("keeps each location's cells to itself", async () => {
     const fx = await fixture(),
       other = await fixture();
