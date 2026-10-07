@@ -681,6 +681,47 @@ describe("dashboard-device-home-preview", () => {
       expect(breadcrumb(el)).toBe("Home › Food para clientes › Drinks para clientes");
     });
 
+    describe("two direct includes each holding one menu as a folder of its own name", () => {
+      const named = (es: string) => included({ names: { es }, fixed: { names: { es } } });
+      const shownDirectly = (id: string, name: string, folder: DocumentMember): DocumentMember => ({
+        ...(documentSection(id, name, [folder]) as SectionNode),
+        direct: true,
+      });
+      const sides = (second = "Second bar") =>
+        lunch(
+          [],
+          [
+            shownDirectly("s-left", "Left", named("First bar")),
+            shownDirectly("s-right", "Right", named(second)),
+          ],
+        );
+
+      it("opens the folder clicked, not the first copy drawn", async () => {
+        const { el } = await mount({ document: sides() });
+        expect(names(tiles(el, "structure"))).toEqual(["First bar", "Second bar"]);
+        await click(el, tile(el, "structure", "Second bar"));
+        expect(breadcrumb(el)).toBe("Home › Second bar");
+        await click(el, tile(el, "section", "Beer para clientes"));
+        expect(breadcrumb(el)).toBe("Home › Second bar › Beer para clientes");
+        await click(
+          el,
+          [...root(el).querySelectorAll<HTMLElement>("nav.breadcrumb li wt-button")][1]!,
+        );
+        expect(breadcrumb(el)).toBe("Home › Second bar");
+        await click(el, home(el));
+        await click(el, tile(el, "structure", "First bar"));
+        expect(breadcrumb(el)).toBe("Home › First bar");
+      });
+
+      it("keeps the copy open when a new document still draws it", async () => {
+        const { el } = await mount({ document: sides() });
+        await click(el, tile(el, "structure", "Second bar"));
+        el.document = sides("Second bar, renamed");
+        await el.updateComplete;
+        expect(breadcrumb(el)).toBe("Home › Second bar, renamed");
+      });
+    });
+
     it("opens the top-level copy from a shortcut to a menu included twice, drawn from that copy", async () => {
       const painted = bar({
         color: "#256bb1",

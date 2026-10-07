@@ -94,28 +94,87 @@ export interface HomeIndex<P> {
   sections: Map<string, DocumentSection>;
   /** Keyed by product id: each product the structure reaches and `offerOf` answers, once. */
   products: Map<string, P>;
+  /** The members home draws. */
+  home: DocumentMember[];
+  /** Keyed by section id: the first copy `home` draws of each section in `sections`. */
+  homeCopies: Map<string, DocumentSection>;
 }
 
-/** The copy of section `id` a device opens from home: the one home's list draws, else the one the
+/** One step of an open section's path: the section, and which of its list's drawn copies, from 0.
+ * A drawn list can hold one section twice only through an include shown directly. */
+export interface SectionStep {
+  sectionId: string;
+  copy: number;
+}
+
+/** The copy of section `id` a device opens from home: the first one home draws, else the one the
  * index holds. A shortcut tile is drawn from this copy too, so its label matches the page. */
 export function openedSection(
   id: string,
-  index: Pick<HomeIndex<unknown>, "sections">,
-  home: readonly DocumentMember[],
+  index: Pick<HomeIndex<unknown>, "sections" | "homeCopies">,
 ): DocumentSection | undefined {
-  return (
-    shownMembers(home).find(
-      (member): member is DocumentSection =>
-        member.kind === "section" && member.sectionId === id && index.sections.has(id),
-    ) ?? index.sections.get(id)
-  );
+  return index.homeCopies.get(id) ?? index.sections.get(id);
+}
+
+/** For each member of a list drawn beneath `path`, the path its tile opens; a product's is empty. */
+export function tilePaths(
+  list: readonly DocumentMember[],
+  path: readonly SectionStep[],
+): SectionStep[][] {
+  const seen = new Map<string, number>();
+  return list.map((member) => {
+    if (member.kind !== "section") return [];
+    const copy = seen.get(member.sectionId) ?? 0;
+    seen.set(member.sectionId, copy + 1);
+    return [...path, { sectionId: member.sectionId, copy }];
+  });
+}
+
+function drawnCopy(
+  list: readonly DocumentMember[],
+  { sectionId, copy }: SectionStep,
+): DocumentSection | undefined {
+  let seen = 0;
+  for (const member of list)
+    if (member.kind === "section" && member.sectionId === sectionId && seen++ === copy)
+      return member;
+  return undefined;
+}
+
+/** The sections `path` opens, or null once a step's section is not in the index or its list no
+ * longer draws that copy. A first copy is also looked for where a device can still open it: a
+ * list's own member shown directly, and at home the index's copy, which a shortcut opens. */
+export function sectionTrail(
+  path: readonly SectionStep[],
+  index: Pick<HomeIndex<unknown>, "sections" | "home" | "homeCopies">,
+): DocumentSection[] | null {
+  const trail: DocumentSection[] = [];
+  for (const step of path) {
+    if (!index.sections.has(step.sectionId)) return null;
+    const previous = trail.at(-1);
+    let next: DocumentSection | undefined;
+    if (previous === undefined)
+      next = step.copy === 0 ? openedSection(step.sectionId, index) : drawnCopy(index.home, step);
+    else
+      next =
+        drawnCopy(shownMembers(previous.members), step) ??
+        (step.copy === 0 ? drawnCopy(previous.members, step) : undefined);
+    if (next === undefined) return null;
+    trail.push(next);
+  }
+  return trail;
 }
 
 export function indexDocument<P>(
   members: readonly DocumentMember[],
   offerOf: (menuItemId: string) => P | undefined,
 ): HomeIndex<P> {
-  const index: HomeIndex<P> = { sections: new Map(), products: new Map() };
+  const index: HomeIndex<P> = {
+    sections: new Map(),
+    products: new Map(),
+    home: shownMembers(members),
+    homeCopies: new Map(),
+  };
   const walk = (list: readonly DocumentMember[]): boolean => {
     let holdsSomething = false;
     for (const member of list) {
@@ -133,6 +192,13 @@ export function indexDocument<P>(
     return holdsSomething;
   };
   walk(members);
+  for (const member of index.home)
+    if (
+      member.kind === "section" &&
+      index.sections.has(member.sectionId) &&
+      !index.homeCopies.has(member.sectionId)
+    )
+      index.homeCopies.set(member.sectionId, member);
   return index;
 }
 

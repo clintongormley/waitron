@@ -2330,6 +2330,57 @@ describe("till-menu-browser", () => {
       expect(breadcrumb(el)).toBe("Home › Comida (ES) › Drinks (EN)");
     });
 
+    describe("two direct includes each holding one menu as a folder of its own name", () => {
+      const named = (en: string): DocumentMember => ({ ...(drinks as SectionNode), names: { en } });
+      const sides = (second = "Second bar") =>
+        lunch({
+          structure: {
+            members: [
+              directly(section("sec-left", "left-internal", { en: "Left" }, [named("First bar")])),
+              directly(section("sec-right", "right-internal", { en: "Right" }, [named(second)])),
+            ],
+          },
+        });
+
+      it("opens the folder tapped, not the first copy drawn", async () => {
+        const { el } = await mount({ menu: sides() });
+        expect(names(entries(el, "structure"))).toEqual(["First bar", "Second bar"]);
+        await tap(el, entry(el, "structure", "Second bar"));
+        expect(breadcrumb(el)).toBe("Home › Second bar");
+        await tap(el, entry(el, "section", "Beer (EN)"));
+        expect(breadcrumb(el)).toBe("Home › Second bar › Beer (EN)");
+        await tap(el, [...root(el).querySelectorAll<HTMLElement>("nav.breadcrumb wt-button")][1]!);
+        expect(breadcrumb(el)).toBe("Home › Second bar");
+        await tap(el, root(el).querySelector<HTMLElement>("nav.breadcrumb wt-button")!);
+        await tap(el, entry(el, "structure", "First bar"));
+        expect(breadcrumb(el)).toBe("Home › First bar");
+      });
+
+      it("keeps the copy open when a new menu still draws it", async () => {
+        const { el } = await mount({ menu: sides() });
+        await tap(el, entry(el, "structure", "Second bar"));
+        el.menu = sides("Second bar, renamed");
+        await el.updateComplete;
+        expect(notice(el)).toBeNull();
+        expect(breadcrumb(el)).toBe("Home › Second bar, renamed");
+      });
+
+      it("says Not found when a new menu no longer draws the copy that was open", async () => {
+        const { el } = await mount({ menu: sides() });
+        await tap(el, entry(el, "structure", "Second bar"));
+        el.menu = lunch({
+          structure: {
+            members: [
+              directly(section("sec-left", "left-internal", { en: "Left" }, [named("First bar")])),
+            ],
+          },
+        });
+        await el.updateComplete;
+        expect(notice(el)).toBe("Not found");
+        expect(names(entries(el, "structure"))).toEqual(["First bar"]);
+      });
+    });
+
     it("a shortcut to a menu included twice opens the top-level copy, and is drawn from it", async () => {
       const paintedBar: DocumentMember = {
         ...(bar as SectionNode),
