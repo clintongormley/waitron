@@ -128,6 +128,7 @@ import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { configureDemoPrinter, startDemoPrinterLoop } from "./demo-printer.js";
+import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
@@ -1463,6 +1464,7 @@ async function bootServer(
   // read-only node at all, so even its safe-verb reads are absent, not merely its writes refused.
   // Un-mounting at boot rather than gating per request is deliberate; see read-only-gate.ts's header.
   if (!fencedOrMirror) {
+    await withTransaction(db, (tx) => expireInvoiceDeliveryClaims(tx, now(), true));
     const demoPrinter = await configureDemoPrinter(db, till.locationId, till.practiceMode === true);
     if (demoPrinter !== null) {
       demoPrinterLoop = startDemoPrinterLoop(db, till.locationId, demoPrinter, 500, (error) =>
