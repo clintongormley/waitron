@@ -53,7 +53,7 @@ function openHoursPage(departmentId: string): void {
 const menuTimetablePath = (departmentId: string | null) =>
   departmentId === null
     ? "/manage/menu-timetable"
-    : `/manage/menu-timetable?departmentId=${encodeURIComponent(departmentId)}`;
+    : `/manage/menu-timetable/department/${encodeURIComponent(departmentId)}`;
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "ticket_then_pay"];
 type View = "departments" | "zones";

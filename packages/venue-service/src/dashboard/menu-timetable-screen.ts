@@ -7,6 +7,7 @@ import {
   focusFirstInvalid,
   leaveCoordinatorFor,
   submitOnEnter,
+  UrlStateController,
   visuallyHiddenStyles,
   type DataTableColumn,
   type DraftScope,
@@ -326,18 +327,23 @@ export class MenuTimetableScreen extends LitElement {
   /** Stable while one editor is open: the modal refuses a close if its callback changes. */
   #beforeClose?: (reason: LeaveReason) => Promise<boolean>;
 
-  readonly #followUrl = (): void => {
-    const asked = new URL(location.href).searchParams.get("departmentId");
-    if (asked !== null && this.model?.departments.some((entry) => entry.id === asked))
+  readonly #url = new UrlStateController(this, () => this.#followUrl(), {
+    basePath: "/manage",
+    primary: "dashboard",
+    children: { "menu-timetable": { department: "department" } },
+  });
+
+  #followUrl(): void {
+    if (this.#url.read("dashboard") !== "menu-timetable") return;
+    const asked = this.#url.read("department");
+    if (asked === null) this.departmentId = "";
+    else if (this.model === undefined || this.model.departments.some((entry) => entry.id === asked))
       this.departmentId = asked;
-    else if (asked !== null && this.model === undefined) this.departmentId = asked;
-  };
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.#register();
-    this.#followUrl();
-    window.addEventListener("popstate", this.#followUrl);
     this.#detach = this.api.watchTimetable(
       (model) => {
         this.model = model;
@@ -357,7 +363,6 @@ export class MenuTimetableScreen extends LitElement {
     this.#scope = undefined;
     this.#leave = undefined;
     super.disconnectedCallback();
-    window.removeEventListener("popstate", this.#followUrl);
     this.#detach?.();
   }
 
@@ -375,12 +380,11 @@ export class MenuTimetableScreen extends LitElement {
     );
   }
 
+  /** Shows the department the address shows once the guard has accepted the pick. */
   #choose(departmentId: string): void {
-    this.departmentId = departmentId;
     this.cellErrors = {};
-    const url = new URL(location.href);
-    url.searchParams.set("departmentId", departmentId);
-    history.replaceState(history.state, "", url);
+    void this.#url.write({ dashboard: "menu-timetable", department: departmentId });
+    this.#followUrl();
   }
 
   #menuName(id: string | null): string {
@@ -1564,6 +1568,8 @@ export class MenuTimetableScreen extends LitElement {
                           .value=${department.id}
                           @wt-change=${(event: CustomEvent<{ value: string }>) => {
                             event.stopPropagation();
+                            (event.currentTarget as HTMLElement & { value: string }).value =
+                              department.id;
                             this.#choose(event.detail.value);
                           }}
                         ></wt-combobox>

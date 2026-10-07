@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, NavigationGuard } from "@waitron/ui";
 import { page } from "vitest/browser";
 import {
   chooseOption,
@@ -404,6 +404,29 @@ describe("Menu timetable: what a department shows", () => {
     await choose(el, "departmentId", "restaurant");
     expect(listed(el)[0]).toBe("Desayunos");
     expect(new URL(location.href).searchParams.get("departmentId")).toBe("restaurant");
+  });
+
+  it("writes a department picked by hand through the navigation guard, as a new history entry", async () => {
+    history.replaceState(null, "", "/manage/before-menus");
+    const guard = new NavigationGuard(window, {
+      isDirty: () => false,
+      request: async () => "proceeded",
+    });
+    onTestFinished(() => guard.dispose());
+    await guard.write("/manage/menu-timetable");
+    const { api } = server();
+    const el = await mount(api);
+    expect(field(el, "departmentId")!.value).toBe("restaurant");
+    await choose(el, "departmentId", "deli");
+    expect(location.pathname).toBe("/manage/menu-timetable/department/deli");
+    expect(new URL(guard.href).pathname).toBe("/manage/menu-timetable/department/deli");
+    expect(listed(el)).toEqual(["Deli para llevar"]);
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/manage/menu-timetable");
+    await expect.poll(() => field(el, "departmentId")!.value).toBe("restaurant");
+    expect(new URL(guard.href).pathname).toBe("/manage/menu-timetable");
+    history.forward();
+    await expect.poll(() => field(el, "departmentId")!.value).toBe("deli");
   });
 
   it("speaks Spanish", async () => {
