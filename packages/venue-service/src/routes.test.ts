@@ -1316,7 +1316,7 @@ describe("venue service management routes", () => {
     });
   });
 
-  it("configures a department and zone menu", async () => {
+  it("configures a department and its menus", async () => {
     const fx = await fixture();
     const created = await send(
       fx.app,
@@ -1348,16 +1348,40 @@ describe("venue service management routes", () => {
         await send(
           fx.app,
           "PUT",
+          `/management-api/venue-service/departments/${department.id}/menus`,
+          fx.managerCookie,
+          { menuIds: [fx.menuId] },
+        )
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/departments/${department.id}/all-day-menu`,
+          fx.managerCookie,
+          { menuId: fx.menuId },
+        )
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
           `/management-api/venue-service/zones/${fx.zoneId}/menus/${fx.menuId}`,
           fx.managerCookie,
           { makeDefault: true },
         )
       ).status,
-    ).toBe(204);
+    ).toBe(404);
 
     const listed = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
     expect(listed.status).toBe(200);
-    expect(await listed.json()).toMatchObject({
+    const body = await listed.json();
+    expect(body).not.toHaveProperty("zoneMenus");
+    expect(body).toMatchObject({
       departments: [
         {
           id: department.id,
@@ -1373,7 +1397,6 @@ describe("venue service management routes", () => {
           serviceMode: "prepay",
         },
       ],
-      zoneMenus: [{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 0, isDefault: true }],
       readiness: [{ code: "zone.menu_unpublished", zoneId: fx.zoneId }],
     });
     const blocked = await send(
@@ -1447,45 +1470,6 @@ describe("venue service management routes", () => {
         )
       ).status,
     ).toBe(400);
-  });
-
-  it("stores a zone menu's explicit display order and refuses one that is not a whole number from zero", async () => {
-    const fx = await fixture();
-    const department = (await (
-      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
-        name: "Restaurant",
-        defaultServiceMode: "table_tab",
-      })
-    ).json()) as { id: string };
-    expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/zones/${fx.zoneId}`,
-          fx.managerCookie,
-          { departmentId: department.id },
-        )
-      ).status,
-    ).toBe(204);
-    const path = `/management-api/venue-service/zones/${fx.zoneId}/menus/${fx.menuId}`;
-    expect((await send(fx.app, "PUT", path, fx.managerCookie, { displayOrder: 3 })).status).toBe(
-      204,
-    );
-    for (const displayOrder of ["4", 4.5, -1]) {
-      const rejected = await send(fx.app, "PUT", path, fx.managerCookie, { displayOrder });
-      expect(rejected.status).toBe(400);
-      expect(await rejected.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "displayOrder" } },
-      });
-    }
-    expect(
-      (
-        (await (
-          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-        ).json()) as { zoneMenus: unknown[] }
-      ).zoneMenus,
-    ).toEqual([{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 3, isDefault: false }]);
   });
 });
 

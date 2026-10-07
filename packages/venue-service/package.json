@@ -10,6 +10,7 @@
     "./hours-types": "./src/hours-types.ts",
     "./holiday-types": "./src/holiday-types.ts",
     "./testing/station-week.js": "./src/testing/station-week.ts",
+    "./testing/zone-menus.js": "./src/testing/zone-menus.ts",
     "./dashboard": "./src/dashboard/index.ts"
   },
   "scripts": {

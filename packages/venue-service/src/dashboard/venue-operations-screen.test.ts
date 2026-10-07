@@ -58,11 +58,6 @@ const model: VenueServiceView = {
     },
   ],
   salePolicies: { departments: [], zones: [] },
-  zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
-  menus: [
-    { id: "m1", name: "Casa Delgado", active: true },
-    { id: "m2", name: "Deli takeaway", active: true },
-  ],
   floorZones: [
     { id: "z1", name: "Dining room" },
     { id: "z2", name: "Deli counter" },
@@ -133,12 +128,6 @@ function field(el: VenueOperationsScreen, name: string) {
 }
 function input(el: VenueOperationsScreen, name: string) {
   return el.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
-}
-/** A dropdown's choices, as the text a person reads. */
-function options(box: Element) {
-  return (box as Element & { options: { label: string }[] }).options
-    .map((option) => option.label)
-    .join(" ");
 }
 function table(el: VenueOperationsScreen, name: string) {
   const result = el.shadowRoot!.querySelector(`[data-test="${name}"]`)!;
@@ -237,39 +226,6 @@ describe("venue operations screen", () => {
       expect(find(el, '[data-test="new-hours"]')).toBeNull();
     }
     expect(table(el, "policy-tree")).not.toBeNull();
-  });
-
-  it("opens retained zone menus from the policy tree outside the legacy tabs", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    const tree = table(el, "policy-tree");
-    await action(el, "menus-tree-zone-z1");
-    const menus = table(el, "zone-menus");
-    expect(menus.closest("wt-tabs")).toBeNull();
-    expect(tree.compareDocumentPosition(menus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(menus.checkVisibility()).toBe(true);
-    await action(el, "new-assignment-z1");
-    expect(modal(el)?.getAttribute("heading")).toBe("Make available");
-  });
-
-  it("opens zone menus from the policy tree without a duplicate old-table action", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    expect(find(el, '[data-test="zone-menus-z1"]')).toBeNull();
-    await action(el, "menus-tree-zone-z1");
-    expect(table(el, "zone-menus").checkVisibility()).toBe(true);
-  });
-
-  it("opens an unconfigured zone's menus from the tree without a duplicate old-table action", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    expect(find(el, '[data-test="zone-menus-z2"]')).toBeNull();
-    await action(el, "menus-tree-zone-z2");
-    expect(table(el, "zone-menus").checkVisibility()).toBe(true);
-    expect(find(el, '[data-test="new-assignment-z2"]')!.hasAttribute("disabled")).toBe(true);
   });
 
   it("opens a new department from the policy tree's top action", async () => {
@@ -457,7 +413,7 @@ describe("venue operations screen", () => {
     ).toBe(true);
   });
 
-  it("opens the zone's menu assignment from its missing-menu warning", async () => {
+  it("links a zone's missing-menu warning to its department's menu timetable", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
@@ -468,13 +424,59 @@ describe("venue operations screen", () => {
     const zone = [...tree.querySelectorAll('tbody [role="row"]')].find((row) =>
       row.textContent?.includes("Dining room"),
     )!;
-    const action = zone.querySelector<HTMLButtonElement>('[data-test="zone-readiness-action"]');
+    const action = zone.querySelector<HTMLAnchorElement>('[data-test="zone-readiness-action"]');
     expect(action).not.toBeNull();
-    expect(action!.textContent).toContain("Make available");
+    expect(action!.textContent).toContain("Set one up in Menu timetable");
+    expect(action!.getAttribute("href")).toBe("/manage/menu-timetable/department/d1");
+    // A plain link: the dashboard's same-app link handler navigates in the app.
+    const before = location.href;
+    let reachedBrowser = false;
+    const blockDefault = (event: MouseEvent) => {
+      reachedBrowser = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener("click", blockDefault, { once: true });
     action!.click();
+    document.removeEventListener("click", blockDefault);
     await settle(el);
-    expect(modal(el)?.getAttribute("heading")).toBe("Make available");
+    expect(reachedBrowser).toBe(true);
+    expect(location.href).toBe(before);
+    expect(modal(el)).toBeNull();
   });
+
+  it.each(["shift", "alt"] as const)(
+    "leaves a click with %s held on the menu timetable link to the browser",
+    async (kind) => {
+      const el = await mount({
+        load: vi.fn().mockResolvedValue({
+          ...model,
+          readiness: [{ code: "zone.menu_missing", zoneId: "z1", zoneName: "Dining room" }],
+        }),
+      } as unknown as VenueServiceApi);
+      const tree = table(el, "policy-tree").shadowRoot!;
+      const action = tree.querySelector<HTMLAnchorElement>('[data-test="zone-readiness-action"]')!;
+      const before = location.href;
+      let reachedBrowser = false;
+      const blockDefault = (event: MouseEvent) => {
+        reachedBrowser = !event.defaultPrevented;
+        event.preventDefault();
+      };
+      document.addEventListener("click", blockDefault, { once: true });
+      action.dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+          shiftKey: kind === "shift",
+          altKey: kind === "alt",
+        }),
+      );
+      document.removeEventListener("click", blockDefault);
+      await settle(el);
+      expect(reachedBrowser).toBe(true);
+      expect(location.href).toBe(before);
+    },
+  );
 
   it("renames a department from its table cell", async () => {
     const updateDepartment = vi.fn().mockResolvedValue(undefined);
@@ -2001,7 +2003,7 @@ describe("venue operations screen", () => {
     expect(printTradingName).toBe(false);
   });
 
-  it("keeps the tree and zone-menu Add outside the tabs", async () => {
+  it("keeps the tree's Add outside the tabs", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
@@ -2015,16 +2017,6 @@ describe("venue operations screen", () => {
     ).not.toBeNull();
     expect(find(el, '[data-test="new-department"]')!.checkVisibility()).toBe(true);
     expect(tabs.querySelector('[slot="departments"] [data-test="new-department"]')).toBeNull();
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    expect(tabs.querySelector('[slot="actions"] [data-test="new-assignment-z1"]')).toBeNull();
-    expect(
-      el.shadowRoot!.querySelector(
-        '[data-test="zone-menu-actions"] [data-test="new-assignment-z1"]',
-      ),
-    ).not.toBeNull();
-    expect(find(el, '[data-test="new-assignment-z1"]')!.checkVisibility()).toBe(true);
-    expect(tabs.querySelector('[slot="zones"] [data-test="new-assignment-z1"]')).toBeNull();
   });
 
   it("puts Add department under its empty table's sentence, opening its editor", async () => {
@@ -2042,32 +2034,14 @@ describe("venue operations screen", () => {
     expect(modal(el)!.getAttribute("heading")).toBe("Add department");
   });
 
-  it("puts Make available under a zone's empty menu table, opening the menu editor", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    const button = table(el, "zone-menus").querySelector<HTMLElement>(
-      ":scope > [slot=empty-action]",
-    )!;
-    expect(button.assignedSlot).not.toBeNull();
-    expect(button.textContent!.trim()).toBe("Make available");
-    button.click();
-    await settle(el);
-    expect(modal(el)!.getAttribute("heading")).toBe("Make available");
-  });
-
   const emptySentences = {
     en: {
       departments: "No departments yet.",
       zones: "No service zones yet.",
-      "zone-menus": "No menus in this service zone yet.",
     },
     es: {
       departments: "Todavía no hay departamentos.",
       zones: "Todavía no hay zonas de servicio.",
-      "zone-menus": "Todavía no hay cartas en esta zona de servicio.",
     },
   };
   function emptySentence(el: VenueOperationsScreen, name: string) {
@@ -2088,23 +2062,6 @@ describe("venue operations screen", () => {
     expect(emptySentence(empty, "departments")).toBe(expected.departments);
     await selectTab(empty, "zones");
     expect(emptySentence(empty, "zones")).toBe(expected.zones);
-
-    const noMenus = await mount({
-      load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
-    } as unknown as VenueServiceApi);
-    await selectTab(noMenus, "zones");
-    await action(noMenus, "menus-tree-zone-z1");
-    expect(emptySentence(noMenus, "zone-menus")).toBe(expected["zone-menus"]);
-  });
-
-  it("disables Make available when a floor zone has no service zone", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    await action(el, "menus-tree-zone-z2");
-    const button = find(el, '[data-test="new-assignment-z2"]')!;
-    expect(button).not.toBeNull();
-    expect(button.hasAttribute("disabled")).toBe(true);
   });
 
   it("shows a load error when the venue configuration request fails", async () => {
@@ -2162,7 +2119,7 @@ describe("venue operations screen", () => {
     }
   });
 
-  it("shows departments, trading names, zones and menu defaults", async () => {
+  it("shows departments, trading names and zones, with no menu default", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
@@ -2175,7 +2132,7 @@ describe("venue operations screen", () => {
     await selectTab(el, "zones");
     expect(tableText(el, "zones")).toContain("Dining room");
     expect(tableText(el, "zones")).toContain("Deli counter");
-    expect(tableText(el, "zones")).toContain("Casa Delgado");
+    expect(tableText(el, "zones")).not.toContain("Casa Delgado");
     await action(el, "edit-zone-z1");
     expect(field(el, "zone-mode-z1").value).toBe("prepay");
   });
@@ -2308,29 +2265,25 @@ describe("venue operations screen", () => {
 
   // A real click lets the screen re-render between its own click handler and the menu's: the
   // save it starts disables every action, which the menu must not read as a disabled click.
-  it("closes the row menu when a zones action saves straight away", async () => {
+  it("closes the row menu when a zone action saves straight away", async () => {
     const api = {
       load: vi.fn().mockResolvedValue({
         ...model,
-        zoneMenus: [
-          ...model.zoneMenus,
-          { zoneId: "z1", menuId: "m2", displayOrder: 1, isDefault: false },
-        ],
+        zones: [{ ...model.zones[0]!, active: false }],
+        floorZones: [{ ...model.floorZones[0]!, active: false }, model.floorZones[1]!],
       }),
       // Still in flight, as a real request is while the menu decides whether to close.
-      allowMenu: vi.fn(() => new Promise(() => {})),
+      updateZone: vi.fn(() => new Promise(() => {})),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    const button = find(el, '[data-test="default-assignment-m2"]')!;
+    const button = find(el, '[data-test="enable-tree-zone-z1"]')!;
     const menu = button.closest("wt-row-actions")!;
     const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
     await userEvent.click(menu.shadowRoot!.querySelector("button")!);
     expect(popup.matches(":popover-open")).toBe(true);
     await userEvent.click(button);
     await settle(el);
-    expect(vi.mocked(api.allowMenu).mock.calls.length).toBe(1);
+    expect(vi.mocked(api.updateZone).mock.calls.length).toBe(1);
     expect(popup.matches(":popover-open")).toBe(false);
   });
 
@@ -2468,35 +2421,6 @@ it("edits a zone policy and can return it to the department's service mode", asy
   });
 });
 
-it("creates and edits zone menu assignments and preserves a current default", async () => {
-  const api = {
-    load: vi.fn().mockResolvedValue(model),
-    allowMenu: vi.fn().mockResolvedValue(undefined),
-  } as unknown as VenueServiceApi;
-  const el = await mount(api);
-  await selectTab(el, "zones");
-  await action(el, "menus-tree-zone-z1");
-  expect(tableText(el, "zone-menus")).toContain("Casa Delgado");
-  await action(el, "new-assignment-z1");
-  expect(field(el, "assignment-menu").value).toBe("m2");
-  expect(options(field(el, "assignment-menu"))).not.toContain("Casa Delgado");
-  field(el, "assignment-order").value = "2";
-  (field(el, "assignment-default") as HTMLInputElement).checked = true;
-  await action(el, "save-editor");
-  expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 2, makeDefault: true });
-  await action(el, "edit-assignment-m1");
-  expect(field(el, "assignment-menu").value).toBe("m1");
-  expect(field(el, "assignment-menu").disabled).toBe(true);
-  expect((field(el, "assignment-default") as HTMLInputElement).checked).toBe(true);
-  expect(field(el, "assignment-default").disabled).toBe(true);
-  field(el, "assignment-order").value = "3";
-  await action(el, "save-editor");
-  expect(api.allowMenu).toHaveBeenLastCalledWith("z1", "m1", {
-    displayOrder: 3,
-    makeDefault: true,
-  });
-});
-
 it("closes a successfully saved editor when refreshing the list fails", async () => {
   const api = {
     load: vi.fn().mockResolvedValueOnce(model).mockRejectedValue(new Error("offline")),
@@ -2625,63 +2549,15 @@ describe("the venue lists", () => {
     expect(column(el, "zones", 0)).toEqual(["Deli counter", "Dining room"]);
   });
 
-  it("marks disabled departments, and names a zone's non-default menus", async () => {
+  it("marks disabled departments", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
         departments: [model.departments[0]!, { ...model.departments[1]!, active: false }],
-        menus: [model.menus[0]!, { ...model.menus[1]!, active: false }],
-        zoneMenus: [
-          ...model.zoneMenus,
-          { zoneId: "z1", menuId: "m2", displayOrder: 1, isDefault: false },
-        ],
       }),
     } as unknown as VenueServiceApi);
     await selectTab(el, "departments");
     expect(column(el, "departments", 3)).toEqual(["Active", "Disabled"]);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    expect(column(el, "zone-menus", 1)).toEqual(["Yes", "No"]);
-  });
-
-  it("labels a zone-menu row's actions with its stored id when it is not loaded", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        zoneMenus: [
-          ...model.zoneMenus,
-          { zoneId: "z1", menuId: "m-gone", displayOrder: 1, isDefault: false },
-        ],
-      }),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    expect(
-      [...table(el, "zone-menus").shadowRoot!.querySelectorAll("wt-row-actions")].map((menu) =>
-        menu.getAttribute("label"),
-      ),
-    ).toEqual(["Actions: Casa Delgado", "Actions: m-gone"]);
-  });
-
-  it("makes another of a zone's menus its default straight from the list", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        zoneMenus: [
-          ...model.zoneMenus,
-          { zoneId: "z1", menuId: "m2", displayOrder: 4, isDefault: false },
-        ],
-      }),
-      allowMenu: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    expect(find(el, '[data-test="default-assignment-m1"]')!.hasAttribute("disabled")).toBe(true);
-    await action(el, "default-assignment-m2");
-    expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 4, makeDefault: true });
-    expect(modal(el)).toBeNull();
-    expect(api.load).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -2699,8 +2575,7 @@ describe("the venue lists' column choosers", () => {
 
   it.each([
     ["departments", "departments", "waitron.venue.departments.table", ["trading", "mode", "state"]],
-    ["zones", "zones", "waitron.venue.zones.table", ["department", "mode", "default"]],
-    ["zones", "zone-menus", "waitron.venue.zone-menus.table", ["default", "order"]],
+    ["zones", "zones", "waitron.venue.zones.table", ["department", "mode"]],
   ] as const)(
     "the %s tab's %s list offers every column but the first and the actions, and remembers a hidden one",
     async (tab, name, viewKey, keys) => {
@@ -2708,7 +2583,6 @@ describe("the venue lists' column choosers", () => {
         load: vi.fn().mockResolvedValue(model),
       } as unknown as VenueServiceApi);
       await selectTab(el, tab);
-      if (name === "zone-menus") await action(el, "menus-tree-zone-z1");
       expect(chooser(el, name)).toBe("Customise columns");
       expect(choices(el, name)).toEqual(keys.map((key) => [key, true]));
       const before = headers(el, name);
@@ -2734,9 +2608,7 @@ describe("the venue lists' column choosers", () => {
     await selectTab(el, "departments");
     expect(chooser(el, "departments")).toBe("Personalizar columnas");
     await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
     expect(chooser(el, "zones")).toBe("Personalizar columnas");
-    expect(chooser(el, "zone-menus")).toBe("Personalizar columnas");
   });
 
   it("words a column that is always shown, and the last one shown, in Spanish", async () => {
@@ -2746,8 +2618,7 @@ describe("the venue lists' column choosers", () => {
     } as unknown as VenueServiceApi);
     await selectTab(el, "departments");
     await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    for (const name of ["departments", "zones", "zone-menus"]) {
+    for (const name of ["departments", "zones"]) {
       const list = table(el, name) as Element & {
         alwaysShownColumnLabel: string;
         lastShownColumnLabel: string;
@@ -2774,49 +2645,6 @@ describe("the venue editors refuse an incomplete form", () => {
     expect(fieldError(el, "zone-department-z2")).toBe("This field is required.");
     expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(api.configureZone).not.toHaveBeenCalled();
-  });
-
-  it("requires a menu for a zone that already has every active one", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        zoneMenus: [
-          ...model.zoneMenus,
-          { zoneId: "z1", menuId: "m2", displayOrder: 1, isDefault: false },
-        ],
-      }),
-      allowMenu: vi.fn(),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    await action(el, "new-assignment-z1");
-    expect(field(el, "assignment-menu").value).toBe("");
-    await action(el, "save-editor");
-    expect(fieldError(el, "assignment-menu")).toBe("This field is required.");
-    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
-    expect(api.allowMenu).not.toHaveBeenCalled();
-  });
-
-  it("refuses a display order that is not a whole number of zero or more", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue(model),
-      allowMenu: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    await action(el, "new-assignment-z1");
-    for (const order of ["-1", "1.5"]) {
-      field(el, "assignment-order").value = order;
-      await action(el, "save-editor");
-      expect(fieldError(el, "assignment-order")).toBe("Enter a whole number of zero or more.");
-      expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
-    }
-    expect(api.allowMenu).not.toHaveBeenCalled();
-    field(el, "assignment-order").value = "0";
-    await action(el, "save-editor");
-    expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 0, makeDefault: false });
   });
 });
 
@@ -3058,13 +2886,6 @@ describe("an editor's messages", () => {
       name: "serviceMode",
       control: "zone-mode-z1",
     },
-    {
-      tab: "zones",
-      open: ["menus-tree-zone-z1", "edit-assignment-m1"],
-      method: "allowMenu",
-      name: "displayOrder",
-      control: "assignment-order",
-    },
   ])("puts a refused $name under $control", async ({ tab, open, method, name, control }) => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -3087,13 +2908,6 @@ describe("an editor's messages", () => {
       method: "configureZone",
       code: "department.not_found",
       control: "zone-department-z1",
-    },
-    {
-      tab: "zones",
-      open: ["menus-tree-zone-z1", "edit-assignment-m1"],
-      method: "allowMenu",
-      code: "catalogue.not_found",
-      control: "assignment-menu",
     },
   ])("puts a refused $code under $control", async ({ tab, open, method, code, control }) => {
     const el = await mount({
@@ -3134,18 +2948,14 @@ it("says a refused list action at the top of the screen, with no editor open", a
   const api = {
     load: vi.fn().mockResolvedValue({
       ...model,
-      zoneMenus: [
-        ...model.zoneMenus,
-        { zoneId: "z1", menuId: "m2", displayOrder: 4, isDefault: false },
-      ],
+      zones: [{ ...model.zones[0]!, active: false }],
+      floorZones: [{ ...model.floorZones[0]!, active: false }, model.floorZones[1]!],
     }),
-    allowMenu: vi.fn().mockRejectedValue(new Error("offline")),
+    updateZone: vi.fn().mockRejectedValue(new Error("offline")),
   } as unknown as VenueServiceApi;
   const el = await mount(api);
-  await selectTab(el, "zones");
-  await action(el, "menus-tree-zone-z1");
-  await action(el, "default-assignment-m2");
-  expect(api.allowMenu).toHaveBeenCalledTimes(1);
+  await action(el, "enable-tree-zone-z1");
+  expect(api.updateZone).toHaveBeenCalledTimes(1);
   expect(modal(el)).toBeNull();
   expect(pageAlert(el)).toBe("The change could not be saved.");
   expect(el.shadowRoot!.querySelector('[data-test="page-alert"]')!.getAttribute("role")).toBe(
@@ -3293,72 +3103,6 @@ it("returns focus to a row's menu after an edit opened from it is saved", async 
   });
 });
 
-describe("where focus goes after a change that saves at once", () => {
-  const withSecondMenu: VenueServiceView = {
-    ...model,
-    zoneMenus: [
-      ...model.zoneMenus,
-      { zoneId: "z1", menuId: "m2", displayOrder: 1, isDefault: false },
-    ],
-  };
-  /** Waits until the save has reloaded the screen (`load` cleared before the change) and handed
-   * its controls back. */
-  async function saved(el: VenueOperationsScreen, load: ReturnType<typeof vi.fn>) {
-    await vi.waitFor(() => expect(load).toHaveBeenCalledOnce());
-    await vi.waitFor(() =>
-      expect(find(el, '[data-test="new-assignment-z1"]')!.hasAttribute("disabled")).toBe(false),
-    );
-    await settle(el);
-  }
-
-  it("leaves focus on a department's print switch after it is changed, though Make available opened an editor earlier", async () => {
-    const load = vi.fn().mockResolvedValue(structuredClone(withSecondMenu));
-    const el = await mount({
-      load,
-      liveData: new LiveData(),
-      setDepartmentSalePolicyField: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    await action(el, "new-assignment-z1");
-    await action(el, "cancel-editor");
-    const makeAvailable = find(el, '[data-test="new-assignment-z1"]')!;
-    expect(el.shadowRoot!.activeElement).toBe(makeAvailable);
-    load.mockClear();
-    const control = table(el, "policy-tree").shadowRoot!.querySelector<HTMLElement>(
-      'wt-switch[name="printTradingName"]',
-    )!;
-    await userEvent.click(control.shadowRoot!.querySelector<HTMLElement>("input")!);
-    await saved(el, load);
-    expect(el.shadowRoot!.activeElement).not.toBe(makeAvailable);
-    expect(table(el, "policy-tree").shadowRoot!.activeElement).toBe(control);
-  });
-
-  it("leaves focus on a zone menu's row menu after Make default", async () => {
-    const load = vi.fn().mockResolvedValue(structuredClone(withSecondMenu));
-    const el = await mount({
-      load,
-      liveData: new LiveData(),
-      allowMenu: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    await action(el, "new-assignment-z1");
-    await action(el, "cancel-editor");
-    const menu = table(el, "zone-menus").shadowRoot!.querySelector<HTMLElement>(
-      'wt-row-actions[label="Actions: Deli takeaway"]',
-    )!;
-    await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
-    load.mockClear();
-    await userEvent.click(find(el, '[data-test="default-assignment-m2"]')!);
-    await saved(el, load);
-    expect(el.shadowRoot!.activeElement).not.toBe(find(el, '[data-test="new-assignment-z1"]'));
-    const focused = table(el, "zone-menus").shadowRoot!.activeElement as HTMLElement | null;
-    expect(focused?.getAttribute("label")).toBe("Actions: Deli takeaway");
-    expect(focused!.shadowRoot!.activeElement).toBe(focused!.shadowRoot!.querySelector("button"));
-  });
-});
-
 describe("where focus goes when an editor opened from an Add button closes", () => {
   /** An api whose writes change what the next load returns, as the server's do. */
   function writingApi(start: Partial<VenueServiceView>) {
@@ -3377,25 +3121,13 @@ describe("where focus goes when an editor opened from an Add button closes", () 
         view.departments = [...view.departments, made];
         return made;
       }),
-      allowMenu: vi.fn(
-        async (
-          zoneId: string,
-          menuId: string,
-          input: { displayOrder: number; makeDefault: boolean },
-        ) => {
-          view.zoneMenus = [
-            ...view.zoneMenus.filter((row) => row.zoneId !== zoneId || row.menuId !== menuId),
-            { zoneId, menuId, displayOrder: input.displayOrder, isDefault: input.makeDefault },
-          ];
-        },
-      ),
     };
   }
   const tables: {
     table: string;
     add: string;
     empty: Partial<VenueServiceView>;
-    write: "createDepartment" | "allowMenu";
+    write: "createDepartment";
     show: (el: VenueOperationsScreen) => Promise<void>;
     fill: (el: VenueOperationsScreen) => void;
   }[] = [
@@ -3410,23 +3142,10 @@ describe("where focus goes when an editor opened from an Add button closes", () 
         field(el, "trading-name").value = "Casa Events";
       },
     },
-    {
-      table: "zone-menus",
-      add: "new-assignment-z1",
-      empty: { zoneMenus: [] },
-      write: "allowMenu",
-      show: async (el: VenueOperationsScreen) => {
-        await selectTab(el, "zones");
-        await action(el, "menus-tree-zone-z1");
-      },
-      fill: () => {},
-    },
   ];
   function top(el: VenueOperationsScreen, add: string) {
     const button = el.shadowRoot!.querySelector<HTMLElement>(
-      add.startsWith("new-assignment-")
-        ? `[data-test="zone-menu-actions"] [data-test="${add}"]`
-        : `[data-test="policy-tree-actions"] [data-test="${add}"]`,
+      `[data-test="policy-tree-actions"] [data-test="${add}"]`,
     );
     expect(button, add).not.toBeNull();
     return button!;
@@ -3480,13 +3199,6 @@ describe("where focus goes when an editor opened from an Add button closes", () 
       await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(button));
     },
   );
-
-  it("draws no button in a zone's menu table once it has rows", async () => {
-    const el = await mount(writingApi({}) as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    expect(inBox(el, "zone-menus")).toBeNull();
-  });
 });
 
 describe("the venue screen's fields are the shared field components", () => {
@@ -3506,11 +3218,6 @@ describe("the venue screen's fields are the shared field components", () => {
     options: { value: string; label: string }[];
     searchPlaceholder: string;
     noResultsLabel: string;
-  };
-  type Stepper = Box & {
-    min: number;
-    decreaseLabel: (label: string) => string;
-    increaseLabel: (label: string) => string;
   };
   function dropdown(root: ParentNode, name: string) {
     const box = root.querySelector<Dropdown>(`wt-combobox[name="${name}"]`)!;
@@ -3593,44 +3300,6 @@ describe("the venue screen's fields are the shared field components", () => {
     expect(dropdown(el.shadowRoot!, "zone-department-z2").value).toBe("d1");
   });
 
-  // Fails if the display order stops being a stepper that counts from zero, or its buttons lose
-  // their names.
-  it("steps a menu's display order and saves it", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue(model),
-      allowMenu: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    await action(el, "new-assignment-z1");
-    const menu = dropdown(el.shadowRoot!, "assignment-menu");
-    expect([menu.label, menu.required, menu.search, menu.value]).toEqual([
-      "Menu name",
-      true,
-      "auto",
-      "m2",
-    ]);
-    expect(options(menu)).toEqual([["m2", "Deli takeaway"]]);
-    const order = el.shadowRoot!.querySelector<Stepper>(
-      'wt-number-stepper[name="assignment-order"]',
-    )!;
-    expect(order).not.toBeNull();
-    expect([order.label, order.required, order.min, order.value]).toEqual([
-      "Display order",
-      true,
-      0,
-      "1",
-    ]);
-    expect(order.decreaseLabel(order.label)).toBe("Decrease Display order");
-    expect(order.increaseLabel(order.label)).toBe("Increase Display order");
-    order.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="1"]')!.click();
-    await settle(el);
-    expect(order.value).toBe("2");
-    await action(el, "save-editor");
-    expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 2, makeDefault: false });
-  });
-
   // Fails if the editor stops hearing a dropdown's change: a refusal under it must go once it is
   // changed.
   it("clears a refusal under a dropdown once another choice is made", async () => {
@@ -3670,22 +3339,19 @@ describe("the venue screen's fields are the shared field components", () => {
     expect(name.error).toBe("");
   });
 
-  // Fails if the Spanish catalogue loses the dropdowns' search wording or the stepper's buttons.
-  it("words the dropdowns' search and the stepper's buttons in Spanish", async () => {
+  // Fails if the Spanish catalogue loses the dropdowns' search wording.
+  it("words the dropdowns' search in Spanish", async () => {
     setLocale("es");
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "menus-tree-zone-z1");
-    await action(el, "new-assignment-z1");
-    const menu = dropdown(el.shadowRoot!, "assignment-menu");
-    expect([menu.searchPlaceholder, menu.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
-    const order = el.shadowRoot!.querySelector<Stepper>(
-      'wt-number-stepper[name="assignment-order"]',
-    )!;
-    expect(order.decreaseLabel("Orden")).toBe("Reducir Orden");
-    expect(order.increaseLabel("Orden")).toBe("Aumentar Orden");
+    await action(el, "edit-zone-z1");
+    const department = dropdown(el.shadowRoot!, "zone-department-z1");
+    expect([department.searchPlaceholder, department.noResultsLabel]).toEqual([
+      "Buscar",
+      "Sin resultados",
+    ]);
   });
 });
 
@@ -3701,15 +3367,10 @@ describe("the venue tables at phone width", () => {
       { id: "z1", name: "Comedor principal junto a la terraza del jardín" },
       model.floorZones[1]!,
     ],
-    menus: [
-      { id: "m1", name: "Carta de temporada de la casa con maridajes y postres", active: true },
-      model.menus[1]!,
-    ],
   };
   const tables: { name: string; tab: string; open?: string; rows: number }[] = [
     { name: "departments", tab: "departments", rows: phoneModel.departments.length },
     { name: "zones", tab: "zones", rows: phoneModel.floorZones.length },
-    { name: "zone-menus", tab: "zones", open: "menus-tree-zone-z1", rows: 1 },
   ];
   it.each(tables.flatMap((table) => ["en", "es"].map((locale) => ({ ...table, locale }))))(
     "keeps every $name row's menu on screen and uncovered while the other columns scroll sideways (390 px, $locale)",

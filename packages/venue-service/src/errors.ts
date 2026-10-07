@@ -1,4 +1,12 @@
 import "@waitron/shared";
+import type { MenuPeriodUse } from "./menu-timetable-types.js";
+
+/** Something that still names a menu of a department's list, so the menu cannot leave it. */
+export type MenuUse =
+  | { kind: "department_all_day" }
+  | { kind: "period"; periodId: string }
+  | { kind: "zone_all_day"; zoneId: string }
+  | { kind: "zone_period"; zoneId: string; periodId: string };
 
 declare module "@waitron/shared" {
   interface ErrorParams {
@@ -6,6 +14,26 @@ declare module "@waitron/shared" {
     "department.last_active": { departmentId: string };
     "zone.table_in_use": { zoneId: string; tableId: string; tableName: string };
     "service_zone.not_found": { zoneId: string };
+    /** A default names a menu the department's list does not hold. */
+    "department_menu.not_found": { departmentId: string; menuId: string };
+    /** Removing a menu from a department's list that `uses` still name, every one of them. */
+    "department_menu.in_use": { departmentId: string; menuId: string; uses: MenuUse[] };
+    "menu_period.not_found": { periodId: string };
+    /** Deleting a named period that `uses` still place, past special dates included. */
+    "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
+    /** Another of the department's named periods already has `name`, as trimmed. */
+    "menu_period.name_taken": { departmentId: string; name: string };
+    /**
+     * `field` is the request path of the refused value, as for `hours.invalid`. A refusal naming a
+     * date also names the department, and whether slots would overlap a neighbouring day's across a
+     * midnight (`overlap`) or open or close at a minute the clock skips there (`clock_skips`).
+     */
+    "menu_timetable.invalid": {
+      field: string;
+      date?: string;
+      departmentId?: string;
+      reason?: "overlap" | "clock_skips";
+    };
     "zone.name_taken": { name: string };
     "service_zone.default_missing": Record<string, never>;
     "service_zone.offer_not_allowed": { zoneId: string; menuItemId: string };

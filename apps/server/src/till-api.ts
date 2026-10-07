@@ -1359,7 +1359,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 })
               ).zoneId
             : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).zoneId;
-        return VENUE_SERVICE.menuState(tx, zone);
+        const menuState = await VENUE_SERVICE.menuState(tx, zone);
+        return {
+          ...menuState,
+          defaultMenuId: await VENUE_SERVICE.resolveDefaultMenu(
+            tx,
+            deps.cfg,
+            zone,
+            new Date(),
+            menuState.menus.map((menu) => menu.menuId),
+          ),
+        };
       });
       return c.json(state);
     }),

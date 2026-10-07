@@ -22,7 +22,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
-import { allowMenuInZone } from "@waitron/venue-service";
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { VenueResult } from "@waitron/provisioning";
 import {
   locationId as brandLocationId,
@@ -407,8 +407,9 @@ export async function counterOrder(v: PartyVenue, ...names: string[]): Promise<s
 }
 
 /**
- * A menu of its own offering the product at `price`, allowed in the zone and made its default, and
- * published; answers the offer. Every other zone keeps selling the product at its own price.
+ * A menu of its own offering the product at `price`, added to the zone's department list and made
+ * the zone's all-day menu, and published; answers the offer. Every zone of that department serves
+ * the menu too.
  */
 export async function pricedInZone(
   v: PartyVenue,
@@ -423,7 +424,7 @@ export async function pricedInZone(
       productId: v.productId(productName),
       grossPrice: price,
     });
-    await allowMenuInZone(tx, v.cfg, zoneId, menu.id, { makeDefault: true });
+    await offerMenuThroughZone(tx, v.cfg, zoneId, menu.id, { makeDefault: true });
     await publishWorkingMenu(tx, menu.id);
     return offer.id;
   });

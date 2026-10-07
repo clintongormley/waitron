@@ -106,8 +106,11 @@ import {
   saveHolidayArea,
   saveLocalHoliday,
   saveSpecialDate,
+  setDepartmentAllDayMenu,
+  setDepartmentMenus,
   setProfileServiceAccess,
   setStationToday,
+  setZoneAllDayMenu,
   stationStates,
   type WeekCell,
   type WeekDay,
@@ -2069,16 +2072,21 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
 
   const policies = await targetSuite.db.execute<{
     zone_id: string;
-    default_menu_id: string | null;
-  }>(sql`select zone_id, default_menu_id from zone_service_policies`);
+  }>(sql`select zone_id from zone_service_policies`);
   expect(policies.rows.length).toBeGreaterThan(0);
   const targetMenus = new Set(
     (await targetSuite.db.select({ id: catalogues.id }).from(catalogues)).map((row) => row.id),
   );
   for (const policy of policies.rows) {
     expect(bundleIds.has(policy.zone_id)).toBe(false);
-    expect(bundleIds.has(policy.default_menu_id!)).toBe(false);
-    expect(targetMenus.has(policy.default_menu_id!)).toBe(true);
+  }
+  const defaults = await targetSuite.db.execute<{
+    menu_id: string;
+  }>(sql`select menu_id from department_all_day_menus`);
+  expect(defaults.rows.length).toBeGreaterThan(0);
+  for (const row of defaults.rows) {
+    expect(bundleIds.has(row.menu_id)).toBe(false);
+    expect(targetMenus.has(row.menu_id)).toBe(true);
   }
 });
 
@@ -3189,6 +3197,97 @@ it("transfers department receipt choices and explicit or inherited zone choices 
     { name: "Explicit receipts", department_mode: "on_request", zone_mode: "never" },
     { name: "Inherited receipts", department_mode: "on_request", zone_mode: null },
   ]);
+});
+
+it("transfers a department's menu list, its all-day menu and a zone's own all-day menu, under the new ids", async () => {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const scope = { locationId: brandLocationId(source.locationId) };
+  const sourceIds = await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, scope, {
+      name: "Restaurante de cartas",
+      defaultServiceMode: "table_tab",
+    });
+    const barra = await createServiceZone(tx, scope, {
+      name: "Barra de cartas",
+      departmentId: department.id,
+    });
+    const bebidas = await createCatalogue(tx, { name: "Bebidas transferidas" });
+    const desayunos = await createCatalogue(tx, { name: "Desayunos transferidos" });
+    await setDepartmentMenus(tx, scope, department.id, [bebidas.id, desayunos.id]);
+    await setDepartmentAllDayMenu(tx, scope, department.id, bebidas.id);
+    await setZoneAllDayMenu(tx, scope, barra.id, desayunos.id);
+    return [department.id, barra.id, bebidas.id, desayunos.id];
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const decoded = decodeConfigurationBundle(
+    encodeConfigurationBundle(
+      await buildConfigurationBundle(
+        suite.db,
+        source,
+        ALL_MODULES,
+        new Date("2026-10-07T10:00:00Z"),
+        versions,
+      ),
+      "a strong passphrase",
+    ),
+    "a strong passphrase",
+  );
+  await applyVenue(planVenue(venue("B24681358"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: async (tx, result) =>
+      importConfigurationTables(
+        tx,
+        decoded,
+        { locationId: result.locationId },
+        ALL_MODULES,
+        versions,
+      ),
+  });
+  const zone = await targetSuite.db.execute<{
+    zone_id: string;
+    department_id: string;
+    menu_id: string;
+    zone: string;
+    department: string;
+    menu: string;
+  }>(sql`
+    select o.zone_id, o.department_id, o.menu_id, z.name as zone, d.name as department,
+      c.name as menu
+    from zone_all_day_menus o
+    join floor_zones z on z.id = o.zone_id
+    join departments d on d.id = o.department_id
+    join catalogues c on c.id = o.menu_id
+    where z.name = 'Barra de cartas'`);
+  expect(zone.rows).toEqual([
+    {
+      zone_id: expect.any(String),
+      department_id: expect.any(String),
+      menu_id: expect.any(String),
+      zone: "Barra de cartas",
+      department: "Restaurante de cartas",
+      menu: "Desayunos transferidos",
+    },
+  ]);
+  const department = await targetSuite.db.execute<{ menu: string; all_day: string }>(sql`
+    select c.name as menu, a.name as all_day
+    from department_menus m
+    join departments d on d.id = m.department_id
+    join catalogues c on c.id = m.menu_id
+    join department_all_day_menus x on x.department_id = d.id
+    join catalogues a on a.id = x.menu_id
+    where d.name = 'Restaurante de cartas'
+    order by m.display_order`);
+  expect(department.rows).toEqual([
+    { menu: "Bebidas transferidas", all_day: "Bebidas transferidas" },
+    { menu: "Desayunos transferidos", all_day: "Bebidas transferidas" },
+  ]);
+  const row = zone.rows[0]!;
+  for (const id of [row.zone_id, row.department_id, row.menu_id])
+    expect(sourceIds).not.toContain(id);
 });
 
 describe("opening hours in a configuration transfer", () => {

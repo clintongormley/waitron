@@ -51,6 +51,7 @@ import {
   type WeekDay,
 } from "./hours-types.js";
 import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
+import { MENU_TIMETABLE_CALENDAR_PARTICIPANT } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import {
@@ -2148,8 +2149,8 @@ describe("deleting a special date", () => {
 });
 
 describe("calendar participants", () => {
-  it("has none of its own in step 5", () => {
-    expect(VENUE_SERVICE_CALENDAR_PARTICIPANTS).toEqual([]);
+  it("is the menu timetable's alone", () => {
+    expect(VENUE_SERVICE_CALENDAR_PARTICIPANTS).toEqual([MENU_TIMETABLE_CALENDAR_PARTICIPANT]);
   });
 
   // A stand-in for a module's own date-linked rows, such as a menu timetable's overrides.

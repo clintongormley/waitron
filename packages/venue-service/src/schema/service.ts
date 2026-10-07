@@ -1,9 +1,7 @@
 import { sql } from "drizzle-orm";
-import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import { check, foreignKey, index, primaryKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, primaryKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { menuItems, menuVersions } from "@waitron/catalogue";
 import {
-  catalogues,
   count,
   deviceProfiles,
   enumCheck,
@@ -65,7 +63,6 @@ export const zoneServicePolicies = table(
     departmentId: id("department_id").notNull(),
     // Not enumText: see departments.default_service_mode.
     serviceMode: label("service_mode"),
-    defaultMenuId: id("default_menu_id"),
     isCounterDefault: flag("is_counter_default").notNull().default(false),
   },
   (t) => [
@@ -84,20 +81,6 @@ export const zoneServicePolicies = table(
       columns: [t.departmentId],
       foreignColumns: [departments.id],
       name: "zone_service_policies_department_fk",
-    }),
-    foreignKey({
-      columns: [t.defaultMenuId],
-      foreignColumns: [catalogues.id],
-      name: "zone_service_policies_default_menu_fk",
-    }),
-    // A default menu must also be an allowed menu for that zone; a null default satisfies the key.
-    // The key is not declared deferrable, so outside `pragma defer_foreign_keys` it is checked at
-    // each statement, and `zone_menus.zone_id` points back at this row: insert the policy with a
-    // null default, then its `zone_menus` rows, then name the default.
-    foreignKey({
-      columns: [t.zoneId, t.defaultMenuId],
-      foreignColumns: ZONE_MENU_KEY,
-      name: "zone_service_policies_default_allowed_fk",
     }),
     uniqueIndex("zone_service_policies_one_counter_default_key")
       .on(t.locationId)
@@ -175,35 +158,6 @@ export const saleReceiptHeaders = table(
     }),
   ],
 );
-
-export const zoneMenus = table(
-  "zone_menus",
-  {
-    zoneId: id("zone_id").notNull(),
-    menuId: id("menu_id").notNull(),
-    displayOrder: count("display_order").notNull().default(0),
-  },
-  (t) => [
-    primaryKey({ columns: [t.zoneId, t.menuId], name: "zone_menus_pk" }),
-    foreignKey({
-      columns: [t.zoneId],
-      foreignColumns: [zoneServicePolicies.zoneId],
-      name: "zone_menus_zone_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.menuId],
-      foreignColumns: [catalogues.id],
-      name: "zone_menus_menu_fk",
-    }),
-    index("zone_menus_order_idx").on(t.zoneId, t.displayOrder),
-  ],
-);
-
-/**
- * Explicitly typed because the two tables reference each other, and TypeScript cannot infer either
- * table's type through the cycle (TS7022). The callback that reads it runs after this line.
- */
-const ZONE_MENU_KEY: [AnySQLiteColumn, AnySQLiteColumn] = [zoneMenus.zoneId, zoneMenus.menuId];
 
 /**
  * The department a device profile orders for and the zone it starts in. A profile with no row has no

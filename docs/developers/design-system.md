@@ -2748,7 +2748,11 @@ operator destinations from a path. Unsaved canvas tabs stay out of both URL writ
 including when you reselect them; saved tabs become destinations after persistence.
 Only meaningful navigation pushes history. Payment steps, modifier dialogs and draft edits do not;
 an automatic return home after payment replaces the current entry. The till holds the menu choice in
-memory for the tab, retained through new and parked orders. A person who signs in again
+memory for the tab, retained through new and parked orders. At a counter where nobody has picked
+a menu by hand, the till moves to its zone's default menu (the department's timetable, with the
+zone's own choices), as the till's periodic menu check reports it, provided the basket is empty: it
+does so when that check arrives, unless a sale, a hold or an order is being sent, and when the
+basket is cleared. A table's menu is not moved to follow the default. A person who signs in again
 with nobody else signed in between comes back to the zone they left, while it is still offered, and
 the menu they chose there, while that zone still offers it. A different person, a sign-in after a
 reload (refresh returns to PIN login) or a profile switch starts at the device's starting zone (the

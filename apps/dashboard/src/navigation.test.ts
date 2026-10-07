@@ -25,6 +25,17 @@ it("preserves the Prep stations tab and tester when the dashboard rewrites its d
   expect(location.pathname).toBe("/manage/prep-stations/view/tickets/test/bread");
 });
 
+it("preserves the Menu timetable department a link names when the dashboard rewrites its destination", () => {
+  history.replaceState(null, "", "/manage/menu-timetable/department/deli");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  document.body.append(host);
+  expect(url.read("department")).toBe("deli");
+  url.write({ dashboard: "menu-timetable" }, true);
+  expect(location.pathname).toBe("/manage/menu-timetable/department/deli");
+});
+
 it("preserves the Hours tab and the subject a link names when the dashboard rewrites its destination", () => {
   history.replaceState(null, "", "/manage/hours/view/week/station/bar");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;

@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
+  floorZones,
   products,
   saleLines,
   sales,
@@ -56,6 +57,7 @@ import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { configureZone, createDepartment } from "@waitron/venue-service";
 import { createTable } from "./tables.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -233,9 +235,11 @@ async function setupLunch(): Promise<Lunch> {
       where location_id = ${cfg.locationId} and is_counter_default`);
     const zoneId = zone.rows[0]!.id;
     await tx.execute(sql`
-      insert into zone_menus (zone_id, menu_id) values (${zoneId}, ${lunch.id})`);
+      insert into department_menus (department_id, menu_id)
+      select department_id, ${lunch.id} from zone_service_policies where zone_id = ${zoneId}`);
     await tx.execute(sql`
-      update zone_service_policies set default_menu_id = ${lunch.id} where zone_id = ${zoneId}`);
+      insert into zone_all_day_menus (zone_id, department_id, menu_id)
+      select zone_id, department_id, ${lunch.id} from zone_service_policies where zone_id = ${zoneId}`);
     await tx.execute(sql`
       insert into station_claims (id, location_id, category_id, station_id)
       values (${randomUUID()}, ${cfg.locationId}, ${category.id},
@@ -439,7 +443,8 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
       const menu = await createCatalogue(tx, { name: "Brunch" });
       await addProductToMenu(tx, { menuId: menu.id, productId: v.burger.productId });
       await tx.execute(sql`
-        insert into zone_menus (zone_id, menu_id, display_order) values (${v.zoneId}, ${menu.id}, 1)`);
+        insert into department_menus (department_id, menu_id, display_order)
+        select department_id, ${menu.id}, 1 from zone_service_policies where zone_id = ${v.zoneId}`);
       return publishWorkingMenu(tx, menu.id);
     });
     const before = await written();
@@ -741,6 +746,18 @@ describe("who may order a product on its own (spec §9, D12)", () => {
   it("fires and pays a table's held standalone line after a publish makes it not sold separately", async () => {
     const v = await setupLunch();
     const bacon = await withBacon(v, "public");
+    // The tables zone in a department of its own, which serves the helper's menu and not Lunch.
+    await withTransaction(suite.db, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: "Mesas",
+        defaultServiceMode: "table_tab",
+      });
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: v.cfg.locationId, name: "Test tables" })
+        .returning({ id: floorZones.id });
+      await configureZone(tx, v.cfg, { zoneId: zone!.id, departmentId: department.id });
+    });
     const tables = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, v.cfg, { zone: "tables", productIds: [bacon.productId] }),
     );
@@ -856,6 +873,7 @@ describe("GET /api/menu-state", () => {
     expect(await state(v)).toEqual({
       menus: [{ menuId: v.menuId, versionId: v1 }],
       unavailable: nothing,
+      defaultMenuId: v.menuId,
     });
 
     const setBurger = (available: boolean) =>
@@ -864,6 +882,7 @@ describe("GET /api/menu-state", () => {
     expect(await state(v)).toEqual({
       menus: [{ menuId: v.menuId, versionId: v1 }],
       unavailable: { ...nothing, products: [v.burger.productId] },
+      defaultMenuId: v.menuId,
     });
     const status = await withTransaction(suite.db, (tx) => menuStatus(tx, [v.menuId]));
     expect(status.get(v.menuId)?.state).toBe("current");

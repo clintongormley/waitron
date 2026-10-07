@@ -26,7 +26,8 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { allowMenuInZone, stationClaims } from "@waitron/venue-service";
+import { stationClaims } from "@waitron/venue-service";
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -216,7 +217,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     // The table sits in a table_tab zone offering this menu, with a route per product to the
     // venue's default station.
     const { zoneId } = await offerProducts(tx, cfg, { zone: "tables" });
-    await allowMenuInZone(tx, cfg, zoneId, cat.id);
+    await offerMenuThroughZone(tx, cfg, zoneId, cat.id);
     await publishWorkingMenu(tx, cat.id);
     const table = await createTable(tx, cfg, { label: "T1", zoneId });
     return {
@@ -332,24 +333,19 @@ async function placeTable(shop: Shop): Promise<void> {
       from zone_service_policies
       where location_id = ${shop.cfg.locationId}
       limit 1`);
-    // The default-menu key is checked at each statement and `zone_menus` points back at the policy:
-    // insert the policy with a null default, then `zone_menus`, then name the default
-    // (`zoneServicePolicies` in `packages/venue-service/src/schema/service.ts`).
+    const departmentId = department.rows[0]!.department_id;
     await tx.execute(sql`
-      insert into zone_service_policies
-        (location_id, zone_id, department_id, service_mode, default_menu_id)
-      values (
-        ${shop.cfg.locationId}, ${zone.id},
-        ${department.rows[0]!.department_id}, 'table_tab', null
-      )`);
+      insert into zone_service_policies (location_id, zone_id, department_id, service_mode)
+      values (${shop.cfg.locationId}, ${zone.id}, ${departmentId}, 'table_tab')`);
     await tx.execute(sql`
       insert into zone_sale_policies (zone_id) values (${zone.id})`);
     await tx.execute(sql`
-      insert into zone_menus (zone_id, menu_id)
-      values (${zone.id}, ${shop.menuId})`);
+      insert into department_menus (department_id, menu_id)
+      values (${departmentId}, ${shop.menuId})
+      on conflict (department_id, menu_id) do nothing`);
     await tx.execute(sql`
-      update zone_service_policies set default_menu_id = ${shop.menuId}
-      where zone_id = ${zone.id}`);
+      insert into zone_all_day_menus (zone_id, department_id, menu_id)
+      values (${zone.id}, ${departmentId}, ${shop.menuId})`);
     // Through the table definition: `stationClaims.id`
     // (`packages/venue-service/src/schema/routing.ts`) is a `$defaultFn` generator, which a raw
     // statement never reaches.

@@ -25,7 +25,6 @@ import { hashPin, persons } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import {
-  allowMenuInZone,
   configureZone,
   createDepartment,
   createServiceZone,
@@ -33,6 +32,7 @@ import {
   setProfileServiceAccess,
   zoneServicePolicies,
 } from "@waitron/venue-service";
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
@@ -318,8 +318,8 @@ beforeAll(async () => {
     });
     const special = await addProductToMenu(tx, { menuId: specials.id, productId: pastrami.id });
     await publishWorkingMenu(tx, specials.id);
-    await allowMenuInZone(tx, v.cfg, deliCounter.id, specials.id);
-    await allowMenuInZone(tx, v.cfg, bar.id, specials.id);
+    await offerMenuThroughZone(tx, v.cfg, deliCounter.id, specials.id);
+    await offerMenuThroughZone(tx, v.cfg, bar.id, specials.id);
     const deliTable = await createTable(tx, v.cfg, { label: "D1", zoneId: deliTables.id });
     return {
       bar: bar.id,

@@ -73,6 +73,21 @@ export function weekChecks(
   return errors;
 }
 
+/** What an editor composing this one supplies: its own words, and a field drawn in each period row. */
+export interface CellComposer {
+  words: {
+    mode: string;
+    /** Every mode the editor offers, `inherit` included, read as is. */
+    modes: Partial<Record<CellMode, string>>;
+    opens: string;
+    closes: string;
+    add: string;
+    /** The remove button's accessible name; `{n}` is the row's number. */
+    remove: string;
+  };
+  periodField(period: HourPeriod, index: number): unknown;
+}
+
 const MODE_LABEL: Record<Exclude<CellMode, "inherit">, Parameters<typeof t>[0]> = {
   closed: "hours.closed",
   all_day: "hours.all_day",
@@ -110,6 +125,10 @@ export class HoursCellEditor extends LitElement {
       .period wt-input {
         flex: 1 1 var(--wt-price-field-width);
       }
+      .period-field {
+        flex: 1 1 100%;
+        min-width: 0;
+      }
       .periods {
         display: grid;
         gap: var(--wt-space-2);
@@ -125,6 +144,7 @@ export class HoursCellEditor extends LitElement {
   @property() inherited = "";
   @property({ attribute: false }) errors: Record<string, string> = {};
   @property({ type: Boolean, reflect: true }) disabled = false;
+  @property({ attribute: false }) composer?: CellComposer;
 
   #change(cell: CellDraft): void {
     this.dispatchEvent(
@@ -159,7 +179,11 @@ export class HoursCellEditor extends LitElement {
       type="time"
       required
       name=${`${this.fieldPrefix}.periods.${index}.${key}`}
-      label=${t(key === "opensAt" ? "hours.opens" : "hours.closes")}
+      label=${
+        this.composer
+          ? this.composer.words[key === "opensAt" ? "opens" : "closes"]
+          : t(key === "opensAt" ? "hours.opens" : "hours.closes")
+      }
       .value=${period[key]}
       error=${this.#error(`periods.${index}.${key}`)}
       ?disabled=${this.disabled}
@@ -171,19 +195,22 @@ export class HoursCellEditor extends LitElement {
   }
 
   override render() {
-    const inherit = this.inherited
-      ? format("hours.inherit_value", { value: this.inherited })
-      : t("hours.inherit");
+    const words = this.composer?.words;
+    const inherit =
+      words?.modes.inherit ??
+      (this.inherited
+        ? format("hours.inherit_value", { value: this.inherited })
+        : t("hours.inherit"));
     const options = this.modes.map((mode) => ({
       value: mode === "inherit" ? "" : mode,
-      label: mode === "inherit" ? inherit : t(MODE_LABEL[mode]),
+      label: mode === "inherit" ? inherit : (words?.modes[mode] ?? t(MODE_LABEL[mode])),
     }));
     const periods = this.cell.periods;
     return html`<fieldset>
       <legend>${this.label}</legend>
       <wt-combobox
         name=${`${this.fieldPrefix}.mode`}
-        label=${t("hours.mode")}
+        label=${words?.mode ?? t("hours.mode")}
         search="never"
         ?required=${!this.modes.includes("inherit")}
         .options=${options}
@@ -204,11 +231,22 @@ export class HoursCellEditor extends LitElement {
                 (period) => period.id,
                 (period, index) =>
                   html`<div class="period">
+                    ${
+                      this.composer
+                        ? html`<div class="period-field">
+                            ${this.composer.periodField(period, index)}
+                          </div>`
+                        : nothing
+                    }
                     ${this.#time(index, "opensAt", period)} ${this.#time(index, "closesAt", period)}
                     <wt-button
                       variant="ghost"
                       data-test="remove-period"
-                      aria-label=${format("hours.remove_period", { n: String(index + 1) })}
+                      aria-label=${
+                        words
+                          ? words.remove.replaceAll("{n}", String(index + 1))
+                          : format("hours.remove_period", { n: String(index + 1) })
+                      }
                       ?disabled=${this.disabled || periods.length === 1}
                       @click=${() =>
                         this.#change({
@@ -229,7 +267,7 @@ export class HoursCellEditor extends LitElement {
                       ...this.cell,
                       periods: [...periods, { id: crypto.randomUUID(), opensAt: "", closesAt: "" }],
                     })}
-                  >${t("hours.add_period")}</wt-button
+                  >${words?.add ?? t("hours.add_period")}</wt-button
                 >
               </div>
             </div>`

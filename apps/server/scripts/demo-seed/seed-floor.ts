@@ -15,8 +15,9 @@ import {
   departments,
   createException,
   replaceWeekHours,
+  addDepartmentMenu,
+  setDepartmentAllDayMenu,
   setStationFallback,
-  zoneMenus,
   zoneSalePolicies,
   zoneServicePolicies,
 } from "@waitron/venue-service";
@@ -129,21 +130,6 @@ export async function seedFloor(
       });
       await tx.insert(zoneSalePolicies).values({ zoneId });
     }
-    const restaurantMenus = menuIds === undefined ? [] : [menuIds.restaurant, menuIds.lunch];
-    for (const [index, menuId] of restaurantMenus.entries()) {
-      await tx
-        .insert(zoneMenus)
-        .values({ zoneId, menuId, displayOrder: index })
-        .onConflictDoUpdate({
-          target: [zoneMenus.zoneId, zoneMenus.menuId],
-          set: { displayOrder: index },
-        });
-      if (index === 0) {
-        await tx.execute(sql`
-          update zone_service_policies set default_menu_id = ${menuId}
-          where zone_id = ${zoneId}`);
-      }
-    }
     zoneIds.set(zone.key, zoneId);
   }
 
@@ -159,16 +145,6 @@ export async function seedFloor(
     isCounterDefault: false,
   });
   await tx.insert(zoneSalePolicies).values({ zoneId: upstairsBarZone.id });
-  if (menuIds !== undefined) {
-    for (const [index, menuId] of [menuIds.restaurant, menuIds.lunch].entries()) {
-      await tx
-        .insert(zoneMenus)
-        .values({ zoneId: upstairsBarZone.id, menuId, displayOrder: index });
-    }
-    await tx.execute(sql`
-      update zone_service_policies set default_menu_id = ${menuIds.restaurant}
-      where zone_id = ${upstairsBarZone.id}`);
-  }
 
   if (menuIds !== undefined) {
     const downstairsBarZoneId = zoneIds.get("bar");
@@ -243,12 +219,12 @@ export async function seedFloor(
   });
   await tx.insert(zoneSalePolicies).values({ zoneId: deliZoneId });
   if (menuIds !== undefined) {
-    await tx
-      .insert(zoneMenus)
-      .values({ zoneId: deliZoneId, menuId: menuIds.deli, displayOrder: 0 });
-    await tx.execute(sql`
-      update zone_service_policies set default_menu_id = ${menuIds.deli}
-      where zone_id = ${deliZoneId}`);
+    const restaurantId = defaultPolicy.department_id;
+    for (const [displayOrder, menuId] of [menuIds.restaurant, menuIds.lunch].entries())
+      await addDepartmentMenu(tx, cfg, restaurantId, menuId, { displayOrder });
+    await setDepartmentAllDayMenu(tx, cfg, restaurantId, menuIds.restaurant);
+    await addDepartmentMenu(tx, cfg, deliDepartmentId, menuIds.deli, { displayOrder: 0 });
+    await setDepartmentAllDayMenu(tx, cfg, deliDepartmentId, menuIds.deli);
   }
 
   const hoursCfg = { locationId: brandLocationId(locationId) };

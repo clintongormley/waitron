@@ -291,6 +291,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Normalising a field while typing preserves the native selection.** Cost: A284's decimal-mark
   conversion moved the cursor to the end during a middle edit. Guards: the EN/ES caret cases in
   `wt-input.test.ts` and `wt-price-input.test.ts`; see [conventions-ui.md](docs/developers/conventions-ui.md).
+- **A new dashboard dialog or page holding staged input takes a draft scope from `leaveCoordinatorFor`
+  and has a `*.unsaved.test.ts`.** Cost: W98's Menu timetable screen reached review without one.
+  Nothing checks it across screens. See [design-system.md](docs/developers/design-system.md).
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a

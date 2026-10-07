@@ -33,7 +33,9 @@ beforeAll(() => {
 const TABLES = [
   "departments",
   "zone_service_policies",
-  "zone_menus",
+  "department_menus",
+  "department_all_day_menus",
+  "zone_all_day_menus",
   "device_profile_service_access",
   "device_profile_zones",
   "device_profile_stations",
@@ -164,18 +166,24 @@ describe("the venue-service migration set carries no tenant column", () => {
       zone_service_policies: {
         primaryKey: ["zone_id"],
         foreignKeys: [
-          "(default_menu_id) -> catalogues(id)",
           "(department_id) -> departments(id)",
           "(location_id) -> locations(id)",
           "(zone_id) -> floor_zones(id)",
-          "(zone_id, default_menu_id) -> zone_menus(zone_id, menu_id)",
         ],
       },
-      zone_menus: {
-        primaryKey: ["zone_id", "menu_id"],
+      department_menus: {
+        primaryKey: ["department_id", "menu_id"],
+        foreignKeys: ["(department_id) -> departments(id)", "(menu_id) -> catalogues(id)"],
+      },
+      department_all_day_menus: {
+        primaryKey: ["department_id"],
+        foreignKeys: ["(department_id, menu_id) -> department_menus(department_id, menu_id)"],
+      },
+      zone_all_day_menus: {
+        primaryKey: ["zone_id"],
         foreignKeys: [
-          "(menu_id) -> catalogues(id)",
-          "(zone_id) -> zone_service_policies(zone_id) on delete cascade",
+          "(department_id, menu_id) -> department_menus(department_id, menu_id)",
+          "(zone_id) -> floor_zones(id)",
         ],
       },
       device_profile_service_access: {
@@ -277,7 +285,7 @@ describe("the venue-service migration set carries no tenant column", () => {
     expect(defs["station_claims_folder_key"]?.unique).toBe(true);
     expect(columns("route_exceptions_order_idx")).toEqual(["location_id", "position"]);
     expect(defs["route_exceptions_order_idx"]?.unique).toBe(false);
-    expect(columns("zone_menus_order_idx")).toEqual(["zone_id", "display_order"]);
+    expect(columns("department_menus_order_idx")).toEqual(["department_id", "display_order"]);
     expect(columns("kitchen_notices_open_idx")).toEqual(["station_id", "created_at"]);
     expect(predicate("kitchen_notices_open_idx")).toBe(
       `"kitchen_notices"."acknowledged_at" is null`,
@@ -363,8 +371,13 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       "zone_service_policies_department_fk",
     );
     await refusal(
-      sql`insert into zone_menus (zone_id, menu_id) values (${v.zoneId}, ${v.menuId})`,
-      "zone_menus_zone_fk",
+      sql`insert into department_menus (department_id, menu_id) values (${missing}, ${v.menuId})`,
+      "department_menus_department_fk",
+    );
+    await refusal(
+      sql`insert into department_menus (department_id, menu_id)
+        values (${v.departmentId}, ${missing})`,
+      "department_menus_menu_fk",
     );
     await refusal(
       sql`insert into order_service_contexts
@@ -374,62 +387,31 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     );
   });
 
-  /**
-   * The key is not deferred, so it is checked at each statement. `pragma defer_foreign_keys` moves
-   * the check to commit, which is how `apps/server/src/configuration-transfer.ts` empties and
-   * refills this cycle: `zone_menus.zone_id` points at `zone_service_policies`, whose
-   * `(zone_id, default_menu_id)` points back at `zone_menus`. The title's "at commit" half is not
-   * asserted: the case under the pragma is accepted, not refused.
-   */
-  it("refuses a default menu the zone does not allow, at the statement or at commit", async () => {
+  it("refuses an all-day menu the department's list does not hold", async () => {
     const v = await venue();
-    await db.execute(sql`
-      insert into zone_service_policies (location_id, zone_id, department_id)
-      values (${v.locationId}, ${v.zoneId}, ${v.departmentId})`);
     await refusal(
-      sql`update zone_service_policies set default_menu_id = ${v.menuId} where zone_id = ${v.zoneId}`,
-      "zone_service_policies_default_allowed_fk",
+      sql`insert into department_all_day_menus (department_id, menu_id)
+        values (${v.departmentId}, ${v.menuId})`,
+      "department_all_day_menus_member_fk",
     );
-
-    // Reversed order, no pragma: refused.
-    const eager = await captureError(() =>
-      db.transaction(async (tx) => {
-        await tx.execute(
-          sql`update zone_service_policies set default_menu_id = ${v.menuId} where zone_id = ${v.zoneId}`,
-        );
-        await tx.execute(
-          sql`insert into zone_menus (zone_id, menu_id) values (${v.zoneId}, ${v.menuId})`,
-        );
-      }),
+    await refusal(
+      sql`insert into zone_all_day_menus (zone_id, department_id, menu_id)
+        values (${v.zoneId}, ${v.departmentId}, ${v.menuId})`,
+      "zone_all_day_menus_member_fk",
     );
-    expect(isRefusal(eager, FOREIGN_KEY_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(eager)).toContain("FOREIGN KEY constraint failed");
-    expect(
-      (
-        await db.execute(
-          sql`select default_menu_id from zone_service_policies where zone_id = ${v.zoneId}`,
-        )
-      ).rows,
-    ).toEqual([{ default_menu_id: null }]);
-
-    // The same reversed order under the pragma: accepted.
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`pragma defer_foreign_keys = on`);
-      await tx.execute(
-        sql`update zone_service_policies set default_menu_id = ${v.menuId} where zone_id = ${v.zoneId}`,
-      );
-      await tx.execute(
-        sql`insert into zone_menus (zone_id, menu_id) values (${v.zoneId}, ${v.menuId})`,
-      );
-    });
-    const policy = await db.execute<{ default_menu_id: string }>(
-      sql`select default_menu_id from zone_service_policies where zone_id = ${v.zoneId}`,
+    await db.execute(sql`
+      insert into department_menus (department_id, menu_id) values (${v.departmentId}, ${v.menuId})`);
+    await db.execute(sql`
+      insert into department_all_day_menus (department_id, menu_id)
+      values (${v.departmentId}, ${v.menuId})`);
+    await db.execute(sql`
+      insert into zone_all_day_menus (zone_id, department_id, menu_id)
+      values (${v.zoneId}, ${v.departmentId}, ${v.menuId})`);
+    await refusal(
+      sql`insert into zone_all_day_menus (zone_id, department_id, menu_id)
+        values (${"00000000-0000-4000-8000-00000000dead"}, ${v.departmentId}, ${v.menuId})`,
+      "zone_all_day_menus_zone_fk",
     );
-    expect(policy.rows).toEqual([{ default_menu_id: v.menuId }]);
-    // The pragma holds only until that transaction ends: it is off again here.
-    expect((await db.execute(sql`pragma defer_foreign_keys`)).rows).toEqual([
-      { defer_foreign_keys: 0 },
-    ]);
   });
 });
 

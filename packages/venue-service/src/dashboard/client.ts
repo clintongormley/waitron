@@ -20,12 +20,6 @@ export interface ServiceZone {
   serviceModeOverride: ServiceMode | null;
   active?: boolean;
 }
-export interface ZoneMenu {
-  zoneId: string;
-  menuId: string;
-  displayOrder: number;
-  isDefault: boolean;
-}
 export type PaidWhen = "prepay" | "ticket_then_pay";
 export type CollectionNumber = "none" | "numbered";
 export type ReceiptPrintMode = "auto" | "on_request" | "never";
@@ -67,7 +61,6 @@ export interface VenueServiceModel {
   departments: Department[];
   zones: ServiceZone[];
   salePolicies: { departments: DepartmentSalePolicy[]; zones: ZoneSalePolicy[] };
-  zoneMenus: ZoneMenu[];
   readiness: VenueReadinessIssue[];
   settings: VenueServiceSettings;
   kitchenTicketGrouping: KitchenTicketGrouping;
@@ -90,7 +83,6 @@ export type VenueServiceSettingsView = Pick<
 >;
 export type KitchenTicketGrouping = "combined" | "separate";
 export interface VenueServiceChoices {
-  menus: (NamedRow & { active: boolean })[];
   floorZones: FloorZone[];
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
@@ -111,16 +103,11 @@ export class VenueServiceApi {
   }
 
   async load(): Promise<VenueServiceView> {
-    const [model, menus, floorZones] = await Promise.all([
+    const [model, floorZones] = await Promise.all([
       this.#read<VenueServiceModel>("/management-api/venue-service"),
-      this.#read<VenueServiceChoices["menus"]>("/management-api/catalogues"),
       this.#read<FloorZone[]>("/management-api/zones?includeInactive=true"),
     ]);
-    return {
-      ...model,
-      menus,
-      floorZones,
-    };
+    return { ...model, floorZones };
   }
 
   async loadSettings(): Promise<VenueServiceSettingsView> {
@@ -215,18 +202,6 @@ export class VenueServiceApi {
       `/management-api/venue-service/zones/${zoneId}/sale-policy/${field}`,
       "PATCH",
       { value },
-    );
-  }
-
-  allowMenu(
-    zoneId: string,
-    menuId: string,
-    input: { displayOrder: number; makeDefault: boolean },
-  ): Promise<void> {
-    return this.request(
-      `/management-api/venue-service/zones/${zoneId}/menus/${menuId}`,
-      "PUT",
-      input,
     );
   }
 

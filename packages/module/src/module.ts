@@ -400,7 +400,9 @@ export interface VenueServiceContribution {
     >
   >;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
-   *  the zone's active menus. With `menuItemIds`, only the offers it names are served. */
+   *  the zone's active menus. With `menuItemIds`, only the offers it names are served. The default
+   *  is the menu timetable's at `at` (now when absent); with `withDefault: false` the timetable is
+   *  not read, `defaultMenuId` is null and no menu is the default, which is what pricing passes. */
   listZoneOffers(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -408,8 +410,19 @@ export interface VenueServiceContribution {
     options?: {
       asserted?: readonly { menuId: string; versionId: string }[];
       menuItemIds?: readonly string[];
+      at?: Date;
+      withDefault?: false;
     },
   ): Promise<ZoneOffers>;
+  /** The zone's default menu at `at` among `servedMenuIds`, which the caller already read: the
+   *  timetable's, else the first served when that one is not served. Reads no publication. */
+  resolveDefaultMenu(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    at: Date,
+    servedMenuIds: readonly string[],
+  ): Promise<string | null>;
   /** Does not check the zone: an unknown one holds nothing. */
   menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState>;
   resolveNewOrderZone(

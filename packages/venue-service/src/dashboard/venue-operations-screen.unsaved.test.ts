@@ -36,11 +36,6 @@ const model: VenueServiceView = {
     },
   ],
   salePolicies: { departments: [], zones: [] },
-  zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
-  menus: [
-    { id: "m1", name: "Casa Delgado", active: true },
-    { id: "m2", name: "Deli takeaway", active: true },
-  ],
   floorZones: [
     { id: "z1", name: "Dining room" },
     { id: "z2", name: "Deli counter" },
@@ -96,7 +91,6 @@ async function mount(write?: Promise<void>, refreshFails = false) {
     createZone: record,
     configureZone: record,
     replaceHours: record,
-    allowMenu: record,
   } as unknown as VenueServiceApi;
   setLocale("en");
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
@@ -210,24 +204,14 @@ const cases = [
     setup: [],
     want: ["z1", { departmentId: "d1", serviceMode: null }],
   },
-  {
-    label: "Menu assignment",
-    action: "new-assignment-z1",
-    field: "assignment-order",
-    initial: "1",
-    edited: "02",
-    setup: [],
-    want: ["z1", "m2", { displayOrder: 2, makeDefault: false }],
-  },
 ] as const;
 async function open(screen: VenueOperationsScreen, key: string) {
-  if (key.includes("zone") || key.includes("assignment")) {
+  if (key.includes("zone")) {
     const tabs = screen.shadowRoot!.querySelector("wt-tabs")!;
     await tabs.updateComplete;
     tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="zones"]')!.click();
     await screen.updateComplete;
   }
-  if (key.includes("assignment")) await action(screen, "menus-tree-zone-z1");
   await action(screen, key);
   const modal = screen.shadowRoot!.querySelector("wt-modal")!;
   expect(modal).not.toBeNull();
@@ -396,34 +380,6 @@ it("a disconnect aborts a pending question and removes unload protection", async
   expect((await question()).open).toBe(true);
   screen.remove();
   expect((await question()).open).toBe(false);
-  expect(unload()).toBe(false);
-});
-it("equivalent assignment numbers revert, but invalid raw input remains dirty", async () => {
-  const { screen } = await mount();
-  await open(screen, "new-assignment-z1");
-  await field(screen, "assignment-order", "01");
-  expect(unload()).toBe(false);
-  await field(screen, "assignment-order", "invalid");
-  expect(unload()).toBe(true);
-  await field(screen, "assignment-order", "1");
-  expect(unload()).toBe(false);
-});
-
-it("assignment checkbox changes participate in Cancel and commit the existing request", async () => {
-  const { screen, writes } = await mount();
-  const modal = await open(screen, "new-assignment-z1");
-  const checkbox = modal.querySelector<HTMLInputElement>('[name="assignment-default"]')!;
-  checkbox.click();
-  expect(unload()).toBe(true);
-  modal.querySelector<HTMLElement>('[data-test="cancel-editor"]')!.click();
-  await choose("keep");
-  expect(checkbox.checked).toBe(true);
-  checkbox.click();
-  expect(unload()).toBe(false);
-  checkbox.click();
-  modal.querySelector<HTMLElement>('[data-test="save-editor"]')!.click();
-  await expect.poll(() => modal.isConnected).toBe(false);
-  expect(writes).toEqual([["z1", "m2", { displayOrder: 1, makeDefault: true }]]);
   expect(unload()).toBe(false);
 });
 it("a save aborts a pending discard without undoing its accepted body", async () => {

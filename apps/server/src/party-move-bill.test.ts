@@ -1,4 +1,4 @@
-import { createException } from "@waitron/venue-service";
+import { configureZone, createDepartment, createException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -85,6 +85,16 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
+    // The tables zone in a department of its own, so a menu priced for the counter's department
+    // is not served at the tables.
+    await inTx(v, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: "Comedor",
+        defaultServiceMode: "table_tab",
+      });
+      await configureZone(tx, v.cfg, { zoneId: v.tables.zoneId, departmentId: department.id });
+      await offerProducts(tx, v.cfg, { zone: "tables" });
+    });
     ticketThenPayZone = await inTx(v, (tx) => zoneNamed(tx, "Barra factura", "ticket_then_pay"));
     terrazaZone = await inTx(v, (tx) => zoneNamed(tx, "Terraza", "table_tab"));
     counterCaña = await pricedInZone(v, v.counter.zoneId, "Caña", "3.50");

@@ -626,6 +626,48 @@ describe("writing Hours", () => {
     expect(calls).toEqual([`copy true ${source.id} 2030-10-22`, `delete ${source.id}`]);
   });
 
+  it("hands a date move to the participants in the request's transaction, and rolls it back when one refuses", async () => {
+    const fx = await fixture();
+    const source = await createDate(fx, input());
+    const calls: string[] = [];
+    participants.push({
+      async copy() {},
+      async beforeDelete() {},
+      async beforeMove(tx, cfg, id, toDate) {
+        const [stored] = await tx
+          .select({ date: specialDates.date })
+          .from(specialDates)
+          .where(eq(specialDates.id, id));
+        calls.push(`move ${cfg.locationId === fx.cfg.locationId} ${id} ${stored!.date} ${toDate}`);
+        if (toDate === "2030-10-23") throw new Error("menu move refused");
+      },
+    });
+    const moved = await send(fx, "PUT", `/special-dates/${source.id}`, fx.manager, {
+      ...input(),
+      date: "2030-10-22",
+    });
+    expect(moved.status).toBe(200);
+    // A save that keeps the date is no move.
+    const renamed = await send(fx, "PUT", `/special-dates/${source.id}`, fx.manager, {
+      ...input(),
+      date: "2030-10-22",
+      name: "Staff lunch",
+    });
+    expect(renamed.status).toBe(200);
+    const refused = await send(fx, "PUT", `/special-dates/${source.id}`, fx.manager, {
+      ...input(),
+      date: "2030-10-23",
+    });
+    expect(refused.status).toBe(500);
+    expect(calls).toEqual([
+      `move true ${source.id} 2030-10-15 2030-10-22`,
+      `move true ${source.id} 2030-10-22 2030-10-23`,
+    ]);
+    expect(await venueDates(fx)).toEqual([
+      { id: source.id, date: "2030-10-22", name: "Staff lunch" },
+    ]);
+  });
+
   it("rolls back the whole copy when a participant refuses", async () => {
     const fx = await fixture();
     const source = await createDate(fx, input());

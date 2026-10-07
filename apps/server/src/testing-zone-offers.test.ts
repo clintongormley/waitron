@@ -11,11 +11,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  allowMenuInZone,
-  getOrderServiceContext,
-  resolveZoneContext,
-} from "@waitron/venue-service";
+import { getOrderServiceContext, resolveZoneContext } from "@waitron/venue-service";
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -143,7 +140,7 @@ async function counts(db: Database) {
       (select count(*) from zone_service_policies) as policies,
       (select count(*) from departments) as departments,
       (select count(*) from catalogues) as menus,
-      (select count(*) from zone_menus) as zone_menus,
+      (select count(*) from department_menus) as department_menus,
       (select count(*) from menu_items) as items,
       (select count(*) from product_modifiers where extra_list_id is not null) as extras,
       (select count(*) from route_exceptions) as routes`);
@@ -194,7 +191,7 @@ describe("offerProducts", () => {
         productId: venue.cafe,
         grossPrice: "2.50",
       });
-      await allowMenuInZone(tx, venue.cfg, offers.zoneId, venue.catalogueId);
+      await offerMenuThroughZone(tx, venue.cfg, offers.zoneId, venue.catalogueId);
     });
 
     const id = randomUUID();

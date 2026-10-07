@@ -5,3 +5,4 @@ export * from "./routing.js";
 export * from "./station-times.js";
 export * from "./hours.js";
 export * from "./holidays.js";
+export * from "./menus.js";

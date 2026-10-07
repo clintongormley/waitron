@@ -18,8 +18,6 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
         departments: [],
         zones: [],
         salePolicies: { departments: [], zones: [] },
-        zoneMenus: [],
-        menus: [],
         floorZones: [],
         settings: { editSentLines: true },
       }),
@@ -58,8 +56,6 @@ describe.each(["light", "dark"] as const)("a disabled department's Enable (%s)",
         zones: [],
         salePolicies: { departments: [], zones: [] },
         hours: [],
-        zoneMenus: [],
-        menus: [],
         floorZones: [],
         settings: { editSentLines: true },
       }),
@@ -98,8 +94,6 @@ describe.each(["light", "dark"] as const)("department editor accessibility (%s)"
         departments: [],
         zones: [],
         salePolicies: { departments: [], zones: [] },
-        zoneMenus: [],
-        menus: [],
         floorZones: [],
         settings: { editSentLines: true },
       }),
@@ -138,57 +132,54 @@ function findDeep(root: ParentNode, selector: string): HTMLElement | null {
 }
 
 describe.each(["light", "dark"] as const)("venue editors' fields accessibility (%s)", (theme) => {
-  test.each([
-    ["the zone editor", "zones", ["edit-zone-z1"]],
-    ["the menu editor", "zones", ["menus-tree-zone-z1", "new-assignment-z1"]],
-  ] as const)("%s", async (_name, tab, steps) => {
-    setLocale("en");
-    await mountThemed("<div></div>", theme);
-    const el = document.createElement("dashboard-venue-operations-screen") as VenueOperationsScreen;
-    el.api = {
-      load: vi.fn().mockResolvedValue({
-        readiness: [],
-        departments: [
-          {
-            id: "d1",
-            name: "Restaurant",
-            tradingName: "Casa",
-            defaultServiceMode: "table_tab",
-            active: true,
-          },
-        ],
-        zones: [
-          {
-            id: "z1",
-            name: "Dining room",
-            departmentId: "d1",
-            departmentName: "Restaurant",
-            serviceMode: "table_tab",
-            serviceModeOverride: null,
-          },
-        ],
-        salePolicies: { departments: [], zones: [] },
-        zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
-        menus: [
-          { id: "m1", name: "Lunch", active: true },
-          { id: "m2", name: "Dinner", active: true },
-        ],
-        floorZones: [{ id: "z1", name: "Dining room" }],
-        settings: { editSentLines: true },
-      }),
-    } as unknown as VenueServiceApi;
-    host.append(el);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
-    tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${tab}"]`)!.click();
-    await el.updateComplete;
-    for (const step of steps) {
-      findDeep(el.shadowRoot!, `[data-test="${step}"]`)!.click();
+  test.each([["the zone editor", "zones", ["edit-zone-z1"]]] as const)(
+    "%s",
+    async (_name, tab, steps) => {
+      setLocale("en");
+      await mountThemed("<div></div>", theme);
+      const el = document.createElement(
+        "dashboard-venue-operations-screen",
+      ) as VenueOperationsScreen;
+      el.api = {
+        load: vi.fn().mockResolvedValue({
+          readiness: [],
+          departments: [
+            {
+              id: "d1",
+              name: "Restaurant",
+              tradingName: "Casa",
+              defaultServiceMode: "table_tab",
+              active: true,
+            },
+          ],
+          zones: [
+            {
+              id: "z1",
+              name: "Dining room",
+              departmentId: "d1",
+              departmentName: "Restaurant",
+              serviceMode: "table_tab",
+              serviceModeOverride: null,
+            },
+          ],
+          salePolicies: { departments: [], zones: [] },
+          floorZones: [{ id: "z1", name: "Dining room" }],
+          settings: { editSentLines: true },
+        }),
+      } as unknown as VenueServiceApi;
+      host.append(el);
       await new Promise((resolve) => setTimeout(resolve, 0));
       await el.updateComplete;
-    }
-    expect(findDeep(el.shadowRoot!, "wt-combobox")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
+      const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+      tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${tab}"]`)!.click();
+      await el.updateComplete;
+      for (const step of steps) {
+        findDeep(el.shadowRoot!, `[data-test="${step}"]`)!.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+      }
+      expect(findDeep(el.shadowRoot!, "wt-combobox")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
 });

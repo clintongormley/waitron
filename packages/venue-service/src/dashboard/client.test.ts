@@ -105,7 +105,6 @@ describe("VenueServiceApi", () => {
     const model = {
       departments: [{ id: "d1" }],
       zones: [],
-      zoneMenus: [],
       readiness: [],
       settings: { editSentLines: false },
       kitchenTicketGrouping: "separate",
@@ -257,26 +256,24 @@ describe("VenueServiceApi", () => {
         jsonResponse({
           departments: [],
           zones: [],
-          zoneMenus: [],
           readiness: [],
         }),
       )
-      .mockResolvedValueOnce(jsonResponse([{ id: "m1", name: "Restaurant", active: true }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs", active: false }]));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
 
-    await expect(api.load()).resolves.toMatchObject({
-      menus: [{ id: "m1", name: "Restaurant" }],
+    const loaded = await api.load();
+    expect(loaded).toMatchObject({
       floorZones: [{ id: "z1", name: "Upstairs", active: false }],
     });
+    expect(loaded).not.toHaveProperty("menus");
     expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
       "/management-api/venue-service",
-      "/management-api/catalogues",
       "/management-api/zones?includeInactive=true",
     ]);
   });
 
-  it("writes departments, zone policy and menu assignment", async () => {
+  it("writes departments and zone policy, and has no per-zone menu write", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ id: "d1" }, 201))
@@ -290,13 +287,12 @@ describe("VenueServiceApi", () => {
     await api.deactivateDepartment("d1");
     expect("replaceHours" in api).toBe(false);
     await api.configureZone("z1", { departmentId: "d1", serviceMode: null });
-    await api.allowMenu("z1", "m1", { displayOrder: 0, makeDefault: true });
+    expect("allowMenu" in api).toBe(false);
 
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service/departments", "POST"],
       ["/management-api/venue-service/departments/d1", "DELETE"],
       ["/management-api/venue-service/zones/z1", "PUT"],
-      ["/management-api/venue-service/zones/z1/menus/m1", "PUT"],
     ]);
   });
 
@@ -304,7 +300,6 @@ describe("VenueServiceApi", () => {
     const empty = {
       departments: [],
       zones: [],
-      zoneMenus: [],
       readiness: [],
     };
     const fetchImpl = vi.fn((path: string) =>
@@ -322,7 +317,7 @@ describe("VenueServiceApi", () => {
     expect(background.liveData).toBe(liveData);
 
     await background.load();
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
       expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
     }
@@ -330,10 +325,10 @@ describe("VenueServiceApi", () => {
 
     fetchImpl.mockClear();
     await api.load();
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
       expect(new Headers(init.headers).get("x-waitron-live")).toBeNull();
     }
-    expect(onSuccess).toHaveBeenCalledTimes(3);
+    expect(onSuccess).toHaveBeenCalledTimes(2);
   });
 });

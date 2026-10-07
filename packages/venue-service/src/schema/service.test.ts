@@ -11,10 +11,10 @@ import {
   orderServiceContexts,
   saleReceiptHeaders,
   workingLineContexts,
-  zoneMenus,
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./service.js";
+import { departmentAllDayMenus, departmentMenus, zoneAllDayMenus } from "./menus.js";
 import { serviceSettings } from "./settings.js";
 import { kitchenNotices } from "./kitchen-notices.js";
 import { routeExceptions, stationClaims } from "./routing.js";
@@ -62,8 +62,6 @@ const EXPECTED: Record<
       "zone_service_policies_location_fk",
       "zone_service_policies_zone_fk",
       "zone_service_policies_department_fk",
-      "zone_service_policies_default_menu_fk",
-      "zone_service_policies_default_allowed_fk",
     ],
     checks: ["zone_service_policies_mode_ck"],
     indexes: ["zone_service_policies_one_counter_default_key"],
@@ -90,13 +88,29 @@ const EXPECTED: Record<
     uniqueConstraints: [],
     primaryKeys: [],
   },
-  zone_menus: {
-    table: zoneMenus,
-    foreignKeys: ["zone_menus_zone_fk", "zone_menus_menu_fk"],
+  department_menus: {
+    table: departmentMenus,
+    foreignKeys: ["department_menus_department_fk", "department_menus_menu_fk"],
     checks: [],
-    indexes: ["zone_menus_order_idx"],
+    indexes: ["department_menus_order_idx"],
     uniqueConstraints: [],
-    primaryKeys: ["zone_menus_pk"],
+    primaryKeys: ["department_menus_pk"],
+  },
+  department_all_day_menus: {
+    table: departmentAllDayMenus,
+    foreignKeys: ["department_all_day_menus_member_fk"],
+    checks: [],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: [],
+  },
+  zone_all_day_menus: {
+    table: zoneAllDayMenus,
+    foreignKeys: ["zone_all_day_menus_zone_fk", "zone_all_day_menus_member_fk"],
+    checks: [],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: [],
   },
   device_profile_service_access: {
     table: deviceProfileServiceAccess,
@@ -236,8 +250,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers the eighteen tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(18);
+  it("covers the twenty tables it lists", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(20);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

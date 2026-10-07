@@ -766,6 +766,7 @@ async function offersFor(
   if (zoneId === null) return new Map();
   const { offers } = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
     menuItemIds: [...new Set(menuItemIds)],
+    withDefault: false,
   });
   return new Map(offers.map((offer) => [offer.id, offer]));
 }

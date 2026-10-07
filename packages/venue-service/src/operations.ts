@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import {
   catalogues,
   diningTables,
@@ -33,10 +33,16 @@ import {
   orderServiceContexts,
   saleReceiptHeaders,
   workingLineContexts,
-  zoneMenus,
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./schema/service.js";
+import {
+  departmentAllDayMenus,
+  departmentMenus,
+  zoneAllDayMenus,
+  zonePeriodMenus,
+} from "./schema/menus.js";
+import { resolveZoneMenus, servedDefault } from "./menu-timetable.js";
 import { routeExceptions } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
@@ -73,25 +79,15 @@ export function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
 
-export async function listZoneMenuAssignments(tx: Transaction, cfg: VenueScope) {
-  return tx
-    .select({
-      zoneId: zoneMenus.zoneId,
-      menuId: zoneMenus.menuId,
-      displayOrder: zoneMenus.displayOrder,
-      defaultMenuId: zoneServicePolicies.defaultMenuId,
-    })
-    .from(zoneMenus)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneMenus.zoneId))
-    .where(eq(zoneServicePolicies.locationId, cfg.locationId))
-    .orderBy(zoneMenus.zoneId, zoneMenus.displayOrder, zoneMenus.menuId)
-    .then((rows) =>
-      rows.map(({ defaultMenuId, ...row }) => ({
-        ...row,
-        isDefault: row.menuId === defaultMenuId,
-      })),
-    );
-}
+/** A zone's own all-day menu, else its department's; joined beside `zone_service_policies`. */
+const allDayMenuId = sql<
+  string | null
+>`coalesce(${zoneAllDayMenus.menuId}, ${departmentAllDayMenus.menuId})`;
+const zoneAllDayJoin = eq(zoneAllDayMenus.zoneId, zoneServicePolicies.zoneId);
+const departmentAllDayJoin = eq(
+  departmentAllDayMenus.departmentId,
+  zoneServicePolicies.departmentId,
+);
 
 /** The default list is restricted to zones that can start a new order. */
 export async function listServiceZones(
@@ -345,19 +341,13 @@ export async function listVenueReadiness(
       name: floorZones.name,
       departmentId: zoneServicePolicies.departmentId,
       departmentActive: departments.active,
-      defaultMenuId: zoneServicePolicies.defaultMenuId,
-      assignedMenuId: zoneMenus.menuId,
+      defaultMenuId: allDayMenuId,
     })
     .from(floorZones)
     .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
     .leftJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .leftJoin(
-      zoneMenus,
-      and(
-        eq(zoneMenus.zoneId, zoneServicePolicies.zoneId),
-        eq(zoneMenus.menuId, zoneServicePolicies.defaultMenuId),
-      ),
-    )
+    .leftJoin(zoneAllDayMenus, zoneAllDayJoin)
+    .leftJoin(departmentAllDayMenus, departmentAllDayJoin)
     .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
     .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
 
@@ -366,7 +356,7 @@ export async function listVenueReadiness(
       if (zone.departmentId === null || zone.departmentActive !== true) {
         return [{ code: "zone.department_missing", zoneId: zone.id, zoneName: zone.name }];
       }
-      if (zone.defaultMenuId === null || zone.assignedMenuId === null) {
+      if (zone.defaultMenuId === null) {
         return [{ code: "zone.menu_missing", zoneId: zone.id, zoneName: zone.name }];
       }
       return [];
@@ -374,10 +364,7 @@ export async function listVenueReadiness(
   );
   const ready = zones.filter(
     (zone) =>
-      zone.departmentId !== null &&
-      zone.departmentActive === true &&
-      zone.defaultMenuId !== null &&
-      zone.assignedMenuId !== null,
+      zone.departmentId !== null && zone.departmentActive === true && zone.defaultMenuId !== null,
   );
   if (ready.length === 0) return issues;
   const menusOf = await zoneMenuIdsByZone(tx, cfg);
@@ -423,6 +410,23 @@ export async function configureZone(
   if (department === undefined) {
     throw new AppError("department.not_found", { departmentId: input.departmentId });
   }
+  // A zone moving department drops its own menus, which named the old department's list and periods.
+  await tx
+    .delete(zoneAllDayMenus)
+    .where(
+      and(
+        eq(zoneAllDayMenus.zoneId, input.zoneId),
+        ne(zoneAllDayMenus.departmentId, input.departmentId),
+      ),
+    );
+  await tx
+    .delete(zonePeriodMenus)
+    .where(
+      and(
+        eq(zonePeriodMenus.zoneId, input.zoneId),
+        ne(zonePeriodMenus.departmentId, input.departmentId),
+      ),
+    );
   await tx
     .insert(zoneServicePolicies)
     .values({
@@ -480,43 +484,6 @@ export async function createServiceZone(
   return { id: zoneId };
 }
 
-export async function allowMenuInZone(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-  menuId: string,
-  options: { displayOrder?: number; makeDefault?: boolean } = {},
-): Promise<void> {
-  const [menu] = await tx
-    .select({ id: catalogues.id })
-    .from(catalogues)
-    .where(eq(catalogues.id, menuId));
-  if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
-  const [policy] = await tx
-    .select({ zoneId: zoneServicePolicies.zoneId })
-    .from(zoneServicePolicies)
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(zoneServicePolicies.zoneId, zoneId),
-      ),
-    );
-  if (policy === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  await tx
-    .insert(zoneMenus)
-    .values({ zoneId, menuId, displayOrder: options.displayOrder ?? 0 })
-    .onConflictDoUpdate({
-      target: [zoneMenus.zoneId, zoneMenus.menuId],
-      set: { displayOrder: options.displayOrder ?? 0 },
-    });
-  if (options.makeDefault === true) {
-    await tx
-      .update(zoneServicePolicies)
-      .set({ defaultMenuId: menuId })
-      .where(eq(zoneServicePolicies.zoneId, zoneId));
-  }
-}
-
 export async function resolveZoneContext(
   tx: Transaction,
   cfg: VenueScope,
@@ -526,7 +493,6 @@ export async function resolveZoneContext(
   departmentId: string;
   departmentName: string;
   serviceMode: ServiceMode;
-  defaultMenuId: string | null;
 }> {
   const [row] = await tx
     .select({
@@ -535,7 +501,6 @@ export async function resolveZoneContext(
       departmentName: departments.name,
       zoneMode: zoneServicePolicies.serviceMode,
       departmentMode: departments.defaultServiceMode,
-      defaultMenuId: zoneServicePolicies.defaultMenuId,
     })
     .from(zoneServicePolicies)
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
@@ -552,7 +517,6 @@ export async function resolveZoneContext(
     departmentId: row.departmentId,
     departmentName: row.departmentName,
     serviceMode: (row.zoneMode ?? row.departmentMode) as ServiceMode,
-    defaultMenuId: row.defaultMenuId,
   };
 }
 
@@ -720,16 +684,19 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
     .where(eq(zoneSalePolicies.zoneId, zoneId));
 }
 
-/** The active menus each of the venue's zones may sell from, in each zone's order. */
+/** The active menus each of the venue's zones may sell from, in its department's order. */
 async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<string, string[]>> {
   const byZone = new Map<string, string[]>();
   for (const row of await tx
-    .select({ zoneId: zoneMenus.zoneId, menuId: zoneMenus.menuId })
-    .from(zoneMenus)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneMenus.zoneId))
-    .innerJoin(catalogues, eq(catalogues.id, zoneMenus.menuId))
+    .select({ zoneId: zoneServicePolicies.zoneId, menuId: departmentMenus.menuId })
+    .from(departmentMenus)
+    .innerJoin(
+      zoneServicePolicies,
+      eq(zoneServicePolicies.departmentId, departmentMenus.departmentId),
+    )
+    .innerJoin(catalogues, eq(catalogues.id, departmentMenus.menuId))
     .where(and(eq(zoneServicePolicies.locationId, cfg.locationId), eq(catalogues.active, true)))
-    .orderBy(zoneMenus.displayOrder, zoneMenus.menuId)) {
+    .orderBy(departmentMenus.displayOrder, departmentMenus.menuId)) {
     const menus = byZone.get(row.zoneId);
     if (menus === undefined) byZone.set(row.zoneId, [row.menuId]);
     else menus.push(row.menuId);
@@ -737,14 +704,18 @@ async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<
   return byZone;
 }
 
-/** The active menus a zone may sell from, in the zone's order. */
+/** The active menus a zone may sell from: its department's, in the department's order. */
 async function zoneMenuIds(tx: Transaction, zoneId: string): Promise<string[]> {
   const rows = await tx
-    .select({ id: zoneMenus.menuId })
-    .from(zoneMenus)
-    .innerJoin(catalogues, eq(catalogues.id, zoneMenus.menuId))
-    .where(and(eq(zoneMenus.zoneId, zoneId), eq(catalogues.active, true)))
-    .orderBy(zoneMenus.displayOrder, zoneMenus.menuId);
+    .select({ id: departmentMenus.menuId })
+    .from(departmentMenus)
+    .innerJoin(
+      zoneServicePolicies,
+      eq(zoneServicePolicies.departmentId, departmentMenus.departmentId),
+    )
+    .innerJoin(catalogues, eq(catalogues.id, departmentMenus.menuId))
+    .where(and(eq(zoneServicePolicies.zoneId, zoneId), eq(catalogues.active, true)))
+    .orderBy(departmentMenus.displayOrder, departmentMenus.menuId);
   return rows.map((row) => row.id);
 }
 
@@ -769,10 +740,12 @@ async function zoneLiveDocuments(
 /**
  * What the zone sells: each published menu's live version, with the current availability put back
  * (an unavailable offer is served marked, in its place), and that version's structure and Device
- * Home Page. An inactive menu, or one with no live version, is left out, and a default that is
- * inactive or unpublished gives way to the zone's first menu that is served. Refused
- * `menu.version_changed` unless every `asserted` version is the live version of one of the zone's
- * active menus. With `menuItemIds`, only the offers it names are served; the menus are all listed.
+ * Home Page. An inactive menu, or one with no live version, is left out. The default is the menu
+ * timetable's at `at` (now when absent), and one that is inactive or unpublished gives way to the
+ * zone's first menu that is served; with `withDefault: false` the timetable is not read and no
+ * menu is the default. Refused `menu.version_changed` unless every `asserted` version is the live
+ * version of one of the zone's active menus. With `menuItemIds`, only the offers it names are
+ * served; the menus are all listed.
  */
 export async function listZoneOffers(
   tx: Transaction,
@@ -781,9 +754,11 @@ export async function listZoneOffers(
   options: {
     asserted?: readonly { menuId: string; versionId: string }[];
     menuItemIds?: readonly string[];
+    at?: Date;
+    withDefault?: false;
   } = {},
 ): Promise<ZoneOffers> {
-  const context = await resolveZoneContext(tx, cfg, zoneId);
+  await resolveZoneContext(tx, cfg, zoneId);
   const published = await zoneLiveDocuments(tx, zoneId, options.asserted);
   const served = await applyLiveFields(
     tx,
@@ -791,10 +766,12 @@ export async function listZoneOffers(
     options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
   );
   const defaultMenuId =
-    context.defaultMenuId === null ||
-    published.some((menu) => menu.menuId === context.defaultMenuId)
-      ? context.defaultMenuId
-      : (published[0]?.menuId ?? null);
+    options.withDefault === false
+      ? null
+      : servedDefault(
+          (await resolveZoneMenus(tx, cfg, zoneId, options.at ?? new Date())).defaultMenuId,
+          published.map((menu) => menu.menuId),
+        );
   // Catalogue's `ServedMenu` is the type the till reads each menu as.
   const menus: ServedMenu[] = published.map(({ menuId, versionId, document }) => ({
     id: menuId,
@@ -836,7 +813,6 @@ export async function resolveNewOrderZone(
   departmentId: string;
   departmentName: string;
   serviceMode: ServiceMode;
-  defaultMenuId: string | null;
 }> {
   if (input.zoneId !== undefined && input.zoneId !== null) {
     return resolveZoneContext(tx, cfg, input.zoneId);

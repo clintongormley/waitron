@@ -646,11 +646,8 @@ export async function importConfigurationTables(
     where id = ${target.locationId}
   `);
 
-  // The declared tables hold at least one foreign-key cycle — `zone_menus.zone_id` points at
-  // `zone_service_policies`, whose `(zone_id, default_menu_id)` points back at `zone_menus` — so
-  // neither the deletes nor the inserts below, in the order they run, pass a per-statement check.
-  // The pragma moves the check to COMMIT; it holds only until this transaction ends, and the
-  // caller's commit still validates the final state.
+  // Moves the key checks to COMMIT, for this transaction only; the caller's commit still checks the
+  // final state.
   // `packages/db/src/testing/venue-db.ts` empties a whole venue the same way.
   await tx.execute(sql`pragma defer_foreign_keys = on`);
   for (const [declaration] of [...checked].reverse()) {
