@@ -8,6 +8,8 @@ import "./venue-operations-screen.js";
 import "./service-settings-panel.js";
 import { HoursApi } from "./hours-client.js";
 import "./hours-screen.js";
+import { MenuTimetableApi } from "./menu-timetable-client.js";
+import "./menu-timetable-screen.js";
 
 export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
   module: "venue-service",
@@ -65,6 +67,25 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
               .api=${api}
               .readOnly=${readOnly}
             ></dashboard-hours-screen>`,
+        };
+      },
+    },
+    {
+      screen: {
+        id: "menu-timetable",
+        navLabelKey: "nav.menu_timetable",
+        group: "menu",
+        requiresPermission: "venue_service.manage",
+        readPermission: "venue.view",
+      },
+      create(ctx) {
+        const api = new MenuTimetableApi(ctx.request, ctx.liveData);
+        return {
+          render: (readOnly = false) =>
+            html`<dashboard-menu-timetable-screen
+              .api=${api}
+              .readOnly=${readOnly}
+            ></dashboard-menu-timetable-screen>`,
         };
       },
     },

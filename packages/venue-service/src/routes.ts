@@ -14,7 +14,6 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
 import {
-  allowMenuInZone,
   configureZone,
   createServiceZone,
   activateDepartment,
@@ -26,7 +25,6 @@ import {
   listSalePolicies,
   listServiceZones,
   listVenueReadiness,
-  listZoneMenuAssignments,
   setDepartmentSalePolicyField,
   setZoneSalePolicyOverride,
   updateDepartment,
@@ -164,13 +162,6 @@ function requireMode(value: unknown, field: string): ServiceMode {
     throw new AppError("management.request_invalid", { field });
   }
   return value as ServiceMode;
-}
-
-function requireDisplayOrder(value: unknown): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new AppError("management.request_invalid", { field: "displayOrder" });
-  }
-  return value;
 }
 
 const MAX_RELEASE_REMINDER_MINUTES = 120;
@@ -662,7 +653,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           departments: await listDepartments(tx, ctx.cfg),
           zones: await listServiceZones(tx, ctx.cfg, { includeInactive: true }),
           salePolicies: await listSalePolicies(tx, ctx.cfg),
-          zoneMenus: await listZoneMenuAssignments(tx, ctx.cfg),
           readiness: await listVenueReadiness(tx, ctx.cfg),
           settings: { editSentLines: await readEditSentLines(tx) },
           kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
@@ -1080,23 +1070,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         onlyKeys(body, ["menuId"]);
         const menuId = requireNullableBodyUuid(body.menuId, "menuId");
         await gated(sessionId, (tx) => setZonePeriodMenu(tx, ctx.cfg, zoneId, periodId, menuId));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/zones/:zoneId/menus/:menuId", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
-        const menuId = requireUuidParam(c.req.param("menuId"), "MenuId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        await gated(sessionId, (tx) =>
-          allowMenuInZone(tx, ctx.cfg, zoneId, menuId, {
-            displayOrder:
-              body.displayOrder === undefined ? undefined : requireDisplayOrder(body.displayOrder),
-            makeDefault: body.makeDefault === true,
-          }),
-        );
         return c.body(null, 204);
       }),
     );

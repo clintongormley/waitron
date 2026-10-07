@@ -37,15 +37,23 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
     t(key) as string,
   );
 
-function openHoursPage(departmentId: string): void {
-  const url = `/manage/hours/department/${encodeURIComponent(departmentId)}`;
+function openPage(path: string): void {
   const guard = navigationGuardFor(window);
-  if (guard) void guard.write(url);
+  if (guard) void guard.write(path);
   else {
-    history.pushState(history.state, "", url);
+    history.pushState(history.state, "", path);
     dispatchEvent(new PopStateEvent("popstate"));
   }
 }
+
+function openHoursPage(departmentId: string): void {
+  openPage(`/manage/hours/department/${encodeURIComponent(departmentId)}`);
+}
+
+const menuTimetablePath = (departmentId: string | null) =>
+  departmentId === null
+    ? "/manage/menu-timetable"
+    : `/manage/menu-timetable?departmentId=${encodeURIComponent(departmentId)}`;
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "ticket_then_pay"];
 type View = "departments" | "zones";
@@ -53,7 +61,6 @@ type Editor =
   | { kind: "department"; row?: Department }
   | { kind: "new-zone" }
   | { kind: "zone"; row: FloorZone }
-  | { kind: "assignment"; zoneId: string; menuId?: string }
   | {
       kind: "disable";
       name: string;
@@ -218,7 +225,6 @@ export class VenueOperationsScreen extends LitElement {
   @state() private receiptDrafts: Record<string, string> = {};
   @state() private view: View = "departments";
   @state() private editor?: Editor;
-  @state() private zoneId = "";
   #editorScope?: DraftScope<EditorValues>;
   #editorIdentity?: Editor;
   #editorBaseline?: EditorValues;
@@ -520,9 +526,7 @@ export class VenueOperationsScreen extends LitElement {
       const twin =
         opener?.slot === "empty-action"
           ? this.renderRoot.querySelector<HTMLElement>(
-              opener.dataset.test?.startsWith("new-assignment-")
-                ? `[data-test="zone-menu-actions"] [data-test="${opener.dataset.test}"]`
-                : `[data-test="policy-tree-actions"] [data-test="${opener.dataset.test}"]`,
+              `[data-test="policy-tree-actions"] [data-test="${opener.dataset.test}"]`,
             )
           : null;
       (opener?.isConnected &&
@@ -639,18 +643,6 @@ export class VenueOperationsScreen extends LitElement {
       required
       error=${this.#errors()[name] ?? ""}
     ></wt-input>`;
-  }
-  #stepper(name: string, label: string, value: string) {
-    return html`<wt-number-stepper
-      name=${name}
-      label=${label}
-      .value=${value}
-      min="0"
-      required
-      error=${this.#errors()[name] ?? ""}
-      .decreaseLabel=${(text: string) => t("venue.decrease").replace("{label}", text)}
-      .increaseLabel=${(text: string) => t("venue.increase").replace("{label}", text)}
-    ></wt-number-stepper>`;
   }
   /** A value the choices do not hold starts on the first choice; the save reads what is shown. An
    * empty first choice is also the text shown while it is chosen. */
@@ -771,14 +763,6 @@ export class VenueOperationsScreen extends LitElement {
       label: t("venue.add_zone"),
       disabled: !this.model!.departments.some((department) => department.active),
       run: () => this.#open({ kind: "new-zone" }),
-    };
-  }
-  #addAssignment(zoneId: string): Action {
-    return {
-      key: `new-assignment-${zoneId}`,
-      label: t("venue.make_available"),
-      disabled: !this.model!.zones.some((row) => row.id === zoneId),
-      run: () => this.#open({ kind: "assignment", zoneId }),
     };
   }
   #enableDepartment(key: string, row: Department): Action {
@@ -955,18 +939,17 @@ export class VenueOperationsScreen extends LitElement {
                     ${this.#readinessMessage(issue)}
                     ${
                       issue.code === "zone.menu_missing"
-                        ? html`<button
-                            type="button"
+                        ? html`<a
                             part="zone-readiness-action"
                             data-test="zone-readiness-action"
-                            @click=${(event: Event) => {
-                              this.#opener = event.currentTarget as HTMLElement;
-                              this.#openerAction = undefined;
-                              this.#open({ kind: "assignment", zoneId: row.zone.id });
+                            href=${menuTimetablePath(row.departmentId)}
+                            @click=${(event: MouseEvent) => {
+                              if (event.button !== 0 || event.metaKey || event.ctrlKey) return;
+                              event.preventDefault();
+                              openPage(menuTimetablePath(row.departmentId));
                             }}
-                          >
-                            ${t("venue.make_available")}
-                          </button>`
+                            >${t("venue.set_up_menus")}</a
+                          >`
                         : nothing
                     }
                   </div>`,
@@ -1414,13 +1397,6 @@ export class VenueOperationsScreen extends LitElement {
                       },
                     ]
                   : []),
-                {
-                  key: `menus-tree-zone-${row.zone.id}`,
-                  label: t("venue.menus"),
-                  run: () => {
-                    this.zoneId = row.zone.id;
-                  },
-                },
                 ...(row.zone.active !== false
                   ? [
                       {
@@ -1573,17 +1549,6 @@ export class VenueOperationsScreen extends LitElement {
             },
           },
           {
-            key: "default",
-            label: t("venue.default"),
-            choosable: "shown",
-            cell: (row) =>
-              model.menus.find(
-                (menu) =>
-                  menu.id ===
-                  model.zoneMenus.find((z) => z.zoneId === row.id && z.isDefault)?.menuId,
-              )?.name ?? t("venue.unconfigured"),
-          },
-          {
             key: "actions",
             label: t("venue.actions"),
             pinned: "end",
@@ -1599,82 +1564,6 @@ export class VenueOperationsScreen extends LitElement {
         ],
         (row) => row.id,
       )}
-    </section>`;
-  }
-  #zoneMenus() {
-    const model = this.model!;
-    const zone = model.floorZones.find((row) => row.id === this.zoneId);
-    return html`<section>
-      ${
-        zone
-          ? html`<div class="toolbar" data-test="zone-menu-actions">
-                <h2>${zone.name}: ${t("venue.menus")}</h2>
-                ${this.#tabAction(this.#addAssignment(zone.id))}
-              </div>
-              ${this.#table(
-                "zone-menus",
-                "waitron.venue.zone-menus.table",
-                t("venue.menus"),
-                t("venue.no_zone_menus"),
-                model.zoneMenus.filter((row) => row.zoneId === zone.id),
-                [
-                  {
-                    key: "menu",
-                    label: t("venue.menu_name"),
-                    cell: (row) => model.menus.find((menu) => menu.id === row.menuId)?.name,
-                  },
-                  {
-                    key: "default",
-                    label: t("venue.default"),
-                    choosable: "shown",
-                    cell: (row) => t(row.isDefault ? "venue.yes" : "venue.no"),
-                  },
-                  {
-                    key: "order",
-                    label: t("venue.display_order"),
-                    choosable: "shown",
-                    cell: (row) => String(row.displayOrder),
-                  },
-                  {
-                    key: "actions",
-                    label: t("venue.actions"),
-                    pinned: "end",
-                    cell: (row) =>
-                      this.#actions(
-                        model.menus.find((menu) => menu.id === row.menuId)?.name ?? row.menuId,
-                        [
-                          {
-                            key: `edit-assignment-${row.menuId}`,
-                            label: t("venue.edit"),
-                            run: () =>
-                              this.#open({
-                                kind: "assignment",
-                                zoneId: zone.id,
-                                menuId: row.menuId,
-                              }),
-                          },
-                          {
-                            key: `default-assignment-${row.menuId}`,
-                            label: t("venue.make_default"),
-                            disabled: row.isDefault,
-                            run: () => {
-                              void this.#save(() =>
-                                this.api.allowMenu(zone.id, row.menuId, {
-                                  displayOrder: row.displayOrder,
-                                  makeDefault: true,
-                                }),
-                              );
-                            },
-                          },
-                        ],
-                      ),
-                  },
-                ],
-                (row) => row.menuId,
-                this.#addAssignment(zone.id),
-              )}`
-          : nothing
-      }
     </section>`;
   }
   #editorContent(editor: Editor): EditorContent {
@@ -1758,51 +1647,6 @@ export class VenueOperationsScreen extends LitElement {
               },
               codes: { "department.not_found": `zone-department-${editor.row.id}` },
             });
-          },
-        };
-      }
-      case "assignment": {
-        const assignment = model.zoneMenus.find(
-          (row) => row.zoneId === editor.zoneId && row.menuId === editor.menuId,
-        );
-        const menus = model.menus.filter(
-          (menu) =>
-            menu.id === editor.menuId ||
-            (menu.active &&
-              !model.zoneMenus.some(
-                (row) => row.zoneId === editor.zoneId && row.menuId === menu.id,
-              )),
-        );
-        return {
-          heading: t(assignment ? "venue.edit_assignment" : "venue.make_available"),
-          body: html`${this.#select("assignment-menu", t("venue.menu_name"), menus, editor.menuId, true, !!assignment)}${this.#stepper("assignment-order", t("venue.display_order"), String(assignment?.displayOrder ?? model.zoneMenus.filter((row) => row.zoneId === editor.zoneId).length))}<label
-              >${t("venue.default")}<input
-                type="checkbox"
-                name="assignment-default"
-                .checked=${assignment?.isDefault ?? false}
-                ?disabled=${assignment?.isDefault === true}
-            /></label>`,
-          check: () => {
-            const missing = this.#required(["assignment-menu", "assignment-order"]);
-            if (Object.keys(missing).length > 0) return missing;
-            const displayOrder = Number(this.#value("assignment-order"));
-            return Number.isInteger(displayOrder) && displayOrder >= 0
-              ? {}
-              : { "assignment-order": t("venue.order_invalid") };
-          },
-          save: () => {
-            const displayOrder = Number(this.#value("assignment-order"));
-            const menuId = this.#value("assignment-menu");
-            const makeDefault = this.renderRoot.querySelector<HTMLInputElement>(
-              '[name="assignment-default"]',
-            )!.checked;
-            void this.#save(
-              () => this.api.allowMenu(editor.zoneId, menuId, { displayOrder, makeDefault }),
-              {
-                fields: { displayOrder: "assignment-order" },
-                codes: { "catalogue.not_found": "assignment-menu" },
-              },
-            );
           },
         };
       }
@@ -1917,7 +1761,7 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#pageAlert()}
       ${
         this.model
-          ? html`${this.#policyTree()} ${this.#readiness()} ${this.#zoneMenus()}
+          ? html`${this.#policyTree()} ${this.#readiness()}
               <wt-tabs
                 label=${t("venue.title")}
                 .value=${this.view}

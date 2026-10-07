@@ -6,6 +6,7 @@ import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { ServiceSettingsPanel } from "./service-settings-panel.js";
 import type { HoursScreen } from "./hours-screen.js";
+import type { MenuTimetableScreen } from "./menu-timetable-screen.js";
 
 const containers: HTMLElement[] = [];
 afterEach(() => {
@@ -248,6 +249,63 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     // From the day before today, so a venue a day behind the browser still sees its today, for
     // the most dates one read may cover.
     expect(path).toBe("/management-api/venue-service/hours?from=2026-10-06&to=2027-10-06");
+    expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+  });
+
+  it("files Menu timetable with the menus, readable with venue.view", async () => {
+    const model = {
+      menus: [{ id: "m1", name: "Desayunos", active: true }],
+      timeZone: "Europe/Madrid",
+      clockReadable: true,
+      civilDate: "2026-10-07",
+      departments: [
+        {
+          id: "d1",
+          name: "Restaurant",
+          active: true,
+          menuIds: ["m1"],
+          allDayMenuId: null,
+          periods: [],
+          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
+          zones: [],
+        },
+      ],
+      specialDates: [],
+    };
+    const fetchImpl = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(model),
+      } as Response),
+    );
+    const liveData = new LiveData();
+    const timetable = VENUE_SERVICE_DASHBOARD.moreScreens!.at(-1)!;
+    expect(timetable.screen).toEqual({
+      id: "menu-timetable",
+      navLabelKey: "nav.menu_timetable",
+      group: "menu",
+      requiresPermission: "venue_service.manage",
+      readPermission: "venue.view",
+    });
+    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.menu_timetable"]).toBe("Menu timetable");
+    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.menu_timetable"]).toBe("Horario de cartas");
+    const handle = timetable.create({
+      request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+      liveData,
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    render(handle.render(true), container);
+    const screen = container.querySelector<MenuTimetableScreen>("dashboard-menu-timetable-screen")!;
+    expect(screen.api.liveData).toBe(liveData);
+    expect(screen.readOnly).toBe(true);
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector('[data-test="menu-list"]')).not.toBeNull(),
+    );
+    const [[path, init]] = fetchImpl.mock.calls as unknown as [[string, RequestInit]];
+    expect(path).toBe("/management-api/venue-service/menu-timetable");
     expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
   });
 });

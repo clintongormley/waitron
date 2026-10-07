@@ -1034,7 +1034,8 @@ pre-publish changes list (W51) — DONE (#1160).** The core `working_order_lines
 Reset retained pre-live venues before installing core `0092`, which rebuilds both tables.
 
 **Department menu timetables and queued publication (A204, owner 2026-10-02; refined
-2026-10-04) — SPEC APPROVED; implementation plans queued in lane B; not implemented.**
+2026-10-04) — department menus and timetable (W98) IN PROGRESS on `feat/department-menu-timetable`,
+no pull request yet; queued publication not implemented.**
 Departments own the available-menu list and the only timetable; zones override defaults within its shared periods.
 An all-day default covers gaps; normal weeks and special dates share A261's calendar. Staff may
 still order from breakfast after it stops being the default. Several future menu editions can be
@@ -1043,10 +1044,14 @@ explicit cancellation or replacement.
 [Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md), §§2–3 and the approved details in §9;
 [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md);
 [publication plan](superpowers/plans/2026-10-04-forward-only-menu-publication.md).
-The shared calendar it builds on is in (A261 step 5): its menu participant joins the empty
-`VENUE_SERVICE_CALENDAR_PARTICIPANTS` list in `packages/venue-service/src/calendar-participants.ts`.
-It must replace A261 step 2's Task 8 (zone-by-zone menus, the interim path W97 kept) before it
-removes the old menu editor; W97's profiles already scope a till to a department and its zones.
+W98 on that branch: each department holds an ordered menu list, an all-day menu and named periods
+placed on a normal week and on special dates; a zone may choose its own menu for a period or for
+the all-day gaps. Managers edit it on a new Menu timetable page (`/manage/menu-timetable`, in the
+"Products and menus" navigation group); Departments and zones no longer edits menus per zone, and its
+"needs a default menu" line links there. Its menu participant is in
+`VENUE_SERVICE_CALENDAR_PARTICIPANTS`. **Installing it needs every populated venue reset**: it
+drops `zone_menus` and rebuilds `zone_service_policies`, and nothing carries the old per-zone menus
+across; the shared dev venue needs `wa-wt reset demo <name>` once it lands.
 
 **The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
@@ -4712,11 +4717,10 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   month calendar; routing reads the same schedules. The old station and department hours editors
   and their two tables are gone (venue-service `0022_retire_legacy_hours`); a pre-live venue is
   reset rather than carrying old hours over. Separate dependencies it leaves open:
-  - **W98's participant wiring.** Duplicating or deleting a special date hands it to every entry
-    of `VENUE_SERVICE_CALENDAR_PARTICIPANTS` (`packages/venue-service/src/calendar-participants.ts`),
-    which is empty. The department-menu plan is to add its menu-timetable participant there and
-    give its own rows a cascading foreign key to `special_dates` (Hours plan, "Shared date
-    lifecycle").
+  - **W98's participant wiring** — done on `feat/department-menu-timetable` (no pull request
+    yet): the menu timetable is the entry in `VENUE_SERVICE_CALENDAR_PARTICIPANTS`
+    (`packages/venue-service/src/calendar-participants.ts`), and its day rows hold a cascading
+    foreign key to `special_dates`.
   - **Step 6 public holidays** — done (#1305, below): the Hours page reads holidays
     through that seam, and "Make this a special date" starts with the day's holiday names or its
     date.
@@ -4835,9 +4839,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     [conventions-ui.md](developers/conventions-ui.md), "A device's profile and the signed-in person
     must both allow what the device does".
   - **Handed on.** The [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md)
-    must replace A261 step 2's Task 8 (zone-by-zone menus, kept as the interim path) before that
-    plan removes the old menu editor; until then "offered to a department" means offered through
-    one of its zones' `zone_menus`. The [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
+    replaces A261 step 2's Task 8 (zone-by-zone menus, the interim path) on
+    `feat/department-menu-timetable`, not yet in a pull request: a menu is offered to a department
+    by its own list, and `zone_menus` and the per-zone menu editor are gone. The [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
     must define portable assignment, Use default, busy-terminal protection and a drawer
     independent of receipt printers before it removes today's printer choice, which a switch keeps
     while the new profile lists the printer and otherwise replaces with the first usable one — done

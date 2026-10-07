@@ -20,12 +20,6 @@ export interface ServiceZone {
   serviceModeOverride: ServiceMode | null;
   active?: boolean;
 }
-export interface ZoneMenu {
-  zoneId: string;
-  menuId: string;
-  displayOrder: number;
-  isDefault: boolean;
-}
 export type PaidWhen = "prepay" | "ticket_then_pay";
 export type CollectionNumber = "none" | "numbered";
 export type ReceiptPrintMode = "auto" | "on_request" | "never";
@@ -67,7 +61,6 @@ export interface VenueServiceModel {
   departments: Department[];
   zones: ServiceZone[];
   salePolicies: { departments: DepartmentSalePolicy[]; zones: ZoneSalePolicy[] };
-  zoneMenus: ZoneMenu[];
   readiness: VenueReadinessIssue[];
   settings: VenueServiceSettings;
   kitchenTicketGrouping: KitchenTicketGrouping;
@@ -215,18 +208,6 @@ export class VenueServiceApi {
       `/management-api/venue-service/zones/${zoneId}/sale-policy/${field}`,
       "PATCH",
       { value },
-    );
-  }
-
-  allowMenu(
-    zoneId: string,
-    menuId: string,
-    input: { displayOrder: number; makeDefault: boolean },
-  ): Promise<void> {
-    return this.request(
-      `/management-api/venue-service/zones/${zoneId}/menus/${menuId}`,
-      "PUT",
-      input,
     );
   }
 

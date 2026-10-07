@@ -1378,6 +1378,21 @@ describe("the editor's model", () => {
     }
   });
 
+  it("names every menu with whether it is active, for a venue viewer who cannot read the menus", async () => {
+    const v = await venue({ timetable: false });
+    await scoped((tx) =>
+      tx.update(catalogues).set({ active: false }).where(eq(catalogues.id, v.menus.Cena)),
+    );
+    const model = await scoped((tx) => readMenuTimetableModel(tx, v.cfg, AT));
+    expect(model.menus.map((menu) => menu.name).sort()).toEqual(Object.keys(v.menus).sort());
+    expect(model.menus.find((menu) => menu.id === v.menus.Cena)).toEqual({
+      id: v.menus.Cena,
+      name: "Cena",
+      active: false,
+    });
+    expect(model.menus.filter((menu) => !menu.active)).toHaveLength(1);
+  });
+
   it("lists every department, its periods with their days, its week and its zones' menus", async () => {
     const v = await timed();
     const { menus, periods } = v;

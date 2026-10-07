@@ -42,7 +42,6 @@ import {
   zoneAllDayMenus,
   zonePeriodMenus,
 } from "./schema/menus.js";
-import { addDepartmentMenu, setZoneAllDayMenu } from "./department-menus.js";
 import { resolveZoneMenus, servedDefault } from "./menu-timetable.js";
 import { routeExceptions } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
@@ -89,32 +88,6 @@ const departmentAllDayJoin = eq(
   departmentAllDayMenus.departmentId,
   zoneServicePolicies.departmentId,
 );
-
-/** Each configured zone's department list, with the zone's effective all-day menu marked. */
-export async function listZoneMenuAssignments(tx: Transaction, cfg: VenueScope) {
-  return tx
-    .select({
-      zoneId: zoneServicePolicies.zoneId,
-      menuId: departmentMenus.menuId,
-      displayOrder: departmentMenus.displayOrder,
-      defaultMenuId: allDayMenuId,
-    })
-    .from(departmentMenus)
-    .innerJoin(
-      zoneServicePolicies,
-      eq(zoneServicePolicies.departmentId, departmentMenus.departmentId),
-    )
-    .leftJoin(zoneAllDayMenus, zoneAllDayJoin)
-    .leftJoin(departmentAllDayMenus, departmentAllDayJoin)
-    .where(eq(zoneServicePolicies.locationId, cfg.locationId))
-    .orderBy(zoneServicePolicies.zoneId, departmentMenus.displayOrder, departmentMenus.menuId)
-    .then((rows) =>
-      rows.map(({ defaultMenuId, ...row }) => ({
-        ...row,
-        isDefault: row.menuId === defaultMenuId,
-      })),
-    );
-}
 
 /** The default list is restricted to zones that can start a new order. */
 export async function listServiceZones(
@@ -509,38 +482,6 @@ export async function createServiceZone(
   }
   await configureZone(tx, cfg, { zoneId, departmentId: input.departmentId });
   return { id: zoneId };
-}
-
-/**
- * Adds the menu to the zone's DEPARTMENT list, so every zone of the department serves it, at
- * `displayOrder` (0 when absent); `makeDefault` makes it the zone's own all-day menu.
- */
-export async function allowMenuInZone(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-  menuId: string,
-  options: { displayOrder?: number; makeDefault?: boolean } = {},
-): Promise<void> {
-  const [menu] = await tx
-    .select({ id: catalogues.id })
-    .from(catalogues)
-    .where(eq(catalogues.id, menuId));
-  if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
-  const [policy] = await tx
-    .select({ departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(zoneServicePolicies.zoneId, zoneId),
-      ),
-    );
-  if (policy === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  await addDepartmentMenu(tx, cfg, policy.departmentId, menuId, {
-    displayOrder: options.displayOrder ?? 0,
-  });
-  if (options.makeDefault === true) await setZoneAllDayMenu(tx, cfg, zoneId, menuId);
 }
 
 export async function resolveZoneContext(

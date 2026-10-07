@@ -802,7 +802,13 @@ export async function readMenuTimetableModel(
     )
     .orderBy(asc(specialDates.date));
 
+  const menus = await tx
+    .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
+    .from(catalogues)
+    .orderBy(asc(catalogues.name), asc(catalogues.id));
+
   return {
+    menus,
     timeZone: clock.timeZone,
     clockReadable: civilDate !== null,
     civilDate,

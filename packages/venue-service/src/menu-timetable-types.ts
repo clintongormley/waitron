@@ -69,6 +69,8 @@ export interface MenuTimetableSpecialDate {
 }
 
 export interface MenuTimetableModel {
+  /** Every menu, to name the ones the departments list; a venue viewer cannot read the menus. */
+  menus: { id: string; name: string; active: boolean }[];
   timeZone: string;
   clockReadable: boolean;
   /** The venue's date now; null when its clock cannot be read. */
