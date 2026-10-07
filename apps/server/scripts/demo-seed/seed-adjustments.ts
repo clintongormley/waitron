@@ -9,18 +9,27 @@ import {
 } from "@waitron/adjustments";
 import { decimal } from "@waitron/shared";
 import type { SeedLocale } from "./menu.js";
-import type { DemoDataSet } from "./data-set.js";
+import type { DemoDataSet, DemoText } from "./data-set.js";
+import type { CasaDelgadoLanguage } from "./data-sets/casa-delgado-es.js";
 import { inLanguages } from "./in-languages.js";
 
-export type SeedReason = Omit<AdjustmentReasonInput, "name" | "names"> & {
-  names: Record<SeedLocale, string>;
+export type SeedReason<L extends string = string> = Omit<
+  AdjustmentReasonInput,
+  "name" | "names"
+> & {
+  names: DemoText<L>;
 };
 
 // Cancelling what was entered in error or is no longer wanted is routine, so staff do it alone;
 // every reduction carries a per-bill euro cap.
-export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason[] = [
+export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason<CasaDelgadoLanguage>[] = [
   {
-    names: { en: "Entry error", es: "Error al marcar" },
+    names: {
+      en: "Entry error",
+      es: "Error al marcar",
+      ca: "Error en marcar",
+      gl: "Erro ao marcar",
+    },
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
@@ -29,7 +38,12 @@ export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason[] = [
     noteRequired: false,
   },
   {
-    names: { en: "Changed mind", es: "Cambio de opinión" },
+    names: {
+      en: "Changed mind",
+      es: "Cambio de opinión",
+      ca: "Canvi d'opinió",
+      gl: "Cambio de opinión",
+    },
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
@@ -38,7 +52,12 @@ export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason[] = [
     noteRequired: false,
   },
   {
-    names: { en: "Unavailable item", es: "Producto no disponible" },
+    names: {
+      en: "Unavailable item",
+      es: "Producto no disponible",
+      ca: "Producte no disponible",
+      gl: "Produto non dispoñible",
+    },
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
@@ -47,7 +66,7 @@ export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason[] = [
     noteRequired: false,
   },
   {
-    names: { en: "Complaint", es: "Queja" },
+    names: { en: "Complaint", es: "Queja", ca: "Queixa", gl: "Queixa" },
     actions: ["comp", "discount_percent"],
     maxPercentBp: 5000,
     maxAmount: decimal("30.00"),
@@ -56,7 +75,12 @@ export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason[] = [
     noteRequired: true,
   },
   {
-    names: { en: "Friends and family", es: "Amigos y familia" },
+    names: {
+      en: "Friends and family",
+      es: "Amigos y familia",
+      ca: "Amics i família",
+      gl: "Amigos e familia",
+    },
     actions: ["discount_percent"],
     maxPercentBp: 2000,
     maxAmount: decimal("50.00"),
@@ -65,7 +89,12 @@ export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason[] = [
     noteRequired: true,
   },
   {
-    names: { en: "Employee discount", es: "Descuento de empleado" },
+    names: {
+      en: "Employee discount",
+      es: "Descuento de empleado",
+      ca: "Descompte d'empleat",
+      gl: "Desconto de empregado",
+    },
     actions: ["discount_percent"],
     maxPercentBp: 3000,
     maxAmount: decimal("20.00"),
@@ -74,7 +103,12 @@ export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason[] = [
     noteRequired: false,
   },
   {
-    names: { en: "Manager special", es: "Invitación del encargado" },
+    names: {
+      en: "Manager special",
+      es: "Invitación del encargado",
+      ca: "Invitació de l'encarregat",
+      gl: "Invitación do encargado",
+    },
     actions: ["comp", "discount_percent", "discount_amount"],
     maxPercentBp: 10000,
     maxAmount: decimal("100.00"),

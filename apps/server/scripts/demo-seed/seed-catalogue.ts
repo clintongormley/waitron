@@ -188,7 +188,11 @@ export async function seedCatalogues(
 
   const { restaurant, lunch, deli, drinksName } = dataSet.menus;
   const drinksCategories = restaurant.categories.filter((category) => category.station === "bar");
-  const drinksId = await seedOne({ name: drinksName, categories: drinksCategories });
+  const drinksId = await seedOne({
+    name: drinksName,
+    customerName: dataSet.menus.drinksCustomerName,
+    categories: drinksCategories,
+  });
   const casaId = await seedOne(
     {
       ...restaurant,
