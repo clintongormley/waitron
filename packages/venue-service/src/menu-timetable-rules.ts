@@ -18,7 +18,11 @@ const KEY = "menu";
 
 export function invalidTimetable(
   field: string,
-  clash?: { date: LocalDate; departmentId: string; reason: "overlap" | "clock_skips" },
+  clash?: {
+    date?: LocalDate;
+    departmentId?: string;
+    reason: "overlap" | "clock_skips" | "empty" | "order" | "step";
+  },
 ): never {
   throw new AppError("menu_timetable.invalid", { field, ...clash });
 }
