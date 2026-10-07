@@ -1161,6 +1161,7 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     const monitor = new DepartmentTransferMonitor({
       api: this.api,
+      currentSource: () => this.#currentTransferTabId(),
       changed: () => {
         const previous = this.transferSnapshot;
         const next = monitor.snapshot;

@@ -4839,7 +4839,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   receiving request or accepted source request refreshes floor, held and waiting lists. A departed
   API client cannot install its list reply, and an outstanding retrieval cannot reopen the tab
   after its transfer is accepted. Department-wide reads retain every pending request and the
-  newest 100 resolved requests; per-tab reads retain older history. Current responsibility is read
+  newest 100 resolved requests; the open tab also reads its older history. A delayed history read
+  cannot announce the previously selected tab after selection changes. Current responsibility is read
   separately from historical acceptance, so restarting the monitor does not retire a tab that has
   returned to its source. Unsent counter edits and standalone table drafts are retained as read-only
   local copies for explicit review and dismissal, rather than silently lost or resubmitted. These

@@ -11,6 +11,7 @@ export interface TransferSnapshot {
 interface Options {
   api: TillApi;
   changed(): void;
+  currentSource?(): string | undefined;
   onAccessLost?(code: string): void;
 }
 function empty(): TransferSnapshot {
@@ -239,8 +240,8 @@ export class DepartmentTransferMonitor {
 
   #readSource(): void {
     const active = this.#active;
-    const tabId = this.#sourceTabId;
     const wholeDepartment = this.#wholeDepartment;
+    const tabId = wholeDepartment ? this.options.currentSource?.() : this.#sourceTabId;
     if (active === undefined || (!wholeDepartment && tabId === undefined)) return;
     if (this.#sourceFlight !== undefined) {
       this.#sourceDirty = true;
@@ -248,13 +249,25 @@ export class DepartmentTransferMonitor {
     }
     const flight = {};
     this.#sourceFlight = flight;
-    void this.#bounded(active, (signal) =>
-      wholeDepartment
-        ? this.options.api.listDepartmentSentTransfers({ signal })
-        : this.options.api.listSentDepartmentTransfers(tabId!, { signal }),
-    )
+    void this.#bounded(active, async (signal) => {
+      if (!wholeDepartment) return this.options.api.listSentDepartmentTransfers(tabId!, { signal });
+      const department = await this.options.api.listDepartmentSentTransfers({ signal });
+      if (tabId === undefined) return department;
+      const selected = await this.options.api.listSentDepartmentTransfers(tabId, { signal });
+      return {
+        requests: [
+          ...new Map(
+            [...department.requests, ...selected.requests].map((row) => [row.id, row]),
+          ).values(),
+        ],
+      };
+    })
       .then((answer) => {
         if (this.#active === active && this.#sourceFlight === flight) {
+          if (wholeDepartment && this.options.currentSource?.() !== tabId) {
+            this.#sourceDirty = true;
+            return;
+          }
           this.#sourceError = undefined;
           this.#update({ sent: answer.requests });
         }

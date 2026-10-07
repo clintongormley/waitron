@@ -22,7 +22,7 @@ beforeEach(() =>
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] }),
 );
 afterEach(() => {
-  for (const monitor of monitors.splice(0)) monitor.stop();
+  for (const monitor of monitors.splice(0)) monitor?.stop();
   vi.useRealTimers();
 });
 async function settle() {
@@ -509,4 +509,62 @@ it("forgets department-wide discovery on session end and ignores a late sent res
   expect(sentReads).toBe(1);
   expect(monitor.snapshot.sent).toEqual([]);
   expect(monitor.snapshot.notifications).toEqual([]);
+});
+
+it("discovers the selected tab's older acceptance outside the bounded department history", async () => {
+  const old = { ...pending, id: "old-acceptance", status: "accepted" as const, revision: 1 };
+  const api = new client.TillApi("", async (input) => {
+    const url = String(input);
+    if (url.endsWith("/events")) return new Response(new ReadableStream());
+    if (url.endsWith("/incoming")) return json({ count: 0, requests: [] });
+    if (url === "/api/department-transfers/sent") return json({ requests: [] });
+    if (url === "/api/working-orders/tab-1/department-transfers") return json({ requests: [old] });
+    throw new Error(`Unexpected read ${url}`);
+  });
+  const options = { api, changed() {}, currentSource: () => "tab-1" };
+  const monitor = new DepartmentTransferMonitor(options);
+  monitors.push(monitor);
+  monitor.watchDepartment();
+  monitor.start();
+  await settle();
+  await expect.poll(() => monitor.snapshot.sent).toEqual([old]);
+});
+
+it("does not announce an old selected-tab acceptance after the operator selects another tab", async () => {
+  let selected = "tab-1";
+  let answer!: (response: Response) => void;
+  const seen: string[] = [];
+  const api = new client.TillApi("", async (input) => {
+    const url = String(input);
+    if (url.endsWith("/events")) return new Response(new ReadableStream());
+    if (url.endsWith("/incoming")) return json({ count: 0, requests: [] });
+    if (url === "/api/department-transfers/sent") return json({ requests: [] });
+    if (url === "/api/working-orders/tab-1/department-transfers")
+      return new Promise<Response>((resolve) => {
+        answer = resolve;
+      });
+    if (url === "/api/working-orders/tab-2/department-transfers")
+      return json({ requests: [{ ...pending, tabId: "tab-2" }] });
+    throw new Error(`Unexpected read ${url}`);
+  });
+  const options = {
+    api,
+    changed() {
+      seen.push(...monitor.snapshot.sent.map((row) => row.id));
+    },
+    currentSource: () => selected,
+  };
+  const monitor = new DepartmentTransferMonitor(options);
+  monitors.push(monitor);
+  monitor.watchDepartment();
+  monitor.start();
+  await settle();
+  await expect.poll(() => typeof answer).toBe("function");
+  selected = "tab-2";
+  monitor.refresh();
+  answer(
+    json({ requests: [{ ...pending, id: "old-acceptance", status: "accepted", revision: 1 }] }),
+  );
+  await expect.poll(() => monitor.snapshot.sent).toEqual([{ ...pending, tabId: "tab-2" }]);
+  expect(seen).not.toContain("old-acceptance");
 });

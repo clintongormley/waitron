@@ -192,6 +192,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     recordSale: vi.fn().mockResolvedValue(saleResult),
     pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
     retrieveWorkingOrder: vi.fn(),
+    listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
     reprint: vi.fn().mockResolvedValue(undefined),
     printReceipt: vi.fn().mockResolvedValue(undefined),
     printPaymentSlip: vi.fn().mockResolvedValue(undefined),
@@ -3371,6 +3372,35 @@ describe("department transfers across operator lifetimes", () => {
     expect(c.store.lines).toEqual([]);
     expect(c.store.id).not.toBe("counter-tab");
     expect(transferRoot(el)?.querySelector("[data-request-transfer]")).toBeNull();
+  });
+
+  it("retires an open source basket after sign-in even when its acceptance is outside recent department history", async () => {
+    const desk = transfers();
+    const { el } = await mountApp({
+      ...desk.calls,
+      listDepartmentSentTransfers: vi.fn(async () => ({ requests: [] })),
+      listSentDepartmentTransfers: vi.fn(async () => ({
+        requests: [
+          {
+            ...request,
+            tabId: "counter-tab",
+            status: "accepted",
+            revision: 1,
+            currentDepartmentId: "restaurant",
+          },
+        ],
+      })),
+    });
+    await signIn(el);
+    const c = counter(el)!;
+    c.store.loadFrom("counter-tab", [{ product: c.products[0]!, quantity: "2" }], "Lunch", 7);
+    await flush(el);
+    emit(shell(el)!, "logout");
+    await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+    await signIn(el);
+    expect(c.store.persisted).toBe(false);
+    expect(c.store.lines).toEqual([]);
+    expect(c.store.id).not.toBe("counter-tab");
   });
 
   it("keeps a returned source basket when monitor restart reads its old acceptance", async () => {
