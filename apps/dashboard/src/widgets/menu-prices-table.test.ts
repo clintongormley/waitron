@@ -1924,9 +1924,17 @@ describe("variants", () => {
     ]);
   });
 
-  it("offers Appears under, Main category and Status in the column chooser, all shown, and keeps the choice under the Price overrides key alone", async () => {
-    // A choice stored under the Prices tab's old key is not read.
+  it("offers Appears under, Main category and Status in the column chooser, all shown, and keeps the choice under the menu prices key alone", async () => {
+    // A choice under either of this table's old keys, or an order under the last one, is not read.
     localStorage.setItem("waitron.menus.prices:columns", JSON.stringify({ category: false }));
+    localStorage.setItem(
+      "waitron.menus.price-overrides.table:column-order",
+      JSON.stringify(["placements", "category", "status", "override"]),
+    );
+    localStorage.setItem(
+      "waitron.menus.price-overrides.table:columns",
+      JSON.stringify({ category: false }),
+    );
     const el = await mountVariants();
     const trigger = table(el).shadowRoot.querySelector(".columns-trigger")!;
     expect(trigger.getAttribute("aria-label")).toBe(t("table.customise_columns"));
@@ -1940,20 +1948,18 @@ describe("variants", () => {
       ["category", true],
       ["status", true],
     ]);
-    expect(headers(el)).toEqual(["name", "placements", "category", "status", "override", ""]);
+    expect(headers(el)).toEqual(["name", "override", "placements", "category", "status", ""]);
     box(el, "category").click();
     await table(el).updateComplete;
     expect(headers(el)).not.toContain("category");
-    expect(
-      JSON.parse(localStorage.getItem("waitron.menus.price-overrides.table:columns")!),
-    ).toEqual({
+    expect(JSON.parse(localStorage.getItem("waitron.menus.menu-prices.table:columns")!)).toEqual({
       category: false,
     });
     const again = await mountVariants();
-    expect(headers(again)).toEqual(["name", "placements", "status", "override", ""]);
+    expect(headers(again)).toEqual(["name", "override", "placements", "status", ""]);
     table(again).shadowRoot.querySelector<HTMLElement>("[data-restore-columns]")!.click();
     await table(again).updateComplete;
-    expect(headers(again)).toEqual(["name", "placements", "category", "status", "override", ""]);
+    expect(headers(again)).toEqual(["name", "override", "placements", "category", "status", ""]);
   });
 
   it("counts Active sizes only in a product's tooltip, and every stored price in the summary", async () => {
