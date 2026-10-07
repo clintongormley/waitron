@@ -3296,6 +3296,62 @@ it("says the menu's structure could not be loaded, and tries again", async () =>
   expect(q(el, '[data-test="structure-error"]')).toBeNull();
 });
 
+/** The staff name, the included menu's own customer names and the folder's fixed name all read
+ * differently, so a dialog showing the wrong one fails. */
+const WINE_NAMES = { en: "Wine list", es: "Carta de vinos" };
+
+/** Lunch, with the Wines menu included at its top level; the fake keeps what a save sets. */
+function winesClient(
+  folder: IncludeFolder,
+  overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
+) {
+  const live = new LiveData();
+  let stored = folder;
+  let names: Record<string, string> = WINE_NAMES;
+  const client = api({
+    liveData: live,
+    setIncludeFolder: vi.fn(async (_list: string, _member: string, input: IncludeFolderInput) => {
+      stored = { showAsFolder: input.showAsFolder, overrides: input.overrides ?? {} };
+      return stored;
+    }),
+    ...overrides,
+  });
+  const read = client.getMenuStructure.getMockImplementation()! as (
+    id: string,
+  ) => Promise<MenuStructure>;
+  client.getMenuStructure.mockImplementation(async (id: string) => {
+    const answer = await read(id);
+    if (id !== "menu-lunch") return answer;
+    const wines: MenuStructureNode = {
+      memberId: "included-wine",
+      ref: { kind: "section", sectionId: "wine-root" },
+      internalName: "Wines",
+      names: { ...names },
+      image: null,
+      color: "#112233",
+      includedMenuId: "wine",
+      ownerMenuId: "wine",
+      folder: structuredClone(stored),
+      children: [productNode("wine-chips", "p-chips")],
+    };
+    return { ...answer, nodes: [...answer.nodes, wines] };
+  });
+  return {
+    client,
+    live,
+    rename(next: Record<string, string>) {
+      names = next;
+    },
+  };
+}
+
+type IncludeForm = HTMLElementTagNameMap["dashboard-include-folder-form"];
+
+function includeForm(el: MenusScreen): IncludeForm {
+  return q<IncludeForm>(el, '[data-test="include-folder-form"]')!;
+}
+const includeModal = (el: MenusScreen) => includeForm(el).shadowRoot!.querySelector("wt-modal")!;
+
 describe("the Structure tree", () => {
   /** Wines is another menu, included at Lunch's top level after Lunch's own members. */
   function wines(): MenuStructureNode {
@@ -3754,6 +3810,50 @@ describe("the Structure tree", () => {
       focused: "m-drinks",
     },
     {
+      name: "Include Edit, cancelled",
+      client: () => winesClient({ showAsFolder: true, overrides: {} }).client,
+      open: async (el) => {
+        await rowAction(el, "included-wine", "edit");
+        await vi.waitFor(() => expect(includeModal(el).open).toBe(true));
+      },
+      close: async (el) => {
+        includeForm(el).shadowRoot!.querySelector<HTMLElement>('[data-test="cancel"]')!.click();
+        await vi.waitFor(() => expect(includeModal(el).open).toBe(false));
+      },
+      focused: "included-wine",
+    },
+    {
+      name: "Include Edit, saved, and read back without the include",
+      client: () => winesClient({ showAsFolder: true, overrides: {} }).client,
+      open: async (el) => {
+        await rowAction(el, "included-wine", "edit");
+        await vi.waitFor(() => expect(includeModal(el).open).toBe(true));
+      },
+      close: async (el, client) => {
+        // Someone else took the include out meanwhile, so the dialog's own focus return has no ⋮.
+        const read = client.getMenuStructure.getMockImplementation()! as (
+          id: string,
+        ) => Promise<MenuStructure>;
+        client.getMenuStructure.mockImplementationOnce(async (id: string) => {
+          const answer = await read(id);
+          return {
+            ...answer,
+            nodes: answer.nodes.filter((node) => node.memberId !== "included-wine"),
+          };
+        });
+        emit(
+          includeForm(el).shadowRoot!.querySelector('wt-switch[name="show-as-folder"]')!,
+          "wt-change",
+          { checked: false },
+        );
+        await includeForm(el).updateComplete;
+        includeForm(el).shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+        await vi.waitFor(() => expect(includeModal(el).open).toBe(false));
+        await vi.waitFor(() => expect(topLevelKeys(el)).not.toContain("included-wine"));
+      },
+      focused: "root",
+    },
+    {
       name: "Delete, confirmed",
       client: () => {
         const client = api();
@@ -4007,61 +4107,6 @@ describe("the Structure tree", () => {
 });
 
 describe("an include's Edit dialog", () => {
-  type IncludeForm = HTMLElementTagNameMap["dashboard-include-folder-form"];
-
-  /** The staff name, the included menu's own customer names and the folder's fixed name all read
-   * differently, so a dialog showing the wrong one fails. */
-  const WINE_NAMES = { en: "Wine list", es: "Carta de vinos" };
-
-  /** Lunch, with the Wines menu included at its top level; the fake keeps what a save sets. */
-  function winesClient(
-    folder: IncludeFolder,
-    overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
-  ) {
-    const live = new LiveData();
-    let stored = folder;
-    let names: Record<string, string> = WINE_NAMES;
-    const client = api({
-      liveData: live,
-      setIncludeFolder: vi.fn(async (_list: string, _member: string, input: IncludeFolderInput) => {
-        stored = { showAsFolder: input.showAsFolder, overrides: input.overrides ?? {} };
-        return stored;
-      }),
-      ...overrides,
-    });
-    const read = client.getMenuStructure.getMockImplementation()! as (
-      id: string,
-    ) => Promise<MenuStructure>;
-    client.getMenuStructure.mockImplementation(async (id: string) => {
-      const answer = await read(id);
-      if (id !== "menu-lunch") return answer;
-      const wines: MenuStructureNode = {
-        memberId: "included-wine",
-        ref: { kind: "section", sectionId: "wine-root" },
-        internalName: "Wines",
-        names: { ...names },
-        image: null,
-        color: "#112233",
-        includedMenuId: "wine",
-        ownerMenuId: "wine",
-        folder: structuredClone(stored),
-        children: [productNode("wine-chips", "p-chips")],
-      };
-      return { ...answer, nodes: [...answer.nodes, wines] };
-    });
-    return {
-      client,
-      live,
-      rename(next: Record<string, string>) {
-        names = next;
-      },
-    };
-  }
-
-  function includeForm(el: MenusScreen): IncludeForm {
-    return q<IncludeForm>(el, '[data-test="include-folder-form"]')!;
-  }
-  const includeModal = (el: MenusScreen) => includeForm(el).shadowRoot!.querySelector("wt-modal")!;
   const includeField = (el: MenusScreen, name: string) =>
     includeForm(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
       `wt-input[name="${name}"]`,
