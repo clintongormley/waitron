@@ -339,6 +339,12 @@ export interface DepartmentTransfer {
   createdAt: string;
   resolvedAt: string | null;
   revision: number;
+  summary?: {
+    orderNumber: number;
+    tabLabel: string | null;
+    sourceDepartmentName: string;
+    destinationDepartmentName: string;
+  };
 }
 
 export interface DepartmentTransferActor {

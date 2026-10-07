@@ -39,6 +39,7 @@ export const en = {
   "department_transfer.work": "Outstanding kitchen work",
   "department_transfer.no_work": "No outstanding kitchen work.",
   "department_transfer.unrecorded_item": "Unrecorded item",
+  "department_transfer.unrecorded_station": "Station not recorded",
   "department_transfer.refresh": "Refresh current tab",
   "department_transfer.close": "Close",
   "department_transfer.read_failed":
@@ -1143,6 +1144,7 @@ export const es: Record<StringKey, string> = {
   "department_transfer.work": "Trabajo pendiente en cocina",
   "department_transfer.no_work": "No hay trabajo pendiente en cocina.",
   "department_transfer.unrecorded_item": "Producto no registrado",
+  "department_transfer.unrecorded_station": "Puesto no registrado",
   "department_transfer.refresh": "Actualizar cuenta",
   "department_transfer.close": "Cerrar",
   "department_transfer.read_failed":

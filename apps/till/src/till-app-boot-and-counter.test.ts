@@ -2679,6 +2679,9 @@ describe("department transfers across operator lifetimes", () => {
     return {
       calls,
       signals,
+      refresh() {
+        change?.();
+      },
       empty() {
         incoming = [];
         change?.();
@@ -2722,6 +2725,7 @@ describe("department transfers across operator lifetimes", () => {
         id: "work-1",
         lineId: "line-1",
         stationId: "kitchen",
+        stationName: "Kitchen / Cocina",
         state: "queued",
         note: "No salt",
         firedAt: null,
@@ -3264,5 +3268,268 @@ describe("department transfers across operator lifetimes", () => {
     answer({ count: 1, requests: [request] });
     await flush(el);
     await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("0"));
+  });
+
+  it("removes an accepted source tab and refreshes held and floor lists without clearing a different basket", async () => {
+    const desk = transfers();
+    let accepted = false;
+    const held = {
+      id: "tab-1",
+      orderNumber: 12,
+      label: "Lunch",
+      itemCount: 1,
+      total: "1.50",
+      outstanding: "1.50",
+      hasPayments: false,
+      partyId: null,
+      openedAt: "2026-10-07T09:00:00Z",
+      signals: [],
+    };
+    const list = vi.fn(async () => (accepted ? [] : [held]));
+    const floor = vi.fn(async () => []);
+    const { el } = await mountApp({
+      ...desk.calls,
+      listDepartmentSentTransfers: vi.fn(async () => ({
+        requests: [
+          { ...request, status: accepted ? "accepted" : "pending", revision: accepted ? 1 : 0 },
+        ],
+      })),
+      listWorkingOrders: list,
+      getTablesState: floor,
+    });
+    await signIn(el);
+    const c = counter(el)!;
+    c.store.addProduct(c.products[0]!, "2");
+    Object.assign(el, { activeTabId: "tab-1", drill: { kind: "table-order" } });
+    el.requestUpdate();
+    await flush(el);
+    await openTransfers(el);
+    const beforeLists = list.mock.calls.length;
+    const beforeFloor = floor.mock.calls.length;
+    accepted = true;
+    desk.refresh();
+    await vi.waitFor(() =>
+      expect(transferRoot(el)?.querySelector("[data-sent=request-1]")?.textContent).toContain(
+        "Traspaso aceptado",
+      ),
+    );
+    expect((el as unknown as { activeTabId?: string }).activeTabId).toBeUndefined();
+    expect(transferRoot(el)?.querySelector("[data-request-transfer]")).toBeNull();
+    await vi.waitFor(() => expect(list.mock.calls.length).toBeGreaterThan(beforeLists));
+    await vi.waitFor(() => expect(floor.mock.calls.length).toBeGreaterThan(beforeFloor));
+    expect(c.store.lines).toHaveLength(1);
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    expect(c.store.total).toBe("3.00");
+    expect(c.heldOrders).toEqual([]);
+  });
+
+  it("offers a transfer of a retrieved named counter tab and removes only that accepted basket", async () => {
+    const desk = transfers();
+    let accepted = false;
+    const send = vi.fn(async () => ({ ...request, tabId: "counter-tab" }));
+    const { el } = await mountApp({
+      ...desk.calls,
+      listDepartmentSentTransfers: vi.fn(async () => ({
+        requests: accepted
+          ? [{ ...request, tabId: "counter-tab", status: "accepted", revision: 1 }]
+          : [],
+      })),
+      listDepartmentTransferDestinations: vi.fn(async () => ({
+        destinations: [{ id: "restaurant", name: "Restaurant" }],
+      })),
+      requestDepartmentTransfer: send,
+    });
+    await signIn(el);
+    const c = counter(el)!;
+    c.store.loadFrom(
+      "counter-tab",
+      [{ product: c.products[0]!, quantity: "2" }],
+      "Pablo's lunch",
+      7,
+    );
+    await flush(el);
+    await openTransfers(el);
+    expect(transferRoot(el)?.textContent).toContain("Pablo's lunch");
+    const button = transferRoot(el)?.querySelector<HTMLElement>("[data-request-transfer]");
+    expect(button).not.toBeNull();
+    button!.click();
+    await vi.waitFor(() =>
+      expect(
+        transferRoot(el)?.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+          ?.disabled,
+      ).toBe(false),
+    );
+    emit(transferRoot(el)!.querySelector("[name=destinationDepartmentId]")!, "wt-change", {
+      value: "restaurant",
+    });
+    await flush(el);
+    transferRoot(el)!.querySelector<HTMLElement>("[data-save-transfer]")!.click();
+    await vi.waitFor(() => expect(send).toHaveBeenCalledWith("counter-tab", "restaurant"));
+    accepted = true;
+    desk.refresh();
+    await vi.waitFor(() => expect(c.store.persisted).toBe(false));
+    expect(c.store.lines).toEqual([]);
+    expect(c.store.id).not.toBe("counter-tab");
+    expect(transferRoot(el)?.querySelector("[data-request-transfer]")).toBeNull();
+  });
+
+  it("refreshes the receiving ordinary lists when a durable request leaves the queue", async () => {
+    const desk = transfers();
+    let received = false;
+    const row = {
+      id: "tab-1",
+      orderNumber: 12,
+      label: "Lunch",
+      itemCount: 1,
+      total: "1.50",
+      outstanding: "1.50",
+      hasPayments: false,
+      partyId: null,
+      openedAt: "2026-10-07T09:00:00Z",
+      signals: [],
+    };
+    const list = vi.fn(async () => (received ? [row] : []));
+    const floor = vi.fn(async () => []);
+    const { el } = await mountApp({
+      ...desk.calls,
+      listWorkingOrders: list,
+      getTablesState: floor,
+    });
+    await signIn(el);
+    await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("1"));
+    const beforeLists = list.mock.calls.length;
+    const beforeFloor = floor.mock.calls.length;
+    received = true;
+    desk.empty();
+    await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("0"));
+    await vi.waitFor(() => expect(counter(el)?.heldOrders).toEqual([row]));
+    expect(list.mock.calls.length).toBeGreaterThan(beforeLists);
+    await vi.waitFor(() => expect(floor.mock.calls.length).toBeGreaterThan(beforeFloor));
+  });
+
+  it("ignores a transfer list refresh from the API client that has been replaced", async () => {
+    const desk = transfers();
+    let received = false;
+    let answer!: (rows: unknown[]) => void;
+    const list = vi.fn(async () => {
+      if (!received) return [];
+      return new Promise<unknown[]>((resolve) => {
+        answer = resolve;
+      });
+    });
+    const { el } = await mountApp({ ...desk.calls, listWorkingOrders: list });
+    await signIn(el);
+    await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("1"));
+    received = true;
+    desk.empty();
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+    el.api = stubApi({
+      listIncomingDepartmentTransfers: vi.fn(async () => ({ count: 0, requests: [] })),
+      listDepartmentSentTransfers: vi.fn(async () => ({ requests: [] })),
+      readDepartmentTransferEvents: desk.calls.readDepartmentTransferEvents,
+    });
+    await flush(el);
+    answer([
+      {
+        id: "old-tab",
+        orderNumber: 12,
+        label: "Old client",
+        itemCount: 1,
+        total: "1.50",
+        outstanding: "1.50",
+        hasPayments: false,
+        partyId: null,
+        openedAt: "2026-10-07T09:00:00Z",
+        signals: [],
+      },
+    ]);
+    await flush(el);
+    expect(counter(el)?.heldOrders).toEqual([]);
+  });
+
+  it("does not reopen a transferred source tab from a retrieval already in flight", async () => {
+    const desk = transfers();
+    let accepted = false;
+    let answer!: (value: unknown) => void;
+    const retrieve = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountApp({
+      ...desk.calls,
+      listDepartmentSentTransfers: vi.fn(async () => ({
+        requests: [
+          { ...request, status: accepted ? "accepted" : "pending", revision: accepted ? 1 : 0 },
+        ],
+      })),
+      retrieveWorkingOrder: retrieve,
+    });
+    await signIn(el);
+    const c = counter(el)!;
+    emit(c, "retrieve-order", { id: "tab-1" });
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+    accepted = true;
+    desk.refresh();
+    await vi.waitFor(() =>
+      expect(
+        transferPanel(el) as unknown as { snapshot: { sent: { status: string }[] } },
+      ).toHaveProperty("snapshot.sent.0.status", "accepted"),
+    );
+    answer({
+      id: "tab-1",
+      orderNumber: 12,
+      label: "Moved lunch",
+      revision: 7,
+      lines: [{ productId: "cafe", quantity: "1.000", product: cafe }],
+    });
+    await flush(el);
+    expect(c.store.persisted).toBe(false);
+    expect(c.store.id).not.toBe("tab-1");
+    expect(c.store.lines).toEqual([]);
+  });
+
+  it("keeps a different tab's retrieval usable when a source transfer is accepted", async () => {
+    const desk = transfers();
+    let accepted = false;
+    let answer!: (value: unknown) => void;
+    const { el } = await mountApp({
+      ...desk.calls,
+      listDepartmentSentTransfers: vi.fn(async () => ({
+        requests: [
+          { ...request, status: accepted ? "accepted" : "pending", revision: accepted ? 1 : 0 },
+        ],
+      })),
+      retrieveWorkingOrder: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    });
+    await signIn(el);
+    const c = counter(el)!;
+    emit(c, "retrieve-order", { id: "different-tab" });
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+    accepted = true;
+    desk.refresh();
+    await vi.waitFor(() =>
+      expect(
+        transferPanel(el) as unknown as { snapshot: { sent: { status: string }[] } },
+      ).toHaveProperty("snapshot.sent.0.status", "accepted"),
+    );
+    answer({
+      id: "different-tab",
+      orderNumber: 13,
+      label: "Different lunch",
+      revision: 7,
+      lines: [{ productId: "cafe", quantity: "2.000", product: cafe }],
+    });
+    await flush(el);
+    expect(c.store.persisted).toBe(true);
+    expect(c.store.id).toBe("different-tab");
+    expect(c.store.lines).toHaveLength(1);
+    expect(c.store.total).toBe("3.00");
   });
 });

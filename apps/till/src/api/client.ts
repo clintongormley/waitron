@@ -1952,6 +1952,12 @@ export interface DepartmentTransfer {
   createdAt: string;
   resolvedAt: string | null;
   revision: number;
+  summary?: {
+    orderNumber: number;
+    tabLabel: string | null;
+    sourceDepartmentName: string;
+    destinationDepartmentName: string;
+  };
 }
 
 export interface DepartmentTransferDetail {
@@ -1977,6 +1983,7 @@ export interface DepartmentTransferDetail {
     id: string;
     lineId: string;
     stationId: string;
+    stationName: string | null;
     state: TicketState;
     note: string | null;
     firedAt: string | null;

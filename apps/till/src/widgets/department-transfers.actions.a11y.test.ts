@@ -45,6 +45,7 @@ const detail: DepartmentTransferDetail = {
       id: "work",
       lineId: "line",
       stationId: "kitchen",
+      stationName: "Kitchen / Cocina",
       state: "preparing",
       note: "No salt / Sin sal",
       firedAt: null,

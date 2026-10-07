@@ -9,6 +9,7 @@ import {
   workingOrders,
   workingOrderLines,
   ticketItems,
+  kitchenStations,
   sales,
   saleLines,
   withTransaction,
@@ -28,6 +29,7 @@ import {
   setProfileServiceScope,
   setDepartmentTransferSettings,
   departmentTransferRequests,
+  departments,
   workingLineContexts,
 } from "@waitron/venue-service";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
@@ -1523,4 +1525,93 @@ describe("department transfer tab lifecycle", () => {
       );
     },
   );
+});
+
+describe("human transfer identities", () => {
+  it("names the tab and both departments in the receiving queue and source history after acceptance", async () => {
+    const f = await ready();
+    await withTransaction(suite.db, async (tx) => {
+      await tx.update(departments).set({ name: "Deli counter" }).where(eq(departments.id, f.a));
+      await tx.update(departments).set({ name: "Restaurant desk" }).where(eq(departments.id, f.b));
+      await tx
+        .update(workingOrders)
+        .set({ label: "Ana's lunch", orderNumber: 80123 })
+        .where(eq(workingOrders.id, f.tab));
+    });
+    const id = await pending(f);
+    const summary = {
+      orderNumber: 80123,
+      tabLabel: "Ana's lunch",
+      sourceDepartmentName: "Deli counter",
+      destinationDepartmentName: "Restaurant desk",
+    };
+    const incoming = await get(f.desk.cookie, "/api/department-transfers/incoming");
+    expect(incoming.status).toBe(200);
+    expect(incoming.body.requests).toEqual([expect.objectContaining({ id, summary })]);
+    const detail = await get(f.desk.cookie, `/api/department-transfers/${id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.request.summary).toEqual(summary);
+    expect(
+      await post(f.desk.cookie, resolutionPath(id, "accept"), { revision: 0, zoneId: f.bz }),
+    ).toMatchObject({ status: 200 });
+    for (const source of [f.source, await login(f.sourceProfile)]) {
+      for (const path of [requestPath(f.tab), "/api/department-transfers/sent"]) {
+        const history = await get(source.cookie, path);
+        expect(history.status).toBe(200);
+        expect(history.body.requests).toEqual([
+          expect.objectContaining({ id, status: "accepted", summary }),
+        ]);
+        expect(history.body.requests[0]).not.toHaveProperty("lines");
+      }
+      expect(await get(source.cookie, `/api/working-orders/${f.tab}/lines`)).toMatchObject({
+        status: 403,
+      });
+      expect(await get(source.cookie, `/api/department-transfers/${id}`)).toMatchObject({
+        status: 409,
+        body: { error: { code: "department_transfer.not_pending" } },
+      });
+    }
+  });
+
+  it("names the recorded preparation station even after it is switched off", async () => {
+    const f = await ready();
+    f.tab = await counterOrder(v, "Burger");
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await placeOrder(
+      { db: suite.db, backend: v.backend, clock: v.clock },
+      requestCfg(v.cfg, f.source),
+      f.tab,
+      personId,
+    );
+    const id = await pending(f);
+    const [ticket] = await suite.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, f.tab));
+    const [station] = await suite.db
+      .select()
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, ticket!.stationId));
+    await suite.db
+      .update(kitchenStations)
+      .set({ name: "Deli grill", active: false })
+      .where(eq(kitchenStations.id, ticket!.stationId));
+    try {
+      const detail = await get(f.desk.cookie, `/api/department-transfers/${id}`);
+      expect(detail.status).toBe(200);
+      expect(detail.body.outstandingWork).toEqual([
+        expect.objectContaining({
+          id: ticket!.id,
+          stationId: ticket!.stationId,
+          stationName: "Deli grill",
+        }),
+      ]);
+      expect((await state(f.tab)).requests[0]!.status).toBe("pending");
+    } finally {
+      await suite.db
+        .update(kitchenStations)
+        .set({ name: station!.name, active: station!.active })
+        .where(eq(kitchenStations.id, ticket!.stationId));
+    }
+  });
 });

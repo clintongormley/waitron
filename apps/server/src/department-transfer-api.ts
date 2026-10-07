@@ -7,6 +7,7 @@ import {
   workingOrders,
   workingOrderLines,
   ticketItems,
+  kitchenStations,
   type Transaction,
 } from "@waitron/db";
 import { authorize, canUseDeviceProfile, persons } from "@waitron/identity";
@@ -230,6 +231,7 @@ export function mountDepartmentTransferApi(
             id: ticketItems.id,
             lineId: ticketItems.workingOrderLineId,
             stationId: ticketItems.stationId,
+            stationName: kitchenStations.name,
             state: ticketItems.state,
             note: ticketItems.note,
             firedAt: ticketItems.firedAt,
@@ -237,6 +239,7 @@ export function mountDepartmentTransferApi(
             courseId: ticketItems.courseId,
           })
           .from(ticketItems)
+          .leftJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
           .where(
             and(
               eq(ticketItems.workingOrderId, request.tabId),

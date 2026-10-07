@@ -1085,10 +1085,13 @@ export class TillApp extends LitElement {
 
   #departmentTransfers?: DepartmentTransferMonitor;
   #transferApi?: TillApi;
+  #transferViewRead = 0;
+  #counterRetrievals = new Map<object, string>();
   @state() private transferSnapshot?: TransferSnapshot;
   @state() private transferQueueOpen = false;
 
   #stopDepartmentTransfers(): void {
+    this.#transferViewRead++;
     this.#departmentTransfers?.stop();
     this.#departmentTransfers = undefined;
     this.#transferApi = undefined;
@@ -1112,7 +1115,35 @@ export class TillApp extends LitElement {
     const monitor = new DepartmentTransferMonitor({
       api: this.api,
       changed: () => {
-        this.transferSnapshot = monitor.snapshot;
+        const previous = this.transferSnapshot;
+        const next = monitor.snapshot;
+        this.transferSnapshot = next;
+        if (!this.isConnected || this.operatorName === "" || !monitor.running) return;
+        const accepted = next.sent.filter(
+          (row) =>
+            row.status === "accepted" &&
+            !previous?.sent.some((old) => old.id === row.id && old.status === "accepted"),
+        );
+        for (const row of accepted) {
+          for (const [read, tabId] of this.#counterRetrievals)
+            if (tabId === row.tabId) this.#counterRetrievals.delete(read);
+          if (this.activeTabId === row.tabId) {
+            this.#forgetParty();
+            if (this.#tableCatalogueActive()) this.#returnToFloor();
+          }
+          if (this.#store.persisted && this.#store.id === row.tabId) {
+            this.#dismissStationChoices();
+            this.#counterSends++;
+            this.#clearBasket();
+            this.counterLines = null;
+            this.cardOutcome = undefined;
+            this.collectFlow = undefined;
+          }
+        }
+        const received = previous?.incoming.some(
+          (old) => !next.incoming.some((row) => row.id === old.id),
+        );
+        if (accepted.length > 0 || received) void this.#refreshTransferViews();
       },
       onAccessLost: (code) => {
         if (
@@ -1128,6 +1159,39 @@ export class TillApp extends LitElement {
     this.#departmentTransfers = monitor;
     monitor.watchDepartment();
     monitor.start();
+  }
+
+  #currentTransferTabId(): string | undefined {
+    if (this.#tableCatalogueActive()) return this.activeTabId;
+    const tab = this.#activeTab();
+    const counterVisible =
+      this.drill === undefined &&
+      (tab?.key === "counter" || tab?.cards.some((card) => card.type === "basket"));
+    return counterVisible && this.stage === "order" && this.#store.persisted
+      ? this.#store.id
+      : undefined;
+  }
+
+  async #refreshTransferViews(): Promise<void> {
+    const read = ++this.#transferViewRead;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const replaced = () =>
+      read !== this.#transferViewRead || session !== this.#operatorSession || api !== this.api;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const tables = await api.getTablesState({ signal: limit.signal });
+      if (replaced()) return;
+      this.tables = tables;
+    } catch {
+      if (replaced()) return;
+    } finally {
+      limit.done();
+    }
+    if (replaced()) return;
+    await this.#refreshList("held", "refresh.held_after_move", TABLE_REQUEST_LIMIT_MS, replaced);
+    if (replaced()) return;
+    await this.#refreshList("waiting", "refresh.waiting", TABLE_REQUEST_LIMIT_MS, replaced);
   }
 
   #deviceKind: DeviceKind = "till";
@@ -2375,7 +2439,12 @@ export class TillApp extends LitElement {
    * a failure is also thrown to the caller. A read still out after `limitMs` is cancelled and fails
    * like any other failed read.
    */
-  async #refreshList(list: RefreshList, messageKey?: StringKey, limitMs?: number): Promise<void> {
+  async #refreshList(
+    list: RefreshList,
+    messageKey?: StringKey,
+    limitMs?: number,
+    replaced: () => boolean = () => false,
+  ): Promise<void> {
     const request = ++this.#refreshGeneration[list];
     const limit = limitMs === undefined ? undefined : limited(limitMs);
     const options: [] | [ReadOptions] = limit === undefined ? [] : [{ signal: limit.signal }];
@@ -2383,13 +2452,14 @@ export class TillApp extends LitElement {
     try {
       install = await this.#loadList(list, ...options);
     } catch (error) {
+      if (replaced()) return;
       if (request === this.#refreshGeneration[list]) this.#onRefreshFailed(list, messageKey);
       if (messageKey === undefined) throw error;
       return;
     } finally {
       limit?.done();
     }
-    if (request !== this.#refreshGeneration[list]) return;
+    if (request !== this.#refreshGeneration[list] || replaced()) return;
     install();
     this.#endRefreshRetry(list);
   }
@@ -3795,35 +3865,32 @@ export class TillApp extends LitElement {
     }
   }
 
-  /**
-   * Loads a parked order under its own id, so a later payment uses the same idempotency key. The held
-   * list has no live push, so another till may already have paid or discarded the order: that is a
-   * non-fatal `held.stale`, the current basket is untouched, and the list refreshes on both paths.
-   * `cardOutcome` is cleared only on success, because only then is the basket replaced.
-   */
   async #onRetrieveOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
     const session = this.#operatorSession;
     const generation = this.#store.loadGeneration;
     const payload = this.#basketPayload();
+    const read = {};
+    this.#counterRetrievals.set(read, id);
     this.errorKey = undefined;
     try {
       await this.#loadHeldOrder(
         id,
         () =>
+          !this.#counterRetrievals.has(read) ||
           session !== this.#operatorSession ||
           generation !== this.#store.loadGeneration ||
           payload !== this.#basketPayload(),
       );
-      if (session !== this.#operatorSession) return;
+      if (!this.#counterRetrievals.has(read) || session !== this.#operatorSession) return;
       this.#refusePaidInPart();
     } catch {
-      // Paid or discarded on another till; the basket is untouched.
-      if (session !== this.#operatorSession) return;
+      if (!this.#counterRetrievals.has(read) || session !== this.#operatorSession) return;
       this.errorKey = "held.stale";
+    } finally {
+      this.#counterRetrievals.delete(read);
     }
     if (session !== this.#operatorSession) return;
-    // Runs on both paths: on success the list is re-read; on the stale race the vanished row drops off.
     await this.#refreshHeldOrders();
   }
 
@@ -8897,8 +8964,8 @@ export class TillApp extends LitElement {
                         this.transferSnapshot === undefined
                           ? nothing
                           : html`<till-department-transfers
-                              .currentTabId=${this.#tableCatalogueActive() ? this.activeTabId : undefined}
-                              .currentTabLabel=${this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId)?.label ?? this.orderParty?.displayName ?? ""}
+                              .currentTabId=${this.#currentTransferTabId()}
+                              .currentTabLabel=${this.#tableCatalogueActive() ? (this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId)?.label ?? this.orderParty?.displayName ?? "") : (this.#store.label ?? "")}
                               .serviceZones=${this.counterServiceZones}
                               @transfer-changed=${() => this.#departmentTransfers?.refresh()}
                               .api=${this.api}

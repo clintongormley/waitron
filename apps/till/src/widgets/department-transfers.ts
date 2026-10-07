@@ -456,6 +456,14 @@ export class TillDepartmentTransfers extends LitElement {
   #summary(row: DepartmentTransfer, incoming: boolean) {
     return html`<div class="description">
       <p>${incoming ? t("department_transfer.incoming_notice") : t(statusKeys[row.status])}</p>
+      ${
+        row.summary === undefined
+          ? nothing
+          : html`<p>
+                ${t("department_transfer.tab").replace("{number}", String(row.summary.orderNumber))}${row.summary.tabLabel === null ? "" : ` — ${row.summary.tabLabel}`}
+              </p>
+              <p>${row.summary.sourceDepartmentName} → ${row.summary.destinationDepartmentName}</p>`
+      }
       <time datetime=${row.createdAt}
         >${new Intl.DateTimeFormat(currentLocale(), { dateStyle: "short", timeStyle: "short" }).format(new Date(row.createdAt))}</time
       >
@@ -482,7 +490,7 @@ export class TillDepartmentTransfers extends LitElement {
               </ul>
               <h3>${t("department_transfer.work")}</h3>
               <ul data-current-work>
-                ${detail.outstandingWork.map((work) => html`<li><div class="description">${detail.lines.find((line) => line.id === work.lineId)?.name ?? t("department_transfer.unrecorded_item")} · ${t(`station.state.${work.state}`)}${work.note === null ? nothing : html`<p>${work.note}</p>`}</div></li>`)}
+                ${detail.outstandingWork.map((work) => html`<li><div class="description">${detail.lines.find((line) => line.id === work.lineId)?.name ?? t("department_transfer.unrecorded_item")} · ${work.stationName ?? t("department_transfer.unrecorded_station")} · ${t(`station.state.${work.state}`)}${work.note === null ? nothing : html`<p>${work.note}</p>`}</div></li>`)}
               </ul>
               ${detail.outstandingWork.length === 0 ? html`<p>${t("department_transfer.no_work")}</p>` : nothing}
             `

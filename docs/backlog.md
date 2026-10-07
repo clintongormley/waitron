@@ -4832,8 +4832,13 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   Sender controls now request the selected tab through a permitted destination choice and withdraw
   a pending request. Destination drafts use the shared leave confirmation; successful requests keep
   their pending result visible while the durable history reloads. A request is offered only while
-  the selected tab surface is showing. Human tab/department/station summaries and transfer-driven
-  refresh of ordinary tab lists remain to build. Party-linked bills are
+  the selected tab surface is showing, including a retrieved named counter tab. Transfer notices,
+  queue rows and sender history now identify the tab and source/destination departments; current
+  work names its recorded station even when switched off. Accepted source tabs leave the ordinary
+  selected-tab surface or matching counter basket, while a different basket stays intact. A resolved
+  receiving request or accepted source request refreshes floor, held and waiting lists. A departed
+  API client cannot install its list reply, and an outstanding retrieval cannot reopen the tab
+  after its transfer is accepted. Final branch integration, review and CI remain. Party-linked bills are
   refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
@@ -5011,8 +5016,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
   may set it. Releasing an ALREADY-held group stays with whoever the venue's `fire_control` setting
   names — the waiter asks the kitchen or pass when that is not the waiter.
-- **Handheld live updates** — the app is pull-only, so two waiters on one table see stale data until
-  a refetch. A sizable new subsystem; spec it when it matters.
+- **Handheld shared-table updates** — still queued: automatic table-content refresh while two
+  waiters work on the same table. W101 supplies transfer-specific updates. Spec the wider
+  subscription model when it matters.
 - **Device profile follow-ons**: the aggregated device-profile bundle (till, station, hardware, area,
   order routing, printer target on the profile); the visual theme editor. The canvas-editor
   follow-ons that stood here, and a canvas-driven table-order screen, gave way to A4's A182.

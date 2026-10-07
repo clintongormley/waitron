@@ -1,6 +1,10 @@
-import type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
+import type {
+  DepartmentTransfer,
+  DepartmentTransferActor,
+  DepartmentTransferReceiver,
+} from "@waitron/module";
 export type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   billPayments,
   billPaymentRefunds,
@@ -10,6 +14,7 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
+import { alias } from "drizzle-orm/sqlite-core";
 import { AppError } from "@waitron/shared";
 import { assertDepartment } from "./department-menus.js";
 import {
@@ -470,13 +475,39 @@ export async function listDepartmentTransferDestinations(
   return choices;
 }
 
+async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
+  if (rows.length === 0) return [];
+  const source = alias(departments, "transfer_source_department");
+  const destination = alias(departments, "transfer_destination_department");
+  const identities = await tx
+    .select({
+      id: departmentTransferRequests.id,
+      orderNumber: workingOrders.orderNumber,
+      tabLabel: workingOrders.label,
+      sourceDepartmentName: source.name,
+      destinationDepartmentName: destination.name,
+    })
+    .from(departmentTransferRequests)
+    .innerJoin(workingOrders, eq(workingOrders.id, departmentTransferRequests.tabId))
+    .innerJoin(source, eq(source.id, departmentTransferRequests.sourceDepartmentId))
+    .innerJoin(destination, eq(destination.id, departmentTransferRequests.destinationDepartmentId))
+    .where(
+      inArray(
+        departmentTransferRequests.id,
+        rows.map((row) => row.id),
+      ),
+    );
+  const byId = new Map(identities.map(({ id, ...summary }) => [id, summary]));
+  return rows.map((row) => ({ ...row, summary: byId.get(row.id)! }));
+}
+
 export async function listIncomingDepartmentTransfers(
   tx: Transaction,
   cfg: VenueScope,
   receiver: DepartmentTransferReceiver,
 ) {
   await checkReceiver(tx, cfg, receiver.departmentId, receiver);
-  return listDepartmentTransfers(tx, cfg, receiver.departmentId);
+  return summarizeTransfers(tx, await listDepartmentTransfers(tx, cfg, receiver.departmentId));
 }
 
 export async function readIncomingDepartmentTransfer(
@@ -487,7 +518,7 @@ export async function readIncomingDepartmentTransfer(
 ) {
   const request = await pendingRequest(tx, cfg, requestId);
   await checkReceiver(tx, cfg, request.destinationDepartmentId, receiver);
-  return request;
+  return (await summarizeTransfers(tx, [request]))[0]!;
 }
 
 export async function listSentDepartmentTransfers(
@@ -512,7 +543,7 @@ export async function listSentDepartmentTransfers(
     if (context.departmentId !== sender.departmentId)
       throw new AppError("department_transfer.not_allowed", {});
   }
-  return rows;
+  return summarizeTransfers(tx, rows);
 }
 
 export async function listDepartmentSentTransfers(
@@ -521,9 +552,10 @@ export async function listDepartmentSentTransfers(
   sender: DepartmentTransferActor,
 ) {
   await activeDepartment(tx, cfg, sender.departmentId);
-  return tx
+  const rows = await tx
     .select()
     .from(departmentTransferRequests)
     .where(eq(departmentTransferRequests.sourceDepartmentId, sender.departmentId))
     .orderBy(asc(departmentTransferRequests.createdAt), asc(departmentTransferRequests.id));
+  return summarizeTransfers(tx, rows);
 }
