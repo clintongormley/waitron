@@ -424,27 +424,65 @@ describe("setRoutingCell / clearRoutingCell", () => {
     expect(await readStoredCells(f)).toEqual([]);
   });
 
-  it("keeps a zone's cell when the zone moves into a switched-off department, and clears it once the zone is back in an enabled one", async () => {
+  it("refuses moving an active zone with a cell into a switched-off department and leaves the cell as it was", async () => {
     const f = await setup();
     const address: CellAddress = {
       row: { kind: "category", categoryId: f.drinks },
       zoneId: f.terrace,
     };
     await scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar)));
+    const before = await readStoredCells(f);
+    expect(before).toEqual([expect.objectContaining({ zone_id: f.terrace, station_id: f.bar })]);
+    const closed = await scoped((tx) =>
+      createDepartment(tx, f.cfg, { name: "Closed", defaultServiceMode: "table_tab" }),
+    );
+    await scoped((tx) => deactivateDepartment(tx, f.cfg, closed.id));
+    await expect(
+      scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: closed.id })),
+    ).rejects.toMatchObject({
+      code: "zone.department_inactive",
+      params: { zoneId: f.terrace },
+    });
+    expect(await readStoredCells(f)).toEqual(before);
+    await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
+    expect(await readStoredCells(f)).toEqual([]);
+  });
+
+  it("a disabled zone loses its cells, may move into a switched-off department, and takes cells again only once enabled in an enabled one", async () => {
+    const f = await setup();
+    const address: CellAddress = {
+      row: { kind: "category", categoryId: f.drinks },
+      zoneId: f.terrace,
+    };
+    await scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar)));
+    await scoped((tx) => deactivateServiceZone(tx, f.cfg, f.terrace));
+    expect(await readStoredCells(f)).toEqual([]);
     const closed = await scoped((tx) =>
       createDepartment(tx, f.cfg, { name: "Closed", defaultServiceMode: "table_tab" }),
     );
     await scoped((tx) => deactivateDepartment(tx, f.cfg, closed.id));
     await scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: closed.id }));
-    expect(await readStoredCells(f)).toHaveLength(1);
-    await expect(scoped((tx) => clearRoutingCell(tx, f.cfg, address))).rejects.toMatchObject({
-      code: "service_zone.not_found",
-      params: { zoneId: f.terrace },
-    });
+    const refusesBoth = async () => {
+      await expect(
+        scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar))),
+      ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId: f.terrace } });
+      await expect(scoped((tx) => clearRoutingCell(tx, f.cfg, address))).rejects.toMatchObject({
+        code: "service_zone.not_found",
+        params: { zoneId: f.terrace },
+      });
+    };
+    await refusesBoth();
     const open = await scoped((tx) =>
       createDepartment(tx, f.cfg, { name: "Open", defaultServiceMode: "table_tab" }),
     );
     await scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: open.id }));
+    await refusesBoth();
+    expect(await readStoredCells(f)).toEqual([]);
+    await db.update(floorZones).set({ active: true }).where(eq(floorZones.id, f.terrace));
+    await scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar)));
+    expect(await readStoredCells(f)).toEqual([
+      expect.objectContaining({ zone_id: f.terrace, station_id: f.bar }),
+    ]);
     await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
     expect(await readStoredCells(f)).toEqual([]);
   });
