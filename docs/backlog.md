@@ -998,6 +998,18 @@ start again too, as when the Menus list changed key (W87).
 **Empty extras and options tables keep their Preselected and Default headings readable (A262, owner
 2026-10-03) — DONE (W49, #1165).**
 
+**An extras list can allow only one extra, drawn as radio buttons (A331, owner 2026-10-07) — OPEN.**
+The extras list form gains a setting "Allow selecting more than one extra"; when it is off, the till
+draws the list's items as radio buttons, one pick at most. Today every single-quantity item is a
+checkbox and an item whose `maxQuantity` is above 1 is a stepper
+(`#renderExtras`, `apps/till/src/widgets/modifier-picker.ts`), whatever the list's `maxPicks`; the
+customer menu (`apps/dashboard/src/widgets/customer-menu.ts`) and the server's selection check
+(`apps/server/src/modifier-selection.ts`) read the same list fields. To settle in the brainstorm:
+whether the setting is a stored flag or simply `maxPicks` of 1 under a clearer name; what it does to
+the minimum and maximum picks fields, an item's maximum quantity and more than one preselected item;
+and whether a radio list that is not required offers a way to pick nothing. **Next action:**
+brainstorm with the owner.
+
 **The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE (#1151).**
 
 **What #1151 left open (2026-10-03):**
