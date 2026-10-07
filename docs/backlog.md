@@ -1905,9 +1905,12 @@ a demo identity too, because the venue screen has one country list for every mod
 reading of the owner's answer A — the alternative is hiding only the Demo choice). Correction to
 the plan's prediction: a fallback demo in an area that requires languages does NOT list them as
 missing when the data set carries text in them — the seed writes the set's own text for every
-enabled language (measured by the per-task review on a Barcelona venue with a set that was not
-Spain's: `ca` and `es` text written, no missing translations); only a required language the set
-lacks would be listed.
+enabled language. Measured on a real database with the real migrations, not as a committed test:
+the finish review (2026-10-07) seeded a Barcelona venue with a set that was not Spain's, and got
+English default, `en`, `ca` and `es` enabled, every customer name in all three, and no missing
+translations; the per-task review's earlier run found `ca` and `es` text written and no missing
+translations. The finish review also removed the Catalan text from the
+set: the Catalan texts were listed as missing translations, and the seed still completed.
 
 Seen during W109-5's look at a Barcelona demo set up in Spanish (2026-10-07), OPEN, unqueued:
 (1) practice-sale invoice numbers do not follow time order — `seedSales` fills days from today
@@ -1966,7 +1969,10 @@ language in the Valencian Community, the Balearic Islands and Galicia, and a new
 its area's required languages, then English. The dashboard's required-language messages now say
 Waitron keeps the language enabled for the region, not that the region requires it. **The demo's
 side is BUILT too (W109-4, #1322, Task 4), so this entry is DONE:** a demo keeps the languages setup gives
-its area, writes every customer-facing text in each of them (menus' customer names included), and
+its area (except a pack with no data set of its own: English is its default, its languages are
+English plus the area's required ones, and a required language the set has no text in is listed
+as missing, W109-2), writes every customer-facing text in each of them
+(menus' customer names included), and
 saves its row through the required-language check; a Barcelona demo is Catalan (default), Spanish
 and English with nothing listed as missing. Left by #1320, OPEN, unqueued:
 `resolveInstalledDefaultContentLanguage` (`packages/country-packs/src/registry.ts`) is now called

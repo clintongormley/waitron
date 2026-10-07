@@ -6,6 +6,8 @@
 two open points about a country with no demo data on the same day (A at ~10:05, B at ~10:07); this
 plan is amended to all of them (W109, lane A).** Nothing here is built. No task waits for an answer;
 Task 2 is still built last.
+_2026-10-07: all six tasks are now built — Task 1 (#1315), Task 6 (W109-6, #1320), Task 3 (W109-3,
+#1321), Task 4 (W109-4, #1322), Task 5 (W109-5, #1323) and Task 2 (W109-2)._
 
 **Amended 2026-10-06 to the owner's regional-language decisions of ~17:05–17:23** (decisions 9 to
 12 below). They settle the three language points the owner had sent to the backlog at ~10:58, and
@@ -206,7 +208,10 @@ every Spanish area where a venue can be set up requires Spanish, so a pack shape
 without demo data would get a fallback demo of English (default) plus Spanish and any regional
 language, each of those listed as missing translations. No pack today has such an area without
 demo data (the only other pack, the United Kingdom's, has no areas, and its starting languages are
-English alone). Its month of practice sales is recorded like any other demo's,
+English alone). _2026-10-07, as built (W109-2): the seed writes the data set's own text in every
+enabled language, so a required language is listed as missing only when the set has no text in
+it; English is the default by the owner's decision, not because the text is English only. See
+`docs/backlog.md`, W109-2._ Its month of practice sales is recorded like any other demo's,
 through the venue's own fiscal module (below). No real pack reaches the fallback today — Spain
 names `casa-delgado-es`, and the United Kingdom carries no identity at all — so only Task 2's tests
 reach it. **A pack with no identity at all cannot offer Demo:** the
@@ -1008,6 +1013,12 @@ export function demoLanguagesFor(set: DemoDataSet, geography: VenueGeography): D
     : englishFallbackLanguages(starting);
 }
 ```
+
+  _2026-10-07, as built (W109-2): the built doc comments differ, because the set's text is not
+  English only. `dataSet`'s reads "absent, the demo seeds the fallback set with English as its
+  default"; `englishFallbackLanguages`'s says English is the default by the owner's decision for a
+  country with no demo data of its own. Neither `FALLBACK_DEMO_DATA_SET_ID` nor
+  `englishFallbackLanguages` is exported, and `demoDataSetFor` has no doc comment._
 
   Deciding by comparing the set with the pack's own, rather than by asking only whether the pack
   names one, is what lets a test reach the fallback branch with a Spanish area: the one real pack
