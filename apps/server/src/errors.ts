@@ -19,6 +19,9 @@ import type { AllocationPreview } from "./bill-allocation.js";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "invoice_delivery.active": Record<string, never>;
+    "invoice_delivery.not_found": Record<string, never>;
+    "invoice_delivery.full_invoice_required": Record<string, never>;
     "venue.detail_invalid": { field: string; reason: string };
     "venue.detail_read_only": { field: string };
     "venue.detail_locked": {

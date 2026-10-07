@@ -1799,9 +1799,17 @@ comparisons while the Catalan and Basque controls pass. The PWG and Apple Raster
 now match native CUPS reference files at 300/600 dpi. Native readback compared every decoded pixel and header size, resolution and
 colour space for the invoice page and two-page pattern fixtures. A synthetic `ippeveprinter`
 completed all four format/resolution jobs; its command decoded both pattern pages unchanged.
-These checks ran against source modules. The production delivery path, image/box checks,
-delivery metadata, SMTP, office transport and delivery UI remain. It settles A3's
-open "Printing A4 invoices on an office printer" work when complete.
+These checks ran against source modules. The metadata-only queue now reserves email attempts,
+retains the recipient and consent for each request, and distinguishes original retries from
+duplicates. Its claim helpers use fresh tokens, keep only their hashes, expire to an unknown
+outcome, and authenticate late reports against the recorded attempt. Tests cover late results
+before a retry, while it is queued or sending, and after it succeeds or fails. Existing receipt
+originals participate in reservation checks. The focused delivery and receipt suites pass 198
+cases; the schema/error guards pass 414, and the unchanged fiscal suites pass 20.
+The helpers are not wired into a worker or public route yet. Receipt-job/agent correlation,
+stale receipt-report fencing, bill staging, A4 printer references, SMTP, office transport,
+delivery UI and image/box checks remain. It settles A3's open "Printing A4 invoices on an office
+printer" work when complete.
 Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe
 throws when embedding the current Google Sans WOFF2 for “í”; Noto Sans rendered the same probe
 as PDF and glyph outlines. PDFKit's ESM import also collides with the shared bundle banner's
