@@ -672,6 +672,106 @@ describe("venue operations screen", () => {
     });
   });
 
+  it("hides and shows a department's zones from an arrow named for the department", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const policyTree = table(el, "policy-tree") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    const tree = policyTree.shadowRoot!;
+    const department = () => tree.querySelector('[data-row-key="department-d1"]')!;
+    const toggle = () => department().querySelector<HTMLButtonElement>('[part="tree-toggle"]');
+    expect(toggle()).not.toBeNull();
+    expect(toggle()!.getAttribute("aria-label")).toBe("Hide the zones in Restaurant and bar");
+    expect(department().getAttribute("aria-expanded")).toBe("true");
+    expect(tree.querySelector('[data-row-key="zone-z1"]')).not.toBeNull();
+
+    toggle()!.click();
+    await policyTree.updateComplete;
+    expect(department().getAttribute("aria-expanded")).toBe("false");
+    expect(toggle()!.getAttribute("aria-label")).toBe("Show the zones in Restaurant and bar");
+    expect(tree.querySelector('[data-row-key="zone-z1"]')).toBeNull();
+    expect(tree.querySelector('[data-row-key="zone-z2"]')).not.toBeNull();
+
+    toggle()!.click();
+    await policyTree.updateComplete;
+    expect(department().getAttribute("aria-expanded")).toBe("true");
+    expect(tree.querySelector('[data-row-key="zone-z1"]')).not.toBeNull();
+  });
+
+  it("names a department's arrow in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const policyTree = table(el, "policy-tree") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    const toggle = () =>
+      policyTree.shadowRoot!.querySelector<HTMLButtonElement>(
+        '[data-row-key="department-d1"] [part="tree-toggle"]',
+      );
+    expect(toggle()?.getAttribute("aria-label")).toBe("Ocultar las zonas de Restaurant and bar");
+    toggle()!.click();
+    await policyTree.updateComplete;
+    expect(toggle()?.getAttribute("aria-label")).toBe("Mostrar las zonas de Restaurant and bar");
+  });
+
+  it.each([
+    ["desktop", 1280],
+    ["phone", 390],
+  ] as const)(
+    "lines a department with no zones up with one that has an arrow (%s)",
+    async (_name, width) => {
+      const originalWidth = window.innerWidth;
+      const originalHeight = window.innerHeight;
+      try {
+        await page.viewport(width, 844);
+        const el = await mount({
+          load: vi.fn().mockResolvedValue(model),
+        } as unknown as VenueServiceApi);
+        const tree = table(el, "policy-tree").shadowRoot!;
+        const withZones = tree.querySelector('[data-row-key="department-d1"]')!;
+        const withoutZones = tree.querySelector('[data-row-key="department-d2"]')!;
+        expect(withZones.querySelector('[part="tree-toggle"]')).not.toBeNull();
+        expect(withoutZones.querySelector('[part="tree-toggle"]')).toBeNull();
+        expect(withoutZones.querySelector(".tree-spacer")).not.toBeNull();
+        const nameLeft = (row: Element) =>
+          row.querySelector('[data-test="edit-department-name"]')!.getBoundingClientRect().left;
+        expect(nameLeft(withoutZones)).toBeCloseTo(nameLeft(withZones), 1);
+      } finally {
+        await page.viewport(originalWidth, originalHeight);
+      }
+    },
+  );
+
+  it("sets an unconfigured zone's note apart from its name, in the muted colour", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+    const row = table(el, "policy-tree").shadowRoot!.querySelector('[data-row-key="zone-z2"]')!;
+    const name = row.querySelector('[data-test="edit-zone-name"]')!;
+    const cell = row.querySelector('[role="gridcell"]')!;
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    let note: Text | null = null;
+    while (walker.nextNode()) {
+      const text = walker.currentNode as Text;
+      if (text.data.includes("Not configured")) note = text;
+    }
+    expect(note).not.toBeNull();
+    const start = note!.data.indexOf("Not configured");
+    const range = document.createRange();
+    range.setStart(note!, start);
+    range.setEnd(note!, start + "Not configured".length);
+    const noteBox = range.getBoundingClientRect();
+    const nameBox = name.getBoundingClientRect();
+    expect(noteBox.top).toBeLessThan(nameBox.bottom);
+    expect(noteBox.left - nameBox.right).toBeGreaterThan(0);
+    expect(getComputedStyle(note!.parentElement!).color).toBe("rgb(7, 8, 9)");
+  });
+
   it("does not label a zone of an inactive department as unconfigured", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
