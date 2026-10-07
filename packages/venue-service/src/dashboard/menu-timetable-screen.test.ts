@@ -615,7 +615,9 @@ describe("Menu timetable: named periods", () => {
 
   it("puts a taken name under the name field", async () => {
     const { api, state } = server();
-    state.writes.push(refusal("menu_timetable.invalid", { field: "name" }));
+    state.writes.push(
+      refusal("menu_period.name_taken", { departmentId: "restaurant", name: "Mañanas" }),
+    );
     const el = await mount(api);
     await click(el, byTest(el, "new-period"));
     await setField(el, "name", "Mañanas");

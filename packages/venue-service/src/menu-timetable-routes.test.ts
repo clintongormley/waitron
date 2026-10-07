@@ -332,8 +332,8 @@ describe("the menu timetable routes", () => {
         name: "Mañanas",
         menuId: r.cafe,
       }),
-      400,
-      { code: "menu_timetable.invalid", params: { field: "name" } },
+      409,
+      { code: "menu_period.name_taken", params: { departmentId: r.restaurant, name: "Mañanas" } },
     );
     await answers(
       await r.send("PUT", `/menu-periods/${unknown}`, r.manager, { name: "X", menuId: r.cafe }),

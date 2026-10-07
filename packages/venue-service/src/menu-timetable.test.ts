@@ -729,15 +729,19 @@ describe("the timetable's writers", () => {
     );
     expect(renamed).toEqual({ id: periods.noches, name: "Cenas", menuId: menus.Cócteles });
     expect((await resolve(v, v.sala, madrid(MONDAY, "18:30"))).defaultMenuId).toBe(menus.Cócteles);
-    for (const [id, name] of [
-      [null, "Mañanas"],
-      [null, " Mañanas "],
-      [periods.noches, "Mañanas"],
-      [null, "  "],
+    const taken = {
+      code: "menu_period.name_taken",
+      params: { departmentId: v.restaurant, name: "Mañanas" },
+    };
+    for (const [id, name, refusal] of [
+      [null, "Mañanas", taken],
+      [null, " Mañanas ", taken],
+      [periods.noches, "Mañanas", taken],
+      [null, "  ", invalid("name")],
     ] as const)
       await expect(
         scoped((tx) => saveMenuPeriod(tx, v.cfg, v.restaurant, { id, name, menuId: menus.Café })),
-      ).rejects.toMatchObject(invalid("name"));
+      ).rejects.toMatchObject(refusal);
     // The same name in another department is its own period.
     await scoped((tx) =>
       saveMenuPeriod(tx, v.cfg, v.deli, {
