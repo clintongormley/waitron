@@ -1753,8 +1753,8 @@ records added after a run's unanswered successor sent with its retry, as built. 
 the run's code, the run is broken and nothing would explain such a hold: the
 `fiscal.refusals_repeated` alert would not show, and when that answer is not a refusal at all
 `heldRecords` would name no case for the held records.
-**Follow-up W41s-3c (done on `fix/w41s-reply-line-identity`, #1304, reworked 2026-10-07, awaiting
-the owner's review):** `resolveLines` in `packages/fiscal-verifactu/src/drain.ts` used to match a
+**Follow-up W41s-3c — DONE ([#1304](https://github.com/clintongormley/waitron/pull/1304), landed
+2026-10-07 on the owner's approval):** `resolveLines` in `packages/fiscal-verifactu/src/drain.ts` used to match a
 reply line to a claimed record by `RefExterna` alone; a review probe gave invoice B's accepted line
 invoice A's reference and the drain marked A `aceptado` though AEAT had rejected it. Now, as the
 owner chose (2026-10-06), line N of AEAT's reply is paired with record N of the envío, and is
@@ -1771,9 +1771,10 @@ reply's line count (`lineasEnRespuesta`) on its alert, and the reply's lines are
 warning `fiscal.respuesta_descuadrada` on the sale of the envío's first record, with the envío's
 record ids and its CSV. The dashboard's sentence does not show those lines; `readOpenAlerts`
 (`apps/server/src/alerts.ts`), behind `GET /management-api/alerts`, returns them in the alert's
-params. **Still open:** nothing we hold says AEAT answers in the order sent — the saved preproduction
-replies were stored in the order sent by the probe itself, whatever order AEAT used — and the
-question is with the asesor as [Q43](compliance/asesor-questions.md). A line AEAT moves away from
+params. **Still open:** in AEAT's preproduction environment two runs of shuffled envíos of up to
+1,000 records each got their replies back in the order sent (verifactu #138's probe, recorded in
+[Q43](compliance/asesor-questions.md)); production is not measured, and the question stays with the
+asesor. A line AEAT moves away from
 its record's position is never applied, so that record stays unknown and is retried unless an
 earlier record on its chain is on hold, while records whose line is still at their position are
 applied as usual. A record whose line AEAT moved in every reply it was sent in would never be
@@ -1801,7 +1802,7 @@ that line: AEAT accepted records linked to a refused predecessor in the same bat
 and all 999 successors of a 1,000-record batch ([evidence](superpowers/specs/2026-10-05-aeat-protocol-evidence.json),
 runs 37283677375, 37283909983 and 37283910284). Records sent in the same batch as an unknown one
 are not held; only unsent ones wait. Not probed: a successor reaching AEAT before its predecessor
-arrives. The owner kept the hold for now (W41s-3c, #1304, may land with it) and asked to revisit it
+arrives. The owner kept the hold for now (it landed with W41s-3c, #1304) and asked to revisit it
 when the asesor answers Q37 and its siblings ([questions](compliance/asesor-questions.md)): drop the
 hold, keep it, or add the overtaking case to the W41s-1b probe first.
 **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
