@@ -466,3 +466,123 @@ describe("standard icon trigger", () => {
     expect(popup.getAttribute("part")).toBe("popup");
   });
 });
+
+describe("a link entry", () => {
+  async function mountLinkAndButton() {
+    const el = (await mount(
+      `<wt-row-actions label="Actions for Wine">
+        <a href="#wine">Open Wine</a>
+        <wt-button variant="secondary" align="start">Edit</wt-button>
+      </wt-row-actions>`,
+    )) as WtRowActions;
+    const edit = el.querySelector<WtButton>("wt-button")!;
+    await edit.updateComplete;
+    el.show();
+    return { el, link: el.querySelector("a")!, button: edit.shadowRoot!.querySelector("button")! };
+  }
+
+  // Not display: the popup's flex column turns the link's inline-flex into flex, where the button
+  // inside wt-button keeps inline-flex; the two boxes below are compared by size instead.
+  const boxProperties = [
+    "justifyContent",
+    "alignItems",
+    "boxSizing",
+    "width",
+    "minWidth",
+    "minHeight",
+    "height",
+    "paddingTop",
+    "paddingRight",
+    "paddingBottom",
+    "paddingLeft",
+    "borderTopWidth",
+    "borderTopStyle",
+    "borderTopColor",
+    "borderBottomWidth",
+    "borderLeftWidth",
+    "borderRightWidth",
+    "borderTopLeftRadius",
+    "backgroundColor",
+    "color",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "lineHeight",
+    "textDecorationLine",
+  ] as const;
+
+  it("draws the same box as a secondary start-aligned button beside it", async () => {
+    const { link, button } = await mountLinkAndButton();
+    const linkStyle = getComputedStyle(link);
+    const buttonStyle = getComputedStyle(button);
+    const pick = (style: CSSStyleDeclaration) =>
+      Object.fromEntries(boxProperties.map((name) => [name, style[name]]));
+    expect(pick(linkStyle)).toEqual(pick(buttonStyle));
+    expect(link.getBoundingClientRect().width).toBe(button.getBoundingClientRect().width);
+    expect(link.getBoundingClientRect().height).toBe(button.getBoundingClientRect().height);
+  });
+
+  it("paints its border, background, text, corners and size from the tokens", async () => {
+    const { link } = await mountLinkAndButton();
+    host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-surface", "rgb(4, 5, 6)");
+    host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-radius-md", "7px");
+    host.style.setProperty("--wt-tap-min", "51px");
+    host.style.setProperty("--wt-space-2", "9px");
+    host.style.setProperty("--wt-space-4", "13px");
+    host.style.setProperty("--wt-font-weight-bold", "800");
+    const style = getComputedStyle(link);
+    expect(style.borderTopColor).toBe("rgb(1, 2, 3)");
+    expect(style.borderTopWidth).toBe("1px");
+    expect(style.borderTopStyle).toBe("solid");
+    expect(style.backgroundColor).toBe("rgb(4, 5, 6)");
+    expect(style.color).toBe("rgb(7, 8, 9)");
+    expect(style.borderTopLeftRadius).toBe("7px");
+    expect(style.minHeight).toBe("51px");
+    expect(style.minWidth).toBe("51px");
+    expect([style.paddingTop, style.paddingLeft]).toEqual(["9px", "13px"]);
+    expect(style.fontWeight).toBe("800");
+    expect(style.textDecorationLine).toBe("none");
+    expect(style.justifyContent).toBe("flex-start");
+  });
+
+  it("shows the token focus ring when reached by keyboard, as the button does", async () => {
+    const { el, link, button } = await mountLinkAndButton();
+    host.style.setProperty("--wt-color-focus", "rgb(10, 11, 12)");
+    el.shadowRoot!.querySelector("button")!.focus();
+    await userEvent.tab();
+    expect(document.activeElement).toBe(link);
+    expect(link.matches(":focus-visible")).toBe(true);
+    const ring = (style: CSSStyleDeclaration) => [
+      style.outlineStyle,
+      style.outlineWidth,
+      style.outlineColor,
+      style.outlineOffset,
+    ];
+    const linkRing = ring(getComputedStyle(link));
+    expect(linkRing).toEqual(["solid", "2px", "rgb(10, 11, 12)", "2px"]);
+    await userEvent.tab();
+    expect(button.matches(":focus-visible")).toBe(true);
+    expect(ring(getComputedStyle(button))).toEqual(linkRing);
+  });
+
+  it("takes the button's hover border when the pointer is over it", async () => {
+    const { link, button } = await mountLinkAndButton();
+    host.style.setProperty("--wt-color-primary-text", "rgb(20, 21, 22)");
+    await userEvent.hover(link);
+    expect(getComputedStyle(link).borderTopColor).toBe("rgb(20, 21, 22)");
+    await userEvent.hover(button);
+    expect(getComputedStyle(button).borderTopColor).toBe("rgb(20, 21, 22)");
+    expect(getComputedStyle(link).borderTopColor).not.toBe("rgb(20, 21, 22)");
+  });
+
+  it("is still a link, and choosing it closes the menu", async () => {
+    const { el, link } = await mountLinkAndButton();
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    expect(link.getAttribute("href")).toBe("#wine");
+    expect(link.tagName).toBe("A");
+    link.click();
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+});

@@ -394,6 +394,31 @@ it("draws an included menu read-only, its menu offering Open, Edit and Remove", 
   expect(edits).toEqual([]);
 });
 
+it("draws an included menu's Open link as the same entry as its Edit and Remove", async () => {
+  const el = await mount({ nodes: [...lunchNodes(), wines()] });
+  const menu = inTable<HTMLElementTagNameMap["wt-row-actions"]>(
+    el,
+    '[data-test="actions-included-wine"]',
+  )!;
+  menu.show();
+  const link = item(el, "source-included-wine");
+  const look = (entry: Element) => {
+    const style = getComputedStyle(entry);
+    return {
+      border: [style.borderTopWidth, style.borderTopStyle, style.borderTopColor],
+      background: style.backgroundColor,
+      color: style.color,
+      decoration: style.textDecorationLine,
+      start: style.justifyContent,
+      width: entry.getBoundingClientRect().width,
+    };
+  };
+  for (const test of ["edit-included-wine", "remove-included-wine"]) {
+    const button = item(el, test).shadowRoot!.querySelector("button")!;
+    expect(look(link), test).toEqual(look(button));
+  }
+});
+
 it("Edit sends wt-include-edit with the list's path and the member", async () => {
   const nested = lunchNodes().map((node) =>
     node.memberId === "m-drinks" ? { ...node, children: [...node.children!, wines()] } : node,

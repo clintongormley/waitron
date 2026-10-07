@@ -50,6 +50,32 @@ export class WtRowActions extends LitElement {
       ::slotted(wt-button) {
         width: 100%;
       }
+      /* The same box as a slotted wt-button variant="secondary" align="start". */
+      ::slotted(a[href]) {
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: var(--wt-space-2);
+        width: 100%;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+        font-weight: var(--wt-font-weight-bold);
+        text-decoration: none;
+      }
+      ::slotted(a[href]:hover) {
+        border-color: var(--wt-color-primary-text);
+      }
+      ::slotted(a[href]:focus-visible) {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
     `,
   ];
 
