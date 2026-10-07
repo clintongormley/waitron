@@ -1819,10 +1819,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   /** Chooses these values on the column's filter as the person choosing them would, so the choice
-   * is reported and remembered. A column without a filter is left alone. */
+   * is reported and remembered: only the values it offers now, one on a single-choice filter, and
+   * none chosen (all) when given none. One or more values, none of which it offers, leave it alone,
+   * as does a column without a filter. */
   chooseFilter(key: string, values: readonly string[]): void {
     const column = this.columns.find((candidate) => candidate.key === key);
-    if (column?.filter) this.#chooseFilter(column, values);
+    const options = this.#offered(key);
+    const offered = values.filter((value) => options?.some((option) => option.value === value));
+    if (!column?.filter || (values.length > 0 && offered.length === 0)) return;
+    this.#chooseFilter(column, column.filter?.multiple ? offered : offered.slice(0, 1));
   }
 
   /** The order the table draws these rows in when they share a parent. */
