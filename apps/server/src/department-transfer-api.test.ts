@@ -617,3 +617,305 @@ describe("department transfer till writes", () => {
     expect((await state(f.tab)).requests[0]!.status).toBe("pending");
   });
 });
+
+async function get(cookie: string, path: string) {
+  const response = await app.request(path, { headers: { cookie } });
+  const text = await response.text();
+  return {
+    status: response.status,
+    body: text.startsWith("{") || text.startsWith("[") ? JSON.parse(text) : text,
+  };
+}
+
+describe("department transfer durable reads", () => {
+  it("shows only configured usable destinations without granting destination browsing", async () => {
+    const f = await ready();
+    const choices = await get(f.source.cookie, "/api/department-transfers/destinations");
+    expect(choices.status).toBe(200);
+    expect(choices.body.destinations).toEqual([{ id: f.b, name: expect.any(String) }]);
+    expect(await get(f.desk.cookie, "/api/department-transfers/destinations")).toEqual({
+      status: 200,
+      body: { destinations: [] },
+    });
+    const id = await pending(f);
+    expect(await get(f.source.cookie, `/api/department-transfers/${id}`)).toMatchObject({
+      status: 403,
+      body: { error: { code: "department_transfer.not_allowed" } },
+    });
+    expect(await get(f.desk.cookie, `/api/working-orders/${f.tab}/lines`)).toMatchObject({
+      status: 403,
+      body: { error: { code: "service_zone.not_allowed" } },
+    });
+  });
+  it("rebuilds the same pending queue for two receiving devices and after a new login", async () => {
+    const f = await ready();
+    const id = await pending(f);
+    for (const desk of [f.desk, await login(f.deskProfile), await login(f.deskProfile)]) {
+      const result = await get(desk.cookie, "/api/department-transfers/incoming");
+      expect(result).toMatchObject({
+        status: 200,
+        body: { count: 1, requests: [{ id, tabId: f.tab, status: "pending" }] },
+      });
+      expect(result.body.requests).toHaveLength(1);
+    }
+    expect((await state(f.tab)).requests[0]!.status).toBe("pending");
+  });
+  for (const who of ["source", "other"] as const)
+    it(`refuses the incoming queue and detail to the ${who} profile`, async () => {
+      const f = await ready();
+      const id = await pending(f);
+      for (const path of ["/api/department-transfers/incoming", `/api/department-transfers/${id}`])
+        expect(await get(f[who].cookie, path)).toMatchObject({
+          status: 403,
+          body: { error: { code: "department_transfer.not_allowed" } },
+        });
+    });
+  it("reads the latest placed tab and outstanding kitchen instructions without resolving it", async () => {
+    const f = await ready();
+    f.tab = await counterOrder(v, "Burger");
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await placeOrder(
+      { db: suite.db, backend: v.backend, clock: v.clock },
+      requestCfg(v.cfg, f.source),
+      f.tab,
+      personId,
+    );
+    const id = await pending(f);
+    const [line] = await suite.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, f.tab));
+    const [ticket] = await suite.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, f.tab));
+    await suite.db.update(workingOrders).set({ revision: 7 }).where(eq(workingOrders.id, f.tab));
+    await suite.db
+      .update(ticketItems)
+      .set({ note: "Keep pickup at the deli", state: "preparing" })
+      .where(eq(ticketItems.id, ticket!.id));
+    const before = await state(f.tab);
+    for (let i = 0; i < 2; i++) {
+      const detail = await get(f.desk.cookie, `/api/department-transfers/${id}`);
+      expect(detail).toMatchObject({
+        status: 200,
+        body: {
+          request: { id, status: "pending" },
+          tab: { id: f.tab, revision: 7, status: "placed" },
+          lines: [{ id: line!.id, name: "Burger", quantity: "1.000", unitPriceGross: "12.00" }],
+          outstandingWork: [
+            {
+              id: ticket!.id,
+              lineId: line!.id,
+              stationId: ticket!.stationId,
+              state: "preparing",
+              note: "Keep pickup at the deli",
+              firedAt: ticket!.firedAt,
+              awayAt: null,
+            },
+          ],
+        },
+      });
+    }
+    expect(await state(f.tab)).toEqual(before);
+    expect(await get(f.desk.cookie, `/api/working-orders/${f.tab}/lines`)).toMatchObject({
+      status: 403,
+    });
+  });
+  for (const action of ["accept", "decline", "withdraw"] as const)
+    it(`updates every receiver and the sender after ${action}`, async () => {
+      const f = await ready();
+      const id = await pending(f);
+      const second = await login(f.deskProfile);
+      expect(await get(f.source.cookie, requestPath(f.tab))).toMatchObject({
+        status: 200,
+        body: { requests: [{ id, status: "pending" }] },
+      });
+      await post(
+        action === "withdraw" ? f.source.cookie : f.desk.cookie,
+        resolutionPath(id, action),
+        action === "accept" ? { revision: 0, zoneId: f.bz } : { reason: "Closing" },
+      );
+      const status = { accept: "accepted", decline: "declined", withdraw: "withdrawn" }[action];
+      expect(await get(f.source.cookie, requestPath(f.tab))).toMatchObject({
+        status: 200,
+        body: {
+          requests: [
+            { id, status, resolvedBy: personId, reason: action === "decline" ? "Closing" : null },
+          ],
+        },
+      });
+      for (const desk of [f.desk, second]) {
+        expect(await get(desk.cookie, "/api/department-transfers/incoming")).toEqual({
+          status: 200,
+          body: { count: 0, requests: [] },
+        });
+        expect(await get(desk.cookie, `/api/department-transfers/${id}`)).toMatchObject({
+          status: 409,
+          body: { error: { code: "department_transfer.not_pending" } },
+        });
+      }
+    });
+  it("does not expose another source department's status", async () => {
+    const f = await ready();
+    await pending(f);
+    expect(await get(f.other.cookie, requestPath(f.tab))).toMatchObject({
+      status: 403,
+      body: { error: { code: "department_transfer.not_allowed" } },
+    });
+  });
+  it("refuses source reads outside its zone before acceptance", async () => {
+    const f = await ready();
+    await pending(f);
+    await withTransaction(suite.db, (tx) =>
+      retargetOrderServiceContext(tx, v.cfg, f.tab, f.hidden),
+    );
+    expect(await get(f.source.cookie, requestPath(f.tab))).toMatchObject({
+      status: 403,
+      body: { error: { code: "service_zone.not_allowed" } },
+    });
+  });
+  it("hides a destination once its receiving profile is retired", async () => {
+    const f = await ready();
+    await suite.db
+      .update(deviceProfiles)
+      .set({ retiredAt: new Date().toISOString() })
+      .where(eq(deviceProfiles.id, f.deskProfile));
+    expect(await get(f.source.cookie, "/api/department-transfers/destinations")).toEqual({
+      status: 200,
+      body: { destinations: [] },
+    });
+  });
+  it("rechecks receiving admission on reads", async () => {
+    const f = await ready();
+    const id = await pending(f);
+    await withTransaction(suite.db, (tx) =>
+      setProfileAdmission(tx, f.deskProfile, { personExceptions: [{ personId, admitted: false }] }),
+    );
+    for (const path of ["/api/department-transfers/incoming", `/api/department-transfers/${id}`])
+      expect(await get(f.desk.cookie, path)).toMatchObject({
+        status: 403,
+        body: { error: { code: "device_profile.not_admitted" } },
+      });
+  });
+});
+
+describe("department transfer read boundaries", () => {
+  it("returns empty source history for an eligible tab before its first request", async () => {
+    const f = await ready();
+    expect(await get(f.source.cookie, requestPath(f.tab))).toEqual({
+      status: 200,
+      body: { requests: [] },
+    });
+    expect(await get(f.other.cookie, requestPath(f.tab))).toMatchObject({
+      status: 403,
+      body: { error: { code: "department_transfer.not_allowed" } },
+    });
+  });
+  it("does not include another department's incoming request", async () => {
+    const f = await ready();
+    const unrelated = await ready();
+    const id = await pending(f);
+    await pending(unrelated);
+    const queue = await get(f.desk.cookie, "/api/department-transfers/incoming");
+    expect(queue).toMatchObject({ status: 200, body: { count: 1, requests: [{ id }] } });
+    expect(queue.body.requests).toHaveLength(1);
+  });
+  it("uses the currently designated desk rather than the desk at request time", async () => {
+    const f = await ready();
+    const id = await pending(f);
+    await withTransaction(suite.db, (tx) =>
+      setDepartmentTransferSettings(tx, v.cfg, f.b, {
+        receivingProfileId: f.otherProfile,
+        destinationDepartmentIds: [],
+      }),
+    );
+    expect(await get(f.desk.cookie, "/api/department-transfers/incoming")).toMatchObject({
+      status: 403,
+      body: { error: { code: "department_transfer.not_allowed" } },
+    });
+    expect(await get(f.desk.cookie, `/api/department-transfers/${id}`)).toMatchObject({
+      status: 403,
+      body: { error: { code: "department_transfer.not_allowed" } },
+    });
+    expect(await get(f.other.cookie, "/api/department-transfers/incoming")).toMatchObject({
+      status: 200,
+      body: { count: 1, requests: [{ id }] },
+    });
+  });
+  it("does not label away or made-here kitchen work outstanding", async () => {
+    const f = await ready();
+    f.tab = await counterOrder(v, "Burger");
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await placeOrder(
+      { db: suite.db, backend: v.backend, clock: v.clock },
+      requestCfg(v.cfg, f.source),
+      f.tab,
+      personId,
+    );
+    const id = await pending(f);
+    const [ticket] = await suite.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, f.tab));
+    expect(
+      (await get(f.desk.cookie, `/api/department-transfers/${id}`)).body.outstandingWork,
+    ).toHaveLength(1);
+    for (const patch of [{ awayAt: new Date().toISOString() }, { awayAt: null, madeHere: true }]) {
+      await suite.db.update(ticketItems).set(patch).where(eq(ticketItems.id, ticket!.id));
+      expect(
+        (await get(f.desk.cookie, `/api/department-transfers/${id}`)).body.outstandingWork,
+      ).toEqual([]);
+    }
+  });
+  for (const kind of ["revoked", "suspended", "action"] as const)
+    it(`refuses reads after the receiver is ${kind}`, async () => {
+      const f = await ready();
+      const id = await pending(f);
+      if (kind === "revoked")
+        await suite.db
+          .update(devices)
+          .set({ active: false })
+          .where(eq(devices.id, f.desk.deviceId));
+      if (kind === "suspended")
+        await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+      if (kind === "action")
+        await suite.db
+          .update(deviceProfiles)
+          .set({ capabilities: CAPABILITY_FLAGS.filter((x) => x !== "take-orders") })
+          .where(eq(deviceProfiles.id, f.deskProfile));
+      try {
+        for (const path of [
+          "/api/department-transfers/incoming",
+          `/api/department-transfers/${id}`,
+        ])
+          expect(await get(f.desk.cookie, path)).toMatchObject({
+            status: kind === "revoked" ? 401 : 403,
+            body: {
+              error: {
+                code:
+                  kind === "revoked"
+                    ? "device.unauthorized"
+                    : kind === "suspended"
+                      ? "person.suspended"
+                      : "device.forbidden_action",
+              },
+            },
+          });
+      } finally {
+        if (kind === "suspended")
+          await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, personId));
+      }
+    });
+  it("refuses unknown and malformed request ids", async () => {
+    const f = await ready();
+    expect(await get(f.desk.cookie, `/api/department-transfers/${randomUUID()}`)).toMatchObject({
+      status: 404,
+      body: { error: { code: "department_transfer.not_found" } },
+    });
+    expect(await get(f.desk.cookie, "/api/department-transfers/bad-id")).toMatchObject({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "requestId" } } },
+    });
+  });
+});

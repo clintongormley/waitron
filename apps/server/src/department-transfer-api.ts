@@ -1,9 +1,15 @@
-import { eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Hono } from "hono";
-import { withTransaction, type Transaction } from "@waitron/db";
+import {
+  withTransaction,
+  workingOrders,
+  workingOrderLines,
+  ticketItems,
+  type Transaction,
+} from "@waitron/db";
 import { authorize, canUseDeviceProfile, persons } from "@waitron/identity";
 import { readRawJsonBody } from "@waitron/server-kit";
-import { AppError, isUuid } from "@waitron/shared";
+import { AppError, isUuid, centsToDecimal, thousandthsToDecimal } from "@waitron/shared";
 import { asObject } from "./bill-payments-api.js";
 import { assertDeviceStillProven, assertProfileAction } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -51,6 +57,115 @@ export function mountDepartmentTransferApi(
   log: Logger,
   run: Run,
 ): void {
+  app.get("/api/department-transfers/destinations", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const destinations = await withTransaction(deps.db, async (tx) => {
+        const sender = await actor(tx, deps, session);
+        return VENUE_SERVICE.listDepartmentTransferDestinations(tx, deps.cfg, sender);
+      });
+      return c.json({ destinations });
+    }),
+  );
+  app.get("/api/department-transfers/incoming", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const requests = await withTransaction(deps.db, async (tx) => {
+        const receiver = await actor(tx, deps, session);
+        return VENUE_SERVICE.listIncomingDepartmentTransfers(tx, deps.cfg, receiver);
+      });
+      return c.json({ count: requests.length, requests });
+    }),
+  );
+  app.get("/api/working-orders/:id/department-transfers", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const tabId = uuid(c.req.param("id"), "tabId");
+      const requests = await withTransaction(deps.db, async (tx) => {
+        const sender = await actor(tx, deps, session);
+        const rows = await VENUE_SERVICE.listSentDepartmentTransfers(tx, deps.cfg, tabId, sender);
+        const context = await VENUE_SERVICE.getOrderContext(tx, deps.cfg, tabId);
+        if (context.departmentId === sender.departmentId)
+          await checkZones(tx, deps.cfg, sender, [{ orderId: tabId }]);
+        // Resolution remains visible to the source after responsibility moves; it exposes no tab contents.
+        return rows;
+      });
+      return c.json({ requests });
+    }),
+  );
+  app.get("/api/department-transfers/:id", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const requestId = uuid(c.req.param("id"), "requestId");
+      const detail = await withTransaction(deps.db, async (tx) => {
+        const receiver = await actor(tx, deps, session);
+        const request = await VENUE_SERVICE.readIncomingDepartmentTransfer(
+          tx,
+          deps.cfg,
+          requestId,
+          receiver,
+        );
+        const [tab] = await tx
+          .select({
+            id: workingOrders.id,
+            revision: workingOrders.revision,
+            status: workingOrders.status,
+            label: workingOrders.label,
+            orderNumber: workingOrders.orderNumber,
+            deliveryTableId: workingOrders.deliveryTableId,
+          })
+          .from(workingOrders)
+          .where(
+            and(
+              eq(workingOrders.id, request.tabId),
+              eq(workingOrders.locationId, deps.cfg.locationId),
+            ),
+          );
+        if (tab === undefined || (tab.status !== "open" && tab.status !== "placed"))
+          throw new AppError("department_transfer.tab_unavailable", { tabId: request.tabId });
+        const storedLines = await tx
+          .select({
+            id: workingOrderLines.id,
+            name: workingOrderLines.name,
+            variantName: workingOrderLines.variantName,
+            quantity: workingOrderLines.quantity,
+            unitPriceGross: workingOrderLines.unitPriceGross,
+            note: workingOrderLines.note,
+            parentLineId: workingOrderLines.parentLineId,
+          })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, request.tabId))
+          .orderBy(asc(workingOrderLines.lineNo));
+        const lines = storedLines.map((line) => ({
+          ...line,
+          quantity: thousandthsToDecimal(line.quantity),
+          unitPriceGross: centsToDecimal(line.unitPriceGross),
+        }));
+        const outstandingWork = await tx
+          .select({
+            id: ticketItems.id,
+            lineId: ticketItems.workingOrderLineId,
+            stationId: ticketItems.stationId,
+            state: ticketItems.state,
+            note: ticketItems.note,
+            firedAt: ticketItems.firedAt,
+            awayAt: ticketItems.awayAt,
+            courseId: ticketItems.courseId,
+          })
+          .from(ticketItems)
+          .where(
+            and(
+              eq(ticketItems.workingOrderId, request.tabId),
+              eq(ticketItems.madeHere, false),
+              isNull(ticketItems.awayAt),
+            ),
+          )
+          .orderBy(asc(ticketItems.queuedAt), asc(ticketItems.id));
+        return { request, tab, lines, outstandingWork };
+      });
+      return c.json(detail);
+    }),
+  );
   app.post("/api/working-orders/:id/department-transfers", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });

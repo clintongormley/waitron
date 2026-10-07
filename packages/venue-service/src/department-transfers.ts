@@ -421,3 +421,81 @@ export async function declineDepartmentTransfer(
   if (!reason.trim()) throw new AppError("department_transfer.reason_required", {});
   return resolveRequest(tx, requestId, receiver, { status: "declined", reason: reason.trim() });
 }
+
+export async function listDepartmentTransferDestinations(
+  tx: Transaction,
+  cfg: VenueScope,
+  sender: DepartmentTransferActor,
+): Promise<{ id: string; name: string }[]> {
+  await activeDepartment(tx, cfg, sender.departmentId);
+  const rows = await tx
+    .select({
+      id: departments.id,
+      name: departments.name,
+      profileId: departmentTransferDesks.receivingProfileId,
+    })
+    .from(departmentTransferDestinations)
+    .innerJoin(
+      departments,
+      eq(departments.id, departmentTransferDestinations.destinationDepartmentId),
+    )
+    .innerJoin(departmentTransferDesks, eq(departmentTransferDesks.departmentId, departments.id))
+    .where(
+      and(
+        eq(departmentTransferDestinations.sourceDepartmentId, sender.departmentId),
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+      ),
+    )
+    .orderBy(asc(departments.name), asc(departments.id));
+  const choices: { id: string; name: string }[] = [];
+  for (const row of rows)
+    if (await usableProfile(tx, cfg, row.id, row.profileId))
+      choices.push({ id: row.id, name: row.name });
+  return choices;
+}
+
+export async function listIncomingDepartmentTransfers(
+  tx: Transaction,
+  cfg: VenueScope,
+  receiver: DepartmentTransferReceiver,
+) {
+  await checkReceiver(tx, cfg, receiver.departmentId, receiver);
+  return listDepartmentTransfers(tx, cfg, receiver.departmentId);
+}
+
+export async function readIncomingDepartmentTransfer(
+  tx: Transaction,
+  cfg: VenueScope,
+  requestId: string,
+  receiver: DepartmentTransferReceiver,
+) {
+  const request = await pendingRequest(tx, cfg, requestId);
+  await checkReceiver(tx, cfg, request.destinationDepartmentId, receiver);
+  return request;
+}
+
+export async function listSentDepartmentTransfers(
+  tx: Transaction,
+  cfg: VenueScope,
+  tabId: string,
+  sender: DepartmentTransferActor,
+) {
+  await assertDepartment(tx, cfg, sender.departmentId);
+  const rows = await tx
+    .select()
+    .from(departmentTransferRequests)
+    .where(
+      and(
+        eq(departmentTransferRequests.tabId, tabId),
+        eq(departmentTransferRequests.sourceDepartmentId, sender.departmentId),
+      ),
+    )
+    .orderBy(asc(departmentTransferRequests.createdAt), asc(departmentTransferRequests.id));
+  if (rows.length === 0) {
+    const context = await getOrderServiceContext(tx, cfg, tabId);
+    if (context.departmentId !== sender.departmentId)
+      throw new AppError("department_transfer.not_allowed", {});
+  }
+  return rows;
+}

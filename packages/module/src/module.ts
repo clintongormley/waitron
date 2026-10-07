@@ -352,6 +352,28 @@ export interface DepartmentTransferReceiver extends DepartmentTransferActor {
 
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
+  listDepartmentTransferDestinations(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    sender: DepartmentTransferActor,
+  ): Promise<{ id: string; name: string }[]>;
+  listIncomingDepartmentTransfers(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    receiver: DepartmentTransferReceiver,
+  ): Promise<DepartmentTransfer[]>;
+  readIncomingDepartmentTransfer(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    requestId: string,
+    receiver: DepartmentTransferReceiver,
+  ): Promise<DepartmentTransfer>;
+  listSentDepartmentTransfers(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    tabId: string,
+    sender: DepartmentTransferActor,
+  ): Promise<DepartmentTransfer[]>;
   requestDepartmentTransfer(
     tx: Transaction,
     cfg: { locationId: LocationId },
