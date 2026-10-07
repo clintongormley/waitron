@@ -9,7 +9,11 @@ import { INSTALLED_DEMO_SALES_DAYS, demoSeedLocale, seedInstalledDemo } from "./
 import { DEMO_DATA_SETS } from "../scripts/demo-seed/data-set.js";
 
 function venueWithLocales(invoiceLocales: string[], country = "ES"): VenueRequest {
-  return { country, location: { invoiceLocales } } as unknown as VenueRequest;
+  return {
+    country,
+    location: { invoiceLocales },
+    admin: { locale: invoiceLocales[0] },
+  } as unknown as VenueRequest;
 }
 
 const RESULT = {
@@ -26,9 +30,28 @@ describe("demoSeedLocale", () => {
     [["en-GB", "es-ES"], "en"],
     [["ca-ES"], "en"],
     [[], "en"],
-  ])("reads invoice locales %j as the %s sample restaurant", (locales, expected) => {
-    expect(demoSeedLocale(venueWithLocales(locales))).toBe(expected);
-  });
+  ])(
+    "reads the admin's language, here the first of %j, as the %s sample restaurant",
+    (locales, expected) => {
+      expect(demoSeedLocale(venueWithLocales(locales))).toBe(expected);
+    },
+  );
+
+  it.each([
+    [["ca-ES"], "es-ES", "es"],
+    [["es-ES"], "en-GB", "en"],
+    [["es-ES"], null, "en"],
+  ])(
+    "with receipts in %j, an admin in %s seeds the %s sample restaurant",
+    (invoiceLocales, adminLocale, expected) => {
+      const venue = {
+        country: "ES",
+        location: { invoiceLocales },
+        admin: { locale: adminLocale },
+      } as unknown as VenueRequest;
+      expect(demoSeedLocale(venue)).toBe(expected);
+    },
+  );
 });
 
 describe("seedInstalledDemo", () => {

@@ -1,7 +1,8 @@
 // Sales are seeded after the main transaction commits, because each sale opens its own transaction
 // and reads the committed products.
 
-import { withTransaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import type { CountryDemoIdentity } from "@waitron/country";
 import { createPrinter } from "@waitron/printing";
@@ -48,7 +49,7 @@ export async function seedDemoRestaurant(
   const { locationId } = venue;
   demoSeedEnvironment(process.env);
 
-  const products = await withTransaction(db, async (tx) => {
+  const { products, invoiceLocale } = await withTransaction(db, async (tx) => {
     const { productsByImage, menuIds, stationIds } = await seedCatalogues(tx, {
       locationId,
       locale,
@@ -77,7 +78,14 @@ export async function seedDemoRestaurant(
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "demo-seed");
     }
-    return (await listAvailableProducts(tx, locationId)).products;
+    const [location] = await tx
+      .select({ invoiceLocales: locations.invoiceLocales })
+      .from(locations)
+      .where(eq(locations.id, locationId));
+    return {
+      products: (await listAvailableProducts(tx, locationId)).products,
+      invoiceLocale: location!.invoiceLocales[0]!,
+    };
   });
 
   const salesProducts: SeedSalesProduct[] = products.map((p) => ({
@@ -93,7 +101,7 @@ export async function seedDemoRestaurant(
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
     },
-    locale,
+    invoiceLocale,
     days: salesDays,
     products: salesProducts,
   });

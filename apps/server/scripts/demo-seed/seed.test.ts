@@ -624,6 +624,43 @@ describe("seedDemoRestaurant", () => {
     },
   );
 
+  it("writes a Barcelona demo's practice sales in its Catalan receipt language, whatever the staff language", async () => {
+    const venue = await createDemoVenueProvisioner(() => suite.db, {
+      nifBase: 92_000_000,
+      invoiceLocale: "ca-ES",
+      nifFormat: "calculated",
+      province: "Barcelona",
+      postalCode: "08001",
+      city: "Barcelona",
+    })();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: "es",
+      salesDays: 3,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
+    });
+
+    const { rows } = await suite.db.execute<{ descriptions: string }>(
+      sql`select descriptions from sale_lines`,
+    );
+    const { restaurant, deli, lunch } = CASA_DELGADO_ES.menus;
+    const products = [restaurant, deli, lunch].flatMap((menu) =>
+      menu.categories.flatMap((category) => category.products),
+    );
+    const catalan = new Set(products.map((product) => product.customerName.ca));
+    const spanish = new Set(products.map((product) => product.customerName.es));
+    const stored = rows.map((row) => JSON.parse(row.descriptions) as Record<string, string>);
+
+    expect(stored.length).toBeGreaterThan(0);
+    for (const descriptions of stored) {
+      expect(Object.keys(descriptions)).toEqual(["ca-ES"]);
+      expect(catalan.has(descriptions["ca-ES"]!)).toBe(true);
+    }
+    // Some dishes share a name in both languages; at least one sold line must not.
+    expect(stored.some((descriptions) => !spanish.has(descriptions["ca-ES"]!))).toBe(true);
+  });
+
   it("seeds a Madrid demo in English staff names under the area's Spanish default", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {

@@ -40,7 +40,6 @@ import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
 import type { DeploymentEnvironment } from "../../src/config.js";
 import "../../src/errors.js";
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 /** `seriesId` is the standard series, the first of `applyVenue`'s `seriesIds`. */
 export interface SeedSalesVenue {
@@ -67,7 +66,8 @@ export interface BackDatingClock {
 
 export interface SeedSalesInput {
   venue: SeedSalesVenue;
-  locale: SeedLocale;
+  /** The full receipt-language tag (`ca-ES`) the sales are written in. */
+  invoiceLocale: string;
   /** How many trailing days to fill. `0` writes nothing and returns `{ count: 0 }`. */
   days: number;
   /** The pool of items sales are drawn from — must be non-empty when `days > 0`. */
@@ -153,7 +153,7 @@ export function demoSeedEnvironment(env: NodeJS.ProcessEnv): DeploymentEnvironme
 /** Returns how many sales were recorded. */
 export async function seedSales(
   db: Database,
-  { venue, locale, days, products, clock }: SeedSalesInput,
+  { venue, invoiceLocale, days, products, clock }: SeedSalesInput,
 ): Promise<{ count: number }> {
   const environment = demoSeedEnvironment(process.env);
   if (days <= 0) {
@@ -162,9 +162,6 @@ export async function seedSales(
   if (products.length === 0) {
     throw new Error("seedSales: products must be non-empty when days > 0");
   }
-
-  // A filed sale takes the FULL tag (`es-ES`), not the bare content locale.
-  const invoiceLocale = SEED_INVOICE_LOCALE[locale];
 
   const backDating = clock ?? backDatingClock();
   const backend = new VerifactuBackend({

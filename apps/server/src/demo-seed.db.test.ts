@@ -8,7 +8,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { readContentLanguages } from "@waitron/catalogue";
 import { getCountryPack } from "@waitron/country-packs";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -74,6 +76,60 @@ it("provisions Spain's demo business and files its practice sales under the demo
     expect(departments.map((d) => d.trading_name)).toEqual(["Bar Casa Delgado", "Deli Delgado"]);
     expect(sales[0]!.n).toBeGreaterThan(0);
     expect(records).toEqual([{ issuer: "B00000000", n: sales[0]!.n }]);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+it("names a Barcelona demo's dishes in its Spanish-speaking admin's language, with Catalan the content default", async () => {
+  const identity = getCountryPack("ES")!.demo!;
+  const venue: VenueRequest = {
+    country: "ES",
+    taxId: identity.taxId,
+    legalName: identity.legalName,
+    location: {
+      name: identity.locationName,
+      fiscalTerritory: "ES-common",
+      invoiceLocales: ["ca-ES"],
+      operationDescription: "Venda a l'establiment",
+      addressLine1: "Carrer Major 1",
+      addressLine2: null,
+      postalCode: "08001",
+      city: "Barcelona",
+      province: "Barcelona",
+      timeZone: "Europe/Madrid",
+      dayCutover: "04:00",
+    },
+    seriesCode: "FS",
+    rectificativeSeriesCode: "FR",
+    admin: {
+      displayName: "Administradora",
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword("dashPass123"),
+      email: "owner@example.test",
+      locale: "es-ES",
+    },
+  };
+  const stateDir = await mkdtemp(join(tmpdir(), "waitron-demo-seed-"));
+  try {
+    const result = await provisionVenue(
+      {
+        ownerDb: suite.db,
+        moduleConfig: venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "ES-common"),
+        database: "venue",
+        stateDir,
+      },
+      { environment: "preproduction", venue },
+    );
+
+    await seedInstalledDemo(suite.db, result, venue);
+
+    const { rows: products } = await suite.db.execute<{ name: string }>(
+      sql`select name from products where name in ('Ensalada mixta', 'Mixed salad')`,
+    );
+    const languages = await withTransaction(suite.db, (tx) => readContentLanguages(tx, "es"));
+    expect(products.map((p) => p.name)).toEqual(["Ensalada mixta"]);
+    expect(languages.defaultLanguage).toBe("ca");
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }
