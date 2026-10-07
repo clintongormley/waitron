@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
+import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { adjustments } from "@waitron/adjustments";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
@@ -13,6 +15,8 @@ import {
   devices,
   drawerOpens,
   invoiceSeries,
+  locations,
+  pagePrinters,
   nodes,
   parties,
   printJobs,
@@ -20,6 +24,7 @@ import {
   saleLines,
   sales,
   tenders,
+  tenantReceipts,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -99,6 +104,14 @@ const suite = useVenueDb({
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
+let invoiceMailMode: { onboardingIntent: "live" | "demo" | "prepare"; devMode: boolean } = {
+  onboardingIntent: "live",
+  devMode: false,
+};
+const invoiceMailRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
 
 interface Venue {
   cfg: OriginConfig;
@@ -317,6 +330,9 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       secureCookies: false,
       venueLocale: LOCALE,
       cardProvider: new SimulatorPaymentProvider(db),
+      invoiceEmailAvailable: async () =>
+        (await resolveInvoiceEmailDelivery(db, invoiceMailRing, invoiceMailMode)).mode !==
+        "unconfigured",
     },
     quiet,
   );
@@ -1706,6 +1722,303 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       expect(await paymentRows(billId)).toEqual([]);
     },
   );
+
+  it("forwards a printed-original delivery choice through the invoice-choice route", async () => {
+    const billId = await tabWith("Chuletón");
+    const [before] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: before!.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+      delivery: { medium: "receipt" },
+    });
+    expect(saved).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
+    const [after] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(after!.invoiceDelivery).toEqual({ medium: "receipt" });
+    const read = await venue.app.request(`/api/parties/${after!.partyId}/bills`, {
+      headers: { cookie: venue.cookie },
+    });
+    expect(read.status).toBe(200);
+    expect(await read.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ workingOrderId: billId, invoiceDelivery: { medium: "receipt" } }),
+      ]),
+    );
+  });
+
+  it("refuses an explicitly null delivery choice over HTTP without advancing the bill", async () => {
+    const billId = await tabWith("Chuletón");
+    const [before] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(
+      await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+        revision: before!.revision,
+        invoiceType: "F2",
+        recipient: null,
+        delivery: null,
+      }),
+    ).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "delivery" } },
+    });
+    const [after] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(after).toEqual(before);
+  });
+
+  it.each(["active", "disabled", "other-location", "missing"] as const)(
+    "stages only the local active A4 printer over HTTP: %s",
+    async (kind) => {
+      const billId = await tabWith("Chuletón");
+      const [before] = await inTx((tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      let printerLocation = venue.cfg.locationId as string;
+      if (kind === "other-location") {
+        const [other] = await inTx((tx) =>
+          tx
+            .insert(locations)
+            .values({
+              name: "Other invoice location",
+              invoiceLocales: ["es-ES"],
+              operationDescription: "Restaurant",
+            })
+            .returning(),
+        );
+        printerLocation = other!.id;
+      }
+      const pagePrinterId = randomUUID();
+      if (kind !== "missing")
+        await inTx((tx) =>
+          tx.insert(pagePrinters).values({
+            id: pagePrinterId,
+            locationId: printerLocation,
+            name: "Office",
+            host: pagePrinterId,
+            port: 631,
+            resourcePath: "/ipp/print",
+            documentFormat: "application/pdf",
+            supportedFormats: ["application/pdf"],
+            media: "iso_a4_210x297mm",
+            resolutionDpi: 300,
+            active: kind !== "disabled",
+          }),
+        );
+      const response = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+        revision: before!.revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+        delivery: { medium: "a4", pagePrinterId },
+      });
+      const [saved] = await inTx((tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      if (kind === "active") {
+        expect(response).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
+        expect(saved!.invoiceDelivery).toEqual({ medium: "a4", pagePrinterId });
+      } else {
+        expect(response).toEqual({
+          status: 409,
+          json: { code: "invoice_delivery.printer_invalid", params: {} },
+        });
+        expect(saved).toEqual(before);
+      }
+    },
+  );
+
+  describe("staged original delivery over HTTP", () => {
+    beforeEach(() => {
+      invoiceMailMode = { onboardingIntent: "live", devMode: false };
+    });
+    afterEach(() => {
+      invoiceMailMode = { onboardingIntent: "live", devMode: false };
+      vi.restoreAllMocks();
+    });
+
+    async function withContact(body: () => Promise<void>) {
+      const [original] = await inTx((tx) => tx.select().from(tenantReceipts));
+      try {
+        await inTx((tx) =>
+          tx
+            .insert(tenantReceipts)
+            .values({ receipt: { email: "venue@example.test", phone: "910000000" } })
+            .onConflictDoUpdate({
+              target: tenantReceipts.id,
+              set: { receipt: { email: "venue@example.test", phone: "910000000" } },
+            }),
+        );
+        await body();
+      } finally {
+        await inTx((tx) => tx.delete(tenantReceipts));
+        if (original !== undefined) await inTx((tx) => tx.insert(tenantReceipts).values(original));
+      }
+    }
+
+    function emailChoice(revision: number) {
+      return {
+        revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+        delivery: {
+          medium: "email",
+          recipient: " customer@example.test ",
+          consent: {
+            accepted: true,
+            statementVersion: "invoice-email-v1",
+            language: "es-ES",
+            contactEmail: "venue@example.test",
+            contactPhone: "910000000",
+            personId: "forged",
+            recordedAt: "1900-01-01",
+          },
+        },
+        emailAvailable: true,
+        personId: "forged",
+        now: "1900-01-01",
+      };
+    }
+
+    it.each([
+      ["demo", false],
+      ["prepare", false],
+      ["live", true],
+    ] as const)(
+      "stages captured email in %s development=%s with authenticated staff and server time",
+      async (onboardingIntent, devMode) => {
+        invoiceMailMode = { onboardingIntent, devMode };
+        await withContact(async () => {
+          const instant = new Date("2026-10-07T18:00:00Z");
+          vi.spyOn(clock, "now").mockReturnValue({
+            instant,
+            offsetMinutes: 0,
+            confident: true,
+            confidence: "anchored",
+            anchorAgeSeconds: 0,
+          });
+          const billId = await tabWith("Chuletón");
+          const [before] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(
+            await request(
+              "PUT",
+              `/api/working-orders/${billId}/invoice-choice`,
+              emailChoice(before!.revision),
+            ),
+          ).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
+          const [after] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(after!.invoiceDelivery).toEqual({
+            medium: "email",
+            recipient: "customer@example.test",
+            consent: {
+              statementVersion: "invoice-email-v1",
+              language: "es-ES",
+              contactEmail: "venue@example.test",
+              contactPhone: "910000000",
+              personId: venue.staffId,
+              recordedAt: "2026-10-07T18:00:00.000Z",
+            },
+          });
+          expect(await paymentRows(billId)).toEqual([]);
+        });
+      },
+    );
+
+    it("refuses unconfigured live invoice mail despite client-forged availability", async () => {
+      await withContact(async () => {
+        const billId = await tabWith("Chuletón");
+        const [before] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        expect(
+          await request(
+            "PUT",
+            `/api/working-orders/${billId}/invoice-choice`,
+            emailChoice(before!.revision),
+          ),
+        ).toEqual({
+          status: 409,
+          json: { code: "invoice_delivery.email_unavailable", params: {} },
+        });
+        const [after] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        expect(after).toEqual(before);
+      });
+    });
+
+    it("reads current SMTP availability for each choice without restarting the API", async () => {
+      await withContact(async () => {
+        try {
+          await inTx((tx) =>
+            putCredential(tx, invoiceMailRing, {
+              purpose: "email.smtp",
+              value: { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" },
+            }),
+          );
+          const billId = await tabWith("Chuletón");
+          const [before] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(
+            await request(
+              "PUT",
+              `/api/working-orders/${billId}/invoice-choice`,
+              emailChoice(before!.revision),
+            ),
+          ).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
+          const [saved] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(saved!.invoiceDelivery).toMatchObject({
+            medium: "email",
+            recipient: "customer@example.test",
+            consent: { personId: venue.staffId },
+          });
+          await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+          expect(
+            await request(
+              "PUT",
+              `/api/working-orders/${billId}/invoice-choice`,
+              emailChoice(saved!.revision),
+            ),
+          ).toEqual({
+            status: 409,
+            json: { code: "invoice_delivery.email_unavailable", params: {} },
+          });
+          const [after] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(after).toEqual(saved);
+        } finally {
+          await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+        }
+      });
+    });
+  });
 
   it("saves a requested F1 recipient on the bill under its revision before payment", async () => {
     const billId = await tabWith("Chuletón");

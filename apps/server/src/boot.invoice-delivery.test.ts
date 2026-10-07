@@ -8,6 +8,8 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   invoiceDeliveries,
+  workingOrders,
+  tenantReceipts,
   invoiceSeries,
   locations,
   nodes,
@@ -20,9 +22,11 @@ import {
   writeMirrorConfig,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { SESSION_COOKIE } from "./till-session.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { recordSale } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -67,9 +71,9 @@ afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
 });
 
-async function fixture() {
+async function fixture(environment: "preproduction" | "production" = "preproduction") {
   await seedTenant(suite.db);
-  await stampDeployment(suite.db, "preproduction");
+  await stampDeployment(suite.db, environment);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved issuer address" });
   const [location] = await suite.db
     .insert(locations)
@@ -102,7 +106,7 @@ async function fixture() {
   const backend = fiscalSlot(enabledModules(ALL_MODULES, modules), null).makeBackend({
     db: suite.db,
     clock,
-    environment: "preproduction",
+    environment,
   });
   const sale = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, {
@@ -168,7 +172,7 @@ async function fixture() {
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_HTTP_LANDING_PORT: "0",
-    WAITRON_ENV: "preproduction",
+    WAITRON_ENV: environment,
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
     WAITRON_TILL_LOCATION_ID: location!.id,
@@ -597,4 +601,115 @@ describe("invoice email worker at trading boot", () => {
       await smtp.close();
     }
   });
+});
+
+describe("invoice-choice email context at trading boot", () => {
+  it.each([
+    ["demo", false, false, 200],
+    ["prepare", false, false, 200],
+    ["live", true, false, 200],
+    ["live", false, true, 200],
+    ["live", false, false, 409],
+  ] as const)(
+    "stages intent=%s development=%s SMTP=%s with status %s",
+    async (intent, development, configured, status) => {
+      const ctx = await fixture(intent === "live" && !development ? "production" : "preproduction");
+      const env = {
+        ...ctx.env,
+        WAITRON_MANAGEMENT_RP_ID: "localhost",
+        WAITRON_MANAGEMENT_ORIGIN: "http://localhost:5191",
+        WAITRON_ONBOARDING_INTENT: intent,
+        WAITRON_ENV: development ? "dev" : ctx.env.WAITRON_ENV,
+      };
+      const [person] = await suite.db
+        .insert(persons)
+        .values({ displayName: "Invoice operator", pinHash: hashPin("5555"), role: "staff" })
+        .returning();
+      const device = await seedDevice(suite.db, {
+        locationId: ctx.location,
+        capabilities: ["take-orders"],
+      });
+      const session = await withTransaction(suite.db, (tx) =>
+        loginWithPin(tx, { deviceId: device.deviceId, personId: person!.id, pin: "5555" }),
+      );
+      const [order] = await suite.db
+        .insert(workingOrders)
+        .values({ source: "dashboard", nodeId: ctx.node, locationId: ctx.location, orderNumber: 1 })
+        .returning();
+      await suite.db.insert(tenantReceipts).values({ receipt: { email: "venue@example.test" } });
+      if (configured)
+        await withTransaction(suite.db, (tx) =>
+          putCredential(tx, loadKeyRing(env), {
+            purpose: "email.smtp",
+            value: { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" },
+          }),
+        );
+      let server: StartedServer | undefined;
+      try {
+        server = await startServer(env);
+        await vi.waitFor(async () =>
+          expect((await fetch(`http://127.0.0.1:${env.WAITRON_HTTP_PORT}/health`)).status).toBe(
+            200,
+          ),
+        );
+        const response = await fetch(
+          `http://127.0.0.1:${env.WAITRON_HTTP_PORT}/api/working-orders/${order!.id}/invoice-choice`,
+          {
+            method: "PUT",
+            headers: {
+              "content-type": "application/json",
+              cookie: `${SESSION_COOKIE}=${session.token}`,
+            },
+            body: JSON.stringify({
+              revision: 0,
+              invoiceType: "F1",
+              recipient: {
+                taxId: "12345678Z",
+                legalName: "Customer",
+                address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+                countryCode: "ES",
+              },
+              delivery: {
+                medium: "email",
+                recipient: "customer@example.test",
+                consent: {
+                  accepted: true,
+                  statementVersion: "invoice-email-v1",
+                  language: "es-ES",
+                  contactEmail: "venue@example.test",
+                  personId: "forged",
+                  recordedAt: "1900-01-01",
+                },
+              },
+              emailAvailable: true,
+            }),
+          },
+        );
+        expect(response.status).toBe(status);
+        const [saved] = await suite.db
+          .select()
+          .from(workingOrders)
+          .where(eq(workingOrders.id, order!.id));
+        if (status === 200) {
+          expect(await response.json()).toEqual({ revision: 1 });
+          expect(saved!.invoiceDelivery).toMatchObject({
+            medium: "email",
+            recipient: "customer@example.test",
+            consent: { personId: person!.id, contactEmail: "venue@example.test" },
+          });
+          expect(
+            saved!.invoiceDelivery?.medium === "email" &&
+              Date.parse(saved.invoiceDelivery.consent.recordedAt),
+          ).toBeGreaterThan(Date.now() - 60_000);
+        } else {
+          expect(await response.json()).toEqual({
+            error: { code: "invoice_delivery.email_unavailable", params: {} },
+          });
+          expect(saved).toEqual(order);
+        }
+      } finally {
+        await server?.close();
+      }
+    },
+  );
 });

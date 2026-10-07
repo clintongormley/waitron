@@ -2218,10 +2218,13 @@ The bill's internal invoice-choice writer now stages receipt/email/A4 metadata u
 revision check. Email consent snapshots use server staff/time and preserve the displayed
 venue contact; stale edits, malformed choices and unavailable email are refused. A4 staging
 requires an active local page printer. The new column is included in the database's
-transition restrictions, with focused refusal and valid-revision cases. HTTP forwarding,
-server-context composition, bill read projections, issuance reservation and receipt suppression
-remain open, along with email setup/settings and the delivery UI; no Task 4
-completion claim.
+transition restrictions, with focused refusal and valid-revision cases. The HTTP invoice-choice
+route now forwards the delivery choice, stamps consent with the authenticated staff member and
+server clock, and asks the current invoice-mail resolver whether email is available. Real boot
+cases cover demo, prepare, development and live SMTP, with unconfigured live email refused.
+Bill reads return a saved delivery draft. Null choices and unavailable A4 destinations are refused
+without advancing the bill. Issuance reservation and receipt suppression remain open, along with
+email setup/settings and the delivery UI; no Task 4 completion claim.
 For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain

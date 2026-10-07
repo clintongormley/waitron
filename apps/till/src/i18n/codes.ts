@@ -163,6 +163,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the customer's invoice details and try again",
     es: "Revisa los datos de facturación del cliente e inténtalo de nuevo",
   },
+  "invoice_delivery.printer_invalid": {
+    en: "That invoice printer is unavailable. Choose another printer or ask a manager",
+    es: "Esa impresora de facturas no está disponible. Elige otra o avisa a un responsable",
+  },
+  "invoice_delivery.email_unavailable": {
+    en: "Invoice email is unavailable. Choose paper or ask a manager",
+    es: "No se puede enviar la factura por correo. Elige papel o avisa a un responsable",
+  },
   "invoice.choice_locked": {
     en: "This bill has received a payment. Its full invoice choice cannot be removed",
     es: "Esta cuenta ya ha recibido un pago. No se puede quitar la elección de factura completa",

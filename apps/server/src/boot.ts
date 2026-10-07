@@ -136,7 +136,7 @@ import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
-import { resolveEmailDelivery } from "./email-delivery.js";
+import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
@@ -1424,6 +1424,8 @@ async function bootServer(
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
+      invoiceEmailAvailable: async () =>
+        (await resolveInvoiceEmailDelivery(db, ring, config)).mode !== "unconfigured",
     },
     log,
   );
