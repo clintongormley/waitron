@@ -67,7 +67,10 @@ export interface BackDatingClock {
 
 export interface SeedSalesInput {
   venue: SeedSalesVenue;
-  /** The full receipt-language tag (`ca-ES`) the sales are written in. */
+  /**
+   * The full receipt-language tag (`ca-ES`) each line's description is stored under; a dish with no
+   * text in it falls back to the content default.
+   */
   invoiceLocale: string;
   /** How many trailing days to fill. `0` writes nothing and returns `{ count: 0 }`. */
   days: number;

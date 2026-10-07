@@ -1401,6 +1401,10 @@ that is Task 2's, built after this one.
   `apps/server/src/demo-seed.db.test.ts`; listed changes in `demo-seed.test.ts`,
   `seed-sales.test.ts` and `seed-sales.dated.test.ts`
 
+2026-10-07, as built: `seed.ts` reads the receipt language with `readReceiptLanguage`, and `seedSales`
+falls back to the venue's content default (`readContentLanguages`) where a dish has no text in the
+receipt language, as a till sale does (commit 434704160).
+
 **Interfaces:**
 - Produces:
 

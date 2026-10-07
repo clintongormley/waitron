@@ -661,7 +661,7 @@ describe("seedDemoRestaurant", () => {
     expect(stored.some((descriptions) => !spanish.has(descriptions["ca-ES"]!))).toBe(true);
   });
 
-  it("writes a Madrid demo's Catalan-receipt practice sales in the area's Spanish text, as a till sale does", async () => {
+  it("writes a Madrid demo's Catalan-receipt practice sales in the area's Spanish text", async () => {
     const venue = await createDemoVenueProvisioner(() => suite.db, {
       nifBase: 93_000_000,
       invoiceLocale: "ca-ES",

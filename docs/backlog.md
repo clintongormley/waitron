@@ -1874,7 +1874,7 @@ and the staff-facing names — is one data set, `casa-delgado-es`, which Spain's
 a demo seeds changes.
 
 **A demo's staff-facing names follow the language of the person setting it up, and its practice
-sales are written in the venue's receipt language (W109-5, Task 5 of the same plan) — DONE
+sales are stored under the venue's receipt language (W109-5, Task 5 of the same plan) — DONE
 (2026-10-07).** `demoSeedLocale` (`apps/server/src/demo-seed.ts`) reads the setup person's language
 (`admin.locale`) — Spanish when it is Spanish, English otherwise — instead of the receipt language,
 and `seedDemoRestaurant` (`apps/server/scripts/demo-seed/seed.ts`) reads the location's first
@@ -1888,9 +1888,10 @@ than an empty description. The plan's last step, Task 2 (W109-2, a country with 
 
 Seen during W109-5's look at a Barcelona demo set up in Spanish (2026-10-07), OPEN, unqueued:
 (1) practice-sale invoice numbers do not follow time order — `seedSales` fills days from today
-backwards, at random hours within each day, so FS/1 falls on today and the highest numbers on the
-oldest day (`dayIndex` loop in
-`apps/server/scripts/demo-seed/seed-sales.ts`, unchanged since #165, 2026-08-30); (2) the
+backwards, at random hours within each day, so the lowest numbers fall on the most recent day that
+has a sale (yesterday, when the seed runs before today's first sale time) and the highest on the
+oldest day (`dayIndex` loop in `apps/server/scripts/demo-seed/seed-sales.ts`, unchanged since #165,
+2026-08-30); (2) the
 dashboard's order detail dialog (Pedidos → Ver detalle) shows a quantity of one as "× 1.000",
 which a Spanish reader takes as a thousand; (3) product groups and prep stations stay English
 under Spanish staff-facing dish names (the plan's known limit). Stored practice sales cannot be

@@ -55,7 +55,7 @@ describe("demoSeedLocale", () => {
 });
 
 describe("seedInstalledDemo", () => {
-  it("seeds the provisioned venue's own ids with a month of practice sales, in its admin's staff language", async () => {
+  it("seeds the provisioned venue's own ids, a month of practice sales, and its admin's staff language", async () => {
     seedDemoRestaurant.mockResolvedValue(undefined);
     const db = {} as Database;
     const result = {
