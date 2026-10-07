@@ -1082,7 +1082,7 @@ Reset retained pre-live venues before installing core `0092`, which rebuilds bot
 
 **Department menu timetables and queued publication (A204, owner 2026-10-02; refined
 2026-10-04) — department menus and timetable (W98) DONE (#1331, 2026-10-07); queued publication
-(W99) DONE with the forward-only menu publication pull request.**
+(W99) DONE (#1358, 2026-10-07).**
 Departments own the available-menu list and the only timetable; zones override defaults within its shared periods.
 An all-day default covers gaps; normal weeks and special dates share A261's calendar. Staff may
 still order from breakfast after it stops being the default. Several future menu editions can be
