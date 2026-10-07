@@ -1366,8 +1366,8 @@ building, not changed:**
 
 Seen in A178g's LOOK, not changed and not checked against `main` before it (screenshots kept
 outside the repository): at 390px the extras list form's item table runs past the dialog's edge,
-its headings cut ("Preselecc…"); and the venue operations "Make available" dialog draws its
-"Default" checkbox as a large plain square.
+its headings cut ("Preselecc…"). (The venue operations "Make available" dialog this note also
+named was removed by W98, 2026-10-07.)
 
 **Text size after A179 (#988).** The scale is 12 / 14 / 18 / 22px (sm / md / lg / xl) in the
 system font, for the dashboard, setup and the till (owner: _"yes for now, then we can revisit

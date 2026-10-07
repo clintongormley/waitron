@@ -1095,6 +1095,9 @@ and background zone updates keep the opening's defaults. Replacement/disconnect 
 question; departed Save/Enter and refusals cannot affect the new form. Read-only removal
 confirmations remain exempt.
 
+2026-10-07: W98 removed the menu-assignment editor; menus are edited on the Menu timetable screen
+(`packages/venue-service/src/dashboard/menu-timetable-screen.ts`).
+
 The initial focused run failed 12 warning assertions and passed 12 clean/save controls. The next
 lifetime run failed the accepted-save/newer-edit case and the background-zone draft assertion.
 The two-suite venue selection passed 220 tests; a subsequent removal exemption case passed
