@@ -877,6 +877,8 @@ browser test** — most of these rules exist because a test passed while proving
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to
   every hook, so a hand-isolated fixture writes into the real repo. Run such a suite once under
   `GIT_DIR` before trusting it.
+- **A test that changes the screen's global language restores it before the next case.** Cost:
+  A284's split test changed the labels in later transfer cases; receipt: [testing-guide.md](docs/developers/testing-guide.md).
 - **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.** A module
   mock cannot replace an already-loaded browser ES module.
 - **Browser recovery tests read the native control inside a shared component.** A host's `checked`

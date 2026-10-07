@@ -3207,27 +3207,32 @@ describe("till-table-order-screen", () => {
     };
 
     it("decimal input split quantity accepts either mark and shows Spanish", async () => {
+      const locale = currentLocale();
       setLocale("es");
-      const el = await splitTwoLines();
-      const field = el.shadowRoot!.querySelector<
-        HTMLElement & { updateComplete: Promise<unknown> }
-      >('[data-split-quantity="1"]')!;
-      await field.updateComplete;
-      const native = field.shadowRoot!.querySelector("input")!;
-      expect(native.value).toBe("0,75");
-      for (const separator of [".", ","]) {
-        native.value = `0${separator}125`;
-        native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-        await el.updateComplete;
+      try {
+        const el = await splitTwoLines();
+        const field = el.shadowRoot!.querySelector<
+          HTMLElement & { updateComplete: Promise<unknown> }
+        >('[data-split-quantity="1"]')!;
         await field.updateComplete;
-        expect(native.value).toBe("0,125");
+        const native = field.shadowRoot!.querySelector("input")!;
+        expect(native.value).toBe("0,75");
+        for (const separator of [".", ","]) {
+          native.value = `0${separator}125`;
+          native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+          await el.updateComplete;
+          await field.updateComplete;
+          expect(native.value).toBe("0,125");
+        }
+        let sent: unknown;
+        el.addEventListener("split-lines", (event) => (sent = (event as CustomEvent).detail));
+        click(el, "[data-split-confirm]");
+        expect(sent).toEqual({
+          transfers: [{ lineNo: 1, quantity: "0.125" }, { lineNo: 2 }],
+        });
+      } finally {
+        setLocale(locale);
       }
-      let sent: unknown;
-      el.addEventListener("split-lines", (event) => (sent = (event as CustomEvent).detail));
-      click(el, "[data-split-confirm]");
-      expect(sent).toEqual({
-        transfers: [{ lineNo: 1, quantity: "0.125" }, { lineNo: 2 }],
-      });
     });
 
     it("split says nothing about a bad quantity until Split is pressed", async () => {
