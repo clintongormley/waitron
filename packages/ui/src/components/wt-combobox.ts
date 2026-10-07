@@ -381,7 +381,9 @@ export class WtCombobox extends LitElement {
    * multiple choice it is the chosen row while `values` is empty, and choosing it empties them. */
   @property({ type: Boolean, attribute: "show-empty-option" }) showEmptyOption = false;
   /** Reserve the width of each option's closed-trigger text (`valueLabel`, else `label`), and in a
-   * multiple choice the `countLabel` of every choosable option. Ignored with `appearance="link"`. */
+   * multiple choice one count text too: `countLabel(n)`, where n is the number of choosable options
+   * (not an action, not disabled, not the empty value), only when n is at least 2. Ignored with
+   * `appearance="link"`. */
   @property({ type: Boolean, reflect: true, attribute: "stable-width" }) stableWidth = false;
   @property({ attribute: false }) values: string[] = [];
   @property() placeholder = "";

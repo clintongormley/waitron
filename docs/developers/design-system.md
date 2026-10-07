@@ -987,11 +987,14 @@ emits `wt-sort-change`.
 Give the table a `viewKey` and it remembers its sort and filter choices in the tab's session storage
 — never the search text. It restores them once it has columns: a stored sort only if a current
 column can still sort by it — its direction is restored with that column or not at all, so the
-starting sort stands whole — and every stored filter value that is a string or a list of strings. Once its column is rendered
-with a `filter`, a stored value of the wrong shape for it (a string for a `multiple` filter, a list
-for a single-choice one, as a view saved before a filter became multi-select holds) is dropped and
-the view rewritten without it; a stored list loses only the values its column no longer offers,
-and one left empty is kept as "all" only where the column names an `initial`. A `filter` may name
+starting sort stands whole — and every stored filter value that is a string or a list of strings. Once its column is declared
+with a `filter` (a column the chooser hides included), a stored value of the wrong shape for it (a
+string for a `multiple` filter, a list for a single-choice one, as a view saved before a filter
+became multi-select holds) is dropped and the view rewritten without it. Once the column offers a
+non-empty options list, a stored list loses the values that list does not include, and a list left
+with none is removed, so the column starts again as if nothing were stored; while the column offers
+an empty list, a stored list waits unchanged, as a single choice does. A stored empty list, an
+explicit "all", is kept only where the column names an `initial`. A `filter` may name
 an `initial` option, which it starts on until a choice is made or restored, while the column's
 options include it; choosing the "all"
 option over it is then stored as a choice of its own (an empty string, or an empty list for a

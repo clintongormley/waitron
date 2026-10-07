@@ -7468,7 +7468,7 @@ test("a stored list loses the values its column stops offering once options load
   expect(storedFilters("test.multi-unoffered")).toEqual({ status: ["off"] });
 });
 
-test("a stored list emptied of unoffered values is kept as none only where the column has an initial", async () => {
+test("a stored list whose every value stops being offered is removed, so the column's initial applies again", async () => {
   sessionStorage.setItem("test.multi-emptied", JSON.stringify({ filters: { status: ["gone"] } }));
   const plain = await multiTable({ viewKey: "test.multi-emptied" });
   expect(rowKeysS(plain)).toEqual(["1", "2", "3", "4"]);
@@ -7476,8 +7476,21 @@ test("a stored list emptied of unoffered values is kept as none only where the c
   cleanup();
   sessionStorage.setItem("test.multi-emptied2", JSON.stringify({ filters: { status: ["gone"] } }));
   const initial = await multiTable({ viewKey: "test.multi-emptied2", columns: multiInitial });
+  expect(rowKeysS(initial)).toEqual(["1"]);
+  expect(storedFilters("test.multi-emptied2")).toEqual({});
+  expect(statusSelect(initial).values).toEqual(["active"]);
+});
+
+test("a stored empty list is kept as none only where the column has an initial", async () => {
+  sessionStorage.setItem("test.multi-none", JSON.stringify({ filters: { status: [] } }));
+  const plain = await multiTable({ viewKey: "test.multi-none" });
+  expect(rowKeysS(plain)).toEqual(["1", "2", "3", "4"]);
+  expect(storedFilters("test.multi-none")).toEqual({});
+  cleanup();
+  sessionStorage.setItem("test.multi-none2", JSON.stringify({ filters: { status: [] } }));
+  const initial = await multiTable({ viewKey: "test.multi-none2", columns: multiInitial });
   expect(rowKeysS(initial)).toEqual(["1", "2", "3", "4"]);
-  expect(storedFilters("test.multi-emptied2")).toEqual({ status: [] });
+  expect(storedFilters("test.multi-none2")).toEqual({ status: [] });
 });
 
 test("Clear all empties a multi-select filter, to none where the column has an initial", async () => {

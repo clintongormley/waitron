@@ -3468,6 +3468,33 @@ test("choosing the empty option of a multiple choice clears its values and repor
   expect(optionRows(el)[0]!.getAttribute("aria-selected")).toBe("false");
 });
 
+test("Enter on the highlighted empty option of a multiple choice clears its values and reports it once", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" multiple show-empty-option></wt-combobox>',
+    ANY_TAG,
+  );
+  el.values = ["vegan", "vegetarian"];
+  await el.updateComplete;
+  const received: string[][] = [];
+  el.addEventListener("wt-change", (event) =>
+    received.push((event as CustomEvent<{ values: string[] }>).detail.values),
+  );
+  await userEvent.click(fieldParts(el).trigger);
+  expect(
+    el.shadowRoot!.querySelector('[role="listbox"]')!.getAttribute("aria-multiselectable"),
+  ).toBe("true");
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  search.focus();
+  await userEvent.keyboard("{Home}");
+  expect(search.getAttribute("aria-activedescendant")).toBe(optionRows(el)[0]!.id);
+  await userEvent.keyboard("{Enter}");
+  expect(el.values).toEqual([]);
+  expect(received).toEqual([[]]);
+  expect(optionRows(el)[0]!.getAttribute("aria-selected")).toBe("true");
+  await userEvent.keyboard("{Enter}");
+  expect(received).toEqual([[]]);
+});
+
 test("stable-width on a multiple choice also reserves the count text for every choosable option", async () => {
   const el = await mountWith(
     '<wt-combobox label="Dietary tags" multiple show-empty-option stable-width></wt-combobox>',

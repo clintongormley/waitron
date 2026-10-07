@@ -1351,10 +1351,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   /** Removes every choice whose column offers options that do not include it, or whose shape (a
    * string or a list) is not its column's mode, and reports whether it changed any. A list loses
-   * only the values its column's options do not include. A chosen "all" ("" or an empty list) is
-   * kept exactly while its column names an `initial`, and removed otherwise. Any other choice whose
-   * column offers no options waits, kept and stored but not applied, until the column offers a
-   * non-empty list to judge it by. */
+   * only the values its column's options do not include, and is removed when that leaves none. A
+   * chosen "all" ("" or an empty list) is kept exactly while its column names an `initial`, and
+   * removed otherwise. Any other choice whose column offers no options waits, kept and stored but
+   * not applied, until the column offers a non-empty list to judge it by. */
   #judgeFilters(): boolean {
     const judged = Object.entries(this.filterSelections).flatMap(
       ([key, value]): [string, FilterChoice][] => {
@@ -1363,10 +1363,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
         const options = this.#offered(key);
         const offered = (choice: string) =>
           !options || options.some((option) => option.value === choice);
-        const kept = typeof value === "string" ? value : value.filter(offered);
         // The all option is kept only where it overrides an initial choice; anywhere else it is
         // what an absent choice already means.
-        if (kept.length === 0) return filter?.initial !== undefined ? [[key, kept]] : [];
+        if (value.length === 0) return filter?.initial !== undefined ? [[key, value]] : [];
+        const kept = typeof value === "string" ? value : value.filter(offered);
+        if (kept.length === 0) return [];
         return typeof kept === "string" && !offered(kept) ? [] : [[key, kept]];
       },
     );
