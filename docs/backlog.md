@@ -1008,7 +1008,7 @@ unused `units` property is gone (it closes W75's leftover).
     each time; #1366 made a dropdown redo that only when its options or wording change, which these
     three screens defeat. Next: keep their column lists between redraws when nothing they read
     changed.
-- **A343, owner 2026-10-07 — DONE (#TBD, a menu's Price overrides tab tidied):** the two summary
+- **A343, owner 2026-10-07 — DONE (#1368, a menu's Price overrides tab tidied):** the two summary
   sentences above the table are gone; the Price override column, heading and fields, starts at the
   left; a product's variants stay in the product's own order under every sort, as on Products; and
   nothing under a field changes height while its price saves. The result ("Saved …", with Undo, or
@@ -1019,7 +1019,7 @@ unused `units` property is gone (it closes W75's leftover).
   - Open (decided as built, not tested with a user): the message comes after the whole table in tab
     order, so a keyboard user cannot reach Undo from a field within its 5 seconds. Options: a
     keyboard shortcut for Undo, or a message that waits while focus stays in the field it saved.
-  - Open, seen in #TBD's screenshots on code this branch does not change (`wt-price-input`,
+  - Open, seen in #1368's screenshots on code this branch does not change (`wt-price-input`,
     `#focusField` and the placeholder line are untouched): in Spanish a range's placeholder reads
     "8.00 – 12.00" with full stops (the field's hint is written as typed, from W89, 53a76dce9a);
     a refused field is drawn about 14 px wider than the others, pushing its "?" to the right; and at
