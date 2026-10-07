@@ -2757,7 +2757,7 @@ export class TillApp extends LitElement {
   }
 
   /** A counter following its zone's default, with nothing in its basket, moves to the default its
-   * zone's latest menu-state answer named. A table's menu is never moved. */
+   * zone's latest menu-state answer named. It does not move a table's menu to follow the default. */
   #followDefault(): void {
     const menuId = this.#polledDefaults.get(this.counterServiceZoneId);
     if (menuId === undefined || menuId === null) return;
