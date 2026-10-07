@@ -1242,14 +1242,7 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
       tx.select({ id: products.id }).from(products).where(eq(products.name, "Pulpo")),
     );
     const pulpoCell = { row: { kind: "product" as const, productId: pulpo!.id }, zoneId: null };
-    await inTx(venue, (tx) =>
-      setRoutingCell(
-        tx,
-        venue.cfg,
-        { row: { kind: "product", productId: pulpo!.id }, zoneId: null },
-        { kind: "no_preparation" },
-      ),
-    );
+    await inTx(venue, (tx) => setRoutingCell(tx, venue.cfg, pulpoCell, { kind: "no_preparation" }));
     try {
       await inTx(venue, (tx) =>
         addTabRound(tx, venue.cfg, party.tabId, [{ ...dish("Pulpo"), hold: true }]),

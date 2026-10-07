@@ -247,8 +247,7 @@ export type ProductLine = {
 };
 
 /** Open a working order in the counter zone, selling each line through the zone's offer for its
- *  product. Call once the suite's products, stations and extras are final: the offers' routes mirror
- *  the active claim or default station each product would have taken. */
+ *  product. Call once the suite's products, stations and extras are final. */
 export async function createOfferedOrder(
   tx: Transaction,
   cfg: OriginConfig,

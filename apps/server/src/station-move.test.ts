@@ -448,7 +448,7 @@ describe("release", () => {
 
   it("prints FIRE for work kept at its station and From for work rerouted in the same group", async () => {
     const at = new Date("2026-10-02T18:45:00.000Z");
-    const routeId = await inTx(venue, async (tx) => {
+    const cell = await inTx(venue, async (tx) => {
       await setStationToday(tx, venue.cfg, bar, null, at);
       await setStationToday(tx, venue.cfg, grill, null, at);
       await writePrintHeldWork(tx, true);
@@ -517,7 +517,7 @@ describe("release", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await clearRoutingCell(tx, venue.cfg, routeId);
+        await clearRoutingCell(tx, venue.cfg, cell);
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
@@ -720,7 +720,7 @@ describe("release", () => {
 
   it("keeps held work at an open station after the rules change", async () => {
     const group = await heldDish("Vino");
-    const routeId = await inTx(venue, (tx) =>
+    const cell = await inTx(venue, (tx) =>
       routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill }),
     );
     try {
@@ -730,7 +730,7 @@ describe("release", () => {
       );
       expect(item!.stationId).toBe(bar);
     } finally {
-      await inTx(venue, (tx) => clearRoutingCell(tx, venue.cfg, routeId));
+      await inTx(venue, (tx) => clearRoutingCell(tx, venue.cfg, cell));
     }
   });
 
@@ -738,7 +738,7 @@ describe("release", () => {
     const group = await heldDish("Vino");
     const at = new Date("2026-10-02T18:45:00.000Z");
     await handleOpenReleaseAlerts(at);
-    const routeId = await inTx(venue, async (tx) => {
+    const cell = await inTx(venue, async (tx) => {
       const id = await routeProduct(tx, venue.productId("Vino"), { kind: "no_preparation" });
       await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
       await tx
@@ -768,7 +768,7 @@ describe("release", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await clearRoutingCell(tx, venue.cfg, routeId);
+        await clearRoutingCell(tx, venue.cfg, cell);
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
@@ -823,7 +823,7 @@ describe("release", () => {
   });
 
   it("leaves a made-here drink untouched beside a held dish that reroutes", async () => {
-    const { deviceId, routeId, watcherPrinter } = await inTx(venue, async (tx) => {
+    const { deviceId, cell, watcherPrinter } = await inTx(venue, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
         .values({ name: `Bar till ${randomUUID()}`, formFactor: "till", capabilities: [] })
@@ -839,7 +839,7 @@ describe("release", () => {
         .returning({ id: devices.id });
       await tx.insert(deviceMadeHereStations).values({ deviceId: device!.id, stationId: bar });
       await setStationToday(tx, venue.cfg, grill, null, new Date("2026-10-02T18:45:00.000Z"));
-      const routeId = await routeProduct(tx, venue.productId("Vino"), {
+      const cell = await routeProduct(tx, venue.productId("Vino"), {
         kind: "station",
         stationId: grill,
       });
@@ -862,7 +862,7 @@ describe("release", () => {
       );
       await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
       await writePrintHeldWork(tx, true);
-      return { deviceId: device!.id, routeId, watcherPrinter: printer.id };
+      return { deviceId: device!.id, cell, watcherPrinter: printer.id };
     });
     const tableId = await venue.table(`M-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
@@ -937,7 +937,7 @@ describe("release", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await clearRoutingCell(tx, venue.cfg, routeId);
+        await clearRoutingCell(tx, venue.cfg, cell);
         await setStationFallback(tx, venue.cfg, grill, null);
       });
     }
@@ -1263,7 +1263,7 @@ describe("moveDishesToStation", () => {
       }
       return ids;
     });
-    const routeId = await inTx(venue, async (tx) => {
+    const cell = await inTx(venue, async (tx) => {
       await setStationToday(tx, venue.cfg, grill, null, new Date());
       return routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill });
     });
@@ -1325,7 +1325,7 @@ describe("moveDishesToStation", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await clearRoutingCell(tx, venue.cfg, routeId);
+        await clearRoutingCell(tx, venue.cfg, cell);
         await setStationFallback(tx, venue.cfg, bar, null);
         await tx
           .update(kitchenStations)

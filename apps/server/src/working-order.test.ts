@@ -8680,7 +8680,7 @@ describe("a variant is sold as the product it is", () => {
       const copas = await createStation(tx, cfg, { name: "Copas" });
       await claimFolderFor(tx, cfg, wine.vinosId, barra.id);
       await claimFolderFor(tx, cfg, wine.copasId, copas.id);
-      // Both lines name variants; each takes its product's folder, so Copas's claim takes neither.
+      // Both lines name variants; each takes its product's category cell, so Copas's cell takes neither.
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
@@ -8731,10 +8731,9 @@ describe("a variant is sold as the product it is", () => {
     const orderId = randomUUID();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
-      const barra = await createStation(tx, cfg, { name: "Barra", isDefault: true });
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const barra = await createStation(tx, cfg, { name: "Barra" });
       const terraza = await createStation(tx, cfg, { name: "Terraza" });
-      // The zoned cell names Wine 175's stored category, which no variant reads, so both variants
-      // take the parent's product cell.
       await insertRoute(tx, cfg, { zoneId, categoryId: wine.copasId, stationId: terraza.id });
       await insertRoute(tx, cfg, { productId: wine.parentId, stationId: barra.id });
       await createOpenOrder(
