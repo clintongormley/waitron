@@ -238,6 +238,20 @@ has not been wired to this helper; no claim that every issuance path has been in
 SMTP setup/settings, office registration/transport, delivery UI and final integration
 remain. This does not complete Tasks 2 or 4.
 
+**2026-10-07 unpaid-issuance checkpoint.** `issueUnpaidInvoice` now calls the same
+saved-choice reservation helper after its existing sale/header/label writes, within the
+caller's transaction. Its public F1 refusal remains before selection and issuance. Eight
+new database cases exercise email/A4 consent and issuer attribution, accepted A4 disablement,
+rollback, paper/absent choices and stale F2 drafts, plus the actual F1 refusal for email/A4.
+Only invoice selection is replaced for synthetic F1 fixtures; the gate, database and core
+invoice writer are real. The focused unpaid/collection/bill/receipt/cancellation run passed
+316 cases, and the unedited golden/immutability suites passed 20. In an independently installed
+candidate, deleting the reservation hook failed three cases beside five passing controls;
+deleting the F1 gate failed two beside six, and deleting the shared full-invoice check failed
+the stale-F2 case beside seven. Restoring the candidate passed all eight. This closes the
+internal unpaid hook, not Tasks 2 or 4; SMTP setup/settings, office registration/transport,
+delivery UI, image/box measurements and physical checks remain.
+
 ## 3. Set up email for a live venue, without a terminal
 
 **Inspect/change:** `apps/setup/src/setup-app.ts` (venue advances to certificate or review at `:807`; `apps/setup/src/screens/cert-screen.ts:276` advances to fiscal test, and `fiscal-test-screen.ts:66` to review), a new Email screen beside those screens, `apps/setup/src/api/client.ts`, `apps/server/src/setup-api.ts` and `setup-operation.ts`, `apps/server/src/email-delivery.ts`, `packages/credentials/src/purposes.ts` (read only: `email.smtp` keeps its `url` and `from` fields), a settings card on `apps/dashboard/src/screens/email-screen.ts` and its server route, the setup and dashboard translations. Keep the existing CLI path in Task 0.
