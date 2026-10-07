@@ -2372,21 +2372,57 @@ const clashPrice = {
     },
   ],
 } as unknown as MenuPriceRow["combined"]["price"];
-function clashRow(source = lager): MenuPriceRow {
-  return { ...source, combined: { ...source.combined, price: clashPrice } };
+function clashRow(source = lager, price = clashPrice): MenuPriceRow {
+  return { ...source, combined: { ...source.combined, price } };
 }
 /** Lemonade at its own 2.50, its small size's sources disagreeing at size level. */
-function variantClashRow(): MenuPriceRow {
+function variantClashRow(price = clashPrice): MenuPriceRow {
   return {
     ...lemonade,
     combined: {
       ...lemonade.combined,
       variants: lemonade.combined.variants.map((v, at) =>
-        at === 0 ? { ...v, price: { ...clashPrice, level: "size" } } : v,
+        at === 0 ? { ...v, price: { ...price, level: "size" } } : v,
       ),
     },
   } as MenuPriceRow;
 }
+/** `clashPrice` with its other menu renamed. */
+function clashPriceIn(menuName: string): MenuPriceRow["combined"]["price"] {
+  return {
+    state: "clash",
+    candidates: [
+      { place: { kind: "own_sections" }, value: "3.00", source: { kind: "product" } },
+      {
+        place: { kind: "menu", menuId: "drinks", menuName },
+        value: "3.50",
+        source: { ...drinksSource, menuName },
+      },
+    ],
+  } as unknown as MenuPriceRow["combined"]["price"];
+}
+const clashSentences = {
+  "en-GB": {
+    prices: "Price set to €3.00 in this menu's sections, €3.50 in Drinks.",
+    sizes: "Variant prices disagree. Small: €3.00 in this menu's sections, €3.50 in Drinks.",
+    undecided: "Price set to €3.00 in this menu's sections, no single price in Drinks.",
+  },
+  "es-ES": {
+    prices: "Precio fijado: 3,00 € en las secciones de esta carta, 3,50 € en Drinks.",
+    sizes:
+      "Los precios de las variantes discrepan. Small: 3,00 € en las secciones de esta carta, 3,50 € en Drinks.",
+    undecided:
+      "Precio fijado: 3,00 € en las secciones de esta carta, sin un precio único en Drinks.",
+  },
+} as const;
+const undecidedPrice = {
+  state: "clash",
+  candidates: [
+    { place: { kind: "own_sections" }, value: "3.00", source: { kind: "product" } },
+    { place: { kind: "menu", menuId: "drinks", menuName: "Drinks" }, undecided: true },
+  ],
+} as unknown as MenuPriceRow["combined"]["price"];
+
 it.each(["en-GB", "es-ES"])(
   "shows a product's and a size's price field whole inside the table's visible box at phone width, and the page does not scroll sideways (%s)",
   async (locale) => {
@@ -2398,8 +2434,10 @@ it.each(["en-GB", "es-ES"])(
       await vi.waitFor(() => expect(window.innerWidth).toBe(390));
       const long = "Cerveza artesana de trigo sin filtrar";
       const longSize = "Media pinta de limonada natural";
+      const menuName = "Carta de bebidas de la terraza de verano";
+      const price = clashPriceIn(menuName);
       const el = await mount({
-        rows: [clashRow({ ...lager, name: long }), variantClashRow()],
+        rows: [clashRow({ ...lager, name: long }, price), variantClashRow(price)],
         products: [
           {
             ...lemonadeProduct,
@@ -2423,6 +2461,17 @@ it.each(["en-GB", "es-ES"])(
         const right = Math.min(scroller.right, pinned?.getBoundingClientRect().left ?? Infinity);
         expect(field.left, key).toBeGreaterThanOrEqual(scroller.left - 0.5);
         expect(field.right, key).toBeLessThanOrEqual(right + 0.5);
+      }
+      for (const key of ["mi-lager", "mi-lemonade", "mi-lemonade:v-small"]) {
+        const sentence = cell(el, "override", key).querySelector("[part~=clash]")!;
+        expect(text(sentence), key).toContain(menuName);
+        const box = sentence.getBoundingClientRect();
+        const priceCell = cell(el, "override", key).getBoundingClientRect();
+        expect(box.left, key).toBeGreaterThanOrEqual(priceCell.left - 0.5);
+        expect(box.right, key).toBeLessThanOrEqual(priceCell.right + 0.5);
+        expect(box.width, key).toBeLessThanOrEqual(
+          override(el, key).getBoundingClientRect().width + 0.5,
+        );
       }
       const root = document.documentElement;
       expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
@@ -2451,13 +2500,13 @@ it.each(["product", "size"])(
     for (const value of ["", "-1", "abc"]) {
       await typeIn(el, key, value);
       await table(el).updateComplete;
-      expect(clashMarker(el, key)).toBe(t("menu_prices.clash"));
+      expect(clashMarker(el, key)).toBe(clashSentences["es-ES"].prices);
       await typeIn(el, key, "2.80");
       await table(el).updateComplete;
     }
     await press(el, key, "Escape");
     await table(el).updateComplete;
-    expect(clashMarker(el, key)).toBe(t("menu_prices.clash"));
+    expect(clashMarker(el, key)).toBe(clashSentences["es-ES"].prices);
     expect(override(el, key).value).toBe("");
     expect(heard).not.toHaveBeenCalled();
   },
@@ -2485,7 +2534,7 @@ it.each(["", "-1", "abc"])("keeps a clashing row's Clash when its draft is %j", 
   const heard = priceSaves(el);
   await typeIn(el, "mi-lager", value);
   await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lager")).toBe(t("menu_prices.clash"));
+  expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
   expect(heard).not.toHaveBeenCalled();
 });
 
@@ -2527,9 +2576,9 @@ it("shows a clash honestly: no price in the field, a red Clash beside it, the re
     const el = await mount({ rows: [clashRow(lager)] });
     const input = override(el, "mi-lager");
     expect([input.value, input.placeholder]).toEqual(["", "Set a price"]);
-    expect(hintOf(input)).toBe("Left empty, its sources disagree. Set a price to resolve it.");
+    expect(hintOf(input)).toBe(clashSentences["en-GB"].prices);
     const marker = cell(el, "override", "mi-lager").querySelector("[part~=clash]")!;
-    expect(text(marker)).toBe("Clash");
+    expect(text(marker)).toBe(clashSentences["en-GB"].prices);
     // Painted in the danger colour, through the table's part.
     const probe = document.createElement("span");
     probe.style.color = "var(--wt-color-danger)";
@@ -2541,8 +2590,8 @@ it("shows a clash honestly: no price in the field, a red Clash beside it, the re
 });
 
 it.each([
-  ["en-GB", "A variant's sources disagree — set that variant's price"],
-  ["es-ES", "Los orígenes de una variante discrepan: fijar el precio de esa variante"],
+  ["en-GB", clashSentences["en-GB"].sizes],
+  ["es-ES", clashSentences["es-ES"].sizes],
 ])(
   "sends a product row whose only clash is a size's to that size, offering no price of its own (%s)",
   async (locale, words) => {
@@ -2566,6 +2615,56 @@ it.each([
   },
 );
 
+/** The sentence shown in red under the row's field, which a screen reader hears once, as the
+ * field's description. */
+async function expectClashSentence(el: MenuPricesTable, key: string, words: string) {
+  const input = override(el, key);
+  await input.updateComplete;
+  const shownWords = cell(el, "override", key).querySelector("[part~=clash]");
+  expect(text(shownWords), key).toBe(words);
+  expect(shownWords!.getAttribute("aria-hidden"), key).toBe("true");
+  const help = input.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  expect(text(help), key).toBe(words);
+  const describedBy = input.shadowRoot!.querySelector("input")!.getAttribute("aria-describedby");
+  expect(describedBy!.split(" "), key).toContain(help.id);
+}
+
+describe.each(["en-GB", "es-ES"] as const)("the clash spelled out (%s)", (locale) => {
+  beforeEach(() => setLocale(locale));
+  afterEach(() => setLocale("es-ES"));
+  const words = clashSentences[locale];
+
+  it("names each place's price for a clashing product, and drops it while a price is typed", async () => {
+    const el = await mount({ rows: [clashRow(lager)] });
+    await expectClashSentence(el, "mi-lager", words.prices);
+    await typeIn(el, "mi-lager", "2.80");
+    await table(el).updateComplete;
+    expect(cell(el, "override", "mi-lager").querySelector("[part~=clash]")).toBeNull();
+    expect(hintOf(override(el, "mi-lager"))).not.toBe(words.prices);
+  });
+
+  it("names each place's price for a clashing size, and drops it while a price is typed", async () => {
+    const el = await mount({ rows: [variantClashRow()] });
+    toggleOf(el, "mi-lemonade")!.click();
+    await table(el).updateComplete;
+    await expectClashSentence(el, "mi-lemonade:v-small", words.prices);
+    await typeIn(el, "mi-lemonade:v-small", "2.80");
+    await table(el).updateComplete;
+    expect(cell(el, "override", "mi-lemonade:v-small").querySelector("[part~=clash]")).toBeNull();
+    expect(hintOf(override(el, "mi-lemonade:v-small"))).not.toBe(words.prices);
+  });
+
+  it("names each clashing size and its places' prices on its product's row", async () => {
+    const el = await mount({ rows: [variantClashRow()] });
+    await expectClashSentence(el, "mi-lemonade", words.sizes);
+  });
+
+  it("says where no single price was decided", async () => {
+    const el = await mount({ rows: [clashRow(lager, undecidedPrice)] });
+    await expectClashSentence(el, "mi-lager", words.undecided);
+  });
+});
+
 const clashMarker = (el: MenuPricesTable, key: string) =>
   text(cell(el, "override", key).querySelector("[part~=clash]"));
 
@@ -2583,19 +2682,19 @@ it("drops a product's Clash once this menu's saved price decides it, and shows i
   expect(clashMarker(el, "mi-lager")).toBe("");
   await typeIn(el, "mi-lager", "");
   await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lager")).toBe(t("menu_prices.clash"));
+  expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
   expect(override(el, "mi-lager").placeholder).toBe(t("menu_prices.clash_placeholder"));
 });
 
 it("drops a product's Clash while a price is typed for it, and not for text that is no price", async () => {
   const el = await mount({ rows: [clashRow(lager)] });
-  expect(clashMarker(el, "mi-lager")).toBe(t("menu_prices.clash"));
+  expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
   await typeIn(el, "mi-lager", "2.20");
   await table(el).updateComplete;
   expect(clashMarker(el, "mi-lager")).toBe("");
   await typeIn(el, "mi-lager", "2,20");
   await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lager")).toBe(t("menu_prices.clash"));
+  expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
 });
 
 it("drops a size's Clash once this menu's saved price decides it, and shows it again when the field is emptied", async () => {
@@ -2628,7 +2727,7 @@ it("drops a size's Clash once this menu's saved price decides it, and shows it a
   expect(clashMarker(el, "mi-lemonade")).toBe("");
   await typeIn(el, "mi-lemonade:v-small", "");
   await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lemonade:v-small")).toBe(t("menu_prices.clash"));
+  expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
 });
 
 it("turns a clashing product's Clash into its size's once a price is typed for the product", async () => {
@@ -2641,10 +2740,10 @@ it("turns a clashing product's Clash into its size's once a price is typed for t
       },
     ],
   });
-  expect(clashMarker(el, "mi-lemonade")).toBe(t("menu_prices.clash"));
+  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].prices);
   await typeIn(el, "mi-lemonade", "2.80");
   await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lemonade")).toBe(t("menu_prices.size_clash"));
+  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].sizes);
   expect(override(el, "mi-lemonade").placeholder).toBe("—");
 });
 
@@ -2667,7 +2766,7 @@ it("shows a size following its clashing product the price typed for the product,
     await table(el).updateComplete;
     const size = "mi-lemonade:v-small";
     expect(override(el, size).placeholder).toBe("Set a price");
-    expect(clashMarker(el, size)).toBe("Clash");
+    expect(clashMarker(el, size)).toBe(clashSentences["en-GB"].prices);
     await typeIn(el, "mi-lemonade", "2.80");
     await table(el).updateComplete;
     expect(override(el, size).placeholder).toBe("2.80");
@@ -2676,7 +2775,7 @@ it("shows a size following its clashing product the price typed for the product,
     await typeIn(el, "mi-lemonade", "");
     await table(el).updateComplete;
     expect(override(el, size).placeholder).toBe("Set a price");
-    expect(clashMarker(el, size)).toBe("Clash");
+    expect(clashMarker(el, size)).toBe(clashSentences["en-GB"].prices);
   } finally {
     setLocale("es-ES");
   }
@@ -3240,8 +3339,8 @@ it("draws no help tooltip and no row menu, and has no actions column, on a load 
     "mi-lemonade:v-small",
     "mi-lemonade:v-large",
   ]);
-  expect(clashMarker(el, "mi-lager")).toBe(t("menu_prices.clash"));
-  expect(clashMarker(el, "mi-lemonade:v-small")).toBe(t("menu_prices.clash"));
+  expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
+  expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
   expect(root.querySelectorAll("wt-help-tooltip").length).toBe(0);
   expect(root.querySelectorAll("wt-row-actions").length).toBe(0);
   const keys = (table(el) as Table & { columns: { key: string }[] }).columns.map(({ key }) => key);

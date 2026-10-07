@@ -15,6 +15,7 @@ import {
   sizesInheritedFrom,
   variantInherited,
   variantInheritedFrom,
+  withoutOwn,
   type Inherited,
   type InheritedFrom,
   type ParentPrice,
@@ -41,6 +42,7 @@ import {
   PATH_SEPARATOR,
 } from "./category-form.js";
 import { priceSearchText, priceText } from "./form-fields.js";
+import { placeName } from "./price-source.js";
 
 /** One field's value to write. `previous` is the value it replaces in the order writes are made,
  * which Undo writes back. */
@@ -94,6 +96,23 @@ const keepsVariantOrder = ({ variant }: Line): boolean => variant === null;
 /** Whether this menu stores a price for any of the product's sizes. */
 const pricesASize = (item: MenuPriceRow): boolean =>
   item.variants.some(({ price }) => price !== null);
+
+const candidatesText = (setting: Setting<Decimal>): string =>
+  setting.state !== "clash"
+    ? ""
+    : setting.candidates
+        .map((candidate) => {
+          const place = placeName(candidate.place, t);
+          return "value" in candidate
+            ? t("menu_prices.source_candidate")
+                .replace("{price}", priceText(candidate.value))
+                .replace("{place}", () => place)
+            : t("menu_prices.candidate_undecided").replace("{place}", () => place);
+        })
+        .join(", ");
+
+const pricesSentence = (setting: Setting<Decimal>): string =>
+  t("menu_prices.clash_prices").replace("{candidates}", () => candidatesText(setting));
 
 type Span = { low: string; high: string };
 
@@ -581,6 +600,30 @@ export class MenuPricesTable extends LitElement {
       : null;
   }
 
+  #clashSentence(line: Line, clash: "size" | "own"): string {
+    const { item, variant } = line;
+    if (variant) return pricesSentence(this.#withParent(line).from!.setting);
+    const own = withoutOwn(item.combined.price);
+    if (clash === "own" && own.state === "clash") return pricesSentence(own);
+    const sizes =
+      clash === "size"
+        ? item.variants
+            .filter(({ active }) => active)
+            .map(({ variantId }) => ({ variantId, setting: sizeSetting(item, variantId) }))
+            .filter(({ setting }) => setting.level === "size")
+        : this.#productInheritance.get(item)!.sizes;
+    return [
+      t("menu_prices.size_clash_lead"),
+      ...sizes
+        .filter(({ setting }) => setting.state === "clash")
+        .map(({ variantId, setting }) =>
+          t("menu_prices.variant_clash")
+            .replace("{variant}", () => this.#variantName(variantId))
+            .replace("{candidates}", () => candidatesText(setting)),
+        ),
+    ].join(" ");
+  }
+
   /** Whether the row's field holds a price, typed (`draft`) or stored. */
   #holds(line: Line, draft: string | undefined): boolean {
     const text = draft?.trim();
@@ -622,15 +665,16 @@ export class MenuPricesTable extends LitElement {
     const { item, variant } = line;
     const key = keyOf(line);
     const clash = this.#clash(line);
+    const sentence = clash === null ? "" : this.#clashSentence(line, clash);
     const inherited = this.#inherited(line);
     let placeholder: string;
     let hint: string;
     if (clash === "size") {
       placeholder = "—";
-      hint = t("menu_prices.size_clash");
+      hint = sentence;
     } else if (inherited.state === "clash" || clash === "own") {
       placeholder = t("menu_prices.clash_placeholder");
-      hint = t("menu_prices.override_help_clash");
+      hint = clash === "own" ? sentence : t("menu_prices.override_help_clash");
     } else {
       // As typed into a price field, which draws no sign.
       placeholder = spanText(inherited, (amount) => amount);
@@ -662,9 +706,7 @@ export class MenuPricesTable extends LitElement {
               >${
                 clash === null
                   ? nothing
-                  : html`<span part="clash"
-                      >${t(clash === "size" ? "menu_prices.size_clash" : "menu_prices.clash")}</span
-                    >`
+                  : html`<span part="clash" aria-hidden="true">${sentence}</span>`
               }${
                 sizesSetOne
                   ? html`<span part="muted price-note">${t("menu_prices.variant_overrides")}</span>`
