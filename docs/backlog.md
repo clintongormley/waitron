@@ -2428,8 +2428,9 @@ follow-up is DONE (A300): `byLabel` compares number runs as exact decimals with 
 point, so "0,25 kg" precedes "0,5 kg". Chromium checks cover both separators, mixed names, equal
 values, integer order and differences below floating-point precision. This changes category
 pickers in the product editor and catalogue browser, the section's Add products list and category
-filter, menu price section/category filters, and the member-list editor's product/section choices
-until that unused editor is retired by A299. `wt-data-table` uses its own comparison and is outside
+filter, and menu price section/category filters. A299 (#1328) retired the unused member-list
+editor, which also consumed this helper on A300's initial base. `wt-data-table` uses its own
+comparison and is outside
 this item's scope. A rendered Chromium probe confirms that table still lists "0,5 kg" before
 "0,25 kg", so its order differs from these pickers. To align table name sorting, queue a shared
 comparator change separately. Names such as "1.10 Postres" are read as decimals (1.1), so they
