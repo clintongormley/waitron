@@ -1,3 +1,4 @@
+import { staffPresentationName } from "@waitron/catalogue/src/product-presentation.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, leaveCoordinatorFor, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
@@ -486,11 +487,25 @@ export class TillDepartmentTransfers extends LitElement {
               </h3>
               <h3>${t("department_transfer.lines")}</h3>
               <ul data-current-lines>
-                ${detail.lines.map((line) => html`<li><div class="description">${line.quantity} × ${line.name}${line.variantName === null ? "" : ` · ${line.variantName}`}${line.note === null ? nothing : html`<p>${line.note}</p>`}</div></li>`)}
+                ${detail.lines.map((line) => html`<li><div class="description">${line.quantity} × ${staffPresentationName(line)}${line.note === null ? nothing : html`<p>${line.note}</p>`}</div></li>`)}
               </ul>
               <h3>${t("department_transfer.work")}</h3>
               <ul data-current-work>
-                ${detail.outstandingWork.map((work) => html`<li><div class="description">${detail.lines.find((line) => line.id === work.lineId)?.name ?? t("department_transfer.unrecorded_item")} · ${work.stationName ?? t("department_transfer.unrecorded_station")} · ${t(`station.state.${work.state}`)}${work.note === null ? nothing : html`<p>${work.note}</p>`}</div></li>`)}
+                ${detail.outstandingWork.map(
+                  (work) =>
+                    html`<li>
+                      <div class="description">
+                        ${(() => {
+                          const line = detail.lines.find((line) => line.id === work.lineId);
+                          return line === undefined
+                            ? t("department_transfer.unrecorded_item")
+                            : staffPresentationName(line);
+                        })()}
+                        · ${work.stationName ?? t("department_transfer.unrecorded_station")} ·
+                        ${t(`station.state.${work.state}`)}${work.note === null ? nothing : html`<p>${work.note}</p>`}
+                      </div>
+                    </li>`,
+                )}
               </ul>
               ${detail.outstandingWork.length === 0 ? html`<p>${t("department_transfer.no_work")}</p>` : nothing}
             `

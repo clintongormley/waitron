@@ -82,14 +82,14 @@ describe("customerProductName", () => {
 });
 
 describe("lineProductName", () => {
-  it("names the line by the variant's STAFF name alone", () => {
+  it("names the line by the product and variant STAFF names", () => {
     setLocale("es-ES");
     const line = product({
       variantId: "v1",
       variantName: "Large",
       variantCustomerName: { es: "Taza grande", en: "Large cup" },
     });
-    expect(lineProductName(line)).toBe("Large");
+    expect(lineProductName(line)).toBe("Coffee (Large)");
   });
 
   it("names the product alone when no variant was chosen", () => {
@@ -97,7 +97,9 @@ describe("lineProductName", () => {
   });
 
   it("names the line by the variant's staff name even when the variant has no customer name", () => {
-    expect(lineProductName(product({ variantId: "v1", variantName: "Small" }))).toBe("Small");
+    expect(lineProductName(product({ variantId: "v1", variantName: "Small" }))).toBe(
+      "Coffee (Small)",
+    );
   });
 });
 

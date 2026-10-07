@@ -889,7 +889,7 @@ async function readGroups(
     const own = linesByGroup.get(group.id) ?? [];
     const counts = new Map<string, number>();
     for (const line of own) {
-      const label = line.variantName === null ? line.name : `${line.name} ${line.variantName}`;
+      const label = staffPresentationName(line);
       counts.set(label, (counts.get(label) ?? 0) + line.quantity);
     }
     return {

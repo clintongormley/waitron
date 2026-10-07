@@ -1,9 +1,10 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { type WtTextarea, setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillBasket } from "./basket.js";
 import {
@@ -158,7 +159,7 @@ describe("till-basket", () => {
         "1",
       );
       const { el } = await mountWidget<TillBasket>("till-basket", { store });
-      expect(el.shadowRoot!.querySelector(".line > .name")!.textContent).toBe("Large");
+      expect(el.shadowRoot!.querySelector(".line > .name")!.textContent).toBe("Café (Large)");
     } finally {
       setLocale(previousLocale);
     }
@@ -1238,3 +1239,44 @@ describe("till-basket: the note editor keeps to its line", () => {
     ]);
   });
 });
+
+for (const locale of ["en-GB", "es-ES"] as const) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      it(`shows two relative Single variants with their products in ${locale}/${theme}/${width}`, async () => {
+        const previous = currentLocale();
+        await page.viewport(width, 900);
+        try {
+          setLocale(locale);
+          const store = new WorkingOrderStore();
+          for (const name of ["Seagrams Gin", "London Gin"])
+            store.addProduct(
+              {
+                ...cafe,
+                id: name,
+                name,
+                customerName: { en: `Customer ${name}` },
+                kitchenName: `KITCHEN ${name}`,
+                variantId: `${name}-single`,
+                variantName: "Single",
+                variantCustomerName: { en: "Customer single" },
+                variantKitchenName: "SGL",
+              },
+              "1",
+            );
+          const { el, host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
+          expect(
+            [...el.shadowRoot!.querySelectorAll(".line > .name")].map((node) => node.textContent),
+          ).toEqual(["Seagrams Gin (Single)", "London Gin (Single)"]);
+          await expectNoA11yViolations(host);
+          await page.screenshot({
+            path: `../../__screenshots__/a357/basket-${locale}-${theme}-${width}.png`,
+          });
+        } finally {
+          setLocale(previous);
+          await page.viewport(1280, 768);
+        }
+      });
+    }
+  }
+}

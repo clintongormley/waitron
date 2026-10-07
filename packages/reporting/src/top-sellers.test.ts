@@ -54,6 +54,38 @@ function run(overrides: Partial<TopSellersInput> = {}): Promise<TopSeller[]> {
 }
 
 describe("computeTopSellers", () => {
+  it("keeps two products with the same relative variant separate under their frozen parent names", async () => {
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "20.00",
+      lines: ["Seagrams Gin", "London Gin"].map((name) => ({
+        name,
+        descriptions: { es: `Cliente ${name}` },
+        kitchenName: `COCINA ${name}`,
+        variantName: "Single",
+        variantDescriptions: { es: "Copa" },
+        variantKitchenName: "SGL",
+        vatRate: "10.00",
+        lineTotal: "10.00",
+        quantity: "1.000",
+      })),
+    });
+    expect(await run()).toEqual([
+      {
+        name: "London Gin",
+        quantity: "1.000",
+        total: "10.00",
+        variants: [{ name: "Single", quantity: "1.000", total: "10.00" }],
+      },
+      {
+        name: "Seagrams Gin",
+        quantity: "1.000",
+        total: "10.00",
+        variants: [{ name: "Single", quantity: "1.000", total: "10.00" }],
+      },
+    ]);
+  });
   it("validates inputs before touching the database", async () => {
     await expect(run({ timeZone: "Nowhere/Nope" })).rejects.toThrow(/time zone/i);
     await expect(run({ dayCutover: "5:00" })).rejects.toThrow(/cutover/i);

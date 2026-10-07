@@ -589,22 +589,20 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
         dietaryDeclarations: ["vegetarian", "halal"],
         variants: [
           {
-            customerName: { en: "Espresso", es: "Espresso solo", ca: "Cafè sol", gl: "Café só" },
-            staffName: "Café solo",
-            kitchenName: "ESPRESSO",
+            customerName: { en: "Single", es: "Solo", ca: "Sol", gl: "Só" },
+            staffName: "Solo",
+            kitchenName: "SOLO",
             unitPrice: "1.40",
             available: true,
           },
           {
-            // No kitchen name of its own, so the kitchen ticket falls back to this variant's own
-            // staff name, never the parent's.
             customerName: {
-              en: "Double espresso",
-              es: "Espresso doble",
-              ca: "Cafè sol doble",
-              gl: "Café só dobre",
+              en: "Double",
+              es: "Doble",
+              ca: "Doble",
+              gl: "Dobre",
             },
-            staffName: "Café doble",
+            staffName: "Doble",
             unitPrice: "2.10",
             available: true,
           },

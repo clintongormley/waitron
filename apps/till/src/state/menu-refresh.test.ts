@@ -316,11 +316,11 @@ describe("lineBlock", () => {
     };
     expect(lineBlock(line, { ...wine, variants: [variant("glass", "4.00")] })).toEqual({
       reason: "variant_removed",
-      name: "Botella",
+      name: "wine (Botella)",
     });
     expect(
       lineBlock(line, { ...wine, variants: [variant("bottle", "18.00", { available: false })] }),
-    ).toEqual({ reason: "unavailable", name: "Botella" });
+    ).toEqual({ reason: "unavailable", name: "wine (Botella)" });
   });
 
   it("blocks a variant only by the unavailable set and the offer's variants", () => {
@@ -337,12 +337,15 @@ describe("lineBlock", () => {
     const [served] = withUnavailable([loaded], NOTHING);
     expect(lineBlock(line, served)).toBeUndefined();
     const [soldOut] = withUnavailable([loaded], { ...NOTHING, products: ["bottle"] });
-    expect(lineBlock(line, soldOut)).toEqual({ reason: "unavailable", name: "Botella" });
+    expect(lineBlock(line, soldOut)).toEqual({ reason: "unavailable", name: "wine (Botella)" });
     const [withoutBottle] = withUnavailable(
       [{ ...loaded, variants: [variant("glass", "4.00")] }],
       NOTHING,
     );
-    expect(lineBlock(line, withoutBottle)).toEqual({ reason: "variant_removed", name: "Botella" });
+    expect(lineBlock(line, withoutBottle)).toEqual({
+      reason: "variant_removed",
+      name: "wine (Botella)",
+    });
   });
 
   it("names the extra when its list no longer offers it, or it cannot be sold", () => {
@@ -488,7 +491,7 @@ describe("refreshBasket", () => {
     expect(outcome.adopted.get(0)!.product.unitPrice).toBe("8.00");
   });
 
-  it("names the variant, under its own name, when an extra's change offsets its price", () => {
+  it("names the product and variant when an extra's change offsets its price", () => {
     const withCheese = {
       ...wine,
       offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "1.00")])],
@@ -512,7 +515,7 @@ describe("refreshBasket", () => {
     };
     const outcome = refreshBasket([line], [offsetting], live);
     expect(outcome.changed).toEqual([
-      { lineNo: 1, name: "bottle", from: "18.00", to: "17.00", units: eachSide },
+      { lineNo: 1, name: "wine (bottle)", from: "18.00", to: "17.00", units: eachSide },
       { lineNo: 1, name: "cheese", from: "1.00", to: "2.00", units: eachSide },
     ]);
     expect(outcome.adopted.get(0)!.product.unitPrice).toBe("17.00");
@@ -612,7 +615,9 @@ describe("refreshBasket", () => {
       [{ ...wine, variants: [variant("glass", "4.00"), variant("bottle", "16.00")] }],
       live,
     );
-    expect(outcome.changed).toEqual([{ lineNo: 1, name: "bottle", from: "18.00", to: "16.00" }]);
+    expect(outcome.changed).toEqual([
+      { lineNo: 1, name: "wine (bottle)", from: "18.00", to: "16.00" },
+    ]);
     expect(outcome.adopted.get(0)!.product).toMatchObject({
       variantId: "bottle",
       unitPrice: "16.00",

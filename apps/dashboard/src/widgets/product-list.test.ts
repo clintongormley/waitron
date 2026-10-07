@@ -479,7 +479,7 @@ describe("product-list", () => {
           id: "wine",
           unitPrice: "4.00",
           variants: [
-            { ...bunVariant, id: "w125", name: "Wine 125", unitPrice: null },
+            { ...bunVariant, id: "w125", name: "125 ml", unitPrice: null },
             { ...bunVariant, id: "w175", name: "Wine 175", unitPrice: "5.50" },
           ],
         }),
@@ -896,7 +896,7 @@ describe("product-list", () => {
           id: "wine",
           unitPrice: "4.00",
           variants: [
-            { ...bunVariant, id: "w125", name: "Wine 125", unitPrice: "4.50" },
+            { ...bunVariant, id: "w125", name: "125 ml", unitPrice: "4.50" },
             { ...bunVariant, id: "w175", name: "Wine 175", unitPrice: "5.50" },
             { ...bunVariant, id: "w250", name: "Wine 250", unitPrice: "9.00", active: false },
           ],
@@ -990,7 +990,7 @@ describe("product-list", () => {
             {
               ...bunVariant,
               id: "w125",
-              name: "Wine 125",
+              name: "125 ml",
               customerName: { en: "Small glass of wine", es: "Copa pequeña de vino" },
               kitchenName: "VINO 125",
               unitPrice: null,
@@ -1014,7 +1014,7 @@ describe("product-list", () => {
     expect(note("wine")).toBeNull();
     for (const [rowKey, name] of [
       ["wine:w175", "Wine 175"],
-      ["wine:w125", "Wine 125"],
+      ["wine:w125", "125 ml"],
     ] as const)
       expect(cellUnder(root, rowKey, t("product.name")).textContent!.trim()).toBe(name);
     expect(
@@ -4828,7 +4828,7 @@ describe("variant media slot", () => {
       image: "pollo.webp",
       color: "#256bb1",
       variants: [
-        { ...bunVariant, id: "half", name: "1/2 Pollo", image: "half.webp" },
+        { ...bunVariant, id: "half", name: "1/2", image: "half.webp" },
         {
           ...bunVariant,
           id: "quarter",

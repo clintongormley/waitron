@@ -56,7 +56,7 @@ export type ImageUsage =
       id: string;
       productId: string;
       catalogueId: string;
-      /** The variant's staff name, as `staffPresentationName` names a variant. */
+      /** The product and relative variant staff names. */
       name: string;
       /** The variant AND its product are Active. */
       active: boolean;

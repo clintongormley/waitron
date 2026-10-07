@@ -1,5 +1,7 @@
 # One product colour everywhere (W92) — implementation plan
 
+> 2026-10-07, A357: the full variant names in this historical plan are superseded by relative names. Standalone lines pair the product and variant; see [Products](../../developers/products.md).
+
 > 2026-10-07, A358: `PATCH /management-api/products/:id` is retired after A327 removed its
 > application caller. Product edits use `PUT /management-api/products/:id/editor`. The route
 > references below record the plan's earlier contract; see [Products](../../developers/products.md).

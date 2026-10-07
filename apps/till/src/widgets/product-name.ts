@@ -29,7 +29,7 @@ export function productName(product: TillProduct): string {
 }
 
 /**
- * The staff name AS CHOSEN onto a line: the selected variant's own name, else the product's. Deep-imported
+ * The staff name of a line, including its product and any selected relative variant. Deep-imported
  * because `product-presentation.ts` depends only on `@waitron/shared`, so no catalogue barrel reaches the
  * browser bundle.
  */

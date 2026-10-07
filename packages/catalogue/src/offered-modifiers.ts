@@ -1,3 +1,10 @@
+import {
+  customerPresentationText,
+  joinCustomerPresentationText,
+  kitchenPresentationName,
+  staffPresentationName,
+} from "./product-presentation.js";
+import { readContentLanguages } from "./content-languages.js";
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { products, type Transaction } from "@waitron/db";
@@ -92,6 +99,9 @@ async function readExtraProducts(
       name: products.name,
       customerName: products.customerName,
       kitchenName: products.kitchenName,
+      parentName: parentProducts.name,
+      parentCustomerName: parentProducts.customerName,
+      parentKitchenName: parentProducts.kitchenName,
       vatClass: effectiveProductColumns.vatClass,
       allergens: effectiveProductColumns.allergens,
       dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
@@ -111,21 +121,37 @@ async function readExtraProducts(
         ),
       ),
     );
+  const { defaultLanguage } = await readContentLanguages(tx, "en");
   return new Map(
-    rows.map((row) => [
-      row.id,
-      {
-        productId: row.id,
-        name: row.name,
-        customerName: row.customerName,
-        kitchenName: row.kitchenName,
-        vatClass: row.vatClass as VatClass,
-        addAllergens: row.allergens,
-        suitableFor: expandDietaryDeclarations(
-          validateDietaryDeclarations(row.dietaryDeclarations),
-        ),
-      },
-    ]),
+    rows.map((row) => {
+      const presentation = {
+        name: row.parentName ?? row.name,
+        customerName: row.parentName === null ? row.customerName : row.parentCustomerName,
+        kitchenName: row.parentName === null ? row.kitchenName : row.parentKitchenName,
+        variantName: row.parentName === null ? null : row.name,
+        variantCustomerName: row.parentName === null ? null : row.customerName,
+        variantKitchenName: row.parentName === null ? null : row.kitchenName,
+      };
+      const text = customerPresentationText(presentation, defaultLanguage);
+      return [
+        row.id,
+        {
+          productId: row.id,
+          name: staffPresentationName(presentation),
+          customerName:
+            row.parentName === null
+              ? row.customerName
+              : joinCustomerPresentationText(text.product, text.variant, row.name),
+          kitchenName:
+            row.parentName === null ? row.kitchenName : kitchenPresentationName(presentation),
+          vatClass: row.vatClass as VatClass,
+          addAllergens: row.allergens,
+          suitableFor: expandDietaryDeclarations(
+            validateDietaryDeclarations(row.dietaryDeclarations),
+          ),
+        },
+      ];
+    }),
   );
 }
 

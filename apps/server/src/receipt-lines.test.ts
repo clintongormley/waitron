@@ -35,6 +35,25 @@ describe("withReceiptListPrices", () => {
 });
 
 describe("ticketLinesFrom", () => {
+  it("joins frozen parent and relative variant names without consulting live names", () => {
+    const lines = ticketLinesFrom(
+      {
+        lines: [
+          {
+            ...filed("1.000", "2.00"),
+            descriptions: { en: "Customer gin", es: "Ginebra cliente" },
+            variantDescriptions: { en: "Customer single", es: "Copa cliente" },
+            variantName: "Single",
+          },
+        ],
+      },
+      [{ listUnitGross: null }],
+    );
+    expect(lines[0]!.descriptions).toEqual({
+      en: "Customer gin (Customer single)",
+      es: "Ginebra cliente (Copa cliente)",
+    });
+  });
   it("keeps a weighted extra's filed thousandths for the amount printed beneath its dish", () => {
     const dish = filed("1.000", "2.00");
     const child = {

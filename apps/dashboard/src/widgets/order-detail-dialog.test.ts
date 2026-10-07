@@ -1,6 +1,7 @@
+import { page } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
 import type { DashboardApi, OrderDetailDto } from "../api/client.js";
@@ -120,7 +121,7 @@ it("shows the bill's items, invoices, payments, party, departure and copies", as
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
   const words = el.shadowRoot!.textContent!;
   for (const value of [
-    "Large",
+    "Soup (Large)",
     "Ana",
     "A/12",
     "R/2",
@@ -286,3 +287,44 @@ it("clears a failed load's message once the server answers again", async () => {
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
   expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 });
+
+for (const locale of ["en-GB", "es-ES"]) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      it(`identifies each recorded Single variant in ${locale}/${theme}/${width}`, async () => {
+        await page.viewport(width, 900);
+        try {
+          setLocale(locale);
+          const saved = {
+            ...detail,
+            lines: ["Seagrams Gin", "London Gin"].map((name, index) => ({
+              ...detail.lines[0]!,
+              lineNo: index + 1,
+              name,
+              variantName: "Single",
+            })),
+          };
+          const api = {
+            getOrder: async () => saved,
+            liveData: new LiveData(),
+          } as unknown as DashboardApi;
+          const { el, host } = await mountWidget<OrderDetailDialog>(
+            "dashboard-order-detail-dialog",
+            { api, orderId: "bill-1", mayReprint: () => true },
+            theme,
+          );
+          await vi.waitFor(() =>
+            expect(el.shadowRoot!.textContent).toContain("Seagrams Gin (Single)"),
+          );
+          expect(el.shadowRoot!.textContent).toContain("London Gin (Single)");
+          await expectNoA11yViolations(host);
+          await page.screenshot({
+            path: `../../__screenshots__/a357/order-detail-${locale}-${theme}-${width}.png`,
+          });
+        } finally {
+          await page.viewport(1280, 768);
+        }
+      });
+    }
+  }
+}
