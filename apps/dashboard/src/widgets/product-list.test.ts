@@ -4592,7 +4592,7 @@ it.each([390, 1280])(
   },
 );
 
-describe("product media actions", () => {
+describe("product media link", () => {
   it("paints the leading photo ring with inherited colour, and its swatch opens the product's Edit at the photo", async () => {
     const { el, root } = await mountTree({
       products: [product({ id: "cola", name: "Cola", primaryCategoryId: "d", image: "cola.webp" })],

@@ -929,6 +929,10 @@ unused `units` property is gone (it closes W75's leftover).
   - Open: `PATCH /management-api/products/:id` (`apps/server/src/catalogue-api.ts`) now has no
     caller in `apps/` outside tests; the dashboard's `setProductColor` was its only one. Deleting
     the route, or keeping it on purpose, is not decided.
+  - Open: `wt-row-actions` (`packages/ui/src/components/wt-row-actions.ts`) keeps the `disabled`
+    property and the `trigger` slot and part that A303 added for the retired menu. Nothing outside
+    its own tests uses them now, and those tests still name Colour… and Change photo…. Retiring
+    them, or keeping them on purpose, is not decided.
   - Open, found during A327's look and believed to predate it (the base hid the swatch at the same
     width): at 440px or narrower the Menus Structure tree hides every swatch, and a product row's
     Actions menu holds only "Remove from <section>", so on a phone that tree offers no way to open
@@ -2223,9 +2227,6 @@ native-input EN/ES regressions to `wt-price-input.test.ts` and runs the menu-pri
 2026-10-05).**
 Left open:
 
-- In the Structure tree, closing the section form opened from a section's swatch puts focus on the
-  row's ⋮ menu, while the product colour dialog puts it back on the swatch. Neither is pinned by a
-  test, and the two should agree.
 - At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
   swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
   on the W92 branch, not on `main`) _(2026-10-06: W85e gives it 12 px more; it still clips)_
