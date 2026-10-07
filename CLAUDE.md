@@ -627,6 +627,10 @@ browser test** — most of these rules exist because a test passed while proving
   with the request's generation, or an old read blocks the reopened dialog.
 - **A browser test using fake timers must advance an awaited animation frame or restore real timers
   first**, or it stalls on its own paused `requestAnimationFrame`.
+- **A test waits for a browser grant, such as a Web Lock, by tracking the request until it is
+  answered — never by a fixed sleep.** Cost: the Payments screen's reader-status tests failed CI on
+  a late grant, fixed twice — W59 (#1168), then A320 (#1342). Nothing guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-test-waits-for-a-browser-grant-by-tracking-the-request-never-by-a-fixed-sleep).
 - **Dispatch events when testing a `composedPath()` guard.** An undispatched `KeyboardEvent` has an
   empty path, so the test can pass without reaching the branch it claims to check.
 - **Position a native popover before its first paint.** Positioning from the asynchronous `toggle`
