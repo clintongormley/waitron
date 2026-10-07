@@ -5032,6 +5032,11 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       390 px the Prep stations tab row scrolls sideways with both ends cut ("Stations" on the left,
       "New watcher" on the right) and nothing shows that it scrolls. Screenshots:
       `~/waitron-campaign-c/a323-shots/`.
+    - **Seen in A372's look at the demo (2026-10-07), in files A372 did not change.** At 390 px
+      the routing grid's fixed first column takes about 140 of the grid's roughly 310 px, so one
+      zone column shows at a time and a saved choice in a zone column is reached only by scrolling
+      sideways. In a cell at 390 px, "Downstairs bar" fills its field and its last letter touches
+      the dropdown arrow. Screenshots: `~/waitron-campaign-c/a372-shots/`.
     - **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells.**
       `#saveSettingsCell`
       (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
