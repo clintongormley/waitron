@@ -5,6 +5,7 @@ import {
   count,
   enumCheck,
   enumType,
+  flag,
   id,
   json,
   label,
@@ -12,7 +13,7 @@ import {
   products,
   table,
 } from "@waitron/db";
-import type { SectionRole } from "../section-types.js";
+import type { IncludeFolderOverrides, SectionRole } from "../section-types.js";
 
 // Not in section-types.ts: the dashboard imports that file, and
 // scripts/dashboard-browser-purity.test.ts refuses a runtime value in it.
@@ -59,6 +60,8 @@ export const sectionMembers = table(
     productId: id("product_id"),
     childSectionId: id("child_section_id"),
     missingName: label("missing_name"),
+    showAsFolder: flag("show_as_folder").notNull().default(true),
+    folderOverrides: json<IncludeFolderOverrides>("folder_overrides").notNull().default({}),
   },
   (t) => [
     foreignKey({

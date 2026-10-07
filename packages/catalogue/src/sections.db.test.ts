@@ -1,12 +1,13 @@
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { racePair, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
+import { sectionMembers } from "./schema/sections.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { loadSectionGraph, wouldCreateCycle } from "./section-graph.js";
-import { addMember, readSection } from "./sections.js";
+import { addMember, readSection, replaceMember } from "./sections.js";
 
 /**
  * Sections against the database itself: two member writes started together, and the constraints
@@ -167,5 +168,37 @@ describe("section_members", () => {
     await fx.db.execute(sql`delete from products where id = ${water}`);
     const rows = await fx.db.execute<{ n: number }>(sql`select count(*) as n from section_members`);
     expect(rows.rows[0]!.n).toBe(0);
+  });
+});
+
+describe("an include's folder setting", () => {
+  async function includeB() {
+    await fixture();
+    const a = await app((tx) => createSection(tx, { internalName: "A" }));
+    const b = await app((tx) => createSection(tx, { internalName: "B" }));
+    const member = await app((tx) => addMember(tx, a.id, { kind: "section", sectionId: b.id }));
+    await fx.db
+      .update(sectionMembers)
+      .set({ showAsFolder: false, folderOverrides: { names: { en: "Bar" } } })
+      .where(eq(sectionMembers.id, member.id));
+    return { rootA: a.id, memberId: member.id };
+  }
+
+  it("loads show_as_folder and folder_overrides through loadSectionGraph", async () => {
+    const { memberId } = await includeB();
+    expect((await app(loadSectionGraph)).folder(memberId)).toEqual({
+      showAsFolder: false,
+      overrides: { names: { en: "Bar" } },
+    });
+  });
+
+  it("a replaced include starts as a folder that follows", async () => {
+    const { rootA, memberId } = await includeB();
+    const c = await app((tx) => createSection(tx, { internalName: "C" }));
+    await app((tx) => replaceMember(tx, rootA, memberId, { kind: "section", sectionId: c.id }));
+    const rows = await fx.db.execute<{ show_as_folder: number; folder_overrides: string }>(
+      sql`select show_as_folder, folder_overrides from section_members where id = ${memberId}`,
+    );
+    expect(rows.rows).toEqual([{ show_as_folder: 1, folder_overrides: "{}" }]);
   });
 });

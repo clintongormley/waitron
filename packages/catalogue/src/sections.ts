@@ -317,7 +317,10 @@ export async function replaceMember(
   const current = writableMember(graph, sectionId, memberId);
   refuseOwnedMember(graph, current);
   await checkListRef(tx, graph, sectionId, ref, current);
-  await tx.update(sectionMembers).set(refColumns(ref)).where(eq(sectionMembers.id, memberId));
+  await tx
+    .update(sectionMembers)
+    .set({ ...refColumns(ref), showAsFolder: true, folderOverrides: {} })
+    .where(eq(sectionMembers.id, memberId));
   // A replace changes what the list holds, never which menus reach the list.
   await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
   return { ...current, ref };
