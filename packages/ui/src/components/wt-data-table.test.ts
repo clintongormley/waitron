@@ -7351,6 +7351,23 @@ test("a list-valued multi-select filter keeps a row whose list holds any chosen 
   ).toEqual(["1", "2"]);
 });
 
+test("a multi-select filter does not ask for its count texts again when a choice re-renders the table", async () => {
+  const countLabel = vi.fn((count: number) => `${count} statuses`);
+  const el = await multiTable({
+    columns: [
+      multiStatus[0]!,
+      { ...multiStatus[1]!, filter: { ...multiStatusFilter, multiple: { countLabel } } },
+    ],
+  });
+  expect(countLabel.mock.calls).toEqual([[2], [3]]);
+  countLabel.mockClear();
+  await chooseOptions(statusSelect(el), ["active"]);
+  await el.updateComplete;
+  await statusSelect(el).updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(countLabel).not.toHaveBeenCalled();
+});
+
 test("a multi-select filter and a second filter still narrow together", async () => {
   const el = await multiTable();
   await chooseOptions(statusSelect(el), ["active", "off"]);

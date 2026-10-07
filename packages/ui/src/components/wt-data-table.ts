@@ -54,6 +54,8 @@ export interface DataTableColumn<Row> {
   activatesRow?: false;
 }
 
+type Filter<Row> = NonNullable<DataTableColumn<Row>["filter"]>;
+
 type SortDirection = "ascending" | "descending";
 
 /** The tree's box width, in px, at or below which each level indents `--wt-space-2` rather than
@@ -1387,6 +1389,22 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return true;
   }
 
+  #filterOptions = new WeakMap<
+    Filter<Row>,
+    { allLabel: string; options: Filter<Row>["options"]; list: Filter<Row>["options"] }
+  >();
+
+  /** The same list while the filter's options and all label are unchanged, so a table render does
+   * not make each filter dropdown recompute what depends on its options. */
+  #filterOptionList(filter: Filter<Row>): Filter<Row>["options"] {
+    const cached = this.#filterOptions.get(filter);
+    if (cached?.allLabel === filter.allLabel && cached.options === filter.options)
+      return cached.list;
+    const list = [{ value: "", label: filter.allLabel }, ...filter.options];
+    this.#filterOptions.set(filter, { allLabel: filter.allLabel, options: filter.options, list });
+    return list;
+  }
+
   /** The values that narrow rows for this column, none when there are none or they are waiting. An
    * initial choice applies only while nothing was chosen and the column offers it. */
   #activeValues(column: DataTableColumn<Row>): readonly string[] {
@@ -2173,7 +2191,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   noResultsLabel=${this.filterNoResultsLabel}
                   ?multiple=${Boolean(multiple)}
                   .countLabel=${multiple?.countLabel ?? String}
-                  .options=${[{ value: "", label: column.filter.allLabel }, ...column.filter.options]}
+                  .options=${this.#filterOptionList(column.filter)}
                   .value=${multiple ? "" : (active[0] ?? "")}
                   .values=${multiple ? [...active] : []}
                   @wt-change=${(event: CustomEvent<{ value?: string; values?: string[] }>) => {

@@ -3522,6 +3522,23 @@ test("stable-width on a multiple choice also reserves the count text of every co
   expect(reserved()).toEqual(["Any tag", "Gluten-free"]);
 });
 
+test("stable-width on a multiple choice does not ask for its count texts again when only the chosen values change", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" multiple show-empty-option stable-width></wt-combobox>',
+    ANY_TAG,
+  );
+  const countLabel = vi.fn((count: number) => `${count} tags`);
+  el.countLabel = countLabel;
+  await el.updateComplete;
+  expect(countLabel.mock.calls).toEqual([[2], [3]]);
+  countLabel.mockClear();
+  el.values = ["vegan"];
+  await el.updateComplete;
+  el.values = [];
+  await el.updateComplete;
+  expect(countLabel).not.toHaveBeenCalled();
+});
+
 test("stable-width on a multiple choice keeps the trigger's width when a smaller count's text is the widest", async () => {
   const el = await mountWith(
     '<wt-combobox label="Dietary tags" multiple show-empty-option stable-width style="display: inline-block"></wt-combobox>',

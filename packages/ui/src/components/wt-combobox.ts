@@ -1,6 +1,7 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
+import { guard } from "lit/directives/guard.js";
 import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
@@ -762,8 +763,18 @@ export class WtCombobox extends LitElement {
    * the list nor stay on a list that no longer handles keys. */
   private keepingPanelFocus = false;
 
+  private reservedTexts: string[] = [];
+
   override willUpdate(changed: PropertyValues<this>): void {
     this.keepingPanelFocus = Boolean(this.popup?.contains(this.shadowRoot!.activeElement));
+    if (
+      changed.has("stableWidth") ||
+      changed.has("options") ||
+      changed.has("multiple") ||
+      changed.has("countLabel")
+    ) {
+      this.reservedTexts = this.stableWidth ? this.widthTexts() : [];
+    }
     if (changed.has("options") && this.activeIndex >= 0) {
       // The active row follows its option by value, and the add row stays active while it is shown;
       // failing that, the chosen row, else the first.
@@ -998,7 +1009,11 @@ export class WtCombobox extends LitElement {
           @keydown=${this.onTriggerKeydown}
         >
           <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
-          ${this.stableWidth ? this.widthTexts().map((text) => html`<span class="width-option" aria-hidden="true">${text}</span>`) : nothing}
+          ${guard([this.reservedTexts], () =>
+            this.reservedTexts.map(
+              (text) => html`<span class="width-option" aria-hidden="true">${text}</span>`,
+            ),
+          )}
           <wt-icon class="chevron" name="chevron-down"></wt-icon>
         </button>
       </div>
