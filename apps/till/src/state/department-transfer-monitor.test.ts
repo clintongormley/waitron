@@ -433,3 +433,80 @@ describe("DepartmentTransferMonitor", () => {
     await expect.poll(() => monitor.snapshot.error).toBeUndefined();
   });
 });
+
+it("discovers all sent tabs across reconnect without watching a selected tab, retaining dismissal separately", async () => {
+  const resolved: DepartmentTransfer = {
+    ...pending,
+    id: "resolved-2",
+    tabId: "tab-2",
+    status: "accepted",
+    revision: 1,
+  };
+  let sent = [pending, resolved];
+  const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
+  const reads: string[] = [];
+  const api = new client.TillApi("", async (input) => {
+    const url = String(input);
+    if (url.endsWith("/events"))
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            streams.push(controller);
+          },
+        }),
+      );
+    reads.push(url);
+    if (url.endsWith("/incoming"))
+      return json({ error: { code: "department_transfer.not_allowed", params: {} } }, 403);
+    if (url === "/api/department-transfers/sent") return json({ requests: sent });
+    throw new Error(`Unexpected read ${url}`);
+  });
+  const monitor = new DepartmentTransferMonitor({ api, changed() {} });
+  monitors.push(monitor);
+  monitor.watchDepartment();
+  monitor.start();
+  await expect.poll(() => monitor.snapshot.sent).toEqual([pending, resolved]);
+  expect(monitor.snapshot.notifications).toEqual([resolved]);
+  monitor.dismiss(resolved.id);
+  expect(monitor.snapshot.sent).toEqual([pending, resolved]);
+  expect(monitor.snapshot.notifications).toEqual([]);
+  streams[0]!.close();
+  await settle();
+  sent = [{ ...pending, status: "declined", reason: "Closing soon", revision: 1 }, resolved];
+  await vi.advanceTimersByTimeAsync(1000);
+  streams.at(-1)!.enqueue(new TextEncoder().encode("event: ready\ndata: {}\n\n"));
+  await expect.poll(() => monitor.snapshot.sent).toEqual(sent);
+  expect(monitor.snapshot.notifications).toEqual([sent[0]]);
+  expect(reads.every((url) => url.endsWith("/incoming") || url.endsWith("/sent"))).toBe(true);
+});
+
+it("forgets department-wide discovery on session end and ignores a late sent response", async () => {
+  let finish!: (response: Response) => void;
+  let sentReads = 0;
+  const api = new client.TillApi("", async (input) => {
+    const url = String(input);
+    if (url.endsWith("/events")) return new Response(new ReadableStream());
+    if (url.endsWith("/incoming")) return json({ count: 0, requests: [] });
+    if (url.endsWith("/sent")) {
+      sentReads++;
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    }
+    throw new Error(`Unexpected read ${url}`);
+  });
+  const monitor = new DepartmentTransferMonitor({ api, changed() {} });
+  monitors.push(monitor);
+  monitor.watchDepartment();
+  monitor.start();
+  expect(sentReads).toBe(1);
+  monitor.stop();
+  monitor.start();
+  const late = consumedResponse({ requests: [pending] });
+  finish(late.response);
+  await late.consumed;
+  await expect.poll(() => monitor.snapshot.receivingAllowed).toBe(true);
+  expect(sentReads).toBe(1);
+  expect(monitor.snapshot.sent).toEqual([]);
+  expect(monitor.snapshot.notifications).toEqual([]);
+});

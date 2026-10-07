@@ -2027,6 +2027,12 @@ export class TillApi {
     return this.#request("/api/department-transfers/incoming", "GET", undefined, options.signal);
   }
 
+  listDepartmentSentTransfers(
+    options: ReadOptions = {},
+  ): Promise<{ requests: DepartmentTransfer[] }> {
+    return this.#request("/api/department-transfers/sent", "GET", undefined, options.signal);
+  }
+
   listSentDepartmentTransfers(
     tabId: string,
     options: ReadOptions = {},

@@ -368,6 +368,11 @@ export interface VenueServiceContribution {
     requestId: string,
     receiver: DepartmentTransferReceiver,
   ): Promise<DepartmentTransfer>;
+  listDepartmentSentTransfers(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    sender: DepartmentTransferActor,
+  ): Promise<DepartmentTransfer[]>;
   listSentDepartmentTransfers(
     tx: Transaction,
     cfg: { locationId: LocationId },

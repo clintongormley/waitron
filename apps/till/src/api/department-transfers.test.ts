@@ -278,3 +278,18 @@ describe("departmental transfer client", () => {
     expect(source.body.locked).toBe(false);
   });
 });
+
+it("discovers all sent transfers without a selected tab and preserves cancellation", async () => {
+  const abort = new AbortController();
+  const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+    expect(url).toBe("/api/department-transfers/sent");
+    expect(init).toEqual({ method: "GET", credentials: "include", signal: abort.signal });
+    return json({
+      requests: [request, { ...request, id: "request-2", tabId: "tab-2", status: "accepted" }],
+    });
+  });
+  const api = new TillApi("", fetchImpl);
+  expect(await api.listDepartmentSentTransfers({ signal: abort.signal })).toEqual({
+    requests: [request, { ...request, id: "request-2", tabId: "tab-2", status: "accepted" }],
+  });
+});

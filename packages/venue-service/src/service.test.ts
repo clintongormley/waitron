@@ -17,6 +17,7 @@ describe("VENUE_SERVICE", () => {
       "findOrderModes",
       "findOrderZones",
       "getOrderContext",
+      "listDepartmentSentTransfers",
       "listDepartmentTransferDestinations",
       "listIncomingDepartmentTransfers",
       "listLineContexts",

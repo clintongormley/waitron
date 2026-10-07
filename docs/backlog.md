@@ -4808,8 +4808,10 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   and leaves device sightings unchanged. Signals carry no request or tab identity; durable reads
   remain the queue authority. The till client now provides the transfer reads/writes and consumes
   authenticated reload frames. Its transfer monitor reloads on reconnect, polls durable reads,
-  separates notification dismissal from the pending queue and forgets the watched source tab at
-  session end. The monitor is not yet connected to the till app; notification/count presentation,
+  separates notification dismissal from the pending queue and forgets its source selection at
+  session end. A department-wide sent-history read now discovers accepted tabs after they leave
+  the source list, including after a fresh login; the monitor can follow this history without a
+  selected tab. The monitor is not yet connected to the till app; notification/count presentation,
   lifecycle integration and receiving/sending screens remain to build. Party-linked bills are
   refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and

@@ -167,6 +167,16 @@ export function mountDepartmentTransferApi(
       return c.json({ requests });
     }),
   );
+  app.get("/api/department-transfers/sent", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const requests = await withTransaction(deps.db, async (tx) => {
+        const sender = await actor(tx, deps, session);
+        return VENUE_SERVICE.listDepartmentSentTransfers(tx, deps.cfg, sender);
+      });
+      return c.json({ requests });
+    }),
+  );
   app.get("/api/department-transfers/:id", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });

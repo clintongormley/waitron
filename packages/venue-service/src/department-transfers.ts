@@ -499,3 +499,16 @@ export async function listSentDepartmentTransfers(
   }
   return rows;
 }
+
+export async function listDepartmentSentTransfers(
+  tx: Transaction,
+  cfg: VenueScope,
+  sender: DepartmentTransferActor,
+) {
+  await activeDepartment(tx, cfg, sender.departmentId);
+  return tx
+    .select()
+    .from(departmentTransferRequests)
+    .where(eq(departmentTransferRequests.sourceDepartmentId, sender.departmentId))
+    .orderBy(asc(departmentTransferRequests.createdAt), asc(departmentTransferRequests.id));
+}

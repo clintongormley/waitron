@@ -1137,3 +1137,59 @@ it("releases transfer streams when their server bus shuts down", async () => {
     await reader.cancel();
   }
 });
+
+describe("department-wide sent transfer discovery", () => {
+  it("discovers every sent tab after acceptance and a fresh source login without destination browsing", async () => {
+    const f = await ready();
+    const first = await pending(f);
+    const [secondTab] = await suite.db
+      .insert(workingOrders)
+      .values({
+        locationId: v.cfg.locationId,
+        source: "operator_script",
+        orderNumber: ++nextOrderNumber,
+      })
+      .returning();
+    await withTransaction(suite.db, (tx) =>
+      recordOrderServiceContext(tx, v.cfg, secondTab!.id, f.az),
+    );
+    const second = await pending({ ...f, tab: secondTab!.id });
+    const unrelated = await ready();
+    await pending(unrelated);
+    expect(
+      await post(f.desk.cookie, resolutionPath(first, "accept"), { revision: 0, zoneId: f.bz }),
+    ).toMatchObject({ status: 200 });
+    for (const source of [f.source, await login(f.sourceProfile)]) {
+      const result = await get(source.cookie, "/api/department-transfers/sent");
+      expect(result.status).toBe(200);
+      expect(result.body.requests).toHaveLength(2);
+      expect(result.body.requests).toEqual([
+        expect.objectContaining({ id: first, tabId: f.tab, status: "accepted" }),
+        expect.objectContaining({ id: second, tabId: secondTab!.id, status: "pending" }),
+      ]);
+      expect(await get(source.cookie, `/api/working-orders/${f.tab}/lines`)).toMatchObject({
+        status: 403,
+      });
+    }
+    expect(await get(f.desk.cookie, "/api/department-transfers/sent")).toEqual({
+      status: 200,
+      body: { requests: [] },
+    });
+  });
+  it("requires an active admitted operator and the profile's ordering action for discovery", async () => {
+    const f = await ready();
+    await pending(f);
+    expect(await get("", "/api/department-transfers/sent")).toMatchObject({
+      status: 401,
+      body: { error: { code: "session.required" } },
+    });
+    await suite.db
+      .update(deviceProfiles)
+      .set({ capabilities: CAPABILITY_FLAGS.filter((flag) => flag !== "take-orders") })
+      .where(eq(deviceProfiles.id, f.sourceProfile));
+    expect(await get(f.source.cookie, "/api/department-transfers/sent")).toMatchObject({
+      status: 403,
+      body: { error: { code: "device.forbidden_action" } },
+    });
+  });
+});

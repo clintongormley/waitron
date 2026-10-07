@@ -57,6 +57,7 @@ export class DepartmentTransferMonitor {
   #retry?: ReturnType<typeof setTimeout>;
   #retryMs = 1000;
   #sourceTabId?: string;
+  #wholeDepartment = false;
   #incomingFlight?: object;
   #sourceFlight?: object;
   #incomingDirty = false;
@@ -95,20 +96,33 @@ export class DepartmentTransferMonitor {
     this.#sourceDirty = false;
     this.#dismissed.clear();
     this.#sourceTabId = undefined;
+    this.#wholeDepartment = false;
     this.#incomingError = undefined;
     this.#sourceError = undefined;
     this.#snapshot = empty();
     this.options.changed();
   }
 
-  watchSource(tabId: string | undefined): void {
-    if (tabId === this.#sourceTabId) return;
-    this.#sourceTabId = tabId;
+  watchDepartment(): void {
+    if (this.#wholeDepartment) return;
+    this.#wholeDepartment = true;
+    this.#sourceTabId = undefined;
+    this.#resetSource();
+  }
+
+  #resetSource(): void {
     this.#sourceError = undefined;
     this.#sourceFlight = undefined;
     this.#sourceDirty = false;
     this.#update({ sent: [] });
     this.#readSource();
+  }
+
+  watchSource(tabId: string | undefined): void {
+    if (!this.#wholeDepartment && tabId === this.#sourceTabId) return;
+    this.#wholeDepartment = false;
+    this.#sourceTabId = tabId;
+    this.#resetSource();
   }
 
   dismiss(requestId: string): void {
@@ -226,7 +240,8 @@ export class DepartmentTransferMonitor {
   #readSource(): void {
     const active = this.#active;
     const tabId = this.#sourceTabId;
-    if (active === undefined || tabId === undefined) return;
+    const wholeDepartment = this.#wholeDepartment;
+    if (active === undefined || (!wholeDepartment && tabId === undefined)) return;
     if (this.#sourceFlight !== undefined) {
       this.#sourceDirty = true;
       return;
@@ -234,7 +249,9 @@ export class DepartmentTransferMonitor {
     const flight = {};
     this.#sourceFlight = flight;
     void this.#bounded(active, (signal) =>
-      this.options.api.listSentDepartmentTransfers(tabId, { signal }),
+      wholeDepartment
+        ? this.options.api.listDepartmentSentTransfers({ signal })
+        : this.options.api.listSentDepartmentTransfers(tabId!, { signal }),
     )
       .then((answer) => {
         if (this.#active === active && this.#sourceFlight === flight) {
