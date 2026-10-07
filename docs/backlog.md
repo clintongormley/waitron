@@ -1478,17 +1478,18 @@ tabs and reverted requests do not ask. Clean child-to-shell handoffs remain dire
 Schedule Back and party-draft transitions waiting on a save. Inactivity and server switches still
 lock immediately and retire pending answers. Counter view changes and logout retain the basket
 and its label without a form warning. The dated audit records the test commands, deletion controls
-and native EN/ES, light/dark, phone/desktop inspection. Memory-only basket unload/destructive
-replacement, unindexed till history, native reload, remaining link/context routes and the final
-advancing-owner audit remain open; W69 is not ready for finishing or landing.
+and native EN/ES, light/dark, phone/desktop inspection. The later checkpoints below cover basket
+replacement, unindexed till history and activated Schedule reload. Remaining link/context routes
+and the final advancing-owner audit keep W69 incomplete.
 
 Retained basket checkpoint (2026-10-07): memory-only and retrieved-order edits now participate
 in unload protection. Retrieve, waiting-list Pay and New sale ask before replacing them; Keep
 retains the basket and Discard proceeds once. Failed or stale reads retain local edits. Accepted
 saves and payments commit their submitted snapshot; later edits stay protected. Retained view,
 history and logout changes do not ask for the basket. The dated audit records test-first, consumer,
-native visual and deletion-control receipts. Remaining basket/context commands, dirty unindexed
-till navigation, activated native reload, links and the advancing-owner audit keep W69 incomplete.
+native visual and deletion-control receipts. The later checkpoints cover held moves, dirty
+unindexed navigation and activated Schedule reload. Remaining basket/context commands, links
+and the advancing-owner audit keep W69 incomplete.
 
 Held move checkpoint (2026-10-07): moving the retrieved order you have edited now asks before
 the move request. Keep retains your local label and quantities; Discard moves the stored order
@@ -1497,6 +1498,17 @@ values typed while the move was pending or a newly loaded copy of the same order
 held order and moving a reverted basket remain direct. The dated audit records tests and native
 picker inspection. The remaining context/navigation/native reload paths and final owner audit
 still keep W69 incomplete.
+
+Unindexed history and native reload checkpoint (2026-10-07): Back/Forward into an unindexed
+entry preserve your mounted Schedule request while asking. Keep retains its note and URL;
+Discard reaches the captured destination with its unrelated history state. Neither answer adds
+a history entry or guesses a traversal distance. In activated headless Chromium, rejecting the
+native reload warning retains that request; accepting reloads without submitting it. Clean,
+reverted and successfully submitted requests reload without a prompt. These checks use the real
+till shell and form with a synthetic API; they do not establish tab-close, external navigation
+or other-platform behavior. The dated audit records the commands and deletion controls.
+Remaining basket/context and link routes, other native leave paths and the advancing-owner
+audit keep W69 incomplete.
 
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected

@@ -3645,3 +3645,61 @@ without claiming that an ignored whole-document check read historical text.
 Existing behavioral assertions are unchanged. Remaining basket/context routes, dirty unindexed
 navigation, activated native reload, other links and the advancing-owner audit still keep the
 whole W69 item incomplete. No push, external review, PR, CI or landing is claimed here.
+
+
+## Dirty unindexed till history and activated reload, 2026-10-07
+
+Back/Forward into an unindexed same-document entry now has four real-shell acceptance cases:
+each direction with Keep and Discard. They retain the actual Schedule owner and its typed note
+while asking, check the accepted URL, and verify that Discard preserves the destination's
+unrelated state. The cases assert no history push, no guessed `history.go`, unchanged history
+length, fresh index zero and no absence submission or logout. They passed against the existing
+shared guard on their first run; this checkpoint changes tests and browser-command support,
+not application behavior.
+
+The new `apps/till/src/till-app.unsaved-changes.test.ts` exercises an independent page with the
+real TillApp and Schedule form, a synthetic API and an actual label click before reload.
+The Playwright command in `apps/till/test/native-reload.ts` receives the browser's native
+`beforeunload` dialog. Keep retains the document and native input; accepting changes the document
+without submitting. Clean, reverted and successfully submitted requests reload without a dialog.
+The command closes its independent page in `finally`, including failed setup, and never reloads
+the Vitest runner. It uses Chromium's reload command because the earlier `page.reload` experiment
+waited for a navigation that dismissing the warning prevented; that failed log remains retained.
+Tab closing, external navigation, no-activation behavior and other platforms are not measured.
+
+Commands and results, retained under the local campaign receipt directory
+`receipts/w69-unindexed-20261007/`:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t 'unindexed .* protects the mounted schedule'
+# 4 passed (first-run.log)
+pnpm --filter @waitron/till exec vitest run src/till-app.unsaved-changes.test.ts
+# 5 passed (native-green.log)
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts src/till-app.unsaved-changes.test.ts src/till-app-drafts.test.ts src/screens/till-schedule-screen.test.ts src/screens/till-schedule-screen.unsaved.test.ts
+# 989 passed (family.log)
+```
+
+The family prints the malformed printer-choice rejection at `printerChoices.receipt`. The earlier
+installed baseline experiment in `receipts/w69-till-pages-20261007/baseline-switch.log` records
+the same rejection; this checkpoint changes no printer behavior or historical assertion.
+
+Two independent deletions ran in an installed disposable worktree containing the complete
+candidate. Removing unload listener registration failed both dirty native cases with
+`actual []` versus `expected ["beforeunload"]`; all three clean/revert/save controls passed.
+Removing the till history dirty gate failed all four new unindexed cases; the retained-basket
+traversal control passed. Restoring both source files passed ten cases, and six source/test/config
+files matched the feature tree before the owned candidate and empty parent were removed.
+The logs are `native-deletion.log`, `unindexed-deletion.log`, `restored-controls.log` and
+`candidate-cleanup.txt`. Initial missing-command, wrong-shell-tag, label-actionability and
+cancelled-navigation failures are fixture development records, not product regression receipts.
+
+The till source typecheck and an explicit TypeScript check of its browser command/config passed.
+The first explicit compiler command was refused by TypeScript 7 because it omitted
+`--ignoreConfig`; `command-types-corrected.log` retains the corrected successful command.
+Coverage vocabulary, native-field, style-token and CLAUDE pointer guards passed 46 cases; unedited
+fiscal write-path/inmutabilidad passed twenty. ESLint, source formatting and `git diff --check`
+passed. No new visual styling or application code changed, and no existing assertion changed.
+
+The remaining basket/context and link routes, other native leave paths and advancing-source
+owner audit remain open. Tasks 2/3 remain complete; Tasks 1/4/5/6 remain partial. W69 is not
+ready for finish-branch or landing.

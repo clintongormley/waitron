@@ -15473,6 +15473,62 @@ describe("W69 till shell leave routes", () => {
     expect(question(el).open).toBe(false);
   });
 
+  for (const direction of ["back", "forward"] as const)
+    for (const decision of ["keep", "discard"] as const)
+      it(`unindexed ${direction} ${decision} protects the mounted schedule without adding history`, async () => {
+        const { el, owner, input, href } = await editedSchedule();
+        await userEvent.fill(input.shadowRoot!.querySelector("input")!, "");
+        const acceptedState: unknown = history.state;
+        const destination = new URL("/tabs/floor?source=legacy#table", location.origin).href;
+        history.pushState({ external: "legacy", unrelated: 7 }, "", destination);
+        if (direction === "back") history.pushState(acceptedState, "", href);
+        else {
+          const arrived = new Promise<void>((resolve) =>
+            window.addEventListener("popstate", () => resolve(), { once: true }),
+          );
+          history.back();
+          await arrived;
+          await flush(el);
+        }
+        expect(schedule(el)).toBe(owner);
+        await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Legacy request");
+        const length = history.length;
+        const pushes = vi.spyOn(history, "pushState");
+        const go = vi.spyOn(history, "go");
+        try {
+          history[direction]();
+          await expect.poll(() => question(el).open).toBe(true);
+          expect(location.href).toBe(href);
+          expect(schedule(el)).toBe(owner);
+          expect(input.value).toBe("Legacy request");
+          await answer(el, decision);
+          if (decision === "keep") {
+            expect(location.href).toBe(href);
+            expect(schedule(el)).toBe(owner);
+            expect(input.value).toBe("Legacy request");
+            const unload = new Event("beforeunload", { cancelable: true });
+            window.dispatchEvent(unload);
+            expect(unload.defaultPrevented).toBe(true);
+          } else {
+            await expect.poll(() => shell(el)!.activeTabKey).toBe("floor");
+            expect(schedule(el)).toBeNull();
+            expect(location.href).toBe(destination);
+            expect(history.state).toMatchObject({ external: "legacy", unrelated: 7 });
+            const unload = new Event("beforeunload", { cancelable: true });
+            window.dispatchEvent(unload);
+            expect(unload.defaultPrevented).toBe(false);
+          }
+          expect(history.state.__wtNavigation.index).toBe(0);
+          expect(history.length).toBe(length);
+          expect(pushes).not.toHaveBeenCalled();
+          expect(go).not.toHaveBeenCalled();
+          expect(currentApi.requestAbsence).not.toHaveBeenCalled();
+          expect(currentApi.logout).not.toHaveBeenCalled();
+        } finally {
+          go.mockRestore();
+        }
+      });
+
   it.each(["idle", "server"])(
     "%s security exit cancels a pending signout decision without asking again",
     async (boundary) => {
