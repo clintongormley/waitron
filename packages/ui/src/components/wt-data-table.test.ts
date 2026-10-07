@@ -7514,3 +7514,43 @@ test("a multi-select filter with an initial choice starts on that one value", as
   expect(rowKeysS(el)).toEqual(["1"]);
   expect(statusSelect(el).values).toEqual(["active"]);
 });
+
+test("a multi-select filter reporting the chosen values in another order is no change", async () => {
+  const el = await multiTable({ viewKey: "test.multi-order" });
+  await chooseOptions(statusSelect(el), ["active", "paused"]);
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) =>
+    seen.push((event as CustomEvent).detail.filters),
+  );
+  await chooseOptions(statusSelect(el), ["paused", "active"]);
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(storedFilters("test.multi-order")).toEqual({ status: ["active", "paused"] });
+});
+
+test("a listener changing a reported multi-select list does not change the table's filter", async () => {
+  const el = await multiTable({ viewKey: "test.multi-detail" });
+  el.addEventListener(
+    "wt-filter-change",
+    (event) => (event as CustomEvent).detail.filters.status.push("off"),
+    { once: true },
+  );
+  await chooseOptions(statusSelect(el), ["active"]);
+  await chooseOption(nameSelect(el), "Ada");
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(storedFilters("test.multi-detail")).toEqual({ status: ["active"], name: "Ada" });
+});
+
+test("a listener changing the list Clear all reports does not change the table's filter", async () => {
+  const el = await multiTable({ viewKey: "test.multi-clear-detail", columns: multiInitial });
+  el.addEventListener("wt-filter-change", (event) =>
+    (event as CustomEvent).detail.filters.status.push("off"),
+  );
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-clear-all")!.click();
+  await el.updateComplete;
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "2", "3", "4"]);
+  expect(storedFilters("test.multi-clear-detail")).toEqual({ status: [] });
+});

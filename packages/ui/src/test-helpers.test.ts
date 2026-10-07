@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { chooseOption, cleanup, mountInShadowRoot } from "./test-helpers.js";
+import { chooseOption, chooseOptions, cleanup, mountInShadowRoot } from "./test-helpers.js";
 import "./components/wt-combobox.js";
 import type { WtCombobox } from "./components/wt-combobox.js";
 
@@ -37,6 +37,46 @@ test("chooseOption resolves only once the element's update has completed", async
   const picking = chooseOption(stub, "main").then(() => (done = true));
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(stub.value).toBe("main");
+  expect(done).toBe(false);
+  finish();
+  await picking;
+  expect(done).toBe(true);
+});
+
+test("chooseOptions sets the values and sends the composed wt-change a row click sends; the trigger shows the count", async () => {
+  const el = (await mountInShadowRoot(
+    '<wt-combobox label="Courses" multiple search="never"></wt-combobox>',
+  )) as WtCombobox;
+  el.options = [
+    { value: "starter", label: "Starter" },
+    { value: "main", label: "Main course" },
+    { value: "dessert", label: "Dessert" },
+  ];
+  el.countLabel = (count) => `${count} courses`;
+  await el.updateComplete;
+  const heard: unknown[] = [];
+  const listener = (event: Event) => heard.push((event as CustomEvent).detail);
+  document.addEventListener("wt-change", listener);
+  try {
+    await chooseOptions(el, ["main", "dessert"]);
+  } finally {
+    document.removeEventListener("wt-change", listener);
+  }
+  expect(heard).toEqual([{ values: ["main", "dessert"] }]);
+  expect(el.values).toEqual(["main", "dessert"]);
+  expect(el.shadowRoot!.querySelector(".trigger .value")!.textContent).toBe("2 courses");
+});
+
+test("chooseOptions resolves only once the element's update has completed", async () => {
+  let finish!: () => void;
+  const stub = Object.assign(document.createElement("div"), {
+    values: [] as string[],
+    updateComplete: new Promise<void>((resolve) => (finish = resolve)),
+  });
+  let done = false;
+  const picking = chooseOptions(stub, ["main"]).then(() => (done = true));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(stub.values).toEqual(["main"]);
   expect(done).toBe(false);
   finish();
   await picking;

@@ -87,7 +87,18 @@ function isFilterChoice(value: unknown): value is FilterChoice {
 }
 
 function sameValues(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
+  const right = new Set(b);
+  return new Set(a).size === right.size && a.every((value) => right.has(value));
+}
+
+/** The lists are copied so a listener cannot change the table's own filter state through them. */
+function copyChoices(choices: Record<string, FilterChoice>): Record<string, FilterChoice> {
+  return Object.fromEntries(
+    Object.entries(choices).map(([key, value]) => [
+      key,
+      typeof value === "string" ? value : [...value],
+    ]),
+  );
 }
 
 function sameChoices(a: Record<string, FilterChoice>, b: Record<string, FilterChoice>): boolean {
@@ -1404,7 +1415,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
-        detail: { filters: { ...next } },
+        detail: { filters: copyChoices(next) },
         bubbles: true,
         composed: true,
       }),
@@ -1425,7 +1436,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
-        detail: { filters: { ...next } },
+        detail: { filters: copyChoices(next) },
         bubbles: true,
         composed: true,
       }),

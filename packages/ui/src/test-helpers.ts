@@ -138,7 +138,8 @@ export async function chooseOption(el: Element, value: string): Promise<void> {
 }
 
 /** Sets `values` on a multiple wt-combobox and sends the `wt-change` (bubbling, composed) a click on
- * one of its rows sends, carrying every value now ticked. */
+ * one of its rows sends, carrying every value now ticked. Unlike clicks, it sends one event for the
+ * whole list, where a person ticks one row per click and each click sends its own. */
 export async function chooseOptions(el: Element, values: string[]): Promise<void> {
   const box = el as HTMLElement & { values: string[]; updateComplete?: Promise<unknown> };
   box.values = values;

@@ -2382,6 +2382,11 @@ test("paints from the primary token", async () => {
   Unlike a click, it neither closes the list nor moves focus to the trigger. It is for a screen test
   that picks an option without driving the list; an app's test imports it as
   `@waitron/ui/src/test-helpers.js`. Its case is in `packages/ui/src/test-helpers.test.ts`.
+- `chooseOptions(el, values)` — picks `values` on a `multiple` `wt-combobox`: sets `values`, sends
+  the `wt-change` a click on a row sends, with `detail: { values }` (bubbling and composed), and
+  awaits the render. Unlike clicks, it sends one event for the whole list, where a person ticks one
+  row per click and each click sends its own. Its cases are in
+  `packages/ui/src/test-helpers.test.ts`.
 
 ### Accessibility testing (axe)
 
