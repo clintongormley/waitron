@@ -121,9 +121,15 @@ export class TillCounterScreen extends LitElement {
       }
 
       .service-zone {
+        max-width: 100%;
+        flex-wrap: wrap;
         display: flex;
         align-items: center;
         gap: var(--wt-space-2);
+      }
+      .service-zone wt-combobox {
+        min-width: min(100%, calc(var(--wt-tap-min) * 4));
+        max-width: 100%;
       }
     `,
   ];

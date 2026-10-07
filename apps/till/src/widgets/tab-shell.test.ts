@@ -350,3 +350,29 @@ it("keeps the language chooser on a kitchen display, at the top right on its own
   expect(shell.right - own.right).toBeLessThanOrEqual(32);
   expect(own.left).toBeGreaterThan(shell.left + shell.width / 2);
 });
+
+it("translates standard tabs on a language switch and retains custom titles", async () => {
+  const original = currentLocale();
+  try {
+    setLocale("en-GB");
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+      tabs: [
+        ...tabs,
+        { key: "order", title: "Order", columns: 4, cards: [] },
+        { key: "custom", title: "Counter", columns: 4, cards: [] },
+        { key: "floor-renamed", title: "Patio", columns: 4, cards: [] },
+      ],
+    });
+    const labels = () =>
+      [...el.shadowRoot!.querySelectorAll(".tab")].map((e) => e.textContent!.trim());
+    expect(labels()).toEqual(["Counter", "Floor", "Order", "Counter", "Patio"]);
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(labels()).toEqual(["Mostrador", "Sala", "Pedido", "Counter", "Patio"]);
+    el.tabs = [{ key: "counter", title: "Barra principal", columns: 12, cards: [] }];
+    await el.updateComplete;
+    expect(labels()).toEqual(["Barra principal"]);
+  } finally {
+    setLocale(original);
+  }
+});

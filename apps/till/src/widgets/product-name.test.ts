@@ -169,3 +169,65 @@ describe("soldByTheUnit", () => {
     expect(soldByTheUnit(product({ unit: unit(0, "kg") }))).toBe(false);
   });
 });
+
+describe("unit labels without ids", () => {
+  it("labels the legacy each product in Spanish when Spanish is the only content language", () => {
+    setLocale("es-ES");
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    expect(unitName(product())).toBe("ud");
+  });
+
+  it("uses the enabled full name when the abbreviation has no enabled text", () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    expect(
+      unitName(
+        product({
+          unit: {
+            id: "d6a9d42f-9252-4a83-b722-0fd7f951e9a0",
+            name: { es: "Caja" },
+            abbreviation: { en: "box" },
+            precision: 0,
+            hardwareUnit: null,
+          },
+        }),
+        "es-ES",
+      ),
+    ).toBe("Caja");
+  });
+
+  it("uses the content default abbreviation when the requested translation is missing", () => {
+    setContentLanguages({ defaultLanguage: "en", languages: ["es", "en"] });
+    expect(
+      unitName(
+        product({
+          unit: {
+            id: "d6a9d42f-9252-4a83-b722-0fd7f951e9a0",
+            name: { en: "Box" },
+            abbreviation: { en: "box" },
+            precision: 0,
+            hardwareUnit: null,
+          },
+        }),
+        "es-ES",
+      ),
+    ).toBe("box");
+  });
+
+  it("returns no label when neither map holds enabled text", () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    expect(
+      unitName(
+        product({
+          unit: {
+            id: "d6a9d42f-9252-4a83-b722-0fd7f951e9a0",
+            name: { en: "Box" },
+            abbreviation: { en: "box" },
+            precision: 0,
+            hardwareUnit: null,
+          },
+        }),
+        "es-ES",
+      ),
+    ).toBe("");
+  });
+});

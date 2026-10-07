@@ -16,6 +16,7 @@ import {
   menuPrices,
   sections as sectionsTable,
   readContentLanguages,
+  listTranslationGapReport,
   readMenuStructure,
 } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
@@ -369,4 +370,44 @@ describe("seedCatalogues", () => {
     expect(hamId).toBeDefined();
     expect(res.products.some((p) => p.id === hamId)).toBe(true);
   });
+});
+
+it("seeds every dish and pricing unit with Spanish text for a Spanish demo", async () => {
+  const { locationId } = await provisionVenue();
+  const read = await withTransaction(suite.db, async (tx) => {
+    const seeded = await seedCatalogues(tx, { locationId, locale: "es", dataSet: CASA_DELGADO_ES });
+    const { rows } = await tx.execute<{ id: string; name: string; customer_es: string | null }>(sql`
+      select id, name, customer_name->>'es' as customer_es from products`);
+    const { rows: units } = await tx.execute<{
+      name_es: string | null;
+      abbreviation_es: string | null;
+    }>(sql`
+      select name->>'es' as name_es, abbreviation->>'es' as abbreviation_es from units`);
+    const config = await readContentLanguages(tx, "es");
+    const gaps = await listTranslationGapReport(tx, config);
+    return { seeded, rows, units, gaps };
+  });
+  const byId = new Map(read.rows.map((row) => [row.id, row]));
+  const { restaurant, lunch, deli } = CASA_DELGADO_ES.menus;
+  const authored = [restaurant, lunch, deli].flatMap((menu) =>
+    menu.categories.flatMap((category) => category.products),
+  );
+  expect(read.seeded.productsByImage.size).toBe(authored.length);
+  for (const dish of authored) {
+    const row = byId.get(read.seeded.productsByImage.get(dish.image)!);
+    expect(row?.name, dish.image).toBe(dish.staffName ?? dish.customerName.es);
+    expect(row?.customer_es, dish.image).toBe(dish.customerName.es);
+    expect(row?.customer_es?.trim(), dish.image).not.toBe("");
+  }
+  expect(read.rows.some((row) => row.name === "Tortilla española")).toBe(true);
+  expect(read.rows.some((row) => row.name === "Pan de la casa")).toBe(true);
+  expect(read.rows.some((row) => ["Spanish omelette", "House bread"].includes(row.name))).toBe(
+    false,
+  );
+  expect(read.units.length).toBeGreaterThan(0);
+  for (const unit of read.units) {
+    expect(unit.name_es?.trim()).toBeTruthy();
+    expect(unit.abbreviation_es?.trim()).toBeTruthy();
+  }
+  expect(read.gaps.find((language) => language.language === "es")?.gaps).toEqual([]);
 });

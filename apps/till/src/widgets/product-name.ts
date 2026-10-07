@@ -47,7 +47,7 @@ export function unitName(
   locale: string = currentLocale(),
 ): string {
   const unit = productUnit(product);
-  return descriptionFor(unit.abbreviation, unit.id, locale);
+  return descriptionFor(unit.abbreviation, descriptionFor(unit.name, "", locale), locale);
 }
 
 export function productUnit(
@@ -58,15 +58,15 @@ export function productUnit(
     (product.pricingUnit === "weight"
       ? {
           id: "00000000-0000-0000-0000-000000000002",
-          name: { en: "kg" },
-          abbreviation: { en: "kg" },
+          name: { en: "kg", es: "kg" },
+          abbreviation: { en: "kg", es: "kg" },
           precision: 3,
           hardwareUnit: "kg" as const,
         }
       : {
           id: "00000000-0000-0000-0000-000000000001",
-          name: { en: "each" },
-          abbreviation: { en: "ea" },
+          name: { en: "each", es: "unidad" },
+          abbreviation: { en: "ea", es: "ud" },
           precision: 0,
           hardwareUnit: null,
         })
