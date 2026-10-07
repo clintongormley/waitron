@@ -418,6 +418,7 @@ describe("till-app: counter station choice", () => {
     emit(lock(el)!, "logged-in", {
       personId: "p2",
       displayName: "Diego",
+      permissions: [],
       canConfigureTill: false,
     });
     await flush(el);

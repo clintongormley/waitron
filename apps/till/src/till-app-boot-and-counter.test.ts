@@ -2,7 +2,12 @@ import { page } from "vitest/browser";
 import { applyTokens, currentContentLanguages } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  servedMenus,
+} from "./widgets/test-helpers.js";
 import indexHtml from "../index.html?raw";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
@@ -2631,5 +2636,357 @@ describe("till-app logout while a request is waiting for the server", () => {
     await flush(el);
 
     expect(privateState<TillSaleResult | undefined>(el, "result")).toBeUndefined();
+  });
+});
+
+describe("department transfers across operator lifetimes", () => {
+  const request = {
+    id: "request-1",
+    tabId: "tab-1",
+    sourceDepartmentId: "deli",
+    destinationDepartmentId: "restaurant",
+    senderId: "sender",
+    resolvedBy: null,
+    destinationZoneId: null,
+    status: "pending" as const,
+    reason: null,
+    createdAt: "2026-10-07T09:00:00.000Z",
+    resolvedAt: null,
+    revision: 0,
+  };
+  function transfers() {
+    const signals: AbortSignal[] = [];
+    let change: (() => void) | undefined;
+    let incoming = [request];
+    const calls = {
+      listIncomingDepartmentTransfers: vi.fn(async () => ({
+        count: incoming.length,
+        requests: incoming,
+      })),
+      listDepartmentSentTransfers: vi.fn(async () => ({
+        requests: [{ ...request, id: "sent-1", status: "declined", reason: "Closing" }],
+      })),
+      readDepartmentTransferEvents: vi.fn(
+        (reload: () => void, { signal }: { signal: AbortSignal }) => {
+          signals.push(signal);
+          change = reload;
+          return new Promise<void>((resolve) =>
+            signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+        },
+      ),
+    };
+    return {
+      calls,
+      signals,
+      empty() {
+        incoming = [];
+        change?.();
+      },
+    };
+  }
+  async function signIn(el: TillApp, permissions = ["sale.take_payment"]) {
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions });
+    await vi.waitFor(() => expect(shell(el)).not.toBeNull());
+    await flush(el);
+  }
+  const pendingCount = (el: TillApp) =>
+    shell(el)?.shadowRoot?.querySelector<HTMLElement>("[data-test=department-transfers]");
+
+  it("starts only after authorised sign-in and shows a live persistent pending count", async () => {
+    const desk = transfers();
+    const { el } = await mountApp(desk.calls);
+    await flush(el);
+    expect(desk.calls.listIncomingDepartmentTransfers).not.toHaveBeenCalled();
+    await signIn(el);
+    await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("1"));
+    expect(desk.calls.listDepartmentSentTransfers).toHaveBeenCalled();
+    desk.empty();
+    await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("0"));
+    expect(desk.signals).toHaveLength(1);
+  });
+
+  it("does not read or show transfer controls without the person's permission", async () => {
+    const desk = transfers();
+    const { el } = await mountApp(desk.calls);
+    await signIn(el, []);
+    expect(pendingCount(el)).toBeNull();
+    expect(desk.calls.listDepartmentSentTransfers).not.toHaveBeenCalled();
+    expect(desk.signals).toHaveLength(0);
+  });
+
+  it("ends its stream on logout and starts a fresh stream on sign-in", async () => {
+    const desk = transfers();
+    const { el } = await mountApp(desk.calls);
+    await signIn(el);
+    emit(shell(el)!, "logout");
+    expect(desk.signals[0]?.aborted).toBe(true);
+    await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+    await signIn(el);
+    await vi.waitFor(() => expect(desk.signals).toHaveLength(2));
+    expect(desk.signals[1]?.aborted).toBe(false);
+  });
+
+  it("aborts its stream when detached", async () => {
+    const desk = transfers();
+    const { el, host } = await mountApp(desk.calls);
+    await signIn(el);
+    host.remove();
+    expect(desk.signals[0]?.aborted).toBe(true);
+  });
+
+  it("locks locally when the transfer stream reports a revoked session", async () => {
+    const desk = transfers();
+    let refuse!: (error: unknown) => void;
+    desk.calls.readDepartmentTransferEvents.mockImplementation((_reload, { signal }) => {
+      desk.signals.push(signal);
+      return new Promise<void>((_resolve, reject) => {
+        refuse = reject;
+      });
+    });
+    const { el } = await mountApp(desk.calls);
+    await signIn(el);
+    expect(desk.signals).toHaveLength(1);
+    refuse({ code: "session.expired", status: 401 });
+    await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+    expect(shell(el)).toBeNull();
+    expect(desk.signals[0]?.aborted).toBe(true);
+  });
+
+  it("clears the old server's stream and count when the router changes server", async () => {
+    const desk = transfers();
+    const router = new ServerRouter({
+      origin: "https://box.deli.test",
+      fetchImpl: vi.fn().mockRejectedValue(new TypeError("Offline")) as typeof fetch,
+      storage: { getItem: () => null, setItem: () => undefined },
+    });
+    const { el } = await mountApp(desk.calls, { router });
+    await signIn(el);
+    await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("1"));
+    router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: "a", to: "b" } }));
+    await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+    expect(desk.signals[0]?.aborted).toBe(true);
+    expect(pendingCount(el)).toBeUndefined();
+  });
+
+  it.each([true, false])(
+    "a profile switch replaces the stream only if it succeeds (%s)",
+    async (succeeds) => {
+      const desk = transfers();
+      const identity = {
+        deviceId: "till-dev",
+        name: "Till 1",
+        formFactor: "till",
+        stationId: null,
+        profileId: "counter",
+        approvedProfiles: [
+          { id: "counter", name: "Counter" },
+          { id: "bar", name: "Bar" },
+        ],
+      };
+      const { el } = await mountApp({
+        ...desk.calls,
+        getDeviceIdentity: vi.fn().mockResolvedValue(identity),
+        switchDeviceProfile: succeeds
+          ? vi.fn().mockResolvedValue({ activeProfileId: "bar" })
+          : vi.fn().mockRejectedValue({ code: "device_profile.not_admitted" }),
+      });
+      await signIn(el);
+      emit(shell(el)!, "open-profile");
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-profile-dialog")).not.toBeNull(),
+      );
+      const dialog = el.shadowRoot!.querySelector("till-profile-dialog")!;
+      emit(dialog, "profile-switch", { profileId: "bar" });
+      if (succeeds) {
+        await vi.waitFor(() => expect(desk.signals).toHaveLength(2));
+        expect(desk.signals[0]?.aborted).toBe(true);
+        expect(desk.signals[1]?.aborted).toBe(false);
+      } else {
+        await vi.waitFor(() =>
+          expect((dialog as HTMLElement & { notice: unknown }).notice).toEqual({
+            code: "device_profile.not_admitted",
+          }),
+        );
+        expect(desk.signals).toHaveLength(1);
+        expect(desk.signals[0]?.aborted).toBe(false);
+        expect(pendingCount(el)?.textContent).toContain("1");
+      }
+    },
+  );
+
+  it.each([
+    "department_transfer.not_allowed",
+    "device.forbidden_action",
+    "authorization.not_permitted",
+  ])("a %s transfer-access refusal keeps its operator signed in", async (code) => {
+    const desk = transfers();
+    desk.calls.readDepartmentTransferEvents.mockRejectedValue({ code, status: 403 });
+    const { el } = await mountApp(desk.calls);
+    await signIn(el);
+    expect(shell(el)).not.toBeNull();
+    expect(lock(el)).toBeNull();
+    expect(pendingCount(el)).toBeNull();
+  });
+
+  it("stops the old profile's transfer stream before the new profile setup answers", async () => {
+    const desk = transfers();
+    let setup!: (value: typeof till) => void;
+    const getTill = vi
+      .fn()
+      .mockResolvedValueOnce(till)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            setup = resolve;
+          }),
+      );
+    const { el } = await mountApp({
+      ...desk.calls,
+      getTill,
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "till-dev",
+        name: "Till 1",
+        formFactor: "till",
+        stationId: null,
+        profileId: "counter",
+        approvedProfiles: [
+          { id: "counter", name: "Counter" },
+          { id: "bar", name: "Bar" },
+        ],
+      }),
+      switchDeviceProfile: vi.fn().mockResolvedValue({ activeProfileId: "bar" }),
+    });
+    await signIn(el);
+    emit(shell(el)!, "open-profile");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-profile-dialog")).not.toBeNull(),
+    );
+    emit(el.shadowRoot!.querySelector("till-profile-dialog")!, "profile-switch", {
+      profileId: "bar",
+    });
+    await vi.waitFor(() => expect(getTill).toHaveBeenCalledTimes(2));
+    expect(desk.signals).toHaveLength(1);
+    expect(desk.signals[0]?.aborted).toBe(true);
+    expect(pendingCount(el)).toBeNull();
+    setup(till);
+    await vi.waitFor(() => expect(desk.signals).toHaveLength(2));
+    expect(desk.signals[1]?.aborted).toBe(false);
+  });
+
+  it("replaces private transfer state when another sign-in begins without a prior logout", async () => {
+    const desk = transfers();
+    const { el } = await mountApp(desk.calls);
+    await signIn(el);
+    emit(shell(el)!, "logged-in", {
+      personId: "p2",
+      displayName: "Bea",
+      permissions: ["sale.take_payment"],
+    });
+    await vi.waitFor(() => expect(desk.signals).toHaveLength(2));
+    expect(desk.signals[0]?.aborted).toBe(true);
+    expect(desk.signals[1]?.aborted).toBe(false);
+    expect(shell(el)?.shadowRoot?.textContent).toContain("Bea");
+  });
+
+  for (const locale of ["en-GB", "es-ES"]) {
+    for (const theme of ["light", "dark"]) {
+      for (const width of [390, 1280]) {
+        it(`shows the pending count accessibly: ${locale}, ${theme}, ${width}`, async () => {
+          const desk = transfers();
+          await page.viewport(width, 800);
+          try {
+            const { el, host } = await mountApp({
+              ...desk.calls,
+              clockStatus: vi.fn().mockResolvedValue({ state: "not-applicable" }),
+              listDefaultZoneOffers: vi.fn().mockResolvedValue(
+                zoneOffers(
+                  {
+                    menus: [defaultMenu],
+                    products: [
+                      {
+                        ...cafe,
+                        unit: {
+                          id: "00000000-0000-0000-0000-000000000001",
+                          name: { en: "each", es: "unidad" },
+                          abbreviation: { en: "ea", es: "ud" },
+                          precision: 0,
+                          hardwareUnit: null,
+                        },
+                      },
+                    ],
+                  },
+                  "zone-counter",
+                ),
+              ),
+            });
+            host.setAttribute("data-theme", theme);
+            await signIn(el);
+            setLocale(locale);
+            await flush(el);
+            await vi.waitFor(() =>
+              expect(pendingCount(el)?.textContent).toContain(
+                locale === "en-GB"
+                  ? "Department transfers (1 pending)"
+                  : "Traspasos entre departamentos (pendientes: 1)",
+              ),
+            );
+            const status = pendingCount(el)!;
+            expect(status.getAttribute("role")).toBe("status");
+            expect(status.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+            await expectNoA11yViolations(host);
+            await page.screenshot({
+              path: `../__screenshots__/w101-app-count/${locale}-${theme}-${width}.png`,
+            });
+          } finally {
+            setLocale("es-ES");
+            await page.viewport(1280, 768);
+          }
+        });
+      }
+    }
+  }
+
+  it("does not publish a pending count on a profile that is not the receiving desk", async () => {
+    const desk = transfers();
+    desk.calls.listIncomingDepartmentTransfers.mockRejectedValue({
+      code: "department_transfer.not_allowed",
+      status: 403,
+    });
+    const { el } = await mountApp(desk.calls);
+    await signIn(el);
+    expect(pendingCount(el)).toBeNull();
+    expect(desk.signals[0]?.aborted).toBe(false);
+    expect(desk.calls.listDepartmentSentTransfers).toHaveBeenCalled();
+  });
+
+  it("does not publish zero while the first durable incoming read has not answered", async () => {
+    const desk = transfers();
+    desk.calls.listIncomingDepartmentTransfers.mockImplementation(() => new Promise(() => {}));
+    const { el } = await mountApp(desk.calls);
+    await signIn(el);
+    expect(pendingCount(el)).toBeNull();
+    expect(desk.signals[0]?.aborted).toBe(false);
+  });
+
+  it("clears a delayed old-session answer before a new operator signs in", async () => {
+    const desk = transfers();
+    let answer!: (value: { count: number; requests: (typeof request)[] }) => void;
+    desk.calls.listIncomingDepartmentTransfers.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountApp(desk.calls);
+    await signIn(el);
+    emit(shell(el)!, "logout");
+    await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+    desk.empty();
+    await signIn(el);
+    expect(desk.calls.listIncomingDepartmentTransfers).toHaveBeenCalledTimes(2);
+    answer({ count: 1, requests: [request] });
+    await flush(el);
+    await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("0"));
   });
 });

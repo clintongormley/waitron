@@ -4816,9 +4816,12 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   cash, bill and integrated-card settlement, capture recovery, cancellation, party closure, merging
   and reassignment, including rollback and invoice preservation on retries. Closing a party
   withdraws requests for its retained unpaid invoices too, and a closed party refuses new requests.
-  The monitor is not yet
-  connected to the till app; notification/count presentation, session wiring and receiving/sending
-  screens remain to build. Party-linked bills are
+  The monitor now follows the till's authenticated operator, profile and server lifetimes,
+  discovers department-wide sender history and stops on logout, detachment or replacement.
+  The receiving desk's pending count updates from durable reads; another profile has no count,
+  and an unanswered first read is not shown as zero. A transfer-access refusal clears the monitor
+  without logging out an otherwise signed-in operator. Notification presentation and receiving/sending
+  controls remain to build. Party-linked bills are
   refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and

@@ -25,6 +25,10 @@ import {
 import { carriedText, countText, currentLocale, named, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
+import {
+  DepartmentTransferMonitor,
+  type TransferSnapshot,
+} from "./state/department-transfer-monitor.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi, isNetworkFailure, type MadeHereItem } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
@@ -1078,6 +1082,51 @@ export class TillApp extends LitElement {
 
   sessionActivity: SessionActivity = new SessionActivity();
 
+  #departmentTransfers?: DepartmentTransferMonitor;
+  #transferApi?: TillApi;
+  @state() private transferSnapshot?: TransferSnapshot;
+
+  #stopDepartmentTransfers(): void {
+    this.#departmentTransfers?.stop();
+    this.#departmentTransfers = undefined;
+    this.#transferApi = undefined;
+    this.transferSnapshot = undefined;
+  }
+
+  #syncDepartmentTransfers(): void {
+    if (
+      !this.isConnected ||
+      this.operatorName === "" ||
+      this.#loginPending ||
+      this.deviceMode ||
+      !this.permissions.includes("sale.take_payment")
+    ) {
+      this.#stopDepartmentTransfers();
+      return;
+    }
+    if (this.#departmentTransfers !== undefined && this.#transferApi === this.api) return;
+    this.#stopDepartmentTransfers();
+    const monitor = new DepartmentTransferMonitor({
+      api: this.api,
+      changed: () => {
+        this.transferSnapshot = monitor.snapshot;
+      },
+      onAccessLost: (code) => {
+        if (
+          code === "department_transfer.not_allowed" ||
+          code === "device.forbidden_action" ||
+          code === "authorization.not_permitted"
+        )
+          this.#stopDepartmentTransfers();
+        else void this.#onLogout();
+      },
+    });
+    this.#transferApi = this.api;
+    this.#departmentTransfers = monitor;
+    monitor.watchDepartment();
+    monitor.start();
+  }
+
   #deviceKind: DeviceKind = "till";
 
   /** `router` can be set after `connectedCallback`, so both it and `willUpdate` subscribe; a doubled
@@ -1149,9 +1198,11 @@ export class TillApp extends LitElement {
     this.addEventListener("keydown", this.#onInteraction);
     document.addEventListener("visibilitychange", this.#onVisibility);
     void this.sessionActivity.start();
+    this.#syncDepartmentTransfers();
   }
 
   override disconnectedCallback(): void {
+    this.#stopDepartmentTransfers();
     this.#partylessScope?.dispose();
     this.#partylessScope = undefined;
     this.#partylessUnsubscribe?.();
@@ -1980,6 +2031,8 @@ export class TillApp extends LitElement {
     if (!this.#basketScope) this.#syncBasketDraft();
     this.#syncEditDeadEnds();
     if (changed.has("api")) this.api.onMadeHere?.(this.#onMadeHere);
+    if (changed.has("api") || changed.has("operatorName") || changed.has("permissions"))
+      this.#syncDepartmentTransfers();
     if (changed.has("canvas") || changed.has("capabilities"))
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
@@ -2008,6 +2061,7 @@ export class TillApp extends LitElement {
   }
 
   async #boot(): Promise<void> {
+    this.#stopDepartmentTransfers();
     this.#battery?.stop();
     const bootGeneration = ++this.#bootGeneration;
     this.#browserLocale = undefined;
@@ -2163,6 +2217,7 @@ export class TillApp extends LitElement {
     { personId, displayName, permissions }: Omit<LoggedInDetail, "locale">,
     switched = false,
   ): Promise<void> {
+    this.#stopDepartmentTransfers();
     this.#loginPending = true;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
@@ -2225,6 +2280,7 @@ export class TillApp extends LitElement {
     this.#resumeOrderDraft();
     if (switched) this.#endProfileSwitch();
     this.permissions = permissions;
+    this.#syncDepartmentTransfers();
     this.errorKey = offerLoadFailed === false ? undefined : offerLoadFailed;
     this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
@@ -4279,6 +4335,7 @@ export class TillApp extends LitElement {
     }
     try {
       await this.api.switchDeviceProfile(profileId);
+      if (session === this.#operatorSession) this.#stopDepartmentTransfers();
       this.#equipmentChanged++;
     } catch (error) {
       if (session !== this.#operatorSession) return;
@@ -7492,6 +7549,7 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#stopDepartmentTransfers();
     this.#stopClockStatus();
     this.#resetPartylessDraft();
     this.leave.forceReset();
@@ -8820,6 +8878,7 @@ export class TillApp extends LitElement {
                       .affordances=${this.#affordanceList}
                       .kiosk=${this.deviceMode}
                       .canSwitchProfile=${this.approvedProfiles.length > 1}
+                      .transferCount=${this.transferSnapshot?.receivingAllowed === true ? this.transferSnapshot.incoming.length : undefined}
                       .loadLocales=${this.#loadLocales}
                       @tab-select=${(e: CustomEvent<{ key: string }>) => {
                         if (!this.canvas?.tabs.some((tab) => tab.key === e.detail.key)) return;
