@@ -1892,8 +1892,14 @@ The internal unpaid-issuance function now reserves the saved email/A4 choice in 
 transaction after the sale is written. Synthetic selection fixtures exercise real core invoice
 writes, consent/staff snapshots, rollback, accepted A4 disablement and unchanged paper/F2
 controls. Separate cases keep the public F1 refusal ahead of both sale and delivery writes.
-Email setup/settings, printer registration/transport and the delivery UI remain open; no Task 4
-completion claim.
+The trading server now offers manager-only SMTP settings reads, changes and test messages.
+The settings write seals the existing `email.smtp` payload; the read returns the server, port,
+encryption choice and sender, without the username, password or URL query. Demo and prepare
+changes are refused. The test goes to the authenticated person's own address, sends outside the
+database transaction and saves no proposed credential. Real local SMTP cases exercise accepted
+mail, refused recipients/data, lost acknowledgement, timeout closure and trusted/untrusted TLS.
+The wizard's required live email step, provisioning, dashboard editor and restore checks remain
+open, alongside printer registration/transport and the delivery UI; no Task 3 or 4 completion claim.
 For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain

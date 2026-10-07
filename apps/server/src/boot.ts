@@ -142,6 +142,7 @@ import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
 import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
+import { mountEmailSettingsApi } from "./email-settings-api.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
@@ -1599,6 +1600,7 @@ async function bootServer(
       log,
     );
   }
+  mountEmailSettingsApi(app, { db, ring, config }, log);
   mountEmailInboxApi(
     app,
     {
