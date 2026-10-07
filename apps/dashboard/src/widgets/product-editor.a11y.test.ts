@@ -81,6 +81,7 @@ const variantPage: ProductEditorDraft = {
   id: "glass",
   parentId: "coffee",
   inherited: {
+    name: "Coffee",
     description: { en: "Roasted in house" },
     image: "coffee.png",
     unitPrice: "3.00",

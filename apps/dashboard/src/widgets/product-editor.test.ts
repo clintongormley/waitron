@@ -3656,6 +3656,7 @@ it("reads a translation stored under a regional code as present, as the server d
 // an assertion can tell a hint read from the parent from a value read from the variant.
 const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
 const parentValues: InheritedValues = {
+  name: "Coffee",
   description: { en: "Roasted in house" },
   image: "coffee.png",
   unitPrice: "9.00",
@@ -3720,7 +3721,7 @@ function hint(el: ProductEditor, name: string) {
 it("titles a variant's page as a variant, with no Modifiers and no Variants section", async () => {
   const el = await mountVariant();
   expect(el.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).toBe(
-    t("editor.edit_variant"),
+    t("editor.edit_variant_of").replace("{name}", "Coffee"),
   );
   expect(section(el, "modifiers")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=add-variant]")).toBeNull();

@@ -2401,6 +2401,7 @@ describe("catalogue-screen", () => {
     const withVariant: Product[] = [
       {
         ...products[0]!,
+        kitchenName: "CROQ KITCHEN",
         variants: [
           {
             id: "v1",
@@ -2436,6 +2437,7 @@ describe("catalogue-screen", () => {
       allergens: null,
       dietaryDeclarations: null,
       inherited: {
+        name: "Croquetas",
         description: { es: "Cremosas" },
         image: null,
         unitPrice: "8.50",
@@ -2456,6 +2458,35 @@ describe("catalogue-screen", () => {
           .fn()
           .mockImplementation((id: string) => Promise.resolve(id === "v1" ? variantValue : value)),
       });
+
+    it.each([
+      ["en", "Edit variant of: Croquetas", "Edit variant of: Croquetas renamed"],
+      ["es", "Editar variante de: Croquetas", "Editar variante de: Croquetas renamed"],
+    ] as const)(
+      "names the variant's parent in %s and re-reads its name on reload",
+      async (locale, heading, renamedHeading) => {
+        const previous = currentLocale();
+        onTestFinished(() => setLocale(previous));
+        setLocale(locale);
+        history.replaceState(null, "", "/manage/catalogue/product/v1");
+        const api = variantApi();
+        const first = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+        await flush(first.el);
+        expect(
+          editor(first.el).shadowRoot!.querySelector("wt-modal")!.getAttribute("heading"),
+        ).toBe(heading);
+        first.host.remove();
+        vi.mocked(api.getProductEditor).mockResolvedValue({
+          ...variantValue,
+          inherited: { ...variantValue.inherited!, name: "Croquetas renamed" },
+        });
+        const second = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+        await flush(second.el);
+        expect(
+          editor(second.el).shadowRoot!.querySelector("wt-modal")!.getAttribute("heading"),
+        ).toBe(renamedHeading);
+      },
+    );
 
     it("opens the variant named in the address", async () => {
       history.replaceState(null, "", "/manage/catalogue/product/v1");

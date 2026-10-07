@@ -1820,9 +1820,11 @@ export class ProductEditor extends LitElement {
         .open=${this.open}
         .dismissible=${!this.suspended}
         .beforeClose=${this.#draftScope ? this.#beforeClose : undefined}
-        heading=${t(
-          this.inherited ? "editor.edit_variant" : this.value?.id ? "product.edit" : "product.new",
-        )}
+        heading=${
+          this.inherited
+            ? t("editor.edit_variant_of").replace("{name}", this.inherited.name)
+            : t(this.value?.id ? "product.edit" : "product.new")
+        }
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         @wt-close=${(event: Event) => {

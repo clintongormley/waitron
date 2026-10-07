@@ -190,6 +190,8 @@ export type ProductEditorBody = ProductEditorInput & ProductRouting;
 
 /** A parent's value for each field its variants inherit — what a variant's blank field reads as. */
 export interface InheritedValues {
+  /** The parent's staff name, for the variant editor heading. */
+  name: string;
   description: Record<string, string> | null;
   image: string | null;
   unitPrice: string;
