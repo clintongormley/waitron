@@ -256,7 +256,13 @@ export class ProductList extends LitElement {
         display: inline-flex;
         flex-direction: column;
       }
+      /* A category's toggle, drawn while it is renamed, takes its resting arrow's font, so the row
+         keeps its baseline and its square stays put. A product's keeps the button's own font. */
       wt-data-table::part(tree-toggle) {
+        font-family: inherit;
+      }
+      wt-data-table::part(variant-toggle) {
+        font-family: revert;
         padding-inline-end: var(--wt-space-1);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -1463,6 +1469,7 @@ export class ProductList extends LitElement {
             : row.kind === "product"
               ? "click"
               : "none"}
+        .rowToggleParts=${(row: ListRow) => (row.kind === "product" ? "variant-toggle" : "")}
         .rowToggleLabel=${(row: ListRow, expanded: boolean) =>
           row.kind === "folder"
             ? t(expanded ? "folders.close_named" : "folders.open_named").replace(

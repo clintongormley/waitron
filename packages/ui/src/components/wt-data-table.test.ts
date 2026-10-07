@@ -1406,6 +1406,23 @@ test("a branch's toggle button is exposed as a part, so a screen can style it", 
   expect(toggle.part.contains("tree-toggle")).toBe(true);
 });
 
+test("a row's toggle carries the extra part names rowToggleParts gives it, after tree-toggle", async () => {
+  const toggleParts = (el: WtDataTable<TreeRow>) =>
+    ["food", "break"].map((key) =>
+      el
+        .shadowRoot!.querySelector(`tr[data-row-key="${key}"] button.tree-toggle`)!
+        .getAttribute("part"),
+    );
+  expect(toggleParts(await treeTable())).toEqual(["tree-toggle", "tree-toggle"]);
+  const named = await treeTable({
+    rowToggleParts: (row) => (row.id === "food" ? "variant-toggle" : ""),
+  });
+  expect(toggleParts(named)).toEqual(["tree-toggle variant-toggle", "tree-toggle"]);
+  expect(named.shadowRoot!.querySelector('tr[data-row-key="food"] .tree-toggle')!.tagName).toBe(
+    "BUTTON",
+  );
+});
+
 // The width compared is the scroll box's inside its border, which is what clientWidth reports here.
 test("the phone indent starts at a 440px box, not at 441px, and a flat table never takes it", async () => {
   const el = await treeTable();

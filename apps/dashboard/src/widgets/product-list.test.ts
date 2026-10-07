@@ -3279,6 +3279,32 @@ describe("a product's variants in the list", () => {
     expect(grip.getBoundingClientRect().right).toBeLessThan(arrow.getBoundingClientRect().left);
   });
 
+  it("draws a product's variant arrow in the small muted type and font it has always had", async () => {
+    const { el, root } = await mountDeli();
+    const arrow = root.querySelector<HTMLElement>('tr[data-row-key="cecina"] .tree-toggle')!;
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-text-muted)";
+    probe.style.fontSize = "var(--wt-font-size-sm)";
+    probe.style.paddingInlineEnd = "var(--wt-space-1)";
+    el.parentElement!.append(probe);
+    onTestFinished(() => probe.remove());
+    const style = getComputedStyle(arrow);
+    const want = getComputedStyle(probe);
+    expect({
+      color: style.color,
+      fontSize: style.fontSize,
+      paddingInlineEnd: style.paddingInlineEnd,
+      textAlign: style.textAlign,
+      fontFamily: style.fontFamily,
+    }).toEqual({
+      color: want.color,
+      fontSize: want.fontSize,
+      paddingInlineEnd: want.paddingInlineEnd,
+      textAlign: "end",
+      fontFamily: "Arial",
+    });
+  });
+
   it.each([
     ["en", "2 variants", "1 variant"],
     ["es", "2 variantes", "1 variante"],
