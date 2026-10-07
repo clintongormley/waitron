@@ -55,6 +55,7 @@ const TABLES = [
   "menu_versions",
   "menu_publications",
   "menu_version_images",
+  "menu_scheduled_publications",
 ];
 
 /**
@@ -191,6 +192,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_versions: "id",
       menu_publications: "menu_id",
       menu_version_images: "version_id, filename",
+      menu_scheduled_publications: "version_id",
     });
 
     expect(foreignKeys).toEqual({
@@ -221,6 +223,9 @@ describe("the catalogue migration set carries no tenant column", () => {
       "menu_publications(menu_id)": "catalogues(id) on delete no action",
       "menu_publications(version_id, menu_id)": "menu_versions(id, menu_id) on delete no action",
       "menu_version_images(version_id)": "menu_versions(id) on delete no action",
+      "menu_scheduled_publications(menu_id)": "catalogues(id) on delete no action",
+      "menu_scheduled_publications(version_id, menu_id)":
+        "menu_versions(id, menu_id) on delete no action",
     });
 
     expect(checks).toEqual({
@@ -244,6 +249,9 @@ describe("the catalogue migration set carries no tenant column", () => {
       sections_role_ck: `"sections"."role" in ('section', 'menu_root', 'home_layout')`,
       section_members_one_ref_ck: `("section_members"."product_id" is null or "section_members"."child_section_id" is null) and (("section_members"."product_id" is null and "section_members"."child_section_id" is null) = ("section_members"."missing_name" is not null))`,
       menu_versions_number_ck: `"menu_versions"."number" >= 1`,
+      menu_scheduled_publications_state_ck: `"menu_scheduled_publications"."state" in ('queued', 'activated', 'cancelled')`,
+      menu_scheduled_publications_settled_ck: `("menu_scheduled_publications"."state" = 'queued' and "menu_scheduled_publications"."activated_at" is null and "menu_scheduled_publications"."cancelled_at" is null and "menu_scheduled_publications"."cancelled_by" is null) or ("menu_scheduled_publications"."state" = 'activated' and "menu_scheduled_publications"."activated_at" is not null and "menu_scheduled_publications"."cancelled_at" is null and "menu_scheduled_publications"."cancelled_by" is null) or ("menu_scheduled_publications"."state" = 'cancelled' and "menu_scheduled_publications"."cancelled_at" is not null and "menu_scheduled_publications"."cancelled_by" is not null and "menu_scheduled_publications"."activated_at" is null)`,
+      menu_scheduled_publications_after_queue_ck: `"menu_scheduled_publications"."activates_at" > "menu_scheduled_publications"."queued_at"`,
     });
   });
 
@@ -297,6 +305,10 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_versions_menu_number_uq: { unique: true, columns: "menu_id, number" },
       menu_versions_id_menu_key: { unique: true, columns: "id, menu_id" },
       menu_version_images_filename_idx: { unique: false, columns: "filename" },
+      menu_scheduled_publications_queued_time_uq: {
+        unique: true,
+        columns: "menu_id, activates_at",
+      },
     });
   });
 });

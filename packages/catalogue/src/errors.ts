@@ -3,7 +3,7 @@ import "@waitron/shared";
 // Type-only, so it adds no runtime edge back to the module that side-effect-imports this file.
 import type { ProductUsingUnit } from "./unit-types.js";
 import type { MemberRef } from "./section-types.js";
-import type { HomeDevice } from "./menu-document-types.js";
+import type { HomeDevice, OvertakenEdition } from "./menu-document-types.js";
 
 /** @waitron/catalogue's contribution to the shared error registry — DOMAIN-CONCEPT prefixes. */
 declare module "@waitron/shared" {
@@ -74,6 +74,19 @@ declare module "@waitron/shared" {
     /** An order line was priced against a menu version that is not live; `liveVersionId` is null
      * when the menu has no live version among the ones the order may sell from. */
     "menu.version_changed": { menus: { menuId: string; liveVersionId: string | null }[] };
+    /** Placing the edition would let it overtake these queued ones, ascending by number. */
+    "menu_publication.overtakes_queued": { menuId: string; overtaken: OvertakenEdition[] };
+    /** The version has no schedule row, or is a version of another menu. */
+    "menu_publication.not_found": { menuId: string; versionId: string };
+    "menu_publication.not_queued": {
+      menuId: string;
+      versionId: string;
+      state: "activated" | "cancelled";
+    };
+    /** An activation time not after the request's own instant. */
+    "menu_publication.time_past": { activatesAt: string };
+    /** The draft is identical to the edition it would follow, live or queued. */
+    "menu_publication.unchanged": { menuId: string; number: number };
     /** A Device Home Page shortcut names a product or section the menu's working structure does not reach. */
     "menu.shortcut_unreachable": { ref: MemberRef };
     /** A home display setting is outside what its device takes (device-home.ts). */

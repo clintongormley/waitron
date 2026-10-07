@@ -1331,7 +1331,12 @@ it.each([3, 2])(
       new Date("2026-09-26T12:00:00Z"),
       versions,
     );
-    for (const table of ["menu_versions", "menu_publications", "menu_version_images"])
+    for (const table of [
+      "menu_versions",
+      "menu_publications",
+      "menu_version_images",
+      "menu_scheduled_publications",
+    ])
       expect(Object.keys(transferred.tables)).not.toContain(table);
     await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
       db: targetSuite.db,

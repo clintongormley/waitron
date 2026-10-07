@@ -30,6 +30,7 @@ export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "the photos each published menu version names; copied to a standby, never drained back",
   ),
   classify("menu_publications", "state", STATE),
+  classify("menu_scheduled_publications", "state", STATE),
 ];
 
 export const CATALOGUE_CHANGE_SOURCES: readonly ChangeSource[] = CATALOGUE_CLASSIFICATION.map(

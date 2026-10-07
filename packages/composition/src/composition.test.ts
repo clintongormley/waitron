@@ -125,6 +125,7 @@ describe("ALL_MODULES configuration transfer contribution", () => {
       "menu_versions",
       "menu_publications",
       "menu_version_images",
+      "menu_scheduled_publications",
     ]) {
       expect(names).not.toContain(forbidden);
     }

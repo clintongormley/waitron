@@ -1,5 +1,5 @@
 import { navigateMenuChanges } from "./menu-navigation.js";
-import { and, eq, inArray, max, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lt, lte, max, ne, or, sql, type SQL } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
@@ -14,20 +14,26 @@ import {
   type DiffEntry,
   type OmittedShortcut,
 } from "./menu-document.js";
-import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
+import {
+  menuPublications,
+  menuScheduledPublications,
+  menuVersionImages,
+  menuVersions,
+} from "./schema/publication.js";
 import { menusContaining, reachableProducts } from "./section-graph.js";
 import type {
   MenuChangeBody,
   MenuDocument,
   MenuPreview,
   MenuStatus,
+  OvertakenEdition,
   PublishedMenuVersion,
 } from "./menu-document-types.js";
 import "./errors.js";
 
 export type { MenuStatus } from "./menu-document-types.js";
 
-interface LiveVersion {
+export interface LiveVersion {
   versionId: string;
   number: number;
   publishedAt: Date;
@@ -36,7 +42,7 @@ interface LiveVersion {
 }
 
 /** The named menus' live versions, or every published menu's when `menuIds` is left out. */
-async function liveVersions(
+export async function liveVersions(
   tx: Transaction,
   menuIds: readonly string[] | undefined,
   mode: "metadata" | "format" | "document",
@@ -433,17 +439,77 @@ async function shortcutWarnings(
   }));
 }
 
+/** The number the menu's next edition takes: one past every version it has, cancelled ones too. */
+export async function nextNumber(tx: Transaction, menuId: string): Promise<number> {
+  const [latest] = await tx
+    .select({ number: max(menuVersions.number) })
+    .from(menuVersions)
+    .where(eq(menuVersions.menuId, menuId));
+  return (latest?.number ?? 0) + 1;
+}
+
+/**
+ * The queued editions that an edition numbered `number` placed at `activatesAt` would overtake,
+ * ascending by number: a lower number activating no earlier, or a higher one no later. Equal
+ * instants count, because the higher number would hide the lower one for ever. `except` leaves
+ * out the edition being moved.
+ */
+export async function overtakenBy(
+  tx: Transaction,
+  menuId: string,
+  number: number,
+  activatesAt: Date,
+  except?: string,
+): Promise<OvertakenEdition[]> {
+  const rows = await tx
+    .select({
+      versionId: menuScheduledPublications.versionId,
+      number: menuVersions.number,
+      activatesAt: menuScheduledPublications.activatesAt,
+    })
+    .from(menuScheduledPublications)
+    .innerJoin(menuVersions, eq(menuVersions.id, menuScheduledPublications.versionId))
+    .where(
+      and(
+        eq(menuScheduledPublications.menuId, menuId),
+        eq(menuScheduledPublications.state, "queued"),
+        except === undefined ? undefined : ne(menuScheduledPublications.versionId, except),
+        or(
+          and(
+            lt(menuVersions.number, number),
+            gte(menuScheduledPublications.activatesAt, activatesAt),
+          ),
+          and(
+            gt(menuVersions.number, number),
+            lte(menuScheduledPublications.activatesAt, activatesAt),
+          ),
+        ),
+      ),
+    )
+    .orderBy(asc(menuVersions.number));
+  return rows.map((row) => ({ ...row, activatesAt: row.activatesAt.toISOString() }));
+}
+
+/** Refuses `menu_publication.overtakes_queued` when `overtaken` names any edition. */
+export function refuseOvertaken(menuId: string, overtaken: readonly OvertakenEdition[]): void {
+  if (overtaken.length > 0)
+    throw new AppError("menu_publication.overtakes_queued", { menuId, overtaken: [...overtaken] });
+}
+
 /**
  * Makes the menu's working state its live version, inside the caller's one transaction: the
  * document is rebuilt here, and refused with `menu.changed_since_preview` unless it hashes to what
- * the preview showed. Publishing a menu that already matches its live version writes nothing.
+ * the preview showed. Publishing a menu that already matches its live version writes nothing;
+ * otherwise a queued edition the publish would overtake refuses it.
  */
 export async function publishMenu(
   tx: Transaction,
   menuId: string,
   expectedHash: string,
   personId: string,
+  options: { at?: Date } = {},
 ): Promise<PublishedMenuVersion> {
+  const publishedAt = options.at ?? now();
   const { document, clashes } = await buildMenuDocument(tx, menuId);
   if (clashes.length > 0)
     throw new AppError("menu.clashes_unresolved", { menuId, count: clashes.length });
@@ -452,22 +518,31 @@ export async function publishMenu(
   const current = (await liveVersions(tx, [menuId], "format")).get(menuId);
   if (current?.contentHash === contentHash)
     return { versionId: current.versionId, number: current.number };
-  const [latest] = await tx
-    .select({ number: max(menuVersions.number) })
-    .from(menuVersions)
-    .where(eq(menuVersions.menuId, menuId));
-  const number = (latest?.number ?? 0) + 1;
-  const publishedAt = now();
-  const [version] = await tx
-    .insert(menuVersions)
-    .values({ menuId, number, document, contentHash, publishedAt, publishedBy: personId })
-    .returning({ id: menuVersions.id });
-  const versionId = version!.id;
-  for (const batch of batches(documentImages(document)))
-    await tx.insert(menuVersionImages).values(batch.map((filename) => ({ versionId, filename })));
+  const number = await nextNumber(tx, menuId);
+  refuseOvertaken(menuId, await overtakenBy(tx, menuId, number, publishedAt));
+  const versionId = await insertVersion(tx, {
+    menuId,
+    number,
+    document,
+    contentHash,
+    publishedAt,
+    publishedBy: personId,
+  });
   await tx
     .insert(menuPublications)
     .values({ menuId, versionId, publishedAt })
     .onConflictDoUpdate({ target: menuPublications.menuId, set: { versionId, publishedAt } });
   return { versionId, number };
+}
+
+/** Writes a version and the photos its document names; both rows are never changed again. */
+export async function insertVersion(
+  tx: Transaction,
+  version: typeof menuVersions.$inferInsert,
+): Promise<string> {
+  const [row] = await tx.insert(menuVersions).values(version).returning({ id: menuVersions.id });
+  const versionId = row!.id;
+  for (const batch of batches(documentImages(version.document)))
+    await tx.insert(menuVersionImages).values(batch.map((filename) => ({ versionId, filename })));
+  return versionId;
 }

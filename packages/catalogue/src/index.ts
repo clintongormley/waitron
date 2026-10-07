@@ -99,6 +99,11 @@ export {
   publishMenu,
   readLiveDocuments,
 } from "./menu-publication.js";
+export {
+  cancelMenuPublication,
+  listMenuPublications,
+  queueMenuPublication,
+} from "./menu-schedule.js";
 export * from "./sale-classification.js";
 export { currentClassifications } from "./current-classifications.js";
 

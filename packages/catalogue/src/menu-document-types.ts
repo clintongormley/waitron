@@ -302,6 +302,34 @@ export interface PublishedMenuVersion {
   number: number;
 }
 
+export interface OvertakenEdition {
+  versionId: string;
+  number: number;
+  activatesAt: string;
+}
+
+export interface QueuedEdition {
+  versionId: string;
+  number: number;
+  activatesAt: string;
+}
+
+export interface MenuEdition {
+  versionId: string;
+  number: number;
+  state: "queued" | "activated" | "cancelled";
+  activatesAt: string;
+  queuedAt: string;
+  cancelledAt: string | null;
+  contentHash: string;
+}
+
+export interface MenuPublications {
+  live: { versionId: string; number: number; since: string } | null;
+  /** Every queued edition, soonest first, then the ten most recently numbered settled ones. */
+  editions: MenuEdition[];
+}
+
 /** What a zone's live menus hold that cannot be sold now — `GET /api/menu-state`'s `unavailable`. */
 export interface MenuUnavailable {
   /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
