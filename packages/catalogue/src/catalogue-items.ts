@@ -253,8 +253,7 @@ async function summarise(
   const counts = new Map(
     subtrees.flat().map((id) => [id, { products: 0, activeProducts: 0, routes: 0 }]),
   );
-  const claimsPresent = await tableExists(tx, "station_claims");
-  const exceptionsPresent = await tableExists(tx, "route_exceptions");
+  const cellsPresent = await tableExists(tx, "routing_cells");
   for (const batch of batches([...counts.keys()])) {
     for (const row of await tx
       .select({
@@ -273,13 +272,9 @@ async function summarise(
       batch.map((folder) => sql`${folder}`),
       sql`, `,
     );
-    for (const [present, table] of [
-      [claimsPresent, sql`station_claims`],
-      [exceptionsPresent, sql`route_exceptions`],
-    ] as const) {
-      if (!present) continue;
+    if (cellsPresent) {
       const routes = await tx.execute<{ category_id: string; n: number }>(
-        sql`select category_id, count(*) as n from ${table} where category_id in (${inBatch}) group by category_id`,
+        sql`select category_id, count(*) as n from routing_cells where category_id in (${inBatch}) group by category_id`,
       );
       for (const row of routes.rows) counts.get(row.category_id)!.routes += Number(row.n);
     }
