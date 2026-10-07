@@ -939,13 +939,13 @@ unused `units` property is gone (it closes W75's leftover).
     width): at 440px or narrower the Menus Structure tree hides every swatch, and a product row's
     Actions menu holds only "Remove from <section>", so on a phone that tree offers no way to open
     the product. The Products list's Actions menu still offers Edit.
-  - Open, found by A327's review and NOT tested: the dashboard's in-app link handling
-    (`#onAppLink`, `apps/dashboard/src/dashboard-app.ts`, from W69 #1325) catches a `/manage` link
-    click before the link's own handler runs; #1349 lets a link opt out with `data-own-click`. By
-    reading only, the Printers screen's "all printers" breadcrumb has a handler that refuses to
-    leave while a printer is saving, which the app's handling would skip. Five other self-handled
-    links read as going where the app would send them anyway. Next: a test mounting that
-    breadcrumb under the real app while a save is out; if it navigates, mark it `data-own-click`.
+  - A360 — DONE: the Printers breadcrumb uses `data-own-click`, preserving its pending-name and
+    pending-connection save guards under the real dashboard app. Eight EN/ES and light/dark
+    Chromium cases reproduced an unwanted discard prompt before the opt-out; afterwards they
+    retained the editor without that prompt, displayed the eventual save refusal, and allowed
+    leaving after discarding the retained draft. The five other self-handled links (price-table
+    product, translation-gap product/variant, both menu-preview links and the Menus breadcrumb)
+    were read through their handlers; they request navigation, with no pending-save refusal.
 - **A328, owner 2026-10-07 — DONE (#1350; the category name box keeps the swatch in place):** while a
   category is renamed or added in the Products tree, its colour square stays in the row's square
   slot and the name box starts where the name did; the box no longer carries a square at its end.

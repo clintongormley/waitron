@@ -6138,3 +6138,133 @@ it("forced session exit aborts an open unsaved question and clears its registry 
   expect(left).toBe(0);
   expect(value).toBe("Typed secret");
 });
+
+describe("printer breadcrumb during a pending save", () => {
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    for (const theme of ["light", "dark"] as const) {
+      for (const editor of ["name", "connection"] as const) {
+        it(`${locale}/${theme}: keeps the ${editor} save and its refusal under the real app`, async () => {
+          history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+          let refuse!: (error: unknown) => void;
+          const api = stubApi({
+            getMe: vi.fn().mockResolvedValue({ ...meResponse, locale }),
+            listPrinters: vi.fn().mockResolvedValue([
+              {
+                id: "p1",
+                name: "Kitchen",
+                transport: "network_tcp",
+                host: "10.0.0.9",
+                port: 9100,
+                localKey: null,
+                pollId: null,
+                watcherId: null,
+                paperWidth: "80mm",
+                resolution: "180dpi",
+                hasCashDrawer: false,
+                portable: false,
+                holder: null,
+                pendingJobs: 0,
+                lastPrintAt: null,
+                lastPrintAgentId: null,
+                active: true,
+              },
+            ]),
+            listPrinterProfiles: vi.fn().mockResolvedValue([]),
+            listDiscoveredPrinters: vi.fn().mockResolvedValue([]),
+            pairingMode: vi.fn().mockResolvedValue({
+              open: false,
+              openUntil: null,
+              deviceAddress: "https://waitron.local",
+            }),
+            joinRequests: vi.fn().mockResolvedValue([]),
+            updatePrinter: vi.fn(
+              () =>
+                new Promise<void>((_resolve, reject) => {
+                  refuse = reject;
+                }),
+            ),
+          });
+          const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+          await flush(el);
+          const screen = screenPrinters(el)!;
+          await expect
+            .poll(() => screen.shadowRoot!.querySelector("[data-test=printer-status]"))
+            .not.toBeNull();
+          const q = (selector: string) => screen.shadowRoot!.querySelector<HTMLElement>(selector)!;
+          await expect.poll(() => screen.loading).toBe(false);
+          expect(q("[data-test=printer-refresh-error]")).toBeNull();
+          if (editor === "connection") {
+            const disclosure = q(
+              "[data-test=printer-section-connection]",
+            ) as import("@waitron/ui").WtDisclosure;
+            disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+            await screen.updateComplete;
+            await disclosure.updateComplete;
+            await expect
+              .poll(() => disclosure.shadowRoot!.querySelector<HTMLElement>(".body")!.style.height)
+              .toBe("");
+          }
+          q(`[data-test=edit-printer-${editor}]`).click();
+          await screen.updateComplete;
+          const input = q(
+            `[name="printer-detail-${editor === "name" ? "name" : "host"}"]`,
+          ) as WtInput;
+          input.dispatchEvent(
+            new CustomEvent("wt-change", {
+              detail: { value: editor === "name" ? "New kitchen" : "10.0.0.10" },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+          await screen.updateComplete;
+          const save = q(`[data-test=save-printer-${editor}]`) as import("@waitron/ui").WtButton;
+          save.click();
+          await expect.poll(() => typeof refuse).toBe("function");
+          await screen.updateComplete;
+          expect(save.disabled).toBe(true);
+          q("[data-test=all-printers-link]").click();
+          await flush(el);
+          expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+          expect(screenPrinters(el)).toBe(screen);
+          expect(input.isConnected).toBe(true);
+          expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+          refuse({ code: "printer.invalid_config" });
+          await expect
+            .poll(() =>
+              editor === "name"
+                ? q("[data-test=printer-name-refusal]")?.textContent?.trim()
+                : q("[data-test=printer-section-connection] [role=alert]")?.textContent?.trim(),
+            )
+            .toBe(
+              locale === "en-GB"
+                ? "Check the printer's connection settings"
+                : "Revisa los ajustes de conexión de la impresora",
+            );
+          expect(save.disabled).toBe(false);
+          const width = window.innerWidth,
+            height = window.innerHeight;
+          try {
+            for (const size of [390, 1280]) {
+              await page.viewport(size, 900);
+              await page.screenshot({
+                element: host,
+                path: `__screenshots__/look/a360-${locale}-${theme}-${editor}-${size}.png`,
+              });
+            }
+          } finally {
+            await page.viewport(width, height);
+          }
+          q("[data-test=all-printers-link]").click();
+          const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+          await expect.poll(() => question.open).toBe(true);
+          await question.updateComplete;
+          question.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+          await expect.poll(() => location.pathname).toBe("/manage/printers/view/printers");
+          await expect
+            .poll(() => screen.shadowRoot!.querySelector("[data-test=printer-status]"))
+            .toBeNull();
+        });
+      }
+    }
+  }
+});
