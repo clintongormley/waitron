@@ -2482,7 +2482,7 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 it.each(["product", "size"])(
-  "drops the Clash while a valid unsaved price fills a clashing %s row, and shows it again for text that is no price and on Escape",
+  "drops the clash sentence while a valid unsaved price fills a clashing %s row, and shows it again for text that is no price and on Escape",
   async (kind) => {
     const el = await mount({ rows: [kind === "product" ? clashRow(lager) : variantClashRow()] });
     const key = kind === "product" ? "mi-lager" : "mi-lemonade:v-small";
@@ -2529,14 +2529,17 @@ it("shows a clashing product's stored price, takes native typing, and restores t
   expect(field.value).toBe("2.50");
 });
 
-it.each(["", "-1", "abc"])("keeps a clashing row's Clash when its draft is %j", async (value) => {
-  const el = await mount({ rows: [clashRow(lager)] });
-  const heard = priceSaves(el);
-  await typeIn(el, "mi-lager", value);
-  await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
-  expect(heard).not.toHaveBeenCalled();
-});
+it.each(["", "-1", "abc"])(
+  "keeps a clashing row's clash sentence when its draft is %j",
+  async (value) => {
+    const el = await mount({ rows: [clashRow(lager)] });
+    const heard = priceSaves(el);
+    await typeIn(el, "mi-lager", value);
+    await table(el).updateComplete;
+    expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
+    expect(heard).not.toHaveBeenCalled();
+  },
+);
 
 it("offers one labelled price override field per product and per size, the inherited price as a blank one's placeholder", async () => {
   setLocale("en-GB");
@@ -2570,7 +2573,7 @@ it("offers one labelled price override field per product and per size, the inher
   }
 });
 
-it("shows a clash honestly: no price in the field, a red Clash beside it, the reason in its hint", async () => {
+it("shows a clash honestly: no price in the field, a red sentence under it naming each place's price, the same sentence as its hint", async () => {
   setLocale("en-GB");
   try {
     const el = await mount({ rows: [clashRow(lager)] });

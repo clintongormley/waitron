@@ -210,7 +210,7 @@ export class MenuPricesTable extends LitElement {
         padding-inline: var(--wt-space-4);
         font-size: var(--wt-font-size-sm);
       }
-      /* Above wt-data-table's pinned column (2) and sticky header (3). */
+      /* Above wt-data-table's sticky header (3). */
       wt-toast {
         position: fixed;
         inset-block-end: var(--wt-space-3);
@@ -296,8 +296,9 @@ export class MenuPricesTable extends LitElement {
   /** Each row that clashes as this menu stores it, drafts aside, so a row under the Clashes filter
    * stays while a price is typed into it. */
   #clashing: ReadonlyMap<string, "size" | "own"> = new Map();
-  /** Clashing prices, counted per product as `clashesOf` counts them
-   * (packages/catalogue/src/menu-combine.ts): a product with variants by its clashing variants. */
+  /** Clashing prices, by the same per-product rule as `clashesOf`
+   * (packages/catalogue/src/menu-combine.ts): a product with variants by its clashing variants.
+   * Unlike the publish check, Inactive products and variants are counted too. */
   #clashCount = 0;
   /** Whether the price filter starts on Clashes, decided on the first loaded update of each load;
    * undefined until then. Dropped for the rest of a load once it has no clash, so a clash that
@@ -976,7 +977,7 @@ export class MenuPricesTable extends LitElement {
     const words =
       count === 1
         ? t("menu_prices.clash_message_one")
-        : t("menu_prices.clash_message_other").replace("{count}", String(count));
+        : t("menu_prices.clash_message").replace("{count}", String(count));
     return html`<p class="error" role="status" data-test="clash-message">${words}</p>`;
   }
 
