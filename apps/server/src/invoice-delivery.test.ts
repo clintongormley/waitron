@@ -4,14 +4,16 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
+  invoiceDeliveries,
   locations,
   printJobs,
+  printAgents,
   tenants,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { createPrinter, enqueuePrintJob } from "@waitron/printing";
+import { createPrinter, enqueuePrintJob, claimPrintJobs } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -536,4 +538,447 @@ describe("active invoice outcome", () => {
       });
     },
   );
+});
+
+describe("receipt delivery reservation", () => {
+  async function receiptJob(
+    saleId: string,
+    receiptCopy: boolean | null = false,
+    kind: "document" | "drawer" = "document",
+  ) {
+    const [location] = await suite.db.select().from(locations);
+    return withTransaction(suite.db, async (tx) => {
+      const printer = await createPrinter(
+        tx,
+        { locationId: location!.id },
+        { name: "Receipt", transport: "network_tcp", host: "printer.test" },
+      );
+      return enqueuePrintJob(
+        tx,
+        { locationId: location!.id },
+        printer.id,
+        new Uint8Array([27, 64]),
+        kind,
+        { saleId, receiptCopy },
+      );
+    });
+  }
+  const request = (printJobId: string) => ({
+    requestKey: randomUUID(),
+    personId: "staff-one",
+    medium: "receipt" as const,
+    printJobId,
+  });
+
+  it("correlates the existing queued original without another job or handover snapshot", async () => {
+    const sale = await issue();
+    const job = await receiptJob(sale.saleId);
+    const handover = { personId: "staff-two", confirmedAt: "2026-10-07T12:00:00.000Z" };
+    await suite.db
+      .update(printJobs)
+      .set({ receiptHandover: handover })
+      .where(eq(printJobs.id, job.jobId));
+    const input = request(job.jobId);
+    const delivery = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, input),
+    );
+    expect(delivery).toMatchObject({
+      medium: "receipt",
+      printJobId: job.jobId,
+      designation: "original",
+      generation: 1,
+      status: "queued",
+      recipient: null,
+      consent: null,
+    });
+    const replay = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, input),
+    );
+    expect(replay.id).toBe(delivery.id);
+    expect(await rows()).toHaveLength(1);
+    expect(await suite.db.select().from(printJobs)).toMatchObject([
+      { id: job.jobId, status: "queued", receiptHandover: handover, receiptCopy: false },
+    ]);
+    await expect(
+      withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, email())),
+    ).rejects.toMatchObject({ code: "invoice_delivery.active" });
+  });
+
+  it.each(["missing", "other-sale", "drawer", "not-receipt", "done", "failed", "printing"])(
+    "refuses a %s job without reserving delivery metadata",
+    async (scenario) => {
+      const sale = await issue();
+      const other = scenario === "other-sale" ? await issue() : sale;
+      const job = await receiptJob(
+        other.saleId,
+        scenario === "not-receipt" ? null : false,
+        scenario === "drawer" ? "drawer" : "document",
+      );
+      if (scenario === "done" || scenario === "failed" || scenario === "printing") {
+        await suite.db
+          .update(printJobs)
+          .set({ status: scenario })
+          .where(eq(printJobs.id, job.jobId));
+      }
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          reserveInvoiceDelivery(
+            tx,
+            sale.saleId,
+            request(scenario === "missing" ? randomUUID() : job.jobId),
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "invoice_delivery.receipt_invalid" });
+      expect(await rows()).toHaveLength(0);
+    },
+  );
+
+  it("refuses another queued original while allowing only the selected job to be correlated", async () => {
+    const sale = await issue();
+    const selected = await receiptJob(sale.saleId);
+    await receiptJob(sale.saleId);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, request(selected.jobId)),
+      ),
+    ).rejects.toMatchObject({ code: "invoice_delivery.active" });
+    expect(await rows()).toHaveLength(0);
+  });
+
+  it("reserves a receipt copy after email completes and refuses original bytes", async () => {
+    const sale = await issue();
+    const delivery = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, email()),
+    );
+    const held = (await claim(delivery.id, "server-one", new Date("2026-12-01T00:00:00.000Z")))!;
+    await withTransaction(suite.db, (tx) => reportInvoiceDelivery(tx, held, { status: "sent" }));
+    const copy = await receiptJob(sale.saleId, true);
+    const next = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, request(copy.jobId)),
+    );
+    expect(next).toMatchObject({
+      medium: "receipt",
+      designation: "duplicate",
+      generation: 2,
+      printJobId: copy.jobId,
+    });
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({ status: "failed" })
+      .where(eq(invoiceDeliveries.id, next.id));
+    const original = await receiptJob(sale.saleId);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, request(original.jobId)),
+      ),
+    ).rejects.toMatchObject({ code: "invoice_delivery.receipt_invalid" });
+  });
+
+  it("refuses copy bytes before an original has completed", async () => {
+    const sale = await issue();
+    const copy = await receiptJob(sale.saleId, true);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, request(copy.jobId)),
+      ),
+    ).rejects.toMatchObject({ code: "invoice_delivery.receipt_invalid" });
+    expect(await rows()).toHaveLength(0);
+  });
+
+  it("rolls back the job and its receipt reservation together", async () => {
+    const sale = await issue();
+    await expect(
+      withTransaction(suite.db, async (tx) => {
+        const [location] = await tx.select().from(locations);
+        const printer = await createPrinter(
+          tx,
+          { locationId: location!.id },
+          { name: "Receipt", transport: "network_tcp", host: "printer.test" },
+        );
+        const job = await enqueuePrintJob(
+          tx,
+          { locationId: location!.id },
+          printer.id,
+          new Uint8Array([27, 64]),
+          "document",
+          { saleId: sale.saleId, receiptCopy: false },
+        );
+        await reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId));
+        throw new Error("Caller refused");
+      }),
+    ).rejects.toThrow("Caller refused");
+    expect(await rows()).toHaveLength(0);
+    expect(await suite.db.select().from(printJobs)).toHaveLength(0);
+  });
+
+  it("cannot reuse a correlated receipt job for a new request even after delivery ends", async () => {
+    const sale = await issue();
+    const job = await receiptJob(sale.saleId);
+    const first = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId)),
+    );
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({ status: "failed" })
+      .where(eq(invoiceDeliveries.id, first.id));
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId)),
+      ),
+    ).rejects.toMatchObject({ code: "invoice_delivery.receipt_invalid" });
+    expect(await rows()).toHaveLength(1);
+  });
+
+  async function receiptClaimSetup() {
+    const sale = await issue();
+    const job = await receiptJob(sale.saleId);
+    const [location] = await suite.db.select().from(locations);
+    const [agent] = await suite.db
+      .insert(printAgents)
+      .values({
+        locationId: location!.id,
+        name: "Receipt agent",
+        tokenHash: "scrypt$fixture",
+      })
+      .returning();
+    const delivery = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId)),
+    );
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({ nextAttemptAt: start.toISOString() })
+      .where(eq(invoiceDeliveries.id, delivery.id));
+    return { sale, job, delivery, agentId: agent!.id, locationId: location!.id };
+  }
+  async function pulled(ctx: Awaited<ReturnType<typeof receiptClaimSetup>>) {
+    return withTransaction(suite.db, (tx) =>
+      claimPrintJobs(tx, ctx.agentId, {
+        locationId: ctx.locationId,
+        visibleKeys: [],
+      }),
+    );
+  }
+
+  it("leaves an absent invoice delivery unclaimed", async () => {
+    expect(await claim(randomUUID())).toBeUndefined();
+    expect(await rows()).toHaveLength(0);
+  });
+
+  it.each(["queued", "done", "failed"] as const)(
+    "does not attach an invoice claim to a %s print job retaining the holder",
+    async (status) => {
+      const ctx = await receiptClaimSetup();
+      await suite.db
+        .update(printJobs)
+        .set({ status, claimedBy: ctx.agentId })
+        .where(eq(printJobs.id, ctx.job.jobId));
+      expect(await claim(ctx.delivery.id, ctx.agentId)).toBeUndefined();
+      await suite.db
+        .update(printJobs)
+        .set({ status: "printing" })
+        .where(eq(printJobs.id, ctx.job.jobId));
+      expect(await claim(ctx.delivery.id, ctx.agentId)).toBeDefined();
+    },
+  );
+
+  it("does not attach another job's print claim to this invoice attempt", async () => {
+    const ctx = await receiptClaimSetup();
+    const other = await receiptJob(ctx.sale.saleId, true);
+    const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, other.jobId));
+    await withTransaction(suite.db, (tx) =>
+      claimPrintJobs(tx, ctx.agentId, {
+        locationId: ctx.locationId,
+        visibleKeys: [],
+        printerId: job!.printerId,
+      }),
+    );
+    expect(await claim(ctx.delivery.id, ctx.agentId)).toBeUndefined();
+    await pulled(ctx);
+    expect(await claim(ctx.delivery.id, ctx.agentId)).toBeDefined();
+  });
+
+  it("requires the same agent's current print claim before assigning an invoice token", async () => {
+    const ctx = await receiptClaimSetup();
+    expect(await claim(ctx.delivery.id, ctx.agentId)).toBeUndefined();
+    expect(await pulled(ctx)).toHaveLength(1);
+    const [otherAgent] = await suite.db
+      .insert(printAgents)
+      .values({
+        locationId: ctx.locationId,
+        name: "Another receipt agent",
+        tokenHash: "scrypt$other-fixture",
+      })
+      .returning();
+    expect(await claim(ctx.delivery.id, otherAgent!.id)).toBeUndefined();
+    const held = await claim(ctx.delivery.id, ctx.agentId);
+    expect(held).toMatchObject({ deliveryId: ctx.delivery.id, generation: 1, holder: ctx.agentId });
+    expect((await rows())[0]).toMatchObject({ claimed_agent_id: ctx.agentId, status: "sending" });
+  });
+
+  it.each(["sent", "failed"] as const)(
+    "projects current receipt %s without another handover or retry",
+    async (status) => {
+      const ctx = await receiptClaimSetup();
+      await pulled(ctx);
+      const held = (await claim(ctx.delivery.id, ctx.agentId))!;
+      await withTransaction(suite.db, (tx) =>
+        reportInvoiceDelivery(
+          tx,
+          held,
+          status === "sent" ? { status } : { status, failureCode: "transport_failed" },
+          start,
+        ),
+      );
+      const [job] = await suite.db.select().from(printJobs);
+      expect(job).toMatchObject({
+        status: status === "sent" ? "done" : "failed",
+        receiptHandover: null,
+        attempts: status === "sent" ? 0 : 5,
+        deliveredAt: status === "sent" ? start.toISOString() : null,
+        lastError: status === "sent" ? null : "transport_failed",
+      });
+      expect(await pulled(ctx)).toHaveLength(0);
+      const before = { ...job };
+      await withTransaction(suite.db, (tx) =>
+        reportInvoiceDelivery(tx, held, { status: "sent" }, expired),
+      );
+      expect((await suite.db.select().from(printJobs))[0]).toEqual(before);
+    },
+  );
+
+  it.each([false, true])(
+    "expires receipt lease on restart=%s and ends old print eligibility before email retry",
+    async (restart) => {
+      const ctx = await receiptClaimSetup();
+      await pulled(ctx);
+      const held = (await claim(ctx.delivery.id, ctx.agentId))!;
+      if (!restart) {
+        expect(
+          await withTransaction(suite.db, (tx) =>
+            expireInvoiceDeliveryClaims(tx, new Date(start.getTime() + 59999)),
+          ),
+        ).toBe(0);
+        expect((await suite.db.select().from(printJobs))[0]!.status).toBe("printing");
+      }
+      expect(await expire(restart)).toBe(1);
+      expect((await suite.db.select().from(printJobs))[0]).toMatchObject({
+        status: "failed",
+        attempts: 5,
+      });
+      expect(await pulled(ctx)).toHaveLength(0);
+      const next = await withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, ctx.sale.saleId, email()),
+      );
+      expect(next).toMatchObject({ medium: "email", designation: "original", generation: 2 });
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          reportInvoiceDelivery(tx, held, { status: "sent" }, expired),
+        ),
+      ).toEqual({ updated: false, historical: true });
+      expect((await suite.db.select().from(printJobs))[0]).toMatchObject({
+        status: "failed",
+        attempts: 5,
+        deliveredAt: null,
+      });
+      expect((await rows())[1]).toMatchObject({
+        status: "queued",
+        designation: "original",
+        attempts: 0,
+      });
+    },
+  );
+
+  it.each(["sent", "failed"] as const)(
+    "projects latest late receipt %s before retry",
+    async (status) => {
+      const ctx = await receiptClaimSetup();
+      await pulled(ctx);
+      const held = (await claim(ctx.delivery.id, ctx.agentId))!;
+      await expire();
+      await withTransaction(suite.db, (tx) =>
+        reportInvoiceDelivery(
+          tx,
+          held,
+          status === "sent" ? { status } : { status, failureCode: "transport_failed" },
+          expired,
+        ),
+      );
+      expect((await suite.db.select().from(printJobs))[0]).toMatchObject({
+        status: status === "sent" ? "done" : "failed",
+        deliveredAt: status === "sent" ? expired.toISOString() : null,
+        attempts: 5,
+      });
+      expect((await rows())[0]!.status).toBe(status === "sent" ? "sent" : "unknown");
+      const next = await withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, ctx.sale.saleId, email()),
+      );
+      expect(next.designation).toBe(status === "sent" ? "duplicate" : "original");
+    },
+  );
+
+  it("keeps the receipt job unchanged for an unauthenticated token or generation", async () => {
+    const ctx = await receiptClaimSetup();
+    await pulled(ctx);
+    const held = (await claim(ctx.delivery.id, ctx.agentId))!;
+    const before = (await suite.db.select().from(printJobs))[0];
+    for (const bad of [
+      { ...held, token: "wrong" },
+      { ...held, generation: 2 },
+    ]) {
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          reportInvoiceDelivery(tx, bad, { status: "sent" }, start),
+        ),
+      ).toEqual({ updated: false, historical: false });
+      expect((await suite.db.select().from(printJobs))[0]).toEqual(before);
+    }
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        reportInvoiceDelivery(tx, held, { status: "sent" }, start),
+      ),
+    ).toEqual({ updated: true, historical: false });
+    expect((await suite.db.select().from(printJobs))[0]!.status).toBe("done");
+  });
+});
+
+describe("receipt delivery correlation key", () => {
+  it("refuses an absent job through the declared foreign key", async () => {
+    const sale = await issue();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        tx.insert(invoiceDeliveries).values({
+          saleId: sale.saleId,
+          requestKey: randomUUID(),
+          medium: "receipt",
+          designation: "original",
+          generation: 1,
+          personId: "staff-one",
+          printJobId: randomUUID(),
+        }),
+      ),
+    ).rejects.toThrow("FOREIGN KEY constraint failed");
+    expect(await rows()).toHaveLength(0);
+  });
+});
+
+describe("receipt agent correlation key", () => {
+  it("refuses an absent agent through the declared foreign key", async () => {
+    const sale = await issue();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        tx.insert(invoiceDeliveries).values({
+          saleId: sale.saleId,
+          requestKey: randomUUID(),
+          medium: "email",
+          designation: "original",
+          generation: 1,
+          personId: "staff-one",
+          recipient: "customer@example.test",
+          consent,
+          claimedAgentId: randomUUID(),
+        }),
+      ),
+    ).rejects.toThrow("FOREIGN KEY constraint failed");
+    expect(await rows()).toHaveLength(0);
+  });
 });

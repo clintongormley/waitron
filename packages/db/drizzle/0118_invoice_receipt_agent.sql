@@ -1,0 +1,1 @@
+ALTER TABLE `invoice_deliveries` ADD `claimed_agent_id` text REFERENCES print_agents(id);
