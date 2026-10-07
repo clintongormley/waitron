@@ -380,15 +380,12 @@ A screen that styles its own native control reads the same variable on the eleme
 A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
-button beside the ruler's answer, and the member list editor's `.add` row does, for its Add button
-(`apps/dashboard/src/widgets/member-list-editor.ts`; no screen draws it since W93, so only its own
-tests reach it). Guards: the form-width
+button beside the ruler's answer. Guards: the form-width
 cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
 `wt-price-input`, `wt-number-stepper` and `wt-switch`, and the message at 1280px; each field and the
 message bounded by the narrower of the form width and the body in every modal size at 1280px; wide
 content and the footer row at full width; each field at the body's width at 390px; each field at its container's width outside a modal); `wt-slider`'s own case "the field max-width token bounds the slider's width" (`packages/ui/src/components/wt-slider.test.ts`); the calibration case in
 `apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
-`apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
 `packages/venue-service/src/dashboard/venue-operations-screen.test.ts` (these two measure the
 reasons screen's two role `wt-combobox`es and the venue department editor's `wt-input` and

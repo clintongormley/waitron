@@ -2293,16 +2293,17 @@ DONE (W88a, #1228, 2026-10-05); left open:** A drag no longer sends a move once 
 the category; one deleted elsewhere before this screen refreshed is still sent, and what the server
 answers to it is not checked.
 
-**Unused editing code in the two widgets the Menus screen no longer edits with — OPEN (W88, owner
-default 2026-10-04: leave and record).** `dashboard-member-list-editor`
-(`apps/dashboard/src/widgets/member-list-editor.ts`) is drawn by nothing since W93 (2026-10-06),
-which deleted the Home page tab's layout editor that drew it, so all of it is reached by its own
-tests alone; the Menus screen and the two structure widgets still import its `memberName`, and the
-two widgets its `memberKindLabel`. `dashboard-menu-structure-tree`
-(`apps/dashboard/src/widgets/menu-structure-tree.ts`) is no longer drawn by Preview after W95;
-Preview uses the frozen customer renderer. W95 landed in #1302. The owner authorised deletion
-as A299 on 2026-10-06, retaining the shared name helpers and listing deleted test checks.
-The deletion remains open.
+**Unused editing code in the two widgets the Menus screen no longer edits with — DONE (A299,
+2026-10-07).** `dashboard-member-list-editor` (drawn by nothing since W93) and
+`dashboard-menu-structure-tree` (no longer drawn by Preview since W95) are deleted with their tests;
+the name helpers the Menus screen and `menu-structure-table.ts` still use moved to
+`apps/dashboard/src/widgets/member-names.ts`, and the strings only the deleted widgets read were
+retired. Left open, outside the two widgets A299 deleted: `documentTree` in
+`apps/dashboard/src/widgets/menu-preview.ts` is called only by its own test case in
+`menu-preview.test.ts`; and the `apps/dashboard/src/screens/menus-screen.test.ts` case "puts nothing
+beside the tabs and draws no Add a product picker" still asserts that no
+`dashboard-member-list-editor` and no `[name="member-ref"]` field is drawn, though no non-test file
+under `apps/` or `packages/` names either any more.
 
 **Two copies of the tree pointer drag — OPEN (W88).** W88 moved what Products and the Menus tree
 draw during a drag into `apps/dashboard/src/widgets/tree-drag.ts` (the ghost, the row and gap marks,
@@ -2824,10 +2825,9 @@ The original walkthrough is retained under _Detail → Setup wizard_.
 
 - **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
   `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
-  not `wt-data-table`, so `pinned` does not reach them; `member-list-editor.ts` (drawn by nothing
-  since W93) and
-  `product-editor.ts` also contain both a `<table>` and a row menu (found by grep, not read). None
-  has a phone-width case and none was measured.
+  not `wt-data-table`, so `pinned` does not reach them; `product-editor.ts` also contains both a
+  `<table>` and a row menu (found by grep, not read). None has a phone-width case and none was
+  measured.
 - Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
   though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
 
