@@ -549,7 +549,7 @@ export async function nextNumber(tx: Transaction, menuId: string): Promise<numbe
  * The queued editions that an edition numbered `number` placed at `activatesAt` would overtake,
  * ascending by number: a lower number activating no earlier, or a higher one no later. Equal
  * instants count, because the higher number would hide the lower one for ever. The edition being
- * placed never matches itself: a menu has one version per number.
+ * placed, passed with its own number, matches neither clause.
  */
 export async function overtakenBy(
   tx: Transaction,

@@ -927,16 +927,16 @@ describe("concurrent schedule writes", () => {
   });
 
   for (const activationFirst of [true, false])
-    it(`an activation and an immediate publish while an edition is due end on version 3, ${
+    it(`an activation and an immediate publish landing at v2's own instant end on version 3, ${
       activationFirst ? "the activation" : "the publish"
     } first`, async () => {
       await setSoup("5.50");
       const second = await queue(day(8));
       await setSoup("6.00");
       const hash = await hashOf(f.lunch);
-      const activate = (tx: Transaction) => activateDueMenuPublications(tx, day(9));
+      const activate = (tx: Transaction) => activateDueMenuPublications(tx, day(8));
       const publish = (tx: Transaction) =>
-        publishMenu(tx, f.lunch, hash, "person-1", { at: day(9) });
+        publishMenu(tx, f.lunch, hash, "person-1", { at: day(8) });
       const settled = activationFirst
         ? await racePair(fx.db, activate, publish)
         : (await racePair(fx.db, publish, activate)).reverse();
@@ -948,7 +948,7 @@ describe("concurrent schedule writes", () => {
       expect(await scheduleRow(second.versionId)).toMatchObject({ state: "activated" });
       expect(await pointer()).toMatchObject({
         versionId: published.versionId,
-        publishedAt: day(9),
+        publishedAt: day(8),
       });
     });
 });
@@ -1161,6 +1161,13 @@ describe("rescheduleMenuPublication", () => {
         });
     });
 
+    it("an unknown version at a time already past, as not found", async () => {
+      await refuses(() => reschedule("no-such-version", NOW), {
+        code: "menu_publication.not_found",
+        params: { menuId: f.lunch, versionId: "no-such-version" },
+      });
+    });
+
     it("a cancelled edition", async () => {
       const { third } = await queueTwo();
       await cancel(third.versionId);
@@ -1173,7 +1180,7 @@ describe("rescheduleMenuPublication", () => {
     it("a due edition, rolling its settle back", async () => {
       const { second } = await queueTwo();
       await refuses(
-        () => reschedule(second.versionId, day(10), new Date("2026-10-08T07:00:00.000Z")),
+        () => reschedule(second.versionId, day(8), new Date("2026-10-08T07:00:00.000Z")),
         {
           code: "menu_publication.not_queued",
           params: { menuId: f.lunch, versionId: second.versionId, state: "activated" },
