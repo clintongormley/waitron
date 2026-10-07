@@ -275,6 +275,38 @@ test("a toast taken off the page stops counting down and never announces a close
   expect(el.open).toBe(true);
 });
 
+test("a toast taken off the page before it draws its opening starts no countdown", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const el = (await mount('<wt-toast message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  el.show();
+  el.remove();
+  await el.updateComplete;
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("an open toast put back on the page gets its full countdown again", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const el = (await mount('<wt-toast open message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  vi.advanceTimersByTime(900);
+  el.remove();
+  host.append(el);
+  vi.advanceTimersByTime(999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(el.open).toBe(false);
+});
+
+test("a toast taken off the page while hovered counts down once it is back", async () => {
+  // Taking it away moves it from under the pointer with no mouseleave.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const el = (await mount('<wt-toast open message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  part(el, ".toast")!.dispatchEvent(new MouseEvent("mouseenter"));
+  el.remove();
+  host.append(el);
+  vi.advanceTimersByTime(1_000);
+  expect(el.open).toBe(false);
+});
+
 test("taking a toast off the page tells a controller the consumer attached to it", async () => {
   const el = (await mount('<wt-toast open message="Hi"></wt-toast>')) as WtToast;
   const gone = vi.fn();
