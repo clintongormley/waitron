@@ -74,6 +74,8 @@ const EXPECTED_FOREIGN_KEYS = [
   ["department_menus", ["menu_id"], "catalogues"],
   ["menu_periods", ["department_id"], "departments"],
   ["menu_periods", ["department_id", "menu_id"], "department_menus"],
+  ["menu_period_staff_menus", ["period_id", "department_id"], "menu_periods"],
+  ["menu_period_staff_menus", ["menu_id"], "catalogues"],
   ["menu_day_timetables", ["department_id"], "departments"],
   ["menu_day_timetables", ["special_date_id"], "special_dates"],
   ["menu_slots", ["timetable_id", "department_id"], "menu_day_timetables"],

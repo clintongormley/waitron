@@ -17,6 +17,7 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("department_all_day_menus", "state", STATE),
   classify("zone_all_day_menus", "state", STATE),
   classify("menu_periods", "state", STATE),
+  classify("menu_period_staff_menus", "state", STATE),
   classify("menu_day_timetables", "state", STATE),
   classify("menu_slots", "state", STATE),
   classify("zone_period_menus", "state", STATE),

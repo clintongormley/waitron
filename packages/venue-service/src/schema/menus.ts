@@ -1,8 +1,21 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { catalogues, count, floorZones, id, label, newId, table, timeOfDay } from "@waitron/db";
+import {
+  catalogues,
+  count,
+  enumType,
+  floorZones,
+  id,
+  label,
+  newId,
+  table,
+  timeOfDay,
+} from "@waitron/db";
+import { CALENDAR_COLOURS } from "../hours-types.js";
 import { specialDates } from "./hours.js";
 import { departments } from "./service.js";
+
+const calendarColour = enumType(CALENDAR_COLOURS);
 
 /** The menus every zone of a department may sell from, in the department's order. */
 export const departmentMenus = table(
@@ -79,6 +92,7 @@ export const menuPeriods = table(
     id: id("id").primaryKey().$defaultFn(newId),
     departmentId: id("department_id").notNull(),
     name: label("name").notNull(),
+    colour: calendarColour("colour").notNull().default("grey"),
     menuId: id("menu_id").notNull(),
   },
   (t) => [
@@ -96,6 +110,29 @@ export const menuPeriods = table(
     // The target of the keys that tie a slot's or a zone menu's department to its period's.
     uniqueIndex("menu_periods_department_key").on(t.id, t.departmentId),
     check("menu_periods_name_ck", sql`trim(${t.name}) <> ''`),
+  ],
+);
+
+export const menuPeriodStaffMenus = table(
+  "menu_period_staff_menus",
+  {
+    periodId: id("period_id").notNull(),
+    departmentId: id("department_id").notNull(),
+    menuId: id("menu_id").notNull(),
+    displayOrder: count("display_order").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.periodId, t.menuId], name: "menu_period_staff_menus_pk" }),
+    foreignKey({
+      columns: [t.periodId, t.departmentId],
+      foreignColumns: [menuPeriods.id, menuPeriods.departmentId],
+      name: "menu_period_staff_menus_period_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.menuId],
+      foreignColumns: [catalogues.id],
+      name: "menu_period_staff_menus_menu_fk",
+    }),
   ],
 );
 

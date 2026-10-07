@@ -34,6 +34,7 @@ const TABLES = [
   "departments",
   "zone_service_policies",
   "department_menus",
+  "menu_period_staff_menus",
   "department_all_day_menus",
   "zone_all_day_menus",
   "device_profile_service_access",
@@ -173,6 +174,13 @@ describe("the venue-service migration set carries no tenant column", () => {
       department_menus: {
         primaryKey: ["department_id", "menu_id"],
         foreignKeys: ["(department_id) -> departments(id)", "(menu_id) -> catalogues(id)"],
+      },
+      menu_period_staff_menus: {
+        primaryKey: ["period_id", "menu_id"],
+        foreignKeys: [
+          "(menu_id) -> catalogues(id)",
+          "(period_id, department_id) -> menu_periods(id, department_id) on delete cascade",
+        ],
       },
       department_all_day_menus: {
         primaryKey: ["department_id"],
@@ -336,6 +344,63 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION), constraint).toBe(true);
     expect(engineErrorMessage(error), constraint).toContain("FOREIGN KEY constraint failed");
   }
+
+  it("defaults period colour and removes staff menus when the period is deleted", async () => {
+    const v = await venue();
+    const periodId = randomUUID();
+    const staff = await db.transaction((tx) => createCatalogue(tx, { name: "Staff drinks" }));
+    await db.execute(sql`insert into department_menus (department_id, menu_id)
+      values (${v.departmentId}, ${v.menuId})`);
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
+    await db.execute(sql`insert into menu_period_staff_menus (period_id, department_id, menu_id)
+      values (${periodId}, ${v.departmentId}, ${staff.id})`);
+    expect(
+      (await db.execute(sql`select colour from menu_periods where id = ${periodId}`)).rows,
+    ).toEqual([{ colour: "grey" }]);
+    expect(
+      (
+        await db.execute(sql`select display_order from menu_period_staff_menus
+        where period_id = ${periodId}`)
+      ).rows,
+    ).toEqual([{ display_order: 0 }]);
+    await db.execute(sql`delete from menu_periods where id = ${periodId}`);
+    expect(
+      (
+        await db.execute(sql`select menu_id from menu_period_staff_menus
+        where period_id = ${periodId}`)
+      ).rows,
+    ).toEqual([]);
+  });
+
+  it("ties a staff menu to its period's department and an existing catalogue", async () => {
+    const v = await venue();
+    const other = await venue();
+    const periodId = randomUUID();
+    const missing = "00000000-0000-4000-8000-00000000dead";
+    await db.execute(sql`insert into department_menus (department_id, menu_id)
+      values (${v.departmentId}, ${v.menuId})`);
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
+    await refusal(
+      sql`insert into menu_period_staff_menus (period_id, department_id, menu_id)
+        values (${periodId}, ${other.departmentId}, ${other.menuId})`,
+      "menu_period_staff_menus_period_fk",
+    );
+    await refusal(
+      sql`insert into menu_period_staff_menus (period_id, department_id, menu_id)
+        values (${periodId}, ${v.departmentId}, ${missing})`,
+      "menu_period_staff_menus_menu_fk",
+    );
+    await db.execute(sql`insert into menu_period_staff_menus (period_id, department_id, menu_id)
+      values (${periodId}, ${v.departmentId}, ${other.menuId})`);
+    expect(
+      (
+        await db.execute(sql`select menu_id from menu_period_staff_menus
+        where period_id = ${periodId}`)
+      ).rows,
+    ).toEqual([{ menu_id: other.menuId }]);
+  });
 
   it("refuses a department, zone or menu that does not exist", async () => {
     const v = await venue();
