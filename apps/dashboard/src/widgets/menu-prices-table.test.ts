@@ -3357,16 +3357,21 @@ describe("the clash message and the Clashes filter", () => {
       price: { state: "decided", value: "2.20", source: { kind: "own" }, otherwise: clashPrice },
     } as MenuPriceRow["combined"],
   };
-  /** Lemonade with no price of this menu's own, its clash followed by both its sizes. */
+  /** Lemonade with no price of this menu's own, its clash followed by both its sizes, as
+   * `combineOffer` builds it. */
   function followedClashRow(): MenuPriceRow {
-    const combined = combinedFixture("p-lemonade", "3.00", [
-      { variantId: "v-small", price: null },
-      { variantId: "v-large", price: null },
-    ]);
+    const followed = { ...clashPrice, level: "product" };
     return {
       ...lemonade,
       override: null,
-      combined: { ...combined, price: clashPrice },
+      combined: {
+        productId: "p-lemonade",
+        price: clashPrice,
+        variants: [
+          { variantId: "v-small", price: followed },
+          { variantId: "v-large", price: followed },
+        ],
+      },
       variants: [
         { variantId: "v-small", price: null, active: true },
         { variantId: "v-large", price: null, active: true },
