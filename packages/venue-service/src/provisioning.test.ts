@@ -141,13 +141,14 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       select count(*) as count from departments`);
     const zones = await db.execute<{ count: number }>(sql`
       select count(*) as count from floor_zones`);
-    const policies = await db.execute<{ service_mode: string | null; default_menu_id: string }>(sql`
-      select service_mode, default_menu_id from zone_service_policies`);
+    const policies = await db.execute<{ service_mode: string | null }>(sql`
+      select service_mode from zone_service_policies`);
+    const allDay = await db.execute<{ menu_id: string }>(sql`
+      select menu_id from department_all_day_menus`);
     expect(departments.rows[0]!.count).toBe(1);
     expect(zones.rows[0]!.count).toBe(1);
-    expect(policies.rows).toEqual([
-      { service_mode: "ticket_then_pay", default_menu_id: menus[1]!.id },
-    ]);
+    expect(policies.rows).toEqual([{ service_mode: "ticket_then_pay" }]);
+    expect(allDay.rows).toEqual([{ menu_id: menus[1]!.id }]);
   });
 
   it("seeds the service settings row with changes to sent items allowed, and keeps a later choice", async () => {

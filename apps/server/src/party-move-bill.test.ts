@@ -917,17 +917,6 @@ describe("the service area of a moved bill", () => {
       ["Caña", 300, "general"],
     ]);
     expect(await zoneOf(v, orderId)).toBe(v.tables.zoneId);
-    // The counter's own offer is no longer served on it.
-    const counterOffer = await captureError(() =>
-      inTx(v, (tx) =>
-        placeGroups(tx, v.cfg, ana.partyId, {
-          groups: [{ lines: [{ menuItemId: counterCaña, quantity: "1" }], release: "fire" }],
-          operatorId: OPERATOR,
-          billId: orderId,
-        }),
-      ),
-    );
-    expect(counterOffer).toMatchObject({ code: "service_zone.offer_not_allowed" });
     expect(await linesOf(v, orderId)).toHaveLength(2);
   });
 

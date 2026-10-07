@@ -200,13 +200,13 @@ describe("provisionVenue", () => {
       "fiscal-verifactu",
       "adjustments",
     ]);
-    const defaults = await db.execute<{ menus: number; zone_menus: number }>(sql`
+    const defaults = await db.execute<{ menus: number; department_menus: number }>(sql`
       select
         (select cast(count(*) as int) from catalogues ) as menus,
-        (select cast(count(*) as int) from zone_menus zm
-          join zone_service_policies p on p.zone_id = zm.zone_id
-          where p.location_id = ${result.locationId}) as zone_menus`);
-    expect(defaults.rows[0]).toEqual({ menus: 1, zone_menus: 1 });
+        (select cast(count(*) as int) from department_menus dm
+          join departments d on d.id = dm.department_id
+          where d.location_id = ${result.locationId}) as department_menus`);
+    expect(defaults.rows[0]).toEqual({ menus: 1, department_menus: 1 });
 
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");
 

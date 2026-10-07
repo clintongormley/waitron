@@ -69,6 +69,9 @@ const EXPECTED_FOREIGN_KEYS = [
   ["special_date_hours_periods", ["cell_id"], "special_date_hours"],
   ["holiday_geographies", ["location_id"], "locations"],
   ["local_holidays", ["geography_id"], "holiday_geographies"],
+  ["department_all_day_menus", ["department_id", "menu_id"], "department_menus"],
+  ["department_menus", ["department_id"], "departments"],
+  ["department_menus", ["menu_id"], "catalogues"],
   ["departments", ["location_id"], "locations"],
   ["device_approved_profiles", ["device_id"], "devices"],
   ["device_approved_profiles", ["device_profile_id"], "device_profiles"],
@@ -281,13 +284,11 @@ const EXPECTED_FOREIGN_KEYS = [
   ["working_orders", ["location_id"], "locations"],
   ["working_orders", ["node_id"], "nodes"],
   ["working_orders", ["party_id"], "parties"],
-  ["zone_menus", ["menu_id"], "catalogues"],
-  ["zone_menus", ["zone_id"], "zone_service_policies"],
-  ["zone_service_policies", ["default_menu_id"], "catalogues"],
+  ["zone_all_day_menus", ["department_id", "menu_id"], "department_menus"],
+  ["zone_all_day_menus", ["zone_id"], "floor_zones"],
   ["zone_service_policies", ["department_id"], "departments"],
   ["zone_service_policies", ["location_id"], "locations"],
   ["zone_service_policies", ["zone_id"], "floor_zones"],
-  ["zone_service_policies", ["zone_id", "default_menu_id"], "zone_menus"],
 ];
 
 /** Every unique index that is not a primary key, by the name its declaration gives it. */

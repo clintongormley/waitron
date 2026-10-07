@@ -53,7 +53,8 @@ import { readWeekHours, replaceWeekHours } from "./hours.js";
 import type { WeekDay } from "./hours-types.js";
 import { createException, resolveMakers, setClaim } from "./routing-store.js";
 import { routeExceptions } from "./schema/routing.js";
-import { zoneSalePolicies, zoneMenus } from "./schema/service.js";
+import { zoneSalePolicies } from "./schema/service.js";
+import { zoneAllDayMenus } from "./schema/menus.js";
 import {
   copyOrderServiceContext,
   copyWorkingLineContext,
@@ -1364,9 +1365,9 @@ describe("departments", () => {
     ).toEqual([]);
     expect(
       await db
-        .select({ menuId: zoneMenus.menuId })
-        .from(zoneMenus)
-        .where(eq(zoneMenus.zoneId, zoneId)),
+        .select({ menuId: zoneAllDayMenus.menuId })
+        .from(zoneAllDayMenus)
+        .where(eq(zoneAllDayMenus.zoneId, zoneId)),
     ).toEqual([{ menuId }]);
     expect(
       await db
@@ -1664,10 +1665,10 @@ describe("retired and moved zones", () => {
     });
     expect(
       await db
-        .select({ menuId: zoneMenus.menuId })
-        .from(zoneMenus)
-        .where(eq(zoneMenus.zoneId, venue.barZone)),
-    ).toEqual([{ menuId: venue.menuId }]);
+        .select({ menuId: zoneAllDayMenus.menuId })
+        .from(zoneAllDayMenus)
+        .where(eq(zoneAllDayMenus.zoneId, venue.barZone)),
+    ).toEqual([]);
   });
 });
 
@@ -2381,7 +2382,7 @@ describe("zone offers from the published menus", () => {
       await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
       const sqlOf = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
       expect(sqlOf.filter((text) => /from "menu_publications"/.test(text))).toHaveLength(1);
-      expect(sqlOf.filter((text) => /from "zone_menus"/.test(text))).toHaveLength(1);
+      expect(sqlOf.filter((text) => /from "department_menus"/.test(text))).toHaveLength(1);
     });
   });
 });

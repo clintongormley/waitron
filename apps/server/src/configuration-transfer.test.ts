@@ -2069,16 +2069,21 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
 
   const policies = await targetSuite.db.execute<{
     zone_id: string;
-    default_menu_id: string | null;
-  }>(sql`select zone_id, default_menu_id from zone_service_policies`);
+  }>(sql`select zone_id from zone_service_policies`);
   expect(policies.rows.length).toBeGreaterThan(0);
   const targetMenus = new Set(
     (await targetSuite.db.select({ id: catalogues.id }).from(catalogues)).map((row) => row.id),
   );
   for (const policy of policies.rows) {
     expect(bundleIds.has(policy.zone_id)).toBe(false);
-    expect(bundleIds.has(policy.default_menu_id!)).toBe(false);
-    expect(targetMenus.has(policy.default_menu_id!)).toBe(true);
+  }
+  const defaults = await targetSuite.db.execute<{
+    menu_id: string;
+  }>(sql`select menu_id from department_all_day_menus`);
+  expect(defaults.rows.length).toBeGreaterThan(0);
+  for (const row of defaults.rows) {
+    expect(bundleIds.has(row.menu_id)).toBe(false);
+    expect(targetMenus.has(row.menu_id)).toBe(true);
   }
 });
 

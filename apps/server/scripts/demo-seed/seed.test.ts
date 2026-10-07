@@ -357,12 +357,12 @@ describe("seedDemoRestaurant", () => {
         select z.name as zone_name, d.name as department_name,
                coalesce(p.service_mode, d.default_service_mode) as service_mode,
                p.is_counter_default,
-               json_group_array(c.name order by zm.display_order) as menus
+               json_group_array(c.name order by dm.display_order) as menus
         from zone_service_policies p
         join floor_zones z on z.id = p.zone_id
         join departments d on d.id = p.department_id
-        join zone_menus zm on zm.zone_id = p.zone_id
-        join catalogues c on c.id = zm.menu_id
+        join department_menus dm on dm.department_id = p.department_id
+        join catalogues c on c.id = dm.menu_id
         group by z.name, d.name, p.service_mode, d.default_service_mode, p.is_counter_default
         order by z.name`);
       const serviceZoneRows = serviceZoneRaw.map((row) => ({
