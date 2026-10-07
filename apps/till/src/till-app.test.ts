@@ -1356,6 +1356,38 @@ describe("till-app", () => {
     expect(ticket(el)).toBeNull();
   });
 
+  it("changing the lock screen language asks before dropping its typed PIN", async () => {
+    const { el } = await mountApp();
+    await flush(el);
+    const screen = lock(el)!;
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await screen.updateComplete;
+    const pad = screen.shadowRoot!.querySelector("till-numeric-pad")!;
+    await pad.updateComplete;
+    pad.shadowRoot!.querySelector<HTMLElement>("[data-key='0']")!.click();
+    await screen.updateComplete;
+    const original = currentLocale();
+    const next = original === "en" ? "es" : "en";
+    emit(screen, "wt-locale-selected", { code: next });
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    expect(question.open).toBe(true);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question.open).toBe(false);
+    expect(lock(el)).toBe(screen);
+    expect(pad.value).toBe("0");
+    expect(currentLocale()).toBe(original);
+    emit(screen, "wt-locale-selected", { code: next });
+    await flush(el);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => currentLocale()).toBe(next);
+    await flush(el);
+    expect(lock(el)).not.toBe(screen);
+    expect(lock(el)!.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+    expect(currentApi.login).not.toHaveBeenCalled();
+  });
+
   it("boots: getTill sets the active locale", async () => {
     // getTill returns a locale that differs from the es-ES baseline (beforeEach), so the change is observable.
     const { el } = await mountApp({
