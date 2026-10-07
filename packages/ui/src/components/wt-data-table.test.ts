@@ -2935,7 +2935,7 @@ test.each([390, 640])(
 );
 
 test.each([641, 1280])(
-  "in a table %i px wide, Filters, the search and the chooser share one line in that order",
+  "in a table %i px wide, Filters, the chooser and the search share one line in that order",
   async (width) => {
     const el = await tableS({ searchable: true, columns: withStatusAndChooser });
     el.style.width = `${width}px`;
@@ -2945,9 +2945,9 @@ test.each([641, 1280])(
       expect(search.top).toBeLessThan(filters.bottom);
       expect(chooser.top).toBeLessThan(search.bottom);
       expect(filters.left).toBeCloseTo(toolbar.left, 0);
-      expect(filters.right).toBeLessThan(search.left);
-      expect(search.right).toBeLessThan(chooser.left);
-      expect(chooser.right).toBeGreaterThanOrEqual(toolbar.right - 8);
+      expect(filters.right).toBeLessThan(chooser.left);
+      expect(chooser.right).toBeLessThan(search.left);
+      expect(search.right).toBeGreaterThanOrEqual(toolbar.right - 8);
       // The search grows into the room the buttons leave; they keep their natural width.
       expect(filters.width).toBeLessThan(search.width / 2);
     });
@@ -7699,4 +7699,61 @@ test("a listener changing the list Clear all reports does not change the table's
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["1", "2", "3", "4"]);
   expect(storedFilters("test.multi-clear-detail")).toEqual({ status: [] });
+});
+
+test.each(
+  [390, 1280].flatMap((width) =>
+    (["light", "dark"] as const).map((theme) => [width, theme] as const),
+  ),
+)("Tab follows the toolbar's visual order at %i px (%s)", async (width, theme) => {
+  await page.viewport(width, 844);
+  onTestFinished(() => page.viewport(1280, 844));
+  const el = await table({
+    searchable: true,
+    columns: [
+      { ...columns[0], choosable: "shown" },
+      { ...columns[1], choosable: "shown" },
+      columns[2],
+    ],
+    viewKey: "toolbar-tab",
+  });
+  host.setAttribute("data-theme", theme);
+  const before = document.createElement("button");
+  before.textContent = "Before table";
+  host.prepend(before);
+  const extra = document.createElement("button");
+  extra.slot = "toolbar-end";
+  extra.textContent = "Add user";
+  el.append(extra);
+  el.requestUpdate();
+  await el.updateComplete;
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(width === 390));
+  const controls = [
+    extra,
+    el.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
+    el.shadowRoot!.querySelector<HTMLElement>(".table-search")!,
+  ];
+  const drawn = [...controls].sort((a, b) => {
+    const x = a.getBoundingClientRect(),
+      y = b.getBoundingClientRect();
+    return Math.abs(x.top - y.top) > 20 ? x.top - y.top : x.left - y.left;
+  });
+  before.focus();
+  for (const control of drawn) {
+    await userEvent.keyboard("{Tab}");
+    expect(el.shadowRoot!.activeElement ?? document.activeElement).toBe(control);
+  }
+});
+
+test("a screen-owned search is available when it is the only toolbar control", async () => {
+  const el = (await mount(
+    '<wt-data-table aria-label="Users"><input slot="toolbar-search" type="search" aria-label="Search users"></wt-data-table>',
+  )) as WtDataTable<Row>;
+  Object.assign(el, { rows, columns: [columns[0]], rowKey: (row: Row) => row.id });
+  await el.updateComplete;
+  const search = el.querySelector<HTMLInputElement>("input")!;
+  expect(search.getBoundingClientRect().height).toBeGreaterThan(0);
+  search.focus();
+  await userEvent.keyboard("Ada");
+  expect(search.value).toBe("Ada");
 });

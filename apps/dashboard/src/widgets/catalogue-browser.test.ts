@@ -3329,7 +3329,7 @@ it("passes whether products can be added to every menu", async () => {
   ).toBe(false);
 });
 
-it("draws Filters, Select, search, Expand all and Customise on one toolbar line, in that order", async () => {
+it("draws Filters, Select, Expand all, Customise and search on one toolbar line, in that order", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3346,9 +3346,9 @@ it("draws Filters, Select, search, Expand all and Customise on one toolbar line,
     const boxes = [
       table.shadowRoot!.querySelector(".filters-trigger")!,
       select,
-      search,
       table.shadowRoot!.querySelector(".expand-all")!,
       table.shadowRoot!.querySelector(".columns-trigger")!,
+      search,
     ].map((element) => element.getBoundingClientRect());
     for (let index = 1; index < boxes.length; index++) {
       expect(boxes[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(boxes[index - 1]!.right);
@@ -3530,9 +3530,7 @@ it("at phone width puts Filters, Select, Expand all and Customise on the first t
     expect(toolbar.bottom).toBeCloseTo(search.bottom, 0);
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.focus();
     await userEvent.tab();
-    expect(el.shadowRoot!.activeElement).toBe(
-      el.shadowRoot!.querySelector('[name="catalogue-search"]'),
-    );
+    expect(table.shadowRoot!.activeElement).toBe(table.shadowRoot!.querySelector(".expand-all"));
   } finally {
     await page.viewport(width, height);
   }
@@ -3582,7 +3580,7 @@ it.each([
   },
 );
 
-it("keeps Filters, Select, search, Expand all and Customise on one line in a Spanish list 660px wide", async () => {
+it("keeps Filters, Select, Expand all, Customise and search on one line in a Spanish list 660px wide", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3595,9 +3593,9 @@ it("keeps Filters, Select, search, Expand all and Customise on one line in a Spa
     const boxes = [
       table.shadowRoot!.querySelector(".filters-trigger")!,
       el.shadowRoot!.querySelector('[data-test="select"]')!,
-      el.shadowRoot!.querySelector('[name="catalogue-search"]')!,
       table.shadowRoot!.querySelector(".expand-all")!,
       table.shadowRoot!.querySelector(".columns-trigger")!,
+      el.shadowRoot!.querySelector('[name="catalogue-search"]')!,
     ].map((element) => element.getBoundingClientRect());
     for (let index = 1; index < boxes.length; index++) {
       expect(boxes[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(boxes[index - 1]!.right);
@@ -3802,3 +3800,53 @@ it.each([false, true])(
     else expect(scroll.bottom).toBeLessThan(host.getBoundingClientRect().bottom - 100);
   },
 );
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => [width, locale, theme] as const),
+    ),
+  ),
+)("Tab follows Products toolbar's visual order at %i px (%s, %s)", async (width, locale, theme) => {
+  setLocale(locale);
+  onTestFinished(() => setLocale("en-GB"));
+  const { page } = await import("vitest/browser");
+  await page.viewport(width, 844);
+  onTestFinished(() => page.viewport(1280, 844));
+  const el = await mountBrowser();
+  el.style.width = "100%";
+  el.parentElement!.setAttribute("data-theme", theme);
+  const table = await tableOf(el);
+  await vi.waitFor(() => expect(table.getBoundingClientRect().width).toBeGreaterThan(0));
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+  const search = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    '[name="catalogue-search"]',
+  )!;
+  await search.updateComplete;
+  const controls = [
+    table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!,
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!,
+    table.shadowRoot!.querySelector<HTMLElement>(".expand-all")!,
+    table.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
+    search.shadowRoot!.querySelector<HTMLInputElement>("input")!,
+  ];
+  const drawn = [...controls].sort((a, b) => {
+    const x = a.getBoundingClientRect(),
+      y = b.getBoundingClientRect();
+    return Math.abs(x.top - y.top) > 20 ? x.top - y.top : x.left - y.left;
+  });
+  const before = document.createElement("button");
+  before.textContent = "Before Products";
+  el.before(before);
+  onTestFinished(() => before.remove());
+  before.focus();
+  for (const control of drawn) {
+    await userEvent.keyboard("{Tab}");
+    let focused = document.activeElement;
+    while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+    expect(focused).toBe(control);
+  }
+  before.remove();
+});
