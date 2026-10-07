@@ -26,7 +26,8 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { allowMenuInZone, stationClaims } from "@waitron/venue-service";
+import { stationClaims } from "@waitron/venue-service";
+import { allowMenuInZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,

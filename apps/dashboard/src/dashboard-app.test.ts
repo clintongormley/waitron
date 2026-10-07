@@ -1661,7 +1661,6 @@ describe("dashboard-app", () => {
             departments: [],
             zones: [],
             hours: [],
-            zoneMenus: [],
             readiness: [],
             settings: { editSentLines: true },
             kitchenTicketGrouping: "combined",
@@ -3727,7 +3726,6 @@ describe("dashboard URL navigation", () => {
             zones: [],
             routes: [],
             hours: [],
-            zoneMenus: [],
             readiness: [],
             settings: { editSentLines: true },
           }
@@ -3794,7 +3792,6 @@ describe("dashboard URL navigation", () => {
             zones: [],
             routes: [],
             hours: [],
-            zoneMenus: [],
             readiness: [],
             settings: { editSentLines: true },
           }

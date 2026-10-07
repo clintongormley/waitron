@@ -100,7 +100,6 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       zones: [],
       routes: [],
       hours: [],
-      zoneMenus: [],
       readiness: [],
       settings: { editSentLines: true },
       clearingWorkflow: false,

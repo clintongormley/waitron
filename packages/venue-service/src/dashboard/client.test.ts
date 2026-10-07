@@ -105,7 +105,6 @@ describe("VenueServiceApi", () => {
     const model = {
       departments: [{ id: "d1" }],
       zones: [],
-      zoneMenus: [],
       readiness: [],
       settings: { editSentLines: false },
       kitchenTicketGrouping: "separate",
@@ -257,7 +256,6 @@ describe("VenueServiceApi", () => {
         jsonResponse({
           departments: [],
           zones: [],
-          zoneMenus: [],
           readiness: [],
         }),
       )
@@ -276,7 +274,7 @@ describe("VenueServiceApi", () => {
     ]);
   });
 
-  it("writes departments, zone policy and menu assignment", async () => {
+  it("writes departments and zone policy, and has no per-zone menu write", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ id: "d1" }, 201))
@@ -290,13 +288,12 @@ describe("VenueServiceApi", () => {
     await api.deactivateDepartment("d1");
     expect("replaceHours" in api).toBe(false);
     await api.configureZone("z1", { departmentId: "d1", serviceMode: null });
-    await api.allowMenu("z1", "m1", { displayOrder: 0, makeDefault: true });
+    expect("allowMenu" in api).toBe(false);
 
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service/departments", "POST"],
       ["/management-api/venue-service/departments/d1", "DELETE"],
       ["/management-api/venue-service/zones/z1", "PUT"],
-      ["/management-api/venue-service/zones/z1/menus/m1", "PUT"],
     ]);
   });
 
@@ -304,7 +301,6 @@ describe("VenueServiceApi", () => {
     const empty = {
       departments: [],
       zones: [],
-      zoneMenus: [],
       readiness: [],
     };
     const fetchImpl = vi.fn((path: string) =>

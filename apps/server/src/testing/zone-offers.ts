@@ -10,7 +10,6 @@ import {
 } from "@waitron/catalogue";
 import type { ServiceMode } from "@waitron/module";
 import {
-  allowMenuInZone,
   configureZone,
   createDepartment,
   createException,
@@ -20,6 +19,7 @@ import {
   zoneAllDayMenus,
   zoneServicePolicies,
 } from "@waitron/venue-service";
+import { allowMenuInZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { TillConfig } from "../till-config.js";
 import { publishWorkingMenu } from "./publish-menu.js";
 

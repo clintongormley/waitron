@@ -22,7 +22,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
-import { allowMenuInZone } from "@waitron/venue-service";
+import { allowMenuInZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { VenueResult } from "@waitron/provisioning";
 import {
   locationId as brandLocationId,

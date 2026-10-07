@@ -11,11 +11,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  allowMenuInZone,
-  getOrderServiceContext,
-  resolveZoneContext,
-} from "@waitron/venue-service";
+import { getOrderServiceContext, resolveZoneContext } from "@waitron/venue-service";
+import { allowMenuInZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,

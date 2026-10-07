@@ -25,7 +25,6 @@ import { hashPin, persons } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import {
-  allowMenuInZone,
   configureZone,
   createDepartment,
   createServiceZone,
@@ -33,6 +32,7 @@ import {
   setProfileServiceAccess,
   zoneServicePolicies,
 } from "@waitron/venue-service";
+import { allowMenuInZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";

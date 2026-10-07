@@ -64,7 +64,6 @@ import {
   deactivateDepartment,
   departmentRemovalImpact,
   deactivateServiceZone,
-  allowMenuInZone,
   findOrderServiceContext,
   findOrderServiceModes,
   findOrderServiceZones,
@@ -88,6 +87,7 @@ import {
   menuState,
   orderInZones,
 } from "./operations.js";
+import { allowMenuInZone } from "./testing/zone-menus.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
