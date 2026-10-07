@@ -276,6 +276,24 @@ delivery UI, image/box measurements and physical checks remain.
 
 **Look at it.** Open the wizard's Email step and the dashboard card in both themes, at 1280 and 390 px wide, in English and Spanish.
 
+**2026-10-07 SMTP settings server checkpoint.** The trading boot mounts GET/PUT
+`/management-api/email/settings` and POST `/management-api/email/settings/test`, each requiring
+`system.manage`. Settings changes are sealed under the existing `email.smtp` purpose; demo and
+prepare changes/tests are refused. Reads omit URL credentials and query values. Structured
+server/port/encryption/user/password/sender inputs build either implicit TLS or required STARTTLS.
+The test message goes to the authenticated person's address, outside the database transaction,
+and returns acceptance or a refusal/timeout code without saving the proposed settings.
+The focused boot/email run passed 179 cases; the unedited fiscal suites passed 20, and the two
+error-code guards passed 34. A focused report for the two new source modules meets the existing
+coverage thresholds. Nine independently installed mutations each failed an intended assertion
+beside valid controls, including removing required STARTTLS, accepting an untrusted certificate,
+changing the recipient, exposing the password, and moving SMTP under a write transaction.
+Restoring that candidate passed all 55 settings/test-message cases. The first helper RED run
+waited for a connection its stub never opened and was stopped; the corrected run produced three
+intended failures. Its SMTP stub also needed an explicit STARTTLS refusal instead of a generic
+success reply. Neither result is used as evidence of production failure. Live setup/provisioning,
+the dashboard editor, restore checks and all browser/visual checks in this task remain pending.
+
 ## 4. Email the PDF
 
 **2026-10-07 transport checkpoint.** `resolveInvoiceEmailDelivery` applies the mode rules below

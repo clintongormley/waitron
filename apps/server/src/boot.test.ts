@@ -3409,6 +3409,44 @@ describe("startServer — what a trading boot wires behind its management routes
     return response.json();
   }
 
+  it("exposes secret-free SMTP settings through trading boot", async () => {
+    const endpoint = `http://127.0.0.1:${port}/management-api/email/settings`;
+    const read = await fetch(endpoint, { headers: { cookie } });
+    expect(read.status).toBe(200);
+    expect(await read.json()).toEqual({ mode: "unconfigured", editable: true, settings: null });
+    try {
+      const changed = await fetch(endpoint, {
+        method: "PUT",
+        headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+        body: JSON.stringify({
+          server: "smtp.example.test",
+          port: 465,
+          encryption: "tls",
+          user: "private-user",
+          password: "private-password",
+          from: "venue@example.test",
+        }),
+      });
+      expect(changed.status).toBe(200);
+      expect(await changed.json()).toEqual({ saved: true });
+      const configured = await fetch(endpoint, { headers: { cookie } });
+      expect(configured.status).toBe(200);
+      expect(await configured.json()).toEqual({
+        mode: "smtp",
+        editable: true,
+        settings: {
+          server: "smtp.example.test",
+          port: 465,
+          encryption: "tls",
+          from: "venue@example.test",
+          hasAuthentication: true,
+        },
+      });
+    } finally {
+      await withTransaction(db, (tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+    }
+  });
+
   it("sends account email through the SMTP gateway the vault holds, and sends none while it holds none", async () => {
     const inbox = await fetch(`http://127.0.0.1:${port}/management-api/email`, {
       headers: { cookie },
