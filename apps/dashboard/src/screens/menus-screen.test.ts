@@ -4222,7 +4222,7 @@ it("refuses a malformed price in its field without sending anything", async () =
   expect(writeCalls(client)).toEqual([]);
 });
 
-it("sends a second change to a field whose save is out once the first is answered, keeping the field marked saving until both are", async () => {
+it("sends a second change to a field whose save is out once the first is answered, keeping the field listed as saving until both are", async () => {
   const pending = deferred<void>();
   let written: string | null = null;
   const client = api({
@@ -4506,7 +4506,7 @@ it("names the product and its size beside the list when a size's refusal lands a
   expect(client.updateMenuItem).not.toHaveBeenCalled();
 });
 
-it("says a connection failure in the status line, under no field", async () => {
+it("says a connection failure in the outcome message, under no field", async () => {
   const client = api({ updateMenuItem: vi.fn().mockRejectedValue({ code: "connection.failed" }) });
   const el = await mountPrices(client);
   await commitPrice(el, "mi-burger", "11.00");
@@ -4541,7 +4541,7 @@ it("shows the stored price again after a refused save once the tab is left and o
   expect(client.updateMenuItem).toHaveBeenCalledOnce();
 });
 
-it("keeps the sent price in the field, marked saving, until the re-read after its write has answered", async () => {
+it("keeps the sent price in the field, listed as saving, until the re-read after its write has answered", async () => {
   const client = api();
   const el = await mountPrices(client);
   const reread = deferred<MenuPriceRow[]>();
@@ -4653,7 +4653,7 @@ it("undoes on a click while that field holds a price typed and not yet saved, se
 });
 
 it.each(AWAY_FROM_PRICES)(
-  "clears what the status line said about a saved price once $away is opened",
+  "clears what the outcome message said about a saved price once $away is opened",
   async ({ leave }) => {
     const el = await mountPrices();
     await commitPrice(el, "mi-burger", "11.00");
@@ -4724,7 +4724,7 @@ it.each([
   { second: "another field's", key: "mi-lager", price: "5.00" },
   { second: "the same field's", key: "mi-burger", price: "11.50" },
 ])(
-  "keeps an earlier save's refusal in the status line when $second later save succeeds, offering no Undo",
+  "keeps an earlier save's refusal in the outcome message when $second later save succeeds, offering no Undo",
   async ({ key, price }) => {
     const refused = deferred<void>();
     const holds = [refused];
@@ -4751,7 +4751,7 @@ it.each([
   },
 );
 
-it("takes an earlier save's refusal from under its field once a later save of that field succeeds, still saying it in the status line", async () => {
+it("takes an earlier save's refusal from under its field once a later save of that field succeeds, still saying it in the outcome message", async () => {
   const refused = deferred<void>();
   let written: string | null = null;
   const holds = [refused];
@@ -4805,7 +4805,7 @@ it("keeps a refusal under its field when a later save of another field succeeds"
   expect(priceField(el, "mi-burger").error).toBe(reason);
 });
 
-it("clears a refusal from the status line, and from under its field, once that field is sent again", async () => {
+it("clears a refusal from the outcome message, and from under its field, once that field is sent again", async () => {
   const again = deferred<void>();
   const client = api({
     updateMenuItem: vi
@@ -4836,7 +4836,7 @@ it.each([
   ["mi-lemonade:v-small", { code: "product.variant_invalid", params: { field: "variants.1" } }],
   ["mi-lemonade:v-small", { code: "menu_item.not_found", params: {} }],
 ])(
-  "says %s's refusal %j, which names no price, in the status line under no field",
+  "says %s's refusal %j, which names no price, in the outcome message under no field",
   async (key, refusal) => {
     const client = api({
       listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
@@ -4926,7 +4926,7 @@ function heldPriceWrites(holds: { promise: Promise<void> }[]) {
   });
 }
 
-it("reads the prices again once for saves made one behind another, each field keeping its sent price, marked saving, until that read", async () => {
+it("reads the prices again once for saves made one behind another, each field keeping its sent price, listed as saving, until that read", async () => {
   const first = deferred<void>();
   const second = deferred<void>();
   const client = heldPriceWrites([first, second]);

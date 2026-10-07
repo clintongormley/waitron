@@ -1620,7 +1620,7 @@ of its own, so the rules above for a form with a primary action apply like this 
   sends nothing;
 - a refusal that names the field puts its sentence under that field; any other refusal is said for
   the list as a whole;
-- there is no bottom message and no Save button to disable.
+- there is no form-level message above the buttons and no Save button to disable.
 
 Where the two differ, and why:
 

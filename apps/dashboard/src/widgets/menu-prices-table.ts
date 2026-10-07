@@ -116,7 +116,7 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
  * asks for its own save on Enter or on leaving it, through `wt-price-save`; the host performs the
  * writes and says which are out (`saving`), which were refused for the price typed (`refusals`) and
  * the outcome of the last save (`outcome`), which floats over the page: a save for 5 s, with its
- * Undo; a refusal until another outcome replaces it, as it may be said nowhere else.
+ * Undo; a refusal until it is closed or another outcome replaces it, as it may be said nowhere else.
  */
 @customElement("dashboard-menu-prices-table")
 export class MenuPricesTable extends LitElement {
