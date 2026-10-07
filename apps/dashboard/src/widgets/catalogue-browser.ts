@@ -379,8 +379,10 @@ export class CatalogueBrowser extends LitElement {
           this.operation = operation;
           const fresh = await this.#readAgain();
           if (fresh) {
+            this.operationError = this.#showsSame(fresh)
+              ? t("folders.changed_unshown")
+              : codeMessage("category.contents_changed");
             this.summaries = fresh;
-            this.operationError = codeMessage("category.contents_changed");
           }
           return;
         }
@@ -414,13 +416,21 @@ export class CatalogueBrowser extends LitElement {
     return fresh as FolderSummary[];
   }
   /** When the subcategories, switched-on products or routing rules the dialog showed have changed,
-   * shows the new counts instead. A change in disabled products alone is not compared: the dialog
-   * neither counts them nor asks about them. The delete sends this read's counts, disabled products
-   * included, for the server to check against. */
+   * shows the new counts instead. The delete sends this read's counts, disabled products included,
+   * for the server to check against. */
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
-    const same = fresh.every((summary, index) => {
+    const same = this.#showsSame(fresh);
+    this.summaries = fresh;
+    if (same) return true;
+    this.operationError = t("folders.summary_changed");
+    return false;
+  }
+  /** A change in disabled products alone is not compared: the dialog neither counts them nor asks
+   * about them. */
+  #showsSame(fresh: readonly FolderSummary[]): boolean {
+    return fresh.every((summary, index) => {
       const shown = this.summaries[index];
       return (
         shown !== undefined &&
@@ -430,10 +440,6 @@ export class CatalogueBrowser extends LitElement {
         summary.ownRoutes === shown.ownRoutes
       );
     });
-    this.summaries = fresh;
-    if (same) return true;
-    this.operationError = t("folders.summary_changed");
-    return false;
   }
   /** Disabled products move up whichever answer is chosen, so they alone ask nothing. */
   #asksContents(): boolean {

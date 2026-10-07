@@ -2691,7 +2691,7 @@ it("when the server refuses an empty category's delete because a disabled produc
   await press(el, "delete");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
-      codeMessage("category.contents_changed"),
+      en["folders.changed_unshown"],
     ),
   );
   expect(dialog(el)).not.toBeNull();
@@ -2711,6 +2711,59 @@ it("when the server refuses an empty category's delete because a disabled produc
     ),
   );
 });
+it.each([
+  ["en-GB", "a disabled product joined", { products: 4 }],
+  ["en-GB", "a disabled product left", { products: 2 }],
+  ["es", "a disabled product joined", { products: 4 }],
+  ["en-GB", "the contents changed and changed back", {}],
+] as const)(
+  "when the server refuses because the contents changed but nothing the dialog shows did, says so instead of asking to check the counts (%s, %s), and a second Delete sends the new counts",
+  async (locale, _what, change) => {
+    setLocale(locale);
+    const el = await mountBrowser();
+    const shown = { id: "d", folders: 1, products: 3, activeProducts: 2, routes: 1, ownRoutes: 1 };
+    const fresh = { ...shown, ...change };
+    vi.mocked(el.api.summariseFolders)
+      .mockResolvedValueOnce([shown])
+      .mockResolvedValueOnce([shown])
+      .mockResolvedValue([fresh]);
+    vi.mocked(el.api.deleteCatalogueItems).mockRejectedValueOnce({
+      code: "category.contents_changed",
+      params: { categoryId: "d" },
+      status: 409,
+    });
+    const shownText = () =>
+      [...dialog(el)!.querySelectorAll("form > :not([role=alert])")]
+        .map((node) => node.textContent)
+        .join("|");
+    await selectKeys(el, ["folder:d"]);
+    await press(el, "delete");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("fieldset")).not.toBeNull());
+    const before = shownText();
+    await press(el, "confirm");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+        (locale === "es" ? es : en)["folders.changed_unshown"],
+      ),
+    );
+    expect(dialog(el)).not.toBeNull();
+    expect(el.api.summariseFolders).toHaveBeenCalledTimes(3);
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled"),
+      ).toBeNull(),
+    );
+    expect(shownText()).toBe(before);
+    await press(el, "confirm");
+    await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalledTimes(2));
+    expect(el.api.deleteCatalogueItems).toHaveBeenLastCalledWith(
+      { productIds: [], categoryIds: ["d"] },
+      "move_up",
+      [fresh],
+    );
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+  },
+);
 it("deletes a folder through its own row action", async () => {
   const el = await mountBrowser();
   (await tableOf(el))
