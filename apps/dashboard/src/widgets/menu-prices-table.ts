@@ -859,6 +859,29 @@ export class MenuPricesTable extends LitElement {
                 }`,
       },
       {
+        key: "override",
+        label: t("menu_prices.override_column"),
+        align: "end",
+        // A range sorts by its low end.
+        sortValue: (line) => {
+          const shown = this.#shown(line);
+          return shown.state === "price" ? stringToCents(shown.low) : null;
+        },
+        searchValue: (line) => {
+          const shown = this.#shown(line);
+          return shown.state === "price"
+            ? priceSearchText(spanText(shown), [shown.low, shown.high])
+            : "";
+        },
+        cell: (line) => this.#overrideCell(line),
+        filter: {
+          label: t("menu_prices.price_filter"),
+          allLabel: t("menu_prices.all_prices"),
+          value: (line) => (this.#overridden(line) ? "overridden" : "product"),
+          options: [{ value: "overridden", label: t("menu_prices.overridden_only") }],
+        },
+      },
+      {
         key: "placements",
         label: t("menu_prices.placements"),
         choosable: "shown",
@@ -898,29 +921,6 @@ export class MenuPricesTable extends LitElement {
         sortValue: (line) => (this.#active(line) ? 0 : 1),
         searchValue: (line) => productStatusName(this.#active(line), line.variant !== null),
         cell: (line) => this.#status(line),
-      },
-      {
-        key: "override",
-        label: t("menu_prices.override_column"),
-        align: "end",
-        // A range sorts by its low end.
-        sortValue: (line) => {
-          const shown = this.#shown(line);
-          return shown.state === "price" ? stringToCents(shown.low) : null;
-        },
-        searchValue: (line) => {
-          const shown = this.#shown(line);
-          return shown.state === "price"
-            ? priceSearchText(spanText(shown), [shown.low, shown.high])
-            : "";
-        },
-        cell: (line) => this.#overrideCell(line),
-        filter: {
-          label: t("menu_prices.price_filter"),
-          allLabel: t("menu_prices.all_prices"),
-          value: (line) => (this.#overridden(line) ? "overridden" : "product"),
-          options: [{ value: "overridden", label: t("menu_prices.overridden_only") }],
-        },
       },
       {
         key: "actions",
@@ -985,7 +985,7 @@ export class MenuPricesTable extends LitElement {
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         aria-label=${t("menu_prices.label").replace("{menu}", this.menuName)}
-        viewKey="waitron.menus.price-overrides.table"
+        viewKey="waitron.menus.menu-prices.table"
         searchable
         searchLabel=${t("menu_prices.search")}
         customiseColumnsLabel=${t("table.customise_columns")}
