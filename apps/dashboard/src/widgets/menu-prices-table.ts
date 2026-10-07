@@ -104,10 +104,10 @@ const activeOffer = (item: MenuPriceRow): MenuPriceRow["combined"] => {
   };
 };
 
-/** Whether a clash in the product's own price stops publishing: it has no Active size, or an
- * Active size charges that clashing price. */
-const ownPriceSold = (item: MenuPriceRow): boolean =>
-  item.variants.every((v) => !v.active) || followsClash(item);
+/** Whether a clash in the product's own price, as its field reads now, stops publishing: it has
+ * no Active size, or an Active size charges that clashing price. */
+const ownPriceSold = (item: MenuPriceRow, parent: ParentPrice = undefined): boolean =>
+  item.variants.every((v) => !v.active) || followsClash(item, parent);
 
 /** Whether this menu stores a price for any of the product's sizes. */
 const pricesASize = (item: MenuPriceRow): boolean =>
@@ -332,7 +332,13 @@ export class MenuPricesTable extends LitElement {
    * worked out for. */
   readonly #underParent = new Map<
     string,
-    { parent: ParentPrice; from?: InheritedFrom; inherited?: Inherited; sizeClash?: boolean }
+    {
+      parent: ParentPrice;
+      from?: InheritedFrom;
+      inherited?: Inherited;
+      sizeClash?: boolean;
+      ownSold?: boolean;
+    }
   >();
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -536,6 +542,19 @@ export class MenuPricesTable extends LitElement {
     );
   }
 
+  /** The button goes once the filter is on Clashes, so focus moves to the first clashing row's
+   * field, or to the search box when the search leaves none. */
+  async #showClashes(): Promise<void> {
+    const table = this.#table()!;
+    table.chooseFilter("override", ["clash"]);
+    await table.updateComplete;
+    const root = table.shadowRoot!;
+    (
+      root.querySelector<HTMLElement>("wt-price-input[data-row]") ??
+      root.querySelector<HTMLElement>('input[name="search"]')!
+    ).focus();
+  }
+
   async #focusField(key: string): Promise<void> {
     const table = this.#table();
     await table?.updateComplete;
@@ -603,7 +622,7 @@ export class MenuPricesTable extends LitElement {
           from: variantInheritedFrom(item, variant.variantId, parent),
           inherited: variantInherited(item, variant.variantId, parent),
         }
-      : { parent, sizeClash: sizeClash(item, parent) };
+      : { parent, sizeClash: sizeClash(item, parent), ownSold: ownPriceSold(item, parent) };
     this.#underParent.set(key, worked);
     return worked;
   }
@@ -621,14 +640,14 @@ export class MenuPricesTable extends LitElement {
     return stored === null ? this.#inherited(line) : { state: "price", low: stored, high: stored };
   }
 
-  /** "size" for a product row whose own price is decided but an Active size's is not; "own" for a
-   * row whose own price, or what it inherits, is undecided and whose field holds no price. A size
-   * is judged by what it inherits alone, which follows a price typed for its product. */
+  /** An Active row's mark, its product's field as it reads now: "size" on a product row by
+   * `sizeClash`; "own" on a row whose field holds no price and whose own price, or what it
+   * inherits, clashes, on a product row only while `ownPriceSold`. */
   #clash(line: Line): "size" | "own" | null {
     if (!this.#active(line)) return null;
     if (line.variant === null && this.#withParent(line).sizeClash) return "size";
     if (this.#holds(line, this.drafts.get(keyOf(line)))) return null;
-    if (line.variant === null && !ownPriceSold(line.item)) return null;
+    if (line.variant === null && !this.#withParent(line).ownSold) return null;
     return (line.variant === null && this.#priceSetting(line).state === "clash") ||
       this.#inherited(line).state === "clash"
       ? "own"
@@ -1021,7 +1040,7 @@ export class MenuPricesTable extends LitElement {
           ? html`<wt-button
               variant="ghost"
               data-test="show-clashes"
-              @click=${() => this.#table()?.chooseFilter("override", ["clash"])}
+              @click=${() => void this.#showClashes()}
               >${t("menu_prices.show_clashes")}</wt-button
             >`
           : nothing

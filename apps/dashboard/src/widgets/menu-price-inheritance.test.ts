@@ -3,6 +3,7 @@ import type { Decimal } from "@waitron/shared";
 import { combineOffer } from "@waitron/catalogue/src/menu-combine.js";
 import type { MenuPriceRow, Setting } from "../api/client.js";
 import {
+  followsClash,
   productInherited,
   sizeClash,
   sizesInheritedFrom,
@@ -408,8 +409,32 @@ describe("sizesInheritedFrom", () => {
   });
 });
 
+describe("followsClash", () => {
+  it("is true when an Active size with no price of its own follows the product's clash", () => {
+    expect(followsClash(productClash)).toBe(true);
+  });
+
+  it("is false once that size is Inactive", () => {
+    expect(followsClash(withInactive(productClash, "v-small"))).toBe(false);
+  });
+
+  it("is false when the size has this menu's own price", () => {
+    const ownSmall: MenuPriceRow = {
+      ...sizeOwnOverClash,
+      variants: sizeOwnOverClash.variants.map((v) =>
+        v.variantId === "v-small" ? { ...v, price: "2.20" } : v,
+      ),
+    };
+    expect(followsClash(ownSmall)).toBe(false);
+  });
+
+  it("is false when a price is typed in the product's field", () => {
+    expect(followsClash(productClash, "2.80")).toBe(false);
+  });
+});
+
 describe("sizeClash", () => {
-  it("is true when an Active size clashes while the product's price is decided", () => {
+  it("is true when an Active size clashes at size level and no Active size follows a product clash", () => {
     expect(sizeClash(sizeLevelClash)).toBe(true);
   });
 
@@ -417,7 +442,7 @@ describe("sizeClash", () => {
     expect(sizeClash(productClash)).toBe(false);
   });
 
-  it("is true when an Active size clashes at size level and no Active size follows the product's clash", () => {
+  it("beside a size-level clash, is false while an Active size follows the product's clash, and true once that size is Inactive", () => {
     const both = lemonadeOn({}, { price: "3.50", variants: { "v-large": "3.90" } });
     expect(both.combined.price.state).toBe("clash");
     expect(sizeClash(withInactive(both, "v-small"))).toBe(true);

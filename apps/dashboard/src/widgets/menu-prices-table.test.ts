@@ -2686,6 +2686,40 @@ it("drops a product's clash sentence once this menu's saved price decides it, an
   expect(override(el, "mi-lager").placeholder).toBe(t("menu_prices.clash_placeholder"));
 });
 
+it("marks a product whose saved price settled the clash a following size charges once its field is emptied, so the clash shows with the product closed", async () => {
+  const settled = {
+    state: "decided",
+    value: "2.20",
+    source: { kind: "own" },
+    otherwise: clashPrice,
+  };
+  const row = {
+    ...lemonade,
+    override: "2.20",
+    combined: {
+      ...lemonade.combined,
+      price: settled,
+      variants: lemonade.combined.variants.map((v, at) =>
+        at === 0
+          ? { ...v, price: { ...settled, source: { kind: "parent" }, level: "product" } }
+          : v,
+      ),
+    },
+  } as MenuPriceRow;
+  const el = await mount({ rows: [row] });
+  expect(clashMarker(el, "mi-lemonade")).toBe("");
+  await typeIn(el, "mi-lemonade", "");
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].prices);
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
+  await typeIn(el, "mi-lemonade", "2.80");
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lemonade")).toBe("");
+  expect(clashMarker(el, "mi-lemonade:v-small")).toBe("");
+});
+
 it("drops a product's clash sentence while a price is typed for it, and not for text that is no price", async () => {
   const el = await mount({ rows: [clashRow(lager)] });
   expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
@@ -2730,7 +2764,7 @@ it("drops a size's clash sentence once this menu's saved price decides it, and s
   expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
 });
 
-it("turns a clashing product's sentence into the one naming its variants' clash once a price is typed for the product", async () => {
+it("names its variants' clash on a product whose own clashing price is never sold, before and after a price is typed for it", async () => {
   const el = await mount({
     rows: [
       {
@@ -3615,6 +3649,31 @@ describe("the clash message and the Clashes filter", () => {
     await table(el).updateComplete;
     expect(priceFilter(el)).toBe("clash");
     expect(showClashes(el)).toBeNull();
+  });
+
+  it("moves focus from Show clashes, which goes, to the first clashing row's field", async () => {
+    const el = await mount({ rows: [burger, variantClashRow(), clashRow(lager)] });
+    await choose(el, "override", "");
+    await el.updateComplete;
+    showClashes(el)!.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(table(el).shadowRoot.activeElement).not.toBeNull());
+    expect(shown(el)[0]).toBe("mi-lemonade");
+    expect(table(el).shadowRoot.activeElement).toBe(override(el, "mi-lemonade"));
+  });
+
+  it("moves focus from Show clashes to the search box when the search leaves no clashing row", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    await choose(el, "override", "");
+    await search(el, "Burger");
+    await el.updateComplete;
+    showClashes(el)!.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(table(el).shadowRoot.activeElement).not.toBeNull());
+    expect(shown(el)).toEqual([]);
+    expect(table(el).shadowRoot.activeElement).toBe(
+      table(el).shadowRoot.querySelector('input[name="search"]'),
+    );
   });
 
   it("offers Show clashes on a return to the tab whose remembered filter is All prices", async () => {
