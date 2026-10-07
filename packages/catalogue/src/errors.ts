@@ -95,7 +95,7 @@ declare module "@waitron/shared" {
       time: string;
       occurrences: { at: string; offset: string }[];
     };
-    /** The location's time zone cannot be read, so no venue-local time can be placed. */
+    /** The location's stored time zone is not a named zone. */
     "menu_publication.clock_unreadable": Record<string, never>;
     /** A Device Home Page shortcut names a product or section the menu's working structure does not reach. */
     "menu.shortcut_unreachable": { ref: MemberRef };

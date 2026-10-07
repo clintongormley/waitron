@@ -120,10 +120,7 @@ export interface CatalogueApiDeps {
     language: string,
   ) => Promise<{ kind: string; id: string }[]>;
   db: Database;
-  /**
-   * The venue whose kitchen courses the product editor may set. Optional for suites that never
-   * set a course; `requireVenueCfg` throws on a course request without one.
-   */
+  /** Required by the routes that read the venue's location; `requireVenueCfg` throws without it. */
   venueCfg?: TillConfig;
   venueLocale?: string;
 }
@@ -290,7 +287,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
   "menu.clashes_unresolved": 409,
-  // An edition placed here would go live before a lower-numbered one still queued.
   "menu_publication.overtakes_queued": 409,
   "menu_publication.not_found": 404,
   "menu_publication.not_queued": 409,
@@ -1592,10 +1588,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 
 /** A misconfiguration guard, not a request fault: `boot.ts` always supplies `venueCfg`. */
 function requireVenueCfg(deps: CatalogueApiDeps): TillConfig {
-  /* v8 ignore start -- boot always threads a venueCfg; only a harness that omits it AND sends editor
-     routing reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
+  /* v8 ignore start -- boot always threads a venueCfg; only a harness that omits it AND calls a route
+     that reads the venue's location reaches this, which no suite does — surfaced as a 500 by `run`. */
   if (deps.venueCfg === undefined) {
-    throw new Error("mountCatalogueApi: venueCfg is required for the product editor's routing");
+    throw new Error(
+      "mountCatalogueApi: venueCfg is required by routes that read the venue's location",
+    );
   }
   /* v8 ignore stop */
   return deps.venueCfg;

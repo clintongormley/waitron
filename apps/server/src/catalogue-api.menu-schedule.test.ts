@@ -64,13 +64,10 @@ afterAll(() => {
   vi.useRealTimers();
 });
 
-// Every case shares one database and names its menu "Lunch" and its product "Soup", which must be
-// unique among live rows; the rows earlier cases left are renamed first.
+// Every case shares one database and names its product "Soup"; an active product's name is unique
+// across the venue, so the products earlier cases left are renamed first.
 beforeEach(async () => {
   vi.setSystemTime(NOW);
-  await suite.db.execute(
-    sql`update categories set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
-  );
   await suite.db.execute(
     sql`update products set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
   );
@@ -188,6 +185,12 @@ async function status(app: Hono, menuId: string): Promise<MenuStatus> {
   return json(await send(app, "GET", `/management-api/catalogues/${menuId}/status`), 200);
 }
 
+async function setVenueZone(timeZone: string): Promise<void> {
+  await suite.db.execute(
+    sql`update locations set time_zone = ${timeZone} where id = ${locationId}`,
+  );
+}
+
 const cancelPath = (menuId: string, versionId: string) =>
   `/management-api/catalogues/${menuId}/publications/${versionId}/cancel`;
 
@@ -229,6 +232,44 @@ describe("queuing, listing and cancelling menu editions through the routes", () 
         local: { date: "2026-10-08", time: "08:00", offset: "+02:00", repeated: false },
       }),
     ]);
+  });
+
+  it("places and lists times in the venue's own time zone", async () => {
+    const app = mountApp();
+    const { menuId, itemId } = await lunchWithSoup(app);
+    await setSoupPrice(app, menuId, itemId, "5.50");
+    await setVenueZone("Atlantic/Canary");
+    try {
+      const queued = await json<{ versionId: string }>(await queue(app, menuId, TOMORROW), 201);
+      expect(queued).toMatchObject({ activatesAt: "2026-10-08T07:00:00.000Z" });
+      const answer = await publications(app, menuId);
+      expect(answer.timeZone).toBe("Atlantic/Canary");
+      expect(answer.editions).toEqual([
+        expect.objectContaining({
+          versionId: queued.versionId,
+          local: { date: "2026-10-08", time: "08:00", offset: "+01:00", repeated: false },
+        }),
+      ]);
+    } finally {
+      await setVenueZone("Europe/Madrid");
+    }
+  });
+
+  it("refuses to queue or list while the venue's stored zone is not a named zone, writing nothing", async () => {
+    const app = mountApp();
+    const { menuId, itemId } = await lunchWithSoup(app);
+    await setSoupPrice(app, menuId, itemId, "5.50");
+    const tables = await publicationTables();
+    await setVenueZone("Mars/Olympus");
+    try {
+      const refusal = { error: { code: "menu_publication.clock_unreadable", params: {} } };
+      expect(await json(await queue(app, menuId, TOMORROW), 409)).toEqual(refusal);
+      const listed = await send(app, "GET", `/management-api/catalogues/${menuId}/publications`);
+      expect(await json(listed, 409)).toEqual(refusal);
+      expect(await publicationTables()).toEqual(tables);
+    } finally {
+      await setVenueZone("Europe/Madrid");
+    }
   });
 
   it("lists a menu never published as having no live version and no editions", async () => {
