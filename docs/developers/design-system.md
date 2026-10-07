@@ -2935,5 +2935,7 @@ uses this arrangement when its first four cards are Product grid, Basket, Total 
 with the menu and basket filling one row and the total and payment cards matching the basket's
 width; only Held orders with the menu's width may follow. Other arrangements keep their configured row spans.
 At phone width the cards stack in their configured order and the page scrolls. Basket rows wrap
-controls that do not fit beside the dish name. Full invoice and Hold share a row; Cash, Card and
-Hold use the shared medium button size.
+controls that do not fit beside the dish name. Full invoice and Hold share a row in both payment
+modes. When Place is offered, it fills the row above them. The cash-at-till explanation spans the
+payment card. Cash, Card and Hold use the shared medium button size. The Chromium payment-mode
+cases in `apps/till/src/screens/till-counter-screen.layout.test.ts` hold those arrangements.

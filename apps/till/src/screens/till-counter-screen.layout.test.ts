@@ -14,6 +14,7 @@ import "./till-counter-screen.js";
 import "../widgets/tab-shell.js";
 import type { TillTabShell } from "../widgets/tab-shell.js";
 import indexHtml from "../../index.html?raw";
+import type { TillTenderPay } from "../widgets/tender-pay.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 
 // Vitest's own default frame, which every other case runs in.
@@ -288,6 +289,17 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
         }
         await counter.updateComplete;
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        await expect
+          .element(page.getByRole("button", { name: "Casa Delgado", exact: true }))
+          .toBeVisible();
+        await expect
+          .element(
+            page.getByRole("button", {
+              name: locale === "es-ES" ? "Vegano" : "Vegan",
+              exact: true,
+            }),
+          )
+          .toBeVisible();
         const controls = sellingControls(grid);
         for (const name of ["total", "cash button", "card button", "hold button"]) {
           const [control] = controls[name]!;
@@ -315,6 +327,10 @@ it.each([
   {
     name: "reordered cards",
     cards: [counterTab.cards[1]!, counterTab.cards[0]!, counterTab.cards[2]!, counterTab.cards[3]!],
+  },
+  {
+    name: "payment before total",
+    cards: [counterTab.cards[0]!, counterTab.cards[1]!, counterTab.cards[3]!, counterTab.cards[2]!],
   },
   {
     name: "a menu narrower than its configured row",
@@ -372,13 +388,70 @@ it("keeps a usable basket and payment controls when the default canvas has many 
   host.style.height = "752px";
   shell.style.height = "100%";
   shell.append(counter);
+  for (let i = 0; i < 25; i++)
+    counter.store.addProduct(product(`held-long-${i}`, `Long dish ${i}`, "117.00"), "1");
   await counter.updateComplete;
   await (grid as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   const basket = grid.shadowRoot!.querySelector("till-basket")!;
+  expect(basket.parentElement!.scrollHeight).toBeGreaterThan(basket.parentElement!.clientHeight);
+  basket.parentElement!.scrollTop = basket.parentElement!.scrollHeight;
+  expect(basket.parentElement!.scrollTop).toBeGreaterThan(0);
+  const lastRemove = [...basket.shadowRoot!.querySelectorAll<HTMLElement>(".remove")].at(-1)!;
+  expect(lastRemove.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    basket.parentElement!.getBoundingClientRect().bottom,
+  );
   expect(basket.parentElement!.clientHeight).toBeGreaterThanOrEqual(44);
   expect(
     inShadow(grid.shadowRoot!.querySelector("till-tender-pay"), ".hold").getBoundingClientRect()
       .bottom,
   ).toBeLessThanOrEqual(800);
   expect(grid.shadowRoot!.querySelector("till-held-orders")).not.toBeNull();
+});
+
+describe.each(["light", "dark"] as const)("idle payment layout in %s", (theme) => {
+  describe.each(["en-GB", "es-ES"])("idle payment layout in %s", (locale) => {
+    it.each(["prepay", "ticket_then_pay"] as const)(
+      "keeps invoice and hold together in %s mode",
+      async (mode) => {
+        await page.viewport(1024, 768);
+        setLocale(locale);
+        const store = new WorkingOrderStore();
+        store.addProduct(cafe, "1");
+        const { el, host } = await mountWidget<TillTenderPay>(
+          "till-tender-pay",
+          { store, mode },
+          theme,
+        );
+        host.style.width = "360px";
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const invoice = inShadow(el, "[data-full-invoice]").getBoundingClientRect();
+        const hold = inShadow(el, ".hold").getBoundingClientRect();
+        expect(hold.top).toBe(invoice.top);
+        expect(hold.left).toBeGreaterThanOrEqual(invoice.right);
+        for (const selector of [".pay", ".pay-card", ".hold"]) {
+          const rect = inShadow(el, selector).getBoundingClientRect();
+          expect(rect.height).toBeGreaterThanOrEqual(44);
+          expect(rect.width).toBeGreaterThanOrEqual(44);
+        }
+        if (mode !== "prepay") {
+          const place = inShadow(el, ".place").getBoundingClientRect();
+          expect(place.bottom).toBeLessThanOrEqual(invoice.top);
+          expect(place.width).toBe(inShadow(el, ".idle-actions").getBoundingClientRect().width);
+        }
+        await expectNoA11yViolations(host);
+      },
+    );
+  });
+});
+
+it("keeps the cash-at-till explanation across the payment card", async () => {
+  const store = new WorkingOrderStore();
+  store.addProduct(cafe, "1");
+  const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", {
+    store,
+    takesCash: false,
+  });
+  host.style.width = "360px";
+  const note = inShadow(el, ".cash-at-till").getBoundingClientRect();
+  expect(note.width).toBe(inShadow(el, ".idle-actions").getBoundingClientRect().width);
 });

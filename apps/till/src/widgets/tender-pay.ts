@@ -131,6 +131,7 @@ export class TillTenderPay extends LitElement {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
+      .idle-actions .cash-at-till,
       .idle-actions .tenders,
       .idle-actions .place {
         grid-column: 1 / -1;
@@ -804,7 +805,7 @@ export class TillTenderPay extends LitElement {
       ${this.#renderCardExtras()}
       ${formMessage(this.tipAttempted && this.#tipInvalid() ? t("form.fix_fields") : "")}
       <div class="actions idle-actions">
-        ${this.#renderTenderButtons(disabled)} ${this.#renderInvoiceButton(disabled)}
+        ${this.#renderTenderButtons(disabled)}
         ${
           withPlace
             ? html`<wt-button
@@ -818,6 +819,7 @@ export class TillTenderPay extends LitElement {
               </wt-button>`
             : nothing
         }
+        ${this.#renderInvoiceButton(disabled)}
         <wt-button
           class="hold"
           variant="secondary"
