@@ -306,10 +306,6 @@ declare module "@waitron/shared" {
     "table.label_taken": { label: string };
     /** A dining table exists but is deactivated, so no tab may be opened on it. */
     "table.inactive": { tableId: string };
-    /**
-     * A table may not be enabled in a disabled zone, or in a zone whose department is disabled.
-     * `zoneId` is the zone the table would sit in.
-     */
     "table.zone_inactive": { tableId: string; zoneId: string };
     /**
      * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
@@ -618,6 +614,7 @@ declare module "@waitron/shared" {
     "zone.not_found": { zoneId: string };
     /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */
     "zone.name_taken": { name: string };
+    "zone.department_inactive": { zoneId: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */
     "station.name_taken": { name: string };
     /** The effective late thresholds would be unordered for this station. */

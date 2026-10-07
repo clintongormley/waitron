@@ -869,11 +869,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
+        if (Array.isArray(body))
+          throw new AppError("management.request_invalid", { field: "body" });
         const name = requireString(body.name, "name").trim();
         if (name === "") throw new AppError("management.request_invalid", { field: "name" });
         const zone = await gated(sessionId, (tx) =>
           createServiceZone(tx, ctx.cfg, {
             name,
+            displayOrder:
+              body.displayOrder === undefined ? undefined : requireDisplayOrder(body.displayOrder),
             departmentId: requireBodyUuid(body.departmentId, "departmentId"),
           }),
         );

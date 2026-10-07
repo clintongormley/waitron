@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -15,7 +16,7 @@ import { createPinThrottle } from "@waitron/identity";
 import { createStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { bumpGroupReady, markGroupAway, placeGroups } from "./order-groups.js";
-import { createZone } from "./tables.js";
+
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import {
   fireNewOrder,

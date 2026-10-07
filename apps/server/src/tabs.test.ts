@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { createException } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -47,7 +48,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { fireAll, openPartyTab, serveLine, unserveLine } from "./testing/serve-line.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
-import { createTable, createZone, updateTable } from "./tables.js";
+import { createTable, updateTable } from "./tables.js";
 import {
   addTabRound,
   advanceTicketItem,
@@ -1006,9 +1007,9 @@ describe("listTablesWithState (occupancy)", () => {
           defaultServiceMode: "table_tab",
         })
         .returning({ id: departments.id });
-      await tx.execute(sql`
-        insert into zone_service_policies (location_id, zone_id, department_id, service_mode)
-        values (${cfg.locationId}, ${zone.id}, ${department!.id}, 'table_tab')`);
+      await tx.execute(sql`update zone_service_policies
+        set department_id = ${department!.id}, service_mode = 'table_tab'
+        where zone_id = ${zone.id}`);
       await tx.execute(sql`
         insert into department_menus (department_id, menu_id)
         values (${department!.id}, ${menuId})`);

@@ -7,10 +7,47 @@ function jsonResponse(body: unknown, status = 200): Response {
     ok: status >= 200 && status < 300,
     status,
     text: async () => (status === 204 ? "" : JSON.stringify(body)),
+    json: async () => body,
   } as Response;
 }
 
 describe("VenueServiceApi", () => {
+  it("createZone POSTs { name, departmentId } and returns the id (201)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "z1" }, 201));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    expect(await api.createZone({ name: "Comedor", departmentId: "d1" })).toEqual({ id: "z1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/zones", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Comedor", departmentId: "d1" }),
+    });
+  });
+
+  it("createZone can carry an optional displayOrder", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "z2" }, 201));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    expect(await api.createZone({ name: "Terraza", departmentId: "d1", displayOrder: 3 })).toEqual({
+      id: "z2",
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/zones", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Terraza", departmentId: "d1", displayOrder: 3 }),
+    });
+  });
+
+  it("createZone rejects with { code } on a non-2xx (name already taken)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "zone.name_taken" } }, 409));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await expect(api.createZone({ name: "Comedor", departmentId: "d1" })).rejects.toMatchObject({
+      code: "zone.name_taken",
+    });
+  });
+
   it("renames a floor zone through the zone route", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));

@@ -11,6 +11,7 @@ import {
   floorZones,
   isStatusColor,
   isUniqueViolation,
+  newId,
   refusalOn,
   UNIQUE_VIOLATION,
   tableServiceStatuses,
@@ -45,11 +46,6 @@ async function requireZone(tx: Transaction, zoneId: string): Promise<void> {
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
 }
 
-/**
- * A zone with no service policy has no department to judge, so only the zone's own flag counts.
- * `zoneId` exists: a supplied one was checked by `requireZone`, a stored one by
- * `dining_tables_zone_fk`.
- */
 async function requireZoneInService(tx: Transaction, tableId: string, zoneId: string) {
   const [row] = await tx
     .select({ zoneActive: floorZones.active, departmentActive: departments.active })
@@ -57,7 +53,7 @@ async function requireZoneInService(tx: Transaction, tableId: string, zoneId: st
     .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
     .leftJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
     .where(eq(floorZones.id, zoneId));
-  if (!row!.zoneActive || row!.departmentActive === false) {
+  if (!row!.zoneActive || row!.departmentActive !== true) {
     throw new AppError("table.zone_inactive", { tableId, zoneId });
   }
 }
@@ -86,11 +82,16 @@ export async function createTable(
   cfg: TillConfig,
   input: { label: string; zoneId?: string; capacity?: number },
 ): Promise<{ id: string }> {
-  if (input.zoneId !== undefined) await requireZone(tx, input.zoneId);
+  const id = newId();
+  if (input.zoneId !== undefined) {
+    await requireZone(tx, input.zoneId);
+    await requireZoneInService(tx, id, input.zoneId);
+  }
   try {
     const [row] = await tx
       .insert(diningTables)
       .values({
+        id,
         locationId: cfg.locationId,
         label: input.label,
         zoneId: input.zoneId ?? null,
@@ -154,13 +155,15 @@ export async function updateTable(
     patch.zoneId = input.zoneId;
     await requireZone(tx, input.zoneId);
   }
-  if (input.active === true) {
+  if (input.active === true || (input.zoneId !== undefined && input.active !== false)) {
     const [table] = await tx
-      .select({ zoneId: diningTables.zoneId })
+      .select({ zoneId: diningTables.zoneId, active: diningTables.active })
       .from(diningTables)
       .where(eq(diningTables.id, id));
     const zoneId = input.zoneId ?? table?.zoneId ?? null;
-    if (table !== undefined && zoneId !== null) await requireZoneInService(tx, id, zoneId);
+    if (table !== undefined && (input.active ?? table.active) && zoneId !== null) {
+      await requireZoneInService(tx, id, zoneId);
+    }
   }
 
   let updated: { id: string }[];
@@ -224,6 +227,8 @@ export async function setTablePlacement(
     throw new AppError("zone.not_found", { zoneId: p.zoneId });
   }
 
+  await requireZoneInService(tx, tableId, p.zoneId);
+
   requirePlacementInt(p.posX, COORD_MAX, "posX");
   requirePlacementInt(p.posY, COORD_MAX, "posY");
   if (!floorTableShape.enumValues.includes(p.shape)) {
@@ -264,34 +269,6 @@ export interface FloorZone {
   active: boolean;
 }
 
-export async function createZone(
-  tx: Transaction,
-  cfg: TillConfig,
-  input: { name: string; displayOrder?: number },
-): Promise<{ id: string }> {
-  try {
-    const [row] = await tx
-      .insert(floorZones)
-      .values({
-        locationId: cfg.locationId,
-        name: input.name,
-        displayOrder: input.displayOrder ?? 0,
-      })
-      .returning({ id: floorZones.id });
-    return { id: row!.id };
-  } catch (error) {
-    if (
-      refusalOn(error, UNIQUE_VIOLATION, {
-        table: "floor_zones",
-        columns: ["location_id", "name"],
-      })
-    ) {
-      throw new AppError("zone.name_taken", { name: input.name });
-    }
-    throw error;
-  }
-}
-
 export async function listZones(
   tx: Transaction,
   cfg: TillConfig,
@@ -323,6 +300,19 @@ export async function updateZone(
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
   if (patch.active !== undefined) set.active = patch.active;
+
+  if (patch.active === true) {
+    const [zone] = await tx
+      .select({ departmentActive: departments.active })
+      .from(floorZones)
+      .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
+      .leftJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+      .where(and(eq(floorZones.id, id), eq(floorZones.locationId, cfg.locationId)));
+    if (zone === undefined) throw new AppError("zone.not_found", { zoneId: id });
+    if (zone.departmentActive !== true) {
+      throw new AppError("zone.department_inactive", { zoneId: id });
+    }
+  }
 
   if (patch.active === false) {
     const [zone] = await tx

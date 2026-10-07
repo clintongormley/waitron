@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { describe, expect, it } from "vitest";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import {
@@ -36,7 +37,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
-import { createTable, createZone, listTables, setTablePlacement } from "./tables.js";
+import { createTable, listTables, setTablePlacement } from "./tables.js";
 import { addTabRound, advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -334,11 +335,9 @@ async function placeTable(shop: Shop): Promise<void> {
       where location_id = ${shop.cfg.locationId}
       limit 1`);
     const departmentId = department.rows[0]!.department_id;
-    await tx.execute(sql`
-      insert into zone_service_policies (location_id, zone_id, department_id, service_mode)
-      values (${shop.cfg.locationId}, ${zone.id}, ${departmentId}, 'table_tab')`);
-    await tx.execute(sql`
-      insert into zone_sale_policies (zone_id) values (${zone.id})`);
+    await tx.execute(sql`update zone_service_policies
+      set department_id = ${departmentId}, service_mode = 'table_tab'
+      where zone_id = ${zone.id}`);
     await tx.execute(sql`
       insert into department_menus (department_id, menu_id)
       values (${departmentId}, ${shop.menuId})

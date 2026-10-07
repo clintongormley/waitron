@@ -1,7 +1,9 @@
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -11,13 +13,16 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { clearPlacement, createTable, createZone, setTablePlacement } from "./tables.js";
+import { clearPlacement, createTable, setTablePlacement } from "./tables.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
 
 // The placement verbs' own `location_id` predicate is the only thing refusing another location's row.
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 let db: Database;
 beforeAll(() => {
   db = suite.db;

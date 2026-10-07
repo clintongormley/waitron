@@ -169,7 +169,11 @@ export class VenueServiceApi {
     return this.request(`/management-api/venue-service/zones/${zoneId}`, "PUT", input);
   }
 
-  createZone(input: { name: string; departmentId: string }): Promise<{ id: string }> {
+  createZone(input: {
+    name: string;
+    departmentId: string;
+    displayOrder?: number;
+  }): Promise<{ id: string }> {
     return this.request("/management-api/venue-service/zones", "POST", input);
   }
 

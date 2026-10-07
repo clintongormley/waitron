@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -6,7 +7,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { joinTables, moveGuests } from "./table-actions.js";
-import { createZone } from "./tables.js";
+
 import { createOpenOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {

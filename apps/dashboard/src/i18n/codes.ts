@@ -434,6 +434,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A zone with that name already exists",
     es: "Ya existe una zona con ese nombre",
   },
+  "zone.department_inactive": {
+    en: "That zone needs an active department. Enable its department or assign it to an active one first",
+    es: "Esa zona necesita un departamento habilitado. Habilita su departamento o asígnala primero a uno habilitado",
+  },
   "zone.not_found": {
     en: "That zone no longer exists",
     es: "Esa zona ya no existe",

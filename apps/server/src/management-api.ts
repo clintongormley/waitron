@@ -91,7 +91,6 @@ import {
   clearPlacement,
   createStatus,
   createTable,
-  createZone,
   deactivateStatus,
   deactivateTable,
   deactivateZone,
@@ -292,6 +291,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "zone.not_found": 404,
   "zone.table_in_use": 409,
   "zone.name_taken": 409,
+  "zone.department_inactive": 409,
   "table.not_found": 404,
   "table.label_taken": 409,
   "table.zone_inactive": 409,
@@ -1651,25 +1651,6 @@ export function mountManagementApi(
   );
 
   // ── Zones and tables ──
-  app.post("/management-api/zones", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<{ name?: unknown; displayOrder?: unknown }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      if (typeof body.name !== "string")
-        throw new AppError("management.request_invalid", { field: "name" });
-      const displayOrder = parseDisplayOrder(body.displayOrder);
-      const { name } = body;
-      const result = await withVenueAuth(deps, sessionId, (tx) =>
-        createZone(tx, cfg, { name, displayOrder }),
-      );
-      return c.json(result, 201);
-    }),
-  );
-
   app.get("/management-api/zones", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

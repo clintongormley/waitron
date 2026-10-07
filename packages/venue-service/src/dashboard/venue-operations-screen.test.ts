@@ -897,6 +897,29 @@ describe("venue operations screen", () => {
       expect(row.querySelector('[data-test="enable-tree-zone-z1"]')).not.toBeNull();
     });
 
+    it.each([
+      [
+        "en",
+        "That zone needs an active department. Enable its department or assign it to an active one first",
+      ],
+      [
+        "es",
+        "Esa zona necesita un departamento habilitado. Habilita su departamento o asígnala primero a uno habilitado",
+      ],
+    ] as const)("explains a department refusal from Enable in %s", async (locale, message) => {
+      setLocale(locale);
+      const updateZone = vi
+        .fn()
+        .mockRejectedValue({ code: "zone.department_inactive", params: { zoneId: "z1" } });
+      const el = await mount({
+        load: vi.fn().mockResolvedValue(disabled),
+        updateZone,
+      } as unknown as VenueServiceApi);
+      await action(el, "enable-tree-zone-z1");
+      await vi.waitFor(() => expect(pageAlert(el)).toBe(message));
+      expect(zoneRow(el).querySelector('[data-test="enable-tree-zone-z1"]')).not.toBeNull();
+    });
+
     it("draws a gap between a disabled zone's name and its Disabled word", async () => {
       const el = await mount({
         load: vi.fn().mockResolvedValue(disabled),
@@ -908,7 +931,7 @@ describe("venue operations screen", () => {
       expect(label.getBoundingClientRect().left - name.right).toBeGreaterThan(2);
     });
 
-    it("offers Enable on a disabled zone that belongs to no department", async () => {
+    it("withholds Enable until a disabled zone belongs to an active department", async () => {
       const updateZone = vi.fn().mockResolvedValue(undefined);
       const el = await mount({
         load: vi.fn().mockResolvedValue({
@@ -922,8 +945,8 @@ describe("venue operations screen", () => {
       ].find((candidate) => candidate.textContent?.includes("Deli counter"))!;
       expect(row.getAttribute("aria-level")).toBe("1");
       expect(row.querySelector('[data-test="remove-tree-zone-z2"]')).toBeNull();
-      await action(el, "enable-tree-zone-z2");
-      expect(updateZone).toHaveBeenCalledExactlyOnceWith("z2", { active: true });
+      expect(row.querySelector('[data-test="enable-tree-zone-z2"]')).toBeNull();
+      expect(updateZone).not.toHaveBeenCalled();
     });
 
     it("offers neither Enable nor Disable on a disabled zone of a disabled department", async () => {

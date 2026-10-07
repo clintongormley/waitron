@@ -1,8 +1,9 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorZones, kitchenTimingDefaults, locations, withTransaction } from "@waitron/db";
+import { kitchenTimingDefaults, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { writeEditSentLines } from "@waitron/venue-service";
@@ -89,12 +90,9 @@ const suite = useVenueDb({
       return p;
     });
     productId = product.id;
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ locationId: loc!.id, name: "Terraza" })
-      .returning({ id: floorZones.id });
-    seededZoneId = zone!.id;
     cfg = makeCfg(loc!.id, nodeId);
+    const zone = await withTransaction(db, (tx) => createZone(tx, cfg, { name: "Terraza" }));
+    seededZoneId = zone.id;
     const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
     menuItemId = offers.offerFor(productId);
     tablesZoneId = offers.zoneId;

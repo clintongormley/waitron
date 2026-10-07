@@ -49,7 +49,6 @@ function stubApi(zones: FloorZone[], tables: DashboardTable[]): DashboardApi {
   return {
     listZones: vi.fn().mockResolvedValue(zones.map((z) => ({ ...z }))),
     listTables: vi.fn().mockResolvedValue(tables.map((t) => ({ ...t }))),
-    createZone: vi.fn().mockResolvedValue({ id: "z9" }),
     updateZone: vi.fn().mockResolvedValue(undefined),
     deactivateZone: vi.fn().mockResolvedValue(undefined),
     createTable: vi.fn().mockResolvedValue({ id: "t9" }),

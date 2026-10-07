@@ -1503,30 +1503,6 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
     });
   });
 
-  it("createZone POSTs { name } and returns the id (201)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "z1" }, true, 201));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.createZone({ name: "Comedor" })).toEqual({ id: "z1" });
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Comedor" }),
-    });
-  });
-
-  it("createZone can carry an optional displayOrder", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "z2" }, true, 201));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.createZone({ name: "Terraza", displayOrder: 3 })).toEqual({ id: "z2" });
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Terraza", displayOrder: 3 }),
-    });
-  });
-
   it("updateZone PATCHes the addressed zone's mutable slice (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
@@ -1546,16 +1522,6 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones/z1", {
       method: "DELETE",
       credentials: "include",
-    });
-  });
-
-  it("createZone rejects with { code } on a non-2xx (name already taken)", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "zone.name_taken" } }, false, 409));
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.createZone({ name: "Comedor" })).rejects.toMatchObject({
-      code: "zone.name_taken",
     });
   });
 

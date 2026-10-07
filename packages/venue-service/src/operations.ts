@@ -449,7 +449,7 @@ export async function configureZone(
 export async function createServiceZone(
   tx: Transaction,
   cfg: VenueScope,
-  input: { name: string; departmentId: string },
+  input: { name: string; departmentId: string; displayOrder?: number },
 ): Promise<{ id: string }> {
   const [department] = await tx
     .select({ id: departments.id })
@@ -467,7 +467,11 @@ export async function createServiceZone(
   try {
     const [zone] = await tx
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: input.name })
+      .values({
+        locationId: cfg.locationId,
+        name: input.name,
+        displayOrder: input.displayOrder ?? 0,
+      })
       .returning({ id: floorZones.id });
     zoneId = zone!.id;
   } catch (error) {
