@@ -397,16 +397,29 @@ describe("home tiles", () => {
     expect(await tileRefs(home)).toEqual([]);
   });
 
-  it("accepts an Inactive product the menu places, and publishing keeps an empty slot with a warning", async () => {
+  it("refuses an Inactive product the menu placed, and a shortcut to one later disabled publishes as an empty slot with a warning", async () => {
     const f = await menusFixture(fx.db);
+    const home = await homeOf(f.lunch);
+    await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
     await app((tx) => deactivateProduct(tx, f.soup));
-    const tile = await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
-    expect(tile.ref).toEqual(product(f.soup));
     const { shortcuts } = await app((tx) => readMenuHome(tx, f.lunch));
-    expect(shortcuts).toMatchObject([{ ref: product(f.soup), reachable: true }]);
+    expect(shortcuts).toMatchObject([
+      { position: 0, ref: { kind: "missing", name: "Soup" }, reachable: false },
+    ]);
     const preview = await app((tx) => previewMenu(tx, f.lunch));
     expect(preview.warnings).toEqual([{ kind: "shortcut_missing", name: "Soup" }]);
     expect(preview.document.home.shortcuts).toEqual([{ kind: "empty" }]);
+
+    expect(await codeOf(() => app((tx) => addShortcut(tx, f.lunch, product(f.soup))))).toBe(
+      "menu.shortcut_unreachable",
+    );
+    const rows = await fx.db
+      .select()
+      .from(sectionMembers)
+      .where(eq(sectionMembers.sectionId, home));
+    expect(rows.map(({ productId, missingName }) => ({ productId, missingName }))).toEqual([
+      { productId: null, missingName: "Soup" },
+    ]);
   });
 
   it("accepts product tiles on an inactive menu, reached by its structure", async () => {
@@ -425,15 +438,13 @@ describe("home tiles", () => {
     ]);
   });
 
-  it("accepts an inactive product the structure reaches", async () => {
+  it("refuses an Inactive product an included menu placed", async () => {
     const f = await menusFixture(fx.db);
     await app((tx) => deactivateProduct(tx, f.lager));
-    await app((tx) => addShortcut(tx, f.lunch, product(f.lager)));
-    const { shortcuts } = await app((tx) => readMenuHome(tx, f.lunch));
-    expect(shortcuts).toMatchObject([{ ref: product(f.lager), reachable: true }]);
-    expect((await app((tx) => previewMenu(tx, f.lunch))).warnings).toEqual([
-      { kind: "shortcut_missing", name: "Lager" },
-    ]);
+    expect(await codeOf(() => app((tx) => addShortcut(tx, f.lunch, product(f.lager))))).toBe(
+      "menu.shortcut_unreachable",
+    );
+    expect(await tileRefs(await homeOf(f.lunch))).toEqual([]);
   });
 
   it("refuses unreachable menu roots and home sections as tiles", async () => {

@@ -520,13 +520,25 @@ describe("a product that leaves a menu starts fresh there", () => {
     await expectFresh(f, settings);
   });
 
-  it("keeps a removed product's settings while it is only made inactive", async () => {
+  it("takes a product made inactive off every list and resets its settings on each menu, and making it Active again puts it back on none", async () => {
     const { f, settings } = await lemonadeOnLunch();
     await app((tx) => updateProduct(tx, f.lemonade, { active: false }));
     expect(await offerNames(f.lunch)).toEqual(["Water (staff)"]);
-    await app((tx) => syncMenuOffers(tx, [f.lunch, f.dinner]));
     await app((tx) => updateProduct(tx, f.lemonade, { active: true }));
-    expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toEqual(settings.lunch);
+    expect(await offerNames(f.lunch)).toEqual(["Water (staff)"]);
+    expect(await offerNames(f.dinner)).toEqual([]);
+    const { rows } = await fx.db.execute<{ id: string }>(
+      sql`select id from section_members where product_id = ${f.lemonade}`,
+    );
+    expect(rows).toEqual([]);
+    const after = await app(async (tx) => ({
+      lunch: await settingsOf(tx, f.lunch, f.lemonade),
+      dinner: await settingsOf(tx, f.dinner, f.lemonade),
+    }));
+    expect(after).toEqual({
+      lunch: { id: settings.lunch.id, grossPrice: null, variantOverrides: [] },
+      dinner: { id: settings.dinner.id, grossPrice: null, variantOverrides: [] },
+    });
   });
 
   it("keeps the overrides when another included menu takes its place in one step", async () => {
@@ -781,7 +793,7 @@ describe("a menu's prices", () => {
     ]);
   });
 
-  it("lists a sold-out and an inactive product, each with its own Active state", async () => {
+  it("lists a sold-out product with its own Active state, and an inactive product not at all", async () => {
     const f = await fixture();
     await app(async (tx) => {
       for (const productId of [f.lemonade, f.water, f.burger, f.juice])
@@ -795,7 +807,6 @@ describe("a menu's prices", () => {
     expect(rows.map(({ name, active }) => [name, active])).toEqual([
       ["Lemonade (staff)", true],
       ["Water (staff)", true],
-      ["Burger (staff)", false],
       ["Juice (staff)", true],
     ]);
     // A till's offers still leave the inactive product out.
@@ -874,13 +885,14 @@ describe("a menu's prices", () => {
     ]);
   });
 
-  it("marks an Active variant of an Inactive product by each one's own state", async () => {
+  it("lists neither an Inactive product nor its Active variant", async () => {
     const f = await fixture();
     await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
+    expect((await app((tx) => menuPrices(tx, f.lunch))).map(({ productId }) => productId)).toEqual([
+      f.lemonade,
+    ]);
     await app((tx) => deactivateProduct(tx, f.lemonade));
-    const [row] = await app((tx) => menuPrices(tx, f.lunch));
-    expect(row).toMatchObject({ productId: f.lemonade, active: false });
-    expect(row!.variants).toEqual([{ variantId: f.large, price: null, active: true }]);
+    expect(await app((tx) => menuPrices(tx, f.lunch))).toEqual([]);
   });
 
   it("names the product's reporting category by id", async () => {

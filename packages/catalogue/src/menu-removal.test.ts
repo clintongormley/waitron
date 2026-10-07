@@ -7,6 +7,7 @@ import { createCategory } from "./categories.js";
 import { deleteCatalogueItems } from "./catalogue-items.js";
 import { addShortcut, readMenuHome } from "./menu-home.js";
 import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
+import { takeOffMenus } from "./menu-removal.js";
 import { readMenuStructure } from "./menu-structure.js";
 import {
   createCatalogue,
@@ -244,6 +245,42 @@ describe("a product made Inactive comes off every menu", () => {
       { position: 1, ref: { kind: "missing", name: "Tortilla" } },
       { position: 2, ref: section(r.fried) },
     ]);
+  });
+});
+
+describe("takeOffMenus", () => {
+  it("writes nothing for a product on no list, and every menu keeps its status", async () => {
+    const r = await removalFixture();
+    await publish(r.tapas);
+    await publish(r.terrace);
+    const loose = await app(
+      async (tx) =>
+        (
+          await createProduct(tx, {
+            catalogueId: r.tapas,
+            categoryId: null,
+            name: "Gazpacho",
+            pricingUnit: "each",
+            unitPrice: "4.00",
+            vatClass: "reduced",
+            allergens: {},
+          })
+        ).id,
+    );
+    const snapshot = async () => ({
+      members: await fx.db.select().from(sectionMembers).orderBy(sectionMembers.id),
+      offers: await fx.db.select().from(menuItems).orderBy(menuItems.id),
+      variantPrices: await fx.db
+        .select()
+        .from(menuItemVariantOverrides)
+        .orderBy(menuItemVariantOverrides.menuItemId, menuItemVariantOverrides.variantId),
+    });
+    const before = await snapshot();
+
+    await app((tx) => takeOffMenus(tx, [loose]));
+
+    expect(await snapshot()).toEqual(before);
+    expect(await states([r.tapas, r.terrace])).toEqual(["current", "current"]);
   });
 });
 
