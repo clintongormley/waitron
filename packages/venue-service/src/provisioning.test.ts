@@ -34,6 +34,53 @@ beforeAll(() => {
 });
 
 describe("VENUE_SERVICE_PROVISIONING", () => {
+  it("places Open once and preserves its authored ranges on a second seed", async () => {
+    await seedTenant(db);
+    const [menu] = await db
+      .insert(catalogues)
+      .values({ name: "First menu" })
+      .returning({ id: catalogues.id });
+    const [location] = await db
+      .insert(locations)
+      .values({
+        name: "First venue",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+        catalogueId: menu!.id,
+      })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(location!.id);
+    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const seed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+    const rows = () =>
+      db.execute(
+        sql`select p.name, p.menu_id, d.weekday, s.starts_at, s.ends_at from menu_periods p join departments dep on dep.id = p.department_id join menu_slots s on s.period_id = p.id join menu_day_timetables d on d.id = s.timetable_id where dep.location_id = ${locationId} order by d.weekday`,
+      );
+    await seed();
+    expect((await rows()).rows).toEqual(
+      [1, 2, 3, 4, 5].map((weekday) => ({
+        name: "Open",
+        menu_id: menu!.id,
+        weekday,
+        starts_at: "09:00:00",
+        ends_at: "17:00:00",
+      })),
+    );
+    await db.execute(
+      sql`update menu_slots set ends_at = '16:00:00' where period_id = (select p.id from menu_periods p join departments d on d.id = p.department_id where d.location_id = ${locationId})`,
+    );
+    await seed();
+    expect((await rows()).rows).toEqual(
+      [1, 2, 3, 4, 5].map((weekday) => ({
+        name: "Open",
+        menu_id: menu!.id,
+        weekday,
+        starts_at: "09:00:00",
+        ends_at: "16:00:00",
+      })),
+    );
+  });
+
   it("names the default department after the venue", async () => {
     await seedTenant(db);
     const [location] = await db
@@ -151,7 +198,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     expect(allDay.rows).toEqual([{ menu_id: menus[1]!.id }]);
   });
 
-  it("lists the location's menu on the counter department, makes it the default, and keeps a manager's order on a re-run", async () => {
+  it("seeds the location's Open period and keeps the transitional member order on a re-run", async () => {
     await seedTenant(db);
     const [menu] = await db
       .insert(catalogues)
@@ -171,21 +218,29 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const listed = async () =>
       (
-        await db.execute<{ menu_id: string; display_order: number; all_day: string | null }>(sql`
-          select m.menu_id, m.display_order, a.menu_id as all_day
+        await db.execute<{
+          menu_id: string;
+          display_order: number;
+          period_menu: string | null;
+        }>(sql`
+          select m.menu_id, m.display_order, a.menu_id as period_menu
           from department_menus m
           join departments d on d.id = m.department_id
-          left join department_all_day_menus a on a.department_id = m.department_id
+          join menu_periods a on a.department_id = m.department_id
           where d.location_id = ${locationId}`)
       ).rows;
 
     await runSeed();
-    expect(await listed()).toEqual([{ menu_id: menu!.id, display_order: 0, all_day: menu!.id }]);
+    expect(await listed()).toEqual([
+      { menu_id: menu!.id, display_order: 0, period_menu: menu!.id },
+    ]);
     await db.execute(
       sql`update department_menus set display_order = 5 where menu_id = ${menu!.id}`,
     );
     await runSeed();
-    expect(await listed()).toEqual([{ menu_id: menu!.id, display_order: 5, all_day: menu!.id }]);
+    expect(await listed()).toEqual([
+      { menu_id: menu!.id, display_order: 5, period_menu: menu!.id },
+    ]);
   });
 
   it("seeds the service settings row with changes to sent items allowed, and keeps a later choice", async () => {

@@ -32,6 +32,7 @@ import {
 } from "./department-menus.js";
 import { duplicateHolidayNamedSpecialDates } from "./holidays.js";
 import { deleteSpecialDate, saveSpecialDate } from "./hours.js";
+import { addDays } from "./hours-rules.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import type { SpecialDateInput } from "./hours-types.js";
 import {
@@ -58,7 +59,13 @@ import {
   recordOrderServiceContext,
   recordWorkingLineContexts,
 } from "./operations.js";
-import { menuDayTimetables, menuSlots, zonePeriodMenus } from "./schema/menus.js";
+import {
+  menuDayTimetables,
+  menuPeriods,
+  menuPeriodStaffMenus,
+  menuSlots,
+  zonePeriodMenus,
+} from "./schema/menus.js";
 import { specialDates } from "./schema/hours.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
@@ -115,6 +122,257 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
 });
 const weekOf = (fill: (weekday: number) => MenuSlot[]): MenuWeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: fill(weekday) }));
+
+describe("service-period writers", () => {
+  it("checks an end equal to the changeover on the following calendar date", async () => {
+    const v = await venue();
+    await db
+      .update(locations)
+      .set({ dayCutover: "02:30:00" })
+      .where(eq(locations.id, v.locationId));
+    const date = await makeDate(v, "2026-03-28");
+    await expect(
+      dateMenus(v, date.id, [slot(v.periods!.noches, "21:00", "02:30")]),
+    ).rejects.toMatchObject({
+      code: "menu_timetable.invalid",
+      params: { field: "slots.0.endsAt", reason: "clock_skips" },
+    });
+  });
+
+  it("refuses explicit null fields rather than treating them as omitted", async () => {
+    const v = await venue({ timetable: false });
+    const { id } = await scoped((tx) =>
+      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: "Lunch",
+        menuId: v.menus.Bebidas,
+        staffMenuIds: [],
+      }),
+    );
+    for (const field of ["colour", "staffMenuIds"] as const) {
+      await expect(
+        scoped((tx) => updateMenuPeriod(tx, v.cfg, id, { [field]: null } as never)),
+      ).rejects.toMatchObject({ code: "menu_period.invalid", params: { field } });
+    }
+  });
+
+  it("uses the location's changeover and refuses a range crossing the end of its business day", async () => {
+    const v = await venue();
+    await db
+      .update(locations)
+      .set({ dayCutover: "08:00:00" })
+      .where(eq(locations.id, v.locationId));
+    await expect(
+      scoped((tx) =>
+        replaceMenuWeek(
+          tx,
+          v.cfg,
+          v.restaurant,
+          weekOf((day) => (day === 1 ? [slot(v.periods!.mananas, "07:00", "09:00")] : [])),
+          AT,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu_timetable.invalid",
+      params: { field: "days.1.slots", reason: "order" },
+    });
+  });
+
+  it("refuses off-step week and special-date ranges", async () => {
+    const v = await venue();
+    await expect(
+      scoped((tx) =>
+        replaceMenuWeek(
+          tx,
+          v.cfg,
+          v.restaurant,
+          weekOf((day) => (day === 1 ? [slot(v.periods!.mananas, "12:10", "14:00")] : [])),
+          AT,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu_timetable.invalid",
+      params: { field: "days.1.slots", reason: "step" },
+    });
+    const special = await makeDate(v, CHRISTMAS);
+    await expect(
+      dateMenus(v, special.id, [slot(v.periods!.mananas, "12:00", "14:10")]),
+    ).rejects.toMatchObject({
+      code: "menu_timetable.invalid",
+      params: { field: "slots", reason: "step" },
+    });
+  });
+
+  it("checks skipped times on the calendar date that owns each business-day endpoint", async () => {
+    const v = await venue();
+    await db
+      .update(locations)
+      .set({ dayCutover: "06:00:00" })
+      .where(eq(locations.id, v.locationId));
+    const before = await makeDate(v, "2026-03-28");
+    await expect(
+      dateMenus(v, before.id, [slot(v.periods!.noches, "21:00", "02:30")]),
+    ).rejects.toMatchObject({ code: "menu_timetable.invalid", params: { reason: "clock_skips" } });
+    const after = await makeDate(v, "2026-03-29");
+    await dateMenus(v, after.id, [slot(v.periods!.noches, "06:00", "02:30")]);
+    const stored = await db
+      .select({ startsAt: menuSlots.startsAt, endsAt: menuSlots.endsAt })
+      .from(menuSlots)
+      .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
+      .where(eq(menuDayTimetables.specialDateId, after.id));
+    expect(stored).toEqual([{ startsAt: "06:00:00", endsAt: "02:30:00" }]);
+  });
+
+  it.each([null, "pink", 1])("refuses an explicit invalid colour %s", async (colour) => {
+    const v = await venue({ timetable: false });
+    await expect(
+      scoped((tx) =>
+        saveMenuPeriod(tx, v.cfg, v.restaurant, {
+          id: null,
+          name: "Lunch",
+          menuId: v.menus.Bebidas,
+          staffMenuIds: [],
+          colour: colour as never,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "menu_period.invalid", params: { field: "colour" } });
+  });
+
+  it("refuses changing the customer menu to a retained staff menu and leaves the period untouched", async () => {
+    const v = await venue({ timetable: false });
+    const { id } = await scoped((tx) =>
+      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        id: null,
+        name: "Lunch",
+        menuId: v.menus.Bebidas,
+        staffMenuIds: [v.menus.Café],
+        colour: "blue",
+      }),
+    );
+    await expect(
+      scoped((tx) => updateMenuPeriod(tx, v.cfg, id, { menuId: v.menus.Café })),
+    ).rejects.toMatchObject({ code: "menu_period.invalid", params: { field: "staffMenuIds" } });
+    expect(
+      await db
+        .select({ menuId: menuPeriods.menuId, colour: menuPeriods.colour })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, id)),
+    ).toEqual([{ menuId: v.menus.Bebidas, colour: "blue" }]);
+  });
+
+  it("saves an active customer menu outside the old list, trims the name and keeps staff-menu order", async () => {
+    const v = await venue({ timetable: false });
+    const period = await scoped((tx) =>
+      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: " Lunch ",
+        menuId: v.menus["Deli para llevar"],
+        staffMenuIds: [v.menus.Café, v.menus.Bebidas],
+      }),
+    );
+    expect(
+      await db
+        .select({ name: menuPeriods.name, colour: menuPeriods.colour, menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, period.id)),
+    ).toEqual([{ name: "Lunch", colour: "red", menuId: v.menus["Deli para llevar"] }]);
+    const staff = () =>
+      db
+        .select({
+          menuId: menuPeriodStaffMenus.menuId,
+          position: menuPeriodStaffMenus.displayOrder,
+        })
+        .from(menuPeriodStaffMenus)
+        .where(eq(menuPeriodStaffMenus.periodId, period.id))
+        .orderBy(menuPeriodStaffMenus.displayOrder);
+    expect(await staff()).toEqual([
+      { menuId: v.menus.Café, position: 0 },
+      { menuId: v.menus.Bebidas, position: 1 },
+    ]);
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, period.id, {
+        staffMenuIds: [v.menus.Bebidas, v.menus.Café],
+        colour: "purple",
+      }),
+    );
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, period.id, { name: " Afternoon " }));
+    expect(await staff()).toEqual([
+      { menuId: v.menus.Bebidas, position: 0 },
+      { menuId: v.menus.Café, position: 1 },
+    ]);
+    expect(
+      await db
+        .select({ name: menuPeriods.name, colour: menuPeriods.colour, menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, period.id)),
+    ).toEqual([{ name: "Afternoon", colour: "purple", menuId: v.menus["Deli para llevar"] }]);
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, period.id, { staffMenuIds: [] }));
+    expect(await staff()).toEqual([]);
+  });
+
+  it("chooses the first unused department colour, repeating red after all six", async () => {
+    const v = await venue({ timetable: false });
+    const colours = [];
+    for (let index = 0; index < 7; index++) {
+      const { id } = await scoped((tx) =>
+        saveMenuPeriod(tx, v.cfg, v.restaurant, {
+          id: null,
+          name: `Period ${index}`,
+          menuId: v.menus.Bebidas,
+          staffMenuIds: [],
+        }),
+      );
+      const [row] = await db
+        .select({ colour: menuPeriods.colour })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, id));
+      colours.push(row!.colour);
+    }
+    expect(colours).toEqual(["red", "amber", "grey", "blue", "green", "purple", "red"]);
+  });
+
+  it.each(["customer", "staff"] as const)(
+    "refuses an inactive %s catalogue without writing a period",
+    async (kind) => {
+      const v = await venue({ timetable: false });
+      await db.update(catalogues).set({ active: false }).where(eq(catalogues.id, v.menus.Café));
+      await expect(
+        scoped((tx) =>
+          saveMenuPeriod(tx, v.cfg, v.restaurant, {
+            id: null,
+            name: "Lunch",
+            menuId: kind === "customer" ? v.menus.Café : v.menus.Bebidas,
+            staffMenuIds: kind === "staff" ? [v.menus.Café] : [],
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "catalogue.not_found",
+        params: { catalogueId: v.menus.Café },
+      });
+      expect(
+        await db.select().from(menuPeriods).where(eq(menuPeriods.departmentId, v.restaurant)),
+      ).toEqual([]);
+    },
+  );
+
+  it.each(["customer", "duplicate"] as const)(
+    "refuses a %s entry among staff menus",
+    async (kind) => {
+      const v = await venue({ timetable: false });
+      await expect(
+        scoped((tx) =>
+          saveMenuPeriod(tx, v.cfg, v.restaurant, {
+            id: null,
+            name: "Lunch",
+            menuId: v.menus.Bebidas,
+            staffMenuIds: kind === "customer" ? [v.menus.Bebidas] : [v.menus.Café, v.menus.Café],
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "menu_period.invalid", params: { field: "staffMenuIds" } });
+      expect(
+        await db.select().from(menuPeriods).where(eq(menuPeriods.departmentId, v.restaurant)),
+      ).toEqual([]);
+    },
+  );
+});
 
 /**
  * Restaurant (Barra, Sala, Terraza) lists every menu but Deli para llevar, all-day Bebidas; Deli
@@ -506,7 +764,7 @@ describe("a special date's menu timetable", () => {
       });
   });
 
-  it("is not closed by a whole-venue closure, and its slots still count beside the neighbours", async () => {
+  it("retains the current resolver until Task 4 and refuses a range crossing the changeover", async () => {
     const v = await timed();
     const { menus, periods } = v;
     const christmas = await makeDate(v, CHRISTMAS, { closeWholeVenue: true });
@@ -515,17 +773,17 @@ describe("a special date's menu timetable", () => {
     expect((await resolve(v, v.sala, at("12:00"))).defaultMenuId).toBe(menus["Brunch de Navidad"]);
     expect((await resolve(v, v.sala, at("16:00"))).defaultMenuId).toBe(menus.Bebidas);
     expect((await resolve(v, v.mostrador, at("12:00"))).periodId).toBe(periods.mediodiaDeli);
-    // Its tail would run into Saturday's Mediodía, 13:00.
+    // This range runs beyond the next changeover.
     await expect(
       dateMenus(v, christmas.id, [slot(periods.madrugada, "23:00", "14:00")]),
-    ).rejects.toMatchObject(invalid("slots", { date: "2026-12-26", departmentId: v.restaurant }));
+    ).rejects.toMatchObject(invalid("slots", { reason: "order" }));
   });
 
   it("refuses a slot opening or closing at a minute the clock skips that date, writing nothing", async () => {
     const v = await timed();
     const forward = clockChangeAfter(ZONE, "2027-01-01T00:00:00Z", "forward");
     const skipped = minutesAfter(forward.before, 16);
-    const date = await makeDate(v, forward.date);
+    const date = await makeDate(v, addDays(forward.date, -1));
     await expect(
       dateMenus(v, date.id, [slot(v.periods.mananas, "00:30", skipped)]),
     ).rejects.toMatchObject(invalid("slots.0.endsAt"));
@@ -595,41 +853,27 @@ describe("a special date's menu timetable", () => {
 });
 
 describe("the timetable's writers", () => {
-  it("check every special date's neighbours, and no skipped minute, when the venue's clock cannot be read", async () => {
+  it("checks structural ranges but skips clock-gap checks when the clock cannot be read", async () => {
     const v = await timed();
-    const { periods } = v;
-    const forward = clockChangeAfter(ZONE, "2027-01-01T00:00:00Z", "forward");
-    const march = await makeDate(v, forward.date);
-    const past = await makeDate(v, "2026-10-03");
-    await dateMenus(v, past.id, [slot(periods.mananas, "01:00", "03:00")]);
-    await scoped(async (tx) => {
-      await tx.execute(
-        sql`update locations set time_zone = 'Mars/Base' where id = ${v.locationId}`,
-      );
-    });
-    // Nothing is known to be skipped on an unreadable clock.
-    await dateMenus(v, march.id, [
-      slot(periods.mananas, "00:30", minutesAfter(forward.before, 16)),
-    ]);
-    // Without a today, the past Saturday's clash with Friday's tail counts.
+    await db.update(locations).set({ timeZone: "Mars/Base" }).where(eq(locations.id, v.locationId));
+    const date = await makeDate(v, "2027-03-27");
+    await dateMenus(v, date.id, [slot(v.periods.mananas, "00:30", "02:30")]);
+    expect(
+      await db
+        .select({ startsAt: menuSlots.startsAt, endsAt: menuSlots.endsAt })
+        .from(menuSlots)
+        .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
+        .where(eq(menuDayTimetables.specialDateId, date.id)),
+    ).toEqual([{ startsAt: "00:30:00", endsAt: "02:30:00" }]);
     await expect(
-      scoped((tx) =>
-        replaceMenuWeek(
-          tx,
-          v.cfg,
-          v.restaurant,
-          restaurantWeek(periods, (weekday) =>
-            weekday === 5 ? [slot(periods.madrugada, "22:00", "02:00")] : null,
-          ),
-          AT,
-        ),
-      ),
-    ).rejects.toMatchObject(invalid("date", { date: "2026-10-03", departmentId: v.restaurant }));
+      dateMenus(v, date.id, [slot(v.periods.mananas, "01:00", "12:00")]),
+    ).rejects.toMatchObject(invalid("slots", { reason: "order" }));
   });
 
   it("refuse a period, menu or slot from another department, and an unknown period", async () => {
     const v = await timed();
     const { menus, periods } = v;
+    const absentMenu = randomUUID();
     await expect(
       scoped((tx) => setZonePeriodMenu(tx, v.cfg, v.mostrador, periods.mananas, menus.Desayunos)),
     ).rejects.toMatchObject(invalid("periodId"));
@@ -638,12 +882,12 @@ describe("the timetable's writers", () => {
         saveMenuPeriod(tx, v.cfg, v.restaurant, {
           id: null,
           name: "Para llevar",
-          menuId: menus["Deli para llevar"],
+          menuId: absentMenu,
         }),
       ),
     ).rejects.toMatchObject({
-      code: "department_menu.not_found",
-      params: { departmentId: v.restaurant, menuId: menus["Deli para llevar"] },
+      code: "catalogue.not_found",
+      params: { catalogueId: absentMenu },
     });
     await expect(
       scoped((tx) =>
@@ -768,6 +1012,7 @@ describe("the timetable's writers", () => {
   it("keep a period's stored name when only its menu changes, and its stored menu when only its name does", async () => {
     const v = await timed();
     const { menus, periods } = v;
+    const absentMenu = randomUUID();
     await scoped((tx) =>
       updateMenuPeriod(tx, v.cfg, periods.noches, { name: "Cenas", menuId: menus.Cena }),
     );
@@ -785,12 +1030,10 @@ describe("the timetable's writers", () => {
     });
     // A partial update is still checked like a whole one.
     await expect(
-      scoped((tx) =>
-        updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: menus["Deli para llevar"] }),
-      ),
+      scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: absentMenu })),
     ).rejects.toMatchObject({
-      code: "department_menu.not_found",
-      params: { departmentId: v.restaurant, menuId: menus["Deli para llevar"] },
+      code: "catalogue.not_found",
+      params: { catalogueId: absentMenu },
     });
     await expect(
       scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { name: "  " })),
@@ -823,7 +1066,7 @@ describe("the timetable's writers", () => {
     });
   });
 
-  it("refuse a week whose slot past midnight overlaps a coming special date's, and ignore a past pair", async () => {
+  it("keeps each business day independent of neighbouring special dates", async () => {
     const v = await timed();
     const { periods } = v;
     const fridayTail = (endsAt: string) =>
@@ -855,11 +1098,11 @@ describe("the timetable's writers", () => {
 
     const coming = await makeDate(v, "2026-10-24");
     await dateMenus(v, coming.id, [slot(periods.mananas, "02:30", "05:00")]);
-    await expect(
-      scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("03:00"), AT)),
-    ).rejects.toMatchObject(invalid("date", { date: "2026-10-24", departmentId: v.restaurant }));
-    // The refused week was not written.
-    expect((await resolve(v, v.sala, madrid("2026-10-31", "02:30"))).periodId).toBeNull();
+    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("03:00"), AT));
+    // The replacement week was written.
+    expect((await resolve(v, v.sala, madrid("2026-10-31", "02:30"))).periodId).toBe(
+      periods.madrugada,
+    );
     await expect(
       scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, weekOf(() => []).slice(1), AT)),
     ).rejects.toMatchObject(invalid("days"));
@@ -1132,12 +1375,14 @@ describe("the calendar participant", () => {
           tx,
           v.cfg,
           source.id,
-          [twoWeeksEarlier, forward.date],
+          [twoWeeksEarlier, addDays(forward.date, -1)],
           AT,
           VENUE_SERVICE_CALENDAR_PARTICIPANTS,
         ),
       ),
-    ).rejects.toMatchObject(invalid("date", { date: forward.date, departmentId: v.restaurant }));
+    ).rejects.toMatchObject(
+      invalid("date", { date: addDays(forward.date, -1), departmentId: v.restaurant }),
+    );
     const stored = await db
       .select({ date: specialDates.date })
       .from(specialDates)
@@ -1145,27 +1390,37 @@ describe("the calendar participant", () => {
     expect(stored.map((row) => row.date)).toEqual([weekEarlier]);
   });
 
-  it("refuses a copy whose slots would overlap the day after its target", async () => {
+  it("copies ranges independently of the next business day", async () => {
     const v = await timed();
-    // A Saturday, so its tail runs to 10:00 on a Sunday, clear of Mediodía.
     const source = await makeDate(v, "2026-12-12");
-    await dateMenus(v, source.id, [slot(v.periods.madrugada, "23:00", "10:00")]);
-    // Copied to a Saturday it is clear again; to a Sunday its tail meets Monday's Mañanas.
-    await expect(
-      scoped((tx) =>
-        duplicateHolidayNamedSpecialDates(
-          tx,
-          v.cfg,
-          source.id,
-          ["2026-12-19", "2026-12-20"],
-          AT,
-          VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-        ),
+    await dateMenus(v, source.id, [slot(v.periods.madrugada, "23:00", "03:00")]);
+    await scoped((tx) =>
+      duplicateHolidayNamedSpecialDates(
+        tx,
+        v.cfg,
+        source.id,
+        ["2026-12-19", "2026-12-20"],
+        AT,
+        VENUE_SERVICE_CALENDAR_PARTICIPANTS,
       ),
-    ).rejects.toMatchObject(invalid("date", { date: "2026-12-20", departmentId: v.restaurant }));
+    );
+    const stored = await db
+      .select({ date: specialDates.date, startsAt: menuSlots.startsAt, endsAt: menuSlots.endsAt })
+      .from(specialDates)
+      .innerJoin(menuDayTimetables, eq(menuDayTimetables.specialDateId, specialDates.id))
+      .innerJoin(menuSlots, eq(menuSlots.timetableId, menuDayTimetables.id))
+      .where(eq(specialDates.locationId, v.locationId))
+      .orderBy(specialDates.date);
+    expect(stored).toEqual(
+      ["2026-12-12", "2026-12-19", "2026-12-20"].map((date) => ({
+        date,
+        startsAt: "23:00:00",
+        endsAt: "03:00:00",
+      })),
+    );
   });
 
-  it("lets a deleted date take its timetables with it, unless the week it resumes would overlap a neighbour's", async () => {
+  it("lets clearing and deleting a date restore the week independently of its neighbour", async () => {
     const v = await timed();
     const { periods } = v;
     await recordedLine(v);
@@ -1175,15 +1430,13 @@ describe("the calendar participant", () => {
     await dateMenus(v, christmas.id, [slot(periods.mananas, "09:00", "11:00")]);
     const boxingDay = await makeDate(v, "2026-12-26");
     await dateMenus(v, boxingDay.id, [slot(periods.mananas, "01:00", "03:00")]);
-    // Without Christmas's own timetable, Friday's Madrugada would run into 01:00 on the 26th.
-    await expect(
-      scoped((tx) =>
-        deleteSpecialDate(tx, v.cfg, christmas.id, AT, VENUE_SERVICE_CALENDAR_PARTICIPANTS),
-      ),
-    ).rejects.toMatchObject(invalid("date", { date: "2026-12-26", departmentId: v.restaurant }));
-    await expect(
-      scoped((tx) => clearSpecialDateMenus(tx, v.cfg, christmas.id, v.restaurant, AT)),
-    ).rejects.toMatchObject(invalid("date", { date: "2026-12-26", departmentId: v.restaurant }));
+    await scoped((tx) => clearSpecialDateMenus(tx, v.cfg, christmas.id, v.restaurant, AT));
+    expect(
+      await db
+        .select()
+        .from(menuDayTimetables)
+        .where(eq(menuDayTimetables.specialDateId, christmas.id)),
+    ).toEqual([]);
 
     await scoped((tx) => clearSpecialDateMenus(tx, v.cfg, boxingDay.id, v.restaurant, AT));
     await scoped((tx) =>
@@ -1210,7 +1463,7 @@ describe("the calendar participant", () => {
     expect((await lineContexts()).rows).toEqual(recorded.rows);
   });
 
-  it("re-checks a moved date's slots on its new date, and the week it leaves behind", async () => {
+  it("moves business-day ranges independently of neighbours, checking skipped endpoints on the destination", async () => {
     const v = await timed();
     const { periods } = v;
     const sunday = await makeDate(v, "2026-12-13", { name: "Fiesta" });
@@ -1228,21 +1481,28 @@ describe("the calendar participant", () => {
           VENUE_SERVICE_CALENDAR_PARTICIPANTS,
         ),
       );
-    await expect(move(sunday.id, "2026-12-23", "Fiesta")).rejects.toMatchObject(
-      invalid("date", { date: "2026-12-23", departmentId: v.restaurant }),
+    await move(sunday.id, "2026-12-23", "Fiesta");
+    expect((await resolve(v, v.sala, madrid("2026-12-23", "23:30"))).periodId).toBe(
+      periods.madrugada,
     );
     // Moving Nochebuena to the 26th leaves the 24th to the week, whose Thursday has no tail, but
     // puts its 01:00 slot after Christmas Friday's Madrugada.
-    await expect(move(christmasEve.id, "2026-12-26", "Nochebuena")).rejects.toMatchObject(
-      invalid("date", { date: "2026-12-26", departmentId: v.restaurant }),
-    );
+    await move(christmasEve.id, "2026-12-26", "Nochebuena");
+    expect(
+      (
+        await db
+          .select({ date: specialDates.date })
+          .from(specialDates)
+          .where(eq(specialDates.id, christmasEve.id))
+      )[0]!.date,
+    ).toBe("2026-12-26");
     const forward = clockChangeAfter(ZONE, "2027-01-01T00:00:00Z", "forward");
     const skippedEnd = await makeDate(v, "2027-03-14", { name: "Marzo" });
     await dateMenus(v, skippedEnd.id, [
       slot(periods.mananas, "00:30", minutesAfter(forward.before, 16)),
     ]);
-    await expect(move(skippedEnd.id, forward.date, "Marzo")).rejects.toMatchObject(
-      invalid("date", { date: forward.date, departmentId: v.restaurant }),
+    await expect(move(skippedEnd.id, addDays(forward.date, -1), "Marzo")).rejects.toMatchObject(
+      invalid("date", { date: addDays(forward.date, -1), departmentId: v.restaurant }),
     );
 
     await move(sunday.id, "2026-12-20", "Fiesta");
@@ -1252,25 +1512,31 @@ describe("the calendar participant", () => {
     expect((await resolve(v, v.sala, madrid("2026-12-13", "23:30"))).periodId).toBeNull();
   });
 
-  it("refuses moving a date away when the week it leaves behind would overlap a neighbour's", async () => {
+  it("moves a date away without constraining the next business day", async () => {
     const v = await timed();
     const { periods } = v;
     const christmas = await makeDate(v, CHRISTMAS);
     await dateMenus(v, christmas.id, []);
     const boxingDay = await makeDate(v, "2026-12-26", { name: "San Esteban" });
     await dateMenus(v, boxingDay.id, [slot(periods.mananas, "01:00", "03:00")]);
-    await expect(
-      scoped((tx) =>
-        saveSpecialDate(
-          tx,
-          v.cfg,
-          christmas.id,
-          dateInput("2026-12-31"),
-          AT,
-          VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-        ),
+    await scoped((tx) =>
+      saveSpecialDate(
+        tx,
+        v.cfg,
+        christmas.id,
+        dateInput("2026-12-31"),
+        AT,
+        VENUE_SERVICE_CALENDAR_PARTICIPANTS,
       ),
-    ).rejects.toMatchObject(invalid("date", { date: "2026-12-26", departmentId: v.restaurant }));
+    );
+    expect(
+      (
+        await db
+          .select({ date: specialDates.date })
+          .from(specialDates)
+          .where(eq(specialDates.id, christmas.id))
+      )[0]!.date,
+    ).toBe("2026-12-31");
     // A date with no menu timetable moves freely.
     const plain = await makeDate(v, "2027-01-06", { name: "Reyes" });
     await scoped((tx) =>
@@ -1581,17 +1847,14 @@ describe("a duplicate onto neighbouring days in one request", () => {
     );
   });
 
-  it("still refuses a copy beside a day that keeps its week, creating no target", async () => {
+  it("copies beside a day that keeps its own business-day week", async () => {
     const { v, duplicate } = await arranged();
-    await expect(duplicate(["2026-12-10", "2026-12-11"])).rejects.toMatchObject({
-      code: "menu_timetable.invalid",
-      params: { field: "date", date: "2026-12-11", departmentId: v.restaurant, reason: "overlap" },
-    });
+    await duplicate(["2026-12-10", "2026-12-11"]);
     const stored = await db
       .select({ date: specialDates.date })
       .from(specialDates)
       .where(eq(specialDates.locationId, v.locationId));
-    expect(stored.map((row) => row.date)).toEqual(["2026-12-02"]);
+    expect(stored.map((row) => row.date)).toEqual(["2026-12-02", "2026-12-10", "2026-12-11"]);
   });
 });
 
@@ -1603,62 +1866,43 @@ describe("why a calendar change is refused", () => {
     params: { field: "date", date, departmentId: v.restaurant, reason },
   });
 
-  it("names a skipped minute apart from an overlap, for a copy, a move and a delete", async () => {
+  it("names a skipped business-day endpoint on copies and moves", async () => {
     const v = await timed();
-    const { periods } = v;
     const march = await makeDate(v, "2027-03-14", { name: "Marzo" });
-    await dateMenus(v, march.id, [slot(periods.mananas, "00:30", skipped)]);
-    const copy = (sourceId: string, date: string) =>
+    await dateMenus(v, march.id, [slot(v.periods.mananas, "00:30", skipped)]);
+    const target = addDays(forward.date, -1);
+    await expect(
       scoped((tx) =>
         duplicateHolidayNamedSpecialDates(
           tx,
           v.cfg,
-          sourceId,
-          [date],
+          march.id,
+          [target],
           AT,
           VENUE_SERVICE_CALENDAR_PARTICIPANTS,
         ),
-      );
-    const move = (id: string, date: string, name: string) =>
+      ),
+    ).rejects.toMatchObject(refused(v, target, "clock_skips"));
+    await expect(
       scoped((tx) =>
         saveSpecialDate(
           tx,
           v.cfg,
-          id,
-          dateInput(date, { name }),
+          march.id,
+          dateInput(target, { name: "Marzo" }),
           AT,
           VENUE_SERVICE_CALENDAR_PARTICIPANTS,
         ),
-      );
-    await expect(copy(march.id, forward.date)).rejects.toMatchObject(
-      refused(v, forward.date, "clock_skips"),
-    );
-    await expect(move(march.id, forward.date, "Marzo")).rejects.toMatchObject(
-      refused(v, forward.date, "clock_skips"),
-    );
-
-    // A Saturday: its tail reaches 10:00 on Sunday; on a Sunday it meets Monday's Mañanas.
-    const late = await makeDate(v, "2026-12-12", { name: "Tarde" });
-    await dateMenus(v, late.id, [slot(periods.madrugada, "23:00", "10:00")]);
-    await expect(copy(late.id, "2026-12-20")).rejects.toMatchObject(
-      refused(v, "2026-12-20", "overlap"),
-    );
-    await expect(move(late.id, "2026-12-20", "Tarde")).rejects.toMatchObject(
-      refused(v, "2026-12-20", "overlap"),
-    );
-
-    const christmas = await makeDate(v, CHRISTMAS);
-    await dateMenus(v, christmas.id, []);
-    const boxingDay = await makeDate(v, "2026-12-26", { name: "San Esteban" });
-    await dateMenus(v, boxingDay.id, [slot(periods.mananas, "01:00", "03:00")]);
-    await expect(
-      scoped((tx) =>
-        deleteSpecialDate(tx, v.cfg, christmas.id, AT, VENUE_SERVICE_CALENDAR_PARTICIPANTS),
       ),
-    ).rejects.toMatchObject(refused(v, "2026-12-26", "overlap"));
-    await expect(
-      scoped((tx) => clearSpecialDateMenus(tx, v.cfg, christmas.id, v.restaurant, AT)),
-    ).rejects.toMatchObject(refused(v, "2026-12-26", "overlap"));
+    ).rejects.toMatchObject(refused(v, target, "clock_skips"));
+    expect(
+      (
+        await db
+          .select({ date: specialDates.date })
+          .from(specialDates)
+          .where(eq(specialDates.locationId, v.locationId))
+      ).map((row) => row.date),
+    ).toEqual(["2027-03-14"]);
   });
 });
 
@@ -1677,7 +1921,7 @@ describe("the venue's clock", () => {
       return reads;
     });
 
-  it("is read once per change, however many departments a date holds", async () => {
+  it("is read once when ranges need it and never for deleting ranges", async () => {
     const v = await timed();
     const { periods } = v;
     const christmas = await makeDate(v, CHRISTMAS);
@@ -1698,7 +1942,7 @@ describe("the venue's clock", () => {
     expect(
       await clockReads((tx) => participant.beforeMove!(tx, v.cfg, christmas.id, "2026-12-30", AT)),
     ).toBe(1);
-    expect(await clockReads((tx) => participant.beforeDelete(tx, v.cfg, christmas.id, AT))).toBe(1);
+    expect(await clockReads((tx) => participant.beforeDelete(tx, v.cfg, christmas.id, AT))).toBe(0);
     const target = await makeDate(v, "2026-12-31", { name: "Nochevieja" });
     expect(
       await clockReads(async (tx) => {
@@ -1714,7 +1958,7 @@ describe("the venue's clock", () => {
     ).toBe(1);
     expect(
       await clockReads((tx) => clearSpecialDateMenus(tx, v.cfg, christmas.id, v.restaurant, AT)),
-    ).toBe(1);
+    ).toBe(0);
     expect(
       await clockReads((tx) =>
         replaceMenuWeek(tx, v.cfg, v.restaurant, restaurantWeek(periods), AT),

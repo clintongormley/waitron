@@ -95,6 +95,42 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
+describe("new department service periods", () => {
+  it("places the location's menu in Open on weekdays, and leaves a menu-less location without periods", async () => {
+    const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
+    const id = brandLocationId(await seedLocation(`New ${randomUUID()}`));
+    await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
+    const department = await scoped((tx) =>
+      createDepartment(
+        tx,
+        { locationId: id },
+        { name: "Restaurant", defaultServiceMode: "prepay" },
+      ),
+    );
+    const periods = await db.execute(
+      sql`select name, menu_id from menu_periods where department_id = ${department.id}`,
+    );
+    expect(periods.rows).toEqual([{ name: "Open", menu_id: menu.id }]);
+    const slots = await db.execute(
+      sql`select d.weekday, s.starts_at, s.ends_at from menu_day_timetables d join menu_slots s on s.timetable_id = d.id where d.department_id = ${department.id} order by d.weekday`,
+    );
+    expect(slots.rows).toEqual(
+      [1, 2, 3, 4, 5].map((weekday) => ({ weekday, starts_at: "09:00:00", ends_at: "17:00:00" })),
+    );
+    const emptyId = brandLocationId(await seedLocation(`Empty ${randomUUID()}`));
+    const empty = await scoped((tx) =>
+      createDepartment(
+        tx,
+        { locationId: emptyId },
+        { name: "Restaurant", defaultServiceMode: "prepay" },
+      ),
+    );
+    expect(
+      (await db.execute(sql`select id from menu_periods where department_id = ${empty.id}`)).rows,
+    ).toEqual([]);
+  });
+});
+
 let db: Database;
 
 beforeAll(() => {
