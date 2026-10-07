@@ -28,6 +28,7 @@ const CURRENT_CLASSIFICATION_READS = ["products", "categories", "category_detail
 
 /** Dependencies describe the read model, independently of which operation changes it. */
 export const QUERY_DEPENDENCIES = {
+  getCatalogueSettings: ["catalogue_settings"],
   getContentLanguages: ["content_languages"],
   // The server works the rules out once at boot, so no table change moves them.
   getContentLanguageRules: [],

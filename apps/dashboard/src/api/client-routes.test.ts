@@ -1116,3 +1116,16 @@ it("reads a venue clock preview passively with encoded clock values", async () =
   ]);
   expect(new Headers(fetchImpl.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
 });
+
+it("reads and saves the new-product default through the catalogue settings route", async () => {
+  const config = { defaultProductVatClass: "reduced" as const };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(config));
+  const api = new DashboardApi("", fetchImpl);
+  expect(typeof api.getCatalogueSettings).toBe("function");
+  expect(await api.getCatalogueSettings()).toEqual(config);
+  expect(await api.saveCatalogueSettings(config)).toEqual(config);
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/catalogue-settings", "GET", undefined],
+    ["/management-api/catalogue-settings", "PUT", config],
+  ]);
+});

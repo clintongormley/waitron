@@ -287,6 +287,7 @@ const unsupportedAreaCodes = new Set(
 
 export const SPAIN: CountryPack = {
   countryCode: "ES",
+  defaultProductVatClass: "reduced",
   defaultLocale: "es-ES",
   defaultTimeZone: "Europe/Madrid",
   invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],

@@ -1,3 +1,4 @@
+import { VAT_CLASSES, type VatClass } from "./vat-rates.js";
 import { AppError } from "@waitron/shared";
 import { colorOrNull } from "./color-inheritance.js";
 import { HOME_DEVICES, homeDisplayProblem } from "./device-home.js";
@@ -63,6 +64,13 @@ function sharedName(names: readonly string[]): string | undefined {
  * `#rrggbb` or null, or a menu display setting a save would refuse.
  */
 export function validateCatalogueConfiguration(tables: Readonly<Record<string, Rows>>): void {
+  for (const row of tables.catalogue_settings ?? []) {
+    const value = row.default_product_vat_class;
+    if (typeof value !== "string" || !VAT_CLASSES.includes(value as VatClass))
+      throw new AppError("setup.request_invalid", {
+        field: "catalogue_settings.default_product_vat_class",
+      });
+  }
   checkHomeDisplays(tables.menu_details);
   checkColors(tables.products, "products");
   checkColors(tables.category_details, "category_details");
@@ -104,6 +112,7 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
   tables: [
     { name: "category_details" },
     { name: "content_languages" },
+    { name: "catalogue_settings" },
     { name: "unit_seed_states" },
     { name: "units" },
     { name: "product_units" },

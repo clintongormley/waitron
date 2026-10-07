@@ -98,6 +98,7 @@ export interface CountryPack {
   readonly countryCode: string;
   readonly defaultLocale: string;
   readonly defaultTimeZone: string;
+  readonly defaultProductVatClass?: string;
   readonly invoiceLocales: readonly string[];
   /** Keyed by invoice locale. */
   readonly receiptLabels?: Readonly<Record<string, ReceiptLabels>>;

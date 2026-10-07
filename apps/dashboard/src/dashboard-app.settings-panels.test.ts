@@ -90,6 +90,7 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
       modules: ["widgets"],
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
+    getCatalogueSettings: vi.fn().mockResolvedValue({ defaultProductVatClass: "reduced" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
@@ -225,3 +226,20 @@ it("preserves an explicitly selected Receipts link for a manager with venue acce
   expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
   expect(page(el).shadowRoot!.querySelector("wt-tabs")!.value).toBe("receipts");
 });
+
+it.each([
+  ["manager", ["person.manage", "venue.view", "venue.configure"], true],
+  ["supervisor", ["venue.view"], false],
+])(
+  "shows product defaults to %s according to catalogue access",
+  async (role, permissions, visible) => {
+    const el = await mount("/manage/venue-settings/view/venue-details", role, permissions);
+    const panel = page(el).shadowRoot!.querySelector("dashboard-catalogue-settings-panel");
+    expect(panel !== null).toBe(visible);
+    if (panel) {
+      await expect
+        .poll(() => panel.shadowRoot?.querySelector("wt-combobox")?.value)
+        .toBe("reduced");
+    }
+  },
+);

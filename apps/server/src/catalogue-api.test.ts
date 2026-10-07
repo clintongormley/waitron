@@ -5843,3 +5843,99 @@ it("keeps a shared snapshot's revision with its data when a write commits before
     boundary.mockRestore();
   }
 });
+
+describe("catalogue settings routes", () => {
+  it("saves and reloads the venue's new-product VAT class", async () => {
+    const app = mountApp();
+    for (const defaultProductVatClass of ["general", "reduced", "super_reduced", "zero"]) {
+      const saved = await send(app, "PUT", "/management-api/catalogue-settings", {
+        body: { defaultProductVatClass },
+      });
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toEqual({ defaultProductVatClass });
+      const loaded = await send(app, "GET", "/management-api/catalogue-settings");
+      expect(loaded.status).toBe(200);
+      expect(await loaded.json()).toEqual({ defaultProductVatClass });
+    }
+  });
+
+  it.each(["GET", "PUT"] as const)("refuses unauthenticated and staff %s", async (method) => {
+    const app = mountApp();
+    const body = method === "PUT" ? { defaultProductVatClass: "reduced" } : undefined;
+    const anonymous = await send(app, method, "/management-api/catalogue-settings", {
+      cookie: null,
+      body,
+    });
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    const staff = await send(app, method, "/management-api/catalogue-settings", {
+      cookie: staffCookie,
+      body,
+    });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
+
+  it.each([undefined, null, [], ["reduced"], 10, "unknown"])(
+    "refuses an invalid default %j",
+    async (defaultProductVatClass) => {
+      const app = mountApp();
+      const response = await send(app, "PUT", "/management-api/catalogue-settings", {
+        body: { defaultProductVatClass },
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "product.invalid", params: { field: "defaultProductVatClass" } },
+      });
+    },
+  );
+
+  it("still requires an explicit class on the product create API", async () => {
+    const app = mountApp();
+    const menu = await createCatalogueVia(app, "Required class");
+    const response = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId: menu,
+        categoryId: null,
+        name: "Lemonade",
+        pricingUnit: "each",
+        unitPrice: "2.00",
+      },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "vatClass" } },
+    });
+    const editorInput = {
+      name: "Lemonade",
+      customerName: null,
+      description: null,
+      kitchenName: null,
+      image: null,
+      unitId: null,
+      unitPrice: "2.00",
+      active: true,
+      available: true,
+      ordering: "public",
+      variants: [],
+      primaryCategoryId: null,
+      modifiers: [],
+      allergens: null,
+      dietaryDeclarations: [],
+    };
+    const editorResponse = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${menu}/product-editor`,
+      {
+        body: editorInput,
+      },
+    );
+    expect(editorResponse.status).toBe(400);
+    expect(await editorResponse.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "vatClass" } },
+    });
+  });
+});

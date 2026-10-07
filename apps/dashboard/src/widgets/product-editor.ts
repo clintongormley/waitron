@@ -8,7 +8,12 @@ import { baseStyles, submitOnEnter, type ComboboxOption, type SummaryField } fro
 import { resolveContentText } from "@waitron/shared";
 import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
-import { VAT_CLASSES, localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
+import {
+  VAT_CLASSES,
+  localToday,
+  vatRateOn,
+  type VatClass,
+} from "@waitron/catalogue/src/vat-rates.js";
 import { PRODUCT_ORDERINGS } from "@waitron/catalogue/src/product-ordering.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -180,7 +185,7 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   courseId: "product-course",
 };
 
-function emptyDraft(): ProductEditorDraft {
+function emptyDraft(defaultVatClass: VatClass = "general"): ProductEditorDraft {
   return {
     name: "",
     customerName: null,
@@ -192,7 +197,7 @@ function emptyDraft(): ProductEditorDraft {
     active: true,
     available: true,
     ordering: "public",
-    vatClass: "general",
+    vatClass: defaultVatClass,
     variants: [],
     primaryCategoryId: null,
     color: null,
@@ -383,6 +388,7 @@ export class ProductEditor extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) childOpen = false;
   @property({ attribute: false }) locales: string[] = [];
+  @property({ attribute: false }) defaultVatClass: VatClass = "general";
   @property({ attribute: false }) newCategoryId: string | null = null;
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
@@ -480,7 +486,7 @@ export class ProductEditor extends LitElement {
       this.unitUsageUnavailable = false;
       this.draft = this.value
         ? structuredClone(this.value)
-        : { ...emptyDraft(), primaryCategoryId: this.newCategoryId };
+        : { ...emptyDraft(this.defaultVatClass), primaryCategoryId: this.newCategoryId };
       this.generation++;
       this.imageOpen = false;
       this.attempted = false;

@@ -1,3 +1,4 @@
+import type { CatalogueSettings } from "../api/client.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
@@ -98,6 +99,7 @@ export class CatalogueScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   /** Fills a bounded flex column, with the Products table's rows scrolling under its headings. */
   @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
+  @state() private catalogueSettings: CatalogueSettings | null = null;
   @state() private contentLanguages: ContentLanguages | null = null;
   @state() private catalogues: CatalogueSummary[] = [];
   @state() private categories: CategorySummary[] = [];
@@ -223,6 +225,9 @@ export class CatalogueScreen extends LitElement {
     this.#loadFailed = false;
     try {
       await Promise.all([
+        this.#queries.watch("getCatalogueSettings", [], (value) => {
+          this.catalogueSettings = value;
+        }),
         this.#queries.watch("getContentLanguages", [], (value) => {
           this.contentLanguages = value;
           setContentLanguages(value);
@@ -717,7 +722,7 @@ export class CatalogueScreen extends LitElement {
                 this.contentLanguages?.defaultLanguage ??
                 "en"
               }
-              .canAddProduct=${locales.length > 0 && this.units.length > 0}
+              .canAddProduct=${this.catalogueSettings !== null && locales.length > 0 && this.units.length > 0}
               .loaded=${this.productsLoaded}
               @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {
                 event.stopPropagation();
@@ -754,6 +759,7 @@ export class CatalogueScreen extends LitElement {
         .locales=${locales}
         .value=${this.editorValue}
         .initialField=${this.editorInitialField}
+        .defaultVatClass=${this.catalogueSettings?.defaultProductVatClass ?? "general"}
         .newCategoryId=${this.newCategoryId}
         .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}

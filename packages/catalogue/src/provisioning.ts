@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import { catalogues, locationCatalogues } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
-import { resolveInstalledStartingContentLanguages } from "@waitron/country-packs";
+import { getCountryPack, resolveInstalledStartingContentLanguages } from "@waitron/country-packs";
+import { catalogueSettings } from "./schema/settings.js";
+import type { VatClass } from "./vat-rates.js";
 import { contentLanguages } from "./schema/menu.js";
 import { createMenuShell } from "./menu-structure.js";
 import { unitSeedStates, units } from "./schema/units.js";
@@ -36,6 +38,13 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         where l.id = ${node.locationId}`);
       const country = location.rows[0]?.country;
       const area = location.rows[0]?.province;
+      const defaultProductVatClass =
+        (country === undefined ? undefined : getCountryPack(country)?.defaultProductVatClass) ??
+        "general";
+      await tx
+        .insert(catalogueSettings)
+        .values({ defaultProductVatClass: defaultProductVatClass as VatClass })
+        .onConflictDoNothing({ target: catalogueSettings.id });
       const { defaultLanguage, languages } = resolveInstalledStartingContentLanguages({
         country,
         area,

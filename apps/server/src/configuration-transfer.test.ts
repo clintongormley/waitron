@@ -681,6 +681,36 @@ describe("configuration transfer database path", () => {
     expect(firstLive.rows).toEqual([{ invoice_number: 1, first_record: 1, previous_hash: null }]);
   });
 
+  it("carries the venue's authored new-product VAT default through export and import", async () => {
+    const source = await applyVenue(planVenue(venue("B66778899"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await suite.db.execute(
+      sql`update catalogue_settings set default_product_vat_class = 'zero' where id = 1`,
+    );
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    expect(transferred.tables.catalogue_settings).toEqual([
+      { id: 1, default_product_vat_class: "zero" },
+    ]);
+    await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    expect((await targetSuite.db.execute(sql`select * from catalogue_settings`)).rows).toEqual([
+      { id: 1, default_product_vat_class: "zero" },
+    ]);
+  });
+
   it("carries a category's colour and a product's own colour", async () => {
     const source = await applyVenue(planVenue(venue("B66778899"), ALL_MODULES), {
       db: suite.db,

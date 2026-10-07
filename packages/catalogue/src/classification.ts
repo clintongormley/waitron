@@ -5,6 +5,7 @@ const STATE = "menu configuration; copied to a standby, never drained back";
 
 export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("category_details", "state", STATE),
+  classify("catalogue_settings", "state", STATE),
   classify("content_languages", "state", STATE),
   classify("unit_seed_states", "state", STATE),
   classify("units", "state", STATE),

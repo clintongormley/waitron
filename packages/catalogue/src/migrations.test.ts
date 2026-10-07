@@ -37,6 +37,7 @@ beforeAll(() => {
 });
 
 const TABLES = [
+  "catalogue_settings",
   "content_languages",
   "menu_details",
   "menu_items",
@@ -174,6 +175,7 @@ describe("the catalogue migration set carries no tenant column", () => {
     }
 
     expect(primaryKeys).toEqual({
+      catalogue_settings: "id",
       content_languages: "id",
       menu_details: "menu_id",
       menu_items: "id",
@@ -229,6 +231,8 @@ describe("the catalogue migration set carries no tenant column", () => {
     });
 
     expect(checks).toEqual({
+      catalogue_settings_singleton_ck: `"catalogue_settings"."id" = 1`,
+      catalogue_settings_vat_class_ck: `"catalogue_settings"."default_product_vat_class" in ('general', 'reduced', 'super_reduced', 'zero')`,
       content_languages_singleton_ck: `"content_languages"."id" = 1`,
       // The list is JSON text, and the membership test matches the QUOTED token so one code cannot
       // match a prefix of a longer one.

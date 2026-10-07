@@ -219,6 +219,7 @@ const sections: SectionDetails[] = [
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const api = {
+    getCatalogueSettings: vi.fn().mockResolvedValue({ defaultProductVatClass: "general" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCatalogues: vi.fn().mockResolvedValue(catalogues),
     listCategories: vi.fn().mockResolvedValue(categories),
@@ -3156,4 +3157,73 @@ it("closing a guarded linked product retires its field query before opening anot
   emit(list(el), "edit-product", { productId: "p1" });
   await expect.poll(() => editor(el).open).toBe(true);
   expect(editor(el).initialField).toBe("");
+});
+
+it("waits for the venue's VAT default before enabling Add product", async () => {
+  let resolve!: (value: { defaultProductVatClass: "reduced" }) => void;
+  const pending = new Promise<{ defaultProductVatClass: "reduced" }>((yes) => {
+    resolve = yes;
+  });
+  const api = stubApi({ getCatalogueSettings: vi.fn(() => pending) });
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  await expect.poll(() => editor(el)?.units.length).toBeGreaterThan(0);
+  await expect.poll(() => editor(el)?.locales.length).toBeGreaterThan(0);
+  await flush(el);
+  const add = async () =>
+    (await productTable(el)).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="add-product-root"]',
+    )!;
+  expect((await add()).disabled).toBe(true);
+  (await add()).click();
+  await el.updateComplete;
+  expect(editor(el).open).toBe(false);
+  resolve({ defaultProductVatClass: "reduced" });
+  await pending;
+  await flush(el);
+  expect((await add()).disabled).toBe(false);
+  (await add()).click();
+  await flush(el);
+  expect(editor(el).open).toBe(true);
+  expect(
+    editor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="tax"]')!
+      .value,
+  ).toBe("reduced");
+});
+
+it("reads the venue's default into a new editor without replacing an open draft", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(
+    stubApi({
+      getCatalogueSettings: vi.fn().mockResolvedValue({ defaultProductVatClass: "super_reduced" }),
+    }),
+    { liveData },
+  );
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  await flush(el);
+  emit(list(el), "add-product", { categoryId: null });
+  await el.updateComplete;
+  await editor(el).updateComplete;
+  const tax = () =>
+    editor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="tax"]')!;
+  expect(tax().value).toBe("super_reduced");
+  tax().dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "zero" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await editor(el).updateComplete;
+  vi.mocked(api.getCatalogueSettings).mockResolvedValue({ defaultProductVatClass: "reduced" });
+  liveData.refresh();
+  await expect.poll(() => vi.mocked(api.getCatalogueSettings).mock.calls.length).toBe(2);
+  await flush(el);
+  await editor(el).updateComplete;
+  expect(tax().value).toBe("zero");
+  emit(editor(el), "wt-cancel", {});
+  await flush(el);
+  emit(list(el), "add-product", { categoryId: null });
+  await el.updateComplete;
+  await editor(el).updateComplete;
+  expect(tax().value).toBe("reduced");
 });

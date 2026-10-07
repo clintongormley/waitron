@@ -19,6 +19,8 @@ import {
   type FolderContents,
   type ShownFolderCounts,
   catalogueExists,
+  readCatalogueSettings,
+  saveCatalogueSettings,
   readContentLanguages,
   listTranslationGapReport,
   writeContentLanguages,
@@ -713,6 +715,24 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       c.header("x-waitron-menu-revision", JSON.stringify({ epoch, sequence }));
       return result;
     });
+
+  app.get("/management-api/catalogue-settings", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(await gated(c, sessionId, (tx) => readCatalogueSettings(tx)));
+    }),
+  );
+  app.put("/management-api/catalogue-settings", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<{ defaultProductVatClass?: unknown }>(c);
+      return c.json(
+        await gated(c, sessionId, (tx) =>
+          saveCatalogueSettings(tx, { defaultProductVatClass: body.defaultProductVatClass }),
+        ),
+      );
+    }),
+  );
 
   /** Screen the editor body's optional course; null clears it. */
   const screenRouting = (body: Record<string, unknown>): ProductRouting => {
