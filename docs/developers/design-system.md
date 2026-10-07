@@ -1637,12 +1637,13 @@ Where the two differ, and why:
   marks the field and moves focus nowhere (`#commit`).
 - The course list shows a Delete refused while its confirmation dialog is open in that dialog, and any other refusal as an alert
   under the list. The price table says each
-  refusal, including one already shown under its field, in a status line that stays in view at the
-  bottom of the tab while the rows scroll, because a save made far down the list must still be seen.
-  It says a success there only for the last save made, once the prices have been read again after
-  it and the tab still shows them, and only when the status line is not showing a refusal, with an
-  Undo that writes the previous value back; an earlier save is not said, so an Undo never reaches
-  past a later write (`#savePrice`, `apps/dashboard/src/screens/menus-screen.ts`). A refusal
+  refusal, including one already shown under its field, in a message floating at the bottom end of
+  the window (a `wt-toast`), because a save made far down the list must still be seen; a refusal
+  stays until it is closed or replaced, because some are said nowhere else. It says a success there
+  for 5 seconds, longer while the pointer or focus is on it, only for the last save made, once the
+  prices have been read again after it and the tab still shows them, and only when no refusal has
+  been said since it was made, with an Undo inside it that writes the previous value back; an
+  earlier save is not said, so an Undo never reaches past a later write (`#savePrice`, `apps/dashboard/src/screens/menus-screen.ts`). A refusal
   that arrives after the person has left the menu or the tab, or after its row has left the list,
   is said in the Menus screen's own message above the tabs or the menus list instead
   (`memberError`, `apps/dashboard/src/screens/menus-screen.ts`).

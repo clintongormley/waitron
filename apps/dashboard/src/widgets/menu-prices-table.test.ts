@@ -1,10 +1,11 @@
 import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import { MenuPricesTable, type PriceSave } from "./menu-prices-table.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { chooseOption, chooseOptions, expectFiltersFirst } from "@waitron/ui/src/test-helpers.js";
@@ -1042,7 +1043,7 @@ it("moves focus to a size's field when a refusal naming it arrives, from another
   expect(refused.shadowRoot!.activeElement).toBe(refused.shadowRoot!.querySelector("input"));
 });
 
-it("opens a collapsed product to show and focus its size's field when a refusal naming that size arrives, which the status line also says", async () => {
+it("opens a collapsed product to show and focus its size's field when a refusal naming that size arrives, which the outcome message also says", async () => {
   setLocale("en-GB");
   try {
     const el = await mount();
@@ -1074,9 +1075,10 @@ it("opens a collapsed product to show and focus its size's field when a refusal 
       expect(refused.shadowRoot!.activeElement).toBe(refused.shadowRoot!.querySelector("input")),
     );
     expect([refused.value, refused.error]).toEqual(["1.90", "Refused here"]);
-    expect(text(el.shadowRoot!.querySelector('[data-test="price-outcome"]'))).toBe(
+    expect([outcomeToast(el).open, outcomeToast(el).message]).toEqual([
+      true,
       "Your change to Lemonade — Small was not saved. Refused here",
-    );
+    ]);
   } finally {
     setLocale("es-ES");
   }
@@ -1303,7 +1305,7 @@ it("puts a refusal under the field whose save it answers, and nowhere else, and 
   expect(refused.shadowRoot!.activeElement).toBe(refused.shadowRoot!.querySelector("input"));
 });
 
-it("says a refusal in the status line, and moves no focus for one that names no field", async () => {
+it("says a refusal in the outcome message, and moves no focus for one that names no field", async () => {
   setLocale("en-GB");
   try {
     const el = await mount();
@@ -1319,9 +1321,9 @@ it("says a refusal in the status line, and moves no focus for one that names no 
     };
     el.outcome = { kind: "refused", save, reason: "The server could not be reached." };
     await el.updateComplete;
-    const line = el.shadowRoot!.querySelector('[data-test="price-outcome"]')!;
-    expect(line.getAttribute("role")).toBe("status");
-    expect(text(line)).toBe(
+    const toast = outcomeToast(el);
+    expect(toast.open).toBe(true);
+    expect(text(toast.shadowRoot!.querySelector('[role="status"] .message'))).toBe(
       "Your change to Burger was not saved. The server could not be reached.",
     );
     expect(el.shadowRoot!.querySelector('[data-test="price-undo"]')).toBeNull();
@@ -1340,6 +1342,10 @@ const burgerSaved: PriceSave = {
   price: "11.00",
   previous: null,
 };
+
+function outcomeToast(el: MenuPricesTable): WtToast {
+  return el.shadowRoot!.querySelector<WtToast>('[data-test="price-outcome"]')!;
+}
 
 function undoButton(el: MenuPricesTable): HTMLElement | null {
   return el.shadowRoot!.querySelector<HTMLElement>('[data-test="price-undo"]');
@@ -1360,23 +1366,22 @@ it.each([
     undo: "Deshacer",
   },
 ])(
-  "says in $locale what a successful save did, with an Undo beside the status line and outside it",
+  "says in $locale what a successful save did, with an Undo inside the outcome message",
   async (want) => {
     setLocale(want.locale);
     try {
       const el = await mount();
       el.outcome = { kind: "saved", save: burgerSaved };
       await el.updateComplete;
-      const line = el.shadowRoot!.querySelector('[data-test="price-outcome"]')!;
-      expect(line.getAttribute("role")).toBe("status");
-      expect(text(line)).toBe(want.saved);
+      const toast = outcomeToast(el);
+      expect(text(toast.shadowRoot!.querySelector('[role="status"] .message'))).toBe(want.saved);
       const undo = undoButton(el)!;
       expect(text(undo)).toBe(want.undo);
-      expect(line.contains(undo)).toBe(false);
-      expect(undo.parentElement).toBe(line.parentElement);
+      expect(undo.parentElement).toBe(toast);
+      expect(undo.slot).toBe("action");
       el.outcome = { kind: "saved", save: { ...burgerSaved, price: null, previous: "11.00" } };
       await el.updateComplete;
-      expect(text(line)).toBe(want.cleared);
+      expect(text(toast.shadowRoot!.querySelector('[role="status"] .message'))).toBe(want.cleared);
       expect(undoButton(el)).not.toBeNull();
     } finally {
       setLocale("es-ES");
@@ -1429,13 +1434,175 @@ it("draws no Undo for the saved outcome of an Undo", async () => {
     const el = await mount();
     el.outcome = { kind: "saved", save: { ...burgerSaved, undo: true } };
     await el.updateComplete;
-    expect(text(el.shadowRoot!.querySelector('[data-test="price-outcome"]'))).toBe(
+    expect([outcomeToast(el).open, outcomeToast(el).message]).toEqual([
+      true,
       "Saved Burger's price override: €11.00.",
-    );
+    ]);
     expect(undoButton(el)).toBeNull();
   } finally {
     setLocale("es-ES");
   }
+});
+
+describe("the floating outcome message", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Only these two, so the frames Lit awaits still run. */
+  const fakeTimeouts = () => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+  it("says a save in an open info toast holding its Undo, and closes it after 5 s", async () => {
+    setLocale("en-GB");
+    try {
+      const el = await mount();
+      fakeTimeouts();
+      el.outcome = { kind: "saved", save: burgerSaved };
+      await el.updateComplete;
+      const toast = outcomeToast(el);
+      expect(toast.localName).toBe("wt-toast");
+      expect([toast.open, toast.tone, toast.message]).toEqual([
+        true,
+        "info",
+        "Saved Burger's price override: €11.00.",
+      ]);
+      const undo = undoButton(el)!;
+      expect(undo.parentElement).toBe(toast);
+      expect(undo.slot).toBe("action");
+      expect(undo.getBoundingClientRect().height).toBeGreaterThan(0);
+      vi.advanceTimersByTime(4999);
+      expect(toast.open).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(toast.open).toBe(false);
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
+  it("stays while the pointer is over it, and closes 5 s after the pointer leaves", async () => {
+    await commands.parkPointer();
+    const el = await mount();
+    fakeTimeouts();
+    el.outcome = { kind: "saved", save: burgerSaved };
+    await el.updateComplete;
+    const toast = outcomeToast(el);
+    await userEvent.hover(undoButton(el)!);
+    vi.advanceTimersByTime(60_000);
+    expect(toast.open).toBe(true);
+    // userEvent.unhover() hovers the middle of <body>, which can land on the toast itself.
+    await commands.parkPointer();
+    vi.advanceTimersByTime(4999);
+    expect(toast.open).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(toast.open).toBe(false);
+  });
+
+  it("stays while focus is on its Undo, and closes 5 s after focus leaves", async () => {
+    const el = await mount();
+    fakeTimeouts();
+    el.outcome = { kind: "saved", save: burgerSaved };
+    await el.updateComplete;
+    const toast = outcomeToast(el);
+    undoButton(el)!.focus();
+    expect(toast.matches(":focus-within")).toBe(true);
+    vi.advanceTimersByTime(60_000);
+    expect(toast.open).toBe(true);
+    override(el, "mi-lager").focus();
+    vi.advanceTimersByTime(4999);
+    expect(toast.open).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(toast.open).toBe(false);
+  });
+
+  it("says a refusal in an open info toast with no Undo that stays until replaced", async () => {
+    setLocale("en-GB");
+    try {
+      const el = await mount();
+      fakeTimeouts();
+      el.outcome = { kind: "refused", save: burgerSaved, reason: "Refused here" };
+      await el.updateComplete;
+      const toast = outcomeToast(el);
+      expect([toast.open, toast.tone, toast.message]).toEqual([
+        true,
+        "info",
+        "Your change to Burger was not saved. Refused here",
+      ]);
+      expect(undoButton(el)).toBeNull();
+      vi.advanceTimersByTime(60_000);
+      expect(toast.open).toBe(true);
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
+  it("replaces one outcome with the next and gives the new one its full 5 s, even when it reads the same", async () => {
+    setLocale("en-GB");
+    try {
+      const el = await mount();
+      fakeTimeouts();
+      el.outcome = { kind: "saved", save: burgerSaved };
+      await el.updateComplete;
+      const toast = outcomeToast(el);
+      vi.advanceTimersByTime(4000);
+      el.outcome = { kind: "saved", save: { ...burgerSaved } };
+      await el.updateComplete;
+      vi.advanceTimersByTime(4000);
+      expect(toast.open).toBe(true);
+      el.outcome = { kind: "saved", save: { ...burgerSaved, price: "12.00" } };
+      await el.updateComplete;
+      expect(toast.message).toBe("Saved Burger's price override: €12.00.");
+      vi.advanceTimersByTime(4999);
+      expect(toast.open).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(toast.open).toBe(false);
+      el.outcome = { kind: "saved", save: { ...burgerSaved } };
+      await el.updateComplete;
+      expect(toast.open).toBe(true);
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
+  it("closes the toast once there is no outcome", async () => {
+    const el = await mount();
+    el.outcome = { kind: "saved", save: burgerSaved };
+    await el.updateComplete;
+    expect(outcomeToast(el).open).toBe(true);
+    el.outcome = null;
+    await el.updateComplete;
+    expect(outcomeToast(el).open).toBe(false);
+    expect(undoButton(el)).toBeNull();
+  });
+
+  it("floats at the viewport's bottom end, and spans the width at phone width", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(1280, 800);
+      const el = await mount();
+      el.outcome = { kind: "saved", save: burgerSaved };
+      await el.updateComplete;
+      const toast = outcomeToast(el);
+      const probe = document.createElement("div");
+      probe.style.inlineSize = "var(--wt-space-3)";
+      probe.style.blockSize = "var(--wt-space-2)";
+      el.parentElement!.append(probe);
+      const { width: space3, height: space2 } = probe.getBoundingClientRect();
+      const style = getComputedStyle(toast);
+      expect(style.position).toBe("fixed");
+      expect(Number(style.zIndex)).toBeGreaterThanOrEqual(4);
+      const wide = toast.getBoundingClientRect();
+      expect(wide.bottom).toBeCloseTo(window.innerHeight - space3, 0);
+      expect(wide.right).toBeCloseTo(window.innerWidth - space3, 0);
+      expect(wide.left).toBeGreaterThan(window.innerWidth / 2);
+      await page.viewport(390, 800);
+      await vi.waitFor(() => expect(window.innerWidth).toBe(390));
+      const narrow = toast.getBoundingClientRect();
+      expect([narrow.left, narrow.right]).toEqual([space2, 390 - space2]);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
 });
 
 it("carries as a save's previous price the one sent before it while that save is still out", async () => {
@@ -1453,7 +1620,7 @@ it("carries as a save's previous price the one sent before it while that save is
   ]);
 });
 
-it("leaves a field the status line says was saved to the prices read after it", async () => {
+it("leaves a field the outcome message says was saved to the prices read after it", async () => {
   const el = await mount();
   const heard = priceSaves(el);
   await typeIn(el, "mi-burger", "11.00");
@@ -1468,7 +1635,7 @@ it("leaves a field the status line says was saved to the prices read after it", 
   expect(override(el, "mi-burger").value).toBe("10.00");
 });
 
-it("puts a refused price back to the stored one once the status line says another save was saved", async () => {
+it("puts a refused price back to the stored one once the outcome message says another save was saved", async () => {
   const el = await mount();
   const heard = priceSaves(el);
   await typeIn(el, "mi-burger", "11.00");
@@ -1490,14 +1657,17 @@ it("puts a refused price back to the stored one once the status line says anothe
   expect(override(el, "mi-burger").value).toBe("");
 });
 
-it("keeps an empty status line after the table, held in view at the bottom while the rows scroll", async () => {
+it("keeps a closed outcome message after the table, drawing nothing, floating over the page", async () => {
   const el = await mount();
-  const line = el.shadowRoot!.querySelector<HTMLElement>('[data-test="price-outcome"]')!;
-  expect(line.getAttribute("role")).toBe("status");
-  expect(text(line)).toBe("");
-  expect(table(el).compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  const box = getComputedStyle(line.parentElement!);
-  expect([box.position, box.bottom]).toEqual(["sticky", "0px"]);
+  const toast = outcomeToast(el);
+  expect([
+    toast.open,
+    toast.message,
+    text(toast.shadowRoot!.querySelector('[role="status"]')),
+  ]).toEqual([false, "", ""]);
+  expect(toast.getBoundingClientRect().height).toBe(0);
+  expect(table(el).compareDocumentPosition(toast) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(getComputedStyle(toast).position).toBe("fixed");
 });
 
 it("does not resend a refused price on leaving the field unchanged, and resends it on Enter", async () => {
@@ -1560,7 +1730,7 @@ it("puts the stored price back once nothing says its sent price was refused unde
   expect(heard).toHaveBeenCalledOnce();
 });
 
-it("puts the stored price back once the status line stops saying its sent price was refused", async () => {
+it("puts the stored price back once the outcome message stops saying its sent price was refused", async () => {
   const el = await mount();
   const heard = priceSaves(el);
   await typeIn(el, "mi-lemonade", "2.90");
@@ -2572,35 +2742,8 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
-it("keeps a field scrolled into view clear of the status line, which paints above the pinned Resolve column", async () => {
-  const rows = Array.from({ length: 30 }, (_, at) => ({
-    ...burger,
-    menuItemId: `mi-burger-${at}`,
-    name: `Burger ${at}`,
-  }));
-  // Lager is in the middle, so scrolling to it leaves rows under the status line.
-  const el = await mount({ rows: [...rows.slice(0, 15), clashRow(lager), ...rows.slice(15)] });
-  const host = el.parentElement!;
-  host.style.blockSize = "400px";
-  host.style.overflow = "auto";
-  el.outcome = { kind: "saved", save: burgerSaved };
-  await el.updateComplete;
-  const line = el.shadowRoot!.querySelector<HTMLElement>(".outcome")!;
-  const field = override(el, "mi-lager");
-  field.scrollIntoView({ block: "end" });
-  expect(host.scrollTop).toBeGreaterThan(0);
-  expect(host.scrollTop).toBeLessThan(host.scrollHeight - host.clientHeight);
-  expect(field.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-    line.getBoundingClientRect().top + 0.5,
-  );
-  expect(parseFloat(getComputedStyle(field).scrollMarginBlockEnd)).toBeGreaterThanOrEqual(
-    line.getBoundingClientRect().height,
-  );
-  // Where the status line crosses the pinned Resolve column, the line is on top.
-  const pinned = table(el).shadowRoot.querySelector<HTMLElement>('th[data-pinned="end"]')!;
-  const spot = line.getBoundingClientRect();
-  const x = pinned.getBoundingClientRect().left + 4;
-  const y = spot.top + spot.height / 2;
+/** Whether `target`, or something inside it, is what the page paints topmost at (x, y). */
+function paintsTopmost(target: Element, x: number, y: number): boolean {
   let hit: Element | null = document.elementFromPoint(x, y);
   while (hit?.shadowRoot) {
     const inner = hit.shadowRoot.elementFromPoint(x, y);
@@ -2608,52 +2751,112 @@ it("keeps a field scrolled into view clear of the status line, which paints abov
     hit = inner;
   }
   let node: Node | null = hit;
-  while (node && node !== line) node = node.parentNode ?? (node as ShadowRoot).host ?? null;
-  expect(node, hit?.outerHTML.slice(0, 80)).toBe(line);
-});
+  while (node && node !== target) node = node.parentNode ?? (node as ShadowRoot).host ?? null;
+  return node === target;
+}
 
-it("keeps a field scrolled into view clear of a status line that wraps onto a second row", async () => {
+/** The widget inside a scroller that fills the viewport, as the dashboard's page does. */
+async function mountInViewportScroller(props: Partial<MenuPricesTable>) {
+  const el = await mount(props);
+  const host = el.parentElement!;
+  Object.assign(host.style, { position: "fixed", inset: "0", overflow: "auto" });
+  return { el, host };
+}
+
+const manyRows = () => {
   const rows = Array.from({ length: 30 }, (_, at) => ({
     ...burger,
     menuItemId: `mi-burger-${at}`,
     name: `Burger ${at}`,
   }));
-  const el = await mount({ rows: [...rows.slice(0, 15), clashRow(lager), ...rows.slice(15)] });
-  const host = el.parentElement!;
-  host.style.blockSize = "400px";
-  host.style.overflow = "auto";
-  const name = "Burger ".repeat(12).trim();
-  el.outcome = { kind: "saved", save: { ...burgerSaved, name } };
+  // Lager is in the middle, so scrolling to it leaves rows under the outcome message.
+  return [...rows.slice(0, 15), clashRow(lager), ...rows.slice(15)];
+};
+
+it("keeps a field scrolled into view clear of the outcome message, which paints above the pinned Resolve column and the sticky header", async () => {
+  const { el, host } = await mountInViewportScroller({ rows: manyRows() });
+  el.outcome = { kind: "saved", save: burgerSaved };
   await el.updateComplete;
-  const line = el.shadowRoot!.querySelector<HTMLElement>(".outcome")!;
-  const sentence = line.querySelector("p")!.getBoundingClientRect();
-  expect(undoButton(el)!.getBoundingClientRect().top).toBeGreaterThanOrEqual(sentence.bottom - 0.5);
+  const toast = outcomeToast(el);
+  const field = override(el, "mi-lager");
+  field.scrollIntoView({ block: "end" });
+  expect(host.scrollTop).toBeGreaterThan(0);
+  expect(host.scrollTop).toBeLessThan(host.scrollHeight - host.clientHeight);
+  expect(field.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    toast.getBoundingClientRect().top + 0.5,
+  );
+  expect(parseFloat(getComputedStyle(field).scrollMarginBlockEnd)).toBeGreaterThanOrEqual(
+    toast.getBoundingClientRect().height,
+  );
+  // Where the message crosses the pinned Resolve column, the message is on top.
+  const spot = toast.getBoundingClientRect();
+  const y = spot.top + spot.height / 2;
+  const pinnedCell = [
+    ...table(el).shadowRoot.querySelectorAll<HTMLElement>('td[data-pinned="end"]'),
+  ].find((cell) => {
+    const box = cell.getBoundingClientRect();
+    return box.top <= y && box.bottom >= y;
+  })!;
+  expect(pinnedCell).toBeDefined();
+  const x = pinnedCell.getBoundingClientRect().left + 4;
+  expect(x).toBeGreaterThan(spot.left);
+  expect(paintsTopmost(toast, x, y)).toBe(true);
+  // And where it crosses a sticky header's pinned heading, layered at 3.
+  table(el).setAttribute("sticky-header", "");
+  host.scrollTop = 0;
+  const heading = table(el).shadowRoot.querySelector<HTMLElement>('th[data-pinned="end"]')!;
+  const head = heading.getBoundingClientRect();
+  el.style.marginBlockStart = `${y - (head.top + head.height / 2)}px`;
+  const moved = heading.getBoundingClientRect();
+  expect(moved.top).toBeLessThan(y);
+  expect(moved.bottom).toBeGreaterThan(y);
+  expect(getComputedStyle(heading).zIndex).toBe("3");
+  expect(paintsTopmost(toast, moved.left + 4, y)).toBe(true);
+  expect(Number(getComputedStyle(toast).zIndex)).toBeGreaterThan(3);
+});
+
+it("keeps a field scrolled into view clear of an outcome message that wraps onto a second row", async () => {
+  const { el, host } = await mountInViewportScroller({ rows: manyRows() });
+  el.outcome = { kind: "saved", save: burgerSaved };
+  await el.updateComplete;
+  const toast = outcomeToast(el);
+  const oneRow = toast.getBoundingClientRect().height;
+  el.outcome = { kind: "saved", save: { ...burgerSaved, name: "Burger ".repeat(12).trim() } };
+  await el.updateComplete;
+  expect(toast.getBoundingClientRect().height).toBeGreaterThan(oneRow);
   const field = override(el, "mi-lager");
   field.scrollIntoView({ block: "end" });
   expect(host.scrollTop).toBeGreaterThan(0);
   expect(host.scrollTop).toBeLessThan(host.scrollHeight - host.clientHeight);
   expect(
     field.getBoundingClientRect().bottom,
-    `line ${line.getBoundingClientRect().height}px, margin ${getComputedStyle(field).scrollMarginBlockEnd}`,
-  ).toBeLessThanOrEqual(line.getBoundingClientRect().top + 0.5);
+    `message ${toast.getBoundingClientRect().height}px, margin ${getComputedStyle(field).scrollMarginBlockEnd}`,
+  ).toBeLessThanOrEqual(toast.getBoundingClientRect().top + 0.5);
 });
 
-it("widens a field's end margin when a narrower table wraps the status line, after being moved", async () => {
-  const el = await mount();
-  const host = el.parentElement!;
-  host.style.inlineSize = "1280px";
-  el.outcome = { kind: "saved", save: { ...burgerSaved, name: "Burger ".repeat(12).trim() } };
-  await el.updateComplete;
-  const line = el.shadowRoot!.querySelector<HTMLElement>(".outcome")!;
-  const oneRow = line.getBoundingClientRect().height;
-  host.remove();
-  document.body.append(host);
-  host.style.inlineSize = "414px";
-  expect(line.getBoundingClientRect().height).toBeGreaterThan(oneRow);
-  const margin = () => parseFloat(getComputedStyle(override(el, "mi-lager")).scrollMarginBlockEnd);
-  await vi.waitFor(() =>
-    expect(margin()).toBeGreaterThanOrEqual(line.getBoundingClientRect().height),
-  );
+it("widens a field's end margin when a narrower window wraps the outcome message, after being moved", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    await page.viewport(1280, 800);
+    const el = await mount();
+    const host = el.parentElement!;
+    el.outcome = { kind: "saved", save: { ...burgerSaved, name: "Burger ".repeat(12).trim() } };
+    await el.updateComplete;
+    const toast = outcomeToast(el);
+    const oneRow = toast.getBoundingClientRect().height;
+    host.remove();
+    document.body.append(host);
+    await page.viewport(414, 800);
+    await vi.waitFor(() => expect(toast.getBoundingClientRect().height).toBeGreaterThan(oneRow));
+    const margin = () =>
+      parseFloat(getComputedStyle(override(el, "mi-lager")).scrollMarginBlockEnd);
+    await vi.waitFor(() =>
+      expect(margin()).toBeGreaterThanOrEqual(toast.getBoundingClientRect().height),
+    );
+  } finally {
+    await page.viewport(width, height);
+  }
 });
 
 it("keeps an Inactive size's clash on its own row, off its product's", async () => {

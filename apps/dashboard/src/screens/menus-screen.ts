@@ -1674,7 +1674,7 @@ export class MenusScreen extends LitElement {
   }
 
   /** One field per request, in the order made; each field stays editable meanwhile. A refusal is
-   * said in the tab's status line, and under the field when it names the price; once the menu,
+   * said in the tab's floating outcome message, and under the field when it names the price; once the menu,
    * the tab or the row has gone, it is named beside the list instead. The prices are read again
    * only after the last save made, and only when it or an earlier one was stored. A success is said
    * only for the last save made, so its Undo never reaches past a later write; never over a refusal

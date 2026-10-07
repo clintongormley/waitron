@@ -7,6 +7,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-toast.js";
+import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import { describeSetting, placeName } from "./price-source.js";
 import {
@@ -57,7 +59,7 @@ export interface PriceSave {
   undo?: boolean;
 }
 
-/** What the status line says. */
+/** What the floating outcome message says. */
 export type PriceOutcome =
   { kind: "saved"; save: PriceSave } | { kind: "refused"; save: PriceSave; reason: string };
 
@@ -113,7 +115,8 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
  * under it, each showing its Active state and a field for the price this menu sets for it. A field
  * asks for its own save on Enter or on leaving it, through `wt-price-save`; the host performs the
  * writes and says which are out (`saving`), which were refused for the price typed (`refusals`) and
- * what the status line says (`outcome`).
+ * the outcome of the last save (`outcome`), which floats over the page: a save for 5 s, with its
+ * Undo; a refusal until another outcome replaces it, as it may be said nowhere else.
  */
 @customElement("dashboard-menu-prices-table")
 export class MenuPricesTable extends LitElement {
@@ -155,15 +158,14 @@ export class MenuPricesTable extends LitElement {
       }
       /* Wide enough that a range placeholder shows whole rather than clipped into one price. Its
          positioned box holds the field's hidden hint, which otherwise escapes the table's scroller
-         and widens the page. Its end margin is at least the status line's height, measured into
-         --outcome-height because a long sentence wraps the line onto more rows: the line is sticky
-         at the bottom and would otherwise cover a field scrolled into view under it. */
+         and widens the page. Its end margin clears the outcome message floating at the bottom,
+         whose height is measured into --outcome-height because a long sentence wraps it. */
       wt-data-table::part(override-field) {
         position: relative;
         --wt-price-field-width: var(--wt-price-range-field-width);
         scroll-margin-block-end: max(
           var(--wt-tap-min) + 2 * var(--wt-space-2),
-          var(--outcome-height, 0px)
+          var(--outcome-height, 0px) + var(--wt-space-3)
         );
       }
       wt-data-table::part(status-link) {
@@ -188,20 +190,19 @@ export class MenuPricesTable extends LitElement {
         padding-inline: var(--wt-space-4);
         font-size: var(--wt-font-size-sm);
       }
-      /* Above wt-data-table's pinned column, which is layered at 2. */
-      .outcome {
-        position: sticky;
-        bottom: 0;
-        z-index: 3;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-        padding-block: var(--wt-space-2);
-        background: var(--wt-color-bg);
+      /* Above wt-data-table's pinned column (2) and sticky header (3). */
+      wt-toast {
+        position: fixed;
+        inset-block-end: var(--wt-space-3);
+        inset-inline-end: var(--wt-space-3);
+        z-index: 4;
+        max-width: calc(100% - 2 * var(--wt-space-3));
       }
-      .outcome p {
-        margin: 0;
+      @media (max-width: 48rem) {
+        wt-toast {
+          inset-inline: var(--wt-space-2);
+          max-width: none;
+        }
       }
     `,
   ];
@@ -321,25 +322,32 @@ export class MenuPricesTable extends LitElement {
     if (drafts.size !== this.drafts.size) this.drafts = drafts;
   }
 
-  /** Watched, not only measured on each outcome, so a narrower window that wraps the line onto
+  /** Watched, not only measured on each outcome, so a narrower window that wraps the message onto
    * another row still keeps a field clear of it. */
   readonly #outcomeSize = new ResizeObserver(() => this.#fitOutcome());
   #outcomeFitted: Promise<void> = Promise.resolve();
 
-  #fitOutcome(): void {
-    const line = this.renderRoot.querySelector(".outcome")!;
-    this.style.setProperty("--outcome-height", `${line.getBoundingClientRect().height}px`);
+  #toast(): WtToast {
+    return this.renderRoot.querySelector("wt-toast")!;
   }
 
-  /** Measured once its Undo has drawn its label, which decides whether the line wraps. */
-  async #fitOutcomeAfterUndo(): Promise<void> {
+  #fitOutcome(): void {
+    this.style.setProperty("--outcome-height", `${this.#toast().getBoundingClientRect().height}px`);
+  }
+
+  /** Shown anew for each outcome, so an equal sentence still restarts its countdown, and measured
+   * once it and its Undo have drawn, which decides whether the message wraps. */
+  async #showOutcome(): Promise<void> {
+    const toast = this.#toast();
+    if (this.outcome !== null) toast.show();
+    await toast.updateComplete;
     await this.renderRoot.querySelector<LitElement>('[data-test="price-undo"]')?.updateComplete;
     this.#fitOutcome();
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.hasUpdated) this.#outcomeSize.observe(this.renderRoot.querySelector(".outcome")!);
+    if (this.hasUpdated) this.#outcomeSize.observe(this.#toast());
   }
 
   override disconnectedCallback(): void {
@@ -348,10 +356,10 @@ export class MenuPricesTable extends LitElement {
   }
 
   protected override firstUpdated(): void {
-    this.#outcomeSize.observe(this.renderRoot.querySelector(".outcome")!);
+    this.#outcomeSize.observe(this.#toast());
   }
 
-  /** Resolves once the status line's new height is measured too. */
+  /** Resolves once the outcome message's new height is measured too. */
   protected override async getUpdateComplete(): Promise<boolean> {
     const done = await super.getUpdateComplete();
     await this.#outcomeFitted;
@@ -359,7 +367,7 @@ export class MenuPricesTable extends LitElement {
   }
 
   protected override updated(changed: PropertyValues): void {
-    if (changed.has("outcome")) this.#outcomeFitted = this.#fitOutcomeAfterUndo();
+    if (changed.has("outcome")) this.#outcomeFitted = this.#showOutcome();
     // The cells read these, and the table redraws only when its own properties change.
     if (
       ["invalid", "hiddenRefusals", "saving", "refusals"].some((name) => changed.has(name)) ||
@@ -635,7 +643,7 @@ export class MenuPricesTable extends LitElement {
     return this.hiddenRefusals.has(key) ? "" : (this.refusals[key] ?? "");
   }
 
-  /** Whether the field's last save was refused, under it or in the status line alone. */
+  /** Whether the field's last save was refused, under it or in the outcome message alone. */
   #refused(key: string): boolean {
     return (
       key in this.refusals || (this.outcome?.kind === "refused" && this.outcome.save.key === key)
@@ -958,10 +966,15 @@ export class MenuPricesTable extends LitElement {
         errorMessage=${this.failed ? t("menu_prices.error") : ""}
         emptyMessage=${t("menu_prices.empty")}
       ></wt-data-table>
-      <div class="outcome">
-        <p role="status" data-test="price-outcome">${this.#outcomeText()}</p>
-        ${this.#undoButton()}
-      </div>`;
+      <wt-toast
+        data-test="price-outcome"
+        close-label=${t("action.close")}
+        tone="info"
+        .open=${this.outcome !== null}
+        .message=${this.#outcomeText()}
+        .duration=${this.outcome?.kind === "saved" ? 5000 : 0}
+        >${this.#undoButton()}</wt-toast
+      >`;
   }
 
   #outcomeText(): string {
@@ -983,6 +996,7 @@ export class MenuPricesTable extends LitElement {
     // Pressing it keeps focus where it is: a field left would save what it holds, and that new
     // save takes this Undo away before the click lands. Undo writes over its own field's text.
     return html`<wt-button
+      slot="action"
       variant="secondary"
       data-test="price-undo"
       @mousedown=${(event: Event) => event.preventDefault()}
