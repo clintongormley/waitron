@@ -191,6 +191,7 @@ describe("image-upload", () => {
             ? "Uses the main product's photo"
             : "Usa la foto del producto principal",
         );
+      expect(remove.hasAttribute("aria-description")).toBe(false);
       expect(el.shadowRoot!.querySelector("[data-test=remove-image-hint]")).toBeNull();
       remove.click();
       remove.shadowRoot!.querySelector("button")!.click();

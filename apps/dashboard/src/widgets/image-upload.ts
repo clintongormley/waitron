@@ -222,7 +222,7 @@ export class ImageUpload extends LitElement {
                   data-test="remove-image"
                   variant="secondary"
                   disabled
-                  aria-description=${t("image.remove_inherited_hint")}
+                  .ariaDescription=${t("image.remove_inherited_hint")}
                   >${t("image.remove")}</wt-button
                 >`
               : nothing
