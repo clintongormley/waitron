@@ -291,6 +291,39 @@ describe("setRoutingCell / clearRoutingCell", () => {
       expect(await readStoredCell(f, address)).toMatchObject({ station_id: f.kitchen });
   });
 
+  it("keeps a category × zone cell when the same category's Every zone cell is set and cleared", async () => {
+    const f = await setup();
+    const terrace: CellAddress = {
+      row: { kind: "category", categoryId: f.drinks },
+      zoneId: f.terrace,
+    };
+    const everyZone: CellAddress = {
+      row: { kind: "category", categoryId: f.drinks },
+      zoneId: null,
+    };
+    const terraceRow = {
+      category_id: f.drinks,
+      product_id: null,
+      zone_id: f.terrace,
+      station_id: f.bar,
+      no_preparation: 0,
+    };
+    await scoped((tx) => setRoutingCell(tx, f.cfg, terrace, station(f.bar)));
+    await scoped((tx) => setRoutingCell(tx, f.cfg, everyZone, station(f.kitchen)));
+    expect(await readStoredCells(f)).toEqual([
+      {
+        category_id: f.drinks,
+        product_id: null,
+        zone_id: null,
+        station_id: f.kitchen,
+        no_preparation: 0,
+      },
+      terraceRow,
+    ]);
+    await scoped((tx) => clearRoutingCell(tx, f.cfg, everyZone));
+    expect(await readStoredCells(f)).toEqual([terraceRow]);
+  });
+
   it("stores explicit No preparation distinctly from a cleared cell", async () => {
     const f = await setup();
     const address: CellAddress = { row: { kind: "product", productId: f.mojito }, zoneId: null };
