@@ -306,3 +306,20 @@ it("disconnecting clears a local request acknowledgement before the widget is re
   expect(el.shadowRoot!.querySelector("[data-sent=sent-one]")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-request-transfer]")).not.toBeNull();
 });
+
+it("withdraws a just-sent request before polling and immediately permits a new destination", async () => {
+  const { el } = await mount();
+  await begin(el);
+  await choose(el, "restaurant");
+  click(el, "[data-save-transfer]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-withdraw-transfer]")).not.toBeNull(),
+  );
+  expect(el.snapshot.sent).toEqual([]);
+  expect(el.shadowRoot!.querySelector("[data-request-transfer]")).toBeNull();
+  click(el, "[data-withdraw-transfer]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-request-transfer]")).not.toBeNull(),
+  );
+  expect(el.shadowRoot!.querySelector("[data-withdraw-transfer]")).toBeNull();
+});

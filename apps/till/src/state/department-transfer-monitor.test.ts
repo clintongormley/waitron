@@ -568,3 +568,42 @@ it("does not announce an old selected-tab acceptance after the operator selects 
   await expect.poll(() => monitor.snapshot.sent).toEqual([{ ...pending, tabId: "tab-2" }]);
   expect(seen).not.toContain("old-acceptance");
 });
+
+it.each(["department_transfer.not_allowed", "authorization.not_permitted"])(
+  "clears source history after a source-only %s refusal",
+  async (code) => {
+    let refused = false;
+    const codes: string[] = [];
+    const api = new client.TillApi("", async (input) => {
+      const url = String(input);
+      if (url.endsWith("/events")) return new Response(new ReadableStream());
+      if (url.endsWith("/incoming")) return json({ count: 1, requests: [pending] });
+      return refused
+        ? json({ error: { code, params: {} } }, 403)
+        : json({ requests: [{ ...pending, status: "accepted" }] });
+    });
+    const monitor = new DepartmentTransferMonitor({
+      api,
+      changed() {},
+      onAccessLost(value) {
+        codes.push(value);
+      },
+    });
+    monitors.push(monitor);
+    monitor.watchSource("tab-1");
+    monitor.start();
+    await expect.poll(() => monitor.snapshot.sent).toHaveLength(1);
+    refused = true;
+    monitor.refresh();
+    await expect.poll(() => monitor.snapshot.sent).toEqual([]);
+    if (code === "department_transfer.not_allowed") {
+      expect(monitor.running).toBe(true);
+      expect(monitor.snapshot.incoming).toEqual([pending]);
+      expect(codes).toEqual([]);
+    } else {
+      expect(monitor.running).toBe(false);
+      expect(monitor.snapshot.incoming).toEqual([]);
+      expect(codes).toEqual([code]);
+    }
+  },
+);

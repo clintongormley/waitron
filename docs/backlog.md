@@ -4848,6 +4848,12 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   direction prevents new requests and leaves existing pending intent actionable; it does not revoke
   requests already sent. Party-linked bills are refused before
   queuing, and again at acceptance, rather than moving shared table/group links.**
+  **Unresolved observation from W101 verification:** two full local `@waitron/till test:coverage`
+  runs logged an unhandled rejection in `#holdIdentity` while `#switchProfile` was reading identity:
+  `Cannot read properties of null (reading 'approvedProfiles')`. Both completed with every test
+  passing; the second met coverage. Receipts: `~/waitron-campaign-d/receipts/w101/till-full-coverage.log`
+  and `till-full-coverage2.log`. The triggering test and cause are unverified; isolate the profile-switch
+  case and its identity response before choosing a fix. Transfer-focused runs did not log this rejection.
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
   station/watcher bindings; drawers are independent of receipt

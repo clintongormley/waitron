@@ -1106,6 +1106,7 @@ export class TillApp extends LitElement {
     const copy = this.transferLocalCopies[0];
     if (copy === undefined || !this.#inShell()) return nothing;
     return html`<wt-dialog
+      ${trackDialog()}
       data-transfer-local-copy
       .open=${true}
       .dismissible=${false}

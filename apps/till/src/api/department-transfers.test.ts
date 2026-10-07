@@ -293,3 +293,43 @@ it("discovers all sent transfers without a selected tab and preserves cancellati
     requests: [request, { ...request, id: "request-2", tabId: "tab-2", status: "accepted" }],
   });
 });
+
+it("reports malformed HTTP stream refusals as server errors without delivering events", async () => {
+  const events: string[] = [];
+  const api = new TillApi("", async () => new Response("proxy refused", { status: 502 }));
+  await expect(api.readDepartmentTransferEvents((event) => events.push(event))).rejects.toEqual({
+    code: "server.internal",
+    status: 502,
+  });
+  expect(events).toEqual([]);
+});
+
+it("rejects a successful stream with no readable body", async () => {
+  const api = new TillApi("", async () => new Response(null, { status: 204 }));
+  await expect(api.readDepartmentTransferEvents(() => {})).rejects.toThrow(
+    "Transfer stream has no body",
+  );
+});
+
+it("finishes logout and releases the reader when the transport refuses cancellation", async () => {
+  const abort = new AbortController();
+  controllers.push(abort);
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("event: ready\ndata: {}\n\n"));
+    },
+    cancel() {
+      throw new Error("Disconnected transport");
+    },
+  });
+  const api = new TillApi("", async () => new Response(body));
+  const events: string[] = [];
+  const done = api.readDepartmentTransferEvents((event) => events.push(event), {
+    signal: abort.signal,
+  });
+  await vi.waitFor(() => expect(events).toEqual(["ready"]));
+  abort.abort();
+  await done;
+  expect(body.locked).toBe(false);
+  expect(events).toEqual(["ready"]);
+});
