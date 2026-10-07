@@ -931,10 +931,9 @@ unused `units` property is gone (it closes W75's leftover).
   - A358 — DONE: retired `PATCH /management-api/products/:id` and its ownership helper. Product
     edits use the existing editor save route. Modifier-usage and frozen menu-preview fixtures
     now save through that editor; their stored-content assertions remain.
-  - Open: `wt-row-actions` (`packages/ui/src/components/wt-row-actions.ts`) keeps the `disabled`
-    property and the `trigger` slot and part that A303 added for the retired menu. Nothing outside
-    its own tests uses them now, and those tests still name Colour… and Change photo…. Retiring
-    them, or keeping them on purpose, is not decided.
+  - A359 — DONE: retired the unused `wt-row-actions` host `disabled` property and custom
+    `trigger` slot and part, with their media-menu tests. The standard icon button, badge slot,
+    popup part and menu actions remain.
   - Open, found during A327's look and believed to predate it (the base hid the swatch at the same
     width): at 440px or narrower the Menus Structure tree hides every swatch, and a product row's
     Actions menu holds only "Remove from <section>", so on a phone that tree offers no way to open

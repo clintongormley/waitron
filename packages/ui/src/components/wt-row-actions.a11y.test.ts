@@ -43,15 +43,3 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 });
-
-describe.each(["light", "dark"] as const)("media trigger accessibility (%s)", (theme) => {
-  test("names the photo trigger and both open media actions", async () => {
-    const el = await mountThemed(
-      '<wt-row-actions label="Colour and photo of Soup"><span slot="trigger" aria-hidden="true">Photo</span><wt-button>Colour…</wt-button><a href="/manage/catalogue/product/soup?field=image">Change photo…</a></wt-row-actions>',
-      theme,
-    );
-    await expectNoA11yViolations(host);
-    await userEvent.click(el.querySelector('[slot="trigger"]')!);
-    await expectNoA11yViolations(host);
-  });
-});
