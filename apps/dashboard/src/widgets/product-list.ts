@@ -308,7 +308,7 @@ export class ProductList extends LitElement {
         max-inline-size: 12rem;
         white-space: normal;
         overflow-wrap: anywhere;
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
       }
       wt-data-table::part(maker-detail) {
         display: block;

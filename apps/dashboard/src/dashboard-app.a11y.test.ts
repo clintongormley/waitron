@@ -256,8 +256,34 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     }
   });
 
-  // Scoped to the box and its message: at 1280 px on the light theme axe fails the sidebar's group
-  // headers and current page on colour contrast — see docs/backlog.md's primary-blue entry.
+  it("the desktop sidebar's group headers and current page are accessible at rest and under the pointer", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(1280, 800);
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-staff]")!.click();
+      await flush(el);
+      const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+      expect(sidebar.hasAttribute("inert")).toBe(false);
+      const header = sidebar.querySelector<HTMLElement>('button.nav-group[aria-expanded="true"]')!;
+      const current = sidebar.querySelector<HTMLElement>('.nav-item[aria-current="page"]')!;
+      expect(header).toBeTruthy();
+      expect(current).toBeTruthy();
+      await expectNoA11yViolations(sidebar);
+
+      for (const target of [header, current]) {
+        await userEvent.hover(target);
+        expect(target.matches(":hover")).toBe(true);
+        await expectNoA11yViolations(sidebar);
+      }
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
   it("the sidebar's page search box and its message are accessible empty, with matches and with none", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
     const width = window.innerWidth,
