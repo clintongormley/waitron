@@ -36,6 +36,7 @@ import {
 import { batches } from "./batches.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember, sectionPatchValues } from "./sections.js";
+import { takeOffMenus } from "./menu-removal.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
@@ -1224,10 +1225,21 @@ async function patchProduct(
       allergens: allergens !== undefined,
       diet: dietOverride !== undefined,
     });
+  if (patch.active === false) await takeOffMenus(tx, [id]);
 }
 
 export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {
-  await tx.update(products).set({ active: false, updatedAt: now() }).where(eq(products.id, id));
+  await markInactive(tx, [id]);
+  await takeOffMenus(tx, [id]);
+}
+
+/** Sets the products Inactive and nothing else: the caller takes them off menus. */
+export async function markInactive(tx: Transaction, ids: readonly string[]): Promise<void> {
+  for (const batch of batches(ids))
+    await tx
+      .update(products)
+      .set({ active: false, updatedAt: now() })
+      .where(inArray(products.id, batch));
 }
 
 export async function assignCatalogueToLocation(

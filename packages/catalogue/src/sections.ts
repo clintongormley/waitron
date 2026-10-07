@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { tableExists, type Transaction } from "@waitron/db";
+import { products, tableExists, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
@@ -134,11 +134,26 @@ async function checkListRef(
       throw new AppError("menu_section.wrong_role", { sectionId: ref.sectionId, role });
   }
   await checkRef(tx, graph, sectionId, ref, replacing);
+  if (ref.kind === "product" && !(await allActive(tx, [ref.productId])))
+    throw new AppError("menu_section.membership_invalid", {});
   if (ref.kind === "section" && wouldCreateCycle(graph, sectionId, ref.sectionId))
     throw new AppError("menu_section.member_cycle", {
       sectionId,
       childSectionId: ref.sectionId,
     });
+}
+
+/** An Inactive product is on no menu, so no list may take one. */
+async function allActive(tx: Transaction, productIds: readonly string[]): Promise<boolean> {
+  for (const batch of batches(productIds)) {
+    const [inactive] = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(and(inArray(products.id, batch), eq(products.active, false)))
+      .limit(1);
+    if (inactive !== undefined) return false;
+  }
+  return true;
 }
 
 /** Any list by id; Home omits missing members. Use readMenuHome for its complete shortcuts. */
@@ -272,7 +287,11 @@ export async function addProducts(
 ): Promise<{ added: number }> {
   const graph = await loadSectionGraph(tx);
   requireWritableList(graph, sectionId);
-  if (!Array.isArray(productIds) || !(await allTopLevelProducts(tx, productIds)))
+  if (
+    !Array.isArray(productIds) ||
+    !(await allTopLevelProducts(tx, productIds)) ||
+    !(await allActive(tx, productIds))
+  )
     throw new AppError("menu_section.membership_invalid", {});
   const held = new Set(
     graph

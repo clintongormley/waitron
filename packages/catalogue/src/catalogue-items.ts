@@ -5,7 +5,8 @@ import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
 import { listCategories, vacateCategories, validateParent, type Category } from "./categories.js";
 import { assertCategoryNamesFree } from "./category-names.js";
-import { deactivateProduct } from "./operations.js";
+import { takeOffMenus } from "./menu-removal.js";
+import { markInactive } from "./operations.js";
 import { isTopLevelProduct } from "./variant-fallback.js";
 import "./errors.js";
 
@@ -143,12 +144,14 @@ export async function deleteCatalogueItems(
   const tree = await readTree(tx, selection);
   if (shown !== undefined) await assertContentsAsShown(tx, tree, selection.categoryIds, shown);
   if (contents === "move_up") await assertMovedUpNamesFree(tx, tree, selection.categoryIds);
-  for (const id of selection.productIds) await deactivateProduct(tx, id);
+  await markInactive(tx, selection.productIds);
   if (contents === "move_up") {
     for (const id of tree.byDepth(selection.categoryIds, "deepest"))
       await removeFolder(tx, id, tree.parent(id));
+    await takeOffMenus(tx, selection.productIds);
     return;
   }
+  const deactivated = [...selection.productIds];
   const gone = new Set<string>();
   for (const id of tree.byDepth(selection.categoryIds, "shallowest")) {
     if (gone.has(id)) continue; // inside a selected folder already deleted with its contents
@@ -159,7 +162,9 @@ export async function deleteCatalogueItems(
         .select({ id: products.id })
         .from(products)
         .where(and(inArray(products.categoryId, batch), isTopLevelProduct));
-      for (const product of inside) await deactivateProduct(tx, product.id);
+      const ids = inside.map((product) => product.id);
+      await markInactive(tx, ids);
+      deactivated.push(...ids);
       await vacateCategories(tx, batch, parent);
     }
     for (const folder of tree.byDepth(subtree, "deepest")) {
@@ -167,6 +172,7 @@ export async function deleteCatalogueItems(
       gone.add(folder);
     }
   }
+  await takeOffMenus(tx, deactivated);
 }
 
 /**
