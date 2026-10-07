@@ -106,8 +106,12 @@ function wines(): MenuStructureNode {
     memberId: "included-wine",
     ref: { kind: "section", sectionId: "wine-root" },
     internalName: "Wines",
+    names: { en: "Wines to share", es: "Vinos para compartir" },
+    image: null,
+    color: null,
     includedMenuId: "wine",
     ownerMenuId: "wine",
+    folder: { showAsFolder: true, overrides: { names: { en: "The wine cellar" } } },
     children: [
       {
         memberId: "wine-red",
@@ -340,11 +344,16 @@ it("draws an included menu read-only, with a link to its own editor and a way to
   const edits = listen(el, "wt-structure-edit");
   expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
   expect(item(el, "read-only-included-wine").textContent!.trim()).toBe(t("menus.read_only_here"));
-  expect(menuItems(el, "included-wine")).toEqual(["source-included-wine", "remove-included-wine"]);
+  expect(menuItems(el, "included-wine")).toEqual([
+    "source-included-wine",
+    "edit-included-wine",
+    "remove-included-wine",
+  ]);
   const link = item(el, "source-included-wine");
   expect(link.tagName).toBe("A");
   expect(link.getAttribute("href")).toBe("/manage/menus/menu/wine/view/structure");
-  expect(link.textContent!.trim()).toBe(t("menus.edit_included").replace("{name}", "Wines"));
+  expect(link.textContent!.trim()).toBe(t("menus.open_included").replace("{name}", "Wines"));
+  expect(item(el, "edit-included-wine").textContent!.trim()).toBe(t("action.edit"));
   expect(item(el, "remove-included-wine").textContent!.trim()).toBe(t("menus.remove_included"));
   item(el, "remove-included-wine").click();
   expect(removes).toEqual([{ path: [], memberId: "included-wine" }]);
@@ -375,6 +384,69 @@ it("draws an included menu read-only, with a link to its own editor and a way to
   expect(shown(el)).not.toContain("included-wine/wine-red/wine-rioja");
   // Nothing inside another menu can be the list being edited here.
   expect(edits).toEqual([]);
+});
+
+it("Edit sends wt-include-edit with the list's path and the member", async () => {
+  const nested = lunchNodes().map((node) =>
+    node.memberId === "m-drinks" ? { ...node, children: [...node.children!, wines()] } : node,
+  );
+  const el = await mount({ nodes: [...nested, wines()] });
+  const includeEdits = listen(el, "wt-include-edit");
+  const otherEdits = [
+    listen(el, "wt-member-edit"),
+    listen(el, "wt-structure-edit"),
+    listen(el, "wt-member-remove"),
+  ];
+  item(el, "edit-included-wine").click();
+  await toggle(el, "m-drinks");
+  otherEdits.forEach((seen) => (seen.length = 0));
+  item(el, "edit-m-drinks/included-wine").click();
+  expect(includeEdits).toEqual([
+    { path: [], memberId: "included-wine" },
+    { path: ["m-drinks"], memberId: "included-wine" },
+  ]);
+  expect(otherEdits).toEqual([[], [], []]);
+
+  el.busy = true;
+  await settle(el);
+  item(el, "edit-included-wine").click();
+  expect(includeEdits).toHaveLength(2);
+});
+
+it("the row says whether the include is a folder or shown directly", async () => {
+  const el = await mount({ nodes: [...lunchNodes(), wines()] });
+  expect(item(el, "folder-setting-included-wine").textContent!.trim()).toBe(
+    t("menus.include_as_folder"),
+  );
+  expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
+
+  const cava: MenuStructureNode = {
+    memberId: "wine-cava",
+    ref: { kind: "section", sectionId: "cava-root" },
+    internalName: "Cava",
+    includedMenuId: "cava",
+    ownerMenuId: "cava",
+    folder: { showAsFolder: false, overrides: {} },
+    children: [],
+  };
+  el.nodes = [
+    ...lunchNodes(),
+    {
+      ...wines(),
+      folder: { showAsFolder: false, overrides: { names: { en: "The wine cellar" } } },
+      children: [...wines().children!, cava],
+    },
+  ];
+  await settle(el);
+  expect(item(el, "folder-setting-included-wine").textContent!.trim()).toBe(
+    t("menus.include_direct"),
+  );
+  expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
+  expect(item(el, "read-only-included-wine").textContent!.trim()).toBe(t("menus.read_only_here"));
+  // An include inside an included menu belongs to that menu's page, so it says nothing here.
+  await toggle(el, "included-wine");
+  expect(nameOf(el, "included-wine/wine-cava")).toBe(menuLabel("Cava"));
+  expect(row(el, "included-wine/wine-cava")!.querySelector('[part~="note"]')).toBeNull();
 });
 
 it("opens the way to the current section and marks only its name current", async () => {
@@ -457,7 +529,13 @@ it("disables every row action and grip while busy, and a click on one sends noth
   const el = await mount({ nodes: [...lunchNodes(), wines()], busy: true });
   await toggle(el, "m-drinks");
   const sent: string[] = [];
-  for (const name of ["wt-structure-add", "wt-member-remove", "wt-member-edit", "wt-member-delete"])
+  for (const name of [
+    "wt-structure-add",
+    "wt-member-remove",
+    "wt-member-edit",
+    "wt-member-delete",
+    "wt-include-edit",
+  ])
     el.addEventListener(name, () => sent.push(name));
   const buttons = all(el, "wt-row-actions wt-button");
   expect(buttons.length).toBeGreaterThan(10);
@@ -1404,6 +1482,24 @@ describe("colour swatches", () => {
     expect(getComputedStyle(chipOf(el, "m-drinks/m-lemonade")).backgroundColor).toBe(
       "rgb(42, 138, 62)",
     );
+  });
+
+  it("the swatch shows the folder's fixed colour while it is a folder", async () => {
+    const ownColour = { ...wines(), color: "#7a1f3d" };
+    const fixed = (showAsFolder: boolean): MenuStructureNode => ({
+      ...ownColour,
+      folder: { showAsFolder, overrides: { color: "#c0a000" } },
+    });
+    const el = await mountColoured({ nodes: [...paintedLunch(), fixed(true)] });
+    expect(getComputedStyle(chipOf(el, "included-wine")).backgroundColor).toBe("rgb(192, 160, 0)");
+
+    el.nodes = [...paintedLunch(), fixed(false)];
+    await settle(el);
+    expect(getComputedStyle(chipOf(el, "included-wine")).backgroundColor).toBe("rgb(122, 31, 61)");
+
+    el.nodes = [...paintedLunch(), ownColour];
+    await settle(el);
+    expect(getComputedStyle(chipOf(el, "included-wine")).backgroundColor).toBe("rgb(122, 31, 61)");
   });
 
   it("draws a colour that is not lowercase #rrggbb as none, so it never reaches the style", async () => {

@@ -28,6 +28,10 @@ import {
 import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
+import {
+  FOLLOWING_FOLDER,
+  folderPresentation,
+} from "@waitron/catalogue/src/include-folder-presentation.js";
 import type {
   CategorySummary,
   HomeTile,
@@ -739,8 +743,14 @@ export class MenuStructureTable extends LitElement {
       >${this.#nameSpan(row)}${
         node.includedMenuId && !row.readOnly
           ? html`<span part="note" data-test=${`read-only-${key}`}
-              >${t("menus.read_only_here")}</span
-            >`
+                >${t("menus.read_only_here")}</span
+              ><span part="note" data-test=${`folder-setting-${key}`}
+                >${t(
+                  (node.folder ?? FOLLOWING_FOLDER).showAsFolder
+                    ? "menus.include_as_folder"
+                    : "menus.include_direct",
+                )}</span
+              >`
           : nothing
       }</span
     >`;
@@ -765,7 +775,12 @@ export class MenuStructureTable extends LitElement {
       });
     }
     const sectionId = node.ref.sectionId;
-    const chip = swatchChip(node.color ?? null);
+    const own = { names: node.names ?? {}, image: node.image ?? null, color: node.color ?? null };
+    const chip = swatchChip(
+      node.includedMenuId
+        ? folderPresentation(own, node.folder ?? FOLLOWING_FOLDER).color
+        : own.color,
+    );
     if (!this.#ownedSection(row))
       return html`<span part="swatch-box" data-test=${`color-${key}`} aria-hidden="true"
         >${chip}</span
@@ -819,11 +834,16 @@ export class MenuStructureTable extends LitElement {
           part="menu-link"
           data-test=${`source-${key}`}
           href=${`/manage/menus/menu/${node.includedMenuId}/view/structure`}
-          >${t("menus.edit_included").replace(
+          >${t("menus.open_included").replace(
             "{name}",
             memberName(node.ref, this.#productNames, this.#sectionNames),
           )}</a
-        >${this.#remove(row, t("menus.remove_included"))}`;
+        >${this.#button(`edit-${key}`, t("action.edit"), "secondary", () =>
+          this.#send("wt-include-edit", {
+            path: row.path.slice(0, -1),
+            memberId: node.memberId,
+          }),
+        )}${this.#remove(row, t("menus.remove_included"))}`;
     if (node.ref.kind === "section") {
       const detail = { sectionId: node.ref.sectionId, path: row.path };
       return html`${this.#adds(row)}

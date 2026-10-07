@@ -30,7 +30,9 @@ const section = (
   ref: { kind: "section", sectionId },
   internalName,
   ownerMenuId: includedMenuId ?? "menu-lunch",
-  ...(includedMenuId ? { includedMenuId } : {}),
+  ...(includedMenuId
+    ? { includedMenuId, folder: { showAsFolder: true, overrides: { color: "#c0a000" } } }
+    : {}),
   children,
 });
 
@@ -64,6 +66,7 @@ const states = [
   "menu open",
   "root menu open",
   "included menu open",
+  "included shown directly",
   "busy",
 ] as const;
 
@@ -71,14 +74,19 @@ const MENU_OF: Partial<Record<(typeof states)[number], string>> = {
   "menu open": "actions-m-drinks",
   "root menu open": "actions-root",
   "included menu open": "actions-included-wine",
+  "included shown directly": "actions-included-wine",
 };
+
+const shownDirectly = nodes.map((node) =>
+  node.includedMenuId ? { ...node, folder: { showAsFolder: false, overrides: {} } } : node,
+);
 
 describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) => {
   it.each(states)("renders %s accessibly", async (state) => {
     const { el, host } = await mountWidget<MenuStructureTable>(
       "dashboard-menu-structure-table",
       {
-        nodes,
+        nodes: state === "included shown directly" ? shownDirectly : nodes,
         products,
         menuName: "Lunch Menu",
         current: state === "current" ? ["m-drinks", "m-beer"] : [],
@@ -103,6 +111,14 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
       expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
       if (state === "included menu open")
         expect(menu.querySelector('a[part="menu-link"]')).not.toBeNull();
+      if (state.startsWith("included"))
+        expect(menu.querySelector('[data-test="edit-included-wine"]')).not.toBeNull();
+    }
+    if (state === "included shown directly" || state === "closed") {
+      const note = inTable('[data-test="folder-setting-included-wine"]');
+      expect(note.textContent!.trim()).toBe(
+        t(state === "closed" ? "menus.include_as_folder" : "menus.include_direct"),
+      );
     }
     await expectNoA11yViolations(host);
   });

@@ -2110,9 +2110,11 @@ export const en = {
   "menus.delete_section_note":
     "Delete {name} and the {count} sections below it? Its products stay.",
   "menus.menu_prefix": "Menu: {name}",
-  "menus.edit_included": "Edit {name}",
+  "menus.open_included": "Open {name}",
   "menus.remove_included": "Remove from this menu",
   "menus.read_only_here": "Read-only here",
+  "menus.include_as_folder": "Shown as a folder",
+  "menus.include_direct": "Sections shown directly",
 
   "menus.new_section_heading": "New section in {list}",
   "menus.section_not_added":
@@ -4561,9 +4563,11 @@ export const es: Record<StringKey, string> = {
   "menus.delete_section_note":
     "¿Eliminar {name} y las {count} secciones debajo? Sus productos se conservan.",
   "menus.menu_prefix": "Carta: {name}",
-  "menus.edit_included": "Editar {name}",
+  "menus.open_included": "Abrir {name}",
   "menus.remove_included": "Quitar de esta carta",
   "menus.read_only_here": "Solo lectura aquí",
+  "menus.include_as_folder": "Se muestra como carpeta",
+  "menus.include_direct": "Sus secciones se muestran directamente",
 
   "menus.new_section_heading": "Nueva sección en {list}",
   "menus.section_not_added":
