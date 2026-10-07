@@ -32,6 +32,7 @@ import {
   FOLLOWING_FOLDER,
   folderPresentation,
 } from "@waitron/catalogue/src/include-folder-presentation.js";
+import type { Presentation } from "@waitron/catalogue/src/section-types.js";
 import type {
   CategorySummary,
   HomeTile,
@@ -44,6 +45,11 @@ import { t } from "../i18n/t.js";
 export const ROOT_KEY = "root";
 /** The Device Home Page row's key, and the list key its shortcuts' order is kept under. */
 export const HOME_KEY = "home";
+
+/** A section node's own customer-facing presentation, before any include's folder applies. */
+export function ownPresentation(node: MenuStructureNode): Presentation {
+  return { names: node.names ?? {}, image: node.image ?? null, color: node.color ?? null };
+}
 
 /** A section's swatch slot, at a product photo's width; blank on the menu's and home's rows. */
 const folderFrame = (content: unknown = nothing) =>
@@ -775,7 +781,7 @@ export class MenuStructureTable extends LitElement {
       });
     }
     const sectionId = node.ref.sectionId;
-    const own = { names: node.names ?? {}, image: node.image ?? null, color: node.color ?? null };
+    const own = ownPresentation(node);
     const chip = swatchChip(
       node.includedMenuId
         ? folderPresentation(own, node.folder ?? FOLLOWING_FOLDER).color

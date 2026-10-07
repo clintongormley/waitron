@@ -22,6 +22,8 @@ import { DashboardApi } from "../api/client.js";
 import type {
   CatalogueSummary,
   CategorySummary,
+  IncludeFolder,
+  IncludeFolderInput,
   MenuHome,
   MenuReadPart,
   SectionDetails,
@@ -526,6 +528,7 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       members: [],
     })),
     updateSection: vi.fn(),
+    setIncludeFolder: vi.fn(),
     deleteSection: vi.fn(),
     addSectionMember: vi.fn().mockResolvedValue(sectionMember("m-new", 3, "s-new")),
     addSectionProducts: vi.fn().mockResolvedValue({ added: 1 }),
@@ -4000,6 +4003,185 @@ describe("the Structure tree", () => {
         .querySelector('[data-test="name"]')!
         .getAttribute("aria-current"),
     ).toBe("true");
+  });
+});
+
+describe("an include's Edit dialog", () => {
+  type IncludeForm = HTMLElementTagNameMap["dashboard-include-folder-form"];
+
+  /** The staff name, the included menu's own customer names and the folder's fixed name all read
+   * differently, so a dialog showing the wrong one fails. */
+  const WINE_NAMES = { en: "Wine list", es: "Carta de vinos" };
+
+  /** Lunch, with the Wines menu included at its top level; the fake keeps what a save sets. */
+  function winesClient(
+    folder: IncludeFolder,
+    overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
+  ) {
+    const live = new LiveData();
+    let stored = folder;
+    let names: Record<string, string> = WINE_NAMES;
+    const client = api({
+      liveData: live,
+      setIncludeFolder: vi.fn(async (_list: string, _member: string, input: IncludeFolderInput) => {
+        stored = { showAsFolder: input.showAsFolder, overrides: input.overrides ?? {} };
+        return stored;
+      }),
+      ...overrides,
+    });
+    const read = client.getMenuStructure.getMockImplementation()! as (
+      id: string,
+    ) => Promise<MenuStructure>;
+    client.getMenuStructure.mockImplementation(async (id: string) => {
+      const answer = await read(id);
+      if (id !== "menu-lunch") return answer;
+      const wines: MenuStructureNode = {
+        memberId: "included-wine",
+        ref: { kind: "section", sectionId: "wine-root" },
+        internalName: "Wines",
+        names: { ...names },
+        image: null,
+        color: "#112233",
+        includedMenuId: "wine",
+        ownerMenuId: "wine",
+        folder: structuredClone(stored),
+        children: [productNode("wine-chips", "p-chips")],
+      };
+      return { ...answer, nodes: [...answer.nodes, wines] };
+    });
+    return {
+      client,
+      live,
+      rename(next: Record<string, string>) {
+        names = next;
+      },
+    };
+  }
+
+  function includeForm(el: MenusScreen): IncludeForm {
+    return q<IncludeForm>(el, '[data-test="include-folder-form"]')!;
+  }
+  const includeModal = (el: MenusScreen) => includeForm(el).shadowRoot!.querySelector("wt-modal")!;
+  const includeField = (el: MenusScreen, name: string) =>
+    includeForm(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      `wt-input[name="${name}"]`,
+    )!;
+  const includeSave = (el: MenusScreen) =>
+    includeForm(el).shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!;
+
+  async function openWines(el: MenusScreen): Promise<void> {
+    await rowAction(el, "included-wine", "edit");
+    await vi.waitFor(() => expect(includeModal(el).open).toBe(true));
+    await includeForm(el).updateComplete;
+  }
+
+  it("opens from the include's menu with the folder's values", async () => {
+    const { client } = winesClient({
+      showAsFolder: true,
+      overrides: { names: { en: "Our wines" } },
+    });
+    const el = await mountLunch(client);
+    await openWines(el);
+    expect(includeModal(el).heading).toBe(
+      t("menus.include_edit_heading").replace("{name}", "Wines"),
+    );
+    expect(includeField(el, "names-en").value).toBe("Our wines");
+    expect(includeField(el, "names-es").value).toBe("Carta de vinos");
+  });
+
+  it("saves the switch and the changed fields to the include's list, and refreshes", async () => {
+    const { client } = winesClient({
+      showAsFolder: true,
+      overrides: { names: { en: "Our wines" } },
+    });
+    const el = await mountLunch(client);
+    expect(text(inStructure(el, '[data-test="folder-setting-included-wine"]'))).toBe(
+      t("menus.include_as_folder"),
+    );
+    await openWines(el);
+    emit(
+      includeForm(el).shadowRoot!.querySelector('wt-switch[name="show-as-folder"]')!,
+      "wt-change",
+      { checked: false },
+    );
+    await includeForm(el).updateComplete;
+    includeSave(el).click();
+    await vi.waitFor(() =>
+      expect(client.setIncludeFolder).toHaveBeenCalledExactlyOnceWith(
+        "root-lunch",
+        "included-wine",
+        { showAsFolder: false },
+      ),
+    );
+    await vi.waitFor(() => expect(includeModal(el).open).toBe(false));
+    await vi.waitFor(async () => {
+      await settleStructure(el);
+      expect(text(inStructure(el, '[data-test="folder-setting-included-wine"]'))).toBe(
+        t("menus.include_direct"),
+      );
+    });
+  });
+
+  it("an untouched field still follows after the included menu was renamed while the dialog was open", async () => {
+    const { client, live, rename } = winesClient({ showAsFolder: true, overrides: {} });
+    const el = await mountLunch(client);
+    await openWines(el);
+    rename({ en: "Wines by the glass", es: "Vinos por copa" });
+    live.invalidate([{ type: "sections" }]);
+    await vi.waitFor(() =>
+      expect(structure(el).nodes.find((node) => node.memberId === "included-wine")?.names?.en).toBe(
+        "Wines by the glass",
+      ),
+    );
+    await el.updateComplete;
+    includeForm(el).shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+    await includeForm(el).updateComplete;
+    includeSave(el).click();
+    await vi.waitFor(() =>
+      expect(client.setIncludeFolder).toHaveBeenCalledExactlyOnceWith(
+        "root-lunch",
+        "included-wine",
+        { showAsFolder: true, overrides: { color: "#256bb1" } },
+      ),
+    );
+  });
+
+  it("puts a translation refusal beside the name field and keeps the dialog open", async () => {
+    const { client } = winesClient(
+      { showAsFolder: true, overrides: {} },
+      {
+        setIncludeFolder: vi.fn().mockRejectedValue({
+          code: "menu_section.translation_required",
+          params: { field: "names", language: "en" },
+        }),
+      },
+    );
+    const el = await mountLunch(client);
+    await openWines(el);
+    includeSave(el).click();
+    await vi.waitFor(() =>
+      expect(includeField(el, "names-en").error).toBe(
+        codeMessage("menu_section.translation_required"),
+      ),
+    );
+    expect(await bottomIn(includeModal(el))).toBe(t("form.fix_fields"));
+    expect(includeModal(el).open).toBe(true);
+    expect(client.setIncludeFolder).toHaveBeenCalledOnce();
+  });
+
+  it("a refusal that names no shown field shows at the bottom", async () => {
+    const { client } = winesClient(
+      { showAsFolder: true, overrides: {} },
+      { setIncludeFolder: vi.fn().mockRejectedValue({ code: "menu_section.not_found" }) },
+    );
+    const el = await mountLunch(client);
+    await openWines(el);
+    includeSave(el).click();
+    await vi.waitFor(async () =>
+      expect(await bottomIn(includeModal(el))).toBe(codeMessage("menu_section.not_found")),
+    );
+    expect(includeField(el, "names-en").error).toBe("");
+    expect(includeModal(el).open).toBe(true);
   });
 });
 
