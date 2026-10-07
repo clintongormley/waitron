@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
+import { currentLocale } from "@waitron/dashboard-kit";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -13,12 +14,16 @@ import {
   selectRoutingCell,
   selectionRulesFromModel,
   type CellAddress,
+  type GridCategory,
+  type GridProduct,
   type GridRow,
   type RouteTarget,
   type RoutingCell,
   type RoutingRow,
+  type RoutingRules,
   type RoutingSelectionRules,
 } from "../routing.js";
+import { format } from "./hours-view.js";
 import type { RoutingView } from "./routing-client.js";
 import {
   collapseAll,
@@ -34,12 +39,6 @@ export type RoutingRefusal = { address: CellAddress; message: string };
 export type RoutingCellChange = { address: CellAddress; target: RouteTarget | null };
 /** A choice the host has not saved yet, shown at its address in place of the saved value. */
 export type RoutingPending = RoutingCellChange;
-
-const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {}) =>
-  Object.entries(values).reduce(
-    (value, [name, replacement]) => value.replaceAll(`{${name}}`, replacement),
-    t(key),
-  );
 
 function rowKey(row: RoutingRow): string {
   return row.kind === "all"
@@ -211,13 +210,59 @@ export class RoutingGrid extends LitElement {
   @state() private expanded: ReadonlySet<string> = new Set();
 
   #rules: RoutingSelectionRules | null = null;
+  #fallbackRules: RoutingRules | null = null;
   #cells = new Map<string, RoutingCell>();
+  #products = new Map<string, GridProduct>();
+  #categories = new Map<string, GridCategory>();
+  #allRows: ReadonlyMap<string, GridRow> | null = null;
+  /** Reused while the model and language hold, so an unchanged combobox sees the same array. */
+  #options: {
+    model: RoutingView;
+    locale: string;
+    cell: ComboboxOption[];
+    stations: ComboboxOption[];
+  } | null = null;
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (!changed.has("model") || this.model === null) return;
-    this.#rules = selectionRulesFromModel(this.model);
-    this.#cells = new Map(this.model.cells.map((c) => [coordinate(c.row, c.zoneId), c]));
-    this.expanded = pruneExpanded(this.model, this.expanded);
+    const model = this.model;
+    this.#rules = selectionRulesFromModel(model);
+    this.#fallbackRules = {
+      ...this.#rules,
+      timing: new Map(
+        model.stationTimes.map((times) => [
+          times.stationId,
+          { fallbackId: times.fallbackStationId, hours: [], today: null },
+        ]),
+      ),
+    };
+    this.#cells = new Map(model.cells.map((c) => [coordinate(c.row, c.zoneId), c]));
+    this.#products = new Map(model.products.map((product) => [product.id, product]));
+    this.#categories = new Map(model.categories.map((category) => [category.id, category]));
+    this.#allRows = null;
+    this.expanded = pruneExpanded(model, this.expanded);
+  }
+
+  #optionLists() {
+    const model = this.model!;
+    const locale = currentLocale();
+    if (this.#options?.model !== model || this.#options.locale !== locale) {
+      const stations = this.#activeStations().map((station) => ({
+        value: `${STATION}${station.id}`,
+        label: station.name,
+      }));
+      this.#options = {
+        model,
+        locale,
+        stations,
+        cell: [
+          { value: "", label: t("routing.clear") },
+          ...stations,
+          { value: NO_PREPARATION, label: t("prep.no_preparation") },
+        ],
+      };
+    }
+    return this.#options;
   }
 
   #station(id: string) {
@@ -234,30 +279,18 @@ export class RoutingGrid extends LitElement {
 
   #categoryOf(row: RoutingRow): string | null {
     if (row.kind !== "product") return null;
-    return this.model!.products.find((product) => product.id === row.productId)?.categoryId ?? null;
+    return this.#products.get(row.productId)?.categoryId ?? null;
   }
 
   /** What the coordinate would show with no cell of its own. */
-  #inherited(row: RoutingRow, zoneId: string | null, own: RoutingCell | undefined) {
-    const rules = this.#rules!;
-    const without =
-      own === undefined ? rules : { ...rules, cells: rules.cells.filter((c) => c !== own) };
-    return selectRoutingCell(without, row, zoneId, this.#categoryOf(row)).target;
+  #inherited(row: RoutingRow, zoneId: string | null) {
+    return selectRoutingCell(this.#rules!, row, zoneId, this.#categoryOf(row), { skipOwn: true })
+      .target;
   }
 
   /** Where a disabled station's work goes, before any opening hours are applied. */
   #fallbackSentence(stationId: string): string {
-    const model = this.model!;
-    const rules = {
-      ...this.#rules!,
-      timing: new Map(
-        model.stationTimes.map((times) => [
-          times.stationId,
-          { fallbackId: times.fallbackStationId, hours: [], today: null },
-        ]),
-      ),
-    };
-    const { stationId: receiver } = followFallbacks(rules, stationId, null);
+    const { stationId: receiver } = followFallbacks(this.#fallbackRules!, stationId, null);
     return receiver === null
       ? t("prep.no_replacement_ask")
       : format("prep.work_goes_to", {
@@ -274,10 +307,10 @@ export class RoutingGrid extends LitElement {
   /** The refused cell named by its row path and zone, whether or not its row is shown. */
   #refusalText(refusal: RoutingRefusal): string {
     const model = this.model!;
-    const key = rowKey(refusal.address.row);
-    const entry = visibleRoutingRows(model, expandAll(model)).find(
-      (candidate) => rowKey(candidate.row) === key,
+    this.#allRows ??= new Map(
+      visibleRoutingRows(model, expandAll(model)).map((entry) => [rowKey(entry.row), entry]),
     );
+    const entry = this.#allRows.get(rowKey(refusal.address.row));
     const zoneId = refusal.address.zoneId;
     const zone =
       zoneId === null
@@ -316,7 +349,7 @@ export class RoutingGrid extends LitElement {
   #editor(entry: GridRow, zone: Zone) {
     const address: CellAddress = { row: entry.row, zoneId: zone.id };
     const own = this.#cells.get(coordinate(entry.row, zone.id));
-    const inherited = this.#inherited(entry.row, zone.id, own);
+    const inherited = this.#inherited(entry.row, zone.id);
     const pending = this.pending;
     const shown =
       pending !== null && sameAddress(pending.address, address)
@@ -324,17 +357,15 @@ export class RoutingGrid extends LitElement {
         : (own?.target ?? null);
     const disabled =
       shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
-    const options: ComboboxOption[] = [
-      { value: "", label: t("routing.clear") },
-      ...this.#activeStations().map((station) => ({
-        value: `${STATION}${station.id}`,
-        label: station.name,
-      })),
-      ...(disabled === null
-        ? []
-        : [{ value: encode(disabled), label: this.#targetText(disabled), disabled: true }]),
-      { value: NO_PREPARATION, label: t("prep.no_preparation") },
-    ];
+    const { cell } = this.#optionLists();
+    const options =
+      disabled === null
+        ? cell
+        : [
+            ...cell.slice(0, -1),
+            { value: encode(disabled), label: this.#targetText(disabled), disabled: true },
+            ...cell.slice(-1),
+          ];
     const label = format("routing.cell_label", {
       row: this.#rowName(entry),
       zone: zone.name,
@@ -398,10 +429,7 @@ export class RoutingGrid extends LitElement {
         search="auto"
         searchPlaceholder=${t("venue.combobox_search")}
         noResultsLabel=${t("venue.combobox_no_results")}
-        .options=${this.#activeStations().map((station) => ({
-          value: `${STATION}${station.id}`,
-          label: station.name,
-        }))}
+        .options=${this.#optionLists().stations}
         .value=${live(active ? `${STATION}${active.id}` : "")}
         placeholder=${t("routing.no_station")}
         error=${this.#refusalAt(address)}
@@ -439,7 +467,7 @@ export class RoutingGrid extends LitElement {
     const row = entry.row;
     const parent =
       row.kind === "category"
-        ? (this.model!.categories.find((c) => c.id === row.categoryId)?.parentId ?? null)
+        ? (this.#categories.get(row.categoryId)?.parentId ?? null)
         : this.#categoryOf(row);
     const path =
       entry.path.length > 0 && (parent === null || !open.has(parent))

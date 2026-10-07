@@ -1,4 +1,4 @@
-import type { GridCategory, GridProduct, GridRow, RoutingModel } from "../routing.js";
+import type { GridCategory, GridProduct, GridRow, RoutingModel, RoutingRow } from "../routing.js";
 
 interface Hidden {
   categories: number;
@@ -159,4 +159,22 @@ export function pruneExpanded(
 ): ReadonlySet<string> {
   const known = new Set(model.categories.map((category) => category.id));
   return new Set([...expanded].filter((id) => known.has(id)));
+}
+
+/** Whether `visibleRoutingRows` lists the row once every category is expanded. */
+export function rowInModel(model: RoutingModel, row: RoutingRow): boolean {
+  switch (row.kind) {
+    case "all":
+      return true;
+    case "category":
+      return model.categories.some((category) => category.id === row.categoryId);
+    case "product":
+      return model.products.some((product) => product.id === row.productId);
+    case "no_category": {
+      const known = new Set(model.categories.map((category) => category.id));
+      return model.products.some(
+        (product) => product.categoryId === null || !known.has(product.categoryId),
+      );
+    }
+  }
 }

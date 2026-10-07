@@ -17,6 +17,7 @@ import {
   expandAll,
   expandCategory,
   pruneExpanded,
+  rowInModel,
   visibleRoutingRows,
 } from "./routing-grid-model.js";
 
@@ -521,5 +522,53 @@ describe("selectionRulesFromModel", () => {
     expect(rules.cells).not.toBe(wire.cells);
     expect(rules.cells).toEqual(wire.cells);
     expect(Object.isFrozen(wire.cells)).toBe(false);
+  });
+});
+
+describe("rowInModel", () => {
+  const rowKey = (row: RoutingRow) => JSON.stringify(row);
+  const nested = [
+    folder("drinks"),
+    folder("cocktails", "drinks"),
+    folder("sours", "cocktails"),
+    folder("orphan", "gone"),
+    folder("loop-a", "loop-b"),
+    folder("loop-b", "loop-a"),
+  ];
+  const candidates: RoutingRow[] = [
+    { kind: "all" },
+    { kind: "no_category" },
+    ...[...nested.map((c) => c.id), "missing"].map((categoryId): RoutingRow => ({
+      kind: "category",
+      categoryId,
+    })),
+    ...["sour", "bread", "stray", "looped", "missing"].map((productId): RoutingRow => ({
+      kind: "product",
+      productId,
+    })),
+  ];
+
+  it("answers whether the row appears with every category expanded, for every row kind", () => {
+    const models = [
+      model(nested, [item("sour", "sours"), item("bread", null), item("stray", "gone")]),
+      model(nested, [item("sour", "sours"), item("bread", null)]),
+      model(nested, [item("sour", "sours"), item("stray", "gone")]),
+      model(nested, [item("sour", "sours"), item("looped", "loop-b")]),
+      model([], []),
+    ];
+    for (const routing of models) {
+      const shown = new Set(
+        visibleRoutingRows(routing, expandAll(routing)).map((entry) => rowKey(entry.row)),
+      );
+      for (const row of candidates) {
+        expect([rowKey(row), rowInModel(routing, row)]).toEqual([
+          rowKey(row),
+          shown.has(rowKey(row)),
+        ]);
+      }
+    }
+    expect(rowInModel(models[3]!, { kind: "no_category" })).toBe(false);
+    expect(rowInModel(models[1]!, { kind: "no_category" })).toBe(true);
+    expect(rowInModel(models[2]!, { kind: "no_category" })).toBe(true);
   });
 });

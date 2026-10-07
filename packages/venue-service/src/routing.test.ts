@@ -547,6 +547,76 @@ describe("selectRoutingCell", () => {
   });
 });
 
+describe("selectRoutingCell with skipOwn", () => {
+  const noCategory: RoutingRow = { kind: "no_category" };
+  const rules: RoutingRules = {
+    ...base,
+    cells: cells(
+      [product("mojito"), "terrace", station("terraceBar")],
+      [product("mojito"), null, station("mainBar")],
+      [category("cocktails"), "terrace", station("cocktailBar")],
+      [category("drinks"), null, station("bar")],
+      [noCategory, "terrace", station("terraceBar")],
+      [all, "terrace", station("mainBar")],
+    ),
+  };
+  const skipOwn = (from: RoutingRules, row: RoutingRow, zoneId: string | null) =>
+    selectRoutingCell(from, row, zoneId, row.kind === "product" ? "cocktails" : null, {
+      skipOwn: true,
+    });
+
+  it("skips the cell at the asked coordinate, then finds Every zone, parent rows and the default", () => {
+    const walk: [RoutingRow, string | null][] = [
+      [product("mojito"), null],
+      [category("cocktails"), "terrace"],
+      [category("drinks"), null],
+      [all, "terrace"],
+    ];
+    let remaining = rules;
+    for (const [row, zoneId] of walk) {
+      expect(skipOwn(remaining, product("mojito"), "terrace").decidedBy).toEqual(
+        decidedByCell(row, zoneId),
+      );
+      remaining = without(remaining, row, zoneId);
+    }
+    expect(skipOwn(remaining, product("mojito"), "terrace")).toEqual({
+      target: station("kitchen"),
+      decidedBy: { kind: "default" },
+    });
+  });
+
+  it("answers what plain selection gives once the coordinate's own cell is gone", () => {
+    const rows = [product("mojito"), category("cocktails"), category("drinks"), noCategory, all];
+    for (const row of rows) {
+      for (const zoneId of ["terrace", "garden", null]) {
+        const plain = selectRoutingCell(
+          without(rules, row, zoneId),
+          row,
+          zoneId,
+          row.kind === "product" ? "cocktails" : null,
+        );
+        expect(skipOwn(rules, row, zoneId)).toEqual(plain);
+        expect(skipOwn(without(rules, row, zoneId), row, zoneId)).toEqual(plain);
+      }
+    }
+  });
+
+  it("reads a frozen cell list once, however many coordinates it skips", () => {
+    let scans = 0;
+    const counted = new Proxy(Object.freeze([...rules.cells]), {
+      get(target, property, receiver) {
+        if (property === "0") scans++;
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    const countedRules: RoutingRules = { ...rules, cells: counted };
+    for (const row of [product("mojito"), category("cocktails"), category("drinks")]) {
+      for (const zoneId of ["terrace", null]) skipOwn(countedRules, row, zoneId);
+    }
+    expect(scans).toBe(1);
+  });
+});
+
 describe("the No category row", () => {
   const noCategory: RoutingRow = { kind: "no_category" };
   const rules: RoutingRules = {

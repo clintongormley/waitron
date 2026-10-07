@@ -130,13 +130,15 @@ function cellIndex(cells: readonly RoutingCell[]): ReadonlyMap<string, RoutingCe
  * Row order decides before zone: the product, its category, each parent (or No category when the
  * effective category is null), All categories, and within each row its zone cell before Every
  * zone. All categories × Every zone is the implicit default station, never a stored cell. A
- * product row's `categoryId` is its effective category.
+ * product row's `categoryId` is its effective category. `skipOwn` ignores the cell at exactly the
+ * asked coordinate: what that coordinate shows with no setting of its own.
  */
 export function selectRoutingCell(
   rules: RoutingSelectionRules,
   row: RoutingRow,
   zoneId: string | null,
   categoryId: string | null = null,
+  { skipOwn = false }: { readonly skipOwn?: boolean } = {},
 ): SelectedCell {
   const lineage: RoutingRow[] = row.kind === "product" ? [row] : [];
   if (row.kind === "no_category" || (row.kind === "product" && categoryId === null)) {
@@ -149,11 +151,14 @@ export function selectRoutingCell(
   }
   lineage.push({ kind: "all" });
   const byCoordinate = cellIndex(rules.cells);
+  const own = skipOwn ? `${rowKey(row)}|${zoneId ?? ""}` : null;
+  const at = (coordinate: string) =>
+    coordinate === own ? undefined : byCoordinate.get(coordinate);
   let best: RoutingCell | undefined;
   for (const candidate of lineage) {
     const key = rowKey(candidate);
-    if (zoneId !== null) best = byCoordinate.get(`${key}|${zoneId}`);
-    if (best === undefined && candidate.kind !== "all") best = byCoordinate.get(`${key}|`);
+    if (zoneId !== null) best = at(`${key}|${zoneId}`);
+    if (best === undefined && candidate.kind !== "all") best = at(`${key}|`);
     if (best !== undefined) break;
   }
   if (best !== undefined) {

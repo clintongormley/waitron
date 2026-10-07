@@ -32,7 +32,9 @@ import {
   type CellAddress,
   type RouteTarget,
   type RouteExplanation,
+  type RoutingModel,
   type RoutingRow,
+  type RoutingSelectionRules,
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
 import { formatDate } from "./hours-view.js";
@@ -53,7 +55,7 @@ import type {
 } from "./routing-client.js";
 import { watchersOfStation, watchersSeeing, type WatcherView } from "./watchers-seen.js";
 import "./routing-grid.js";
-import { expandAll, visibleRoutingRows } from "./routing-grid-model.js";
+import { rowInModel } from "./routing-grid-model.js";
 import type { RoutingCellChange, RoutingPending, RoutingRefusal } from "./routing-grid.js";
 import { t } from "./strings.js";
 import "./station-health-table.js";
@@ -947,8 +949,7 @@ export class PrepStationsScreen extends LitElement {
     const model = this.view?.routing;
     if (!model) return false;
     if (zoneId !== null && !model.zones.some((zone) => zone.id === zoneId)) return false;
-    const key = rowKey(row);
-    return visibleRoutingRows(model, expandAll(model)).some((entry) => rowKey(entry.row) === key);
+    return rowInModel(model, row);
   }
   #savedCell(address: CellAddress): RouteTarget | null {
     return this.view?.routing.cells.find((cell) => sameAddress(cell, address))?.target ?? null;
@@ -3090,23 +3091,21 @@ export class PrepStationsScreen extends LitElement {
       >`,
     );
   }
+  #selection: { model: RoutingModel; rules: RoutingSelectionRules } | undefined;
   /** "Drinks, Terrace: this changes Bar to Kitchen." — what the cell resolves to before and after. */
   #cellSentence(change: RoutingChange): string {
     const model = this.view!.routing;
-    const rules = selectionRulesFromModel(model);
+    if (this.#selection?.model !== model) {
+      this.#selection = { model, rules: selectionRulesFromModel(model) };
+    }
+    const { rules } = this.#selection;
     const { row, zoneId } = change.address;
     const product =
       row.kind === "product" ? model.products.find((p) => p.id === row.productId) : undefined;
     const categoryId = product?.categoryId ?? null;
     const before = selectRoutingCell(rules, row, zoneId, categoryId).target;
     const after =
-      change.target ??
-      selectRoutingCell(
-        { ...rules, cells: rules.cells.filter((cell) => !sameAddress(cell, change.address)) },
-        row,
-        zoneId,
-        categoryId,
-      ).target;
+      change.target ?? selectRoutingCell(rules, row, zoneId, categoryId, { skipOwn: true }).target;
     const name = (target: RouteTarget | null) =>
       target === null ? t("routing.no_station") : this.#targetName(target);
     return format("routing.preview_change", {
