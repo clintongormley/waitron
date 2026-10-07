@@ -6,6 +6,7 @@ import {
   parentJoin,
   parentProducts,
   productWithId,
+  readOfferedModifiers,
 } from "@waitron/catalogue";
 import { AppError, normaliseUuid } from "@waitron/shared";
 import { resolveZoneContext, type VenueScope } from "./operations.js";
@@ -417,9 +418,10 @@ export async function previewRoutingChange(
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .where(eq(products.active, true));
+  const zoneList = zones.length ? zones : [{ id: null, name: null }];
   const moves: RoutingMove[] = [];
   for (const product of productsToCheck)
-    for (const zone of zones.length ? zones : [{ id: null, name: null }]) {
+    for (const zone of zoneList) {
       const facts = {
         productId: product.id,
         routedProductId: product.routedId,
@@ -440,12 +442,112 @@ export async function previewRoutingChange(
           toNoReplacement: next.noReplacement,
         });
     }
+  moves.push(...(await extraMoves(tx, rules, after, productsToCheck, zoneList)));
   return moves.sort(
     (a, b) =>
       a.productName.localeCompare(b.productName) ||
+      (a.dish?.productName ?? "").localeCompare(b.dish?.productName ?? "") ||
       (a.zoneName ?? "").localeCompare(b.zoneName ?? "") ||
-      a.productId.localeCompare(b.productId),
+      a.productId.localeCompare(b.productId) ||
+      (a.dish?.productId ?? "").localeCompare(b.dish?.productId ?? ""),
   );
+}
+
+/**
+ * Where each offered extra is made before and after a change, mirroring an order's routing: an
+ * extra whose dish has no route waits on the dish, and an extra `chooseExtraMaker` does not make
+ * goes wherever its dish goes. An extra that follows its dish in both states is left out, since the
+ * dish's own move already says where it goes.
+ */
+async function extraMoves(
+  tx: Transaction,
+  before: RoutingRules,
+  after: RoutingRules,
+  dishes: readonly { id: string; name: string; routedId: string; categoryId: string | null }[],
+  zones: readonly { id: string | null; name: string | null }[],
+): Promise<RoutingMove[]> {
+  const offered = await readOfferedModifiers(
+    tx,
+    dishes.map((dish) => ({ productId: dish.id, menuItemId: null })),
+    { includeEveryModifierItem: true },
+  );
+  const extrasByDish = new Map<string, Map<string, string>>();
+  for (const dish of dishes) {
+    const extras = new Map<string, string>();
+    for (const modifier of offered.get(dish.id.toLowerCase()) ?? [])
+      if (modifier.kind === "extras")
+        for (const item of modifier.items) extras.set(storedUuid(item.productId), item.name);
+    if (extras.size) extrasByDish.set(dish.id, extras);
+  }
+  if (!extrasByDish.size) return [];
+  const extraIds = [...new Set([...extrasByDish.values()].flatMap((extras) => [...extras.keys()]))];
+  const extraRows = await tx
+    .select({
+      id: products.id,
+      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
+      categoryId: effectiveProductColumns.categoryId,
+    })
+    .from(products)
+    .leftJoin(parentProducts, parentJoin)
+    .where(inArray(products.id, extraIds));
+  const extraFacts = new Map(
+    extraRows.map((row) => [
+      storedUuid(row.id),
+      { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId },
+    ]),
+  );
+  const placeIn = (
+    rules: RoutingRules,
+    dish: { routedId: string; id: string; categoryId: string | null },
+    extraId: string,
+    zoneId: string | null,
+  ): { follows: boolean; target: RouteTarget | null; noReplacement: boolean } => {
+    const dishChoice = chooseMaker(
+      rules,
+      { productId: dish.id, routedProductId: dish.routedId, categoryId: dish.categoryId },
+      zoneId,
+      null,
+    );
+    if (dishChoice.route === null)
+      return { follows: true, target: null, noReplacement: dishChoice.noReplacement };
+    const { outcome } = chooseExtraMaker(
+      rules,
+      extraFacts.get(extraId)!,
+      zoneId,
+      null,
+      dishChoice.route.kind === "station" ? dishChoice.route.stationId : null,
+    );
+    return outcome.kind === "made"
+      ? {
+          follows: false,
+          target: { kind: "station", stationId: outcome.stationId },
+          noReplacement: false,
+        }
+      : { follows: true, target: dishChoice.route, noReplacement: dishChoice.noReplacement };
+  };
+  const moves: RoutingMove[] = [];
+  for (const dish of dishes) {
+    const extras = extrasByDish.get(dish.id);
+    if (extras === undefined) continue;
+    for (const [extraId, extraName] of extras) {
+      for (const zone of zones) {
+        const from = placeIn(before, dish, extraId, zone.id);
+        const to = placeIn(after, dish, extraId, zone.id);
+        if ((from.follows && to.follows) || sameRoute(from.target, to.target)) continue;
+        moves.push({
+          productId: extraFacts.get(extraId)!.productId,
+          productName: extraName,
+          zoneId: zone.id,
+          zoneName: zone.name,
+          from: from.target,
+          to: to.target,
+          toNoReplacement: to.follows && to.noReplacement,
+          dish: { productId: dish.id, productName: dish.name },
+        });
+      }
+    }
+  }
+  return moves;
 }
 
 const sameRoute = (a: RouteTarget | null, b: RouteTarget | null) => targetKey(a) === targetKey(b);

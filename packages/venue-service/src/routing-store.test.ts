@@ -5,7 +5,9 @@ import {
   CATALOGUE_MIGRATIONS,
   createCatalogue,
   createCategory,
+  createExtraList,
   createProduct,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
@@ -45,7 +47,7 @@ import {
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { routingCells } from "./schema/routing.js";
-import type { CellAddress, RoutingCell } from "./routing-types.js";
+import type { CellAddress, RoutingCell, RoutingMove } from "./routing-types.js";
 import { setStationFallback, setStationToday } from "./station-times.js";
 import { seedStationWeek } from "./testing/station-week.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
@@ -1466,6 +1468,128 @@ describe("routing previews", () => {
         expect.objectContaining({ productId: f.mojito, zoneId: null, zoneName: null }),
       ]);
     }));
+
+  describe("an extra and its dish", () => {
+    async function withExtras(tx: Transaction, listActive = true) {
+      const f = await fixture(tx);
+      const [menu] = await tx.select({ id: products.catalogueId }).from(products).limit(1);
+      const product = async (name: string, categoryId: string | null) =>
+        (
+          await createProduct(tx, {
+            catalogueId: menu!.id,
+            name,
+            categoryId,
+            pricingUnit: "each",
+            unitPrice: "3.00",
+            vatClass: "general",
+          })
+        ).id;
+      const burger = await product("Burger", f.food);
+      const cheese = await product("Cheese", null);
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Toppings",
+          minPicks: 0,
+          maxPicks: 2,
+          active: listActive,
+          items: [{ productId: cheese, price: "0.50" }],
+        },
+        "en",
+      );
+      await writeProductModifiers(tx, burger, [{ kind: "extras", id: list.id }]);
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: productRow(burger), zoneId: null },
+        station(f.terraceBar),
+      );
+      return { ...f, burger, cheese };
+    }
+    const extraMoves = (moves: RoutingMove[]) => moves.filter((move) => move.dish !== undefined);
+
+    it("lists an extra that stops following its dish when its own cell names the default station", async () =>
+      scoped(async (tx) => {
+        const f = await withExtras(tx);
+        const moves = await previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address: { row: productRow(f.cheese), zoneId: null },
+          target: station(f.bar),
+        });
+        expect(extraMoves(moves)).toEqual([
+          {
+            productId: f.cheese,
+            productName: "Cheese",
+            zoneId: f.terrace,
+            zoneName: "Terrace",
+            from: station(f.terraceBar),
+            to: station(f.bar),
+            toNoReplacement: false,
+            dish: { productId: f.burger, productName: "Burger" },
+          },
+        ]);
+      }));
+
+    it("lists an extra that goes back to following its dish when its cell is cleared", async () =>
+      scoped(async (tx) => {
+        const f = await withExtras(tx);
+        const address: CellAddress = { row: productRow(f.cheese), zoneId: null };
+        await setRoutingCell(tx, f.cfg, address, station(f.bar));
+        const moves = await previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address,
+          target: null,
+        });
+        expect(extraMoves(moves)).toEqual([
+          {
+            productId: f.cheese,
+            productName: "Cheese",
+            zoneId: f.terrace,
+            zoneName: "Terrace",
+            from: station(f.bar),
+            to: station(f.terraceBar),
+            toNoReplacement: false,
+            dish: { productId: f.burger, productName: "Burger" },
+          },
+        ]);
+      }));
+
+    it("lists no extra move when the extra follows its dish before and after", async () =>
+      scoped(async (tx) => {
+        const f = await withExtras(tx);
+        const moves = await previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address: { row: productRow(f.burger), zoneId: null },
+          target: station(f.bar),
+        });
+        expect(moves.filter((move) => move.productId === f.burger)).toEqual([
+          expect.objectContaining({ from: station(f.terraceBar), to: station(f.bar) }),
+        ]);
+        expect(extraMoves(moves)).toEqual([]);
+      }));
+
+    it("lists no extra move when the extra's cell names its dish's own station", async () =>
+      scoped(async (tx) => {
+        const f = await withExtras(tx);
+        const moves = await previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address: { row: productRow(f.cheese), zoneId: null },
+          target: station(f.terraceBar),
+        });
+        expect(extraMoves(moves)).toEqual([]);
+      }));
+
+    it("lists no extra move for an extras list that is Inactive", async () =>
+      scoped(async (tx) => {
+        const f = await withExtras(tx, false);
+        const moves = await previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address: { row: productRow(f.cheese), zoneId: null },
+          target: station(f.bar),
+        });
+        expect(extraMoves(moves)).toEqual([]);
+      }));
+  });
 });
 
 describe("timed routing explanation", () => {

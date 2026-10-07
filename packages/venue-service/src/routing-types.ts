@@ -89,6 +89,8 @@ export interface RoutingMove {
   from: RouteTarget | null;
   to: RouteTarget | null;
   toNoReplacement: boolean;
+  /** Present only on an extra's move: the dish that offers it. */
+  dish?: { productId: string; productName: string };
 }
 
 export interface RoutingModel {
