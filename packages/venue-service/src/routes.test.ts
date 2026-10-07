@@ -190,6 +190,10 @@ describe("venue service management routes", () => {
         })
       ).status,
     ).toBe(403);
+    expect((await send(fx.app, "GET", `${path}/profiles`, fx.staffCookie)).status).toBe(403);
+    const choices = await send(fx.app, "GET", `${path}/profiles`, fx.managerCookie);
+    expect(choices.status).toBe(200);
+    expect(await choices.json()).toEqual([]);
     const saved = await send(fx.app, "PUT", path, fx.managerCookie, {
       receivingProfileId: null,
       destinationDepartmentIds: [destination.id],

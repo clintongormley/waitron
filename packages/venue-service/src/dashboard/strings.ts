@@ -263,6 +263,16 @@ const en = {
   "venue.department_disabled": "Disabled",
   "venue.zone_disabled": "Disabled",
   "venue.edit": "Edit",
+  "venue.transfers": "Transfers",
+  "venue.receiving_profile": "Receiving desk profile",
+  "venue.no_receiving_profile": "No receiving desk",
+  "venue.transfer_destinations": "Allowed destinations",
+  "venue.transfer_direction_hint":
+    "Staff may request transfers only to these departments. Each destination accepts at its receiving desk.",
+  "venue.transfer_profile_unavailable": "Unavailable profile — choose another or no receiving desk",
+  "venue.transfer_profile_refused":
+    "Choose a profile with an active service zone in this department, or no receiving desk.",
+  "venue.transfer_destinations_refused": "Choose active departments other than this one.",
   "venue.save": "Save",
   "venue.cancel": "Cancel",
   "venue.confirm": "Confirm",
@@ -966,6 +976,17 @@ const es: Record<keyof typeof en, string> = {
   "venue.department_disabled": "Deshabilitado",
   "venue.zone_disabled": "Deshabilitada",
   "venue.edit": "Editar",
+  "venue.transfers": "Traslados",
+  "venue.receiving_profile": "Perfil del mostrador receptor",
+  "venue.no_receiving_profile": "Sin mostrador receptor",
+  "venue.transfer_destinations": "Destinos permitidos",
+  "venue.transfer_direction_hint":
+    "El personal solo puede solicitar traslados a estos departamentos. Cada destino acepta en su mostrador receptor.",
+  "venue.transfer_profile_unavailable":
+    "Perfil no disponible — elige otro o ningún mostrador receptor",
+  "venue.transfer_profile_refused":
+    "Elige un perfil con una zona de servicio activa en este departamento, o ningún mostrador receptor.",
+  "venue.transfer_destinations_refused": "Elige departamentos activos distintos de este.",
   "venue.save": "Guardar",
   "venue.cancel": "Cancelar",
   "venue.confirm": "Confirmar",

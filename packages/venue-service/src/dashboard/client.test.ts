@@ -48,6 +48,38 @@ describe("VenueServiceApi", () => {
     });
   });
 
+  it("loads transfer settings and choices and sends the exact directional settings", async () => {
+    const settings = {
+      departmentId: "d1",
+      receivingProfileId: "p1",
+      destinationDepartmentIds: ["d2"],
+    };
+    const profiles = [{ id: "p1", name: "Counter" }];
+    const fetchImpl = vi.fn(async (path: string, init: RequestInit) => {
+      if (init.method === "PUT") {
+        expect(JSON.parse(init.body as string)).toEqual({
+          receivingProfileId: null,
+          destinationDepartmentIds: [],
+        });
+        return jsonResponse(undefined, 204);
+      }
+      return jsonResponse(path.endsWith("/profiles") ? profiles : settings);
+    });
+    const api = new VenueServiceApi(
+      createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+    );
+    expect(await api.loadDepartmentTransfers("d1")).toEqual({ ...settings, profiles });
+    await api.saveDepartmentTransfers("d1", {
+      receivingProfileId: null,
+      destinationDepartmentIds: [],
+    });
+    expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
+      "/management-api/venue-service/departments/d1/transfers",
+      "/management-api/venue-service/departments/d1/transfers/profiles",
+      "/management-api/venue-service/departments/d1/transfers",
+    ]);
+  });
+
   it("renames a floor zone through the zone route", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));

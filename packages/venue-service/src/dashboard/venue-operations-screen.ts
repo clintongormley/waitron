@@ -20,6 +20,7 @@ import {
 } from "@waitron/ui";
 import type {
   Department,
+  DepartmentTransfersView,
   DepartmentRemovalImpact,
   FloorZone,
   ServiceMode,
@@ -59,6 +60,7 @@ const MODES: ServiceMode[] = ["table_tab", "prepay", "ticket_then_pay"];
 type View = "departments" | "zones";
 type Editor =
   | { kind: "department"; row?: Department }
+  | { kind: "transfers"; row: Department; settings: DepartmentTransfersView }
   | { kind: "new-zone" }
   | { kind: "zone"; row: FloorZone }
   | {
@@ -190,6 +192,17 @@ export class VenueOperationsScreen extends LitElement {
       .field-error {
         margin: 0;
         font-weight: normal;
+      }
+      .transfer-destinations {
+        margin: 0;
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        min-width: 0;
+      }
+      .transfer-destination {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
       }
       wt-form-actions {
         width: 100%;
@@ -447,6 +460,34 @@ export class VenueOperationsScreen extends LitElement {
         ?.value ?? ""
     );
   }
+  #transferLoad?: object;
+  async #openTransfers(row: Department): Promise<void> {
+    if (this.busy) return;
+    const identity = (this.#transferLoad = {});
+    this.busy = true;
+    this.actionError = undefined;
+    try {
+      const settings = await this.api.loadDepartmentTransfers(row.id);
+      if (this.isConnected && this.#transferLoad === identity)
+        this.#open({ kind: "transfers", row, settings });
+    } catch {
+      if (this.isConnected && this.#transferLoad === identity)
+        this.actionError = t("venue.load_error");
+    } finally {
+      if (this.#transferLoad === identity) {
+        this.#transferLoad = undefined;
+        this.busy = false;
+      }
+    }
+  }
+  #transferAction(row: Department, tree = false): Action {
+    return {
+      key: `transfers-${tree ? "tree-" : ""}department-${row.id}`,
+      label: t("venue.transfers"),
+      disabled: !row.active,
+      run: () => void this.#openTransfers(row),
+    };
+  }
   #open(editor: Editor): void {
     this.#editorBaseline = undefined;
     this.#editorModel = this.model;
@@ -525,6 +566,10 @@ export class VenueOperationsScreen extends LitElement {
     return this.isConnected && this.editor === editor && outcome === "proceeded";
   };
   override disconnectedCallback(): void {
+    if (this.#transferLoad) {
+      this.#transferLoad = undefined;
+      this.busy = false;
+    }
     this.#editorScope?.dispose();
     this.#editorScope = undefined;
     this.#editorIdentity = undefined;
@@ -702,7 +747,7 @@ export class VenueOperationsScreen extends LitElement {
     }
     const field = (error as { params?: { field?: unknown } } | undefined)?.params?.field;
     const control =
-      code === "management.request_invalid"
+      code === "management.request_invalid" || code === "department_transfer.settings_invalid"
         ? typeof field === "string" && Object.hasOwn(fields, field)
           ? fields[field]
           : undefined
@@ -711,7 +756,16 @@ export class VenueOperationsScreen extends LitElement {
           : undefined;
     if (control !== undefined) {
       this.nameClash = this.#disabledNameClash(error);
-      this.refusedFields = { [control]: this.#nameRefusal(code) ?? t("venue.field_refused") };
+      this.refusedFields = {
+        [control]:
+          code === "department_transfer.settings_invalid"
+            ? t(
+                control === "receiving-profile"
+                  ? "venue.transfer_profile_refused"
+                  : "venue.transfer_destinations_refused",
+              )
+            : (this.#nameRefusal(code) ?? t("venue.field_refused")),
+      };
       this.#focusInvalid();
     } else {
       this.editorError = this.#refusal(code, error);
@@ -1455,6 +1509,7 @@ export class VenueOperationsScreen extends LitElement {
         cell: (row) =>
           row.kind === "department"
             ? this.#actions(row.department.name, [
+                this.#transferAction(row.department, true),
                 {
                   key: `edit-tree-department-${row.department.id}`,
                   label: t("venue.edit"),
@@ -1598,6 +1653,7 @@ export class VenueOperationsScreen extends LitElement {
             pinned: "end",
             cell: (row) =>
               this.#actions(row.name, [
+                this.#transferAction(row),
                 {
                   key: `edit-department-${row.id}`,
                   label: t("venue.edit"),
@@ -1672,6 +1728,65 @@ export class VenueOperationsScreen extends LitElement {
   #editorContent(editor: Editor): EditorContent {
     const model = this.#editorModel ?? this.model!;
     switch (editor.kind) {
+      case "transfers": {
+        const settings = editor.settings;
+        const profiles = [{ id: "", name: t("venue.no_receiving_profile") }, ...settings.profiles];
+        if (
+          settings.receivingProfileId &&
+          !profiles.some((profile) => profile.id === settings.receivingProfileId)
+        )
+          profiles.push({
+            id: settings.receivingProfileId,
+            name: t("venue.transfer_profile_unavailable"),
+          });
+        const destinations = model.departments.filter(
+          (row) => row.active && row.id !== editor.row.id,
+        );
+        return {
+          heading: `${t("venue.transfers")}: ${editor.row.name}`,
+          body: html`${this.#select("receiving-profile", t("venue.receiving_profile"), profiles, settings.receivingProfileId ?? "", false)}
+            <fieldset class="transfer-destinations">
+              <legend>${t("venue.transfer_destinations")}</legend>
+              <p>${t("venue.transfer_direction_hint")}</p>
+              ${destinations.map(
+                (row) =>
+                  html`<label class="transfer-destination"
+                    ><input
+                      type="checkbox"
+                      name=${`transfer-destination-${row.id}`}
+                      .checked=${settings.destinationDepartmentIds.includes(row.id)}
+                    />${row.name}</label
+                  >`,
+              )}
+              ${this.#errors()["transfer-destinations"] ? html`<p class="field-error">${this.#errors()["transfer-destinations"]}</p>` : nothing}
+            </fieldset>`,
+          check: () => ({}),
+          save: () => {
+            const receivingProfileId = this.#value("receiving-profile") || null;
+            const destinationDepartmentIds = destinations
+              .filter(
+                (row) =>
+                  this.renderRoot.querySelector<HTMLInputElement>(
+                    `[name="transfer-destination-${row.id}"]`,
+                  )?.checked,
+              )
+              .map((row) => row.id);
+            void this.#save(
+              () =>
+                this.api.saveDepartmentTransfers(editor.row.id, {
+                  receivingProfileId,
+                  destinationDepartmentIds,
+                }),
+              {
+                fields: {
+                  receivingProfileId: "receiving-profile",
+                  destinationDepartmentIds: "transfer-destinations",
+                },
+              },
+            );
+          },
+        };
+      }
       case "new-zone":
         return {
           heading: t("venue.add_zone"),
@@ -1808,7 +1923,11 @@ export class VenueOperationsScreen extends LitElement {
     const recheck = (event: Event) => {
       if (!this.isConnected || this.editor !== editor) return;
       this.#editorScope?.changed();
-      const name = (event.target as HTMLInputElement).name;
+      const controlName = (event.target as HTMLInputElement).name;
+      const name =
+        editor.kind === "transfers" && controlName?.startsWith("transfer-destination-")
+          ? "transfer-destinations"
+          : controlName;
       if (Object.hasOwn(this.refusedFields, name)) {
         const refused = { ...this.refusedFields };
         delete refused[name];

@@ -90,6 +90,7 @@ import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours
 import type { RoutingChange } from "./routing-types.js";
 import { setStationFallback, setStationToday } from "./station-times.js";
 import {
+  listDepartmentTransferProfiles,
   readDepartmentTransferSettings,
   setDepartmentTransferSettings,
 } from "./department-transfers.js";
@@ -971,6 +972,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         return c.json(
           await gated(sessionId, (tx) => readDepartmentTransferSettings(tx, ctx.cfg, departmentId)),
+        );
+      }),
+    );
+    app.get(`${transferSettingsPath}/profiles`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
+        return c.json(
+          await gated(sessionId, (tx) => listDepartmentTransferProfiles(tx, ctx.cfg, departmentId)),
         );
       }),
     );

@@ -78,6 +78,45 @@ async function venue() {
 }
 
 describe("departmental tab transfers", () => {
+  it("offers only active usable receiving profiles in this department", async () => {
+    const v = await venue();
+    await withTransaction(suite.db, async (tx) => {
+      for (const [name, formFactor, departmentId, retired] of [
+        ["Foreign desk", "till", v.a, false],
+        ["Retired desk", "till", v.b, true],
+        ["Kitchen display", "kds", v.b, false],
+      ] as const) {
+        const [profile] = await tx
+          .insert(deviceProfiles)
+          .values({
+            name: `${name}-${v.tab}`,
+            formFactor,
+          })
+          .returning();
+        if (formFactor !== "kds")
+          await setProfileServiceScope(tx, v.cfg, profile!.id, {
+            departmentId,
+            allowedZoneIds: null,
+            startingZoneId: departmentId === v.a ? v.az : v.bz,
+          });
+        if (retired)
+          await tx
+            .update(deviceProfiles)
+            .set({ retiredAt: "2026-10-07T08:00:00.000Z" })
+            .where(eq(deviceProfiles.id, profile!.id));
+      }
+      const [profile] = await tx
+        .select()
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, v.profile));
+      expect(await service.listDepartmentTransferProfiles(tx, v.cfg, v.b)).toEqual([
+        { id: v.profile, name: profile!.name },
+      ]);
+      await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, v.bz));
+      expect(await service.listDepartmentTransferProfiles(tx, v.cfg, v.b)).toEqual([]);
+    });
+  });
+
   it("keeps responsibility at the source while a durable directional request is pending", async () => {
     const v = await venue();
     await withTransaction(suite.db, (tx) =>

@@ -3757,3 +3757,133 @@ it.each(["department", "zone"] as const)(
     expect(pageAlert(el)).toBe("");
   },
 );
+
+describe("department transfer configuration", () => {
+  it("loads the current desk and saves only chosen directional destinations", async () => {
+    const saved: unknown[] = [];
+    const api = {
+      load: async () => structuredClone(model),
+      loadDepartmentTransfers: async () => ({
+        departmentId: "d1",
+        receivingProfileId: "p1",
+        destinationDepartmentIds: [],
+        profiles: [
+          { id: "p1", name: "Restaurant desk" },
+          { id: "p2", name: "Handheld desk" },
+        ],
+      }),
+      saveDepartmentTransfers: async (...values: unknown[]) => {
+        saved.push(values);
+      },
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await action(el, "transfers-tree-department-d1");
+    await expect.poll(() => field(el, "receiving-profile")?.value).toBe("p1");
+    const choices = field(
+      el,
+      "receiving-profile",
+    ) as unknown as HTMLElementTagNameMap["wt-combobox"];
+    expect(choices.options.map((option) => option.value)).toEqual(["", "p1", "p2"]);
+    expect(el.shadowRoot!.querySelector('[name="transfer-destination-d1"]')).toBeNull();
+    const destination = field(el, "transfer-destination-d2") as HTMLInputElement;
+    destination.click();
+    await settle(el);
+    await chooseOption(field(el, "receiving-profile"), "p2");
+    await action(el, "save-editor");
+    expect(saved).toEqual([["d1", { receivingProfileId: "p2", destinationDepartmentIds: ["d2"] }]]);
+    expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  });
+
+  it("keeps settings-load failures out of an empty editable form", async () => {
+    const el = await mount({
+      load: async () => structuredClone(model),
+      loadDepartmentTransfers: async () => {
+        throw { code: "connection.failed" };
+      },
+    } as unknown as VenueServiceApi);
+    await action(el, "transfers-tree-department-d1");
+    expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    expect(pageAlert(el)).toBe("The venue configuration could not be loaded.");
+  });
+
+  it("ignores transfer settings that finish after disconnect and reconnect", async () => {
+    let resolve!: (value: unknown) => void;
+    const settings = new Promise((resolveValue) => {
+      resolve = resolveValue;
+    });
+    const el = await mount({
+      load: async () => structuredClone(model),
+      loadDepartmentTransfers: async () => settings,
+    } as unknown as VenueServiceApi);
+    await action(el, "transfers-tree-department-d1");
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await settle(el);
+    resolve({
+      departmentId: "d1",
+      receivingProfileId: null,
+      destinationDepartmentIds: [],
+      profiles: [],
+    });
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    expect(find(el, '[data-test="transfers-tree-department-d1"]')!.hasAttribute("disabled")).toBe(
+      false,
+    );
+  });
+
+  it("clears a destination refusal when its checkbox selection changes", async () => {
+    const el = await mount({
+      load: async () => structuredClone(model),
+      loadDepartmentTransfers: async () => ({
+        departmentId: "d1",
+        receivingProfileId: null,
+        destinationDepartmentIds: ["d2"],
+        profiles: [],
+      }),
+      saveDepartmentTransfers: async () => {
+        throw {
+          code: "department_transfer.settings_invalid",
+          params: { field: "destinationDepartmentIds" },
+        };
+      },
+    } as unknown as VenueServiceApi);
+    await action(el, "transfers-tree-department-d1");
+    await action(el, "save-editor");
+    const destinations = el.shadowRoot!.querySelector("fieldset")!;
+    expect(destinations.textContent).toContain("Choose active departments other than this one.");
+    expect(saveDisabled(el)).toBe(false);
+    field(el, "transfer-destination-d2").click();
+    await settle(el);
+    expect(destinations.textContent).not.toContain(
+      "Choose active departments other than this one.",
+    );
+    expect(await bottom(el)).toBe("");
+  });
+
+  it("places a refused receiving profile beside that field and leaves Save available", async () => {
+    const el = await mount({
+      load: async () => structuredClone(model),
+      loadDepartmentTransfers: async () => ({
+        departmentId: "d1",
+        receivingProfileId: null,
+        destinationDepartmentIds: [],
+        profiles: [{ id: "p1", name: "Restaurant desk" }],
+      }),
+      saveDepartmentTransfers: async () => {
+        throw {
+          code: "department_transfer.settings_invalid",
+          params: { field: "receivingProfileId" },
+        };
+      },
+    } as unknown as VenueServiceApi);
+    await action(el, "transfers-tree-department-d1");
+    await action(el, "save-editor");
+    expect(field(el, "receiving-profile").getAttribute("error")).toBe(
+      "Choose a profile with an active service zone in this department, or no receiving desk.",
+    );
+    expect(await bottom(el)).not.toBe("");
+    expect(saveDisabled(el)).toBe(false);
+  });
+});

@@ -89,6 +89,24 @@ async function usableProfile(
   );
 }
 
+export async function listDepartmentTransferProfiles(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+): Promise<{ id: string; name: string }[]> {
+  await activeDepartment(tx, cfg, departmentId);
+  const profiles = await tx
+    .select({ id: deviceProfiles.id, name: deviceProfiles.name })
+    .from(deviceProfiles)
+    .where(isNull(deviceProfiles.retiredAt))
+    .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
+  const choices: { id: string; name: string }[] = [];
+  for (const profile of profiles) {
+    if (await usableProfile(tx, cfg, departmentId, profile.id)) choices.push(profile);
+  }
+  return choices;
+}
+
 export async function setDepartmentTransferSettings(
   tx: Transaction,
   cfg: VenueScope,
