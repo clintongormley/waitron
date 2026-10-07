@@ -64,7 +64,6 @@ declare module "@waitron/shared" {
     "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
     /** The device's active profile may not work in this zone. Names only the zone tried. */
     "service_zone.not_allowed": { zoneId: string };
-    "route.not_found": { routeId: string };
     "route.subject_not_found": { subject: string; id: string };
     "route.station_inactive": { stationId: string };
     "station.fallback_loop": { stationId: string; fallbackStationId: string };

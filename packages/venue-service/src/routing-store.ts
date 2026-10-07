@@ -34,60 +34,16 @@ import type { LocalDate } from "./hours-types.js";
 import { stationDayStates, stationFallbacks } from "./schema/station-times.js";
 import type {
   CellAddress,
-  ExceptionInput,
   RoutingCell,
   RouteExplanation,
   RoutingChange,
   RoutingModel,
   RoutingMove,
 } from "./routing-types.js";
-import { routeExceptions, routingCells, stationClaims } from "./schema/routing.js";
+import { routingCells } from "./schema/routing.js";
 import "./errors.js";
 import type { ExtraMakerOutcome, MakerOutcome, MakerResolver } from "@waitron/module";
-export type { ExceptionInput, RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
-
-/** Shared write validation also serves callers that need to check a proposed exception. */
-export async function validateRoutingInput(
-  tx: Transaction,
-  cfg: VenueScope,
-  input: ExceptionInput,
-): Promise<void> {
-  if (input.categoryId !== null && input.productId !== null)
-    throw new AppError("management.request_invalid", { field: "subject" });
-  if (input.zoneId === null && input.categoryId === null && input.productId === null)
-    throw new AppError("management.request_invalid", { field: "condition" });
-  if (input.zoneId !== null) await resolveZoneContext(tx, cfg, input.zoneId);
-  if (input.categoryId !== null) {
-    const [category] = await tx
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.id, input.categoryId));
-    if (category === undefined)
-      throw new AppError("route.subject_not_found", { subject: "category", id: input.categoryId });
-  }
-  if (input.productId !== null) {
-    const [product] = await tx
-      .select({ id: products.id })
-      .from(products)
-      .where(productWithId(input.productId, "top-level"));
-    if (product === undefined)
-      throw new AppError("route.subject_not_found", { subject: "product", id: input.productId });
-  }
-  if (input.target.kind === "station") {
-    const [station] = await tx
-      .select({ id: kitchenStations.id })
-      .from(kitchenStations)
-      .where(
-        and(
-          eq(kitchenStations.locationId, cfg.locationId),
-          eq(kitchenStations.id, input.target.stationId),
-          eq(kitchenStations.active, true),
-        ),
-      );
-    if (station === undefined)
-      throw new AppError("route.station_inactive", { stationId: input.target.stationId });
-  }
-}
+export type { RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
 
 const storedTarget = (target: RouteTarget) => ({
   stationId: target.kind === "station" ? target.stationId : null,
@@ -214,175 +170,6 @@ export async function clearRoutingCell(
 ): Promise<void> {
   const valid = await validateRoutingCell(tx, cfg, address, null);
   await tx.delete(routingCells).where(cellAt(cfg, valid.address));
-}
-
-export async function setClaim(
-  tx: Transaction,
-  cfg: VenueScope,
-  categoryId: string,
-  target: RouteTarget,
-): Promise<void> {
-  await validateRoutingInput(tx, cfg, { zoneId: null, categoryId, productId: null, target });
-  await tx
-    .insert(stationClaims)
-    .values({ locationId: cfg.locationId, categoryId, ...storedTarget(target) })
-    .onConflictDoUpdate({
-      target: [stationClaims.locationId, stationClaims.categoryId],
-      set: storedTarget(target),
-    });
-}
-
-export async function removeClaim(
-  tx: Transaction,
-  cfg: VenueScope,
-  categoryId: string,
-): Promise<void> {
-  await tx
-    .delete(stationClaims)
-    .where(
-      and(eq(stationClaims.locationId, cfg.locationId), eq(stationClaims.categoryId, categoryId)),
-    );
-}
-
-export async function createException(
-  tx: Transaction,
-  cfg: VenueScope,
-  input: ExceptionInput,
-): Promise<string> {
-  await validateRoutingInput(tx, cfg, input);
-  const [last] = await tx
-    .select({ position: sql<number>`coalesce(max(${routeExceptions.position}), -1)` })
-    .from(routeExceptions)
-    .where(eq(routeExceptions.locationId, cfg.locationId));
-  const [row] = await tx
-    .insert(routeExceptions)
-    .values({
-      locationId: cfg.locationId,
-      position: last!.position + 1,
-      zoneId: input.zoneId,
-      categoryId: input.categoryId,
-      productId: input.productId,
-      ...storedTarget(input.target),
-    })
-    .returning({ id: routeExceptions.id });
-  return row!.id;
-}
-
-/** A product-wide assignment must precede broader exceptions to become the effective route. */
-export async function assignUnfiledProduct(
-  tx: Transaction,
-  cfg: VenueScope,
-  productId: string,
-  target: RouteTarget,
-): Promise<void> {
-  const [product] = await tx
-    .select({ id: products.id })
-    .from(products)
-    .where(
-      and(
-        productWithId(productId, "top-level"),
-        eq(products.active, true),
-        isNull(products.categoryId),
-      ),
-    );
-  if (product === undefined)
-    throw new AppError("route.subject_not_found", { subject: "product", id: productId });
-  await validateRoutingInput(tx, cfg, {
-    zoneId: null,
-    categoryId: null,
-    productId,
-    target,
-  });
-  const existing = await tx
-    .select({ id: routeExceptions.id })
-    .from(routeExceptions)
-    .where(
-      and(
-        eq(routeExceptions.locationId, cfg.locationId),
-        isNull(routeExceptions.zoneId),
-        isNull(routeExceptions.categoryId),
-        eq(routeExceptions.productId, productId),
-      ),
-    )
-    .orderBy(asc(routeExceptions.position), asc(routeExceptions.id));
-  const [first] = await tx
-    .select({ position: sql<number>`coalesce(min(${routeExceptions.position}), 0)` })
-    .from(routeExceptions)
-    .where(eq(routeExceptions.locationId, cfg.locationId));
-  const position = first!.position - 1;
-  if (existing[0] === undefined) {
-    await tx.insert(routeExceptions).values({
-      locationId: cfg.locationId,
-      position,
-      zoneId: null,
-      categoryId: null,
-      productId,
-      ...storedTarget(target),
-    });
-    return;
-  }
-  await tx
-    .update(routeExceptions)
-    .set({ position, ...storedTarget(target) })
-    .where(eq(routeExceptions.id, existing[0].id));
-  if (existing.length > 1)
-    await tx.delete(routeExceptions).where(
-      inArray(
-        routeExceptions.id,
-        existing.slice(1).map((row) => row.id),
-      ),
-    );
-}
-
-export async function updateException(
-  tx: Transaction,
-  cfg: VenueScope,
-  id: string,
-  input: ExceptionInput,
-): Promise<void> {
-  await validateRoutingInput(tx, cfg, input);
-  const [row] = await tx
-    .update(routeExceptions)
-    .set({
-      zoneId: input.zoneId,
-      categoryId: input.categoryId,
-      productId: input.productId,
-      ...storedTarget(input.target),
-    })
-    .where(and(eq(routeExceptions.locationId, cfg.locationId), eq(routeExceptions.id, id)))
-    .returning({ id: routeExceptions.id });
-  if (row === undefined) throw new AppError("route.not_found", { routeId: id });
-}
-
-export async function deleteException(tx: Transaction, cfg: VenueScope, id: string): Promise<void> {
-  const [row] = await tx
-    .delete(routeExceptions)
-    .where(and(eq(routeExceptions.locationId, cfg.locationId), eq(routeExceptions.id, id)))
-    .returning({ id: routeExceptions.id });
-  if (row === undefined) throw new AppError("route.not_found", { routeId: id });
-}
-
-export async function reorderExceptions(
-  tx: Transaction,
-  cfg: VenueScope,
-  ids: readonly string[],
-): Promise<void> {
-  const rows = await tx
-    .select({ id: routeExceptions.id })
-    .from(routeExceptions)
-    .where(eq(routeExceptions.locationId, cfg.locationId));
-  const existing = new Set(rows.map((row) => row.id));
-  if (
-    ids.length !== rows.length ||
-    new Set(ids).size !== ids.length ||
-    ids.some((id) => !existing.has(id))
-  )
-    throw new AppError("management.request_invalid", { field: "ids" });
-  for (const [position, id] of ids.entries())
-    await tx
-      .update(routeExceptions)
-      .set({ position })
-      .where(and(eq(routeExceptions.locationId, cfg.locationId), eq(routeExceptions.id, id)));
 }
 
 type VenueClock = { timeZone: string; dayCutover: string };
