@@ -525,16 +525,16 @@ it.each(
     await expectNoA11yViolations(el);
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     await page.screenshot({
-      path: `look/routing-handover-${locale}-${theme}-${width}-routing.png`,
+      path: `__screenshots__/look/routing-handover-${locale}-${theme}-${width}-routing.png`,
       element: el,
     });
     el.shadowRoot!.querySelector('[data-test="station-upstairs"]')!.scrollIntoView();
     await page.screenshot({
-      path: `look/routing-fallback-${locale}-${theme}-${width}-station.png`,
+      path: `__screenshots__/look/routing-fallback-${locale}-${theme}-${width}-station.png`,
     });
     el.shadowRoot!.querySelector('[data-test="inactive-retired"]')!.scrollIntoView();
     await page.screenshot({
-      path: `look/routing-fallback-${locale}-${theme}-${width}-inactive.png`,
+      path: `__screenshots__/look/routing-fallback-${locale}-${theme}-${width}-inactive.png`,
     });
     tabs.scrollIntoView();
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "stations" } }));
@@ -557,14 +557,16 @@ it.each(
     probe.remove();
     await expectNoA11yViolations(el);
     await page.screenshot({
-      path: `look/routing-complete-${locale}-${theme}-${width}-stations.png`,
+      path: `__screenshots__/look/routing-complete-${locale}-${theme}-${width}-stations.png`,
     });
     await page.elementLocator(q(el, '[data-test="new-station"]')!).click();
     await settle(el);
     expect(q(el, '[data-test="name"]')).not.toBeNull();
     expect(q(el, '[data-test="overdue"]')).not.toBeNull();
     await expectNoA11yViolations(el);
-    await page.screenshot({ path: `look/routing-complete-${locale}-${theme}-${width}-create.png` });
+    await page.screenshot({
+      path: `__screenshots__/look/routing-complete-${locale}-${theme}-${width}-create.png`,
+    });
     q(el, "wt-modal")!.dispatchEvent(new CustomEvent("wt-close"));
     await settle(el);
     tabs.scrollIntoView();
@@ -580,7 +582,7 @@ it.each(
     );
     await expectNoA11yViolations(el);
     await page.screenshot({
-      path: `look/routing-handover-${locale}-${theme}-${width}-tickets.png`,
+      path: `__screenshots__/look/routing-handover-${locale}-${theme}-${width}-tickets.png`,
     });
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "settings" } }));
     await settle(el);
@@ -596,7 +598,7 @@ it.each(
     expect(choice.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe("No");
     await expectNoA11yViolations(el);
     await page.screenshot({
-      path: `look/routing-handover-${locale}-${theme}-${width}-settings.png`,
+      path: `__screenshots__/look/routing-handover-${locale}-${theme}-${width}-settings.png`,
     });
     settings.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-settings-cell"]')!.click();
     await settle(el);
@@ -4087,7 +4089,9 @@ it.each([
       await page.elementLocator(menu.shadowRoot!.querySelector("button")!).click();
       await settle(el);
       await expectNoA11yViolations(host);
-      await page.screenshot({ path: `look/station-actions-${locale}-${theme}-${width}-menu.png` });
+      await page.screenshot({
+        path: `__screenshots__/look/station-actions-${locale}-${theme}-${width}-menu.png`,
+      });
       const rename = menu.querySelector<HTMLElement>('[data-test="rename-upstairs"]')!;
       await page.elementLocator(rename).click();
       await settle(el);
@@ -4097,7 +4101,7 @@ it.each([
       ).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/station-actions-${locale}-${theme}-${width}-rename.png`,
+        path: `__screenshots__/look/station-actions-${locale}-${theme}-${width}-rename.png`,
       });
       q(el, '[data-test="station-rename"]')!
         .querySelector<HTMLElement>('wt-button[slot="cancel"]')!
@@ -4112,7 +4116,7 @@ it.each([
       expect(disabledMenu.querySelector('[data-test="disable-retired"]')).toBeNull();
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/station-actions-${locale}-${theme}-${width}-disabled-menu.png`,
+        path: `__screenshots__/look/station-actions-${locale}-${theme}-${width}-disabled-menu.png`,
       });
     } finally {
       document.body.style.background = previous.body;
@@ -4780,7 +4784,7 @@ it.each([
       expect(combo.values).toEqual(["watcher"]);
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/watcher-printers-${locale}-${theme}-${width}-picker.png`,
+        path: `__screenshots__/look/watcher-printers-${locale}-${theme}-${width}-picker.png`,
       });
       await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
       q(el, '[data-test="save-watcher-printers-pass"]')!.click();
@@ -4790,7 +4794,7 @@ it.each([
       ).toContain(locale === "en" ? "Fix the fields" : "Corrige los campos");
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/watcher-printers-${locale}-${theme}-${width}-refusal.png`,
+        path: `__screenshots__/look/watcher-printers-${locale}-${theme}-${width}-refusal.png`,
       });
     } finally {
       await page.viewport(previous.width, previous.height);
@@ -5209,7 +5213,7 @@ it.each([
         expect(popup.textContent).not.toContain("Old terrace");
         await expectNoA11yViolations(host);
         await page.screenshot({
-          path: `look/watcher-table-${locale}-${theme}-${width}-${field}.png`,
+          path: `__screenshots__/look/watcher-table-${locale}-${theme}-${width}-${field}.png`,
         });
         await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
         watcherTableQ(el, '[data-test="cancel-watcher-cell"]')!.click();
@@ -5217,7 +5221,9 @@ it.each([
       }
       const menu = watcherTableQ(el, "wt-row-actions")!;
       await page.elementLocator(menu.shadowRoot!.querySelector("button")!).click();
-      await page.screenshot({ path: `look/watcher-table-${locale}-${theme}-${width}-menu.png` });
+      await page.screenshot({
+        path: `__screenshots__/look/watcher-table-${locale}-${theme}-${width}-menu.png`,
+      });
       await page.elementLocator(watcherTableQ(el, '[data-test="rename-watcher-pass"]')!).click();
       await settle(el);
       q(el, '[data-test="save-watcher-name"]')!.click();
@@ -5228,7 +5234,9 @@ it.each([
           : "Ya existe un punto de seguimiento con este nombre.",
       );
       await expectNoA11yViolations(host);
-      await page.screenshot({ path: `look/watcher-table-${locale}-${theme}-${width}-rename.png` });
+      await page.screenshot({
+        path: `__screenshots__/look/watcher-table-${locale}-${theme}-${width}-rename.png`,
+      });
     } finally {
       await page.viewport(previous.width, previous.height);
     }

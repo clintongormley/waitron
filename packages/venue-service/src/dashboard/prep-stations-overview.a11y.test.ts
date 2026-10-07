@@ -145,7 +145,7 @@ it.each([
       expect(screen.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/overview-${locale}-${theme}-${width}-page.png`,
+        path: `__screenshots__/look/overview-${locale}-${theme}-${width}-page.png`,
       });
       button.focus();
       await userEvent.keyboard("{Enter}");
@@ -156,7 +156,7 @@ it.each([
       );
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/overview-${locale}-${theme}-${width}-details.png`,
+        path: `__screenshots__/look/overview-${locale}-${theme}-${width}-details.png`,
       });
       await userEvent.keyboard("{Escape}");
       await vi.waitFor(() => expect(health.shadowRoot!.querySelector("wt-modal")).toBeNull());

@@ -928,16 +928,19 @@ workspace is allowed by default and `/tmp` is refused: on 2026-10-03 a reviewer 
 Chromium screenshot to `../../../review-shot.png` from `packages/ui` (outside the package, inside
 the workspace), and the installed `assertBrowserFileAccess` with a real Vite config allowed a
 sibling package's path and refused `/tmp/x.png`. Two sessions lost time to it a day apart
-(2026-09-28 and 2026-09-29). Give a path relative to the test file (`look/a.png`, which lands beside
-it), move the PNGs out after the run, and delete that folder and any `__screenshots__/<file>` it
-left.
+(2026-09-28 and 2026-09-29). Give a path relative to the test file under `__screenshots__/`
+(`__screenshots__/look/a.png`, which lands beside it and which git ignores). Guard:
+`scripts/screenshot-paths.test.ts`, weaker than its name — it parses only `*.test.ts` files under
+`apps/` and `packages/`, reads each `${...}` in a path as one plain segment, fails a path it cannot
+read as a literal, and passes unchecked a path outside the repository and any `.screenshot(...)`
+call whose options are not an object literal written inline.
 
 A second thing a widget harness does not inherit: icons are registered in each app's `main.ts`, which
 a harness mounting one widget never loads, so `wt-icon` renders an empty box and a grip handle looks
 like a missing cell. Register the app's icon set in the harness before reading anything into a blank
 control.
 
-Nothing guards either of these.
+Nothing guards the `/tmp` refusal or the icon registration.
 
 ## Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.
 

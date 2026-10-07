@@ -53,7 +53,9 @@ it.each([
       );
       expect(host.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
-      await page.screenshot({ path: `look/venue-defaults-${locale}-${theme}-${width}-saved.png` });
+      await page.screenshot({
+        path: `__screenshots__/look/venue-defaults-${locale}-${theme}-${width}-saved.png`,
+      });
       q('[data-test="edit-timing"]').click();
       await el.updateComplete;
       const input = q('wt-input[name="overdueAfterMinutes"]') as WtInput;
@@ -70,7 +72,7 @@ it.each([
       expect(host.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/venue-defaults-${locale}-${theme}-${width}-invalid.png`,
+        path: `__screenshots__/look/venue-defaults-${locale}-${theme}-${width}-invalid.png`,
       });
       input.value = "7";
       input.dispatchEvent(
@@ -87,7 +89,7 @@ it.each([
       expect(host.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `look/venue-defaults-${locale}-${theme}-${width}-refused.png`,
+        path: `__screenshots__/look/venue-defaults-${locale}-${theme}-${width}-refused.png`,
       });
     } finally {
       await page.viewport(previous.width, previous.height);

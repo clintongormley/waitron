@@ -131,20 +131,20 @@ it.each(cases)(
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await page.screenshot({
         element: host,
-        path: `look/venue-details-panel-${locale}-${theme}-${width}-${state}.png`,
+        path: `__screenshots__/look/venue-details-panel-${locale}-${theme}-${width}-${state}.png`,
       });
       const preview = el.shadowRoot!.querySelector("[data-test=clock-preview]");
       if (preview) {
         preview.scrollIntoView({ block: "start" });
         await page.screenshot({
-          path: `look/venue-details-panel-${locale}-${theme}-${width}-${state}-preview.png`,
+          path: `__screenshots__/look/venue-details-panel-${locale}-${theme}-${width}-${state}-preview.png`,
         });
       }
       const actions = el.shadowRoot!.querySelector("wt-form-actions");
       if (actions) {
         actions.scrollIntoView({ block: "end" });
         await page.screenshot({
-          path: `look/venue-details-panel-${locale}-${theme}-${width}-${state}-bottom.png`,
+          path: `__screenshots__/look/venue-details-panel-${locale}-${theme}-${width}-${state}-bottom.png`,
         });
       }
       cleanupWidgets();

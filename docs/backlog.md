@@ -1952,8 +1952,7 @@ existing venue retains its saved zone (`applyPreparedLocation`,
 not an edit through that applicator.
 
 **A configuration import does not check a table status's colour (A273, review of W92, 2026-10-05) —
-DONE (#1257).** Left open: the save's existing refusal test asserts the code but not
-`{ field: "color" }` (Codex run-it review of #1257); tightening it was out of the item's scope.
+DONE (#1257).** The save's refusal test also asserts `{ field: "color" }` since A281.
 
 **Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
 explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
@@ -4731,10 +4730,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   - When live updates are off and every Hours read both fails and takes longer than the 60-second
     refresh, no error is shown: the dashboard's request code sets no timeout on a read. Found in
     #1298's review; I believe it predates the branch (not checked with `git blame`).
-  - The prep-stations screenshot tests (`prep-stations-screen.test.ts`,
-    `prep-stations-overview.a11y.test.ts` in `packages/venue-service/src/dashboard/`) write `look/*.png`
-    into that folder on every run, and git shows it as untracked — the same shape as the
-    kitchen-screen case recorded under W110b.
+  - The prep-stations screenshot tests wrote `look/*.png` into their folder on every run, untracked
+    in git — fixed by A281: they write under the ignored `__screenshots__/look/`.
     [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) — DONE
     ([PR #1305](https://github.com/clintongormley/waitron/pull/1305)). The Hours calendar shows Spain's 2026 national and regional
     holidays, transcribed from BOE-A-2025-21667 and compared with the archived annex by a test, with
@@ -6605,8 +6602,8 @@ decisions across and re-baseline, or change the sentence to say what it is.
   typescript-eslint tracks the work in its issue 10940, and the message it prints today names
   version **7.1** as the target. When a release supports it, the root entry goes back to a plain
   `^7` range and the alias disappears. `scripts/comments-only.mjs`,
-  `scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts` and
-  `scripts/native-form-fields.test.ts` parse with
+  `scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts`,
+  `scripts/native-form-fields.test.ts` and `scripts/screenshot-paths.test.ts` parse with
   the version 6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them,
   before that move. The arrangement is in [ci-and-gates.md](developers/ci-and-gates.md) → _Two
   TypeScript compilers are installed, and that is deliberate_.
@@ -6878,9 +6875,8 @@ bump it when a fixed version is published, and run the certificate suites in tho
   be stale, because the watcher list does not re-read on a watcher's Done marks nor the course list
   on draft lines, order lines or kitchen items, in which case a confirmed Delete switches the row
   off instead. Found along the way:
-  `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) writes
-  `look/venue-defaults-*.png` screenshots into `apps/dashboard/src/screens/` on every run, which git
-  shows as untracked. (d) Zones and adjustment reasons offer Enable (W110d, #1273); departments
+  `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) wrote untracked
+  `look/` screenshots into `apps/dashboard/src/screens/` — fixed by A281. (d) Zones and adjustment reasons offer Enable (W110d, #1273); departments
   and floor tables do too (W110e, #1290). A department is enabled through `active` on
   `PATCH /management-api/venue-service/departments/:departmentId`, from its policy-tree row and
   the departments tab; floor tables through `active` on `PATCH /management-api/tables/:id`, which
