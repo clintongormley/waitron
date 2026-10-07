@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "./wt-button.js";
@@ -38,6 +38,17 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
 
   test("disabled button", async () => {
     await mountThemed("<wt-button disabled>Cobrar</wt-button>", theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("disabled button with an accessible description", async () => {
+    const el = await mountThemed(
+      `<wt-button disabled aria-description="Uses the main product's photo">Remove image</wt-button>`,
+      theme,
+    );
+    await expect
+      .element(page.elementLocator(el.shadowRoot!.querySelector("button")!))
+      .toHaveAccessibleDescription("Uses the main product's photo");
     await expectNoA11yViolations(host);
   });
 

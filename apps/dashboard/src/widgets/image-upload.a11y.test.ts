@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { page, userEvent } from "vitest/browser";
 import "./image-upload.js";
+import { setLocale } from "../i18n/t.js";
 // The app registers `media-image-picker` through the module registry, as dashboard-app.ts does.
 import "@waitron/dashboard-modules";
 import type { ImageUpload } from "./image-upload.js";
@@ -28,6 +29,7 @@ function stubLibraryApi(): DashboardApi {
 }
 
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("es-ES"));
 
 describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme) => {
   it("an invalid image choice keeps visible, accessible hover feedback", async () => {
@@ -48,20 +50,30 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
     await page.screenshot({ element: host, path: `__screenshots__/look/a319-image-${theme}.png` });
   });
 
-  it("renders accessibly with Remove disabled beside an inherited photo", async () => {
-    const { el, host } = await mountWidget<ImageUpload>(
-      "dashboard-image-upload",
-      { api: stubApi(), inheritedImage: "parent.png" },
-      theme,
-    );
-    const remove = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-      "[data-test=remove-image]",
-    )!;
-    // Without this the scan could pass on a widget that drew no disabled Remove.
-    expect(remove.disabled).toBe(true);
-    expect(el.shadowRoot!.querySelector("[data-test=remove-image-hint]")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
+  it.each(["en-GB", "es-ES"] as const)(
+    "renders accessibly with Remove disabled beside an inherited photo in %s",
+    async (locale) => {
+      setLocale(locale);
+      const { el, host } = await mountWidget<ImageUpload>(
+        "dashboard-image-upload",
+        { api: stubApi(), inheritedImage: "parent.png" },
+        theme,
+      );
+      const remove = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-test=remove-image]",
+      )!;
+      // Without this the scan could pass on a widget that drew no disabled Remove.
+      expect(remove.disabled).toBe(true);
+      await expect
+        .element(page.elementLocator(remove.shadowRoot!.querySelector("button")!))
+        .toHaveAccessibleDescription(
+          locale === "en-GB"
+            ? "Uses the main product's photo"
+            : "Usa la foto del producto principal",
+        );
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("renders accessibly with a preview", async () => {
     const { host } = await mountWidget<ImageUpload>(

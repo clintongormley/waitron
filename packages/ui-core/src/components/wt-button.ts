@@ -125,6 +125,7 @@ export class WtButton extends LitElement {
   // the native accessor would otherwise just read/write) never reaches an icon-only button's
   // accessible name on its own, since the host itself carries no interactive semantics.
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
+  @property({ attribute: "aria-description" }) override ariaDescription: string | null = null;
   @property({ attribute: "aria-haspopup" }) override ariaHasPopup: string | null = null;
   @property({ attribute: "aria-expanded" }) override ariaExpanded: string | null = null;
   @property({ attribute: "aria-invalid" }) override ariaInvalid: string | null = null;
@@ -146,6 +147,7 @@ export class WtButton extends LitElement {
         ?disabled=${this.disabled || this.loading}
         aria-busy=${this.loading ? "true" : nothing}
         aria-label=${this.ariaLabel ?? nothing}
+        aria-description=${this.ariaDescription ?? nothing}
         aria-haspopup=${this.ariaHasPopup ?? nothing}
         aria-expanded=${this.ariaExpanded ?? nothing}
         aria-invalid=${this.ariaInvalid ?? nothing}

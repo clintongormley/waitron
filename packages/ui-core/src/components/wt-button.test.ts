@@ -1,5 +1,5 @@
 import { expect, test, afterEach } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import "./wt-button.js";
 
@@ -268,3 +268,19 @@ test.each([
     expect(getComputedStyle(inner).backgroundColor).toBe(resting);
   },
 );
+
+test("updates and clears the inner button's accessible description", async () => {
+  const el = await mount(
+    `<wt-button aria-description="Uses the main product's photo" disabled>Remove image</wt-button>`,
+  );
+  const inner = el.shadowRoot!.querySelector("button")!;
+  await expect
+    .element(page.elementLocator(inner))
+    .toHaveAccessibleDescription("Uses the main product's photo");
+  el.setAttribute("aria-description", "Usa la foto del producto principal");
+  await expect
+    .element(page.elementLocator(inner))
+    .toHaveAccessibleDescription("Usa la foto del producto principal");
+  el.removeAttribute("aria-description");
+  await expect.element(page.elementLocator(inner)).toHaveAccessibleDescription("");
+});
