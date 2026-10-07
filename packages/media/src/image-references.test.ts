@@ -363,6 +363,24 @@ describe("an image an include's folder names", () => {
     });
     expect(await imageCount()).toBe(1);
   });
+
+  it("finds a folder's photo through section_members_folder_image_idx, not a scan of every member", async () => {
+    const lookup = "section_members WHERE folder_overrides ->> '$.image' = old.filename";
+    const triggers = await suite.db.execute<{ name: string; sql: string }>(
+      sql`select name, sql from sqlite_master where type = 'trigger'
+        and name glob 'section_members_media_image_fk_parent_*' order by name`,
+    );
+    expect(triggers.rows.map((row) => [row.name, row.sql.includes(lookup)])).toEqual([
+      ["section_members_media_image_fk_parent_delete", true],
+      ["section_members_media_image_fk_parent_rename", true],
+    ]);
+    const plan = await suite.db.execute<{ detail: string }>(
+      sql`explain query plan select 1 from section_members where folder_overrides ->> '$.image' = ${PRESENT}`,
+    );
+    expect(plan.rows.map((row) => row.detail)).toEqual([
+      "SEARCH section_members USING COVERING INDEX section_members_folder_image_idx (<expr>=?)",
+    ]);
+  });
 });
 
 /** A menu whose one product shows the image, published, and then the product letting it go. */

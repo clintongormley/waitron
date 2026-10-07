@@ -306,6 +306,8 @@ describe("the catalogue migration set carries no tenant column", () => {
       section_members_order_idx: { unique: false, columns: "section_id, position" },
       section_members_child_idx: { unique: false, columns: "child_section_id" },
       section_members_product_idx: { unique: false, columns: "product_id" },
+      // One expression column, which `pragma index_info` reports with no name.
+      section_members_folder_image_idx: { unique: false, columns: "" },
       menu_versions_menu_number_uq: { unique: true, columns: "menu_id, number" },
       menu_versions_id_menu_key: { unique: true, columns: "id, menu_id" },
       menu_version_images_filename_idx: { unique: false, columns: "filename" },

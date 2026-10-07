@@ -88,5 +88,12 @@ export const sectionMembers = table(
     index("section_members_order_idx").on(t.sectionId, t.position),
     index("section_members_child_idx").on(t.childSectionId),
     index("section_members_product_idx").on(t.productId),
+    // `->>`, not `json_extract(…, …)`: drizzle-kit splits an index expression at its commas. SQLite
+    // uses the index only for this exact expression, which the media photo triggers and reads
+    // repeat. A drizzle-kit table rebuild writes an expression index back wrongly: take this out for
+    // any generation that rebuilds the table and add it back in one of its own (CLAUDE.md §3).
+    index("section_members_folder_image_idx")
+      .on(sql`${t.folderOverrides} ->> '$.image'`)
+      .where(sql`${t.folderOverrides} ->> '$.image' is not null`),
   ],
 );
