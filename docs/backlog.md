@@ -1844,9 +1844,8 @@ mail through configured SMTP or capture, and reports unconfigured live/restored 
 The standalone sender renders a transient PDF and uses Nodemailer. Local SMTP fixtures cover
 readable original/duplicate attachments, recipient and DATA refusals, lost final acknowledgement,
 and an unanswered attempt ending at 30 seconds with its socket closed. Implicit TLS tests
-cover a refused untrusted certificate and a trusted test connection. These helpers are not
-wired into boot yet. The worker pass now commits a claim, closes a separate projection
-transaction before transport, and reports with the saved claim identity. Certain email
+cover a refused untrusted certificate and a trusted test connection. The worker pass now
+commits a claim, closes a separate projection transaction before transport, and reports with the saved claim identity. Certain email
 refusals retain their metadata and reserve another generation, due after 5 seconds,
 30 seconds, 2 minutes or 10 minutes, stopping after five attempts. Unknown outcomes are
 not automatically replayed. Synthetic database cases cover another sale committing while
@@ -1861,8 +1860,13 @@ gating and recovery after a pass failure. The stored-document reader now project
 line snapshots, saved receipt grouping/header, adjustments and payments. Eight synthetic
 cases cover no-regime and filed invoices, weighted extras, a paid discounted bill and its
 operation date, current optional trim, taxpayer changes, no-order settlements, absent line
-gross and refused lookups. Boot's start/stop composition remains pending; no email issuance
-or Task 4 completion claim.
+gross and refused lookups. Trading boot now starts the routed email worker after claim
+recovery, checks the singleton role on each pass, and joins the pending send and its report
+before normal shutdown or failed-start cleanup closes the store. Real local SMTP cases
+exercise a queued duplicate's saved invoice facts, a held acceptance during normal close,
+a later failed startup, and queued-email controls on a local secondary and a read-only mirror.
+Bill delivery staging, email setup/settings and the delivery UI remain open; no Task 4
+completion claim.
 For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain
