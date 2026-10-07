@@ -96,6 +96,21 @@ export interface HomeIndex<P> {
   products: Map<string, P>;
 }
 
+/** The copy of section `id` a device opens from home: the one home's list draws, else the one the
+ * index holds. A shortcut tile is drawn from this copy too, so its label matches the page. */
+export function openedSection(
+  id: string,
+  index: Pick<HomeIndex<unknown>, "sections">,
+  home: readonly DocumentMember[],
+): DocumentSection | undefined {
+  return (
+    shownMembers(home).find(
+      (member): member is DocumentSection =>
+        member.kind === "section" && member.sectionId === id && index.sections.has(id),
+    ) ?? index.sections.get(id)
+  );
+}
+
 export function indexDocument<P>(
   members: readonly DocumentMember[],
   offerOf: (menuItemId: string) => P | undefined,

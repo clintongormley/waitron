@@ -681,13 +681,32 @@ describe("dashboard-device-home-preview", () => {
       expect(breadcrumb(el)).toBe("Home › Food para clientes › Drinks para clientes");
     });
 
-    it("opens the top-level copy from a shortcut to a menu included twice", async () => {
-      // Decision 16: the shortcut tile is drawn from the index (the copy indexed last, Food's),
-      // while opening it looks first among the top level's shown members.
-      const { el } = await mount({ document: twice(bar(), [sectionTile("s-drinks")]) });
-      expect(names(tiles(el, "shortcuts"))).toEqual(["Drinks para clientes"]);
-      await click(el, tile(el, "shortcuts", "Drinks para clientes"));
+    it("opens the top-level copy from a shortcut to a menu included twice, drawn from that copy", async () => {
+      const painted = bar({
+        color: "#256bb1",
+        image: "bar-folder.webp",
+        fixed: { names: { es: "Barra para clientes" }, color: "#256bb1", image: "bar-folder.webp" },
+      });
+      const shortcut = [sectionTile("s-drinks")];
+      const { el } = await mount({ document: twice(painted, shortcut) });
+      expect(names(tiles(el, "shortcuts"))).toEqual(["Barra para clientes"]);
+      expect(fillOf(tile(el, "shortcuts", "Barra para clientes"))).toBe("rgb(37, 107, 177)");
+      const thumbnails = await mount({
+        document: display("handheld", { tiles: "thumbnails" }, twice(painted, shortcut)),
+      });
+      expect(
+        image(tile(thumbnails.el, "shortcuts", "Barra para clientes"))!.getAttribute("src"),
+      ).toBe("/media/bar-folder.webp");
+      await click(el, tile(el, "shortcuts", "Barra para clientes"));
       expect(breadcrumb(el)).toBe("Home › Barra para clientes");
+
+      // Shown directly, the top level holds no copy: the shortcut opens, and names, Food's.
+      const shownDirectly = await mount({
+        document: twice(bar({ direct: true }), shortcut),
+      });
+      expect(names(tiles(shownDirectly.el, "shortcuts"))).toEqual(["Drinks para clientes"]);
+      await click(shownDirectly.el, tile(shownDirectly.el, "shortcuts", "Drinks para clientes"));
+      expect(breadcrumb(shownDirectly.el)).toBe("Home › Drinks para clientes");
     });
   });
 

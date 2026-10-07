@@ -13,6 +13,7 @@ import {
   arrangeHome,
   foldForSearch,
   indexDocument,
+  openedSection,
   shownMembers,
   tileFill,
   type HomeIndex,
@@ -312,7 +313,8 @@ export class TillMenuBrowser extends LitElement {
   @property({ type: Boolean }) weighs = false;
 
   /** The open section's path of section ids: its first among the members home shows, else
-   * anywhere in the menu; each next among the previous one's members. Empty is home. */
+   * anywhere in the menu; each next among the members the previous one shows, else its own
+   * members. Empty is home. */
   @state() private path: string[] = [];
 
   @state() private query = "";
@@ -374,7 +376,7 @@ export class TillMenuBrowser extends LitElement {
         );
       const next =
         previous === undefined
-          ? (among(shownMembers(home)) ?? index.sections.get(id))
+          ? openedSection(id, index, home)
           : (among(shownMembers(previous.members)) ?? among(previous.members));
       if (next === undefined) return null;
       trail.push(next);
@@ -499,12 +501,15 @@ export class TillMenuBrowser extends LitElement {
     if (ref.kind === "section") {
       const id = ref.sectionId;
       const own = "members" in ref ? ref : undefined;
+      const home = this.menu!.structure.members;
       if (index.sections.has(id))
-        return this.#sectionButton(own ?? index.sections.get(id)!, mode, () =>
+        return this.#sectionButton(own ?? openedSection(id, index, home)!, mode, () =>
           this.#open([...path, id]),
         );
-      const unfiltered = this.#unfilteredIndex(this.menu!).sections;
-      return unfiltered.has(id) ? this.#sectionButton(own ?? unfiltered.get(id)!, mode) : nothing;
+      const unfiltered = this.#unfilteredIndex(this.menu!);
+      return unfiltered.sections.has(id)
+        ? this.#sectionButton(own ?? openedSection(id, unfiltered, home)!, mode)
+        : nothing;
     }
     const product = index.products.get(ref.productId);
     return product === undefined

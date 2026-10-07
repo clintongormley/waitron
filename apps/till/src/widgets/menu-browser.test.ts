@@ -2330,18 +2330,43 @@ describe("till-menu-browser", () => {
       expect(breadcrumb(el)).toBe("Home › Comida (ES) › Drinks (EN)");
     });
 
-    it("a shortcut to a menu included twice opens the top-level copy", async () => {
-      // Decision 16: the shortcut tile is drawn from the index (the copy indexed last, Food's),
-      // while opening it looks first among the top level's shown members.
-      const { el } = await mount({ menu: twice(bar, [sectionTile("sec-drinks")]) });
-      expect(names(entries(el, "shortcuts"))).toEqual(["Drinks (EN)"]);
-      await tap(el, entry(el, "shortcuts", "Drinks (EN)"));
+    it("a shortcut to a menu included twice opens the top-level copy, and is drawn from it", async () => {
+      const paintedBar: DocumentMember = {
+        ...(bar as SectionNode),
+        color: "#256bb1",
+        image: "bar-folder.webp",
+        fixed: { names: { en: "Bar (EN)" }, color: "#256bb1", image: "bar-folder.webp" },
+      };
+      const shortcut = [sectionTile("sec-drinks")];
+      const { el } = await mount({ menu: twice(paintedBar, shortcut) });
+      expect(names(entries(el, "shortcuts"))).toEqual(["Bar (EN)"]);
+      const tile = entry(el, "shortcuts", "Bar (EN)");
+      expect(getComputedStyle(tile.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
+        "rgb(37, 107, 177)",
+      );
+      const thumbnails = await mount({
+        menu: display("till", { tiles: "thumbnails" }, twice(paintedBar, shortcut)),
+      });
+      expect(
+        entry(thumbnails.el, "shortcuts", "Bar (EN)").querySelector("img")!.getAttribute("src"),
+      ).toBe("/media/bar-folder.webp");
+      await tap(el, tile);
       expect(breadcrumb(el)).toBe("Home › Bar (EN)");
+
+      // Greyed by a diet filter, it is still drawn from the copy it would open.
+      const filtered = await mount({
+        menu: twice(paintedBar, shortcut),
+        products: PRODUCTS.filter((each) => each !== cola && each !== lemonade && each !== cana),
+        unfilteredProducts: PRODUCTS,
+      });
+      const greyed = entry(filtered.el, "shortcuts", "Bar (EN)");
+      expect(greyed.hasAttribute("data-filtered")).toBe(true);
 
       // Shown directly, the top level holds no copy, so the shortcut opens the copy indexed last.
       const shownDirectly = await mount({
         menu: twice(directly(bar), [sectionTile("sec-drinks")]),
       });
+      expect(names(entries(shownDirectly.el, "shortcuts"))).toEqual(["Drinks (EN)"]);
       await tap(shownDirectly.el, entry(shownDirectly.el, "shortcuts", "Drinks (EN)"));
       expect(breadcrumb(shownDirectly.el)).toBe("Home › Drinks (EN)");
     });

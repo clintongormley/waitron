@@ -15,6 +15,7 @@ import {
   arrangeHome,
   foldForSearch,
   indexDocument,
+  openedSection,
   shownMembers,
   tileFill,
   type HomeIndex,
@@ -242,7 +243,8 @@ export class DeviceHomePreview extends LitElement {
   @property() device: HomeDevice = "handheld";
 
   /** The open section's path of section ids: its first among the members home shows, else
-   * anywhere in the menu; each next among the previous one's members. Empty is home. */
+   * anywhere in the menu; each next among the members the previous one shows, else its own
+   * members. Empty is home. */
   @state() private path: string[] = [];
 
   @state() private query = "";
@@ -284,7 +286,7 @@ export class DeviceHomePreview extends LitElement {
         );
       const next =
         previous === undefined
-          ? (among(shownMembers(home)) ?? index.sections.get(id))
+          ? openedSection(id, index, home)
           : (among(shownMembers(previous.members)) ?? among(previous.members));
       if (next === undefined) return null;
       trail.push(next);
@@ -352,7 +354,7 @@ export class DeviceHomePreview extends LitElement {
   }
 
   /** The tile for a section or product the index holds, else nothing; `path` is where a section
-   * opens beneath. A structural member is drawn from itself, a shortcut from the index. */
+   * opens beneath. A structural member is drawn from itself, a shortcut from the copy it opens. */
   #tile(
     ref: DocumentTile | DocumentMember,
     path: string[],
@@ -361,9 +363,10 @@ export class DeviceHomePreview extends LitElement {
   ): TemplateResult | typeof nothing {
     if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
-      const section = index.sections.get(ref.sectionId);
-      if (section === undefined) return nothing;
-      return this.#sectionTile("members" in ref ? ref : section, mode, path);
+      if (!index.sections.has(ref.sectionId)) return nothing;
+      const section =
+        "members" in ref ? ref : openedSection(ref.sectionId, index, this.document!.root.members)!;
+      return this.#sectionTile(section, mode, path);
     }
     const offer = index.products.get(ref.productId);
     return offer === undefined ? nothing : this.#productTile(offer, mode);

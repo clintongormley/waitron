@@ -8,6 +8,7 @@ import {
   foldForSearch,
   homeDisplayProblem,
   indexDocument,
+  openedSection,
   shownMembers,
   tileFill,
 } from "./device-home.js";
@@ -155,6 +156,50 @@ describe("shownMembers", () => {
     const shown = shownMembers([product("x"), direct, product("y")]);
     expect(ids(shown)).toEqual(["p-x", "p-a", "folderB", "p-c1", "p-y"]);
     expect(shown[2]).toBe(folderB);
+  });
+});
+
+describe("openedSection", () => {
+  const product = (id: string): DocumentMember => ({
+    kind: "product",
+    menuItemId: `mi-${id}`,
+    productId: `p-${id}`,
+  });
+  const section = (
+    id: string,
+    name: string,
+    members: DocumentMember[],
+    direct = false,
+  ): DocumentMember => ({
+    kind: "section",
+    sectionId: id,
+    internalName: name,
+    names: {},
+    image: null,
+    color: null,
+    ...(direct ? { direct: true as const } : {}),
+    members,
+  });
+  const offer = (menuItemId: string) => menuItemId;
+  it("opens the copy home draws, else the copy the index holds", () => {
+    const top = section("drinks", "bar", [product("cola")]);
+    const nested = section("drinks", "drinks", [product("cola")]);
+    const home = [top, section("food", "food", [nested])];
+    const index = indexDocument(home, offer);
+    expect(index.sections.get("drinks")).toBe(nested);
+    expect(openedSection("drinks", index, home)).toBe(top);
+
+    const directTop = section("drinks", "bar", [product("cola")], true);
+    const directHome = [directTop, section("food", "food", [nested])];
+    expect(openedSection("drinks", indexDocument(directHome, offer), directHome)).toBe(nested);
+  });
+  it("looks through a direct node on home, and answers nothing for a section the index lacks", () => {
+    const beer = section("beer", "beer", [product("cana")]);
+    const home = [section("drinks", "drinks", [beer], true)];
+    const index = indexDocument(home, offer);
+    expect(openedSection("beer", index, home)).toBe(beer);
+    const empty = indexDocument(home, () => undefined);
+    expect(openedSection("beer", empty, home)).toBeUndefined();
   });
 });
 
