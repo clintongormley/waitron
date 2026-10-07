@@ -28,7 +28,8 @@ for (const [path, mod] of Object.entries(modules)) {
   }
 }
 
-// Row actions is an interactive disclosure without a disabled state.
+// Row actions is an interactive disclosure without a disabled state. Other primitives are checked
+// only when they reflect disabled, whatever they render.
 const interactiveComponents = allComponents.filter(
   ({ tag, ctor }) =>
     tag === "wt-row-actions" || ctor.elementProperties?.get("disabled")?.reflect === true,
