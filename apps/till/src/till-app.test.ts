@@ -12853,6 +12853,112 @@ describe("a failed list refresh after a successful write", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
     };
 
+    for (const locale of ["en-GB", "es-ES"])
+      for (const theme of ["light", "dark"] as const)
+        for (const width of [390, 1280])
+          it(`A318 look: held refresh and retry, ${locale}, ${theme}, ${width}`, async () => {
+            const size = { width: window.innerWidth, height: window.innerHeight };
+            const previousLocale = currentLocale();
+            await page.viewport(width, 900);
+            try {
+              const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
+              const { el } = await mountApp(
+                {
+                  listWorkingOrders,
+                  listProducts: vi.fn().mockResolvedValue({
+                    menus: [defaultMenu],
+                    products: [
+                      {
+                        ...cafe,
+                        unit: {
+                          id: "unit-each",
+                          name: { en: "Each", es: "Unidad" },
+                          abbreviation: { en: "ea", es: "ud" },
+                          precision: 0,
+                          hardwareUnit: null,
+                        },
+                      },
+                    ],
+                  }),
+                  getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+                },
+                theme,
+              );
+              const c = await toCounterFake(el);
+              c.store.addProduct(cafe, "1");
+              emit(c, "park-order", { label: "Mesa 4" });
+              await settle(el);
+              expect(counter(el)!.store.lines).toEqual([]);
+              await page.screenshot({
+                path: `__screenshots__/a318/${locale}-${theme}-${width}-held.png`,
+              });
+              await tick(el, 150_000);
+              expect(message(el, "held")).toBe(t("refresh.held_after_park"));
+              tryNow(el, "held")!.click();
+              await settle(el);
+              expect(countdown(el, "held")).toBe(t("refresh.retrying"));
+              await page.screenshot({
+                path: `__screenshots__/a318/${locale}-${theme}-${width}-retrying.png`,
+              });
+              await tick(el, 150_000);
+              expect(countdown(el, "held")).toBe(secondsLeft(10));
+              await page.screenshot({
+                path: `__screenshots__/a318/${locale}-${theme}-${width}-notice.png`,
+              });
+            } finally {
+              setLocale(previousLocale);
+              await page.viewport(size.width, size.height);
+            }
+          });
+
+    it("A318: Hold frees the next basket while the held-list read never answers", async () => {
+      const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
+      const { el } = await mountApp({ listWorkingOrders });
+      const c = await toCounterFake(el);
+      c.store.addProduct(cafe, "2");
+      const id = c.store.id;
+      emit(c, "park-order", { label: "Mesa 4" });
+      await settle(el);
+
+      expect(c.store.id).not.toBe(id);
+      expect(c.store.lines).toEqual([]);
+      expect(counter(el)!.busy).toBe(false);
+      counter(el)!.store.addProduct(cafe, "1");
+      emit(counter(el)!, "park-order", { label: "Mesa 5" });
+      await settle(el);
+      expect(currentApi.parkOrder).toHaveBeenCalledTimes(2);
+      expect(counter(el)!.store.lines).toEqual([]);
+      await tick(el, 150_000);
+      expect(message(el, "held")).toBe(t("refresh.held_after_park"));
+      expect(countdown(el, "held")).toBe(secondsLeft(5));
+      expect(counter(el)!.busy).toBe(false);
+    });
+
+    it.each(["automatic", "Try now"])(
+      "A318: a never-answering %s retry returns to the countdown at 150 seconds",
+      async (trigger) => {
+        const { el, listWorkingOrders } = await parkWithFailingRefresh();
+        listWorkingOrders.mockImplementation(unanswered);
+        if (trigger === "automatic") await tick(el, 5000);
+        else {
+          tryNow(el, "held")!.click();
+          await settle(el);
+        }
+        expect(countdown(el, "held")).toBe(t("refresh.retrying"));
+        expect(counter(el)!.busy).toBe(false);
+        await tick(el, 149_999);
+        expect(countdown(el, "held")).toBe(t("refresh.retrying"));
+        await tick(el, 1);
+        expect(message(el, "held")).toBe(t("refresh.held_after_park"));
+        expect(countdown(el, "held")).toBe(secondsLeft(10));
+        expect(counter(el)!.busy).toBe(false);
+        listWorkingOrders.mockResolvedValue([heldSummary]);
+        await tick(el, 10_000);
+        expect(counter(el)!.heldOrders).toEqual([heldSummary]);
+        expect(message(el, "held")).toBe("");
+      },
+    );
+
     it("a cash sale shows its ticket and the next sale can be paid", async () => {
       const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
       const { el } = await mountApp({ listWorkingOrders });
