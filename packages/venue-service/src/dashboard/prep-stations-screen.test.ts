@@ -1,7 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
-import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
 import type { PrepStationsApi, PrepStationsView, StationHealthSnapshot } from "./routing-client.js";
@@ -325,6 +324,17 @@ const q = (el: PrepStationsScreen, s: string) =>
     ?.shadowRoot?.querySelector<HTMLElement>(s) ??
   healthSummary(el)?.querySelector<HTMLElement>(s) ??
   null;
+async function routingGrid(el: PrepStationsScreen) {
+  const grid = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    '[slot="routing"] venue-routing-grid',
+  );
+  await grid?.updateComplete;
+  return grid;
+}
+const gridCombo = (grid: HTMLElement, row: string, zone: string) =>
+  grid.shadowRoot!.querySelector<WtCombobox>(
+    `td[data-row="${row}"][data-zone="${zone}"] wt-combobox[name="routing-target"]`,
+  );
 
 it.each([
   ['wt-switch[name="showsRestOfOrder"]', ""],
@@ -338,7 +348,8 @@ it.each([
     setLocale("en");
     const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
     const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
-    expect(routing.querySelector('[data-test="claim-bar"]')).not.toBeNull();
+    expect(await routingGrid(el)).not.toBeNull();
+    expect(routing.querySelector('[data-test="station-bar"]')).not.toBeNull();
     expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
     if (selector) expect(routing.querySelector(selector)).toBeNull();
     else expect(routing.textContent).not.toContain(text);
@@ -346,14 +357,16 @@ it.each([
 );
 
 it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
-  "keeps fallback editing %s out of Routing while preserving category assignments",
+  "keeps fallback editing %s out of Routing while preserving category cells",
   async (selector) => {
     const next = withUpstairs({ open: false, why: "out_of_hours" });
     next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
     next.routing.stations.push({ id: "retired", name: "Retired", active: false });
     const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
     const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
-    expect(routing.querySelector('[data-test="claim-upstairs"]')).not.toBeNull();
+    const grid = (await routingGrid(el))!;
+    expect(grid).not.toBeNull();
+    expect(gridCombo(grid, "c:cocktails", "every")!.value).toBe("station:bar");
     expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
     expect(routing.querySelector(selector)).toBeNull();
   },
@@ -374,7 +387,8 @@ it.each([
   next.routing.stations.push({ id: "retired", name: "Retired", active: false });
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
-  expect(routing.querySelector('[data-test="claim-upstairs"]')).not.toBeNull();
+  expect(await routingGrid(el)).not.toBeNull();
+  expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
   expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
   expect(routing.querySelector(`[data-test="${action}"]`)).toBeNull();
   const moved = action
@@ -526,9 +540,9 @@ it.each(
     document.documentElement.style.background = canvas;
     const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
     expect(tabs.value).toBe("routing");
-    expect(el.shadowRoot!.querySelector('[data-test="station-bar"]')!.textContent).toContain(
-      "Drinks › Cocktails",
-    );
+    const cocktails = gridCombo((await routingGrid(el))!, "c:cocktails", "every")!;
+    expect(cocktails.label).toContain("Drinks › Cocktails");
+    expect(cocktails.value).toBe("station:bar");
     await expectNoA11yViolations(el);
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     await page.screenshot({
@@ -1218,7 +1232,7 @@ it("keeps station status and output problems in Stations instead of repeating th
   expect(healthRow(el, "upstairs").textContent).toContain("Printer Epson");
   expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
   expect(healthRow(el, "upstairs").textContent).toContain("Closed now");
-  expect(routing.querySelector('[data-test="claim-upstairs"]')).not.toBeNull();
+  expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
 });
 it("uses the health snapshot for output problems without a second management read", async () => {
   const a = api({
@@ -1634,118 +1648,6 @@ it("guards repeated Enter rename saves while a station write is pending and allo
   expect(updateStation).toHaveBeenLastCalledWith("bar", { name: "Bar" });
 });
 
-const exceptionView: PrepStationsView = {
-  ...view,
-  zones: [{ id: "terrace", name: "Terrace" }],
-  routing: {
-    ...view.routing,
-    stations: [...view.routing.stations, { id: "old", name: "Old bar", active: false }],
-    exceptions: [
-      {
-        id: "b",
-        position: 20,
-        zoneId: "terrace",
-        categoryId: "cocktails",
-        productId: null,
-        target: { kind: "station", stationId: "old" },
-        neverMatches: true,
-        stationOff: true,
-      },
-      {
-        id: "a",
-        position: 10,
-        zoneId: null,
-        categoryId: null,
-        productId: "bread",
-        target: { kind: "no_preparation" },
-        neverMatches: false,
-        stationOff: false,
-      },
-    ],
-  },
-};
-it.each([
-  [1280, "light"],
-  [1280, "dark"],
-  [390, "light"],
-  [390, "dark"],
-] as const)(
-  "puts an exception's grip and row menu on the first line of a wrapping rule at %ipx (%s)",
-  async (frame, theme) => {
-    const width = window.innerWidth,
-      height = window.innerHeight;
-    await page.viewport(frame, 844);
-    try {
-      // Long enough to wrap even across a desktop-wide table.
-      const long = "Bread baked in the wood oven every morning and sliced at the pass, ".repeat(6);
-      const el = await mount(
-        api({
-          load: vi.fn().mockResolvedValue({
-            ...exceptionView,
-            products: [{ id: "bread", name: long }],
-          }),
-        }),
-        theme,
-      );
-      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
-      const row = q(el, '[data-test="exceptions"] tr[data-id="a"]')!;
-      const rule = row.children[1]!;
-      const handle = q(el, '[data-test="drag-a"]')!;
-
-      expect(window.innerWidth).toBe(frame);
-      expect(rule.textContent).toContain(long.trim());
-      expect(row.getBoundingClientRect().height).toBeGreaterThan(
-        handle.getBoundingClientRect().height * 1.5,
-      );
-      expect(textLines(rule).length, "the rule wraps").toBeGreaterThan(1);
-      const line = textLines(rule)[0]!;
-      const within = middleWithin(line);
-      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
-      const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
-      expect(
-        { icon: within(icon), menu: within(menu) },
-        JSON.stringify({ line, icon, menu }),
-      ).toEqual({ icon: true, menu: true });
-    } finally {
-      await page.viewport(width, height);
-    }
-  },
-);
-it.each(["create", "update"] as const)(
-  "shows an inactive station refusal when an exception %s is rejected after preview",
-  async (operation) => {
-    setLocale("en");
-    const refusal = { code: "route.station_inactive" };
-    const a = api({
-      load: vi.fn().mockResolvedValue(exceptionView),
-      createException: vi.fn().mockRejectedValue(refusal),
-      updateException: vi.fn().mockRejectedValue(refusal),
-    });
-    const el = await mount(a);
-    q(
-      el,
-      operation === "create" ? '[data-test="add-exception"]' : '[data-test="edit-exception-a"]',
-    )!.click();
-    await settle(el);
-    if (operation === "create") {
-      q(el, '[data-test="exception-zone"]')!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: "terrace" } }),
-      );
-    }
-    q(el, '[data-test="exception-target"]')!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "bar" } }),
-    );
-    await settle(el);
-    q(el, '[data-test="save-exception"]')!.click();
-    await settle(el);
-    expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
-    q(el, '[data-test="confirm-routing"]')!.click();
-    await settle(el);
-    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
-    expect(q(el, '[role="alert"]')?.textContent).toContain("This station is disabled");
-    expect(q(el, '[role="alert"]')?.textContent).not.toContain("could not be saved");
-  },
-);
 it("shows a tester failure without inventing an answer", async () => {
   setLocale("en");
   const a = api({
@@ -1869,18 +1771,6 @@ it("keeps a failed save's message through a later failed refresh and the recover
   await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(4));
   await settle(el);
   expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved");
-});
-
-it.each([
-  ["en", "Old bar (Disabled)"],
-  ["es-ES", "Old bar (Deshabilitada)"],
-] as const)("names a retained disabled exception station in %s", async (locale, expected) => {
-  setLocale(locale);
-  const el = await mount(api({ load: vi.fn().mockResolvedValue(exceptionView) }));
-  q(el, '[data-test="edit-exception-b"]')!.click();
-  await settle(el);
-  const target = q(el, '[data-test="exception-target"]')!;
-  expect(target.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe(expected);
 });
 
 it("retains a disabled fallback in its editor but clears it for Disable", async () => {
@@ -2751,8 +2641,8 @@ it.each(["tickets", "watchers", "settings"])(
     expect(location.pathname).toBe("/manage/prep-stations/view/routing/test/bread");
     expect(q(el, '[data-test="test-product"]')!.closest('[slot="routing"]')).not.toBeNull();
     expect((q(el, '[data-test="test-product"]') as WtCombobox).value).toBe("bread");
-    expect(q(el, '[data-test="claim-bar"]')!.closest('[slot="routing"]')).not.toBeNull();
-    expect(q(el, '[data-test="add-exception"]')!.closest('[slot="routing"]')).not.toBeNull();
+    expect(await routingGrid(el)).not.toBeNull();
+    expect(q(el, '[data-test="station-bar"]')!.closest('[slot="routing"]')).not.toBeNull();
   },
 );
 
@@ -2853,21 +2743,21 @@ it("Today redraws the scheduled label when the next background read no longer ca
 it.each([
   {
     locale: "en",
-    claim: "Claim a category",
-    field: "Category",
+    heading: "Category or product",
+    field: "All categories",
     disable: "Disable",
     enable: "Enable",
   },
   {
     locale: "es",
-    claim: "Asignar una categoría",
-    field: "Categoría",
+    heading: "Categoría o producto",
+    field: "Todas las categorías",
     disable: "Deshabilitar",
     enable: "Habilitar",
   },
 ])(
   "uses category and Disable/Enable wording for retained stations and watchers ($locale)",
-  async ({ locale, claim, field, disable, enable }) => {
+  async ({ locale, heading, field, disable, enable }) => {
     setLocale(locale);
     const disabled = { ...upstairs, active: false };
     const pass = {
@@ -2890,13 +2780,12 @@ it.each([
           .mockResolvedValue({ ...view, stations: [...view.stations, disabled], watchers: [pass] }),
       }),
     );
-    expect(q(el, '[data-test="claim-bar"]')!.textContent!.trim()).toBe(claim);
+    const grid = (await routingGrid(el))!;
+    expect(grid.shadowRoot!.querySelector("thead th")!.textContent!.trim()).toBe(heading);
     expect(q(el, '[data-test="disable-bar"]')!.textContent!.trim()).toBe(disable);
     expect(q(el, '[data-test="enable-upstairs"]')!.textContent!.trim()).toBe(enable);
     expect(q(el, '[data-test="remove-watcher-pass"]')!.textContent!.trim()).toBe(disable);
-    q(el, '[data-test="claim-bar"]')!.click();
-    await settle(el);
-    expect((q(el, '[data-test="claim-choice"]') as WtCombobox).label).toBe(field);
+    expect(gridCombo(grid, "all", "every")!.label.startsWith(`${field}, `)).toBe(true);
   },
 );
 
@@ -3315,7 +3204,7 @@ it("Stations row actions reuse default and retained disable/enable writes", asyn
   expect(a.activateStation).toHaveBeenCalledWith("upstairs");
 });
 
-it("reorders Stations with the keyboard, retains focus and leaves routing priorities unchanged", async () => {
+it("reorders Stations with the keyboard, retains focus and leaves routing cells unchanged", async () => {
   const next = withUpstairs({ open: true, why: "in_hours" });
   const order = vi.fn().mockImplementation(async (ids: string[]) => {
     ids.forEach((id, index) => {
@@ -3335,8 +3224,8 @@ it("reorders Stations with the keyboard, retains focus and leaves routing priori
     ),
   ).toEqual(["station-menu-upstairs", "station-menu-bar"]);
   expect(healthSummary(el)!.activeElement?.getAttribute("data-test")).toBe("drag-upstairs");
-  expect(next.routing.claims).toEqual(view.routing.claims);
-  expect(next.routing.exceptions).toEqual([]);
+  expect(next.routing.cells).toEqual(view.routing.cells);
+  expect(next.routing.defaultStationId).toBe(view.routing.defaultStationId);
 });
 it("restores the Stations order after refusal and never moves disabled rows", async () => {
   const next = withUpstairs({ open: true, why: "in_hours" });
