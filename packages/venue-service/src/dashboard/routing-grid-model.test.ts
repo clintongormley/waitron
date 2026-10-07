@@ -315,14 +315,14 @@ describe("visibleRoutingRows", () => {
     );
     expect(outline(visibleRoutingRows(venue, none))).toEqual([
       "[All]",
-      "  C:self",
       "  C:root",
+      "  C:self",
       "  C:a {1,1}",
     ]);
     expect(outline(visibleRoutingRows(venue, expandAll(venue)))).toEqual([
       "[All]",
-      "  C:self",
       "  C:root",
+      "  C:self",
       "  C:a",
       "    C:b <a>",
       "      P:p <a/b>",
@@ -343,9 +343,9 @@ describe("visibleRoutingRows", () => {
     expect(outline(visibleRoutingRows(venue, expandAll(venue)))).toEqual([
       "[All]",
       "  C:b",
+      "    C:a <b>",
       "    C:c <b>",
       "      P:p <b/c>",
-      "    C:a <b>",
     ]);
   });
 
@@ -361,6 +361,99 @@ describe("visibleRoutingRows", () => {
       "  C:food",
       "[No category]",
       "  P:stray",
+    ]);
+  });
+});
+
+describe("visibleRoutingRows name order", () => {
+  // Given in the server's binary order, as `snapshot` and `routingModel` send them.
+  const binary = ["Mesa 10", "Mesa 2", "Zumos", "bebidas", "Árboles"];
+  const labelOrder = ["Árboles", "bebidas", "Mesa 2", "Mesa 10", "Zumos"];
+
+  it("sorts root categories by label, not by binary order", () => {
+    const venue = model(
+      binary.map((name) => folder(name)),
+      [],
+    );
+    expect(outline(visibleRoutingRows(venue, none))).toEqual([
+      "[All]",
+      ...labelOrder.map((name) => `  C:${name}`),
+    ]);
+  });
+
+  it("sorts an expanded parent's child categories by label", () => {
+    const venue = model(
+      [folder("bar", null, "Bar"), ...binary.map((name) => folder(name, "bar"))],
+      [],
+    );
+    expect(outline(visibleRoutingRows(venue, new Set(["bar"])))).toEqual([
+      "[All]",
+      "  C:Bar",
+      ...labelOrder.map((name) => `    C:${name} <Bar>`),
+    ]);
+  });
+
+  it("sorts an expanded category's products by label", () => {
+    const venue = model(
+      [folder("bar", null, "Bar")],
+      binary.map((name) => item(name, "bar")),
+    );
+    expect(outline(visibleRoutingRows(venue, new Set(["bar"])))).toEqual([
+      "[All]",
+      "  C:Bar",
+      ...labelOrder.map((name) => `    P:${name} <Bar>`),
+    ]);
+  });
+
+  it("sorts the products under No category by label", () => {
+    const venue = model(
+      [],
+      binary.map((name) => item(name, null)),
+    );
+    expect(outline(visibleRoutingRows(venue, none))).toEqual([
+      "[All]",
+      "[No category]",
+      ...labelOrder.map((name) => `  P:${name}`),
+    ]);
+  });
+
+  it("keeps the incoming order for equal names", () => {
+    const venue = model(
+      [folder("bar", null, "Bar")],
+      [
+        item("p2", "bar", "Caña"),
+        item("p1", "bar", "Caña"),
+        item("u2", null, "Agua"),
+        item("u1", null, "Agua"),
+      ],
+    );
+    const productIds = visibleRoutingRows(venue, new Set(["bar"])).flatMap((entry) =>
+      entry.row.kind === "product" ? [entry.row.productId] : [],
+    );
+    expect(productIds).toEqual(["p2", "p1", "u2", "u1"]);
+  });
+
+  it("keeps a child category under its parent, after it and before the parent's products", () => {
+    const venue = model(
+      [
+        folder("zumos", null, "Zumos"),
+        folder("agua", null, "Agua"),
+        folder("mesa", "zumos", "Mesa"),
+      ],
+      [
+        item("p-b", "zumos", "Batido"),
+        item("p-a", "zumos", "Arándano"),
+        item("p-m", "mesa", "Menta"),
+      ],
+    );
+    expect(outline(visibleRoutingRows(venue, expandAll(venue)))).toEqual([
+      "[All]",
+      "  C:Agua",
+      "  C:Zumos",
+      "    C:Mesa <Zumos>",
+      "      P:Menta <Zumos/Mesa>",
+      "    P:Arándano <Zumos>",
+      "    P:Batido <Zumos>",
     ]);
   });
 });
