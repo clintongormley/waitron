@@ -9,19 +9,20 @@ its own, and takes the product's.
 
 ## Choose your content languages
 
-A new venue starts with its content languages already chosen. A venue in Spain starts with Spanish,
-Catalan and English: in Catalonia Catalan is the default, elsewhere Spanish, and a venue in Galicia
-also gets Galician. A venue anywhere else starts with one language, worked out from where it is. To
-add another, open **Settings**, then **Content languages**, which lists your languages with the
+A new venue starts with its content languages already chosen: the languages Waitron keeps enabled
+for its region, plus English. In Spain Waitron keeps Spanish enabled in every region where a venue
+can be set up today, and Catalan as well in Catalonia, the Valencian Community and the Balearic
+Islands, and Galician in Galicia; there that regional language is the default. Elsewhere in Spain
+Spanish is the default. A venue in another country starts with its country's language and English.
+To add another, open **Settings**, then **Content languages**, which lists your languages with the
 default first. Select **Add language**, choose the language and select **Add**; the list shows your
 country's official languages first, under **Official languages**, while any of them is not yet
-added. The added language's translation fields are then available throughout your content
-editors. To change the default, select **Set as default** on that language's row.
+added. The added language's translation fields are then available throughout your content editors.
+To change the default, select **Set as default** on that language's row.
 
-Some regions have rules about the languages a menu uses. A language your venue's region requires is
-marked **Required** and has no **Remove**, and if it is ever missing, your next save on this page
-adds it back. Where the region also asks for foreign languages, the page shows a notice while you
-have fewer than it asks for.
+A language Waitron keeps enabled for your region is marked **Required** and has no **Remove**, and
+if it is ever missing, your next save on this page adds it back. Where the region also asks for
+foreign languages, the page shows a notice while you have fewer than it asks for.
 
 For example, with Spanish as the default and English alongside, a product whose customer-facing name
 reads **Pan de verano** in Spanish can leave its English one empty while you prepare the translation.
@@ -48,7 +49,7 @@ customer-facing names are edited through **Rename** on the menu's row in that li
 **Structure** tab, although the **Missing translations** link for a menu's own name opens that tab.
 
 **Missing translations** lists, for each of your content languages, the customer-facing names that
-have no text in it. A language your region requires comes first, opens by itself when something is
+have no text in it. A language marked **Required** comes first, opens by itself when something is
 missing, and has a note saying how many names still need translating into it. A name filled in for
 some languages but not this one is marked **Partly translated**. Something with no customer-facing
 name at all is listed under your other languages as **No customer-facing name**, because there its

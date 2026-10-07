@@ -26,7 +26,7 @@ export interface AdministrativeArea {
   /** Not the content languages a venue here must keep: those are `requiredContentLocales`. */
   readonly defaultLocale?: string;
   readonly timeZone?: string;
-  /** Locales Waitron keeps enabled for a venue in this area, following its language rules. */
+  /** Locales Waitron keeps enabled for a venue in this area. */
   readonly requiredContentLocales?: readonly string[];
   /** A new venue's default content language in this area. */
   readonly defaultContentLocale?: string;

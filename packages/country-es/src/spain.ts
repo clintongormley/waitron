@@ -167,6 +167,8 @@ const CATALONIA_PROVINCES = new Set(["08", "17", "25", "43"]);
 const VALENCIAN_PROVINCES = new Set(["03", "12", "46"]);
 const GALICIAN = new Set(["15", "27", "32", "36"]);
 const BASQUE = new Set(["01", "20", "48"]);
+const BALEARIC_PROVINCES = new Set(["07"]);
+const NAVARRE_PROVINCES = new Set(["31"]);
 
 function localeFor(code: string): string | undefined {
   if (CATALAN.has(code)) return "ca-ES";
@@ -175,7 +177,7 @@ function localeFor(code: string): string | undefined {
   return undefined;
 }
 
-type LanguageLaw = Pick<
+type LanguageRules = Pick<
   AdministrativeArea,
   "requiredContentLocales" | "defaultContentLocale" | "foreignLanguageNotice" | "fixedReceiptLocale"
 >;
@@ -191,7 +193,7 @@ type LanguageLaw = Pick<
 // putting invoices under it is the agency's reading, not the statute's.
 // A copy can print in another pack language (`printSaleReceipt`, apps/server/src/till-sale.ts).
 // Sources: docs/compliance/regional-language-rules.md, Catalonia table, "Receipts / invoices" rows.
-const CATALONIA: LanguageLaw = {
+const CATALONIA: LanguageRules = {
   requiredContentLocales: ["ca-ES", "es-ES"],
   defaultContentLocale: "ca-ES",
   fixedReceiptLocale: {
@@ -206,8 +208,9 @@ const CATALONIA: LanguageLaw = {
 // Decree 36/2023 arts. 9.9 and 12.4: both official languages and at least one foreign language,
 // preferably English. Art. 1.2.g exempts takeaway-only and delivery-only places; Waitron does
 // not distinguish them and keeps both languages enabled everywhere in the region.
-const VALENCIAN_COMMUNITY: LanguageLaw = {
+const VALENCIAN_COMMUNITY: LanguageRules = {
   requiredContentLocales: ["ca-ES", "es-ES"],
+  defaultContentLocale: "ca-ES",
   foreignLanguageNotice: {
     minimumForeign: 1,
     text: {
@@ -220,8 +223,9 @@ const VALENCIAN_COMMUNITY: LanguageLaw = {
 // Decree 108/2006 art. 27.2, and the menu rule as amended by Decree 8/2007. Arts. 1-2 limit the
 // decree to restaurants and cafeterias; Waitron does not distinguish venue types and keeps both
 // languages enabled everywhere in the region.
-const GALICIA: LanguageLaw = {
+const GALICIA: LanguageRules = {
   requiredContentLocales: ["gl-ES", "es-ES"],
+  defaultContentLocale: "gl-ES",
   foreignLanguageNotice: {
     minimumForeign: 2,
     text: {
@@ -231,11 +235,30 @@ const GALICIA: LanguageLaw = {
   },
 };
 
-function languageLawFor(code: string): LanguageLaw {
+// The owner's choice, stricter than the law, which asks for at least one official language
+// (docs/compliance/regional-language-rules.md, "Balearic Islands"); docs/backlog.md → "Content
+// languages per region".
+const BALEARIC_ISLANDS: LanguageRules = {
+  requiredContentLocales: ["ca-ES", "es-ES"],
+  defaultContentLocale: "ca-ES",
+};
+
+// The owner's choice, not a law: service is offered in Spanish; docs/backlog.md → "Content
+// languages per region".
+const SPANISH: LanguageRules = {
+  requiredContentLocales: ["es-ES"],
+  defaultContentLocale: "es-ES",
+};
+
+function languageRulesFor(code: string): LanguageRules {
   if (CATALONIA_PROVINCES.has(code)) return CATALONIA;
   if (VALENCIAN_PROVINCES.has(code)) return VALENCIAN_COMMUNITY;
   if (GALICIAN.has(code)) return GALICIA;
-  return {};
+  if (BALEARIC_PROVINCES.has(code)) return BALEARIC_ISLANDS;
+  // No content language is required in the Basque Country or Navarre (owner; docs/backlog.md →
+  // "Content languages per region").
+  if (BASQUE.has(code) || NAVARRE_PROVINCES.has(code)) return {};
+  return SPANISH;
 }
 
 const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(
@@ -246,7 +269,7 @@ const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(
     postalPrefixes: [code],
     ...(localeFor(code) === undefined ? {} : { defaultLocale: localeFor(code) }),
     timeZone: code === "35" || code === "38" ? "Atlantic/Canary" : "Europe/Madrid",
-    ...languageLawFor(code),
+    ...languageRulesFor(code),
   }),
 );
 

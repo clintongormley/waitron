@@ -251,23 +251,24 @@ of them in the optional group: the list's own name (`option_list`) and each of i
 second one: each of its items names a product and carries no name of its own, so `extra_list_items`
 holds no map for the report to read.
 
-A content-language save that leaves out a language the venue's region requires is refused
-(`content.language_required`, `writeContentLanguages` in
-`packages/catalogue/src/content-languages.ts`), but nothing makes that language's text complete.
-What is missing is listed instead, on the dashboard's Content languages page, under **Missing
-translations** (`listTranslationGapReport`, `packages/catalogue/src/content-translation-report.ts`,
-read through `GET /management-api/content-translation-gaps`). For each enabled language it lists the
-report's own gaps for that language, marked **Partly translated** (only these stop that language
-becoming the default), and, for every language except the default, what has no customer-facing name
-at all, marked **No customer-facing name**, because there the staff name is shown in its place (an
-absent extras list name is never listed: it reaches no receipt). Under the default language an
-absent name is not listed, because the staff name stands as that language's text. Each row shows the
-staff name — a unit, which has none, shows its name in the default language, or any text it has —
-and links to the screen that edits it. That list leaves out a disabled product, a disabled variant
-and every variant of a disabled product, a disabled options or extras list and its options, and
-what a switched-off menu owns; the default-change check above still counts all of them except a
-disabled variant, which it skips too. Image names (the media module's contribution) are checked on
-a change of default but are not in the list.
+A content-language save that leaves out a language Waitron keeps enabled for the venue's area (its
+area's `requiredContentLocales` in the country pack) is refused (`content.language_required`,
+`writeContentLanguages` in `packages/catalogue/src/content-languages.ts`), but nothing makes that
+language's text complete. What is missing is listed instead, on the dashboard's Content languages
+page, under **Missing translations** (`listTranslationGapReport`,
+`packages/catalogue/src/content-translation-report.ts`, read through
+`GET /management-api/content-translation-gaps`). For each enabled language it lists the report's own
+gaps for that language, marked **Partly translated** (only these stop that language becoming the
+default), and, for every language except the default, what has no customer-facing name at all,
+marked **No customer-facing name**, because there the staff name is shown in its place (an absent
+extras list name is never listed: it reaches no receipt). Under the default language an absent name
+is not listed, because the staff name stands as that language's text. Each row shows the staff name
+— a unit, which has none, shows its name in the default language, or any text it has — and links to
+the screen that edits it. That list leaves out a disabled product, a disabled variant and every
+variant of a disabled product, a disabled options or extras list and its options, and what a
+switched-off menu owns; the default-change check above still counts all of them except a disabled
+variant, which it skips too. Image names (the media module's contribution) are checked on a change
+of default but are not in the list.
 
 ## Colour
 

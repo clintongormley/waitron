@@ -1,4 +1,4 @@
-import { findAdministrativeArea } from "@waitron/country";
+import { findAdministrativeArea, resolveFiscalJurisdiction } from "@waitron/country";
 import { describe, expect, it } from "vitest";
 import {
   COUNTRY_PACKS,
@@ -12,6 +12,7 @@ import {
   resolveInstalledCountryLocale,
   resolveInstalledDefaultContentLanguage,
   resolveInstalledReceiptLanguageRules,
+  resolveInstalledStartingContentLanguages,
 } from "./registry.js";
 
 describe("installed country packs", () => {
@@ -106,12 +107,18 @@ describe("content-language rules", () => {
     expect(rules.foreignLanguageNotice?.minimumForeign).toBe(2);
   });
 
-  it("requires nothing for a Madrid venue or a Spanish venue with no province", () => {
-    for (const area of ["Madrid", null])
-      expect(resolveInstalledContentLanguageRules({ country: "ES", area })).toStrictEqual({
-        required: [],
-        official: SPAIN_OFFICIAL,
-      });
+  it("requires Spanish for a Madrid venue", () => {
+    expect(resolveInstalledContentLanguageRules({ country: "ES", area: "Madrid" })).toStrictEqual({
+      required: ["es"],
+      official: SPAIN_OFFICIAL,
+    });
+  });
+
+  it("requires nothing for a Spanish venue with no province", () => {
+    expect(resolveInstalledContentLanguageRules({ country: "ES", area: null })).toStrictEqual({
+      required: [],
+      official: SPAIN_OFFICIAL,
+    });
   });
 
   it("requires nothing and names no official language for a country with none, or no country", () => {
@@ -122,15 +129,74 @@ describe("content-language rules", () => {
       });
   });
 
-  it("gives Catalan as a new Barcelona venue's default content language and nothing elsewhere", () => {
+  it("gives a new Spanish venue the regional language as its default where one is required, Spanish where Spanish alone is required, and none in the Basque Country", () => {
     expect(resolveInstalledDefaultContentLanguage({ country: "es", area: "Barcelona" })).toBe("ca");
+    expect(resolveInstalledDefaultContentLanguage({ country: "ES", area: "Valencia" })).toBe("ca");
+    expect(resolveInstalledDefaultContentLanguage({ country: "ES", area: "Madrid" })).toBe("es");
     for (const input of [
-      { country: "ES", area: "Valencia" },
-      { country: "ES", area: "Madrid" },
       { country: "XX", area: "Barcelona" },
       { country: null, area: null },
+      { country: "ES", area: "Bizkaia" },
     ])
       expect(resolveInstalledDefaultContentLanguage(input)).toBeUndefined();
+  });
+});
+
+describe("starting content languages", () => {
+  it.each([
+    [
+      { country: "ES", area: "Madrid" },
+      { defaultLanguage: "es", languages: ["es", "en"], required: ["es"] },
+    ],
+    [
+      { country: "ES", area: "Barcelona" },
+      { defaultLanguage: "ca", languages: ["ca", "es", "en"], required: ["ca", "es"] },
+    ],
+    [
+      { country: "ES", area: "46" },
+      { defaultLanguage: "ca", languages: ["ca", "es", "en"], required: ["ca", "es"] },
+    ],
+    [
+      { country: "ES", area: "07" },
+      { defaultLanguage: "ca", languages: ["ca", "es", "en"], required: ["ca", "es"] },
+    ],
+    [
+      { country: "ES", area: "A Coruña" },
+      { defaultLanguage: "gl", languages: ["gl", "es", "en"], required: ["gl", "es"] },
+    ],
+    [
+      { country: "ES", area: "Bizkaia" },
+      { defaultLanguage: "es", languages: ["es", "en"], required: [] },
+    ],
+    [
+      { country: "ES", area: null },
+      { defaultLanguage: "es", languages: ["es", "en"], required: [] },
+    ],
+    [
+      { country: "GB", area: null },
+      { defaultLanguage: "en", languages: ["en"], required: [] },
+    ],
+    [
+      { country: "XX", area: "Barcelona" },
+      { defaultLanguage: "en", languages: ["en"], required: [] },
+    ],
+  ])("starts a new venue in %o with these content languages", (input, expected) => {
+    expect(resolveInstalledStartingContentLanguages(input)).toStrictEqual(expected);
+  });
+
+  it("requires a language, and switches English on without requiring it, wherever a venue can be set up", () => {
+    for (const pack of VENUE_SETUP_COUNTRY_PACKS)
+      for (const area of pack.administrativeAreas) {
+        if (resolveFiscalJurisdiction(pack, area.code)?.supported !== true) continue;
+        const starting = resolveInstalledStartingContentLanguages({
+          country: pack.countryCode,
+          area: area.code,
+        });
+        expect(starting.required.length, area.name).toBeGreaterThan(0);
+        expect(starting.required, area.name).not.toContain("en");
+        expect(starting.languages, area.name).toContain("en");
+        expect(starting.languages[0], area.name).toBe(starting.defaultLanguage);
+      }
   });
 });
 

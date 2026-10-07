@@ -5,7 +5,7 @@ import type {
   ReceiptLanguageRules,
 } from "@waitron/country";
 import { contentLanguageRules, receiptLanguageRules, resolveCountryLocale } from "@waitron/country";
-import { contentLanguageCode, type ContentLanguageRules } from "@waitron/shared";
+import { contentLanguageCode, FALLBACK_LOCALE, type ContentLanguageRules } from "@waitron/shared";
 import { SPAIN, SPAIN_RECEIPT_LABELS } from "@waitron/country-es";
 import { UNITED_KINGDOM } from "@waitron/country-gb";
 
@@ -72,7 +72,7 @@ export function resolveInstalledCountryLocale<Locale extends string>(
   });
 }
 
-interface VenueGeography {
+export interface VenueGeography {
   readonly country?: string | null;
   readonly area?: string | null;
 }
@@ -105,6 +105,34 @@ export function resolveInstalledDefaultContentLanguage(input: VenueGeography): s
   const locale =
     pack === undefined ? undefined : contentLanguageRules(pack, input.area).defaultContentLocale;
   return locale === undefined ? undefined : contentLanguageCode(locale);
+}
+
+export interface StartingContentLanguages {
+  readonly defaultLanguage: string;
+  /** The default first, then the area's required languages, then English. */
+  readonly languages: readonly string[];
+  readonly required: readonly string[];
+}
+
+/** Switched on for every new venue, required nowhere (owner, 2026-10-06; docs/backlog.md →
+ * "Content languages per region"). */
+const ENGLISH = "en";
+
+/** The content languages a NEW venue starts with in this area, as language codes. */
+export function resolveInstalledStartingContentLanguages(
+  input: VenueGeography,
+): StartingContentLanguages {
+  const pack = packFor(input);
+  const rules = pack === undefined ? undefined : contentLanguageRules(pack, input.area);
+  const required = rules === undefined ? [] : codes(rules.required);
+  const defaultLanguage = contentLanguageCode(
+    rules?.defaultContentLocale ?? pack?.defaultLocale ?? FALLBACK_LOCALE,
+  );
+  return {
+    defaultLanguage,
+    languages: [...new Set([defaultLanguage, ...required, ENGLISH])],
+    required,
+  };
 }
 
 /** What a receipt prints in when the venue's country has no installed pack, and how a receipt in a

@@ -654,7 +654,7 @@ describe("content-language configuration", () => {
     official: ["es", "ca", "gl", "eu"],
   };
 
-  it("refuses removing a language the venue's region requires", async () => {
+  it("refuses removing a language the venue must keep", async () => {
     const app = mountApp("es-ES", BARCELONA);
     const all = { defaultLanguage: "es", languages: ["es", "ca", "en"] };
     expect(
@@ -670,7 +670,7 @@ describe("content-language configuration", () => {
     expect(await (await send(app, "GET", "/management-api/content-languages")).json()).toEqual(all);
   });
 
-  it("lets a venue whose region requires nothing remove any language but its default", async () => {
+  it("lets a venue with no required language remove any language but its default", async () => {
     const app = mountApp("es-ES", { required: [], official: BARCELONA.official });
     for (const settings of [
       { defaultLanguage: "es", languages: ["es", "ca", "en"] },

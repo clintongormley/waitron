@@ -6,7 +6,7 @@ export interface ContentLanguages {
   languages: string[];
 }
 
-/** What the venue's region requires of its content languages, as language codes. */
+/** The content-language rules for a venue's area, as language codes. */
 export interface ContentLanguageRules {
   /** The content-languages route refuses a save that leaves one out. */
   readonly required: readonly string[];

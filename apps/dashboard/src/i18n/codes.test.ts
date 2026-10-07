@@ -383,10 +383,10 @@ it("has a sentence of its own for an unsupported language, in both languages", (
 
 it("says a required content language cannot be removed, in both languages", () => {
   expect(codeMessage("content.language_required", "en")).toBe(
-    "This venue's region requires that language, so it cannot be removed.",
+    "Waitron keeps this language enabled for venues in this region, so it cannot be removed.",
   );
   expect(codeMessage("content.language_required", "es")).toBe(
-    "La región del local exige ese idioma, así que no se puede quitar.",
+    "Waitron mantiene este idioma activado en los locales de esta región, así que no se puede quitar.",
   );
 });
 
