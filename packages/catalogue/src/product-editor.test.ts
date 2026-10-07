@@ -660,6 +660,7 @@ describe("a variant's own page", () => {
       modifiers: [],
       variants: [],
       inherited: {
+        name: "Coffee",
         description: { en: "Freshly roasted" },
         image: "coffee.webp",
         unitPrice: "9.00",
@@ -674,6 +675,12 @@ describe("a variant's own page", () => {
     const parent = await read(parentId);
     expect(parent.parentId).toBeNull();
     expect(parent.inherited).toBeNull();
+  });
+
+  it("reads the parent's current staff name after a rename", async () => {
+    expect((await read(variantId)).inherited).toMatchObject({ name: "Coffee" });
+    await withTransaction(fx.db, (tx) => updateProduct(tx, parentId, { name: "Coffee renamed" }));
+    expect((await read(variantId)).inherited).toMatchObject({ name: "Coffee renamed" });
   });
 
   it("offers the parent's PUBLISHED allergens as inherited, never only its manual overlay", async () => {

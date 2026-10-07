@@ -572,8 +572,8 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
   Cancelling it adds nothing. The window's heading names the product by its staff name as the form
   holds it, saved or not: "Add variant to: Coffee", or "Edit variant of: Coffee" for an existing
   variant (`editor.add_variant_to`, `editor.edit_variant_of`). While that name is blank it reads
-  plain "Add variant" or "Edit variant". A variant's own page keeps the plain "Edit variant",
-  because its read carries none of the parent's names.
+  plain "Add variant" or "Edit variant". A variant's own page reads the parent's saved staff name
+  in its editor response and heads "Edit variant of: Coffee"; reloading reads that name again.
 - The Pricing section holds the price field and then VAT. While at least one variant is Active the
   price's label reads "Base price per" and the unit (`editor.base_price_unit`), or "Base price"
   alone (`editor.base_price`) for a product with no unit, a variant with no price of its own shows

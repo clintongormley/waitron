@@ -69,11 +69,12 @@ async function readStored(tx: Transaction, productId: string) {
   };
 }
 
-/** A parent's value for each field its variants inherit. A parent has no parent of its own, so
- * `products_top_level_owns_ck` sets its price, VAT class and dietary declarations. */
+/** A parent has no parent of its own, so `products_top_level_owns_ck` sets its price, VAT class
+ * and dietary declarations. */
 async function readInherited(tx: Transaction, parentId: string): Promise<InheritedValues> {
   const { stored: parent, publishedAllergens } = await readStored(tx, parentId);
   return {
+    name: parent.name,
     description: parent.description,
     image: parent.image,
     unitPrice: parent.unitPrice!,

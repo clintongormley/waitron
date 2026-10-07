@@ -1956,6 +1956,7 @@ describe("mountCatalogueApi — products", () => {
       modifiers: [],
       variants: [],
       inherited: {
+        name: "Café",
         description: { es: "Tostado natural" },
         unitPrice: "2.00",
         vatClass: "reduced",

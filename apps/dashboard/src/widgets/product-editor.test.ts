@@ -3656,6 +3656,7 @@ it("reads a translation stored under a regional code as present, as the server d
 // an assertion can tell a hint read from the parent from a value read from the variant.
 const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
 const parentValues: InheritedValues = {
+  name: "Coffee",
   description: { en: "Roasted in house" },
   image: "coffee.png",
   unitPrice: "9.00",
@@ -3720,11 +3721,27 @@ function hint(el: ProductEditor, name: string) {
 it("titles a variant's page as a variant, with no Modifiers and no Variants section", async () => {
   const el = await mountVariant();
   expect(el.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).toBe(
-    t("editor.edit_variant"),
+    t("editor.edit_variant_of").replace("{name}", "Coffee"),
   );
   expect(section(el, "modifiers")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=add-variant]")).toBeNull();
   expect(variantTable(el)).toBeNull();
+});
+
+it("shows replacement-marker characters literally in a variant parent's name", async () => {
+  const previous = currentLocale();
+  try {
+    setLocale("en");
+    const el = await mountVariant({
+      ...glass,
+      inherited: { ...parentValues, name: "$& coffee $` $'" },
+    });
+    expect(el.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).toBe(
+      "Edit variant of: $& coffee $` $'",
+    );
+  } finally {
+    setLocale(previous);
+  }
 });
 
 // Who may order a dish on its own is read from the dish; a variant is only ever ordered under it.
@@ -3736,6 +3753,8 @@ it("shows no standalone ordering choice on a variant's page, and keeps the varia
   el.addEventListener("wt-submit", submit);
   save(el);
   expect(submit.mock.calls[0]![0].detail.value.ordering).toBe("public");
+  expect(submit.mock.calls[0]![0].detail.value.name).toBe("Glass of coffee");
+  expect(submit.mock.calls[0]![0].detail.value).not.toHaveProperty("inherited");
 });
 
 it("shows a variant's inherited price and description empty, with the parent's value as the hint", async () => {

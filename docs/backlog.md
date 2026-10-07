@@ -957,8 +957,9 @@ unused `units` property is gone (it closes W75's leftover).
   ("Añadir variante a: …", "Editar variante de: …"), with the name as typed, saved or not; a dialog
   heading now wraps a long unbroken name; a variant showing the product's photo shows Remove image
   greyed out beside Choose image. Open: the hidden "Uses the product's image" hint is not tied to that
-  button by `aria-describedby`, which `wt-button` does not pass to its inner button; a variant's own
-  page keeps "Edit variant", as its `InheritedValues` (`packages/catalogue/src/product-types.ts`) has no name.
+  button by `aria-describedby`, which `wt-button` does not pass to its inner button (A362).
+  A361 — DONE: the variant's own page names its product with "Edit variant of: …" / "Editar variante
+  de: …", using the parent's saved staff name; reloading reads a renamed parent again.
 - **A330, owner 2026-10-07 — DONE (#1354; variant rows show their photo):** an opened variant's row
   in the Products list now draws a photo square in its product's column: the variant's own photo,
   else its product's, else the same square its product's row shows. The till draws no variant photo today,
