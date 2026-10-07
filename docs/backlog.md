@@ -4798,7 +4798,10 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   in lane D on `feat/departmental-tab-transfers`. The branch has request storage, directional
   settings, withdrawal, manager settings routes and editor, usable receiving-profile choices,
   configuration export/import and the acceptance/decline service. The editor protects staged desk and
-  destination choices and reports field refusals. Till routes, lifecycle integration and receiving/sending
+  destination choices and reports field refusals. Authenticated till writes now request, withdraw,
+  accept and decline through the generic service contract. The route cases include the two-device
+  acceptance race and an issued, placed tab whose fiscal rows, line contexts and queued kitchen work
+  are read back unchanged. Durable queue/status reads, lifecycle integration and receiving/sending
   screens remain to build. Party-linked bills are
   refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and

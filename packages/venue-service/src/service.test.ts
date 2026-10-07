@@ -5,11 +5,13 @@ import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.j
 describe("VENUE_SERVICE", () => {
   it("exposes every generic ordering capability", () => {
     expect(Object.keys(VENUE_SERVICE).sort()).toEqual([
+      "acceptDepartmentTransfer",
       "acknowledgeKitchenNotice",
       "assertProfileBinding",
       "assertProfileZone",
       "copyLineContext",
       "copyOrderContext",
+      "declineDepartmentTransfer",
       "describeMakers",
       "findOrderContext",
       "findOrderModes",
@@ -22,6 +24,7 @@ describe("VENUE_SERVICE", () => {
       "menuState",
       "orderInZones",
       "readClearingWorkflow",
+      "readDepartmentTransfer",
       "readEditSentLines",
       "readKitchenTicketGrouping",
       "readLinesSoldInEach",
@@ -36,6 +39,7 @@ describe("VENUE_SERVICE", () => {
       "recordLineContexts",
       "recordOrderContext",
       "recordSaleReceiptHeader",
+      "requestDepartmentTransfer",
       "resolveDefaultMenu",
       "resolveExtraMakers",
       "resolveMakers",
@@ -47,6 +51,7 @@ describe("VENUE_SERVICE", () => {
       "setProfileKitchenLists",
       "setProfileServiceScope",
       "stationStates",
+      "withdrawDepartmentTransfer",
     ]);
   });
 

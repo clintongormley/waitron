@@ -80,6 +80,8 @@ import {
  * | POST /api/parties/:id/served, /unserved                   | hand-over-orders           | hand-over-orders      |
  * | PUT /api/parties/:id/drafts; POST /drafts/:did/take-over, /submit | take-orders        | take-orders           |
  * | POST /api/parties/:id/unpaid-departure                    | take-orders                | take-orders           |
+ * | POST /api/working-orders/:id/department-transfers         | take-orders                | department-transfer-api.test.ts: refuses request without the take-orders profile action |
+ * | POST /api/department-transfers/:id/withdraw, /accept, /decline | take-orders             | department-transfer-api.test.ts: refuses <verb> without the take-orders profile action |
  * | POST /api/bills/:id/split, /merge, /transfer, /move       | take-orders                | take-orders           |
  * | POST /api/device/ticket-items/:id/advance (display)       | prepare-orders             | prepare-orders        |
  * | POST /api/device/kitchen-notices/:id/acknowledge (display)| prepare-orders             | prepare-orders        |

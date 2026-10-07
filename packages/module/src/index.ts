@@ -28,6 +28,9 @@ export type {
   MakerResolver,
   ServiceMode,
   VenueServiceContribution,
+  DepartmentTransfer,
+  DepartmentTransferActor,
+  DepartmentTransferReceiver,
 } from "./module.js";
 export { orderedMigrationSets, packageDirOf } from "./module.js";
 export type {

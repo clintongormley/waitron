@@ -1,3 +1,5 @@
+import type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
+export type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import {
   billPayments,
@@ -27,11 +29,6 @@ export interface DepartmentTransferSettings {
   departmentId: string;
   receivingProfileId: string | null;
   destinationDepartmentIds: string[];
-}
-
-export interface DepartmentTransferActor {
-  departmentId: string;
-  personId: string;
 }
 
 export async function readDepartmentTransferSettings(
@@ -234,6 +231,23 @@ export async function listDepartmentTransfers(
     .orderBy(asc(departmentTransferRequests.createdAt), asc(departmentTransferRequests.id));
 }
 
+export async function readDepartmentTransfer(
+  tx: Transaction,
+  cfg: VenueScope,
+  requestId: string,
+  sender: DepartmentTransferActor,
+) {
+  const [request] = await tx
+    .select()
+    .from(departmentTransferRequests)
+    .where(eq(departmentTransferRequests.id, requestId));
+  if (request === undefined) throw new AppError("department_transfer.not_found", { requestId });
+  await assertDepartment(tx, cfg, request.sourceDepartmentId);
+  if (request.sourceDepartmentId !== sender.departmentId)
+    throw new AppError("department_transfer.not_allowed", {});
+  return request;
+}
+
 export async function withdrawDepartmentTransfer(
   tx: Transaction,
   cfg: VenueScope,
@@ -266,10 +280,6 @@ export async function withdrawDepartmentTransfer(
     )
     .returning();
   return withdrawn!;
-}
-
-export interface DepartmentTransferReceiver extends DepartmentTransferActor {
-  profileId: string;
 }
 
 async function pendingRequest(tx: Transaction, cfg: VenueScope, requestId: string) {

@@ -121,6 +121,10 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | PUT  /api/working-orders/:id/lines/:lineNo              | order                  | refuses PUT .../lines/:lineNo                        |
  * | PATCH /api/working-orders/:id/lines/:lineNo/course      | order                  | refuses PATCH .../lines/:lineNo/course               |
  * | POST /api/working-orders/:id/lines/send, /recall        | order                  | refuses POST .../lines/<send|recall>                 |
+ * | POST /api/working-orders/:id/department-transfers         | order source zone       | department-transfer-api.test.ts: refuses a source zone outside the sender profile |
+ * | POST /api/department-transfers/:id/withdraw               | request's source tab    | department-transfer-api.test.ts: refuses withdrawal outside the sender zone |
+ * | POST /api/department-transfers/:id/accept                 | body destination zone   | department-transfer-api.test.ts: refuses a receiving zone outside the designated profile |
+ * | POST /api/department-transfers/:id/decline                | designated desk's department | department-transfer-api.test.ts: refuses decline from an undesignated profile in the destination |
  * | POST /api/bills/:id/split                               | order                  | refuses POST /api/bills/:id/split                    |
  * | POST /api/bills/:id/merge                               | order; body order      | refuses POST /api/bills/:id/merge (into), (from)     |
  * | POST /api/bills/:id/transfer                            | order; body order      | refuses POST /api/bills/:id/transfer (from), (to)    |

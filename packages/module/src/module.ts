@@ -326,8 +326,65 @@ export interface MakerResolver {
   ): Promise<ReadonlyMap<string, ExtraMakerOutcome>>;
 }
 
+export interface DepartmentTransfer {
+  id: string;
+  tabId: string;
+  sourceDepartmentId: string;
+  destinationDepartmentId: string;
+  senderId: string;
+  resolvedBy: string | null;
+  destinationZoneId: string | null;
+  status: "pending" | "accepted" | "declined" | "withdrawn";
+  reason: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  revision: number;
+}
+
+export interface DepartmentTransferActor {
+  departmentId: string;
+  personId: string;
+}
+
+export interface DepartmentTransferReceiver extends DepartmentTransferActor {
+  profileId: string;
+}
+
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
+  requestDepartmentTransfer(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    tabId: string,
+    destinationDepartmentId: string,
+    sender: DepartmentTransferActor,
+  ): Promise<DepartmentTransfer>;
+  readDepartmentTransfer(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    requestId: string,
+    sender: DepartmentTransferActor,
+  ): Promise<DepartmentTransfer>;
+  withdrawDepartmentTransfer(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    requestId: string,
+    sender: DepartmentTransferActor,
+  ): Promise<DepartmentTransfer>;
+  acceptDepartmentTransfer(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    requestId: string,
+    receiver: DepartmentTransferReceiver,
+    input: { tabRevision: number; zoneId: string; tableId: string | null },
+  ): Promise<DepartmentTransfer>;
+  declineDepartmentTransfer(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    requestId: string,
+    receiver: DepartmentTransferReceiver,
+    reason: string,
+  ): Promise<DepartmentTransfer>;
   listServiceZones(
     tx: Transaction,
     cfg: { locationId: LocationId },
