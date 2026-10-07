@@ -5054,9 +5054,15 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       releases its unsaved-changes registration as soon as the save succeeds, before the refresh
       that follows has settled. A routing cell now keeps its registration until that refresh
       settles. Not changed in A261-4.
-    - **A pending routing choice can vanish without a word.** When a refresh removes the row or
-      zone of a choice whose preview moved nothing, the screen drops the choice and tells the
-      person nothing.
+    - **Done by A375 (owner answer "a — say so", 2026-10-07): a routing choice a refresh drops is
+      no longer dropped without a word.** When a refresh removes the row or zone of a choice whose
+      preview moved nothing, or the No category row of a choice whose preview is open, the screen
+      still drops the choice, and now says in the grid's message line, under the grid, that it was
+      not saved because its zone, category or product, or the No category row, is no longer in the
+      grid — the zone's reason given when the zone is gone. The sentence is generic per kind and
+      does not name the thing. A read that fails, or that still leaves its row or zone out of the
+      grid, leaves it; a refresh that brings its row and zone back, the next cell choice or a tab
+      change clears it (`#dropChoice`, `packages/venue-service/src/dashboard/prep-stations-screen.ts`).
     - **A routing preview can miss an extra that stops following its dish.** The preview compares
       where each product would be made on its own (`previewRoutingChange`,
       `packages/venue-service/src/routing-store.ts`), as it did before A261-4. Giving an extra a

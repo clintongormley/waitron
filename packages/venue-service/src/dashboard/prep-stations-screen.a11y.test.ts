@@ -52,6 +52,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     "grid-preview",
     "grid-refusal",
     "grid-disabled-target",
+    "grid-dropped",
     "watcher",
     "watcher-rename",
     "watcher-remove",
@@ -65,16 +66,20 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
     el.api = {
       updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
-      preview: vi.fn().mockResolvedValue([
-        {
-          productId: "cola",
-          productName: "Cola",
-          zoneId: "terrace",
-          zoneName: "Terrace",
-          from: { kind: "station", stationId: "bar" },
-          to: { kind: "no_preparation" },
-        },
-      ]),
+      preview: vi.fn().mockResolvedValue(
+        state === "grid-dropped"
+          ? []
+          : [
+              {
+                productId: "cola",
+                productName: "Cola",
+                zoneId: "terrace",
+                zoneName: "Terrace",
+                from: { kind: "station", stationId: "bar" },
+                to: { kind: "no_preparation" },
+              },
+            ],
+      ),
       setCell: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
       enableWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
       readStationHealth: vi.fn().mockResolvedValue({
@@ -209,6 +214,25 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
         await vi.waitFor(() =>
           expect(el.shadowRoot!.querySelector('[data-test="routing-preview"]')).not.toBeNull(),
         );
+      }
+      if (state === "grid-dropped") {
+        // A zone the grid no longer draws, as when a refresh removed it during the preview.
+        grid.dispatchEvent(
+          new CustomEvent("routing-cell-change", {
+            detail: {
+              address: { row: { kind: "category", categoryId: "drinks" }, zoneId: "gone" },
+              target: { kind: "no_preparation" },
+            },
+          }),
+        );
+        await vi.waitFor(() =>
+          expect(
+            grid.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+              .error,
+          ).toBe("Your choice was not saved: its zone is no longer in the grid."),
+        );
+        await grid.updateComplete;
+        expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
       }
       if (state === "grid-refusal") {
         el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-routing"]')!.click();

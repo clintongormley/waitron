@@ -6180,6 +6180,196 @@ describe("Routing grid", () => {
     expect(a.setCell).toHaveBeenCalledExactlyOnceWith(foodTerrace, kitchenTarget);
   });
 
+  const pageAlert = (el: PrepStationsScreen) => q(el, '[role="alert"]')?.textContent?.trim() ?? "";
+  const gridMessage = async (el: PrepStationsScreen) => {
+    await gridOf(el).updateComplete;
+    await formActions(el).updateComplete;
+    return formActions(el).error;
+  };
+  const switchTab = async (el: PrepStationsScreen, value: string) => {
+    el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+      new CustomEvent("wt-tab-change", { detail: { value } }),
+    );
+    await settle(el);
+  };
+  const shownTargets = (el: PrepStationsScreen) =>
+    [
+      ...gridOf(el).shadowRoot!.querySelectorAll<WtCombobox>('wt-combobox[name="routing-target"]'),
+    ].map((box) => box.value);
+  it.each([
+    {
+      what: "category",
+      row: "c:drinks",
+      locale: "en",
+      message: "Your choice was not saved: its category is no longer in the grid.",
+      remove: (next: PrepStationsView) => {
+        next.routing.categories = next.routing.categories.filter((c) => c.id !== "drinks");
+        next.routing.cells = [];
+        next.categories = next.categories.filter((c) => c.id !== "drinks");
+      },
+    },
+    {
+      what: "product",
+      row: "p:water",
+      locale: "en",
+      message: "Your choice was not saved: its product is no longer in the grid.",
+      remove: (next: PrepStationsView) => {
+        next.routing.products = next.routing.products.filter((p) => p.id !== "water");
+      },
+    },
+    {
+      what: "zone",
+      row: "c:drinks",
+      locale: "en",
+      message: "Your choice was not saved: its zone is no longer in the grid.",
+      remove: (next: PrepStationsView) => {
+        next.routing.zones = [];
+        next.zones = [];
+      },
+    },
+    {
+      what: "zone and category",
+      row: "c:drinks",
+      locale: "en",
+      message: "Your choice was not saved: its zone is no longer in the grid.",
+      remove: (next: PrepStationsView) => {
+        next.routing.zones = [];
+        next.zones = [];
+        next.routing.categories = next.routing.categories.filter((c) => c.id !== "drinks");
+        next.routing.cells = [];
+        next.categories = next.categories.filter((c) => c.id !== "drinks");
+      },
+    },
+    {
+      what: "category",
+      row: "c:drinks",
+      locale: "es",
+      message: "Tu elección no se ha guardado: su categoría ya no está en la cuadrícula.",
+      remove: (next: PrepStationsView) => {
+        next.routing.categories = next.routing.categories.filter((c) => c.id !== "drinks");
+        next.routing.cells = [];
+        next.categories = next.categories.filter((c) => c.id !== "drinks");
+      },
+    },
+    {
+      what: "zone",
+      row: "c:drinks",
+      locale: "es",
+      message: "Tu elección no se ha guardado: su zona ya no está en la cuadrícula.",
+      remove: (next: PrepStationsView) => {
+        next.routing.zones = [];
+        next.zones = [];
+      },
+    },
+  ])(
+    "a choice whose $what a refresh removed while its preview was out says it was not saved ($locale), and the next choice clears that",
+    async ({ row, locale, message, remove }) => {
+      setLocale(locale);
+      const liveData = new LiveData();
+      const answer = deferred<unknown[]>();
+      const removed = gridView();
+      remove(removed);
+      const load = vi.fn(async () => gridView());
+      const { a, el } = await mountGrid({
+        liveData,
+        load,
+        preview: vi.fn().mockReturnValueOnce(answer.promise).mockResolvedValue([breadMove]),
+      });
+      await chooseCell(el, row, "terrace", "Kitchen");
+      load.mockImplementation(async () => removed);
+      liveData.invalidate([{ type: "floor_zones" }, { type: "categories" }, { type: "products" }]);
+      await vi.waitFor(async () => {
+        await gridOf(el).updateComplete;
+        expect(
+          gridOf(el).shadowRoot!.querySelector(`td[data-row="${row}"][data-zone="terrace"]`),
+        ).toBeNull();
+      });
+      answer.resolve([]);
+      await settle(el);
+      await gridOf(el).updateComplete;
+      expect(a.setCell).not.toHaveBeenCalled();
+      expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+      expect(await gridMessage(el)).toBe(message);
+      expect(pageAlert(el)).toBe("");
+      expect(shownTargets(el)).not.toContain("station:kitchen");
+      for (const outcome of ["fails", "succeeds"]) {
+        const calls = load.mock.calls.length;
+        if (outcome === "fails") load.mockRejectedValueOnce({ code: "connection.failed" });
+        liveData.refresh();
+        await vi.waitFor(() => expect(load.mock.calls.length).toBeGreaterThan(calls));
+        await settle(el);
+        expect(await gridMessage(el)).toBe(message);
+      }
+      expect(pageAlert(el)).toBe("");
+
+      await chooseCell(el, "c:food", "every", "Kitchen");
+      expect(await gridMessage(el)).toBe("");
+      expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+    },
+  );
+
+  it.each([
+    {
+      what: "zone",
+      row: "c:drinks",
+      message: "Your choice was not saved: its zone is no longer in the grid.",
+      remove: (next: PrepStationsView) => {
+        next.routing.zones = [];
+        next.zones = [];
+      },
+    },
+    {
+      what: "product",
+      row: "p:water",
+      message: "Your choice was not saved: its product is no longer in the grid.",
+      remove: (next: PrepStationsView) => {
+        next.routing.products = next.routing.products.filter((p) => p.id !== "water");
+      },
+    },
+  ])(
+    "a dropped choice's message clears once a refresh brings its $what back into the grid",
+    async ({ row, message, remove }) => {
+      setLocale("en");
+      const liveData = new LiveData();
+      const answer = deferred<unknown[]>();
+      const removed = gridView();
+      remove(removed);
+      const load = vi.fn(async () => gridView());
+      const { a, el } = await mountGrid({
+        liveData,
+        load,
+        preview: vi.fn().mockReturnValueOnce(answer.promise).mockResolvedValue([breadMove]),
+      });
+      const cell = () =>
+        gridOf(el).shadowRoot!.querySelector(`td[data-row="${row}"][data-zone="terrace"]`);
+      await chooseCell(el, row, "terrace", "Kitchen");
+      load.mockImplementation(async () => removed);
+      liveData.invalidate([{ type: "floor_zones" }, { type: "products" }]);
+      await vi.waitFor(async () => {
+        await gridOf(el).updateComplete;
+        expect(cell()).toBeNull();
+      });
+      answer.resolve([]);
+      await settle(el);
+      expect(await gridMessage(el)).toBe(message);
+
+      load.mockImplementation(async () => gridView());
+      liveData.invalidate([{ type: "floor_zones" }, { type: "products" }]);
+      await vi.waitFor(async () => {
+        await gridOf(el).updateComplete;
+        expect(cell()).not.toBeNull();
+      });
+      await settle(el);
+      expect(await gridMessage(el)).toBe("");
+      expect(cellCombo(el, row, "terrace").error).toBe("");
+      const errors = [...gridOf(el).shadowRoot!.querySelectorAll<WtCombobox>("wt-combobox")].map(
+        (box) => box.error,
+      );
+      expect(errors.some((text) => text.includes(message))).toBe(false);
+      expect(a.setCell).not.toHaveBeenCalled();
+    },
+  );
+
   it("reopening an editor owns a new request generation", async () => {
     setLocale("en");
     const first = deferred<unknown[]>();
@@ -6292,6 +6482,52 @@ describe("Routing grid", () => {
     await settle(el);
     expect(a.setCell).toHaveBeenCalledExactlyOnceWith(foodTerrace, kitchenTarget);
   });
+
+  it.each([
+    {
+      locale: "en",
+      message: "Your choice was not saved: the No category row is no longer in the grid.",
+    },
+    {
+      locale: "es",
+      message: "Tu elección no se ha guardado: la fila Sin categoría ya no está en la cuadrícula.",
+    },
+  ])(
+    "a pending No category choice whose row a refresh removes closes its preview and says it was not saved ($locale)",
+    async ({ locale, message }) => {
+      setLocale(locale);
+      const liveData = new LiveData();
+      const categorised = gridView();
+      categorised.routing.products = categorised.routing.products.map((product) => ({
+        ...product,
+        categoryId: "food",
+      }));
+      const load = vi.fn().mockResolvedValue(gridView());
+      const { a, el } = await mountGrid({
+        liveData,
+        load,
+        preview: vi.fn().mockResolvedValue([breadMove]),
+      });
+      await chooseCell(el, "no_category", "terrace", "Kitchen");
+      expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+      load.mockResolvedValue(categorised);
+      liveData.invalidate([{ type: "products" }]);
+      await vi.waitFor(async () => {
+        await gridOf(el).updateComplete;
+        expect(gridOf(el).shadowRoot!.querySelector('td[data-row="no_category"]')).toBeNull();
+      });
+      await settle(el);
+      expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+      expect(await gridMessage(el)).toBe(message);
+      expect(pageAlert(el)).toBe("");
+      expect(shownTargets(el)).not.toContain("station:kitchen");
+      expect(a.setCell).not.toHaveBeenCalled();
+
+      await switchTab(el, "stations");
+      await switchTab(el, "routing");
+      expect(await gridMessage(el)).toBe("");
+    },
+  );
 
   it("detach stops observers and timers; elapsed-time refresh stays passive", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
