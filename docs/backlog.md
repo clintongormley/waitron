@@ -958,6 +958,13 @@ unused `units` property is gone (it closes W75's leftover).
   greyed out beside Choose image. Open: the hidden "Uses the product's image" hint is not tied to that
   button by `aria-describedby`, which `wt-button` does not pass to its inner button; a variant's own
   page keeps "Edit variant", as its `InheritedValues` (`packages/catalogue/src/product-types.ts`) has no name.
+- **A330, owner 2026-10-07 — DONE (#PR; variant rows show their photo):** an opened variant's row
+  in the Products list now draws a photo square in its product's column: the variant's own photo,
+  else its product's, else a square in its product's colour. The till draws no variant photo today,
+  but the menus it reads give a variant its own photo, else its product's
+  (`packages/catalogue/src/variant-fallback.ts`), and the list follows that rule. The variant's
+  square opens the variant's own editor at its photo, as a click on its row opens its editor. At
+  phone width the square is hidden, as a product's is.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
