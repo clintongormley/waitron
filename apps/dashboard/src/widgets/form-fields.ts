@@ -194,6 +194,8 @@ export function defaultLanguageHint(
  * the staff name rather than being a missing value. `placeholder` is what it falls back TO, shown
  * rather than stored. Given `defaultLanguage`, every other language falls back to the default
  * language's text first, as `resolveContentText` (`packages/shared/src/content-languages.ts`) does.
+ * A `placeholder` given per language is each field's whole fallback, and `defaultLanguage` adds
+ * nothing to it.
  */
 export function optionalTextFields(
   context: FieldContext,
@@ -201,7 +203,7 @@ export function optionalTextFields(
   label: string,
   value: Record<string, string>,
   change: (value: Record<string, string>) => void,
-  placeholder = "",
+  placeholder: string | ((locale: string) => string) = "",
   defaultLanguage?: string,
 ) {
   return context.locales.map((locale) =>
@@ -212,7 +214,9 @@ export function optionalTextFields(
       languageText(value, locale),
       (text) => change(withLanguageText(value, locale, text)),
       false,
-      defaultLanguageHint(value, locale, defaultLanguage) || placeholder,
+      typeof placeholder === "function"
+        ? placeholder(locale)
+        : defaultLanguageHint(value, locale, defaultLanguage) || placeholder,
     ),
   );
 }

@@ -1,7 +1,13 @@
 import { t } from "../i18n/t.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import type { IncludeFolder, Presentation } from "@waitron/catalogue/src/section-types.js";
+import type {
+  IncludeFolder,
+  IncludeFolderInput,
+  Presentation,
+} from "@waitron/catalogue/src/section-types.js";
+import { folderPresentation } from "@waitron/catalogue/src/include-folder-presentation.js";
+import { resolveMenuText } from "@waitron/catalogue/src/customer-menu-presentation.js";
 import "./include-folder-form.js";
 afterEach(cleanupWidgets);
 
@@ -135,6 +141,54 @@ it("hints a blank name with the default language's name, then the included menu'
   expect(field(el, "names-es")!.placeholder).toBe("Drinks list");
   await type(el, "names-en", "Bar");
   expect(field(el, "names-es")!.placeholder).toBe("Bar");
+});
+const placeholders = (el: Form) => ({
+  en: field(el, "names-en")!.placeholder,
+  es: field(el, "names-es")!.placeholder,
+});
+/** What a customer reading in `language` sees as the folder's name once `el` saves. */
+function customerSees(el: Form, language: string): string {
+  const input = submitted(el) as IncludeFolderInput;
+  const { names } = folderPresentation(own, { showAsFolder: true, overrides: input.overrides! });
+  return resolveMenuText(names, "Drinks list", { kind: "customer", language }, el.languages).text;
+}
+it("hints an emptied language with the default language's name the customer then reads", async () => {
+  const el = await includeForm();
+  await type(el, "names-es", "");
+  expect(placeholders(el).es).toBe("Bar");
+  expect(customerSees(el, "es")).toBe("Bar");
+});
+it("hints every emptied name with the included menu's staff name, which the customer then reads", async () => {
+  const el = await includeForm();
+  await type(el, "names-en", "");
+  await type(el, "names-es", "");
+  expect(placeholders(el)).toEqual({ en: "Drinks list", es: "Drinks list" });
+  expect(customerSees(el, "en")).toBe("Drinks list");
+  expect(customerSees(el, "es")).toBe("Drinks list");
+});
+it("hints nothing for an emptied default-language name while another language keeps one, a save refused as before", async () => {
+  const el = await includeForm();
+  await type(el, "names-en", "");
+  expect(placeholders(el).en).toBe("");
+  expect(submitted(el)).toEqual({
+    showAsFolder: true,
+    overrides: { names: { en: "" }, image: "folder-photo" },
+  });
+});
+it("hints nothing when every shown name is emptied but the included menu keeps one in a language the venue does not show", async () => {
+  const el = await includeForm({
+    own: { ...own, names: { ...own.names, fr: "Boissons" } },
+  });
+  await type(el, "names-en", "");
+  await type(el, "names-es", "");
+  expect(placeholders(el)).toEqual({ en: "", es: "" });
+});
+it("follows live edits: a name typed into the default language becomes the other languages' hint", async () => {
+  const el = await includeForm();
+  await type(el, "names-en", "");
+  await type(el, "names-es", "");
+  await type(el, "names-en", "Bar counter");
+  expect(placeholders(el).es).toBe("Bar counter");
 });
 const errorText = (el: Form, id: string) =>
   el.shadowRoot!.querySelector(`#${id}`)!.textContent!.trim();
