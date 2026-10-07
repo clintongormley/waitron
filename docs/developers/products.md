@@ -660,10 +660,10 @@ A section holding a validation error opens itself and cannot be collapsed until 
 that is `wt-disclosure`'s `has-error`, described in [the design system](design-system.md).
 
 The main category is the form's first line: its path, the names joined with " › " (`categoryPathText`,
-`apps/dashboard/src/widgets/classification-fields.ts`), "Uncategorised" for none, or "Unavailable
+`apps/dashboard/src/widgets/classification-fields.ts`), "No category" (`categories.none`) for none, or "Unavailable
 selection" (`editor.missing_choice`) for a category id the loaded list lacks. On a product the path is
 `categoryPathField` in the same file, a `wt-combobox` with `appearance="link"` and the action word
-"Change" (`editor.change_category`). Its list offers "Uncategorised" first, then every category
+"Change" (`editor.change_category`). Its list offers "No category" first, then every category
 depth-first with each set of siblings sorted by name (`byLabel`), a row showing the category's own
 name indented by its depth while nothing is searched for; once chosen, the path is what shows. The control keeps the name
 `primary`, so a refused `category.not_found` on save lands under it. On a variant's page the

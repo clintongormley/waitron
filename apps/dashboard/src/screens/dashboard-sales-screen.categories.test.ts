@@ -426,7 +426,7 @@ describe("dashboard-sales-screen — category report", () => {
     ]);
   });
 
-  it("shows no path for Uncategorised, Not recorded or what sits under Not recorded", async () => {
+  it("shows no path for No category, Not recorded or what sits under Not recorded", async () => {
     const el = await mount(stubApi());
     const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=category-row] th")];
     // Rows 7 to 10: Sin categoría, No registrada, Sin categoría registrada, Tapas viejas.
@@ -453,7 +453,7 @@ describe("dashboard-sales-screen — category report", () => {
     expect(q(el, "categories-heading")!.textContent!.trim()).toBe("Categories at time of sale");
     const names = rows(el).map((r) => r[0]);
     expect(names).toContain("Directly in Bebidas Casa");
-    expect(names).toContain("Uncategorised");
+    expect(names).toContain("No category");
     expect(names).toContain("Not recorded");
     expect(names).toContain("No category recorded");
     expect(names).not.toContain("Directly in Not recorded");

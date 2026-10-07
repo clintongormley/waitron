@@ -37,7 +37,7 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
     extrasIntoDish: "Extras rolled into their dish",
     gross: "Gross",
     net: "Net",
-    uncategorised: "Uncategorised",
+    uncategorised: "No category",
     notRecorded: "Not recorded",
     noCategoryRecorded: "No category recorded",
     directlyIn: (name) => `Directly in ${name}`,

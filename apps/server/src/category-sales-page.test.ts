@@ -307,9 +307,9 @@ describe("formatCategorySalesPage", () => {
     },
   );
 
-  it("names Uncategorised and Not recorded, with Not recorded's free-text children beneath it", () => {
+  it("names No category and Not recorded, with Not recorded's free-text children beneath it", () => {
     const lines = page();
-    expect(lineFor(lines, "Uncategorised")).toMatch(/^Uncategorised +€1\.21 +€1\.00$/);
+    expect(lineFor(lines, "No category")).toMatch(/^No category +€1\.21 +€1\.00$/);
     expect(lineFor(lines, "Not recorded")).toMatch(/^Not recorded +€0\.00 +€7\.00$/);
     expect(lineFor(lines, "No category recorded")).toMatch(
       /^ {2}No category recorded +€0\.00 +€4\.00$/,

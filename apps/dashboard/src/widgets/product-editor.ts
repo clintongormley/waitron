@@ -985,7 +985,7 @@ export class ProductEditor extends LitElement {
     if (parent) {
       const path = parent.primaryCategoryId
         ? categoryPathText(parent.primaryCategoryId, this.categories, t("editor.missing_choice"))
-        : t("categories.uncategorised");
+        : t("categories.none");
       return html`<div class="group" data-section="categories">
         <p class="category-path" data-test="category-path">
           <span class="visually-hidden">${t("editor.classification")}: </span>${path}
@@ -999,7 +999,7 @@ export class ProductEditor extends LitElement {
         actionLabel: t("editor.change_category"),
         categories: this.categories,
         value: this.draft.primaryCategoryId,
-        noneLabel: t("categories.uncategorised"),
+        noneLabel: t("categories.none"),
         missingLabel: t("editor.missing_choice"),
         error: this.error("primary"),
         disabled: this.suspended,

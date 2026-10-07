@@ -45,8 +45,8 @@ beside the name, below the category path.
 
 Each product has one main category. Categories form a tree, so the product editor shows the
 category's full path on the first line under the window's title, such as
-**Drinks › Alcoholic drinks › Cocktails**, or **Uncategorised** when the product is in none. Choose
-**Change** after the path to pick another: the list starts with **Uncategorised** and then shows
+**Drinks › Alcoholic drinks › Cocktails**, or **No category** when the product is in none. Choose
+**Change** after the path to pick another: the list starts with **No category** and then shows
 every category as an indented tree, each subcategory under its parent. You can also move the product
 to another category on the Products screen, by turning on **Select** and dragging it, or
 with **Move to…**. The main category also plays a part in choosing the kitchen station a dish goes

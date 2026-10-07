@@ -352,7 +352,7 @@ it("puts each placement on its own line and paints the notes muted, through the 
   expect(muted).not.toBe(getComputedStyle(row(el, "mi-burger")!).color);
 });
 
-it("names a missing section or category, and a product with no reporting category as uncategorised", async () => {
+it("names a missing section or category, and a product with no reporting category as No category", async () => {
   const el = await mount({
     rows: [
       { ...lager, categoryId: null, placements: [["s-gone"]] },
@@ -360,10 +360,7 @@ it("names a missing section or category, and a product with no reporting categor
     ],
   });
   expect(column(el, "placements")).toEqual([t("members.missing"), t("menu_prices.top_level")]);
-  expect(column(el, "category")).toEqual([
-    t("categories.uncategorised"),
-    t("editor.missing_choice"),
-  ]);
+  expect(column(el, "category")).toEqual([t("categories.none"), t("editor.missing_choice")]);
   await choose(el, "category", "c-drinks");
   expect(shown(el)).toEqual([]);
 });
@@ -398,9 +395,27 @@ it("finds a product whose main category is missing, or that has none, by what th
   });
   await search(el, t("editor.missing_choice"));
   expect(shown(el)).toEqual(["mi-burger"]);
-  await search(el, t("categories.uncategorised"));
+  await search(el, t("categories.none"));
   expect(shown(el)).toEqual(["mi-lager"]);
 });
+
+it.each([
+  { locale: "en-GB", label: "No category" },
+  { locale: "es-ES", label: "Sin categoría" },
+])(
+  "reads $label in $locale for a product with no main category, and finds it by those words",
+  async (c) => {
+    setLocale(c.locale);
+    try {
+      const el = await mount({ rows: [{ ...lager, categoryId: null }, burger] });
+      expect(column(el, "category")[0]).toBe(c.label);
+      await search(el, c.label);
+      expect(shown(el)).toEqual(["mi-lager"]);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
 
 // A term typed from the keyboard carries an ordinary space where Spanish shows a no-break one.
 it.each([

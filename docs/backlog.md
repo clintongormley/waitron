@@ -899,9 +899,11 @@ only, leaving out zeros, naming **No category** at the top level and "each categ
 the parents differ; routing rules naming a subcategory join the "Also: deletes …" list. A category
 holding only disabled products is no longer asked what happens to them. Being compact, the dialog
 now fits its content, which closes W74's finding that it stretched to nearly the full screen
-height. The products-only "Disable N products?" dialog is compact too. **Left open (owner's
-call):** (1) the top level is "No category" here but "All products (top level)" elsewhere on the
-Products screen, and a product with no category reads "Uncategorised"; (2) if the SERVER refuses a
+height. The products-only "Disable N products?" dialog is compact too. Point (1) of what was left
+open — the same place named three ways — is DONE by A305 (owner 2026-10-06): the Move-to list, the
+product editor, the menu prices table, the sales-by-category report on screen and printed, and this
+dialog all read **No category** / **Sin categoría**; the Products tree's heading row keeps "All
+products". **Still left open (owner's call):** (2) if the SERVER refuses a
 delete with `category.contents_changed` because only disabled products changed, its message still
 says to check the new counts, which this dialog no longer shows — a narrow timing window, not
 reproduced.

@@ -459,7 +459,7 @@ export class CatalogueBrowser extends LitElement {
     );
     if (parents.size > 1) return t("folders.each_parent");
     const [parentId] = parents;
-    return parentId ? categoryPath(byId.get(parentId)!, this.categories) : t("folders.no_parent");
+    return parentId ? categoryPath(byId.get(parentId)!, this.categories) : t("categories.none");
   }
   // One pass with a function replacement: a `$&` or a `{name}` inside a value stays literal.
   #fill(key: Parameters<typeof t>[0], values: Record<string, string>): string {
@@ -506,7 +506,7 @@ export class CatalogueBrowser extends LitElement {
       selection.categoryIds.flatMap((id) => [...categoryWithDescendants(id, this.categories)]),
     );
     const destinations = [
-      { value: "top", label: t("folders.top_level") },
+      { value: "top", label: t("categories.none") },
       ...categoryTree(this.categories).filter(({ value }) => !excluded.has(value)),
     ];
     const rootSummaries = this.summaries.filter(
