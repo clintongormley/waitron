@@ -981,6 +981,25 @@ describe("overtakeSentence", () => {
     );
   });
 
+  it("asks for an immediate publish to wait, never for a version to be moved earlier", () => {
+    expect(overtakeSentence([V3_IN_THE_WAY], "now", queue())).toBe(
+      "Version 3, scheduled for 9 Oct 2026, 08:00, must go live first. Cancel it, or publish once it is live.",
+    );
+    expect(overtakeSentence([V3_IN_THE_WAY, V2_IN_THE_WAY], "now", queue())).toBe(
+      "Versions 2 (8 Oct 2026, 08:00) and 3 (9 Oct 2026, 08:00) must go live first. Cancel them, or publish once they are live.",
+    );
+  });
+
+  it("asks for an immediate publish to wait in Spanish", () => {
+    setLocale("es-ES");
+    expect(overtakeSentence([V3_IN_THE_WAY], "now", queue())).toBe(
+      "La versión 3, programada para el 9 oct 2026, 08:00, debe publicarse antes. Cancélala o publica cuando ya esté publicada.",
+    );
+    expect(overtakeSentence([V3_IN_THE_WAY, V2_IN_THE_WAY], "now", queue())).toBe(
+      "Las versiones 2 (8 oct 2026, 08:00) y 3 (9 oct 2026, 08:00) deben publicarse antes. Cancélalas o publica cuando ya estén publicadas.",
+    );
+  });
+
   it("answers null when a version the refusal names is not in the list", () => {
     const missing = { versionId: "v-lunch-9", number: 9, activatesAt: "2026-11-01T09:00:00.000Z" };
     expect(overtakeSentence([V2_IN_THE_WAY, missing], null, queue())).toBeNull();
@@ -1100,7 +1119,49 @@ describe("placing a schedule refusal by what it carries", () => {
     expect(field(el, "time").error).toBe(codeMessage("menu_publication.time_skipped"));
   });
 
-  it("closes a clean form on Cancel, sending nothing, and hands focus back to its button", async () => {
+  it.each([
+    { locale: "en", label: "Close" },
+    { locale: "es-ES", label: "Cerrar" },
+  ] as const)(
+    "labels the form's dismiss button $label, scheduling and changing a time ($locale)",
+    async ({ locale, label }) => {
+      setLocale(locale);
+      onTestFinished(() => setLocale("en"));
+      const el = await mount(stubApi(), { preview: draftPreview() });
+      await openSchedule(el);
+      expect(inShadow(el, "schedule-close")!.textContent!.trim()).toBe(label);
+      await closeForm(el);
+      await openMove(el, "v-lunch-2");
+      expect(inShadow(el, "schedule-close")!.textContent!.trim()).toBe(label);
+    },
+  );
+
+  it.each([
+    { form: "schedule", key: "{Enter}" },
+    { form: "schedule", key: " " },
+    { form: "move", key: "{Enter}" },
+    { form: "move", key: " " },
+  ] as const)(
+    "closes the $form form from the keyboard on Close ($key), sending nothing",
+    async ({ form, key }) => {
+      const api = stubApi();
+      const el = await mount(api, { preview: draftPreview() });
+      if (form === "schedule") await openSchedule(el);
+      else await openMove(el, "v-lunch-2");
+      const reported = new Promise((resolve) =>
+        scheduleDialog(el).addEventListener("wt-close", resolve, { once: true }),
+      );
+      inShadow(el, "schedule-close")!.focus();
+      await userEvent.keyboard(key);
+      await reported;
+      await flush(el);
+      expect(scheduleDialog(el).open).toBe(false);
+      expect(api.scheduleMenuPublication).not.toHaveBeenCalled();
+      expect(api.rescheduleMenuPublication).not.toHaveBeenCalled();
+    },
+  );
+
+  it("closes a clean form on Close, sending nothing, and hands focus back to its button", async () => {
     const api = stubApi();
     const el = await mount(api, { preview: draftPreview() });
     await openSchedule(el);

@@ -747,7 +747,9 @@ before an older one is refused with a sentence naming each version in the way an
 the time field (for a new schedule or a changed time) or in the publish result (for Publish): those
 that must go live first, then those that must go live after this one. The refusal never offers to
 cancel anything; the manager cancels or moves the version in the way through its own row, then tries
-again; a refused Publish clears only once each version in the way is cancelled or has gone live.
+again; a refused Publish clears only once each version in the way is cancelled or has gone live, so
+its sentence says to cancel the version or publish once it is live, never to move it (A376). The form's dismiss button reads "Close", not "Cancel",
+because it sits under a sentence telling the manager to cancel a version.
 
 **Style your own cell markup with `part=` and `::part()`, never with a CSS class.** A cell callback
 returns a template, but the nodes it produces are rendered by `wt-data-table` and so end up inside

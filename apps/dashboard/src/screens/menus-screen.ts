@@ -1302,7 +1302,7 @@ export class MenusScreen extends LitElement {
     try {
       const answer = await this.api.getMenuPublications(menuId);
       return (
-        overtakeSentence(overtaken as { versionId: string }[], null, answer) ?? codeMessage(code)
+        overtakeSentence(overtaken as { versionId: string }[], "now", answer) ?? codeMessage(code)
       );
     } catch {
       return codeMessage(code);
