@@ -823,3 +823,16 @@ after typing the other mark in the middle of `12.50`. The commands were
 `pnpm --filter @waitron/ui exec vitest run src/components/wt-price-input.test.ts -t caret`.
 The shared `readDecimalInput` now saves the selection, writes the displayed string and restores
 that selection before the component's redraw. The focused suites then passed 86 and 106 tests.
+
+
+### Classify numeric fields through their checks and wire conversion
+
+Before leaving a numeric field outside decimal support, try a fraction through its submission.
+On 2026-10-07, `device-profiles-screen.ts` labelled its timeout state as whole minutes, but the
+native-input positive control submitted 150 seconds for 2.5 minutes. In the same run,
+`pnpm --filter @waitron/dashboard exec vitest run src/screens/device-profiles-screen.test.ts -t 'decimal input inactivity'`
+reported four failures and one pass: comma entry, Spanish display and ambiguous-text refusal
+failed, while English dot entry submitted 150 seconds. Decimal mode and the shared parser now
+handle the field; the full screen family passed 138 cases, including its unchanged blank and
+non-numeric clearing checks. The numeric minute state and seconds conversion are retained; bad
+numeric text is a separate draft field, included in snapshots, restoration and the form's checks.

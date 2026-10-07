@@ -285,6 +285,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   is unseen; the files it exempts are not read at all, so a field added inside one passes; and the files it allows by name are held only to how many lines draw a
   field, so a field swapped for another, a hidden input made visible, or one added on a line that
   already has one passes. See [conventions-ui.md](docs/developers/conventions-ui.md).
+- **Before treating a numeric field as whole numbers, follow its checks and wire conversion and
+  try a fraction.** Cost: A284 almost skipped a logout timer because its comment said whole minutes;
+  receipt: [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Normalising a field while typing preserves the native selection.** Cost: A284's decimal-mark
   conversion moved the cursor to the end during a middle edit. Guards: the EN/ES caret cases in
   `wt-input.test.ts` and `wt-price-input.test.ts`; see [conventions-ui.md](docs/developers/conventions-ui.md).

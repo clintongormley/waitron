@@ -4027,7 +4027,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **Money in the dashboard shows its currency sign (C43, #830).** Decimal entry consistency is
   DONE (A284): shared exact string parsing and display in `ui-core`, consumed by `wt-price-input`
   and the decimal mode of `wt-input`. Catalogue/product/variant and menu prices, extras prices and
-  portions, purchases (amounts and percentages), adjustment limits, till discounts, bill
+  portions, purchases (amounts and percentages), adjustment limits, fractional profile logout
+  minutes, till discounts, bill
   contributions/cash/tips, partial refunds, finding and collecting a debt, measured bill splits,
   and the cash/weight keypad display use the screen's decimal mark and accept comma or point.
   Multiple marks and grouping spaces are refused by the form's own checks. The cents conversion
