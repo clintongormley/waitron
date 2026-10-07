@@ -430,6 +430,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That status is disabled",
     es: "Ese estado está deshabilitado",
   },
+  "department.name_taken": {
+    en: "A department with that name already exists",
+    es: "Ya existe un departamento con ese nombre",
+  },
+  "department.name_disabled": {
+    en: "A disabled department already has that name. Enable it instead",
+    es: "Un departamento deshabilitado ya tiene ese nombre. Habilítalo en su lugar",
+  },
+  "zone.name_disabled": {
+    en: "A disabled zone already has that name. Enable it instead",
+    es: "Una zona deshabilitada ya tiene ese nombre. Habilítala en su lugar",
+  },
   "zone.name_taken": {
     en: "A zone with that name already exists",
     es: "Ya existe una zona con ese nombre",

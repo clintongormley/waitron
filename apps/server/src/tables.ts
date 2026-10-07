@@ -338,6 +338,12 @@ export async function updateZone(
         columns: ["location_id", "name"],
       })
     ) {
+      const [other] = await tx
+        .select({ id: floorZones.id, active: floorZones.active })
+        .from(floorZones)
+        .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.name, patch.name)));
+      if (other?.active === false)
+        throw new AppError("zone.name_disabled", { name: patch.name, zoneId: other.id });
       throw new AppError("zone.name_taken", { name: patch.name });
     }
     throw error;

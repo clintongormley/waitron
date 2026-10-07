@@ -3490,3 +3490,177 @@ it("Opening hours uses a distinct history position and Keep preserves the Operat
   history.forward();
   await expect.poll(() => location.pathname).toBe("/manage/hours/department/d2");
 });
+
+describe("reserved venue names", () => {
+  it.each(["department", "zone"] as const)(
+    "offers Enable beside a disabled %s name refusal without creating another row",
+    async (kind) => {
+      const snapshot = structuredClone(model);
+      snapshot.departments[1]!.active = false;
+      snapshot.floorZones[0]!.active = false;
+      snapshot.zones[0]!.active = false;
+      const id = kind === "department" ? "d2" : "z1";
+      const name = kind === "department" ? "Deli" : "Dining room";
+      const create = vi
+        .fn()
+        .mockRejectedValue({ code: `${kind}.name_disabled`, params: { name, [`${kind}Id`]: id } });
+      const update = vi.fn().mockImplementation(async () => {
+        if (kind === "department") snapshot.departments[1]!.active = true;
+        else {
+          snapshot.floorZones[0]!.active = true;
+          snapshot.zones[0]!.active = true;
+        }
+      });
+      const el = await mount({
+        load: vi.fn().mockImplementation(async () => structuredClone(snapshot)),
+        [kind === "department" ? "createDepartment" : "createZone"]: create,
+        [kind === "department" ? "updateDepartment" : "updateZone"]: update,
+      } as unknown as VenueServiceApi);
+      await action(el, kind === "department" ? "new-department" : "new-zone");
+      const control = kind === "department" ? "department-name" : "new-zone-name";
+      await type(el, control, name);
+      if (kind === "department") await type(el, "trading-name", "Shop");
+      else await chooseOption(field(el, "new-zone-department"), "Restaurant and bar");
+      await action(el, "save-editor");
+      expect(fieldError(el, control)).toBe(
+        `A disabled ${kind} already has this name. Enable it instead.`,
+      );
+      expect(saveDisabled(el)).toBe(false);
+      const enable = find(el, '[data-test="enable-name-clash"]');
+      expect(enable).not.toBeNull();
+      expect(enable!.textContent!.trim()).toBe(`Enable ${name}`);
+      await action(el, "enable-name-clash");
+      await expect.poll(() => modal(el)).toBeNull();
+      expect(update).toHaveBeenCalledWith(id, { active: true });
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(tableText(el, "policy-tree")).toContain(name);
+    },
+  );
+
+  it.each(["department", "zone"] as const)(
+    "explains an active %s name refusal without offering Enable",
+    async (kind) => {
+      const el = await mount({
+        load: vi.fn().mockResolvedValue(model),
+        [kind === "department" ? "createDepartment" : "createZone"]: vi
+          .fn()
+          .mockRejectedValue({ code: `${kind}.name_taken`, params: { name: "Reserved" } }),
+      } as unknown as VenueServiceApi);
+      await action(el, kind === "department" ? "new-department" : "new-zone");
+      const control = kind === "department" ? "department-name" : "new-zone-name";
+      await type(el, control, "Reserved");
+      if (kind === "department") await type(el, "trading-name", "Shop");
+      else await chooseOption(field(el, "new-zone-department"), "Restaurant and bar");
+      await action(el, "save-editor");
+      expect(fieldError(el, control)).toBe(`A ${kind} with this name already exists.`);
+      expect(find(el, '[data-test="enable-name-clash"]')).toBeNull();
+      expect(saveDisabled(el)).toBe(false);
+    },
+  );
+});
+
+describe.each(["en", "es"] as const)("reserved name renames (%s)", (locale) => {
+  it.each(["department", "zone"] as const)(
+    "puts a disabled %s clash beneath the inline name and enables the existing row",
+    async (kind) => {
+      setLocale(locale);
+      await page.viewport(390, 900);
+      onTestFinished(() => page.viewport(1280, 900));
+      const name = kind === "department" ? "Deli" : "Deli counter";
+      const id = kind === "department" ? "d2" : "z2";
+      const update = vi
+        .fn()
+        .mockImplementation(async (_id: string, patch: { active?: boolean }) => {
+          if (!patch.active)
+            throw { code: `${kind}.name_disabled`, params: { name, [`${kind}Id`]: id } };
+        });
+      const el = await mount({
+        load: vi.fn().mockResolvedValue(model),
+        [kind === "department" ? "updateDepartment" : "updateZone"]: update,
+      } as unknown as VenueServiceApi);
+      await action(el, `edit-${kind}-name`);
+      const control = find(el, `wt-input[name="${kind}Name"]`)!;
+      const native = control.shadowRoot!.querySelector("input")!;
+      native.value = name;
+      native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await settle(el);
+      await action(el, `save-${kind}-name`);
+      const expected =
+        locale === "en"
+          ? `A disabled ${kind} already has this name. Enable it instead.`
+          : kind === "department"
+            ? "Un departamento deshabilitado ya tiene este nombre. Habilítalo en su lugar."
+            : "Una zona deshabilitada ya tiene este nombre. Habilítala en su lugar.";
+      expect(control.getAttribute("error")).toBe(expected);
+      expect(pageAlert(el)).toBe("");
+      const enable = find(el, '[data-test="enable-name-clash"]');
+      expect(enable).not.toBeNull();
+      expect(enable!.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+      expect(enable!.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+      expect(enable!.textContent!.trim()).toBe(
+        `${locale === "en" ? "Enable" : "Habilitar"} ${name}`,
+      );
+      await action(el, "enable-name-clash");
+      expect(update).toHaveBeenLastCalledWith(id, { active: true });
+      expect(find(el, '[data-test="enable-name-clash"]')).toBeNull();
+      expect(find(el, `wt-input[name="${kind}Name"]`)!.getAttribute("error")).toBe(
+        locale === "en"
+          ? `A ${kind} with this name already exists.`
+          : `Ya existe ${kind === "department" ? "un departamento" : "una zona"} con este nombre.`,
+      );
+      expect(
+        find(el, `wt-input[name="${kind}Name"]`)!.shadowRoot!.querySelector("input")!.value,
+      ).toBe(name);
+    },
+  );
+});
+
+it("clears a disabled-name Enable offer when the modal name changes and retains it when Enable fails", async () => {
+  const el = await mount({
+    load: vi.fn().mockResolvedValue(model),
+    createDepartment: vi.fn().mockRejectedValue({
+      code: "department.name_disabled",
+      params: { name: "Deli", departmentId: "d2" },
+    }),
+    updateDepartment: vi.fn().mockRejectedValue(new Error("offline")),
+  } as unknown as VenueServiceApi);
+  await action(el, "new-department");
+  await type(el, "department-name", "Deli");
+  await type(el, "trading-name", "Shop");
+  await action(el, "save-editor");
+  await action(el, "enable-name-clash");
+  expect(modal(el)).not.toBeNull();
+  expect(await bottom(el)).toContain("The change could not be saved.");
+  expect(find(el, '[data-test="enable-name-clash"]')).not.toBeNull();
+  expect(saveDisabled(el)).toBe(false);
+  await type(el, "department-name", "New Deli");
+  expect(find(el, '[data-test="enable-name-clash"]')).toBeNull();
+  expect(fieldError(el, "department-name")).toBeUndefined();
+});
+
+it("does not attach an earlier inline name refusal to newer text", async () => {
+  let refuse!: (reason: unknown) => void;
+  const pending = new Promise<void>((_resolve, reject) => {
+    refuse = reject;
+  });
+  const el = await mount({
+    load: vi.fn().mockResolvedValue(model),
+    updateZone: vi.fn().mockReturnValue(pending),
+  } as unknown as VenueServiceApi);
+  await action(el, "edit-zone-name");
+  const control = find(el, 'wt-input[name="zoneName"]')!;
+  const native = control.shadowRoot!.querySelector("input")!;
+  const change = async (value: string) => {
+    native.value = value;
+    native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await settle(el);
+  };
+  await change("Deli counter");
+  await action(el, "save-zone-name");
+  await change("New terrace");
+  refuse({ code: "zone.name_disabled", params: { name: "Deli counter", zoneId: "z2" } });
+  await settle(el);
+  expect(control.getAttribute("error")).toBe("");
+  expect(find(el, '[data-test="enable-name-clash"]')).toBeNull();
+  expect(native.value).toBe("New terrace");
+});

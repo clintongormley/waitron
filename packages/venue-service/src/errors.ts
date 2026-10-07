@@ -10,6 +10,9 @@ export type MenuUse =
 
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "department.name_taken": { name: string };
+    "department.name_disabled": { name: string; departmentId: string };
+    "zone.name_disabled": { name: string; zoneId: string };
     "department.not_found": { departmentId: string };
     "department.last_active": { departmentId: string };
     "zone.table_in_use": { zoneId: string; tableId: string; tableName: string };

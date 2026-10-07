@@ -305,6 +305,12 @@ const en = {
   "venue.move_to_department": "Move to department",
   "venue.disable": "Disable",
   "venue.enable": "Enable",
+  "venue.enable_name": "Enable {name}",
+  "venue.department_name_taken": "A department with this name already exists.",
+  "venue.zone_name_taken": "A zone with this name already exists.",
+  "venue.department_name_disabled":
+    "A disabled department already has this name. Enable it instead.",
+  "venue.zone_name_disabled": "A disabled zone already has this name. Enable it instead.",
   "venue.service_style": "Service style",
   "venue.table_tab": "Table service",
   "venue.prepay": "Pay before preparation",
@@ -1001,6 +1007,13 @@ const es: Record<keyof typeof en, string> = {
   "venue.move_to_department": "Mover a departamento",
   "venue.disable": "Deshabilitar",
   "venue.enable": "Habilitar",
+  "venue.enable_name": "Habilitar {name}",
+  "venue.department_name_taken": "Ya existe un departamento con este nombre.",
+  "venue.zone_name_taken": "Ya existe una zona con este nombre.",
+  "venue.department_name_disabled":
+    "Un departamento deshabilitado ya tiene este nombre. Habilítalo en su lugar.",
+  "venue.zone_name_disabled":
+    "Una zona deshabilitada ya tiene este nombre. Habilítala en su lugar.",
   "venue.service_style": "Estilo de servicio",
   "venue.table_tab": "Servicio de mesa",
   "venue.prepay": "Pagar antes de preparar",
