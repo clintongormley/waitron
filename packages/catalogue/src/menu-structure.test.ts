@@ -871,11 +871,8 @@ describe("a menu's prices", () => {
         .filter(({ active }) => active)
         .map(({ variantId, price }) => ({ variantId, price })),
     ).toEqual(await app((tx) => listMenuVariants(tx, lunchItem)));
-    expect(lunchRow!.combined.variants.map(({ variantId }) => variantId)).toEqual([
-      f.large,
-      small,
-      jug,
-    ]);
+    expect(lunchRow!.combined.variants.map(({ variantId }) => variantId)).toEqual([f.large, small]);
+    expect(dinnerRow!.combined.variants.map(({ variantId }) => variantId)).not.toContain(jug);
     // Dinner sets nothing for any size, and lists no Inactive Jug either.
     expect(dinnerRow!.variants).toEqual([
       { variantId: f.large, price: null, active: true },

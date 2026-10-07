@@ -226,6 +226,19 @@ describe("a product made Inactive comes off every menu", () => {
     expect(await listProducts(r.tapasRoot)).toEqual([{ position: 0, productId: null }]);
   });
 
+  it("for a product disabled beside a folder deleted with its contents moved up", async () => {
+    const r = await removalFixture();
+    await app((tx) =>
+      deleteCatalogueItems(
+        tx,
+        { productIds: [r.tortilla], categoryIds: [r.tapasFolder] },
+        "move_up",
+      ),
+    );
+    await expectOffEveryMenu(r, r.tortilla);
+    await expectStillOnEveryMenu(r, r.croquetas);
+  });
+
   it("for every product in a folder deleted with its contents", async () => {
     const r = await removalFixture();
     await app((tx) =>
