@@ -208,7 +208,7 @@ export async function routeProductTo(
 }
 
 /** Test-only: route a category to a station in every zone. */
-export async function claimFolderFor(
+export async function routeCategoryTo(
   tx: Transaction,
   cfg: Cfg,
   categoryId: string,

@@ -1166,10 +1166,6 @@ values as the blank choices), at 1280 and 390, light and dark.
   reset before then). The effective category (`effectiveProductColumns.categoryId`) and the
   editor's read ignore a stored one, and the next save of the variant's own page, or that
   category's deletion, clears it.
-- Prep Stations marks a product exception that can never apply when an earlier category exception
-  already catches the product and every one of its variants (`family.every(...)` in `routingModel`,
-  `packages/venue-service/src/routing-store.ts`). A variant's category is now its product's, so the
-  variant half of that check always agrees with the product's and could be dropped.
 - Past sales of a variant that had a category of its own now show under its product's category in
   the category sales report's "Current categories" mode (`current`,
   `packages/reporting/src/category-sales.ts`), which classifies each line by the catalogue as it is
@@ -4743,7 +4739,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   remains open; the shared calendar is built by A261 step 5 (below), and its public holidays by
   step 6.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; steps 1–3 and 5–8 implemented, step 4 open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  APPROVED; all eight steps implemented** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
@@ -4870,28 +4866,41 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     category and All categories against Every zone and each active service zone, stored one cell
     per coordinate in `routing_cells`; `station_claims` and `route_exceptions` are dropped
     (venue-service `0031_retire_routing_lists`), with no conversion, so a venue is reset and its
-    routing set again. The No category row has cells of its own (owner, 2026-10-07, Q1 "(c)").
-    The grid keeps the server's row order until A323 (lane C queue) moves it to the shared name
-    comparison. Left open:
-    - **Prep stations' Settings cell saves have the shape commit `af44835d0` changed for routing
-      cells.** `#saveSettingsCell`
+    routing set again. The No category row has cells of its own (owner, 2026-10-07).
+    The grid keeps the server's row order; moving it to the shared name comparison is a follow-up
+    (A323). Left open:
+    - **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells.**
+      `#saveSettingsCell`
       (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
       releases its unsaved-changes registration as soon as the save succeeds, before the refresh
       that follows has settled. A routing cell now keeps its registration until that refresh
       settles. Not changed in A261-4.
     - **A pending routing choice can vanish without a word.** When a refresh removes the row or
       zone of a choice whose preview moved nothing, the screen drops the choice and tells the
-      person nothing (commit `59bca9c5c`).
+      person nothing.
+    - **A routing preview can miss an extra that stops following its dish.** The preview compares
+      where each product would be made on its own (`previewRoutingChange`,
+      `packages/venue-service/src/routing-store.ts`), as it did before A261-4. Giving an extra a
+      cell that names the default station, while its dish is made elsewhere, moves that extra off
+      its dish's station, yet the preview lists no move, so the screen saves without asking; clearing
+      that cell is missed the same way. Both run-it reviews of the A261-4 PR reproduced it against
+      the real migrations. What the preview should say about an extra is for the owner.
+    - **The No category row is hidden while no product is uncategorised, and so are its saved
+      cells.** They cannot be seen or cleared then; they apply again, and the row comes back, when a
+      product next has no category (`visibleRoutingRows`,
+      `packages/venue-service/src/dashboard/routing-grid-model.ts`). This matches how an inactive
+      product's cells are kept out of sight until it is active again; whether the row should stay
+      visible while it holds cells is for the owner.
+    - **A routing preview works out every active product in every active zone twice**, whatever the
+      change; only products under the changed row, and only the changed zone, can move. The
+      preview before A261-4 looped the same way.
     - **Owner question: should a configuration import refuse a routing cell on a zone in a
       switched-off department, as a save would?** Since main's A282 (#1339) no product path leaves
-      such a cell in a venue (probe receipt in the A261-4 Task 8b brief), so only a hand-built or
+      such a cell in a venue (probe receipt in the A261-4 PR), so only a hand-built or
       older bundle can carry one, and `validateRoutingConfiguration`
       (`packages/venue-service/src/configuration-transfer.ts`) still accepts it, pinned by
       "accepts a cell for a zone whose department is switched off" in
-      `packages/venue-service/src/configuration-transfer.test.ts`. The two stale claims the Task 4b
-      notes named (that case's old title, "…as a zone can be moved there", and the doc comment's
-      reason "because `configureZone` moves a zone holding cells into one") were already removed
-      on the branch by commit `57cbc1459`; the acceptance itself is unchanged.
+      `packages/venue-service/src/configuration-transfer.test.ts`.
     [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) — DONE (#1281).
     Changes needing another fiscal/geographic context or
     history removal use a separately approved setup/reset instead. Later

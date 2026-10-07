@@ -89,7 +89,7 @@ import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import {
-  claimFolderFor,
+  routeCategoryTo,
   routeProductTo,
   offerProducts,
   type ZoneOffers,
@@ -3042,7 +3042,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const drinks = await createCategory(tx, { name: "Copas" });
-      await claimFolderFor(tx, cfg, drinks.id, barra.id);
+      await routeCategoryTo(tx, cfg, drinks.id, barra.id);
       const cana = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id }); // → barra (category)
       const cafe = await makeProduct(tx, cfg, catalogueId, {
         categoryId: drinks.id,
@@ -3057,7 +3057,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
 
       // Re-route the category AFTER firing. The already-fired item is SNAPSHOTTED, so it does NOT move —
       // the rule (re-categorising a product later never reroutes food already sent).
-      await claimFolderFor(tx, cfg, drinks.id, cocina.id);
+      await routeCategoryTo(tx, cfg, drinks.id, cocina.id);
       const after = await ticketItemsFor(tx, orderId);
       expect(byProduct(after, cana).stationId).toBe(barra.id);
     });
@@ -3070,8 +3070,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const bar = await createStation(tx, cfg, { name: "Bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const food = await createCategory(tx, { name: "Food" });
-      await claimFolderFor(tx, cfg, drinks.id, bar.id);
-      await claimFolderFor(tx, cfg, food.id, kitchen.id);
+      await routeCategoryTo(tx, cfg, drinks.id, bar.id);
+      await routeCategoryTo(tx, cfg, food.id, kitchen.id);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
 
       // The raw unzoned order checks routing; the offered order freezes the sale category.
@@ -3224,7 +3224,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const kitchen = await createStation(tx, cfg, { name: "Kitchen" });
       const product = await tx.execute<{ category_id: string }>(sql`
         select category_id from products where id = ${cafeId}`);
-      await claimFolderFor(tx, cfg, product.rows[0]!.category_id, bar.id);
+      await routeCategoryTo(tx, cfg, product.rows[0]!.category_id, bar.id);
       await routeProductTo(tx, cfg, aguaId, kitchen.id);
       const aguaOffer = await addProductToMenu(tx, {
         menuId: catalogueId,
@@ -4240,7 +4240,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  it("attaches unclaimed extras as sub-items on listStationQueue and listExpoQueue", async () => {
+  it("attaches extras no cell decides as sub-items on listStationQueue and listExpoQueue", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -8678,8 +8678,8 @@ describe("a variant is sold as the product it is", () => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const copas = await createStation(tx, cfg, { name: "Copas" });
-      await claimFolderFor(tx, cfg, wine.vinosId, barra.id);
-      await claimFolderFor(tx, cfg, wine.copasId, copas.id);
+      await routeCategoryTo(tx, cfg, wine.vinosId, barra.id);
+      await routeCategoryTo(tx, cfg, wine.copasId, copas.id);
       // Both lines name variants; each takes its product's category cell, so Copas's cell takes neither.
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
@@ -8706,8 +8706,8 @@ describe("a variant is sold as the product it is", () => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const bodega = await createStation(tx, cfg, { name: "Bodega" });
       const terraza = await createStation(tx, cfg, { name: "Terraza" });
-      await claimFolderFor(tx, cfg, wine.vinosId, bodega.id);
-      await claimFolderFor(tx, cfg, wine.copasId, terraza.id);
+      await routeCategoryTo(tx, cfg, wine.vinosId, bodega.id);
+      await routeCategoryTo(tx, cfg, wine.copasId, terraza.id);
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);

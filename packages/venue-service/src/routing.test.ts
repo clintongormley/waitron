@@ -1182,7 +1182,7 @@ describe("chooseExtraMaker", () => {
       fallbacks: [{ stationId: "fryer", why: "closed_by_hand" }],
     });
   });
-  it("splits a claimed extra off a dish that needs no preparation", () => {
+  it("splits an extra off a dish that needs no preparation when its category's cell names a station", () => {
     expect(chooseExtraMaker(extrasRules, chips, null, null, null).outcome).toEqual({
       kind: "made",
       stationId: "fryer",

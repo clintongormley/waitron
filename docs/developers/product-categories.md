@@ -388,7 +388,7 @@ If the summary cannot be read, deletion waits for a successful new attempt rathe
 to approve unknown contents. The dialog lists each category being deleted by its full path, adding
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
 again; if the numbers of subcategories, active products or routing rules (in the subtree, or
-naming the category itself) have changed, it deletes nothing, shows the new counts and asks you to
+on the category's own row) have changed, it deletes nothing, shows the new counts and asks you to
 confirm again. A change in disabled products alone never stops that check, whether or not the dialog
 asked about contents: the dialog neither counts those products nor asks about them. The delete
 request carries the counts

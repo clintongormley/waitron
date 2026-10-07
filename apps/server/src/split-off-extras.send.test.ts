@@ -31,7 +31,7 @@ import {
   setupVenue,
   useSplitExtrasDb,
 } from "./testing/split-extras-venue.js";
-import { claimFolderFor } from "./testing/zone-offers.js";
+import { routeCategoryTo } from "./testing/zone-offers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { addTabRound, fireLines, unsentDishLines } from "./working-order.js";
 import { routingCells, setRoutingCell } from "@waitron/venue-service";
@@ -246,7 +246,7 @@ describe("sending split-off extras", () => {
       ] as const) {
         expect((await readCategory(tx, venue.folders[child])).parentId).toBe(venue.folders[parent]);
       }
-      const claims = await tx
+      const cells = await tx
         .select({
           categoryId: routingCells.categoryId,
           productId: routingCells.productId,
@@ -256,8 +256,8 @@ describe("sending split-off extras", () => {
         })
         .from(routingCells)
         .where(eq(routingCells.locationId, venue.cfg.locationId));
-      expect(claims).toHaveLength(4);
-      expect(claims).toEqual(
+      expect(cells).toHaveLength(4);
+      expect(cells).toEqual(
         expect.arrayContaining([
           {
             categoryId: venue.folders.burgers,
@@ -356,7 +356,7 @@ describe("sending split-off extras", () => {
     expect(result.records.some((record) => record.lineId === cheese.id)).toBe(false);
   });
 
-  it("does not give an unclaimed extra a separate record", async () => {
+  it("does not give an extra no cell decides a separate record", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
@@ -402,7 +402,7 @@ describe("sending split-off extras", () => {
         { row: { kind: "category", categoryId: drinks.id }, zoneId: null },
         { kind: "no_preparation" },
       );
-      await claimFolderFor(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
       const printer = await createPrinter(
         tx,
         { locationId: cfg.locationId },
@@ -449,7 +449,7 @@ describe("sending split-off extras", () => {
     });
   });
 
-  it("gives a no-preparation dish with an unclaimed extra no kitchen records", async () => {
+  it("gives a no-preparation dish with an extra no cell decides no kitchen records", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
@@ -487,7 +487,7 @@ describe("sending split-off extras", () => {
     });
   });
 
-  it("keeps an extra claimed as no preparation on its burger's ticket", async () => {
+  it("keeps an extra set to No preparation on its burger's ticket", async () => {
     const venue = await splitVenue.setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
@@ -527,7 +527,7 @@ describe("sending split-off extras", () => {
         { row: { kind: "category", categoryId: drinks.id }, zoneId: null },
         { kind: "no_preparation" },
       );
-      await claimFolderFor(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
       const water = await createProduct(tx, {
         catalogueId,
         categoryId: drinks.id,
@@ -597,7 +597,7 @@ describe("sending split-off extras", () => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const fryer = await createStation(tx, cfg, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await claimFolderFor(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -647,8 +647,8 @@ describe("sending split-off extras", () => {
       const kitchen = await createStation(tx, cfg, { name: "Kitchen" });
       const burgers = await createCategory(tx, { name: "Burgers" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await claimFolderFor(tx, cfg, burgers.id, grill.id);
-      await claimFolderFor(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, cfg, burgers.id, grill.id);
+      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: burgers.id,
@@ -696,7 +696,7 @@ describe("sending split-off extras", () => {
       const fryer = await createStation(tx, cfg, { name: "Fryer" });
       const bar = await createStation(tx, cfg, { name: "Bar" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await claimFolderFor(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -752,7 +752,7 @@ describe("sending split-off extras", () => {
       const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const fryer = await createStation(tx, cfg, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await claimFolderFor(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -801,8 +801,8 @@ describe("sending split-off extras", () => {
       const fryer = await createStation(tx, cfg, { name: "Fryer" });
       const burgers = await createCategory(tx, { name: "Burgers" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await claimFolderFor(tx, cfg, burgers.id, grill.id);
-      await claimFolderFor(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, cfg, burgers.id, grill.id);
+      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: burgers.id,
@@ -847,7 +847,7 @@ describe("sending split-off extras", () => {
     await withTransaction(db, async (tx) => {
       const fryer = await createStation(tx, venue.cfg, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await claimFolderFor(tx, venue.cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, venue.cfg, sides.id, fryer.id);
       const [burger] = await tx
         .select({ catalogueId: products.catalogueId })
         .from(products)
@@ -949,7 +949,7 @@ describe("sending split-off extras", () => {
       const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
       const bar = await createStation(tx, cfg, { name: "Bar" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await claimFolderFor(tx, cfg, sides.id, bar.id);
+      await routeCategoryTo(tx, cfg, sides.id, bar.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: null,

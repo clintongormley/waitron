@@ -429,7 +429,7 @@ describe("seedDemoRestaurant", () => {
         join kitchen_stations s on s.id = r.station_id
         where c.name = 'Drinks'
         order by z.name`);
-      const { rows: cocktailClaims } = await tx.execute<{ station_name: string }>(sql`
+      const { rows: cocktailCells } = await tx.execute<{ station_name: string }>(sql`
         select s.name as station_name from routing_cells r
         join categories c on c.id = r.category_id and r.zone_id is null
         join kitchen_stations s on s.id = r.station_id
@@ -440,7 +440,7 @@ describe("seedDemoRestaurant", () => {
       );
       return {
         menus,
-        cocktailClaims,
+        cocktailCells,
         menuStates: [...published.values()].map((status) => status.state),
         products,
         tables: tableRows[0]!.n,
@@ -552,7 +552,7 @@ describe("seedDemoRestaurant", () => {
       },
     ]);
     expect(new Set(read.negroniOffers.map((offer) => offer.product_id)).size).toBe(1);
-    expect(read.cocktailClaims).toEqual([{ station_name: "Downstairs bar" }]);
+    expect(read.cocktailCells).toEqual([{ station_name: "Downstairs bar" }]);
     expect(read.cocktailRoutes).toEqual([
       { zone_name: "Upstairs bar", station_name: "Upstairs bar" },
     ]);

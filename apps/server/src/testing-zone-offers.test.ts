@@ -33,7 +33,7 @@ import { createStation } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import type { OriginConfig } from "./till-config.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
-import { claimFolderFor, routeProductTo, offerProducts } from "./testing/zone-offers.js";
+import { routeCategoryTo, routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 
@@ -94,7 +94,7 @@ async function seedVenue(db: Database): Promise<Venue> {
     const barra = await createStation(tx, cfg, { name: "Barra" });
     const pase = await createStation(tx, cfg, { name: "Pase" });
     await routeProductTo(tx, cfg, cafe.id, barra.id);
-    await claimFolderFor(tx, cfg, comida.id, pase.id);
+    await routeCategoryTo(tx, cfg, comida.id, pase.id);
     const list = await createExtraList(
       tx,
       {

@@ -104,7 +104,7 @@ it("creates, updates and removes watchers through management routes", async () =
   ]);
 });
 
-it("keeps top-level names for exceptions and offers active variants only to the tester", async () => {
+it("keeps top-level product names, and offers active variants only to the tester", async () => {
   const request = vi.fn(async (path: string) =>
     path === "/management-api/products"
       ? [

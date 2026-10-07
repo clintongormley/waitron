@@ -1404,7 +1404,7 @@ export async function unsentDishLines(tx: Transaction, orderId: string): Promise
 }
 
 /**
- * Every order routes by exceptions, folder claims and the active default station. Station and
+ * Every order routes by its routing cells, then the active default station. Station and
  * course are chosen at fire time. A made-here item is recorded and never printed. Extras are
  * decided after their dish against the same routing snapshot. An extra made elsewhere copies the
  * dish's course and hold, unless made here: then it is ready and fired at the send, even when its

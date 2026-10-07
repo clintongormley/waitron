@@ -862,7 +862,7 @@ describe("routing outcomes and menu readiness", () => {
     });
   });
 
-  it("treats a switched-off folder claim without a fallback as a dead end", async () => {
+  it("treats a category cell naming a switched-off station without a fallback as a dead end", async () => {
     const { cfg, zoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
       const kitchen = await insertStation(tx, cfg.locationId, "Kitchen");

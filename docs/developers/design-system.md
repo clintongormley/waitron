@@ -2653,7 +2653,8 @@ zone and each active service zone. A choice that moves products opens a preview 
 with its old and new destination before anything is saved; a choice that moves nothing saves at
 once. Tickets and Watchers own their printer selections. Settings edits each station value in its own
 cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. Station Rename,
-Make default and Disable/Enable actions belong to the Stations row menu. A supervisor sees only
+Make default and Disable/Enable actions belong to the Stations row menu; Routing's All categories ×
+Every zone cell also sets the default station, for someone with `venue.configure`. A supervisor sees only
 Stations.
 
 Hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week`, `dates` and `calendar`
