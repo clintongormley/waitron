@@ -2796,9 +2796,11 @@ follow normal Tab navigation. Give every `wt-button` slotted into a `wt-row-acti
 `align="start"` — a centred label reads oddly once the button has been stretched to the popover's
 full width, the way a dropdown menu item never centres its text. This applies to every
 `wt-row-actions` popover, not just per-row kebab menus — the account menu in the banner uses the
-same primitive and the same alignment. A link (`<a href>`) slotted beside them takes the same
-look — border, background, padding, start alignment, hover border and focus ring — from
-`wt-row-actions` itself, and stays a link.
+same primitive and the same alignment. A link (`<a href>`) slotted into the popover takes the look
+of a `variant="secondary"` `align="start"` button — border, background, padding, start alignment,
+hover border and focus ring — from `wt-row-actions` itself, and stays a link. One marked
+`aria-disabled="true"` takes the disabled button's faded look and no hover border, and choosing it
+leaves the menu open; `wt-row-actions` does not stop it navigating.
 
 The menu itself is left-aligned by default: `wt-row-actions` pins the popup's left edge under its
 trigger (`align="start"`), so the menu grows rightward, and a per-row kebab at the end of a table row

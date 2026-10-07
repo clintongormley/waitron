@@ -468,11 +468,11 @@ describe("standard icon trigger", () => {
 });
 
 describe("a link entry", () => {
-  async function mountLinkAndButton() {
+  async function mountLinkAndButton({ disabled = false } = {}) {
     const el = (await mount(
       `<wt-row-actions label="Actions for Wine">
-        <a href="#wine">Open Wine</a>
-        <wt-button variant="secondary" align="start">Edit</wt-button>
+        <a href="#wine"${disabled ? ' aria-disabled="true"' : ""}>Open Wine</a>
+        <wt-button variant="secondary" align="start"${disabled ? " disabled" : ""}>Edit</wt-button>
       </wt-row-actions>`,
     )) as WtRowActions;
     const edit = el.querySelector<WtButton>("wt-button")!;
@@ -481,8 +481,8 @@ describe("a link entry", () => {
     return { el, link: el.querySelector("a")!, button: edit.shadowRoot!.querySelector("button")! };
   }
 
-  // Not display: the popup's flex column turns the link's inline-flex into flex, where the button
-  // inside wt-button keeps inline-flex; the two boxes below are compared by size instead.
+  // Not display: the link is a flex box, the button inside wt-button an inline-flex one; the two
+  // boxes are compared by size instead.
   const boxProperties = [
     "justifyContent",
     "alignItems",
@@ -577,12 +577,32 @@ describe("a link entry", () => {
     expect(getComputedStyle(link).borderTopColor).not.toBe("rgb(20, 21, 22)");
   });
 
-  it("is still a link, and choosing it closes the menu", async () => {
+  it("takes a disabled button's look when marked aria-disabled, with no hover border", async () => {
+    const { link, button } = await mountLinkAndButton({ disabled: true });
+    host.style.setProperty("--wt-opacity-disabled", "0.31");
+    host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-primary-text", "rgb(20, 21, 22)");
+    const faded = (style: CSSStyleDeclaration) => [style.opacity, style.cursor];
+    expect(faded(getComputedStyle(link))).toEqual(["0.31", "not-allowed"]);
+    expect(faded(getComputedStyle(link))).toEqual(faded(getComputedStyle(button)));
+    await userEvent.hover(link);
+    expect(getComputedStyle(link).borderTopColor).toBe("rgb(1, 2, 3)");
+    await userEvent.hover(button);
+    expect(getComputedStyle(button).borderTopColor).toBe("rgb(1, 2, 3)");
+  });
+
+  it("is still a link: choosing it navigates and closes the menu", async () => {
     const { el, link } = await mountLinkAndButton();
     const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-    expect(link.getAttribute("href")).toBe("#wine");
-    expect(link.tagName).toBe("A");
-    link.click();
-    expect(popup.matches(":popover-open")).toBe(false);
+    const before = location.href;
+    history.replaceState(null, "", "#start");
+    try {
+      expect(link.tagName).toBe("A");
+      link.click();
+      expect(location.hash).toBe("#wine");
+      expect(popup.matches(":popover-open")).toBe(false);
+    } finally {
+      history.replaceState(null, "", before);
+    }
   });
 });

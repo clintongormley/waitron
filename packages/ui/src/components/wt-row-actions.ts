@@ -1,6 +1,6 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-icon.js";
 import type { WtIconSize } from "./wt-icon.js";
@@ -69,8 +69,11 @@ export class WtRowActions extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         text-decoration: none;
       }
-      ::slotted(a[href]:hover) {
+      ::slotted(a[href]:not([aria-disabled="true"]):hover) {
         border-color: var(--wt-color-primary-text);
+      }
+      ::slotted(a[href][aria-disabled="true"]) {
+        ${disabledStyles}
       }
       ::slotted(a[href]:focus-visible) {
         outline: var(--wt-focus-ring);
