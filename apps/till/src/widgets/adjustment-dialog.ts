@@ -381,7 +381,6 @@ export class TillAdjustmentDialog extends LitElement {
     if (reason?.noteRequired === true && this.note.trim() === "")
       errors.set("note", t("adjust.note_required"));
     if (this.kind === "discount") {
-      const typed = this.value.trim();
       const number = this.#typedNumber();
       if (this.discountKind === "percent") {
         const percent = Number(number);
