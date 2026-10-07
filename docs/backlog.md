@@ -4796,8 +4796,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   access and switching DONE (W97, #1311; a venue reset is needed after it, its profiles need the new
   action flags); equipment LANDED except NFC (W100, #1332); transfers IN PROGRESS
   in lane D on `feat/departmental-tab-transfers`. The branch has request storage, directional
-  settings, withdrawal and manager settings routes; acceptance, lifecycle integration and screens
-  remain to build.**
+  settings, withdrawal, manager settings routes, configuration export/import and the acceptance/decline
+  service. Till routes, lifecycle integration and screens remain to build. Party-linked bills are
+  refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
   station/watcher bindings; drawers are independent of receipt

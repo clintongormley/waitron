@@ -1,8 +1,19 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import { deviceProfiles, workingOrders, type Transaction } from "@waitron/db";
+import {
+  billPayments,
+  billPaymentRefunds,
+  deviceProfiles,
+  diningTables,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertDepartment } from "./department-menus.js";
-import { getOrderServiceContext, type VenueScope } from "./operations.js";
+import {
+  getOrderServiceContext,
+  retargetOrderServiceContext,
+  type VenueScope,
+} from "./operations.js";
 import { readProfileZones } from "./profile-access.js";
 import { departments } from "./schema/service.js";
 import {
@@ -137,7 +148,8 @@ export async function requestDepartmentTransfer(
     .select({ status: workingOrders.status })
     .from(workingOrders)
     .where(and(eq(workingOrders.id, tabId), eq(workingOrders.locationId, cfg.locationId)));
-  if (tab?.status !== "open") throw new AppError("department_transfer.tab_unavailable", { tabId });
+  if (tab === undefined || (tab.status !== "open" && tab.status !== "placed"))
+    throw new AppError("department_transfer.tab_unavailable", { tabId });
   const context = await getOrderServiceContext(tx, cfg, tabId);
   if (context.departmentId !== sender.departmentId)
     throw new AppError("department_transfer.not_allowed", {});
@@ -236,4 +248,148 @@ export async function withdrawDepartmentTransfer(
     )
     .returning();
   return withdrawn!;
+}
+
+export interface DepartmentTransferReceiver extends DepartmentTransferActor {
+  profileId: string;
+}
+
+async function pendingRequest(tx: Transaction, cfg: VenueScope, requestId: string) {
+  const [request] = await tx
+    .select()
+    .from(departmentTransferRequests)
+    .where(eq(departmentTransferRequests.id, requestId));
+  if (request === undefined) throw new AppError("department_transfer.not_found", { requestId });
+  await assertDepartment(tx, cfg, request.destinationDepartmentId);
+  if (request.status !== "pending")
+    throw new AppError("department_transfer.not_pending", { requestId });
+  return request;
+}
+
+async function checkReceiver(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  receiver: DepartmentTransferReceiver,
+) {
+  const [desk] = await tx
+    .select()
+    .from(departmentTransferDesks)
+    .where(eq(departmentTransferDesks.departmentId, departmentId));
+  if (
+    receiver.departmentId !== departmentId ||
+    desk?.receivingProfileId !== receiver.profileId ||
+    !(await usableProfile(tx, cfg, departmentId, receiver.profileId))
+  )
+    throw new AppError("department_transfer.not_allowed", {});
+}
+
+async function resolveRequest(
+  tx: Transaction,
+  requestId: string,
+  receiver: DepartmentTransferActor,
+  values: { status: "accepted" | "declined"; destinationZoneId?: string; reason?: string },
+) {
+  const [resolved] = await tx
+    .update(departmentTransferRequests)
+    .set({
+      ...values,
+      resolvedBy: receiver.personId,
+      resolvedAt: new Date().toISOString(),
+      revision: sql`${departmentTransferRequests.revision} + 1`,
+    })
+    .where(
+      and(
+        eq(departmentTransferRequests.id, requestId),
+        eq(departmentTransferRequests.status, "pending"),
+      ),
+    )
+    .returning();
+  if (resolved === undefined) throw new AppError("department_transfer.not_pending", { requestId });
+  return resolved;
+}
+
+export async function acceptDepartmentTransfer(
+  tx: Transaction,
+  cfg: VenueScope,
+  requestId: string,
+  receiver: DepartmentTransferReceiver,
+  input: { tabRevision: number; zoneId: string; tableId: string | null },
+) {
+  const request = await pendingRequest(tx, cfg, requestId);
+  await checkReceiver(tx, cfg, request.destinationDepartmentId, receiver);
+  const [tab] = await tx
+    .select()
+    .from(workingOrders)
+    .where(and(eq(workingOrders.id, request.tabId), eq(workingOrders.locationId, cfg.locationId)));
+  if (tab === undefined || (tab.status !== "open" && tab.status !== "placed"))
+    throw new AppError("department_transfer.tab_unavailable", { tabId: request.tabId });
+  if (tab.revision !== input.tabRevision)
+    throw new AppError("working_order.out_of_date", {
+      workingOrderId: tab.id,
+      revision: tab.revision,
+    });
+  const context = await getOrderServiceContext(tx, cfg, tab.id);
+  if (context.departmentId !== request.sourceDepartmentId)
+    throw new AppError("department_transfer.not_allowed", {});
+  if (tab.paymentAttemptAt !== null)
+    throw new AppError("order.payment_in_flight", { workingOrderId: tab.id });
+  const [payment] = await tx
+    .select({ id: billPayments.id })
+    .from(billPayments)
+    .where(and(eq(billPayments.workingOrderId, tab.id), eq(billPayments.state, "pending")))
+    .limit(1);
+  if (payment !== undefined)
+    throw new AppError("order.payment_in_flight", { workingOrderId: tab.id });
+  const [refund] = await tx
+    .select({ id: billPaymentRefunds.id })
+    .from(billPaymentRefunds)
+    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+    .where(and(eq(billPayments.workingOrderId, tab.id), eq(billPaymentRefunds.state, "pending")))
+    .limit(1);
+  if (refund !== undefined)
+    throw new AppError("bill.refund_in_progress", { workingOrderId: tab.id });
+  // A single-tab acceptance must not change the table links or order groups shared by other bills.
+  if (tab.partyId !== null)
+    throw new AppError("department_transfer.structure_unsupported", { tabId: tab.id });
+  const scope = await readProfileZones(tx, cfg, receiver.profileId);
+  if (!scope.allowedZoneIds?.includes(input.zoneId))
+    throw new AppError("department_transfer.destination_invalid", { field: "zoneId" });
+  if (input.tableId !== null) {
+    const [table] = await tx
+      .select({ id: diningTables.id })
+      .from(diningTables)
+      .where(
+        and(
+          eq(diningTables.id, input.tableId),
+          eq(diningTables.locationId, cfg.locationId),
+          eq(diningTables.zoneId, input.zoneId),
+          eq(diningTables.active, true),
+        ),
+      );
+    if (table === undefined)
+      throw new AppError("department_transfer.destination_invalid", { field: "tableId" });
+  }
+  await retargetOrderServiceContext(tx, cfg, tab.id, input.zoneId);
+  await tx
+    .update(workingOrders)
+    .set({ deliveryTableId: input.tableId, revision: sql`${workingOrders.revision} + 1` })
+    .where(eq(workingOrders.id, tab.id));
+  return resolveRequest(tx, request.id, receiver, {
+    status: "accepted",
+    destinationZoneId: input.zoneId,
+  });
+}
+
+export async function declineDepartmentTransfer(
+  tx: Transaction,
+  cfg: VenueScope,
+  requestId: string,
+  receiver: DepartmentTransferReceiver,
+  reason: string,
+) {
+  const request = await pendingRequest(tx, cfg, requestId);
+  await checkReceiver(tx, cfg, request.destinationDepartmentId, receiver);
+  if (!reason.trim()) throw new AppError("department_transfer.reason_required", {});
+  return resolveRequest(tx, requestId, receiver, { status: "declined", reason: reason.trim() });
 }
