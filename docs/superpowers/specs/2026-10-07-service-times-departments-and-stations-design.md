@@ -42,6 +42,8 @@ instead of three, and for configuration pages that are only about configuration.
   `packages/venue-service/src/schema/hours.ts`).
 - **A menu can include another menu** (`packages/catalogue/src/menu-inclusion.ts`): the included
   menu appears as one folder, and a product reached two ways is one item with one price.
+  _(2026-10-07: since #1372 (A322) each include can instead show the included menu's sections
+  directly, or be a folder with its own name, photo and colour.)_
 - **Routing is a grid** since #1363 (A261-4): rows are products, categories and All categories;
   columns are zones and Every zone; each set cell names a station or No preparation.
 - **Kitchen tickets are routed per station**: each station's ticket prints on each of its printers
