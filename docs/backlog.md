@@ -4786,15 +4786,16 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
   reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
   working assumption, to confirm before go-live. Hours moved to A254.
-- **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC WRITTEN,
-  awaiting the owner's review.** Opening hours and the menu timetable become one idea: a period is
+- **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
+  APPROVED 2026-10-07; slice 1 plan written, awaiting the owner's review**
+  ([slice 1 plan](superpowers/plans/2026-10-07-a366-slice-1-service-periods.md)). Opening hours and the menu timetable become one idea: a period is
   a name with one customer menu plus staff-only menus, a department's day is time ranges each given
   a period, and the till sells only the current period's menus. Zones can be closed for part of
   their department's time; prep stations lose their hours and fallbacks; routing cells can name
   periods; a printer shared by stations prints one combined ticket; watchers become monitors on
   device profiles; receipts move to departments with translated text.
   [Spec](superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md); §13 is
-  the seven-slice build order and §15 what to confirm at review. It replaces A254 §4, A261
+  the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
 - **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
   implemented through A261.** The first department is named after the venue; the

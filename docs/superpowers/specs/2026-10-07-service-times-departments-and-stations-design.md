@@ -1,7 +1,7 @@
 # Service times, departments, zones and prep stations
 
-**Status:** owner decisions of 2026-10-07, from one brainstorm with mockups. Written spec awaiting
-the owner's review. Not built. Backlog item **A366**. Behaviour below is the target design, not a
+**Status:** owner decisions of 2026-10-07, from one brainstorm with mockups. The owner approved
+this written spec on 2026-10-07, including section 15's three defaults. Not built. Backlog item **A366**. Behaviour below is the target design, not a
 claim about what runs today; section 2 is the only part that describes today's code, and it cites
 where.
 
@@ -299,7 +299,7 @@ Each slice is its own plan and pull request, in this order:
 - A "tonight" copy of the floor plan that resets each day.
 - A254 §3.1's questions about tabs at a counter, and its advisor questions.
 
-## 15. To confirm at review
+## 15. Defaults the owner accepted with the spec
 
 1. Live controls go to the till and kitchen display only (section 10).
 2. A watcher printer that followed one zone (a "Terrace runner" printer) has no replacement:
