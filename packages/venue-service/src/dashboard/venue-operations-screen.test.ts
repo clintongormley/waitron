@@ -3706,12 +3706,10 @@ it.each(["success", "refusal"] as const)(
 it("explains a blocked zone Enable beside its reserved name and removes the unusable offer", async () => {
   const el = await mount({
     load: vi.fn().mockResolvedValue(model),
-    createZone: vi
-      .fn()
-      .mockRejectedValue({
-        code: "zone.name_disabled",
-        params: { name: "Dining room", zoneId: "z1" },
-      }),
+    createZone: vi.fn().mockRejectedValue({
+      code: "zone.name_disabled",
+      params: { name: "Dining room", zoneId: "z1" },
+    }),
     updateZone: vi
       .fn()
       .mockRejectedValue({ code: "zone.department_inactive", params: { zoneId: "z1" } }),
