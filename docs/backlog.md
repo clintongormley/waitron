@@ -2479,13 +2479,17 @@ point, so "0,25 kg" precedes "0,5 kg". Chromium checks cover both separators, mi
 values, integer order and differences below floating-point precision. This changes category
 pickers in the product editor and catalogue browser, the section's Add products list and category
 filter, and menu price section/category filters. A299 (#1328) retired the unused member-list
-editor, which also consumed this helper on A300's initial base. `wt-data-table` uses its own
-comparison and is outside
-this item's scope. A rendered Chromium probe confirms that table still lists "0,5 kg" before
-"0,25 kg", so its order differs from these pickers. To align table name sorting, queue a shared
-comparator change separately. Names such as "1.10 Postres" are read as decimals (1.1), so they
+editor, which also consumed this helper on A300's initial base. The table follow-up is DONE
+(A309): `@waitron/shared` now exports `compareLabels`, used by both `byLabel` and
+`wt-data-table`'s text sort. Chromium cases check decimal names in both
+directions, equal-decimal ties, and ISO timestamp order; numeric sort values retain their
+separate comparison. Names such as "1.10 Postres" are read as decimals (1.1), so they
 precede "1.2 Sopas"; this change does not infer outline or version numbering from names. Since
 W85a, product variants retain the product's own order.
+A309's review reported one 5,000-name sorting sample at 95.2 ms with the old comparison and
+124.4 ms with the shared comparison; the sample was not repeated, so the cost on a dashboard
+list is unverified. **Next action:** repeat timings with representative list sizes before
+considering cached name tokens; no sorting optimisation is part of A309.
 
 **Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
 DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
@@ -4347,7 +4351,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
   says so** (owner decision 2026-09-12). **`wt-select` is retired** (owner, 2026-10-02): `wt-combobox`
   is the one dropdown (A178b–f). Still open:
-  `wt-combobox` does not sort its options, and `wt-data-table`'s `localeCompare` takes no locale.
+  `wt-combobox` does not sort its options, and `compareLabels`, now used by `wt-data-table`,
+  passes no locale to `localeCompare`.
 - **The till's schedule screen tells the person to try again and gives them no way to** (found
   2026-10-03 by review of lane C's W14; read, not run). A failed load shows
   `schedule.load_failed`, "Could not load your schedule, try again" (Spanish: "No se pudo cargar tu
