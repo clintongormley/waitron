@@ -2502,8 +2502,8 @@ Each of those follows the included menu until the manager changes it here; a cha
 for this include only. With the switch off, the included menu's own sections and products appear in
 the include's place, in their own order, on the till, in the Menus preview and on the device home
 page; an include inside them keeps its own setting. The setting and the fixed values live on the
-include's row (`section_members.show_as_folder` and `folder_overrides`, catalogue migrations `0028`
-and `0029`), a folder's fixed photo is protected like a section's (media `0009`), and the route is
+include's row (`section_members.show_as_folder` and `folder_overrides`, catalogue migrations `0029`
+and `0030`), a folder's fixed photo is protected like a section's (media `0009`), and the route is
 `PUT /management-api/sections/:id/members/:memberId/folder`. The menu document gains `direct` and
 `fixed` on an include, so a published edition keeps the setting. How it works:
 [design-system.md](developers/design-system.md) (the Structure tab, and Forms on the include dialog's
