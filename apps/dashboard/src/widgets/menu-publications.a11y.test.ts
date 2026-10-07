@@ -203,3 +203,82 @@ describe.each(["light", "dark"] as const)("the schedule form (%s)", (theme) => {
     },
   );
 });
+
+const MOVE_LISTED: MenuPublicationsAnswer = {
+  ...LISTED,
+  editions: [
+    LISTED.editions[0]!,
+    {
+      ...LISTED.editions[0]!,
+      versionId: "v-lunch-3",
+      number: 3,
+      activatesAt: "2026-10-09T06:00:00.000Z",
+      contentHash: "3".repeat(64),
+      local: { date: "2026-10-09", time: "08:00", offset: "+02:00", repeated: false },
+    },
+    LISTED.editions[1]!,
+  ],
+};
+
+const moveStates = {
+  "change time form": null,
+  "change time overtaken": {
+    code: "menu_publication.overtakes_queued",
+    params: {
+      menuId: "menu-lunch",
+      overtaken: [{ versionId: "v-lunch-3", number: 3, activatesAt: "2026-10-09T06:00:00.000Z" }],
+    },
+  },
+  "change time occurrence": scheduleStates["schedule occurrence"],
+} as const;
+type MoveState = keyof typeof moveStates;
+
+describe.each(["light", "dark"] as const)("the Change time form (%s)", (theme) => {
+  it.each(Object.keys(moveStates) as MoveState[])("renders %s accessibly", async (state) => {
+    setLocale("en");
+    const refusal = moveStates[state];
+    const api = {
+      getMenuPublications: vi.fn().mockResolvedValue(MOVE_LISTED),
+      rescheduleMenuPublication: vi.fn().mockRejectedValue(refusal),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<MenuPublicationsPanel>(
+      "dashboard-menu-publications",
+      { api, menuId: "menu-lunch", menuName: "Lunch Menu" },
+      theme,
+    );
+    await settle(el);
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>('[data-test="move-v-lunch-2"]')!
+      .click();
+    await settle(el);
+    const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+      '[data-test="schedule-dialog"]',
+    )!;
+    expect(dialog.open).toBe(true);
+    if (refusal !== null) {
+      const [date, time] =
+        state === "change time occurrence" ? ["2026-10-25", "02:30"] : ["2026-10-10", "08:00"];
+      for (const [name, value] of [
+        ["date", date],
+        ["time", time],
+      ] as const) {
+        const input = dialog.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!;
+        await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), value);
+      }
+      dialog.querySelector<HTMLElement>('[data-test="schedule-submit"]')!.click();
+      await vi.waitFor(() =>
+        expect(
+          dialog.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!.error,
+        ).not.toBe(""),
+      );
+    }
+    if (state === "change time occurrence")
+      expect(dialog.querySelector('wt-combobox[name="occurrence"]')).not.toBeNull();
+    if (state === "change time overtaken")
+      expect(
+        dialog.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="time"]')!.error,
+      ).toContain("Version 3");
+    await settle(el);
+    await expectNoA11yViolations(host);
+  });
+});

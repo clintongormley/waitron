@@ -7,7 +7,22 @@ import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import "./menu-publications.js";
 
-const LISTED: MenuPublicationsAnswer = { timeZone: "Europe/Madrid", live: null, editions: [] };
+const LISTED: MenuPublicationsAnswer = {
+  timeZone: "Europe/Madrid",
+  live: null,
+  editions: [
+    {
+      versionId: "v-lunch-1",
+      number: 1,
+      state: "queued",
+      activatesAt: "2026-10-08T06:00:00.000Z",
+      queuedAt: "2026-10-07T08:00:00.000Z",
+      cancelledAt: null,
+      contentHash: "1".repeat(64),
+      local: { date: "2026-10-08", time: "08:00", offset: "+02:00", repeated: false },
+    },
+  ],
+};
 
 const PREVIEW = {
   clashes: [],
@@ -27,6 +42,11 @@ class PublicationsLeaveApp extends LitElement {
       versionId: "v-lunch-2",
       number: 2,
       activatesAt: "2026-10-10T10:00:00.000Z",
+    }),
+    rescheduleMenuPublication: vi.fn().mockResolvedValue({
+      versionId: "v-lunch-1",
+      number: 1,
+      activatesAt: "2026-10-08T07:00:00.000Z",
     }),
   };
   override render() {
@@ -174,4 +194,54 @@ it("a refused schedule keeps the draft protected", async () => {
   expect(unload()).toBe(true);
   await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
+});
+
+async function mountMove() {
+  setLocale("en-GB");
+  const { el: app } = await mountWidget<PublicationsLeaveApp>(
+    "menu-publications-leave-test-app",
+    {},
+  );
+  const panel = app.shadowRoot!.querySelector("dashboard-menu-publications")!;
+  const table = () => panel.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() =>
+    expect(table().shadowRoot!.querySelector('[data-test="move-v-lunch-1"]')).not.toBeNull(),
+  );
+  table().shadowRoot!.querySelector<HTMLElement>('[data-test="move-v-lunch-1"]')!.click();
+  await panel.updateComplete;
+  const dialog = panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+    '[data-test="schedule-dialog"]',
+  )!;
+  await dialog.updateComplete;
+  expect(dialog.open).toBe(true);
+  return { app, dialog };
+}
+
+it("Change time closes untouched without asking, and warns on Escape once the time changes", async () => {
+  const { app, dialog } = await mountMove();
+  expect(unload()).toBe(false);
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => dialog.open).toBe(false);
+  expect((await question(app)).open).toBe(false);
+
+  cleanupWidgets();
+  const second = await mountMove();
+  const input = await enter(second.dialog, "time", "09:00");
+  expect(unload()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  const q = await question(second.app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(input.value).toBe("09:00");
+  expect(second.dialog.open).toBe(true);
+});
+
+it("a moved time cleared by success does not warn", async () => {
+  const { app, dialog } = await mountMove();
+  await enter(dialog, "time", "09:00");
+  dialog.querySelector<HTMLElement>('[data-test="schedule-submit"]')!.click();
+  await expect.poll(() => dialog.open).toBe(false);
+  expect(app.api.rescheduleMenuPublication).toHaveBeenCalledTimes(1);
+  expect(unload()).toBe(false);
 });

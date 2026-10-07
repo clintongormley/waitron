@@ -127,20 +127,22 @@ interface ScheduleDraft {
 /**
  * A refusal placed under the field it names, or in the bottom message when `field` is null, kept
  * untranslated so a language change rewords it. A null `code` is a press with no preview to
- * schedule; `answer` is the list read after an overtake refusal.
+ * schedule; `answer` is the list read after an overtake refusal, and `placed` the number of the
+ * version being moved, null for a new one.
  */
 interface ScheduleRefusal {
   field: "date" | "time" | "occurrence" | null;
   code: string | null;
   params: Record<string, unknown>;
+  placed: number | null;
   answer?: MenuPublicationsAnswer | null;
 }
 
-function refusalMessage({ code, params, answer }: ScheduleRefusal): string {
+function refusalMessage({ code, params, placed, answer }: ScheduleRefusal): string {
   if (code === null) return t("menu_publications.preview_unavailable");
   if (code === "menu_publication.overtakes_queued" && answer && Array.isArray(params.overtaken))
     return (
-      overtakeSentence(params.overtaken as { versionId: string }[], null, answer) ??
+      overtakeSentence(params.overtaken as { versionId: string }[], placed, answer) ??
       codeMessage(code)
     );
   if (
@@ -179,7 +181,8 @@ function repeatedTime(params: Record<string, unknown>): RepeatedTime | null {
 
 /**
  * A menu's scheduled versions, soonest first, then the latest settled ones, each with its
- * venue-local time and state. A queued version can be cancelled after a confirmation.
+ * venue-local time and state. A queued version can be cancelled after a confirmation, or moved to
+ * another time through the schedule form.
  */
 @customElement("dashboard-menu-publications")
 export class MenuPublicationsPanel extends LitElement {
@@ -235,6 +238,8 @@ export class MenuPublicationsPanel extends LitElement {
   @state() private cancelError: string | null = null;
   @state() private busy = false;
   @state() private scheduling = false;
+  /** The queued version the schedule form moves; null when it schedules the preview. */
+  @state() private moving: Edition | null = null;
   @state() private scheduleBusy = false;
   @state() private date = "";
   @state() private time = "";
@@ -340,11 +345,20 @@ export class MenuPublicationsPanel extends LitElement {
     }
   }
 
-  #openCancel(edition: Edition, event: Event): void {
+  #rememberRowMenu(event: Event): void {
     const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
     this.#focusTarget = menu.shadowRoot!.querySelector("button");
+  }
+
+  #openCancel(edition: Edition, event: Event): void {
+    this.#rememberRowMenu(event);
     this.cancelError = null;
     this.cancelling = edition;
+  }
+
+  #openMove(edition: Edition, event: Event): void {
+    this.#rememberRowMenu(event);
+    this.#openSchedule(edition);
   }
 
   #close(): void {
@@ -404,10 +418,11 @@ export class MenuPublicationsPanel extends LitElement {
     this.#leave = undefined;
   }
 
-  #openSchedule(): void {
+  #openSchedule(moving: Edition | null): void {
     this.#opening = {};
-    this.date = "";
-    this.time = "";
+    this.moving = moving;
+    this.date = moving?.local.date ?? "";
+    this.time = moving?.local.time ?? "";
     this.occurrence = "";
     this.repeated = null;
     this.attempted = false;
@@ -432,8 +447,13 @@ export class MenuPublicationsPanel extends LitElement {
     this.#opening = {};
     this.#disposeDraft();
     this.scheduling = false;
+    const moved = this.moving !== null;
     requestAnimationFrame(() => {
-      const opener = this.renderRoot.querySelector<HTMLElement>('[data-test="schedule-open"]');
+      const opener = moved
+        ? this.#focusTarget?.isConnected
+          ? this.#focusTarget
+          : null
+        : this.renderRoot.querySelector<HTMLElement>('[data-test="schedule-open"]');
       (opener ?? this.renderRoot.querySelector<HTMLElement>("h2"))?.focus();
     });
   }
@@ -477,11 +497,12 @@ export class MenuPublicationsPanel extends LitElement {
 
   async #submitSchedule(): Promise<void> {
     const preview = this.preview;
+    const moving = this.moving;
     if (this.scheduleBusy) return;
     this.attempted = true;
     this.scheduleRefusal = null;
-    if (preview === null) {
-      this.scheduleRefusal = { field: null, code: null, params: {} };
+    if (moving === null && preview === null) {
+      this.scheduleRefusal = { field: null, code: null, params: {}, placed: null };
       return;
     }
     if (Object.keys(this.#ownErrors()).length > 0) {
@@ -496,9 +517,14 @@ export class MenuPublicationsPanel extends LitElement {
     const menuId = this.menuId;
     this.scheduleBusy = true;
     try {
-      await this.api.scheduleMenuPublication(menuId, { expectedHash: preview.hash, activatesAt });
+      if (moving === null)
+        await this.api.scheduleMenuPublication(menuId, {
+          expectedHash: preview!.hash,
+          activatesAt,
+        });
+      else await this.api.rescheduleMenuPublication(menuId, moving.versionId, { activatesAt });
     } catch (error) {
-      await this.#placeRefusal(error, menuId, opening);
+      await this.#placeRefusal(error, menuId, opening, moving?.number ?? null);
       return;
     } finally {
       this.scheduleBusy = false;
@@ -510,10 +536,15 @@ export class MenuPublicationsPanel extends LitElement {
     await this.#refresh();
   }
 
-  async #placeRefusal(error: unknown, menuId: string, opening: object): Promise<void> {
+  async #placeRefusal(
+    error: unknown,
+    menuId: string,
+    opening: object,
+    placed: number | null,
+  ): Promise<void> {
     const code = codeOf(error);
     const params = (error as { params?: Record<string, unknown> }).params ?? {};
-    const refusal: ScheduleRefusal = { field: null, code, params };
+    const refusal: ScheduleRefusal = { field: null, code, params, placed };
     if (code === "menu_publication.time_repeated") {
       const repeated = repeatedTime(params);
       if (opening === this.#opening && repeated !== null) {
@@ -534,6 +565,9 @@ export class MenuPublicationsPanel extends LitElement {
     } else if (code === "management.request_invalid" && typeof params.field === "string") {
       const field = REQUEST_FIELDS[params.field] ?? null;
       refusal.field = field === "occurrence" && this.repeated === null ? null : field;
+    } else if (code === "menu_publication.not_queued" || code === "menu_publication.not_found") {
+      // The row being moved is out of date.
+      void this.#refresh();
     }
     if (opening !== this.#opening) return;
     this.scheduleRefusal = refusal;
@@ -580,6 +614,12 @@ export class MenuPublicationsPanel extends LitElement {
             ? nothing
             : html`<wt-row-actions
                 label=${`${t("menu_publications.actions")}: ${versionWords(edition)}`}
+                ><wt-button
+                  align="start"
+                  variant="ghost"
+                  data-test=${`move-${edition.versionId}`}
+                  @click=${(event: Event) => this.#openMove(edition, event)}
+                  >${t("menu_publications.move")}</wt-button
                 ><wt-button
                   align="start"
                   variant="ghost"
@@ -649,9 +689,15 @@ export class MenuPublicationsPanel extends LitElement {
     ].join(" ");
     const invalid = Object.keys(own).length > 0;
     const repeated = this.repeated;
+    const moving = this.moving;
+    const zone = this.answer?.timeZone ?? "";
     return html`<wt-dialog
       data-test="schedule-dialog"
-      heading=${fill("menu_publications.schedule_heading", { menu: this.menuName })}
+      heading=${
+        moving === null
+          ? fill("menu_publications.schedule_heading", { menu: this.menuName })
+          : fill("menu_publications.move_heading", { number: String(moving.number) })
+      }
       .open=${this.scheduling}
       .dismissible=${!this.scheduleBusy}
       .beforeClose=${this.#scope ? this.#beforeClose : undefined}
@@ -666,7 +712,15 @@ export class MenuPublicationsPanel extends LitElement {
         )}
     >
       <p class="intro" data-test="schedule-intro">
-        ${fill("menu_publications.schedule_intro", { zone: this.answer?.timeZone ?? "" })}
+        ${
+          moving === null
+            ? fill("menu_publications.schedule_intro", { zone })
+            : fill("menu_publications.move_intro", {
+                number: String(moving.number),
+                menu: this.menuName,
+                zone,
+              })
+        }
       </p>
       <wt-input
         class="field"
@@ -737,7 +791,9 @@ export class MenuPublicationsPanel extends LitElement {
           .loading=${this.scheduleBusy}
           ?disabled=${invalid}
           @click=${() => void this.#submitSchedule()}
-          >${t("menu_publications.schedule_action")}</wt-button
+          >${t(
+            moving === null ? "menu_publications.schedule_action" : "menu_publications.move_action",
+          )}</wt-button
         >
       </wt-form-actions>
     </wt-dialog>`;
@@ -751,7 +807,7 @@ export class MenuPublicationsPanel extends LitElement {
               <wt-button
                 variant="secondary"
                 data-test="schedule-open"
-                @click=${() => this.#openSchedule()}
+                @click=${() => this.#openSchedule(null)}
                 >${t("menu_publications.schedule")}</wt-button
               >
             </div>`

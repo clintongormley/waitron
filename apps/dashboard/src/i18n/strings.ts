@@ -2344,6 +2344,11 @@ export const en = {
     "Version {number}, scheduled for {time}, must go live after this one. Cancel it or move it later, then try again.",
   "menu_publications.in_the_way_later_many":
     "Versions {list} must go live after this one. Cancel them or move them later, then try again.",
+  "menu_publications.move": "Change time",
+  "menu_publications.move_heading": "Change the time of version {number}",
+  "menu_publications.move_intro":
+    "Version {number} of {menu} goes live at the date and time you choose, on the venue's clock ({zone}).",
+  "menu_publications.move_action": "Change time",
   "add_to_menus.heading": "Add {name} to menus",
   "add_to_menus.intro":
     "{name} is saved. Choose where it goes on your menus, or skip this and add it later from Menus.",
@@ -4786,6 +4791,11 @@ export const es: Record<StringKey, string> = {
     "La versión {number}, programada para el {time}, debe publicarse después de esta. Cancélala o retrásala y vuelve a intentarlo.",
   "menu_publications.in_the_way_later_many":
     "Las versiones {list} deben publicarse después de esta. Cancélalas o retrásalas y vuelve a intentarlo.",
+  "menu_publications.move": "Cambiar la hora",
+  "menu_publications.move_heading": "Cambiar la hora de la versión {number}",
+  "menu_publications.move_intro":
+    "La versión {number} de {menu} se publica en la fecha y la hora que elijas, según el reloj del local ({zone}).",
+  "menu_publications.move_action": "Cambiar la hora",
   "add_to_menus.heading": "Añadir {name} a las cartas",
   "add_to_menus.intro":
     "{name} está guardado. Elige dónde va en tus cartas, u omite este paso y añádelo más tarde desde Cartas.",
