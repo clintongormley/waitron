@@ -981,8 +981,9 @@ export class PrepStationsScreen extends LitElement {
     if (!isCurrent()) return;
     this.busy = false;
     const pending = { change, moves, save, isCurrent };
-    if (moves.length === 0) await this.#saveCell(pending);
-    else this.pending = pending;
+    if (moves.length > 0) this.pending = pending;
+    else if (this.#addressShown(change.address)) await this.#saveCell(pending);
+    else this.cellChoice = null;
   }
   #refuseCell(address: CellAddress, error: unknown): void {
     this.cellChoice = null;

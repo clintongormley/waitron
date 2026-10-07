@@ -5995,6 +5995,7 @@ describe("Routing grid", () => {
     "station_fallbacks",
     "floor_zones",
     "categories",
+    "category_details",
     "products",
   ])(
     "a cell, default, station-active, fallback, zone, category-parent or product-category change refreshes the grid and tester (%s)",
@@ -6099,28 +6100,26 @@ describe("Routing grid", () => {
   });
 
   it("a late read cannot reopen a closed editor or reorder the selection", async () => {
-    const answerLate = deferred<unknown[]>();
-    const preview = vi.fn().mockReturnValueOnce(answerLate.promise).mockResolvedValue([]);
+    const preview = vi.fn().mockResolvedValueOnce([breadMove]).mockResolvedValue([]);
     const liveData = new LiveData();
     const stale = deferred<PrepStationsView>();
-    const load = vi.fn().mockResolvedValue(gridView());
+    const load = vi.fn(async () => gridView());
     const { a, el } = await mountGrid({ liveData, load, preview });
+    const rowOrder = () =>
+      [...gridOf(el).shadowRoot!.querySelectorAll("tbody th")].map((th) =>
+        th.textContent!.replace(/\s+/g, " ").trim(),
+      );
 
     await chooseCell(el, "c:drinks", "terrace", "Kitchen");
-    const host = el.parentElement!;
-    el.remove();
-    host.append(el);
-    await settle(el);
-    answerLate.resolve([breadMove]);
-    await settle(el);
-    await gridOf(el).updateComplete;
-    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
-    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("");
-
-    load.mockReturnValueOnce(stale.promise).mockResolvedValue(withCell(kitchenTarget));
+    expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+    load.mockReturnValueOnce(stale.promise).mockImplementation(async () => withCell(kitchenTarget));
     const calls = load.mock.calls.length;
     liveData.invalidate([{ type: "routing_cells" }]);
     await vi.waitFor(() => expect(load.mock.calls.length).toBe(calls + 1));
+    q(el, '[data-test="cancel-routing"]')!.click();
+    await settle(el);
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+
     await chooseCell(el, "c:drinks", "terrace", "Kitchen");
     await vi.waitFor(() =>
       expect(a.setCell).toHaveBeenCalledExactlyOnceWith(drinksTerrace, kitchenTarget),
@@ -6129,10 +6128,50 @@ describe("Routing grid", () => {
       await gridOf(el).updateComplete;
       expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
     });
-    stale.resolve(gridView());
+    const order = rowOrder();
+    // The read that started before Cancel lists the categories in another order.
+    const reordered = gridView();
+    reordered.routing.categories = [...reordered.routing.categories].reverse();
+    stale.resolve(reordered);
     await settle(el);
     await gridOf(el).updateComplete;
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
     expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+    expect(rowOrder()).toEqual(order);
+    expect(a.setCell).toHaveBeenCalledTimes(1);
+  });
+
+  it("a choice whose No category row a refresh removed while its preview was out is dropped, not saved, when the preview moves nothing", async () => {
+    const liveData = new LiveData();
+    const answer = deferred<unknown[]>();
+    const categorised = gridView();
+    categorised.routing.products = categorised.routing.products.map((product) => ({
+      ...product,
+      categoryId: "food",
+    }));
+    const load = vi.fn(async () => gridView());
+    const { a, el } = await mountGrid({
+      liveData,
+      load,
+      preview: vi.fn().mockReturnValueOnce(answer.promise).mockResolvedValue([breadMove]),
+    });
+    await chooseCell(el, "no_category", "terrace", "Kitchen");
+    load.mockImplementation(async () => categorised);
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(async () => {
+      await gridOf(el).updateComplete;
+      expect(gridOf(el).shadowRoot!.querySelector('td[data-row="no_category"]')).toBeNull();
+    });
+    answer.resolve([]);
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(a.setCell).not.toHaveBeenCalled();
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(cellCombo(el, "all", "terrace").value).toBe("");
+    await chooseCell(el, "c:food", "terrace", "Kitchen");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(a.setCell).toHaveBeenCalledExactlyOnceWith(foodTerrace, kitchenTarget);
   });
 
   it("reopening an editor owns a new request generation", async () => {
