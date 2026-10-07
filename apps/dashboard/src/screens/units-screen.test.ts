@@ -1277,3 +1277,32 @@ it("puts the units table's Filters before its search, beside the rows on a wide 
     cleanupWidgets,
   );
 });
+
+it("keeps unit column inputs on a redraw and refreshes precision choices and language", async () => {
+  setLocale("en");
+  const el = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const columns = table.columns;
+  el.requestUpdate();
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(table.columns).toBe(columns);
+  vi.mocked(el.api.background.listUnits).mockResolvedValue([
+    ...units,
+    { ...units[0]!, id: "u3", precision: 2 },
+  ]);
+  el.api.liveData.refresh();
+  await flush(el);
+  await table.updateComplete;
+  expect(
+    table.columns
+      .find((column) => column.key === "precision")!
+      .filter!.options.map(({ value }) => value),
+  ).toEqual(["0", "2", "3"]);
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(table.columns[0]!.label).toBe("Nombre");
+});

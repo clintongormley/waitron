@@ -785,7 +785,8 @@ export class ProductList extends LitElement {
    * its first letter. */
   #fitNames(): void {
     const root = this.#table()!.shadowRoot!;
-    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    const scroll = root.querySelector<HTMLElement>(".scroll");
+    if (!scroll) return;
     const box = root.querySelector<HTMLElement>('wt-input[name="category-name"]');
     const names = [
       ...root.querySelectorAll<HTMLElement>(
@@ -1230,7 +1231,19 @@ export class ProductList extends LitElement {
     return html`<span part="grip-space"></span>`;
   }
 
+  #columnLocale = "";
+  #columnList: DataTableColumn<ListRow>[] = [];
+
   #columns(): DataTableColumn<ListRow>[] {
+    const locale = currentLocale();
+    if (this.#columnLocale !== locale) {
+      this.#columnLocale = locale;
+      this.#columnList = this.#buildColumns();
+    }
+    return this.#columnList;
+  }
+
+  #buildColumns(): DataTableColumn<ListRow>[] {
     return this.#productColumns().map((column) => ({
       key: column.key,
       label: column.label,

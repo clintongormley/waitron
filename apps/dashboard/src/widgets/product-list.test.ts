@@ -4920,3 +4920,63 @@ describe("variant media slot", () => {
     expect(box("half").width).toBe(0);
   });
 });
+
+describe("stable column inputs", () => {
+  it("keeps columns and filter width texts on an unrelated redraw, then translates them", async () => {
+    setLocale("en");
+    const { el, table, root } = await mountTree();
+    const columns = table.columns;
+    root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    await table.updateComplete;
+    const filters = [...root.querySelectorAll<WtCombobox>("wt-combobox")];
+    expect(filters.length).toBe(2);
+    await Promise.all(filters.map((filter) => filter.updateComplete));
+    const widths = filters.map((filter) =>
+      vi.spyOn(filter as unknown as { widthTexts(): string[] }, "widthTexts"),
+    );
+    el.reordering = !el.reordering;
+    await el.updateComplete;
+    await table.updateComplete;
+    await Promise.all(filters.map((filter) => filter.updateComplete));
+    expect(table.columns).toBe(columns);
+    expect(widths.map((spy) => spy.mock.calls.length)).toEqual([0, 0]);
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(table.columns[0]!.label).toBe("Nombre");
+    expect(table.columns.find((column) => column.key === "active")!.filter!.options[0]!.label).toBe(
+      "Activo",
+    );
+  });
+
+  it("keeps a no-match search through desktop and phone resizing without an uncaught error", async () => {
+    const errors: string[] = [];
+    const capture = (event: ErrorEvent) => {
+      errors.push(event.message);
+      event.preventDefault();
+    };
+    window.addEventListener("error", capture);
+    try {
+      const { el, table, root } = await mountTree();
+      el.search = "Ca";
+      await el.updateComplete;
+      await table.updateComplete;
+      for (const width of [390, 1280, 390]) {
+        await page.viewport(width, 844);
+        el.style.width = `${width}px`;
+        expect(innerWidth).toBe(width);
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        );
+        expect(root.querySelector(".empty .message")!.textContent).toBe(table.noMatchesMessage);
+        expect(el.search).toBe("Ca");
+        expect(root.querySelector("tbody")).toBeNull();
+      }
+      expect(errors).toEqual([]);
+    } finally {
+      window.removeEventListener("error", capture);
+      await page.viewport(1280, 844);
+    }
+  });
+});
