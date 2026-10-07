@@ -3461,3 +3461,73 @@ voluntary logout, or an activated native reload prompt.
 Tasks 1/4/5/6 remain partial. Next: till shell and UrlState navigation, voluntary sign-out and
 retained-order acceptance, then the complete advancing-owner inventory. W69 remains in progress
 and is not ready for finish-branch or land-branch.
+
+
+## Till shell navigation checkpoint, 2026-10-07
+
+TillApp now supplies the shared history adapter with its leave coordinator. Shell tabs, station,
+expo, Schedule, local Back destinations and voluntary logout ask before their handlers mutate
+page or session state. Language changes ask before saving the preference and recreating the shell.
+The same Schedule destination and a tab absent from the canvas retain the current request without
+asking. Programmatic URL writes suppress their own restore callback; the floor-tab assertion checks
+one additional table-state read, rather than silently doubling the existing loader.
+
+The Schedule request cases use its native note input. Keep retains that exact input, mounted owner
+and URL; Discard navigates once without sending the time-off request. Indexed Chromium Back and
+Forward restore the accepted URL before asking; Keep leaves it there and Discard replays without
+pushing another entry. A second tab request cannot replace the first pending destination. Inactivity
+and server-switch controls immediately lock and invalidate an old Discard control. A counter control
+rings two coffees, retains the basket and label through floor/counter and logout/login, and asserts
+that no sale or park request was made.
+
+Initial command:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t 'W69 till shell leave routes'
+```
+
+The initial run reported six failing warning assertions and one passing revert control. Later red
+runs caught an absent-tab warning and an unnecessary warning on repeated Schedule selection.
+The first wider four-file run reported five failures and 955 passes: the new shell request blocked
+an already-accepted child Back and held clean navigation during a party-draft logout; a lock test
+was using voluntary logout as its forced-exit trigger. The clean handoff correction keeps the old
+Schedule Back and split-bill assertions unchanged. The forced-lock fixture now invokes the actual
+inactivity callback supplied by TillApp, preserving every lock, local-choice, stale-control and
+logout assertion. This is the design's voluntary-versus-forced exit distinction, not a relaxation.
+
+Two existing multi-root comparison fixtures now disconnect their first application after its
+assertions and before mounting the second. The shared history adapter requires one application
+owner per document. Their KDS capability and narrow language-chooser assertions remain unchanged.
+The optional theme, session-activity and requestAbsence fixture additions support the new native
+and security controls; no existing assertion was deleted or weakened.
+
+The installed disposable candidate independently deletes ten guards: tab, station, expo, logout,
+locale, dirty history detection, programmatic-publication suppression, clean child handoff,
+same-destination retention and absent-tab validation. Each run reports one intended assertion
+failure beside one passing retained-basket control. After restoration the shell group reports
+23 passes. The local campaign receipt folder is `receipts/w69-till-shell-20261007/`; its logs retain
+the commands, output, mutation bodies, restored source comparison and candidate cleanup.
+
+Eight native shell tab-click flows cover EN/ES, light/dark and 390/1280 widths. Each checks initial
+Keep focus, native Escape, focus returned to the initiating tab, explicit Keep, then Discard.
+Eight axe scans cover the warning only. Sixteen warning/retained-input captures and four contact
+sheets were inspected. These checks use the real till shell with synthetic API responses; they
+are not full-shell accessibility checks, live time-off writes or activated native reload tests.
+
+Final behavioral command:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts src/till-app-drafts.test.ts src/state/draft-sync.test.ts src/screens/till-schedule-screen.unsaved.test.ts
+```
+
+This run reported 961 passes across four files. The shared adapter command
+`pnpm --filter @waitron/ui exec vitest run src/navigation-guard.test.ts src/url-state.test.ts`
+reported 35 passes across two files. Till typecheck, scoped source/test ESLint,
+source formatting and diff checks passed. New documentation sections were formatted separately;
+no whole-file formatting claim is made for the ignored historical audit/backlog. The restored
+candidate's three changed code/test files matched the feature tree byte for byte before its
+worktree and empty parent were removed.
+
+Next: memory-only basket unload/destructive replacement, retrieved-order local edits, unindexed
+till history, native reload, remaining link/context routes and the complete advancing-owner audit.
+Tasks 2/3 remain complete; Tasks 1/4/5/6 stay partial. W69 is not ready for finish-branch or landing.

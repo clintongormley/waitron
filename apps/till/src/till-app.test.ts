@@ -9,6 +9,7 @@ import {
   adjustmentStubs,
   cancelThroughDialog,
   cleanupWidgets,
+  expectNoA11yViolations,
   draftServer,
   mountWidget,
   servedMenus,
@@ -636,9 +637,9 @@ async function toTableOrder(el: TillApp, table: TableState): Promise<TillTableOr
 }
 
 let currentApi: TillApi;
-async function mountApp(overrides: Record<string, unknown> = {}) {
+async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
   currentApi = stubApi(overrides);
-  return mountWidget<TillApp>("till-app", { api: currentApi });
+  return mountWidget<TillApp>("till-app", { api: currentApi }, theme);
 }
 
 // Force a deterministic es-ES baseline before each test — DELIBERATELY not the module default (en-GB),
@@ -9903,6 +9904,7 @@ describe("till-app", () => {
       expect(hiddenGrid).not.toBeNull();
       // The kds-board card is hidden (its required `act-as-kds` is absent), so no station screen mounts.
       expect(hiddenGrid.shadowRoot!.querySelector("till-station-screen")).toBeNull();
+      hidden.el.remove();
 
       // Profile grants `act-as-kds` → the same card renders its embedded station screen.
       const shown = await mountApp({
@@ -11276,6 +11278,7 @@ it("leaves login and pairing actions clear of the language chooser on a narrow s
       .shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!
       .getBoundingClientRect();
     expect(trigger.right).toBeLessThanOrEqual(window.innerWidth);
+    el.remove();
     // The device front door: a FRESH browser (401 identity probe) renders the
     // join screen — its own language chooser must sit clear of the Ask to join action.
     const fresh = await mountApp({
@@ -15356,3 +15359,295 @@ it.each(["cash", "reference"] as const)(
     expect(recordSale).not.toHaveBeenCalled();
   },
 );
+
+describe("W69 till shell leave routes", () => {
+  async function editedSchedule(
+    options: Record<string, unknown> = {},
+    activity?: ReturnType<typeof fakeSessionActivity>,
+    theme?: "light" | "dark",
+  ) {
+    const { el } = await mountApp(
+      {
+        listMyShifts: vi.fn().mockResolvedValue([]),
+        listMySwaps: vi.fn().mockResolvedValue([]),
+        listMyAbsences: vi.fn().mockResolvedValue([]),
+        requestAbsence: vi.fn().mockResolvedValue(undefined),
+        ...options,
+      },
+      theme,
+    );
+    if (activity) el.sessionActivity = activity as never;
+    await toCounter(el);
+    emit(shell(el)!, "show-schedule");
+    await flush(el);
+    const owner = schedule(el)!;
+    const input = owner.shadowRoot!.querySelector<WtInput>(".abs-note")!;
+    await input.updateComplete;
+    await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Family visit");
+    return { el, owner, input, href: location.href };
+  }
+  function question(el: TillApp) {
+    return el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  }
+  async function answer(el: TillApp, decision: "keep" | "discard") {
+    const q = question(el);
+    await q.updateComplete;
+    q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
+    await expect.poll(() => q.open).toBe(false);
+  }
+  const routes = ["tab", "station", "expo", "locale", "logout"] as const;
+  function leave(el: TillApp, route: (typeof routes)[number]) {
+    if (route === "tab") selectTab(el, "floor");
+    else if (route === "locale") emit(shell(el)!, "wt-locale-selected", { code: "en-GB" });
+    else
+      emit(
+        shell(el)!,
+        route === "station" ? "show-station" : route === "expo" ? "show-expo" : "logout",
+      );
+  }
+  it.each(routes)(
+    "holds %s and its side effects through Keep, then Discard leaves once",
+    async (route) => {
+      const { el, owner, input, href } = await editedSchedule();
+      const pushes = vi.spyOn(history, "pushState");
+      leave(el, route);
+      await flush(el);
+      expect(question(el).open).toBe(true);
+      expect(schedule(el)).toBe(owner);
+      expect(location.href).toBe(href);
+      expect(currentApi.logout).not.toHaveBeenCalled();
+      expect(currentApi.putLocale).not.toHaveBeenCalled();
+      await answer(el, "keep");
+      expect(input.value).toBe("Family visit");
+      expect(schedule(el)).toBe(owner);
+      expect(location.href).toBe(href);
+      expect(currentApi.logout).not.toHaveBeenCalled();
+      expect(currentApi.putLocale).not.toHaveBeenCalled();
+      expect(pushes).not.toHaveBeenCalled();
+      leave(el, route);
+      await expect.poll(() => question(el).open).toBe(true);
+      await answer(el, "discard");
+      if (route === "locale") await expect.poll(() => schedule(el)).not.toBe(owner);
+      else await expect.poll(() => schedule(el)).toBeNull();
+      if (route === "logout") {
+        expect(lock(el)).not.toBeNull();
+        await expect.poll(() => vi.mocked(currentApi.logout).mock.calls.length).toBe(1);
+      } else if (route === "locale") {
+        await expect.poll(() => currentLocale()).toBe("en-GB");
+        expect(currentApi.putLocale).toHaveBeenCalledExactlyOnceWith("en-GB");
+        expect(input.value).toBe("");
+      } else {
+        expect(location.href).not.toBe(href);
+        expect(pushes).toHaveBeenCalledOnce();
+        if (route === "tab") expect(shell(el)!.activeTabKey).toBe("floor");
+        else expect(el.shadowRoot!.querySelector(`till-${route}-screen`)).not.toBeNull();
+      }
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(false);
+    },
+  );
+  it("restores browser Back before asking and keeps the mounted request on Keep", async () => {
+    const { el, owner, input, href } = await editedSchedule();
+    history.back();
+    await expect.poll(() => question(el).open).toBe(true);
+    expect(location.href).toBe(href);
+    expect(schedule(el)).toBe(owner);
+    await answer(el, "keep");
+    expect(input.value).toBe("Family visit");
+    expect(location.href).toBe(href);
+    history.back();
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "discard");
+    await expect.poll(() => schedule(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+    expect(location.href).not.toBe(href);
+  });
+  it("a reverted request leaves by tab without asking", async () => {
+    const { el, input } = await editedSchedule();
+    await userEvent.fill(input.shadowRoot!.querySelector("input")!, "");
+    selectTab(el, "floor");
+    await flush(el);
+    expect(schedule(el)).toBeNull();
+    expect(shell(el)!.activeTabKey).toBe("floor");
+    expect(question(el).open).toBe(false);
+  });
+
+  it.each(["idle", "server"])(
+    "%s security exit cancels a pending signout decision without asking again",
+    async (boundary) => {
+      const activity = fakeSessionActivity();
+      const router = new ServerRouter({
+        origin: location.origin,
+        fetchImpl: vi.fn().mockRejectedValue(new Error("offline")),
+      });
+      const { el, owner } = await editedSchedule({}, activity);
+      el.router = router;
+      await flush(el);
+      emit(shell(el)!, "logout");
+      await expect.poll(() => question(el).open).toBe(true);
+      const stale = question(el).shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+      expect(schedule(el)).toBe(owner);
+      if (boundary === "idle") {
+        const config = activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void };
+        config.onIdle();
+      } else {
+        router.dispatchEvent(
+          new CustomEvent("server-changed", { detail: { from: "old", to: "new" } }),
+        );
+      }
+      await expect.poll(() => lock(el)).not.toBeNull();
+      await expect.poll(() => question(el).open).toBe(false);
+      stale.click();
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(schedule(el)).toBeNull();
+      expect(currentApi.logout).toHaveBeenCalledTimes(boundary === "idle" ? 1 : 0);
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(false);
+    },
+  );
+  it("holds the first requested destination while another tab request arrives", async () => {
+    const { el, owner } = await editedSchedule();
+    const pushes = vi.spyOn(history, "pushState");
+    emit(shell(el)!, "show-expo");
+    await expect.poll(() => question(el).open).toBe(true);
+    selectTab(el, "floor");
+    await flush(el);
+    expect(schedule(el)).toBe(owner);
+    await answer(el, "discard");
+    await expect.poll(() => el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+    expect(shell(el)!.activeTabKey).toBe("counter");
+    expect(pushes).toHaveBeenCalledOnce();
+  });
+  it("counter tab changes and logout retain the same basket without a form warning", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    c.store.label = "Lunch";
+    const lines = c.store.lines;
+    selectTab(el, "floor");
+    await flush(el);
+    expect(question(el).open).toBe(false);
+    selectTab(el, "counter");
+    await flush(el);
+    expect(counter(el)!.store.lines).toEqual(lines);
+    expect(counter(el)!.store.label).toBe("Lunch");
+    emit(shell(el)!, "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(question(el).open).toBe(false);
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    expect(counter(el)!.store.lines).toEqual(lines);
+    expect(counter(el)!.store.label).toBe("Lunch");
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+    expect(currentApi.parkOrder).not.toHaveBeenCalled();
+  });
+
+  it("browser Forward retains the request on Keep and replays the destination once on Discard", async () => {
+    const { el, input } = await editedSchedule();
+    await userEvent.fill(input.shadowRoot!.querySelector("input")!, "");
+    emit(shell(el)!, "show-expo");
+    await expect.poll(() => schedule(el)).toBeNull();
+    history.back();
+    await expect.poll(() => schedule(el)).not.toBeNull();
+    const owner = schedule(el)!;
+    const note = owner.shadowRoot!.querySelector<WtInput>(".abs-note")!;
+    await note.updateComplete;
+    await userEvent.fill(note.shadowRoot!.querySelector("input")!, "Forward draft");
+    const href = location.href;
+    const pushes = vi.spyOn(history, "pushState");
+    history.forward();
+    await expect.poll(() => question(el).open).toBe(true);
+    expect(schedule(el)).toBe(owner);
+    expect(location.href).toBe(href);
+    await answer(el, "keep");
+    expect(note.value).toBe("Forward draft");
+    history.forward();
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "discard");
+    await expect.poll(() => el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+    expect(pushes).not.toHaveBeenCalled();
+  });
+  it("an explicit floor tab loads its data only once when the accepted URL is published", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    const reads = vi.mocked(currentApi.getTablesState).mock.calls.length;
+    selectTab(el, "floor");
+    await flush(el);
+    expect(shell(el)!.activeTabKey).toBe("floor");
+    expect(currentApi.getTablesState).toHaveBeenCalledTimes(reads + 1);
+    expect(question(el).open).toBe(false);
+  });
+  it("a tab absent from the canvas does not discard or ask about the current request", async () => {
+    const { el, owner, href } = await editedSchedule();
+    selectTab(el, "missing-tab");
+    await flush(el);
+    expect(question(el).open).toBe(false);
+    expect(schedule(el)).toBe(owner);
+    expect(location.href).toBe(href);
+  });
+
+  for (const locale of ["en-GB", "es-ES"])
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`native shell tab/Keep/Escape/Discard, ${locale}, ${theme}, ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const { el, owner, input, href } = await editedSchedule(
+              {
+                getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+              },
+              undefined,
+              theme,
+            );
+            expect(currentLocale()).toBe(locale);
+            const tab =
+              shell(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button:last-of-type")!;
+            expect(tab.textContent?.trim()).toBe("Floor");
+            await userEvent.click(tab);
+            await expect.poll(() => question(el).open).toBe(true);
+            const q = question(el);
+            const keep = q
+              .shadowRoot!.querySelector("[data-choice=keep]")!
+              .shadowRoot!.querySelector("button")!;
+            await expect.poll(() => keep.matches(":focus")).toBe(true);
+            await expectNoA11yViolations(q);
+            await page.screenshot({
+              path: `__screenshots__/w69-till-shell-look/${locale}-${theme}-${width}-warning.png`,
+            });
+            await userEvent.keyboard("{Escape}");
+            await expect.poll(() => q.open).toBe(false);
+            expect(schedule(el)).toBe(owner);
+            expect(input.value).toBe("Family visit");
+            expect(location.href).toBe(href);
+            await expect.poll(() => tab.matches(":focus")).toBe(true);
+            await page.screenshot({
+              path: `__screenshots__/w69-till-shell-look/${locale}-${theme}-${width}-kept.png`,
+            });
+            await userEvent.click(tab);
+            await answer(el, "keep");
+            expect(input.value).toBe("Family visit");
+            await userEvent.click(tab);
+            await answer(el, "discard");
+            await expect.poll(() => schedule(el)).toBeNull();
+            expect(shell(el)!.activeTabKey).toBe("floor");
+            expect(currentApi.requestAbsence).not.toHaveBeenCalled();
+          } finally {
+            await page.viewport(size.width, size.height);
+          }
+        });
+
+  it("opening the same Schedule destination retains its request without asking", async () => {
+    const { el, owner, input, href } = await editedSchedule();
+    emit(shell(el)!, "show-schedule");
+    await flush(el);
+    expect(question(el).open).toBe(false);
+    expect(schedule(el)).toBe(owner);
+    expect(input.value).toBe("Family visit");
+    expect(location.href).toBe(href);
+  });
+});

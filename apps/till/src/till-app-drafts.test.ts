@@ -274,9 +274,15 @@ function stubApi(overrides: Record<string, unknown> = {}) {
   } as Record<string, ReturnType<typeof vi.fn>>;
 }
 
-async function mountApp(overrides: Record<string, unknown> = {}) {
+async function mountApp(
+  overrides: Record<string, unknown> = {},
+  sessionActivity?: TillApp["sessionActivity"],
+) {
   api = stubApi(overrides);
-  return mountWidget<TillApp>("till-app", { api: api as unknown as TillApi });
+  return mountWidget<TillApp>("till-app", {
+    api: api as unknown as TillApi,
+    ...(sessionActivity ? { sessionActivity } : {}),
+  });
 }
 
 async function flush(el: TillApp, rounds = 3): Promise<void> {
@@ -4421,7 +4427,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
 });
 
 describe("line-edit unsaved station choice", () => {
-  async function opening() {
+  async function opening(sessionActivity?: TillApp["sessionActivity"]) {
     const updateOrderLine = vi
       .fn()
       .mockRejectedValueOnce({ code: "station.no_replacement" })
@@ -4440,7 +4446,7 @@ describe("line-edit unsaved station choice", () => {
       ],
       stations: [{ id: "kitchen", name: "Kitchen", open: true }],
     });
-    const mounted = await mountApp({ updateOrderLine, askSaleDeadEnds });
+    const mounted = await mountApp({ updateOrderLine, askSaleDeadEnds }, sessionActivity);
     const { el } = mounted;
     const order = await openMesa(el);
     const change = () =>
@@ -4635,13 +4641,21 @@ describe("line-edit unsaved station choice", () => {
     expect(updateOrderLine).toHaveBeenCalledTimes(1);
   });
   it("operator lock cancels the warning and immediately discards only the local station choice", async () => {
-    const { el, choose, cancel, updateOrderLine } = await opening();
+    const activity = {
+      configure: vi.fn(),
+      noteInteraction: vi.fn(),
+      reacquire: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+    const { el, choose, cancel, updateOrderLine } = await opening(activity as never);
     await choose();
     cancel();
     const q = await question(el);
     expect(q.open).toBe(true);
     const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
-    emit(shell(el), "logout");
+    const config = activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void };
+    config.onIdle();
     await flush(el);
     expect(q.open).toBe(false);
     expect(lock(el)).not.toBeNull();

@@ -1470,6 +1470,18 @@ draft. Immediate-save collection/paid/receipt choices remain exempt. The dated a
 focused checks; station-printer owners and the remaining navigation/native-reload rollout still
 keep W69 incomplete.
 
+Till shell tabs, station/expo destinations, language changes and voluntary sign-out now consult
+the shared warning on the branch before changing the page, URL, locale or session. Keep retains
+the Schedule request; Discard accepts the requested leave. Browser Back/Forward restore the
+accepted URL before asking and replay only after Discard. Repeated Schedule selections, absent
+tabs and reverted requests do not ask. Clean child-to-shell handoffs remain direct, including
+Schedule Back and party-draft transitions waiting on a save. Inactivity and server switches still
+lock immediately and retire pending answers. Counter view changes and logout retain the basket
+and its label without a form warning. The dated audit records the test commands, deletion controls
+and native EN/ES, light/dark, phone/desktop inspection. Memory-only basket unload/destructive
+replacement, unindexed till history, native reload, remaining link/context routes and the final
+advancing-owner audit remain open; W69 is not ready for finishing or landing.
+
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected
 EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell receipts are

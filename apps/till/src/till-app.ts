@@ -5,7 +5,13 @@ import { isTillDestination, type TillDestination, tillPath } from "./navigation.
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { DROPDOWN_ICONS, UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
+import {
+  DROPDOWN_ICONS,
+  UrlStateController,
+  navigationGuardFor,
+  baseStyles,
+  registerIcons,
+} from "@waitron/ui";
 import {
   MONEY_SCALE,
   compareDecimal,
@@ -1676,7 +1682,36 @@ export class TillApp extends LitElement {
     waiting: 0,
   };
 
-  readonly #url = new UrlStateController(this, () => this.#onHistory(), tillPath);
+  #writingUrl = false;
+  readonly #url = new UrlStateController(this, () => this.#onHistory(), {
+    ...tillPath,
+    leave: {
+      isDirty: () => this.leave.coordinator.isDirty(),
+      request: (proceed, signal) =>
+        this.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    },
+  });
+
+  // Programmatic writes already apply their destination; only traversal restores it.
+  #writeUrl(changes: Record<string, string | null>, replace = false): void {
+    this.#writingUrl = true;
+    try {
+      void this.#url.write(changes, replace);
+    } finally {
+      this.#writingUrl = false;
+    }
+  }
+
+  #requestLeave(
+    proceed: () => void | Promise<void>,
+    reason: "navigation" | "signout" = "navigation",
+  ): void {
+    if (!this.leave.coordinator.isDirty()) {
+      void proceed();
+      return;
+    }
+    void this.leave.coordinator.request({ scopes: "all", reason, proceed });
+  }
 
   #requestedTab(): string | undefined {
     const requested = this.#url.read("till-tab");
@@ -1686,7 +1721,7 @@ export class TillApp extends LitElement {
   #setActiveTab(key: string | undefined, replace = false, retainDestination = false): void {
     this.activeTabKey = key;
     if (key !== undefined)
-      this.#url.write(
+      this.#writeUrl(
         {
           "till-tab": key,
           ...(retainDestination
@@ -1726,7 +1761,7 @@ export class TillApp extends LitElement {
     const destination =
       isTillDestination(requested) && this.#allowsDestination(requested) ? requested : null;
     this.drill = destination === null ? undefined : { kind: destination };
-    this.#url.write(
+    this.#writeUrl(
       {
         "till-view": destination,
         "till-station": destination === "station" ? this.#url.read("till-station") : null,
@@ -1737,7 +1772,7 @@ export class TillApp extends LitElement {
   }
 
   readonly #onHistory = (): void => {
-    if (!this.#inShell()) return;
+    if (this.#writingUrl || !this.#inShell()) return;
     const key = this.#requestedTab();
     if (key !== undefined) this.#onTabSelect(key, true);
   };
@@ -2008,7 +2043,7 @@ export class TillApp extends LitElement {
     this.#setActiveTab(switched ? this.canvas?.tabs[0]?.key : this.#requestedTab(), true, true);
     this.#setScreen(landsOnFloor ? "floor" : "counter");
     if (switched)
-      this.#url.write({ "till-view": null, "till-station": null, "till-watcher": null }, true);
+      this.#writeUrl({ "till-view": null, "till-station": null, "till-watcher": null }, true);
     else this.#restoreDestination();
     if (this.drill === undefined) this.#openStartingScreen();
     const showsCounterLists = this.#showsCounterLists();
@@ -3383,7 +3418,7 @@ export class TillApp extends LitElement {
     const stationId = (event as CustomEvent<{ stationId?: string } | undefined>).detail?.stationId;
     this.#pushDrill({ kind: "station" });
     if (stationId !== undefined && this.drill?.kind === "station")
-      this.#url.write({ "till-station": stationId }, true);
+      this.#writeUrl({ "till-station": stationId }, true);
   }
 
   /**
@@ -7154,6 +7189,7 @@ export class TillApp extends LitElement {
   #endOperatorSession(): void {
     this.#stopClockStatus();
     this.leave.forceReset();
+    navigationGuardFor(window)?.reset();
     this.#releaseEditDeadEnds();
     this.editDeadEnds = null;
     this.#dismissStationChoices();
@@ -7714,7 +7750,7 @@ export class TillApp extends LitElement {
   #pushDrill(drill: Drill): void {
     if (isTillDestination(drill.kind)) {
       if (!this.#allowsDestination(drill.kind)) return;
-      this.#url.write({ "till-view": drill.kind, "till-station": null, "till-watcher": null });
+      this.#writeUrl({ "till-view": drill.kind, "till-station": null, "till-watcher": null });
     }
     this.#dismissStationChoices();
     diag.record("info", "nav", { screen: drill.kind });
@@ -7725,7 +7761,7 @@ export class TillApp extends LitElement {
   #popDrill(): void {
     this.#dismissStationChoices();
     if (isTillDestination(this.drill?.kind))
-      this.#url.write({ "till-view": null, "till-station": null, "till-watcher": null });
+      this.#writeUrl({ "till-view": null, "till-station": null, "till-watcher": null });
     diag.record("info", "nav", { screen: this.activeTabKey });
     this.drill = undefined;
   }
@@ -7778,7 +7814,7 @@ export class TillApp extends LitElement {
     // `screen = "lock"` resets neither the drill nor the tab.
     this.drill = undefined;
     this.#setActiveTab(this.canvas?.tabs[0]?.key, true);
-    this.#url.write({ "till-zone": null }, true);
+    this.#writeUrl({ "till-zone": null }, true);
     this.#floorLoaded = false;
     this.errorKey = undefined;
     this.#stationsRead++;
@@ -8135,11 +8171,11 @@ export class TillApp extends LitElement {
         @hand-over-order=${(event: Event) => void this.#onHandOverOrder(event)}
         @pay-waiting-order=${(event: Event) => void this.#onPayWaitingOrder(event)}
         @cancel-credit-waiting-order=${(event: Event) => this.#onCancelCreditWaitingOrder(event)}
-        @show-station=${(event: Event) => this.#onShowStation(event)}
+        @show-station=${(event: Event) => this.#requestLeave(() => this.#onShowStation(event))}
         @enrolled=${() => void this.#onEnrolled()}
         @switch-device=${() => void this.#onSwitchDevice()}
         @device-unauthorized=${() => void this.#onDeviceUnauthorized()}
-        @show-expo=${() => this.#onShowExpo()}
+        @show-expo=${() => this.#requestLeave(() => this.#onShowExpo())}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
@@ -8166,7 +8202,10 @@ export class TillApp extends LitElement {
         }}
         @override-confirm=${(event: Event) => void this.#onOverrideConfirm(event)}
         @override-cancel=${() => this.#closeOverrideDialog()}
-        @show-schedule=${() => this.#onShowSchedule()}
+        @show-schedule=${() => {
+          if (this.drill?.kind === "schedule") return;
+          this.#requestLeave(() => this.#onShowSchedule());
+        }}
         @floor-refresh=${() => this.#onFloorRefresh()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
@@ -8213,14 +8252,17 @@ export class TillApp extends LitElement {
         @choose-bill-invoice=${(event: Event) => this.#onChooseBillInvoice(event)}
         @refund-excess=${(event: Event) => void this.#onRefundExcess(event)}
         @counter-bill-pay=${(event: Event) => void this.#onCounterBillPay(event)}
-        @back-to-floor=${() => this.#onBackToFloor()}
-        @back-to-counter=${() => this.#onBackToCounter()}
-        @open-allergens=${() => this.#onOpenAllergens()}
+        @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}
+        @back-to-counter=${() => this.#requestLeave(() => this.#onBackToCounter())}
+        @open-allergens=${() => this.#requestLeave(() => this.#onOpenAllergens())}
         @open-printers=${() => void this.#onOpenPrinters()}
         @open-profile=${() => void this.#onOpenProfile()}
-        @close-allergens=${() => this.#onCloseAllergens()}
-        @logout=${() => void this.#onLogout()}
-        @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+        @close-allergens=${() => this.#requestLeave(() => this.#onCloseAllergens())}
+        @logout=${() => this.#requestLeave(() => this.#onLogout(), "signout")}
+        @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => {
+          if (e.detail.code === currentLocale()) return;
+          this.#requestLeave(() => this.#onLocaleSelected(e));
+        }}
         @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
           this.#selectDiet(e.detail.predicate)}
         @counter-zone-selected=${(event: Event) => void this.#onCounterZoneSelected(event)}
@@ -8448,7 +8490,9 @@ export class TillApp extends LitElement {
                       .canSwitchProfile=${this.approvedProfiles.length > 1}
                       .loadLocales=${this.#loadLocales}
                       @tab-select=${(e: CustomEvent<{ key: string }>) => {
-                        this.#onTabSelect(e.detail.key);
+                        if (!this.canvas?.tabs.some((tab) => tab.key === e.detail.key)) return;
+                        if (e.detail.key === this.activeTabKey && this.drill === undefined) return;
+                        this.#requestLeave(() => this.#onTabSelect(e.detail.key));
                       }}
                     >
                       ${this.#activeTabBody()}
