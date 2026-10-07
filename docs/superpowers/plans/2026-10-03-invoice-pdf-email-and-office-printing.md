@@ -129,8 +129,12 @@ metadata now allows an absent issuing operator, without inventing staff attribut
 and A4 metadata still require a staff identity. Synthetic tests cover unattributed receipt
 reservation/replay, automatic enrollment and token-checked print completion, plus refusal
 of unattributed email/A4 rows. The schema-conformance and stepwise upgrade checks passed
-with generated core migration 0119. Bill staging, A4 references and restart/retry workers
-remain. No Task 2 completion claim.
+with generated core migration 0119. Trading boot now marks inherited receipt and email
+claims unknown before starting the pretend printer or mounting the print-agent routes,
+independently of fiscal drain recovery. Synthetic real-boot cases cover fresh claims,
+ordinary printable jobs, authenticated late email success/failure, and a read-only mirror
+that leaves the inherited receipt claim unchanged. Bill staging, A4 references and
+transport/retry workers remain. No Task 2 completion claim.
 
 ## 3. Set up email for a live venue, without a terminal
 

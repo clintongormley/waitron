@@ -2185,14 +2185,18 @@ confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in 
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain
 their token hash for authenticated late results. Six API cases cover cross-medium original
 retry, printer reactivation without replay, another agent's printable-device control,
-completed originals, and late success before and after a newer attempt. Bill staging, A4
-printer references, restart/retry workers, SMTP, office transport, delivery UI and image/box
-checks remain. It settles A3's open "Printing A4 invoices on an office
-printer" work when complete.
+completed originals, and late success before and after a newer attempt. Trading boot now
+marks inherited receipt and email claims unknown before the pretend printer and print-agent
+routes start, separately from fiscal drain recovery. Synthetic real-boot cases cover fresh
+claims, ordinary printable jobs, authenticated late email success/failure and a read-only
+mirror control. Bill staging, A4 printer references, transport/retry workers, SMTP, office
+transport, delivery UI and image/box checks remain. It settles A3's open "Printing A4 invoices
+on an office printer" work when complete.
 Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe
 throws when embedding the current Google Sans WOFF2 for “í”; Noto Sans rendered the same probe
-as PDF and glyph outlines. PDFKit's ESM import also collides with the shared bundle banner's
-`createRequire` name, and the notices collector requires upstream notices for brotli 1.3.3,
+as PDF and glyph outlines. In the pre-alias bundle probe, PDFKit's ESM import collided with
+the shared banner's `createRequire` name, and the notices collector required upstream notices
+for brotli 1.3.3,
 dfa 1.2.0 and fontkit 2.0.4. Their upstream licence declarations and terms are now collected,
 including the Apache notice on brotli's Google decompressor. The normal renderer bundle writes
 its notices. The owner approved the banner alias on 2026-10-07. With that alias, a new real
