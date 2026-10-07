@@ -5,6 +5,8 @@ import {
   invoiceDeliveries,
   printJobs,
   sales,
+  nodes,
+  pagePrinters,
   type InvoiceEmailConsent,
   type Transaction,
 } from "@waitron/db";
@@ -20,6 +22,13 @@ export type EmailDeliveryRequest = {
   consent: InvoiceEmailConsent;
 };
 
+export type A4DeliveryRequest = {
+  requestKey: string;
+  personId: string;
+  medium: "a4";
+  pagePrinterId: string;
+};
+
 export type ReceiptDeliveryRequest = {
   requestKey: string;
   personId: string | null;
@@ -30,10 +39,10 @@ export type ReceiptDeliveryRequest = {
 export async function reserveInvoiceDelivery(
   tx: Transaction,
   saleId: string,
-  input: EmailDeliveryRequest | ReceiptDeliveryRequest,
+  input: EmailDeliveryRequest | ReceiptDeliveryRequest | A4DeliveryRequest,
 ): Promise<InvoiceDelivery> {
   const [sale] = await tx
-    .select({ recipient: sales.counterpartyTaxId })
+    .select({ recipient: sales.counterpartyTaxId, nodeId: sales.nodeId })
     .from(sales)
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
@@ -45,6 +54,20 @@ export async function reserveInvoiceDelivery(
       and(eq(invoiceDeliveries.saleId, saleId), eq(invoiceDeliveries.requestKey, input.requestKey)),
     );
   if (replay !== undefined) return replay;
+  if (input.medium === "a4") {
+    const [printer] = await tx
+      .select({ id: pagePrinters.id })
+      .from(pagePrinters)
+      .innerJoin(nodes, eq(nodes.locationId, pagePrinters.locationId))
+      .where(
+        and(
+          eq(nodes.id, sale.nodeId),
+          eq(pagePrinters.id, input.pagePrinterId),
+          eq(pagePrinters.active, true),
+        ),
+      );
+    if (printer === undefined) throw new AppError("invoice_delivery.printer_invalid", {});
+  }
   const [receiptJob] =
     input.medium === "receipt"
       ? await tx.select().from(printJobs).where(eq(printJobs.id, input.printJobId))
@@ -125,7 +148,9 @@ export async function reserveInvoiceDelivery(
               recordedAt: new Date(input.consent.recordedAt).toISOString(),
             },
           }
-        : { printJobId: input.printJobId }),
+        : input.medium === "a4"
+          ? { pagePrinterId: input.pagePrinterId }
+          : { printJobId: input.printJobId }),
     })
     .returning();
   return delivery!;

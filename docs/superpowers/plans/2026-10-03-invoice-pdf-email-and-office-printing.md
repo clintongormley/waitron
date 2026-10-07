@@ -184,6 +184,19 @@ a held acceptance. Local-secondary and mirror cases leave queued email unchanged
 This connects the worker to boot; bill staging, SMTP setup/settings, delivery UI,
 A4 references and transport remain. It does not complete Tasks 2 or 4.
 
+**2026-10-07 A4 destination checkpoint.** Separate `page_printers` rows now store the
+IPP endpoint, selected PDF/PWG/URF format, advertised formats, media and resolution.
+Delivery metadata references that table; receipt-printer enums and payloads are unchanged.
+The reservation helper refuses a receipt-printer id, a disabled page printer or one outside
+the sale node's location before writing metadata. A replay returns the reserved row even
+if the destination was subsequently disabled. Configuration transfer preserves the saved
+capabilities, remaps the location and id, and imports the printer disabled with a reconnect
+notice. Synthetic database cases exercise these paths. Generated migrations 0120 and 0121
+add the column before adding its restrictive key; core schema conformance and stepwise
+upgrade checks passed. Bill staging, location printer selection, registration/reactivation
+routes, A4 claim/renewal/transport and delivery UI remain open. This is no Task 2/5 completion
+claim.
+
 ## 3. Set up email for a live venue, without a terminal
 
 **Inspect/change:** `apps/setup/src/setup-app.ts` (venue advances to certificate or review at `:807`; `apps/setup/src/screens/cert-screen.ts:276` advances to fiscal test, and `fiscal-test-screen.ts:66` to review), a new Email screen beside those screens, `apps/setup/src/api/client.ts`, `apps/server/src/setup-api.ts` and `setup-operation.ts`, `apps/server/src/email-delivery.ts`, `packages/credentials/src/purposes.ts` (read only: `email.smtp` keeps its `url` and `from` fields), a settings card on `apps/dashboard/src/screens/email-screen.ts` and its server route, the setup and dashboard translations. Keep the existing CLI path in Task 0.

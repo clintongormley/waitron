@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   sales,
+  nodes,
+  pagePrinters,
   invoiceSeries,
   invoiceDeliveries,
   locations,
@@ -121,6 +123,110 @@ async function rows() {
 }
 
 describe("invoice delivery reservation", () => {
+  it("reserves an A4 original with only the page-printer reference and replays it", async () => {
+    const sale = await issue();
+    const [node] = await suite.db.select().from(nodes);
+    const [printer] = await suite.db
+      .insert(pagePrinters)
+      .values({
+        locationId: node!.locationId,
+        name: "Office",
+        host: "192.0.2.20",
+        port: 8631,
+        resourcePath: "/ipp/printer",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf", "image/urf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 600,
+      })
+      .returning();
+    const request = {
+      requestKey: randomUUID(),
+      personId: "staff-one",
+      medium: "a4" as const,
+      pagePrinterId: printer!.id,
+    };
+    const first = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, request),
+    );
+    expect(first).toMatchObject({
+      medium: "a4",
+      pagePrinterId: printer!.id,
+      printJobId: null,
+      recipient: null,
+      consent: null,
+      status: "queued",
+      attempts: 0,
+      designation: "original",
+    });
+    await suite.db
+      .update(pagePrinters)
+      .set({ active: false })
+      .where(eq(pagePrinters.id, printer!.id));
+    expect(
+      await withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
+    ).toEqual(first);
+    expect(await rows()).toHaveLength(1);
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+  });
+
+  it.each(["disabled", "other-location"])(
+    "refuses a %s A4 destination without queuing",
+    async (kind) => {
+      const sale = await issue();
+      const [node] = await suite.db.select().from(nodes);
+      const [other] = await suite.db
+        .insert(locations)
+        .values({ name: "Other", invoiceLocales: ["es-ES"], operationDescription: "Sale" })
+        .returning();
+      if (kind === "other-location") await seedNode(suite.db, locationId(other!.id));
+      const [printer] = await suite.db
+        .insert(pagePrinters)
+        .values({
+          locationId: kind === "other-location" ? other!.id : node!.locationId,
+          name: "Office",
+          host: "192.0.2.20",
+          port: 8631,
+          resourcePath: "/ipp/printer",
+          documentFormat: "image/urf",
+          supportedFormats: ["image/urf"],
+          media: "iso_a4_210x297mm",
+          resolutionDpi: 600,
+          active: kind !== "disabled",
+        })
+        .returning();
+      const request = {
+        requestKey: randomUUID(),
+        personId: "staff-one",
+        medium: "a4" as const,
+        pagePrinterId: printer!.id,
+      };
+      await expect(
+        withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
+      ).rejects.toMatchObject({ code: "invoice_delivery.printer_invalid" });
+      expect(await rows()).toEqual([]);
+    },
+  );
+
+  it("refuses a receipt printer as an A4 destination without reserving a delivery", async () => {
+    const sale = await issue();
+    const [location] = await suite.db.select().from(locations);
+    const receipt = await createPrinter(
+      suite.db,
+      { locationId: location!.id },
+      {
+        name: "Receipt only",
+        transport: "network_tcp",
+        host: "192.0.2.10",
+      },
+    );
+    const request = { ...email(), medium: "a4" as const, pagePrinterId: receipt.id };
+    await expect(
+      withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
+    ).rejects.toMatchObject({ code: "invoice_delivery.printer_invalid" });
+    expect(await rows()).toEqual([]);
+  });
+
   it("stores a queued original and frozen consent metadata without sending or retaining a document", async () => {
     const sale = await issue();
     const input = email();

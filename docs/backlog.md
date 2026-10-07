@@ -1865,6 +1865,14 @@ recovery, checks the singleton role on each pass, and joins the pending send and
 before normal shutdown or failed-start cleanup closes the store. Real local SMTP cases
 exercise a queued duplicate's saved invoice facts, a held acceptance during normal close,
 a later failed startup, and queued-email controls on a local secondary and a read-only mirror.
+The separate page-printer schema now records IPP endpoints, supported and selected formats,
+media and resolution. An A4 reservation stores its page-printer reference and refuses a
+receipt-printer id, a disabled page printer or one outside the sale node's location. Replayed
+reservations retain their row after printer disablement. Configuration transfer preserves the
+capabilities, remaps the id/location and imports the page printer disabled with a reconnect
+notice. Synthetic database cases cover these paths; core schema conformance and the stepwise
+upgrade guard passed with generated migrations 0120/0121. Registration, location selection,
+A4 claim/renewal/transport and delivery UI remain open.
 Bill delivery staging, email setup/settings and the delivery UI remain open; no Task 4
 completion claim.
 For enrolled receipts, the real pull now projects
@@ -1876,7 +1884,7 @@ completed originals, and late success before and after a newer attempt. Trading 
 marks inherited receipt and email claims unknown before the pretend printer and print-agent
 routes start, separately from fiscal drain recovery. Synthetic real-boot cases cover fresh
 claims, ordinary printable jobs, authenticated late email success/failure and a read-only
-mirror control. Bill staging, A4 printer references, transport/retry workers, SMTP, office
+mirror control. Bill staging, A4 printer registration and location selection, SMTP setup, office
 transport, delivery UI and image/box checks remain. It settles A3's open "Printing A4 invoices
 on an office printer" work when complete.
 Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe

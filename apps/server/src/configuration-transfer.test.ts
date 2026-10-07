@@ -49,6 +49,7 @@ import {
   locations,
   printAgents,
   printers,
+  pagePrinters,
   watchers,
   watcherStations,
   watcherZones,
@@ -320,6 +321,64 @@ describe("configuration transfer database path", () => {
       select count(*) as count from tenants where tax_id = ${targetRequest.taxId}
     `);
     expect(persisted.rows[0]!.count).toBe(0);
+  });
+
+  it("transfers page-printer capabilities to the target location and requires reactivation", async () => {
+    const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await suite.db.insert(pagePrinters).values({
+      id: "55555555-aaaa-aaaa-aaaa-555555555555",
+      locationId: source.locationId,
+      name: "Invoice office",
+      host: "192.0.2.20",
+      port: 8631,
+      resourcePath: "/ipp/printer",
+      documentFormat: "image/urf",
+      supportedFormats: ["application/pdf", "image/urf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 600,
+      active: true,
+    });
+    const [operator] = await suite.db.select({ id: persons.id }).from(persons);
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      { ...source, sourceOperatorId: operator!.id },
+      ALL_MODULES,
+      new Date("2026-10-07T12:00:00.000Z"),
+      versions,
+    );
+    expect(transferred.tables.page_printers).toHaveLength(1);
+    expect(transferred.reconnect).toContain("page_printers");
+    const target = await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(
+          tx,
+          transferred,
+          { locationId: result.locationId },
+          ALL_MODULES,
+          versions,
+        ),
+    });
+    const [imported] = await targetSuite.db.select().from(pagePrinters);
+    expect(imported).toMatchObject({
+      locationId: target.locationId,
+      name: "Invoice office",
+      host: "192.0.2.20",
+      port: 8631,
+      resourcePath: "/ipp/printer",
+      documentFormat: "image/urf",
+      supportedFormats: ["application/pdf", "image/urf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 600,
+      active: false,
+    });
+    expect(imported!.id).not.toBe("55555555-aaaa-aaaa-aaaa-555555555555");
+    expect(await targetSuite.db.select().from(printers)).toEqual([]);
   });
 
   it("copies declared configuration into a fresh venue while scrubbing staff authenticators", async () => {
