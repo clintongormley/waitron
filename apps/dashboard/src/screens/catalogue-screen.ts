@@ -23,9 +23,6 @@ import type {
   Unit,
   UnitInput,
 } from "../api/client.js";
-import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
-import "../widgets/product-color-form.js";
-import { fieldOf } from "../widgets/section-writes.js";
 import type { ProductEditorDraft } from "../widgets/product-editor-model.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -143,10 +140,6 @@ export class CatalogueScreen extends LitElement {
   #addFrom: string | null | undefined = undefined;
   #linkedProduct: string | null = null;
   @state() private editorInitialField = "";
-  @state() private colouring: Product | null = null;
-  @state() private colourBusy = false;
-  #colourGeneration = 0;
-  @state() private colourErrors: Record<string, string> = {};
   /** Rebuilt only when a new refusal arrives: a form takes a new `fieldErrors` object as a new
    * refusal and shows again the ones the operator had since dismissed. */
   #childRefusals: { error: unknown; errors: ChildRefusals } | null = null;
@@ -224,14 +217,6 @@ export class CatalogueScreen extends LitElement {
     super.connectedCallback();
     this.#showError(null);
     void this.#load();
-  }
-
-  override disconnectedCallback(): void {
-    this.#colourGeneration++;
-    this.colouring = null;
-    this.colourBusy = false;
-    this.colourErrors = {};
-    super.disconnectedCallback();
   }
 
   async #load(): Promise<void> {
@@ -372,31 +357,6 @@ export class CatalogueScreen extends LitElement {
     if (id === null || !this.#knows(id)) return;
     this.#linkedProduct = null;
     await this.#openProduct(id, new URL(location.href).searchParams.get("field") ?? "");
-  }
-
-  async #saveColour(color: string | null): Promise<void> {
-    const product = this.colouring;
-    if (!product || this.colourBusy) return;
-    const generation = this.#colourGeneration;
-    const form = this.shadowRoot!.querySelector("dashboard-product-color-form")!;
-    this.colourBusy = true;
-    this.colourErrors = {};
-    try {
-      await this.api.setProductColor(product.id, color);
-      if (generation !== this.#colourGeneration) return;
-      form.closeSaved(color);
-      this.colouring = null;
-    } catch (error) {
-      if (generation !== this.#colourGeneration) return;
-      this.colourErrors =
-        fieldOf(error) === "color"
-          ? { color: t("editor.field_rejected") }
-          : { _form: codeMessage(codeOf(error)) };
-      return;
-    } finally {
-      if (generation === this.#colourGeneration) this.colourBusy = false;
-    }
-    await this.#reloadProducts().catch(() => undefined);
   }
 
   #openDelete(productId: string): void {
@@ -764,14 +724,6 @@ export class CatalogueScreen extends LitElement {
                 this.#addFrom = event.detail.categoryId;
                 this.#openCreate(event.detail.categoryId);
               }}
-              @product-colour=${(event: CustomEvent<{ productId: string }>) => {
-                event.stopPropagation();
-                this.#colourGeneration++;
-                this.colourBusy = false;
-                this.colouring =
-                  this.products.find((product) => product.id === event.detail.productId) ?? null;
-                this.colourErrors = {};
-              }}
               @edit-product=${(event: CustomEvent<{ productId: string; field?: string }>) => {
                 event.stopPropagation();
                 void this.#openProduct(event.detail.productId, event.detail.field);
@@ -792,24 +744,6 @@ export class CatalogueScreen extends LitElement {
           ? html`<p class="error" role="alert">${refusalText(this.errorKey, this.refusedLists)}</p>`
           : nothing
       }
-      <dashboard-product-color-form
-        .open=${this.colouring !== null}
-        .busy=${this.colourBusy}
-        .productId=${this.colouring?.id ?? ""}
-        .name=${this.colouring?.name ?? ""}
-        .color=${this.colouring?.color ?? null}
-        .categoryColor=${categoryColor(this.colouring?.primaryCategoryId ?? null, new Map(this.categories.map((category) => [category.id, category])))}
-        .errors=${this.colourErrors}
-        @wt-submit=${(event: CustomEvent<{ color: string | null }>) => {
-          event.stopPropagation();
-          void this.#saveColour(event.detail.color);
-        }}
-        @wt-cancel=${(event: Event) => {
-          event.stopPropagation();
-          this.#colourGeneration++;
-          this.colouring = null;
-        }}
-      ></dashboard-product-color-form>
       <dashboard-product-editor
         @wt-close=${() => {
           if (!this.editorOpen && this.placing === null) this.#refocusAdd();

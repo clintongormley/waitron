@@ -223,8 +223,6 @@ export const en = {
   "editor.color_custom": "Custom",
   "editor.color_use_category": "Use category colour",
   "editor.color_category_none": "Its category has no colour.",
-  "product_color.heading": "Colour of {name}",
-  "product_color.scope": "Changes this product's colour on every menu that uses it.",
 
   "nav.modifiers": "Modifiers",
   "modifiers.title": "Modifiers",
@@ -2117,8 +2115,6 @@ export const en = {
   "menus.list_gone_saved":
     "Your change to {name} was saved, but meanwhile another change took it away from where you were editing it.",
   "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
-  "menus.product_gone":
-    "Another change took {name} out of the product list, so its colour window was closed.",
   "menus.tab_preview": "Preview",
   "menus.tab_home": "Home page",
   "home.loading": "Loading the home page…",
@@ -2605,8 +2601,6 @@ export const es: Record<StringKey, string> = {
   "editor.color_custom": "Personalizado",
   "editor.color_use_category": "Usar el color de la categoría",
   "editor.color_category_none": "Su categoría no tiene color.",
-  "product_color.heading": "Color de {name}",
-  "product_color.scope": "Cambia el color de este producto en todas las cartas que lo usan.",
 
   "nav.modifiers": "Modificadores",
   "modifiers.title": "Modificadores",
@@ -4512,8 +4506,6 @@ export const es: Record<StringKey, string> = {
   "menus.list_gone_saved":
     "Se ha guardado tu cambio en {name}, pero entretanto otro cambio la ha quitado de donde la estabas editando.",
   "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
-  "menus.product_gone":
-    "Otro cambio ha quitado {name} de la lista de productos, así que se ha cerrado su ventana de color.",
   "menus.tab_preview": "Vista previa",
   "menus.tab_home": "Página de inicio",
   "home.loading": "Cargando la página de inicio…",
