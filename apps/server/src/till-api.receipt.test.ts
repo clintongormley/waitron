@@ -13,6 +13,8 @@ import {
   saleSettlements,
   tenders,
   invoiceSeries,
+  invoiceDeliveries,
+  tenants,
   workingOrders,
   tenantReceipts,
   withTransaction,
@@ -31,7 +33,10 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { createPrinter, textGrid, updatePrinter } from "@waitron/printing";
+import { createPrinter, enqueuePrintJob, textGrid, updatePrinter } from "@waitron/printing";
+import { recordSale } from "@waitron/core";
+import { createOpenOrder } from "./working-order.js";
+import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { departmentSalePolicies, departments, routingCells } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -40,6 +45,8 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
+  workingOrderId as brandWorkingOrderId,
+  jobOrigin,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -734,6 +741,123 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
 });
 
 describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
+  it.each(["failed", "unknown"] as const)(
+    "enrolls a synthetic full invoice's %s original retry with the authenticated staff member",
+    async (status) => {
+      const { cfg, operatorId } = await setupVenue();
+      const printerId = await makePrinter(cfg);
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const cookie = await login(app, cfg, operatorId);
+      const orderId = randomUUID();
+      const original = await withTransaction(suite.db, async (tx) => {
+        await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+        const [series] = await tx
+          .select()
+          .from(invoiceSeries)
+          .where(eq(invoiceSeries.purpose, "full"));
+        await createOpenOrder(
+          tx,
+          { ...cfg, origin: jobOrigin("operator_script") },
+          orderId,
+          [],
+          null,
+        );
+        const sale = await recordSale(tx, backend, {
+          origin: jobOrigin("operator_script"),
+          nodeId: cfg.nodeId,
+          seriesId: brandSeriesId(series!.id),
+          workingOrderId: brandWorkingOrderId(orderId),
+          locale: LOCALE,
+          invoiceLocales: [LOCALE],
+          counterparty: { taxId: "12345678Z", legalName: "Cliente", countryCode: "ES" },
+          recipientAddress: "Calle Cliente 9, Madrid",
+          total: "1.00",
+          lines: [
+            {
+              lineNo: 1,
+              name: "Coffee",
+              descriptions: { "es-ES": "Café" },
+              quantity: "1",
+              unitPrice: "1.00",
+              vatRate: "0",
+              lineTotal: "1.00",
+            },
+          ],
+          clock,
+          settlement: { kind: "deferred" },
+          operatorId,
+        });
+        const job = await enqueuePrintJob(
+          tx,
+          printCfg(cfg),
+          printerId,
+          new Uint8Array([27, 64]),
+          "document",
+          { saleId: sale.saleId, receiptCopy: false },
+        );
+        if (status === "unknown") {
+          const delivery = await reserveInvoiceDelivery(tx, sale.saleId, {
+            requestKey: job.jobId,
+            personId: operatorId,
+            medium: "receipt",
+            printJobId: job.jobId,
+          });
+          await tx
+            .update(invoiceDeliveries)
+            .set({ status: "sending", claimedAt: new Date(Date.now() - 61000).toISOString() })
+            .where(eq(invoiceDeliveries.id, delivery.id));
+        }
+        await tx
+          .update(printJobs)
+          .set({
+            status: status === "failed" ? "failed" : "printing",
+            attempts: status === "failed" ? 5 : 1,
+          })
+          .where(eq(printJobs.id, job.jobId));
+        return { ...job, saleId: sale.saleId };
+      });
+      const retry = () =>
+        app.request(`/api/sales/${orderId}/receipt/retry`, { method: "POST", headers: { cookie } });
+      const responses = await Promise.all([retry(), retry()]);
+      expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+      const { jobId } = (await responses.find((response) => response.status === 200)!.json()) as {
+        jobId: string;
+      };
+      const [delivery] = await suite.db
+        .select()
+        .from(invoiceDeliveries)
+        .where(eq(invoiceDeliveries.printJobId, jobId));
+      expect(delivery).toMatchObject({
+        saleId: original.saleId,
+        printJobId: jobId,
+        personId: operatorId,
+        medium: "receipt",
+        designation: "original",
+        status: "queued",
+        generation: status === "failed" ? 1 : 2,
+      });
+      if (status === "unknown") {
+        const [expired] = await suite.db
+          .select()
+          .from(invoiceDeliveries)
+          .where(eq(invoiceDeliveries.printJobId, original.jobId));
+        expect(expired).toMatchObject({ status: "unknown", failureCode: "timeout" });
+      }
+      const jobs = await suite.db.select().from(printJobs);
+      expect(jobs).toHaveLength(2);
+      expect(jobs.find((job) => job.id === jobId)).toMatchObject({
+        payload: new Uint8Array([27, 64]),
+        printerId,
+        resendOf: original.jobId,
+        receiptCopy: false,
+      });
+      expect(await saleCount(cfg)).toBe(1);
+      expect(await registroCount(cfg)).toBe(1);
+      expect(await drawerOpensFor(cfg)).toEqual([]);
+    },
+  );
+
   it("resends exhausted originals with the same bytes and printer without refiling or opening the drawer", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);

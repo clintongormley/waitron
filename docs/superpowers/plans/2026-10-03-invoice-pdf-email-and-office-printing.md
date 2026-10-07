@@ -111,8 +111,13 @@ and claim rollback. For enrolled receipts, the pull projects confirmed unpairing
 unavailable-Bluetooth endings in the same transaction. Queued receipts become failed;
 handed-out receipts become unknown and keep their claim hash for authenticated late results.
 The API tests cover printer reactivation without replay, the other-agent printable control,
-completed originals and late success before and after a newer attempt. Original/resend
-enrollment, bill staging, A4 references and restart/retry workers remain. No Task 2 completion
+completed originals and late success before and after a newer attempt. The till original-retry
+and management resend routes now enroll F1 retry jobs with the authenticated staff member,
+preserving the existing bytes, printer and resend chain. Synthetic HTTP tests cover failed
+and expired original retries, current/historical claim fencing, a conflicting email attempt,
+completed-original refusal, copy resends and transactional rollback. Existing F2 retry and
+drawer assertions are retained. Original issuance and new-copy enrollment, bill staging,
+A4 references and restart/retry workers remain. No Task 2 completion
 claim.
 
 ## 3. Set up email for a live venue, without a terminal

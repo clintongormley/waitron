@@ -655,6 +655,170 @@ async function manager(ctx: Awaited<ReturnType<typeof setup>>) {
       body: JSON.stringify(body),
     });
 }
+
+describe("management invoice receipt resends", () => {
+  it("enrolls an exhausted receipt predating delivery tracking", async () => {
+    const ctx = await setup();
+    await suite.db.delete(invoiceDeliveries).where(eq(invoiceDeliveries.id, ctx.delivery.id));
+    await suite.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: 5 })
+      .where(eq(printJobs.id, ctx.job.jobId));
+    const command = await manager(ctx);
+    const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    const [delivery] = await suite.db.select().from(invoiceDeliveries);
+    expect(delivery).toMatchObject({ printJobId: jobId, designation: "original", generation: 1 });
+    const again = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+    expect(await suite.db.select().from(printJobs)).toHaveLength(2);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([delivery]);
+  });
+
+  it("resends marked copy bytes after the original completes", async () => {
+    const ctx = await setup();
+    const original = await held(ctx);
+    await ctx.result({ status: "done", invoiceClaim: original });
+    const copy = await withTransaction(suite.db, async (tx) => {
+      const job = await enqueuePrintJob(
+        tx,
+        { locationId: ctx.locationId },
+        ctx.printer.id,
+        new Uint8Array([68, 85, 80]),
+        "document",
+        { saleId: ctx.sale.saleId, receiptCopy: true },
+      );
+      await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, job.jobId));
+      return job;
+    });
+    const command = await manager(ctx);
+    const response = await command(`/management-api/print-jobs/${copy.jobId}/resend`, {});
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    const [delivery] = await suite.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.printJobId, jobId));
+    expect(delivery).toMatchObject({ designation: "duplicate", generation: 2, status: "queued" });
+    const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+    expect(job).toMatchObject({
+      receiptCopy: true,
+      resendOf: copy.jobId,
+      payload: new Uint8Array([68, 85, 80]),
+    });
+  });
+
+  it("rolls back a receipt resend when its metadata insert is refused", async () => {
+    const ctx = await setup();
+    const claim = await held(ctx);
+    await ctx.result({ status: "failed", error: "unsafe", invoiceClaim: claim });
+    await suite.db.execute(
+      sql`create trigger refuse_retry_metadata before insert on invoice_deliveries begin select raise(abort, 'synthetic refusal'); end`,
+    );
+    try {
+      const jobs = await suite.db.select().from(printJobs);
+      const command = await manager(ctx);
+      const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+      expect(response.status).toBe(500);
+      expect(await response.json()).toMatchObject({ error: { code: "server.internal" } });
+      expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+      expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
+    } finally {
+      await suite.db.execute(sql`drop trigger refuse_retry_metadata`);
+    }
+  });
+
+  it.each(["failed", "unknown"] as const)(
+    "enrolls a %s original retry with the same bytes and a new authenticated claim",
+    async (status) => {
+      const ctx = await setup();
+      const originalClaim = await held(ctx);
+      if (status === "failed")
+        await ctx.result({ status: "failed", error: "unsafe", invoiceClaim: originalClaim });
+      else ctx.advance(60000);
+      const command = await manager(ctx);
+      const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+      expect(response.status).toBe(202);
+      const { jobId } = (await response.json()) as { jobId: string };
+      const [retry] = await suite.db
+        .select()
+        .from(invoiceDeliveries)
+        .where(eq(invoiceDeliveries.printJobId, jobId));
+      const [staff] = await suite.db.select().from(persons);
+      expect(retry).toMatchObject({
+        saleId: ctx.sale.saleId,
+        medium: "receipt",
+        designation: "original",
+        status: "queued",
+        generation: 2,
+        personId: staff!.id,
+      });
+      const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+      expect(job).toMatchObject({
+        printerId: ctx.printer.id,
+        payload: (await ctx.jobRow()).payload,
+        saleId: ctx.sale.saleId,
+        receiptCopy: false,
+        resendOf: ctx.job.jobId,
+        kind: "document",
+      });
+      ctx.advance(1000);
+      const pulled = await ctx.pull();
+      expect(pulled).toHaveLength(1);
+      const retryClaim = (pulled[0] as unknown as { invoiceClaim: ClaimWire }).invoiceClaim;
+      expect(retryClaim).toMatchObject({ deliveryId: retry!.id, generation: 2 });
+      expect(retryClaim.token).not.toBe(originalClaim.token);
+      const before = (
+        await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, retry!.id))
+      )[0];
+      await ctx.result({ status: "done", invoiceClaim: originalClaim });
+      expect(
+        (
+          await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, retry!.id))
+        )[0],
+      ).toEqual(before);
+      expect((await ctx.result({ status: "done", invoiceClaim: retryClaim }, jobId)).status).toBe(
+        204,
+      );
+      expect(
+        (
+          await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, retry!.id))
+        )[0],
+      ).toMatchObject({ status: "sent" });
+    },
+  );
+
+  it("refuses resending completed original bytes and leaves its history unchanged", async () => {
+    const ctx = await setup();
+    const invoiceClaim = await held(ctx);
+    await ctx.result({ status: "done", invoiceClaim });
+    const jobs = await suite.db.select().from(printJobs);
+    const deliveries = await suite.db.select().from(invoiceDeliveries);
+    const command = await manager(ctx);
+    const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+    expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual(deliveries);
+  });
+
+  it("rolls back a resend while another medium holds the invoice", async () => {
+    const ctx = await setup();
+    const invoiceClaim = await held(ctx);
+    await ctx.result({ status: "failed", error: "unsafe", invoiceClaim });
+    await emailRetry(ctx);
+    const jobs = await suite.db.select().from(printJobs);
+    const deliveries = await suite.db.select().from(invoiceDeliveries);
+    const command = await manager(ctx);
+    const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+    expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual(deliveries);
+  });
+});
 async function bluetoothPull(
   ctx: Awaited<ReturnType<typeof setup>>,
   extra: Record<string, unknown> = {},

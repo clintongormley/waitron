@@ -2159,8 +2159,14 @@ and failed sends, malformed claims, another job or holder, expiry without automa
 and old same-agent success/failure reports during each newer receipt-retry state. The generic
 local runtime leaves correlated jobs for this adapter, and the generic reporter refuses them.
 Nineteen disposable guard deletions each failed the intended assertion beside a valid passing
-control. This applies to jobs already enrolled in delivery metadata; the existing F1 original
-and resend paths still need enrollment. For enrolled receipts, the real pull now projects
+control. The till's original-retry route and the management print-job resend route now enroll
+F1 resends in the same transaction as the new job, attributing them to the authenticated
+staff member. They preserve receipt bytes, printer and resend history, refuse an active
+cross-medium attempt, and refuse resending original bytes after completion. The till expires
+an old claim before checking whether the original can be retried. Synthetic F1 HTTP cases
+cover failed and expired retries, concurrent requests, late results, copy resends and rollback
+when metadata cannot be written; existing F2 and drawer assertions remain unchanged.
+Original issuance and newly rendered copies still need enrollment. For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain
 their token hash for authenticated late results. Six API cases cover cross-medium original
