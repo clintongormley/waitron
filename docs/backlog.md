@@ -703,16 +703,8 @@ component rules harden around the dashboard alone.
   `-t` and runs the whole file**; only a bare `--` before it passes it through. **Next action:** add
   it to `CLAUDE.md` §2's trap list, through the normal pull request flow.
 
-**Review points left for the owner: venue operations, the image library, the colour field.**
+**Review points left for the owner: the image library, the colour field.**
 
-- **Venue operations (#546's review,
-  `packages/venue-service/src/dashboard/venue-operations-screen.ts`).** (1) A zone-menu row whose
-  menu is not in the loaded list shows an empty Menu cell while its row actions carry the stored
-  menu id; whether a foreign key makes that row unreachable was not checked. (2) When the row that
-  opened an editor is gone by the time the editor closes, focus goes to `wt-tabs` as a whole, and
-  Chromium puts it on the tab strip rather than the selected tab (seen at 414 pixels). **Next
-  action:** decide whether (1) shows the id or a "missing menu" label, and whether (2) focuses the
-  selected tab.
 - **Image library (#547's review, `packages/media/src/dashboard/image-library.ts` and
   `image-picker.ts`).** (1) When the picker is handed a new live-data source, the library keeps
   listening to the first one until its next load. (2) The delete confirmation's Close button has no
@@ -1035,7 +1027,7 @@ Reset retained pre-live venues before installing core `0092`, which rebuilds bot
 
 **Department menu timetables and queued publication (A204, owner 2026-10-02; refined
 2026-10-04) — department menus and timetable (W98) IN PROGRESS on `feat/department-menu-timetable`,
-no pull request yet; queued publication not implemented.**
+in pull request #1331, awaiting landing; queued publication not implemented.**
 Departments own the available-menu list and the only timetable; zones override defaults within its shared periods.
 An all-day default covers gaps; normal weeks and special dates share A261's calendar. Staff may
 still order from breakfast after it stops being the default. Several future menu editions can be
@@ -4682,7 +4674,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   remain manager-only (owner amendment, 2026-10-04).
   [Step 2](superpowers/plans/2026-10-04-departments-and-zones.md) (#1233) puts departments and
   zones in one editable tree and keeps today's zone-menu and device-default-zone controls
-  temporarily in that screen (W97 retired the device-default-zone control, 2026-10-06).
+  temporarily in that screen (W97 retired the device-default-zone control, 2026-10-06; W98, #1331,
+  retires the zone-menu control, as menus move to a department's list on the Menu timetable page).
   A301 — DONE (#1335; owner 2026-10-06): a department row now has the tree's arrow, named for the
   department in English and Spanish, which hides and shows its zones; a department with no zones
   keeps the arrow's space so the names line up. Departments start open, unlike the Products, menu
@@ -4717,10 +4710,10 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   month calendar; routing reads the same schedules. The old station and department hours editors
   and their two tables are gone (venue-service `0022_retire_legacy_hours`); a pre-live venue is
   reset rather than carrying old hours over. Separate dependencies it leaves open:
-  - **W98's participant wiring** — done on `feat/department-menu-timetable` (no pull request
-    yet): the menu timetable is the entry in `VENUE_SERVICE_CALENDAR_PARTICIPANTS`
-    (`packages/venue-service/src/calendar-participants.ts`), and its day rows hold a cascading
-    foreign key to `special_dates`.
+  - **W98's participant wiring** — done on `feat/department-menu-timetable` (in pull request
+    #1331, awaiting landing): the menu timetable is the entry in
+    `VENUE_SERVICE_CALENDAR_PARTICIPANTS` (`packages/venue-service/src/calendar-participants.ts`),
+    and its day rows hold a cascading foreign key to `special_dates`.
   - **Step 6 public holidays** — done (#1305, below): the Hours page reads holidays
     through that seam, and "Make this a special date" starts with the day's holiday names or its
     date.
@@ -4824,7 +4817,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   [departmental transfer plan](superpowers/plans/2026-10-04-departmental-tab-transfers.md).
   §10 names the A238/A254/A261 decisions the approved design revises. A261 step 2 keeps its
   existing zone-menu and device-default-zone controls as an interim path; the newer work replaces them
-  (W97 retired the device-default-zone control, 2026-10-06).
+  (W97 retired the device-default-zone control, 2026-10-06; W98, #1331, retires the zone-menu
+  control).
   - **W97 delivers** (the profile access and switching plan, Tasks 1–8): each ordering profile has
     one department, its zones or all of them, and a starting zone, and the server refuses a zone,
     order, table, party or bill outside them; who may sign in on a profile, by role with per-person
@@ -4840,8 +4834,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     must both allow what the device does".
   - **Handed on.** The [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md)
     replaces A261 step 2's Task 8 (zone-by-zone menus, the interim path) on
-    `feat/department-menu-timetable`, not yet in a pull request: a menu is offered to a department
-    by its own list, and `zone_menus` and the per-zone menu editor are gone. The [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
+    `feat/department-menu-timetable`, in pull request #1331, awaiting landing: a menu is offered to
+    a department by its own list, and `zone_menus` and the per-zone menu editor are gone. The [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
     must define portable assignment, Use default, busy-terminal protection and a drawer
     independent of receipt printers before it removes today's printer choice, which a switch keeps
     while the new profile lists the printer and otherwise replaces with the first usable one — done
