@@ -25,8 +25,6 @@ function isLanguageCode(key: string): boolean {
   }
 }
 
-/** A key spelled other than its language code would never be found by a lookup in that language,
- * so it is refused rather than stored. */
 function isNamesMap(value: unknown): value is Record<string, string> {
   return (
     isPlainObject(value) &&
@@ -105,9 +103,7 @@ export async function setIncludeFolder(
   return { showAsFolder, overrides };
 }
 
-/** The member's `folder_overrides` as an object, or the column refused. The export writes the
- * column's JSON text, and the import binds each value as it comes, so nothing but text can be
- * stored. */
+/** The member's `folder_overrides` as an object, or the column refused. */
 function importedOverrides(row: Record<string, unknown>): Record<string, unknown> {
   const refuse = (): never => {
     throw new AppError("setup.request_invalid", { field: "section_members.folder_overrides" });
@@ -129,8 +125,8 @@ function importedOverrides(row: Record<string, unknown>): Record<string, unknown
 }
 
 /**
- * Refuses (`setup.request_invalid`) an imported member whose folder setting a save would refuse:
- * a `show_as_folder` other than a flag, `folder_overrides` that are not the JSON text of a sound
+ * Refuses (`setup.request_invalid`) an imported member whose folder setting is malformed: a
+ * `show_as_folder` other than a flag, `folder_overrides` that are not the JSON text of a sound
  * `IncludeFolderOverrides`, or any setting but the default on a member that is not an include of
  * a menu in a list. Whether a named photo is in the library is the media triggers' to refuse.
  */

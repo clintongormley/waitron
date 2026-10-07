@@ -1278,14 +1278,14 @@ it("an include's folder photo travels with the configuration", async () => {
       kind: "section",
       sectionId: (await readMenuStructure(tx, desserts.id)).rootSectionId,
     });
-    const overrides = { image: image.filename, names: { en: "Bar" } };
+    const overrides = { image: image.filename, names: { en: "Bar", es: "" }, color: "#112233" };
     await tx
       .update(sectionMembers)
       .set({ folderOverrides: overrides })
       .where(eq(sectionMembers.id, folder.id));
     await tx
       .update(sectionMembers)
-      .set({ showAsFolder: false })
+      .set({ showAsFolder: false, folderOverrides: { image: null } })
       .where(eq(sectionMembers.id, direct.id));
     return overrides;
   });
@@ -1316,7 +1316,7 @@ it("an include's folder photo travels with the configuration", async () => {
       .where(eq(sections.role, "menu_root"))
       .orderBy(catalogues.name);
     expect(included).toEqual([
-      { staffName: "Desserts (staff)", showAsFolder: false, overrides: {} },
+      { staffName: "Desserts (staff)", showAsFolder: false, overrides: { image: null } },
       { staffName: "Drinks (staff)", showAsFolder: true, overrides: fixed },
     ]);
   });
