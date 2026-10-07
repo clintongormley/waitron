@@ -1933,6 +1933,13 @@ the filed link. Source text retains antialiasing. Noto Sans and its licence matc
 upstream files byte for byte; the build copy matches the source font. Image/box timings and
 physical HP output remain pending.
 
+The wizard's SMTP test endpoint is now mounted in setup mode. A Live request sends a short
+message to the submitted administrator's normalised address through the shared bounded sender,
+without database dependencies. Its 21 added cases exercise real SMTP acceptance, refusals,
+lost acknowledgement and timeout, as well as field validation and secret-free answers/logs;
+the related six-file run passed 381 cases. The wizard screen, provisioning requirement and
+credential sealing, dashboard editor and restore checks remain open.
+
 **Owner decisions in place of the asesor's answers (2026-10-07, under the plan's Task 0.1), so A231p may be built.** Public F1 stays disabled until A231's own enablement gates are met; the asesor is asked to confirm these as [Q44](compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
 
 1. A PDF emailed after a paper original, or paper after an emailed original, is a «duplicado» and is marked so.
