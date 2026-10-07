@@ -743,6 +743,27 @@ async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<
   return byZone;
 }
 
+/**
+ * Each zone's offers from the live versions of its active menus, the documents `listZoneOffers`
+ * serves the zone from, without the live fields put back. Read for every zone at once.
+ */
+export async function publishedOffersByZone(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<Map<string, ReturnType<typeof documentOffers>>> {
+  const menusOf = await zoneMenuIdsByZone(tx, cfg);
+  const live = await readLiveDocuments(tx, [...new Set([...menusOf.values()].flat())]);
+  return new Map(
+    [...menusOf].map(([zoneId, menuIds]) => [
+      zoneId,
+      menuIds.flatMap((menuId) => {
+        const version = live.get(menuId);
+        return version === undefined ? [] : documentOffers(version.document);
+      }),
+    ]),
+  );
+}
+
 /** The active menus a zone may sell from: its department's, in the department's order. */
 async function zoneMenuIds(tx: Transaction, zoneId: string): Promise<string[]> {
   const rows = await tx
