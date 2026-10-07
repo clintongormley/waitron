@@ -321,9 +321,17 @@ export async function replaceMember(
   const current = writableMember(graph, sectionId, memberId);
   refuseOwnedMember(graph, current);
   await checkListRef(tx, graph, sectionId, ref, current);
+  const sameInclude =
+    ref.kind === "section" &&
+    current.ref.kind === "section" &&
+    ref.sectionId === current.ref.sectionId;
   await tx
     .update(sectionMembers)
-    .set({ ...refColumns(ref), showAsFolder: true, folderOverrides: {} })
+    .set(
+      sameInclude
+        ? refColumns(ref)
+        : { ...refColumns(ref), showAsFolder: true, folderOverrides: {} },
+    )
     .where(eq(sectionMembers.id, memberId));
   // A replace changes what the list holds, never which menus reach the list.
   await onStructureChanged(tx, menusContaining(graph, sectionId), graph);

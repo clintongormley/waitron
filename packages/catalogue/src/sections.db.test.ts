@@ -201,4 +201,15 @@ describe("an include's folder setting", () => {
     );
     expect(rows.rows).toEqual([{ show_as_folder: 1, folder_overrides: "{}" }]);
   });
+
+  it("an include replaced by the same menu keeps its folder setting", async () => {
+    const { rootA, memberId } = await includeB();
+    const graph = await app(loadSectionGraph);
+    const held = graph.children(rootA).find((member) => member.id === memberId)!.ref;
+    await app((tx) => replaceMember(tx, rootA, memberId, held));
+    expect((await app(loadSectionGraph)).folder(memberId)).toEqual({
+      showAsFolder: false,
+      overrides: { names: { en: "Bar" } },
+    });
+  });
 });
