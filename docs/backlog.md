@@ -4820,7 +4820,11 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   discovers department-wide sender history and stops on logout, detachment or replacement.
   The receiving desk's pending count updates from durable reads; another profile has no count,
   and an unanswered first read is not shown as zero. A transfer-access refusal clears the monitor
-  without logging out an otherwise signed-in operator. Notification presentation and receiving/sending
+  without logging out an otherwise signed-in operator. Till notifications now show incoming requests
+  and resolved sender statuses; dismissal leaves the durable queue and history intact. A read-only
+  transfer dialog lists pending requests and sender history, and opens the current ordered items and
+  outstanding kitchen work. Closing or replacing a detail read aborts it and ignores late replies;
+  a resolved request clears its displayed detail. Receiving actions and sender request/withdraw
   controls remain to build. Party-linked bills are
   refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and

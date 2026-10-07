@@ -128,6 +128,7 @@ export class TillTabShell extends LitElement {
   @property() activeTabKey?: string;
   @property() operatorName = "";
   @property({ attribute: false }) transferCount?: number;
+  @property({ type: Boolean }) transferAvailable = false;
   @property({ attribute: false }) affordances: ShellAffordance[] = [];
   @property({ attribute: false }) loadLocales?: () => Promise<{ code: string; label: string }[]>;
   /** Suppresses the whole operator `<header>`: a kitchen display shows just its cards, no operator
@@ -190,6 +191,7 @@ export class TillTabShell extends LitElement {
                             >${t("department_transfer.open").replace("{count}", String(this.transferCount))}</span
                           >`
                     }
+                    ${this.transferAvailable ? html`<wt-button data-open-transfers variant="secondary" @click=${() => this.#emit("open-transfers")}>${t("department_transfer.title")}</wt-button>` : nothing}
                     ${
                       this.affordances.includes("find-bill")
                         ? html`<wt-button

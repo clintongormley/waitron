@@ -61,6 +61,7 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./widgets/station-choice-dialog.js";
+import "./widgets/department-transfers.js";
 import { lineProductName } from "./widgets/product-name.js";
 import type {
   AdjustDetail,
@@ -1085,12 +1086,14 @@ export class TillApp extends LitElement {
   #departmentTransfers?: DepartmentTransferMonitor;
   #transferApi?: TillApi;
   @state() private transferSnapshot?: TransferSnapshot;
+  @state() private transferQueueOpen = false;
 
   #stopDepartmentTransfers(): void {
     this.#departmentTransfers?.stop();
     this.#departmentTransfers = undefined;
     this.#transferApi = undefined;
     this.transferSnapshot = undefined;
+    this.transferQueueOpen = false;
   }
 
   #syncDepartmentTransfers(): void {
@@ -8878,6 +8881,10 @@ export class TillApp extends LitElement {
                       .affordances=${this.#affordanceList}
                       .kiosk=${this.deviceMode}
                       .canSwitchProfile=${this.approvedProfiles.length > 1}
+                      .transferAvailable=${this.transferSnapshot !== undefined}
+                      @open-transfers=${() => {
+                        this.transferQueueOpen = true;
+                      }}
                       .transferCount=${this.transferSnapshot?.receivingAllowed === true ? this.transferSnapshot.incoming.length : undefined}
                       .loadLocales=${this.#loadLocales}
                       @tab-select=${(e: CustomEvent<{ key: string }>) => {
@@ -8886,6 +8893,22 @@ export class TillApp extends LitElement {
                         this.#requestLeave(() => this.#onTabSelect(e.detail.key));
                       }}
                     >
+                      ${
+                        this.transferSnapshot === undefined
+                          ? nothing
+                          : html`<till-department-transfers
+                              .api=${this.api}
+                              .snapshot=${this.transferSnapshot}
+                              .open=${this.transferQueueOpen}
+                              @close-transfers=${() => {
+                                this.transferQueueOpen = false;
+                              }}
+                              @dismiss-transfer=${(event: CustomEvent<{ requestId: string }>) => {
+                                event.stopPropagation();
+                                this.#departmentTransfers?.dismiss(event.detail.requestId);
+                              }}
+                            ></till-department-transfers>`
+                      }
                       ${this.#activeTabBody()}
                       ${this.#drillBody() /* the drill overlay, when one is open */}
                     </till-tab-shell>`,

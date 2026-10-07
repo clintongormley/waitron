@@ -2693,6 +2693,162 @@ describe("department transfers across operator lifetimes", () => {
   const pendingCount = (el: TillApp) =>
     shell(el)?.shadowRoot?.querySelector<HTMLElement>("[data-test=department-transfers]");
 
+  const transferPanel = (el: TillApp) =>
+    el.shadowRoot?.querySelector<HTMLElement>("till-department-transfers");
+  const transferRoot = (el: TillApp) => transferPanel(el)?.shadowRoot;
+  const currentDetail = {
+    request,
+    tab: {
+      id: "tab-1",
+      revision: 9,
+      status: "placed",
+      label: "Lunch",
+      orderNumber: 12,
+      deliveryTableId: null,
+    },
+    lines: [
+      {
+        id: "line-1",
+        name: "Soup",
+        variantName: null,
+        quantity: "0.500",
+        unitPriceGross: "2.80",
+        note: "No salt",
+        parentLineId: null,
+      },
+    ],
+    outstandingWork: [
+      {
+        id: "work-1",
+        lineId: "line-1",
+        stationId: "kitchen",
+        state: "queued",
+        note: "No salt",
+        firedAt: null,
+        awayAt: null,
+        courseId: null,
+      },
+    ],
+  };
+  async function openTransfers(el: TillApp) {
+    const button = shell(el)?.shadowRoot?.querySelector<HTMLElement>("[data-open-transfers]");
+    expect(button).not.toBeNull();
+    button!.click();
+    await vi.waitFor(() => expect(transferRoot(el)?.querySelector("wt-dialog")).not.toBeNull());
+  }
+
+  it("dismisses a notice without removing its durable pending request or accepting it", async () => {
+    const desk = transfers();
+    const accept = vi.fn();
+    const { el } = await mountApp({ ...desk.calls, acceptDepartmentTransfer: accept });
+    await signIn(el);
+    await vi.waitFor(() =>
+      expect(transferRoot(el)?.querySelectorAll("[data-notification]").length).toBe(2),
+    );
+    transferRoot(el)!
+      .querySelector<HTMLElement>("[data-notification=request-1] [data-dismiss]")!
+      .click();
+    await vi.waitFor(() =>
+      expect(transferRoot(el)?.querySelector("[data-notification=request-1]")).toBeNull(),
+    );
+    expect(pendingCount(el)?.textContent).toContain("1");
+    await openTransfers(el);
+    expect(transferRoot(el)?.querySelectorAll("[data-incoming]").length).toBe(1);
+    expect(accept).not.toHaveBeenCalled();
+    emit(shell(el)!, "logout");
+    await vi.waitFor(() => expect(transferPanel(el)).toBeNull());
+    await signIn(el);
+    await vi.waitFor(() =>
+      expect(transferRoot(el)?.querySelector("[data-notification=request-1]")).not.toBeNull(),
+    );
+  });
+
+  it("keeps declined sender status and reason in history after dismissing its notification", async () => {
+    const desk = transfers();
+    const { el } = await mountApp(desk.calls);
+    await signIn(el);
+    await vi.waitFor(() =>
+      expect(transferRoot(el)?.querySelector("[data-notification=sent-1]")?.textContent).toContain(
+        "Closing",
+      ),
+    );
+    transferRoot(el)!
+      .querySelector<HTMLElement>("[data-notification=sent-1] [data-dismiss]")!
+      .click();
+    await openTransfers(el);
+    expect(transferRoot(el)?.querySelector("[data-sent=sent-1]")?.textContent).toContain("Closing");
+    expect(transferRoot(el)?.querySelector("[data-notification=sent-1]")).toBeNull();
+  });
+
+  it("opening an incoming request reads current lines and outstanding kitchen work without accepting", async () => {
+    const desk = transfers();
+    const read = vi.fn().mockResolvedValue(currentDetail);
+    const accept = vi.fn();
+    const decline = vi.fn();
+    const { el } = await mountApp({
+      ...desk.calls,
+      getDepartmentTransfer: read,
+      acceptDepartmentTransfer: accept,
+      declineDepartmentTransfer: decline,
+    });
+    await signIn(el);
+    await openTransfers(el);
+    transferRoot(el)!.querySelector<HTMLElement>("[data-incoming=request-1] [data-view]")!.click();
+    await vi.waitFor(() =>
+      expect(transferRoot(el)?.querySelector("[data-current-tab]")?.textContent).toContain("Lunch"),
+    );
+    expect(read).toHaveBeenCalledWith("request-1", { signal: expect.any(AbortSignal) });
+    expect(transferRoot(el)?.querySelector("[data-current-lines]")?.textContent).toContain("Soup");
+    expect(transferRoot(el)?.querySelector("[data-current-work]")?.textContent).toContain("Soup");
+    expect(transferRoot(el)?.querySelector("[data-current-work]")?.textContent).toContain(
+      "No salt",
+    );
+    expect(accept).not.toHaveBeenCalled();
+    expect(decline).not.toHaveBeenCalled();
+    desk.empty();
+    await vi.waitFor(() =>
+      expect(transferRoot(el)?.querySelector("[data-current-tab]")).toBeNull(),
+    );
+    expect(pendingCount(el)?.textContent).toContain("0");
+  });
+
+  it("starts a fresh detail read after close and ignores the previous opening's late reply", async () => {
+    const desk = transfers();
+    let oldReply!: (value: typeof currentDetail) => void;
+    const read = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            oldReply = resolve;
+          }),
+      )
+      .mockResolvedValue({
+        ...currentDetail,
+        tab: { ...currentDetail.tab, label: "Latest lunch" },
+      });
+    const { el } = await mountApp({ ...desk.calls, getDepartmentTransfer: read });
+    await signIn(el);
+    await openTransfers(el);
+    transferRoot(el)!.querySelector<HTMLElement>("[data-incoming=request-1] [data-view]")!.click();
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    transferRoot(el)!.querySelector<HTMLElement>("[data-close-transfers]")!.click();
+    await vi.waitFor(() => expect(transferRoot(el)?.querySelector("wt-dialog")).toBeNull());
+    expect(read.mock.calls[0]![1].signal.aborted).toBe(true);
+    await openTransfers(el);
+    transferRoot(el)!.querySelector<HTMLElement>("[data-incoming=request-1] [data-view]")!.click();
+    await vi.waitFor(() =>
+      expect(transferRoot(el)?.querySelector("[data-current-tab]")?.textContent).toContain(
+        "Latest lunch",
+      ),
+    );
+    oldReply(currentDetail);
+    await flush(el);
+    expect(transferRoot(el)?.querySelector("[data-current-tab]")?.textContent).toContain(
+      "Latest lunch",
+    );
+  });
+
   it("starts only after authorised sign-in and shows a live persistent pending count", async () => {
     const desk = transfers();
     const { el } = await mountApp(desk.calls);
