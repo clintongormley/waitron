@@ -1875,7 +1875,7 @@ a demo seeds changes.
 
 **A demo's staff-facing names follow the language of the person setting it up, and its practice
 sales are stored under the venue's receipt language (W109-5, Task 5 of the same plan) — DONE
-(2026-10-07).** `demoSeedLocale` (`apps/server/src/demo-seed.ts`) reads the setup person's language
+(#1323, 2026-10-07).** `demoSeedLocale` (`apps/server/src/demo-seed.ts`) reads the setup person's language
 (`admin.locale`) — Spanish when it is Spanish, English otherwise — instead of the receipt language,
 and `seedDemoRestaurant` (`apps/server/scripts/demo-seed/seed.ts`) reads the location's first
 receipt language with `readReceiptLanguage` and hands it to `seedSales`
