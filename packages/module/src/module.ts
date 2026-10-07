@@ -327,6 +327,7 @@ export interface MakerResolver {
 }
 
 export interface DepartmentTransfer {
+  currentDepartmentId?: string;
   id: string;
   tabId: string;
   sourceDepartmentId: string;

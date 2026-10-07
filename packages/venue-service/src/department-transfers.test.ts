@@ -30,6 +30,7 @@ import {
   createServiceZone,
   getOrderServiceContext,
   recordOrderServiceContext,
+  retargetOrderServiceContext,
 } from "./operations.js";
 import { setProfileServiceScope } from "./profile-access.js";
 import * as service from "./index.js";
@@ -497,6 +498,80 @@ describe("departmental tab transfers", () => {
         tableId,
       }),
     );
+
+  it("keeps every pending request but bounds department-wide resolved history to the newest 100", async () => {
+    const v = await pending();
+    const ids = Array.from({ length: 105 }, () => randomUUID());
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(departmentTransferRequests)
+        .set({ createdAt: "2020-01-01T00:00:00.000Z" })
+        .where(eq(departmentTransferRequests.id, v.request.id));
+      await tx.insert(departmentTransferRequests).values(
+        ids.map((id, index) => ({
+          id,
+          tabId: v.tab,
+          sourceDepartmentId: v.a,
+          destinationDepartmentId: v.b,
+          senderId: "sender",
+          status: "withdrawn" as const,
+          createdAt: "2026-10-07T08:00:00.000Z",
+          resolvedAt: new Date(Date.UTC(2026, 9, 7, 8, 0, index)).toISOString(),
+        })),
+      );
+    });
+    const sender = { departmentId: v.a, personId: "sender" };
+    const rows = await withTransaction(suite.db, (tx) =>
+      service.listDepartmentSentTransfers(tx, v.cfg, sender),
+    );
+    expect(rows).toHaveLength(101);
+    expect(rows.find((row) => row.id === v.request.id)?.status).toBe("pending");
+    expect(
+      rows
+        .filter((row) => row.status !== "pending")
+        .map((row) => row.id)
+        .sort(),
+    ).toEqual(ids.slice(5).sort());
+    const history = await withTransaction(suite.db, (tx) =>
+      service.listSentDepartmentTransfers(tx, v.cfg, v.tab, sender),
+    );
+    expect(history).toHaveLength(106);
+    expect(history.some((row) => row.id === ids[0])).toBe(true);
+  });
+
+  it("reports current responsibility separately from an old accepted transfer", async () => {
+    const v = await pending();
+    await accept(v);
+    const sender = { departmentId: v.a, personId: "sender" };
+    let rows = await withTransaction(suite.db, (tx) =>
+      service.listDepartmentSentTransfers(tx, v.cfg, sender),
+    );
+    expect(rows[0]).toMatchObject({ status: "accepted", currentDepartmentId: v.b });
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, v.tab, v.az));
+    rows = await withTransaction(suite.db, (tx) =>
+      service.listDepartmentSentTransfers(tx, v.cfg, sender),
+    );
+    expect(rows[0]).toMatchObject({ status: "accepted", currentDepartmentId: v.a });
+  });
+
+  it("keeps an already pending transfer actionable when its sending direction is removed", async () => {
+    const v = await pending();
+    await withTransaction(suite.db, (tx) =>
+      service.setDepartmentTransferSettings(tx, v.cfg, v.a, {
+        receivingProfileId: null,
+        destinationDepartmentIds: [],
+      }),
+    );
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        service.listDepartmentTransferDestinations(tx, v.cfg, {
+          departmentId: v.a,
+          personId: "sender",
+        }),
+      ),
+    ).toEqual([]);
+    expect((await accept(v)).status).toBe("accepted");
+  });
 
   it("withdraws only pending requests at tab lifecycle changes and keeps resolved history", async () => {
     const v = await pending();

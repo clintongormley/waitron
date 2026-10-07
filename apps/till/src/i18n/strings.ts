@@ -8,6 +8,10 @@ export const en = {
     "Your department remains responsible until the receiving desk accepts.",
   "department_transfer.department": "Destination department",
   "department_transfer.choose_department": "Choose a permitted destination department.",
+  "department_transfer.local_copy": "Unsent edits on a transferred tab",
+  "department_transfer.local_copy_message":
+    "The tab was transferred. Your unsaved edits were not sent. This local copy is for reference only; review it before dismissing it.",
+  "department_transfer.dismiss_local_copy": "Dismiss local copy",
   "department_transfer.request": "Request transfer",
   "department_transfer.withdraw": "Withdraw request",
   "department_transfer.retry_destinations": "Retry destination choices",
@@ -1113,6 +1117,10 @@ export const es: Record<StringKey, string> = {
     "Tu departamento sigue siendo responsable hasta que el mostrador receptor acepte.",
   "department_transfer.department": "Departamento de destino",
   "department_transfer.choose_department": "Elige un departamento de destino permitido.",
+  "department_transfer.local_copy": "Cambios sin enviar de una cuenta traspasada",
+  "department_transfer.local_copy_message":
+    "La cuenta se ha traspasado. Tus cambios sin guardar no se han enviado. Esta copia local es solo de consulta; revísala antes de descartarla.",
+  "department_transfer.dismiss_local_copy": "Descartar copia local",
   "department_transfer.request": "Solicitar traspaso",
   "department_transfer.withdraw": "Retirar solicitud",
   "department_transfer.retry_destinations": "Volver a cargar los destinos",

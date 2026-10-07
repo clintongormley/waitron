@@ -1,4 +1,4 @@
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -3371,6 +3371,231 @@ describe("department transfers across operator lifetimes", () => {
     expect(c.store.lines).toEqual([]);
     expect(c.store.id).not.toBe("counter-tab");
     expect(transferRoot(el)?.querySelector("[data-request-transfer]")).toBeNull();
+  });
+
+  it("keeps a returned source basket when monitor restart reads its old acceptance", async () => {
+    const desk = transfers();
+    let historical = false;
+    const { el } = await mountApp({
+      ...desk.calls,
+      listDepartmentSentTransfers: vi.fn(async () => ({
+        requests: historical
+          ? [
+              {
+                ...request,
+                tabId: "counter-tab",
+                status: "accepted",
+                revision: 1,
+                currentDepartmentId: "deli",
+              },
+            ]
+          : [],
+      })),
+    });
+    await signIn(el);
+    const c = counter(el)!;
+    c.store.loadFrom(
+      "counter-tab",
+      [{ product: c.products[0]!, quantity: "2" }],
+      "Returned lunch",
+      9,
+    );
+    emit(shell(el)!, "logout");
+    await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+    historical = true;
+    await signIn(el);
+    await vi.waitFor(() =>
+      expect(privateState<{ sent: unknown[] }>(el, "transferSnapshot").sent).toHaveLength(1),
+    );
+    expect(c.store.persisted).toBe(true);
+    expect(c.store.id).toBe("counter-tab");
+    expect(c.store.lines[0]?.quantity).toBe("2");
+  });
+
+  it.each([
+    ["en-GB", "light", 390],
+    ["en-GB", "light", 1280],
+    ["en-GB", "dark", 390],
+    ["en-GB", "dark", 1280],
+    ["es-ES", "light", 390],
+    ["es-ES", "light", 1280],
+    ["es-ES", "dark", 390],
+    ["es-ES", "dark", 1280],
+  ] as const)(
+    "keeps unsent counter edits as a read-only local copy in %s %s at %s until explicitly dismissed after transfer",
+    async (locale, theme, width) => {
+      const desk = transfers();
+      let accepted = false;
+      const { el, host } = await mountApp({
+        ...desk.calls,
+        listDepartmentSentTransfers: vi.fn(async () => ({
+          requests: [
+            {
+              ...request,
+              tabId: "counter-tab",
+              status: accepted ? "accepted" : "pending",
+              revision: accepted ? 1 : 0,
+              currentDepartmentId: accepted ? "restaurant" : "deli",
+            },
+          ],
+        })),
+      });
+      await signIn(el);
+      setLocale(locale);
+      host.dataset.theme = theme;
+      await page.viewport(width, 900);
+      host.style.width = `${width}px`;
+      await flush(el);
+      const c = counter(el)!;
+      c.store.loadFrom(
+        "counter-tab",
+        [
+          {
+            product: c.products[0]!,
+            quantity: "2",
+          },
+        ],
+        "Lunch",
+        7,
+      );
+      c.store.addProduct(c.products[0]!, "1", {
+        note: "No sugar",
+        extras: [
+          { listId: "milk-list", productId: "milk", name: "Milk", price: "0.50", quantity: 1 },
+        ],
+        optionSnapshots: [
+          {
+            listName: { "en-GB": "Blend", "es-ES": "Blend" },
+            listCustomerName: null,
+            listKitchenName: null,
+            labelName: { "en-GB": "Decaf", "es-ES": "Decaf" },
+            labelCustomerName: null,
+            labelKitchenName: null,
+          },
+        ],
+      });
+      expect(c.store.dirty).toBe(true);
+      accepted = true;
+      desk.refresh();
+      await vi.waitFor(() => expect(c.store.persisted).toBe(false));
+      const copy = () => el.shadowRoot!.querySelector<HTMLElement>("[data-transfer-local-copy]");
+      expect(copy()).not.toBeNull();
+      expect(copy()?.textContent).toContain("Lunch");
+      expect(copy()?.textContent).toContain("No sugar");
+      expect(copy()?.textContent).toContain("Milk");
+      expect(copy()?.textContent).toContain("Decaf");
+      expect(copy()?.querySelectorAll("[data-local-line]")).toHaveLength(2);
+      expect(copy()?.querySelectorAll("[data-local-line]")[1]?.textContent).toContain("1");
+      const native = copy()?.shadowRoot?.querySelector("dialog");
+      expect(native?.open).toBe(true);
+      await expectNoA11yViolations(copy()!);
+      await page.screenshot({
+        path: `../__screenshots__/w101-local-copy/${locale}-${theme}-${width}.png`,
+      });
+      await userEvent.keyboard("{Escape}");
+      expect(copy()).not.toBeNull();
+      if (locale === "en-GB" && theme === "light" && width === 390) {
+        emit(shell(el)!, "logout");
+        await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+        await signIn(el);
+        await flush(el);
+        expect(copy()?.textContent).toContain("No sugar");
+      }
+      const dismiss = copy()!.querySelector<HTMLElement>("[data-dismiss-local-copy]")!;
+      const bounds = dismiss.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+      expect(bounds.width).toBeGreaterThanOrEqual(44);
+      expect(bounds.height).toBeGreaterThanOrEqual(44);
+      await userEvent.click(dismiss);
+      await flush(el);
+      expect(copy()).toBeNull();
+      expect(c.store.id).not.toBe("counter-tab");
+      expect(c.store.lines).toEqual([]);
+      setLocale("es-ES");
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it("retains an unsaved label and its recorded extras in the transferred local copy", async () => {
+    const desk = transfers();
+    let accepted = false;
+    const { el } = await mountApp({
+      ...desk.calls,
+      listDepartmentSentTransfers: vi.fn(async () => ({
+        requests: [
+          {
+            ...request,
+            tabId: "counter-tab",
+            status: accepted ? "accepted" : "pending",
+            revision: accepted ? 1 : 0,
+            currentDepartmentId: accepted ? "restaurant" : "deli",
+          },
+        ],
+      })),
+    });
+    await signIn(el);
+    const c = counter(el)!;
+    c.store.loadFrom(
+      "counter-tab",
+      [
+        {
+          product: c.products[0]!,
+          quantity: "2",
+          notOfferedExtras: [
+            { productId: "cream", name: "Retired cream", price: "0.50", quantity: 1 },
+          ],
+        },
+      ],
+      "Lunch",
+      7,
+    );
+    await flush(el);
+    c.store.label = "Lunch for Ana";
+    await flush(el);
+    expect(c.store.dirty).toBe(false);
+    accepted = true;
+    desk.refresh();
+    await vi.waitFor(() => expect(c.store.persisted).toBe(false));
+    const copy = el.shadowRoot!.querySelector("[data-transfer-local-copy]");
+    expect(copy).not.toBeNull();
+    expect(copy?.textContent).toContain("Lunch for Ana");
+    expect(copy?.textContent).toContain("Retired cream");
+  });
+
+  it("retains an unsent standalone table draft for review when its tab is transferred", async () => {
+    const desk = transfers();
+    let accepted = false;
+    const { el } = await mountApp({
+      ...desk.calls,
+      listDepartmentSentTransfers: vi.fn(async () => ({
+        requests: [
+          {
+            ...request,
+            status: accepted ? "accepted" : "pending",
+            revision: accepted ? 1 : 0,
+            currentDepartmentId: accepted ? "restaurant" : "deli",
+          },
+        ],
+      })),
+    });
+    await signIn(el);
+    const product = counter(el)!.products[0]!;
+    Object.assign(el, { activeTabId: "tab-1", drill: { kind: "table-order" } });
+    el.requestUpdate();
+    await flush(el);
+    const table = el.shadowRoot!.querySelector<
+      HTMLElement & { draftStore: import("./state/working-order.js").WorkingOrderStore }
+    >("till-table-order-screen")!;
+    expect(table).not.toBeNull();
+    table.draftStore.addProduct(product, "1", { note: "Table unsent edit" });
+    accepted = true;
+    desk.refresh();
+    await vi.waitFor(() =>
+      expect(privateState<string | undefined>(el, "activeTabId")).toBeUndefined(),
+    );
+    const copy = el.shadowRoot!.querySelector("[data-transfer-local-copy]");
+    expect(copy).not.toBeNull();
+    expect(copy?.textContent).toContain("Table unsent edit");
+    expect(table.draftStore.lines).toEqual([]);
   });
 
   it("refreshes the receiving ordinary lists when a durable request leaves the queue", async () => {

@@ -4,7 +4,7 @@ import type {
   DepartmentTransferReceiver,
 } from "@waitron/module";
 export type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
   billPayments,
   billPaymentRefunds,
@@ -23,7 +23,7 @@ import {
   type VenueScope,
 } from "./operations.js";
 import { readProfileZones } from "./profile-access.js";
-import { departments } from "./schema/service.js";
+import { departments, orderServiceContexts } from "./schema/service.js";
 import {
   departmentTransferDesks,
   departmentTransferDestinations,
@@ -483,6 +483,7 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
   const identities = await tx
     .select({
       id: departmentTransferRequests.id,
+      currentDepartmentId: orderServiceContexts.departmentId,
       orderNumber: workingOrders.orderNumber,
       tabLabel: workingOrders.label,
       sourceDepartmentName: source.name,
@@ -490,6 +491,7 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
     })
     .from(departmentTransferRequests)
     .innerJoin(workingOrders, eq(workingOrders.id, departmentTransferRequests.tabId))
+    .innerJoin(orderServiceContexts, eq(orderServiceContexts.workingOrderId, workingOrders.id))
     .innerJoin(source, eq(source.id, departmentTransferRequests.sourceDepartmentId))
     .innerJoin(destination, eq(destination.id, departmentTransferRequests.destinationDepartmentId))
     .where(
@@ -498,8 +500,13 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
         rows.map((row) => row.id),
       ),
     );
-  const byId = new Map(identities.map(({ id, ...summary }) => [id, summary]));
-  return rows.map((row) => ({ ...row, summary: byId.get(row.id)! }));
+  const byId = new Map(
+    identities.map(({ id, currentDepartmentId, ...summary }) => [
+      id,
+      { currentDepartmentId, summary },
+    ]),
+  );
+  return rows.map((row) => ({ ...row, ...byId.get(row.id)! }));
 }
 
 export async function listIncomingDepartmentTransfers(
@@ -553,10 +560,29 @@ export async function listDepartmentSentTransfers(
   sender: DepartmentTransferActor,
 ) {
   await activeDepartment(tx, cfg, sender.departmentId);
+  const recent = tx
+    .select({ id: departmentTransferRequests.id })
+    .from(departmentTransferRequests)
+    .where(
+      and(
+        eq(departmentTransferRequests.sourceDepartmentId, sender.departmentId),
+        ne(departmentTransferRequests.status, "pending"),
+      ),
+    )
+    .orderBy(desc(departmentTransferRequests.resolvedAt), desc(departmentTransferRequests.id))
+    .limit(100);
   const rows = await tx
     .select()
     .from(departmentTransferRequests)
-    .where(eq(departmentTransferRequests.sourceDepartmentId, sender.departmentId))
+    .where(
+      and(
+        eq(departmentTransferRequests.sourceDepartmentId, sender.departmentId),
+        or(
+          eq(departmentTransferRequests.status, "pending"),
+          inArray(departmentTransferRequests.id, recent),
+        ),
+      ),
+    )
     .orderBy(asc(departmentTransferRequests.createdAt), asc(departmentTransferRequests.id));
   return summarizeTransfers(tx, rows);
 }

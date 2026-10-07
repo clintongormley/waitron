@@ -4838,9 +4838,15 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   selected-tab surface or matching counter basket, while a different basket stays intact. A resolved
   receiving request or accepted source request refreshes floor, held and waiting lists. A departed
   API client cannot install its list reply, and an outstanding retrieval cannot reopen the tab
-  after its transfer is accepted. The initial whole-branch run-it review is complete; remaining
-  review work is bounding department-wide source history and reproducing returned-tab cleanup and
-  local source-edit preservation before the push hook and CI. Party-linked bills are refused before
+  after its transfer is accepted. Department-wide reads retain every pending request and the
+  newest 100 resolved requests; per-tab reads retain older history. Current responsibility is read
+  separately from historical acceptance, so restarting the monitor does not retire a tab that has
+  returned to its source. Unsent counter edits and standalone table drafts are retained as read-only
+  local copies for explicit review and dismissal, rather than silently lost or resubmitted. These
+  copies remain in browser memory across sign-out; reloading the page loses them. Removing a sending
+  direction prevents new requests and leaves existing pending intent actionable; it does not revoke
+  requests already sent. The whole-branch run-it review and focused fixes are complete; the normal
+  push hook and current-head CI remain before landing. Party-linked bills are refused before
   queuing, and again at acceptance, rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and

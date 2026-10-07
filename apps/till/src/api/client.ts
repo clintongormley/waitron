@@ -1940,6 +1940,7 @@ export type OriginalReceiptPrint =
     };
 
 export interface DepartmentTransfer {
+  currentDepartmentId?: string;
   id: string;
   tabId: string;
   sourceDepartmentId: string;

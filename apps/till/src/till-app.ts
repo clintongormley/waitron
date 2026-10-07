@@ -63,6 +63,7 @@ import "./screens/till-table-order-screen.js";
 import "./widgets/station-choice-dialog.js";
 import "./widgets/department-transfers.js";
 import { lineProductName } from "./widgets/product-name.js";
+import { optionAnswers } from "./widgets/option-snapshot.js";
 import type {
   AdjustDetail,
   ChangeLineDetail,
@@ -1089,6 +1090,52 @@ export class TillApp extends LitElement {
   #counterRetrievals = new Map<object, string>();
   @state() private transferSnapshot?: TransferSnapshot;
   @state() private transferQueueOpen = false;
+  @state() private transferLocalCopies: { label: string; lines: OrderLine[] }[] = [];
+
+  #keepTransferLocalCopy(store: WorkingOrderStore, label: string): void {
+    this.transferLocalCopies = [
+      ...this.transferLocalCopies,
+      {
+        label,
+        lines: store.lines.map((line) => structuredClone(line)),
+      },
+    ];
+  }
+
+  #renderTransferLocalCopy() {
+    const copy = this.transferLocalCopies[0];
+    if (copy === undefined || !this.#inShell()) return nothing;
+    return html`<wt-dialog
+      data-transfer-local-copy
+      .open=${true}
+      .dismissible=${false}
+      .heading=${t("department_transfer.local_copy")}
+    >
+      <p>${t("department_transfer.local_copy_message")}</p>
+      <p>${copy.label}</p>
+      <ul>
+        ${copy.lines.map(
+          (line) =>
+            html`<li data-local-line>
+              ${trimQuantity(line.quantity)} × ${lineProductName(line.product)}
+              ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<div>${answer}</div>`)}
+              ${(line.extras ?? []).map((extra) => html`<div>${extra.quantity} × ${extra.name}</div>`)}
+              ${(line.notOfferedExtras ?? []).map((extra) => html`<div>${extra.quantity} × ${extra.name}</div>`)}
+              ${line.note ? html`<div>${line.note}</div>` : nothing}
+            </li>`,
+        )}
+      </ul>
+      <wt-form-actions slot="footer"
+        ><wt-button
+          data-dismiss-local-copy
+          @click=${() => {
+            this.transferLocalCopies = this.transferLocalCopies.slice(1);
+          }}
+          >${t("department_transfer.dismiss_local_copy")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-dialog>`;
+  }
 
   #stopDepartmentTransfers(): void {
     this.#transferViewRead++;
@@ -1122,16 +1169,23 @@ export class TillApp extends LitElement {
         const accepted = next.sent.filter(
           (row) =>
             row.status === "accepted" &&
+            row.currentDepartmentId !== row.sourceDepartmentId &&
             !previous?.sent.some((old) => old.id === row.id && old.status === "accepted"),
         );
         for (const row of accepted) {
           for (const [read, tabId] of this.#counterRetrievals)
             if (tabId === row.tabId) this.#counterRetrievals.delete(read);
           if (this.activeTabId === row.tabId) {
+            const draft = this.#tableDraft();
+            if (draft !== null && draft.lines.length > 0)
+              this.#keepTransferLocalCopy(draft, this.orderParty?.displayName ?? "");
+            this.#resetPartylessDraft();
             this.#forgetParty();
             if (this.#tableCatalogueActive()) this.#returnToFloor();
           }
           if (this.#store.persisted && this.#store.id === row.tabId) {
+            if (this.#store.dirty || this.#basketPayload() !== this.#basketBaseline)
+              this.#keepTransferLocalCopy(this.#store, this.#store.label ?? "");
             this.#dismissStationChoices();
             this.#counterSends++;
             this.#clearBasket();
@@ -8592,7 +8646,7 @@ export class TillApp extends LitElement {
   override render() {
     const shellCanvas = this.#inShell() ? this.canvas : undefined;
     return html`
-      ${this.leaveConfirmation()}
+      ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}
       <div
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
