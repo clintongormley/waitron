@@ -983,8 +983,7 @@ export class MenuPricesTable extends LitElement {
       <div class="outcome-room"></div>`;
   }
 
-  /** A closed message says nothing any longer, so the host clears the outcome, which puts a field
-   * whose refusal it alone said back to the stored price. */
+  /** A closed message says nothing any longer, so the host is asked to clear the outcome. */
   readonly #onOutcomeClose = (event: Event): void => {
     event.stopPropagation();
     this.#emit("wt-price-outcome-close", {});

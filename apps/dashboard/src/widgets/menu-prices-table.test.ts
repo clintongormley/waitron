@@ -1527,7 +1527,7 @@ describe("the floating outcome message", () => {
     expect(toast.open).toBe(false);
   });
 
-  it("says a refusal in an open info toast with no Undo that stays until replaced", async () => {
+  it("says a refusal in an open info toast with no Undo that never closes itself", async () => {
     setLocale("en-GB");
     try {
       const el = await mount();
