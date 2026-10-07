@@ -5669,28 +5669,24 @@ describe("Routing grid", () => {
     "the preview names an extra's dish beside the extra (%s)",
     async (locale, extraCell) => {
       setLocale(locale);
-      try {
-        const dishMove = { ...breadMove, productId: "burger", productName: "Burger" };
-        const extraMove = {
-          ...breadMove,
-          productId: "cheese",
-          productName: "Cheese",
-          dish: { productId: "burger", productName: "Burger" },
-        };
-        const { el } = await mountGrid({
-          preview: vi.fn().mockResolvedValue([dishMove, extraMove]),
-        });
-        await chooseCell(el, "c:drinks", "terrace", "Kitchen");
-        const rows = [...q(el, '[data-test="routing-preview"]')!.querySelectorAll("tbody tr")].map(
-          (row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent!.trim()),
-        );
-        expect(rows.map((row) => [row[0], row[2], row[3]])).toEqual([
-          ["Burger", "Bar", "Kitchen"],
-          [extraCell, "Bar", "Kitchen"],
-        ]);
-      } finally {
-        setLocale("en");
-      }
+      const dishMove = { ...breadMove, productId: "burger", productName: "Burger" };
+      const extraMove = {
+        ...breadMove,
+        productId: "cheese",
+        productName: "Cheese",
+        dish: { productId: "burger", productName: "Burger" },
+      };
+      const { el } = await mountGrid({
+        preview: vi.fn().mockResolvedValue([dishMove, extraMove]),
+      });
+      await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+      const rows = [...q(el, '[data-test="routing-preview"]')!.querySelectorAll("tbody tr")].map(
+        (row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent!.trim()),
+      );
+      expect(rows.map((row) => [row[0], row[2], row[3]])).toEqual([
+        ["Burger", "Bar", "Kitchen"],
+        [extraCell, "Bar", "Kitchen"],
+      ]);
     },
   );
 

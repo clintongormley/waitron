@@ -1513,8 +1513,7 @@ describe("routing previews", () => {
       return { ...f, burger, cheese, toppings: list.id, product };
     }
     const extraMoves = (moves: RoutingMove[]) => moves.filter((move) => move.dish !== undefined);
-    /** Serves the fixture's menu, holding `dishes`, in the Terrace zone and publishes it as the
-     * dashboard's preview-then-publish does. */
+    /** Adds `dishes` to the fixture's menu, serves it through Terrace's department and publishes it. */
     async function serveAndPublish(
       tx: Transaction,
       f: Awaited<ReturnType<typeof withExtras>>,
@@ -1535,11 +1534,7 @@ describe("routing previews", () => {
     it("lists an extra that stops following its dish when its own cell names the default station", async () =>
       scoped(async (tx) => {
         const f = await withExtras(tx);
-        const moves = await previewRoutingChange(tx, f.cfg, {
-          kind: "cell",
-          address: { row: productRow(f.cheese), zoneId: null },
-          target: station(f.bar),
-        });
+        const moves = await previewRoutingChange(tx, f.cfg, cheeseToBar(f));
         expect(extraMoves(moves)).toEqual([
           {
             productId: f.cheese,
@@ -1606,11 +1601,7 @@ describe("routing previews", () => {
     it("lists no extra move for an extras list that is Inactive", async () =>
       scoped(async (tx) => {
         const f = await withExtras(tx, false);
-        const moves = await previewRoutingChange(tx, f.cfg, {
-          kind: "cell",
-          address: { row: productRow(f.cheese), zoneId: null },
-          target: station(f.bar),
-        });
+        const moves = await previewRoutingChange(tx, f.cfg, cheeseToBar(f));
         expect(extraMoves(moves)).toEqual([]);
       }));
 
