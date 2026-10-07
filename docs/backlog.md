@@ -1884,9 +1884,10 @@ choices, and the Catalan "Salsitxó", "Llom embotit", "Filet al whisky", "Error 
 "Invitació de l'encarregat".
 
 **Content languages per region, for real venues and the demo — owner DECIDED 2026-10-06 ~17:23
-(W109; was "Demo languages per region — owner decision pending").** As relayed in lane A's queue
-(`~/waitron-campaign/queue.md`, WATCHER NOTE of 17:23 above W109-1) and
-`~/waitron-campaign/questions.md` ("2026-10-06 17:23 — OWNER ANSWERS"):
+(W109; was "Demo languages per region — owner decision pending") — DONE (W109-4, 2026-10-07); two
+leftovers left open, below.** As relayed in lane A's queue (`~/waitron-campaign/queue.md`, WATCHER
+NOTE of 17:23 above W109-1) and `~/waitron-campaign/questions.md` ("2026-10-06 17:23 — OWNER
+ANSWERS"):
 
 - Required content languages, in Spain's pack, for real venues too: _"every area not named below:
   **Spanish** required"_ (_"service must be offered in Spanish even where the law does not require
@@ -1908,25 +1909,25 @@ pack as **Task 6** (`feat/content-languages-by-region`, built after Task 1 and b
 demo's side in Tasks 3 and 4. Cases the decisions leave open, built with the plan's default unless
 the owner says otherwise (plan, "Open points"): a Spanish venue with no known province requires
 nothing (setup cannot create one; the owner's reason for Spanish leans towards requiring it there
-too); receipts outside Catalonia stay free, Spanish by default. The new rules reach existing
-venues at their next start; only their stored language list waits for a reset.
-**Setup's side and the pack's rules are BUILT (W109-6, #1320, Task 6):** Spain's pack requires Spanish in
-every area it does not otherwise name and Spanish + Catalan in the Balearic Islands, defaults to
-the regional language in the Valencian Community, the Balearic Islands and Galicia, and a new venue
-starts with `resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`):
-its default, its area's required languages, then English. The dashboard's required-language
-messages now say Waitron keeps the language enabled for the region, not that the region requires
-it. **The demo's side is BUILT too (W109-4, Task 4), so this entry is DONE:** a demo keeps the
-languages setup gives its area, writes every customer-facing text in each of them (menus' customer
-names included), and saves its row through the required-language check; a Barcelona demo is
-Catalan (default), Spanish and English with nothing listed as missing.
-Left by #1320, OPEN, unqueued: `resolveInstalledDefaultContentLanguage`
-(`packages/country-packs/src/registry.ts`) is now called only by its own tests; delete it with its
-cases once the demo-data plan's Tasks 3 and 4 no longer name it. And seen during #1320's look
-(2026-10-07, not checked against `main`): after the onboarding wizard provisions, the stack started
-by `wa-wt onboarding <worktree>` restarted into setup mode, because the dev launcher
-(`apps/server/scripts/dev-server.mjs`) looked for `trading.env` only in the state folder
-`apps/server/.env` names, not the one `wa-wt` passes; the look worked round it with links.
+too); receipts outside Catalonia stay free, Spanish by default. The new rules reach existing venues
+at their next start; only their stored language list waits for a reset. **Setup's side and the
+pack's rules are BUILT (W109-6, #1320, Task 6):** Spain's pack requires Spanish in every area it
+does not otherwise name and Spanish + Catalan in the Balearic Islands, defaults to the regional
+language in the Valencian Community, the Balearic Islands and Galicia, and a new venue starts with
+`resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`): its default,
+its area's required languages, then English. The dashboard's required-language messages now say
+Waitron keeps the language enabled for the region, not that the region requires it. **The demo's
+side is BUILT too (W109-4, Task 4), so this entry is DONE:** a demo keeps the languages setup gives
+its area, writes every customer-facing text in each of them (menus' customer names included), and
+saves its row through the required-language check; a Barcelona demo is Catalan (default), Spanish
+and English with nothing listed as missing. Left by #1320, OPEN, unqueued:
+`resolveInstalledDefaultContentLanguage` (`packages/country-packs/src/registry.ts`) is now called
+only by its own tests; delete it with its cases: nothing else calls it, because the built Task 6
+works out the default itself, and only the demo-data plan's Task 6 sketch still names it. And seen
+during #1320's look (2026-10-07, not checked against `main`): after the onboarding wizard
+provisions, the stack started by `wa-wt onboarding <worktree>` restarted into setup mode, because
+the dev launcher (`apps/server/scripts/dev-server.mjs`) looked for `trading.env` only in the state
+folder `apps/server/.env` names, not the one `wa-wt` passes; the look worked round it with links.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
@@ -7127,14 +7128,15 @@ Each track is its own worktree so sessions do not edit the same files. Rules, ea
   §1) — see B9 → _Prune the comments_.
 - **Update this file as items land**, in the same PR.
 
-**Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → default
-till <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>,
-server :8080. `wa-wt ls` shows the shifted ports if a second stack runs. The till enrols itself on
-first load in dev mode. Till PIN **5555**; dashboard
-**owner@demo.waitron.local / dashPass123**. `dev:setup` seeds three menus (~44 products with images),
-a floor plan (5 zones / ~16 tables), staff on PIN 5555, and ~28 days of back-dated preproduction sales
-— English by default, Spanish via `WAITRON_SEED_LOCALE=es-ES`. `wa-wt onboarding <worktree-name>` for
-a fresh shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and rebuilds.
+**Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → default till
+<http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
+:8080. `wa-wt ls` shows the shifted ports if a second stack runs. The till enrols itself on first
+load in dev mode. Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**.
+`dev:setup` seeds three menus (~44 products with images), a floor plan (5 zones / ~16 tables),
+staff on PIN 5555, and ~28 days of back-dated preproduction sales — seeded in English by default,
+Spanish via `WAITRON_SEED_LOCALE=es-ES`, except the customer-facing languages, which are the Madrid
+venue's: Spanish by default with English beside it. `wa-wt onboarding <worktree-name>` for a fresh
+shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and rebuilds.
 
 ---
 

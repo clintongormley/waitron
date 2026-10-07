@@ -57,7 +57,7 @@ export const ADMIN_PIN = "5555";
 const ADMIN_PASSWORD = DEMO_DASHBOARD_PASSWORD;
 
 /**
- * The demo's bare content locale: English unless `WAITRON_SEED_LOCALE=es-ES`. Read at call time so a
+ * The demo's seed language: English unless `WAITRON_SEED_LOCALE=es-ES`. Read at call time so a
  * one-shot `WAITRON_SEED_LOCALE=es-ES pnpm dev:reset` takes effect.
  */
 export function resolveSeedLocale(): SeedLocale {
