@@ -1625,14 +1625,36 @@ it("draws a product's name as plain text, with no window behind it", async () =>
   );
 });
 
-it("keeps every field editable while a save is out, the saving one marked", async () => {
+it("keeps every field editable while a save is out, with nothing drawn beside the saving one", async () => {
   const el = await mount({ saving: new Set(["mi-burger"]) });
   expect(override(el, "mi-burger").disabled).toBe(false);
   expect(override(el, "mi-lager").disabled).toBe(false);
-  expect(text(cell(el, "override", "mi-burger").querySelector("[part~=saving]"))).toBe(
-    t("menu_prices.saving"),
-  );
+  expect(cell(el, "override", "mi-burger").querySelector("[part~=saving]")).toBeNull();
+  expect(cell(el, "override", "mi-burger").querySelector("[part~=price-notes]")).toBeNull();
   expect(cell(el, "override", "mi-lager").querySelector("[part~=saving]")).toBeNull();
+});
+
+it("keeps a row's height while its save is out, drawing no saving note", async () => {
+  const el = await mount();
+  const height = () => row(el, "mi-burger")!.getBoundingClientRect().height;
+  const drawn = () => {
+    const shown = text(table(el).shadowRoot.querySelector("tbody"));
+    expect(table(el).shadowRoot.querySelector("[part~=saving]")).toBeNull();
+    expect(shown).not.toContain("Saving…");
+    expect(shown).not.toContain("Guardando…");
+  };
+  const before = height();
+  drawn();
+  el.saving = new Set(["mi-burger"]);
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(height()).toBe(before);
+  drawn();
+  el.saving = new Set();
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(height()).toBe(before);
+  drawn();
 });
 
 it("'Set a price…' in Resolve focuses the row's field", async () => {
@@ -2532,7 +2554,6 @@ it.each(["en-GB", "es-ES"])(
         expect(right("mi-lemonade")).toBeCloseTo(right("mi-burger"), 0);
         expect(right("mi-lager")).toBeCloseTo(right("mi-burger"), 0);
         for (const [key, part] of [
-          ["mi-burger", "saving"],
           ["mi-lemonade", "clash"],
           ["mi-lager", "clash"],
         ] as const) {

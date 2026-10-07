@@ -145,9 +145,7 @@ export class MenuPricesTable extends LitElement {
       wt-data-table::part(price-notes) {
         grid-column: 1 / -1;
         contain: inline-size;
-        text-align: end;
       }
-      wt-data-table::part(saving),
       wt-data-table::part(clash),
       wt-data-table::part(price-note) {
         display: block;
@@ -613,13 +611,9 @@ export class MenuPricesTable extends LitElement {
         @focusout=${() => this.#commit(line, "leave")}
       ></wt-price-input
       >${this.#tip(line)}${
-        this.saving.has(key) || clash !== null || sizesSetOne
+        clash !== null || sizesSetOne
           ? html`<span part="price-notes"
               >${
-                this.saving.has(key)
-                  ? html`<span part="muted saving">${t("menu_prices.saving")}</span>`
-                  : nothing
-              }${
                 clash === null
                   ? nothing
                   : html`<span part="clash"

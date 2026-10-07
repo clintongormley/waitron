@@ -159,7 +159,6 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
         `wt-price-input[data-row="${key}"]`,
       )!;
     expect(field("mi-lemonade").error).toBe("Refused");
-    expect(root.querySelector('tr[data-row-key="mi-burger"] [part~="saving"]')).not.toBeNull();
     expect(field("mi-lemonade:v-small")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
