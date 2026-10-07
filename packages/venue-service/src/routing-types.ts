@@ -107,7 +107,7 @@ export interface RoutingModel {
   categories: GridCategory[];
   /** Active top-level products; a disabled product's stored cells are left out of `cells` too. */
   products: GridProduct[];
-  cells: RoutingCell[];
+  cells: readonly RoutingCell[];
   defaultStationId: string | null;
   /** Includes referenced inactive stations, which the active-station management list omits. */
   stations: { id: string; name: string; active: boolean }[];

@@ -151,6 +151,12 @@ const sortCells = (cells: readonly RoutingCell[]) =>
   [...cells].sort((a, b) => cellKey(a).localeCompare(cellKey(b)));
 
 describe("route explanation", () => {
+  it("loads a frozen cell list, so routing a whole catalogue indexes it once", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setCategoryCell(tx, f.cfg, f.cocktails, station(f.bar));
+      expect(Object.isFrozen((await loadRoutingRules(tx, f.cfg, null)).cells)).toBe(true);
+    }));
   it("names the unavailable station when an inactive maker has no fallback", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);

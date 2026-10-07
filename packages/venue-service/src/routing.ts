@@ -115,18 +115,12 @@ function rowKey(row: RoutingRow): string {
 
 const cellIndexes = new WeakMap<readonly RoutingCell[], ReadonlyMap<string, RoutingCell>>();
 
-/** Built once per cell list, so routing a whole catalogue does not rescan it per product and zone. */
+/** Only a frozen list is cached: a cached index would go stale if the list changed. */
 function cellIndex(cells: readonly RoutingCell[]): ReadonlyMap<string, RoutingCell> {
-  let index = cellIndexes.get(cells);
-  if (index === undefined) {
-    const built = new Map<string, RoutingCell>();
-    for (const cell of cells) {
-      const key = `${rowKey(cell.row)}|${cell.zoneId ?? ""}`;
-      if (!built.has(key)) built.set(key, cell);
-    }
-    index = built;
-    cellIndexes.set(cells, index);
-  }
+  const cached = cellIndexes.get(cells);
+  if (cached !== undefined) return cached;
+  const index = new Map(cells.map((cell) => [`${rowKey(cell.row)}|${cell.zoneId ?? ""}`, cell]));
+  if (Object.isFrozen(cells)) cellIndexes.set(cells, index);
   return index;
 }
 

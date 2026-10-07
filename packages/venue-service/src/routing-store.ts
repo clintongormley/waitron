@@ -474,7 +474,7 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
     ]),
   );
   const rules: RoutingRules = {
-    cells: cellRows.map(readCell),
+    cells: Object.freeze(cellRows.map(readCell)),
     parentOf: new Map(folders.map((row) => [row.id, row.parentId])),
     activeStationIds: new Set(stations.filter((row) => row.active).map((row) => row.id)),
     defaultStationId: stations.find((row) => row.active && row.isDefault)?.id ?? null,
@@ -597,7 +597,7 @@ export async function previewRoutingChange(
   const key = cellKey(address);
   const cells = rules.cells.filter((cell) => cellKey(cell) !== key);
   if (target !== null) cells.push({ ...address, target });
-  const after: RoutingRules = { ...rules, cells };
+  const after: RoutingRules = { ...rules, cells: Object.freeze(cells) };
   const zones = await tx
     .select({ id: floorZones.id, name: floorZones.name })
     .from(floorZones)

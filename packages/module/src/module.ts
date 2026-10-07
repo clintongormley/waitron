@@ -476,7 +476,7 @@ export interface VenueServiceContribution {
   ): Promise<
     ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
   >;
-  /** Base maker for active products and variants, plus whether any active zone routes it differently. */
+  /** Base maker for active products and variants, plus whether any active zone's maker or no-replacement answer differs. */
   describeMakers(
     tx: Transaction,
     cfg: { locationId: LocationId },

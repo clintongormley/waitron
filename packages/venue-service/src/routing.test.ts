@@ -436,7 +436,7 @@ describe("selectRoutingCell", () => {
   it("reads the cell list once per rules object, however many products and zones it routes", () => {
     let scans = 0;
     // Every scan of a non-empty list reads its first element; a lookup by coordinate does not.
-    const counted = new Proxy(rules.cells as RoutingCell[], {
+    const counted = new Proxy(Object.freeze([...rules.cells]), {
       get(target, property, receiver) {
         if (property === "0") scans++;
         return Reflect.get(target, property, receiver) as unknown;
@@ -456,6 +456,21 @@ describe("selectRoutingCell", () => {
       ),
     );
     expect(scans).toBe(1);
+  });
+
+  it("routes a list changed in place by the cells it holds now", () => {
+    const list = cells([category("beer"), null, station("bar")]);
+    const changing: RoutingRules = { ...base, cells: list };
+    const route = () => selectRoutingCell(changing, product("lager"), null, "beer").target;
+    expect(route()).toEqual(station("bar"));
+    list.push({ row: product("lager"), zoneId: null, target: station("mainBar") });
+    expect(route()).toEqual(station("mainBar"));
+    list[1] = { row: product("lager"), zoneId: null, target: noPreparation };
+    expect(route()).toEqual(noPreparation);
+    list.splice(1, 1);
+    expect(route()).toEqual(station("bar"));
+    list.splice(0, 1);
+    expect(route()).toEqual(station("kitchen"));
   });
 
   it("selects All categories × the zone, then the implicit default, for the All row", () => {
