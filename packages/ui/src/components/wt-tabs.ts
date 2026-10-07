@@ -135,8 +135,8 @@ export class WtTabs extends LitElement {
   override render() {
     if (this.items.length === 0) return nothing;
     return html`
-      <div class="tab-row">
-        <div role="tablist" aria-label=${this.label}>
+      <div class="tab-row" part="tab-row">
+        <div role="tablist" part="tablist" aria-label=${this.label}>
           ${repeat(
             this.items,
             (item) => item.key,
@@ -156,7 +156,7 @@ export class WtTabs extends LitElement {
               </button>`,
           )}
         </div>
-        <div class="tab-actions"><slot name="actions"></slot></div>
+        <div class="tab-actions" part="tab-actions"><slot name="actions"></slot></div>
       </div>
       ${repeat(
         this.items,

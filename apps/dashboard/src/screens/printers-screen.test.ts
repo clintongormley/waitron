@@ -9454,3 +9454,45 @@ it.each([
     }, cleanupWidgets);
   },
 );
+
+describe.each(["en", "es-ES"] as const)("printer agent action layout (%s)", (locale) => {
+  it("keeps the phone Add action inside the viewport and clear of every tab", async () => {
+    const before = currentLocale();
+    await page.viewport(1280, 900);
+    try {
+      setLocale(locale);
+      const { el, host } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      await selectTab(el, "agents");
+      await page.viewport(390, 844);
+      host.style.width = "310px";
+      await new Promise(requestAnimationFrame);
+      const action = q(el, "[data-test=open-add-agent]")!;
+      const bounds = action.getBoundingClientRect();
+      expect(bounds.width).toBeGreaterThan(0);
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+      const area = q(el, "wt-tabs")!
+        .shadowRoot!.querySelector('[part="tab-actions"]')!
+        .getBoundingClientRect();
+      const native = action.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+      expect(native.left).toBeGreaterThanOrEqual(area.left);
+      expect(native.right).toBeLessThanOrEqual(area.right);
+
+      for (const tab of q(el, "wt-tabs")!.shadowRoot!.querySelectorAll("[role=tab]")) {
+        const box = tab.getBoundingClientRect();
+        const overlaps =
+          bounds.left < box.right &&
+          bounds.right > box.left &&
+          bounds.top < box.bottom &&
+          bounds.bottom > box.top;
+        expect(overlaps, tab.textContent!.trim()).toBe(false);
+      }
+    } finally {
+      setLocale(before);
+      await page.viewport(1280, 900);
+    }
+  });
+});

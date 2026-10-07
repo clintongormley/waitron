@@ -1007,9 +1007,10 @@ unused `units` property is gone (it closes W75's leftover).
   that full-screen panel open no longer throws when it next updates. A table 640 px wide or less
   puts its own search box on a line of its own under its buttons, as Products does, rather than
   spreading the toolbar over three lines at 390 px.
-  - Open, seen in screenshots, not about filters: at 390 px the Printers screen's Add button covers
-    the end of its tab row ("Print A…"), and in Spanish "Añadir un agente de impresión" runs off the
-    right edge. A menu's prices table showing only a sliver of the price box at 390 px — DONE (A344):
+  - DONE (A367): the Printers screen's Add action reads "Add an agent" / "Añadir un agente".
+    Chromium checks at 390 px in English and Spanish keep it inside the viewport and clear of
+    every tab, including after resizing from desktop; below 640 px its action sits under the tabs.
+    A menu's prices table showing only a sliver of the price box at 390 px — DONE (A344):
     the Resolve column is gone and a name wraps under a phone-width cap, so each price box is whole
     on screen in English and Spanish.
   - Open: at 640 px or less a searchable table draws its own search under the controls that follow
