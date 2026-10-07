@@ -89,7 +89,7 @@ export class CatalogueBrowser extends LitElement {
         min-width: min(100%, calc(var(--wt-tap-min) * 7));
       }
       /* The list's width decides when search wraps, since a sidebar can leave a wide window
-         a narrow list. Toolbar controls keep their DOM order at both widths. */
+         a narrow list. */
       @container (max-width: 40rem) {
         wt-input {
           flex-basis: 100%;

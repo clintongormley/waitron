@@ -1020,6 +1020,13 @@ unused `units` property is gone (it closes W75's leftover).
   - DONE (A368): search follows the toolbar buttons in markup at both widths, so Tab follows
     the drawn controls at 390 and 1280 px. Products uses the shared `toolbar-search` slot;
     its English/Spanish cases cover both themes.
+  - Open (A368 review, reproduced on base `825fc59ae` and candidate `a1133dddb`): type a
+    search with no matches in Products, then resize 1280 → 390 → 1280 → 390. The browser
+    reports `Cannot read properties of null (reading 'scrollLeft')` from
+    `apps/dashboard/src/widgets/product-list.ts:796` (`#fitNames`), where the no-matches table
+    has no `.scroll` element. Both disposable-checkout probes failed their no-error assertion.
+    Next: retain a no-match resize regression and handle that table state before measuring names;
+    A368 changes toolbar order only.
   - Open, by reading only (#1362's review, not tested): `wt-row-actions`, `wt-combobox` and
     `wt-help-tooltip` set their open state only from the popover's toggle events, so one taken off
     the page while open may come back with its button still marked open — the bug #1362 fixed in

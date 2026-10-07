@@ -974,8 +974,7 @@ The Products browser puts Select in `toolbar-start` and gives search a full line
 width is 40rem or less. A table's own search (`searchable`) takes a full line at 640px
 (`STACKED_SEARCH_WIDTH`) or less. Wider tables leave search beside the buttons where they fit.
 Guards: the "Tab follows" cases in `packages/ui/src/components/wt-data-table.test.ts` and
-`apps/dashboard/src/widgets/catalogue-browser.test.ts` press Tab at 390 and 1280 px; the
-corresponding `*.a11y.test.ts` suites check both themes.
+`apps/dashboard/src/widgets/catalogue-browser.test.ts` press Tab at 390 and 1280 px in both themes.
 A container query whose width condition reads a token did not match in Chromium (a probe,
 2026-10-07), and a `packages/ui` component may hold no literal breakpoint, so a `searchable` table measures its own width in code and, a frame after each change, sets a
 `stacked-search` attribute on itself; a hidden table, measured 0 wide, does not carry it. Guards:
