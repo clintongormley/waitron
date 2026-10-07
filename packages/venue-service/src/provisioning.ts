@@ -10,8 +10,7 @@ import {
   zoneServicePolicies,
 } from "./schema/service.js";
 import { serviceSettings } from "./schema/settings.js";
-import { departmentAllDayMenus } from "./schema/menus.js";
-import { addDepartmentMenu } from "./department-menus.js";
+import { placeOpenPeriod } from "./menu-timetable.js";
 
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
@@ -105,11 +104,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
       const menuId = location[0]!.catalogueId;
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;
-        await addDepartmentMenu(tx, node, counterDepartmentId, menuId);
-        await tx
-          .insert(departmentAllDayMenus)
-          .values({ departmentId: counterDepartmentId, menuId })
-          .onConflictDoNothing({ target: departmentAllDayMenus.departmentId });
+        await placeOpenPeriod(tx, node, counterDepartmentId, menuId);
       }
       // A profile that takes orders and has no scope yet orders in the counter's department,
       // starting there. A kitchen display takes no orders, so it gets none. A scope already saved

@@ -7,6 +7,7 @@ import {
   refusalOn,
   UNIQUE_VIOLATION,
   kitchenStations,
+  locations,
   parties,
   partyTables,
   watcherZones,
@@ -43,7 +44,7 @@ import {
   zoneAllDayMenus,
   zonePeriodMenus,
 } from "./schema/menus.js";
-import { resolveZoneMenus, servedDefault } from "./menu-timetable.js";
+import { placeOpenPeriod, resolveZoneMenus, servedDefault } from "./menu-timetable.js";
 import { routingCells } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
@@ -171,6 +172,12 @@ export async function createDepartment(
       active: departments.active,
     });
   await tx.insert(departmentSalePolicies).values({ departmentId: row!.id });
+  const [location] = await tx
+    .select({ menuId: locations.catalogueId })
+    .from(locations)
+    .where(eq(locations.id, cfg.locationId));
+  if (location?.menuId !== null && location?.menuId !== undefined)
+    await placeOpenPeriod(tx, cfg, row!.id, location.menuId);
   return { ...row!, defaultServiceMode: row!.defaultServiceMode as ServiceMode };
 }
 

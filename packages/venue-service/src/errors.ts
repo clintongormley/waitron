@@ -48,6 +48,7 @@ declare module "@waitron/shared" {
     /** Removing a menu from a department's list that `uses` still name, every one of them. */
     "department_menu.in_use": { departmentId: string; menuId: string; uses: MenuUse[] };
     "menu_period.not_found": { periodId: string };
+    "menu_period.invalid": { field: "staffMenuIds" | "colour" };
     /** Deleting a named period that `uses` still place, past special dates included. */
     "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
     /** Another of the department's named periods already has `name`, as trimmed. */

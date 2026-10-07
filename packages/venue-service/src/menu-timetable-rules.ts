@@ -80,7 +80,10 @@ export interface ParsedMenuWeek {
  * A whole menu week: one entry per weekday, no two slots overlapping on one day or across a
  * midnight, Sunday into Monday included.
  */
-export function parseMenuWeek(value: unknown): ParsedMenuWeek {
+export function parseMenuWeek(
+  value: unknown,
+  parseDay?: (value: unknown, field: string) => MenuSlot[],
+): ParsedMenuWeek {
   if (!Array.isArray(value) || value.length !== 7) invalidTimetable("days");
   const slots: MenuSlot[][] = [];
   const indexOf: number[] = [];
@@ -96,10 +99,10 @@ export function parseMenuWeek(value: unknown): ParsedMenuWeek {
       indexOf[weekday] !== undefined
     )
       invalidTimetable(`days.${index}.weekday`);
-    slots[weekday] = parseSlots(day.slots, `days.${index}.slots`);
+    slots[weekday] = (parseDay ?? parseSlots)(day.slots, `days.${index}.slots`);
     indexOf[weekday] = index;
   });
-  for (let weekday = 0; weekday < 7; weekday++)
+  for (let weekday = 0; parseDay === undefined && weekday < 7; weekday++)
     if (tailOverlaps(slotIntervals(slots[(weekday + 6) % 7]!), slotIntervals(slots[weekday]!)))
       invalidTimetable(`days.${indexOf[weekday]}.slots`);
   return { slots, indexOf };
