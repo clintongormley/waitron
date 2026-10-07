@@ -1,5 +1,5 @@
 import { page } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { html } from "lit";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
 import {
@@ -99,11 +99,80 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   } as unknown as DashboardApi;
 }
 
+// The browser answers a Web Lock request asynchronously, and where Web Locks exist a status read
+// asks for one before it starts. Every request this document makes is tracked, so a test can wait
+// until each one is either granted or queued behind one of this document's own callbacks that
+// still holds its lock. No timer is involved, so the wait also works under fake timers.
+const lockManager = navigator.locks;
+const requestLock = lockManager.request.bind(lockManager);
+const waitingLocks = new Set<{ name: string }>();
+const heldLocks = new Map<string, number>();
+let lockWatchers: (() => void)[] = [];
+
+function lockStateChanged(): void {
+  const watchers = lockWatchers;
+  lockWatchers = [];
+  for (const watcher of watchers) watcher();
+}
+
+Object.defineProperty(lockManager, "request", {
+  configurable: true,
+  value: (
+    name: string,
+    optionsOrCallback: LockOptions | LockGrantedCallback<unknown>,
+    maybeCallback?: LockGrantedCallback<unknown>,
+  ) => {
+    const options = typeof optionsOrCallback === "function" ? {} : optionsOrCallback;
+    const callback = typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback!;
+    const waiting = { name };
+    const stopWaiting = () => {
+      waitingLocks.delete(waiting);
+      lockStateChanged();
+    };
+    waitingLocks.add(waiting);
+    options.signal?.addEventListener("abort", stopWaiting);
+    const granted = requestLock(name, options, async (lock) => {
+      heldLocks.set(name, (heldLocks.get(name) ?? 0) + 1);
+      stopWaiting();
+      try {
+        return await callback(lock);
+      } finally {
+        heldLocks.set(name, heldLocks.get(name)! - 1);
+        lockStateChanged();
+      }
+    });
+    granted.then(stopWaiting, stopWaiting);
+    return granted;
+  },
+});
+afterAll(() => Reflect.deleteProperty(lockManager, "request"));
+
+// Checked only after a task boundary, so pending microtasks have run: a callback giving its lock
+// back, or a read about to make its request, is not mistaken for a settled state.
+async function lockGrantsSettled(): Promise<void> {
+  for (;;) {
+    await nextTask();
+    if (![...waitingLocks].some(({ name }) => !heldLocks.get(name))) return;
+    await new Promise<void>((resolve) => lockWatchers.push(resolve));
+  }
+}
+
+/** The next task, by a route fake timers leave alone. */
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
+}
+
 async function flush(el: PaymentsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  // Let an asynchronous Web Lock grant run before callers inspect status cells.
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await lockGrantsSettled();
   await el.updateComplete;
 }
 

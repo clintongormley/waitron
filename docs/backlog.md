@@ -5393,17 +5393,26 @@ approved.
   demand, so that exact case is not demonstrated. See
   [ci-and-gates.md](developers/ci-and-gates.md), "The `ci` check passes only when every needed job
   succeeded or was skipped".
-- **A Payments screen test failed once in a local dashboard coverage run (seen 2026-10-05 on W111's
-  branch, `feat/receipt-top-block`) — OPEN, not investigated.**
+- **A Payments screen test checked a reader's row before the browser had granted that reader's Web
+  Lock (main CI run 37585788177; a local failure on 2026-10-05 on W111's branch,
+  `feat/receipt-top-block`, kept no message and is assumed to be the same) — DONE (A320,
+  2026-10-07).**
   `apps/dashboard/src/screens/payments-screen.test.ts`, "isolates a status request failure to its
   row", failed once while the till's coverage run ran beside the dashboard's; it passed three runs
   of its own, and the whole dashboard suite passed when re-run alone. W111's branch changes no
-  Payments screen file. Standing rule: a flaky test is fixed at the
-  root; on a recurrence, keep the log.
-  It recurred in A284's exact merge CI on `1b9c38397d35427c222e55f5aaac65cb94df2f25`
+  Payments screen file. It recurred in A284's exact merge CI on
+  `1b9c38397d35427c222e55f5aaac65cb94df2f25`
   ([run 37585788177](https://github.com/clintongormley/waitron/actions/runs/37585788177),
-  2026-10-07): the second row was “Checking…” instead of “Offline”; 8,416 other dashboard
-  tests passed. Lane E retained the failed-job log. The cause is still unverified.
+  2026-10-07, job `test-dashboard`): the second reader's row read `Checking…` where the test
+  expected `Offline`; 8,416 other dashboard tests passed. Lane E retained the failed-job log.
+  Cause: where Web Locks exist, a reader's status read waits for the browser's answer to its Web
+  Lock request before it starts, and the file's `flush` helper gave that answer a fixed 10 ms (the
+  same race W59 fixed for six other cases by counting calls). `flush` now tracks every lock request
+  the page makes and waits until each one is granted or queued behind one of the page's own
+  callbacks that still holds its lock; no assertion changed. Receipts, all in real Chromium on the
+  owner's Mac: with every grant made to reach the page 40 ms late, the old file failed 29 of its
+  109 tests (this one with the CI failure's `Checking…`) and the new one passed all 109; the new
+  one also passed 5 plain runs and 5 runs beside 16 busy CPU loops.
 - **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
   attempt 1, job 111163230954, 2026-10-03; passed on re-run).** In
   `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after
