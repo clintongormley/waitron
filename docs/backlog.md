@@ -951,7 +951,7 @@ unused `units` property is gone (it closes W75's leftover).
   line while the box is open, above the box. `wt-data-table` gained `rowToggleParts`, so the
   Products list gives only a product's toggle A221's small, muted look; a category's arrow no longer
   shrinks and greys while it is renamed.
-- **A329, owner 2026-10-07 — DONE (#PR; the variant window names its product):** opened from the
+- **A329, owner 2026-10-07 — DONE (the variant window names its product):** opened from the
   product editor, the variant window heads "Add variant to: Coffee" or "Edit variant of: Coffee"
   ("Añadir variante a: …", "Editar variante de: …"), with the name as typed, saved or not; a dialog
   heading now wraps a long unbroken name; a variant showing the product's photo shows Remove image
