@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property } from "lit/decorators.js";
 import { currencySymbol } from "@waitron/shared";
-import { formatDecimalInput, parseDecimalInput } from "@waitron/ui-core";
+import { formatDecimalInput, readDecimalInput } from "@waitron/ui-core";
 import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
@@ -196,8 +196,10 @@ export class WtPriceInput extends LitElement {
   }
 
   private onInput(event: Event): void {
-    const typed = (event.target as HTMLInputElement).value;
-    this.value = parseDecimalInput(typed) ?? typed;
+    this.value = readDecimalInput(
+      event.target as HTMLInputElement,
+      this.decimalLocale || this.locale || "en",
+    );
     this.requestUpdate();
     dispatchWtChange(this, event, { value: this.value });
   }

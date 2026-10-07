@@ -21,3 +21,17 @@ export function parseDecimalInput(value: string): string | null {
 export function formatDecimalInput(value: string, locale: string): string {
   return /^-?\d+(?:[.,]\d*)?$/.test(value) ? value.replace(/[.,]/, decimalMark(locale)) : value;
 }
+
+/** Decimal controls use text inputs so locale conversion can preserve the editing selection. */
+export function readDecimalInput(input: HTMLInputElement, locale: string): string {
+  const value = parseDecimalInput(input.value) ?? input.value;
+  const shown = formatDecimalInput(value, locale);
+  if (shown !== input.value) {
+    const start = input.selectionStart!;
+    const end = input.selectionEnd!;
+    const direction = input.selectionDirection!;
+    input.value = shown;
+    input.setSelectionRange(start, end, direction);
+  }
+  return value;
+}

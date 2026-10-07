@@ -746,3 +746,25 @@ for (const locale of ["en", "es"]) {
     }
   });
 }
+
+for (const locale of ["en", "es"]) {
+  test(`decimal input keeps the caret when localizing a separator in ${locale}`, async () => {
+    const el = await mount(`<wt-input decimal-locale="${locale}" value="1250"></wt-input>`);
+    const input = el.shadowRoot!.querySelector("input")!;
+    input.focus();
+    input.value = locale === "en" ? "12,50" : "12.50";
+    input.setSelectionRange(3, 3);
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await (el as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(input.value).toBe(locale === "en" ? "12.50" : "12,50");
+    expect(input.selectionStart).toBe(3);
+    expect(input.selectionEnd).toBe(3);
+  });
+}
+
+test("decimal input uses a text control even when number type is requested", async () => {
+  const el = await mount('<wt-input decimal-locale="es" type="number" value="6.50"></wt-input>');
+  const input = parts(el).input;
+  expect(input.type).toBe("text");
+  expect(input.value).toBe("6,50");
+});

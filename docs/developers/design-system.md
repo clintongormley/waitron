@@ -1373,7 +1373,8 @@ as grouping. Keep the field's existing limits on sign, precision and range.
 Use `wt-price-input` with `locale` for money. For a decimal without a currency sign, give
 `wt-input` or `wt-price-input` `decimal-locale=${currentLocale()}`. The controls forward a valid
 entry as an exact dot-decimal string in `wt-change.detail.value`; invalid text stays available to
-your form's checks. `parseDecimalInput` and `formatDecimalInput` from `@waitron/ui-core` (also
+your form's checks. Decimal mode uses a text control with a decimal keyboard. Preserve the native
+selection when converting a mark during typing. `parseDecimalInput` and `formatDecimalInput` from `@waitron/ui-core` (also
 exported by `@waitron/ui`) share this conversion. The server still receives its exact dot-decimal
 format. Keep the conversion in the browser so a Spanish keyboard does not change the amount stored.
 

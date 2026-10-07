@@ -811,3 +811,15 @@ and operator-session generation so a server switch rebuilds its credential form.
 receipts are in the dated W69 audit; `navigation-guard.test.ts`, `url-state.unsaved.test.ts`, the
 catalogue/login shell cases, the venue-operations Hours case and till-app server-switch cases
 exercise these behaviors.
+
+
+### Preserve the selection when normalising a typed decimal
+
+Keep the native selection when converting a decimal mark during input. On 2026-10-07, A284's
+real-Chromium EN/ES caret cases in `packages/ui-core/src/components/wt-input.test.ts` and
+`packages/ui/src/components/wt-price-input.test.ts` failed with position 5 where 3 was expected,
+after typing the other mark in the middle of `12.50`. The commands were
+`pnpm --filter @waitron/ui-core exec vitest run src/components/wt-input.test.ts -t caret` and
+`pnpm --filter @waitron/ui exec vitest run src/components/wt-price-input.test.ts -t caret`.
+The shared `readDecimalInput` now saves the selection, writes the displayed string and restores
+that selection before the component's redraw. The focused suites then passed 86 and 106 tests.
