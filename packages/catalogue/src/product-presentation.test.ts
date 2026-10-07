@@ -51,7 +51,7 @@ describe("joinCustomerPresentationText", () => {
       es: "Café recién hecho (Taza grande)",
     });
   });
-  test.each([{}, { en: " " }])(
+  test.each<Readonly<Record<string, string>>>([{}, { en: " " }])(
     "keeps a variant readable when the frozen product map has no text: %j",
     (product) => {
       expect(joinCustomerPresentationText(product, { en: "Double" }, "Double")).toEqual({
