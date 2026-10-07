@@ -895,10 +895,12 @@ height. The products-only "Disable N products?" dialog is compact too. Point (1)
 open — the same place named three ways — is DONE by A305 (#1333, owner 2026-10-06): the Move-to list, the
 product editor, the menu prices table, the sales-by-category report on screen and printed, and this
 dialog all read **No category** / **Sin categoría**; the Products tree's heading row keeps "All
-products". **Still left open (owner's call):** (2) if the SERVER refuses a
-delete with `category.contents_changed` because only disabled products changed, its message still
-says to check the new counts, which this dialog no longer shows — a narrow timing window, not
-reproduced.
+products". Point (2) — the SERVER refusing a delete with `category.contents_changed` when only
+disabled products changed, whose message said to check counts this dialog no longer shows — is
+DONE by A304 (#PRNUM, owner 2026-10-06): after the refusal the dialog re-reads, and when nothing it
+shows changed it says so (`folders.changed_unshown`) and asks to choose Delete again; when a shown
+count changed the old message stays. The server's refusal is unchanged. Of the two options the
+item offered this is the smaller; the other, re-sending the delete automatically, was not built.
 
 **The Products and Structure trees show drag grips only in a mode, and a category's colour square
 comes before its name (A294, owner 2026-10-06) — DONE (#1300); left open:** Products' selection
