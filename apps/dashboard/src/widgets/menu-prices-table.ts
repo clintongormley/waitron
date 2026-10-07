@@ -5,12 +5,9 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
-import "@waitron/ui/src/components/wt-help-tooltip.js";
-import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-price-input.js";
-import { describeSetting, placeName } from "./price-source.js";
 import {
   productInherited,
   sizeClash,
@@ -18,7 +15,6 @@ import {
   sizesInheritedFrom,
   variantInherited,
   variantInheritedFrom,
-  withoutOwn,
   type Inherited,
   type InheritedFrom,
   type ParentPrice,
@@ -140,13 +136,10 @@ export class MenuPricesTable extends LitElement {
       }
       wt-data-table::part(price-cell) {
         display: inline-grid;
-        grid-template-columns: auto auto;
-        align-items: center;
         gap: var(--wt-space-1);
       }
-      /* Contained, so a note wraps inside the field and its "?" rather than widening the column. */
+      /* Contained, so a note wraps inside the field's width rather than widening the column. */
       wt-data-table::part(price-notes) {
-        grid-column: 1 / -1;
         contain: inline-size;
       }
       wt-data-table::part(clash),
@@ -525,38 +518,6 @@ export class MenuPricesTable extends LitElement {
     return variant ? `${item.name} — ${this.#variantName(variant.variantId)}` : item.name;
   }
 
-  /** Where the price a blank field would take comes from, read from the same settings as its
-   * placeholder; a product with sizes explains each of its Active sizes. */
-  #tip(line: Line) {
-    const { item, variant } = line;
-    const names = { product: item.name };
-    const explain = ({ setting, follows }: InheritedFrom) =>
-      follows
-        ? `${t("menu_prices.source_parent").replace("{name}", item.name)}. ${describeSetting(setting, names, t)}`
-        : describeSetting(setting, names, t);
-    let explanation: string;
-    if (variant) explanation = explain(this.#withParent(line).from!);
-    else {
-      const { sizes } = this.#productInheritance.get(item)!;
-      explanation =
-        sizes.length === 0
-          ? describeSetting(withoutOwn(item.combined.price), names, t)
-          : sizes
-              .map((size) => {
-                const price =
-                  size.setting.state === "decided"
-                    ? priceText(size.setting.value)
-                    : t("menu_prices.clash");
-                return `${this.#variantName(size.variantId)}: ${price}. ${explain(size)}`;
-              })
-              .join(" ");
-    }
-    return html`<wt-help-tooltip
-      aria-label=${t("menu_prices.tip_inherited").replace("{name}", this.#lineName(line))}
-      >${explanation}</wt-help-tooltip
-    >`;
-  }
-
   #status(line: Line) {
     const active = this.#active(line);
     const id = line.variant?.variantId ?? line.item.productId;
@@ -622,7 +583,7 @@ export class MenuPricesTable extends LitElement {
         @keydown=${(event: KeyboardEvent) => this.#onKeydown(event, line)}
         @focusout=${() => this.#commit(line, "leave")}
       ></wt-price-input
-      >${this.#tip(line)}${
+      >${
         clash !== null || sizesSetOne
           ? html`<span part="price-notes"
               >${
@@ -758,54 +719,6 @@ export class MenuPricesTable extends LitElement {
     this.#sent.delete(key);
   }
 
-  /** A candidate chosen in Resolve is sent as if typed into the row's field. */
-  #resolve(line: Line, price: string): void {
-    const key = keyOf(line);
-    this.drafts = new Map(this.drafts).set(key, price);
-    this.hiddenRefusals = new Set([...this.hiddenRefusals, key]);
-    this.#checking.delete(key);
-    this.#mark(key, false);
-    this.#send(line, price);
-  }
-
-  #resolveActions(line: Line) {
-    const price = this.#priceSetting(line);
-    const draft = this.drafts.get(keyOf(line));
-    if (price.state !== "clash" || (draft !== undefined && this.#holds(line, draft)))
-      return nothing;
-    return html`<wt-row-actions
-      part="resolve"
-      align="end"
-      label=${`${t("menu_prices.resolve")} ${this.#lineName(line)}`}
-    >
-      ${price.candidates.map((candidate) =>
-        "value" in candidate
-          ? html`<wt-button
-              variant="secondary"
-              @click=${(event: Event) => {
-                event.stopPropagation();
-                (event.currentTarget as HTMLElement)
-                  .closest<HTMLElementTagNameMap["wt-row-actions"]>("wt-row-actions")!
-                  .hide();
-                this.#resolve(line, candidate.value);
-              }}
-              >${t("menu_prices.use_candidate").replace("{price}", priceText(candidate.value)).replace("{place}", placeName(candidate.place, t))}</wt-button
-            >`
-          : nothing,
-      )}<wt-button
-        variant="secondary"
-        @click=${(event: Event) => {
-          event.stopPropagation();
-          (event.currentTarget as HTMLElement)
-            .closest<HTMLElementTagNameMap["wt-row-actions"]>("wt-row-actions")!
-            .hide();
-          this.#field(keyOf(line))?.focus();
-        }}
-        >${t("menu_prices.set_price")}</wt-button
-      >
-    </wt-row-actions>`;
-  }
-
   #variantName(variantId: string): string {
     return this.#variants.get(variantId)?.name ?? t("members.missing");
   }
@@ -925,12 +838,6 @@ export class MenuPricesTable extends LitElement {
         sortValue: (line) => (this.#active(line) ? 0 : 1),
         searchValue: (line) => productStatusName(this.#active(line), line.variant !== null),
         cell: (line) => this.#status(line),
-      },
-      {
-        key: "actions",
-        label: t("menu_prices.resolve"),
-        pinned: "end",
-        cell: (line) => this.#resolveActions(line),
       },
     ];
   }

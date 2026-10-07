@@ -1,7 +1,7 @@
 import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import type { MenuPricesTable } from "./menu-prices-table.js";
 import "./menu-prices-table.js";
@@ -127,7 +127,7 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible clash row with an unsaved valid price and no Resolve menu", async () => {
+  it("accessible clash row with an unsaved valid price", async () => {
     const { el, host } = await mount(theme, {
       rows: [{ ...rows[0]!, combined: { ...rows[0]!.combined, price: clash } }],
     });
@@ -140,7 +140,6 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await el.updateComplete;
     await table.updateComplete;
     expect(field.value).toBe("2.80");
-    expect(table.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -229,31 +228,4 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     expect(field.error).toBe(t("editor.price_invalid"));
     await expectNoA11yViolations(host);
   });
-});
-
-describe.each(["light", "dark"] as const)("price source and clash states (%s)", (theme) => {
-  it.each(["en-GB", "es-ES"])(
-    "accessible clash resolution and open source tooltip (%s)",
-    async (locale) => {
-      setLocale(locale);
-      const product = rows[0]!;
-      const { el, host } = await mount(theme, {
-        rows: [{ ...product, combined: { ...product.combined, price: clash } }],
-      });
-      const table = el.shadowRoot!.querySelector("wt-data-table")!;
-      await table.updateComplete;
-      const actions = table.shadowRoot!.querySelector("wt-row-actions")!;
-      await actions.updateComplete;
-      actions.show();
-      expect(actions.querySelectorAll("wt-button").length).toBe(3);
-      await expectNoA11yViolations(host);
-      const tip = table.shadowRoot!.querySelector("wt-help-tooltip")!;
-      await tip.updateComplete;
-      tip.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
-      await tip.updateComplete;
-      expect(tip.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-      await expectNoA11yViolations(host);
-      setLocale("es-ES");
-    },
-  );
 });
