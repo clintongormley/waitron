@@ -815,6 +815,7 @@ export class HoursScreen extends LitElement {
       field?: string;
       date?: string;
       subjectId?: string;
+      departmentId?: string;
     };
     const placed = this.#place(editor, code, params);
     if (placed === undefined) {
@@ -839,7 +840,7 @@ export class HoursScreen extends LitElement {
       return this.#cellField(DAY_KEYS[weekday]!, match[2]);
     }
     if (editor.kind === "date") {
-      if (code === "special_date.date_taken") return "date";
+      if (code === "special_date.date_taken" || code === "menu_timetable.invalid") return "date";
       if (code !== "hours.invalid") return undefined;
       if (["date", "name", "colour"].includes(field)) return field;
       const match = /^cells\.(\d+)\.cell(?:\.(.+))?$/.exec(field);
@@ -851,7 +852,7 @@ export class HoursScreen extends LitElement {
       return this.#cellField(entry.prefix, match?.[2]);
     }
     if (editor.kind === "duplicate") {
-      if (code === "special_date.date_taken") {
+      if (code === "special_date.date_taken" || code === "menu_timetable.invalid") {
         const index = editor.dates.indexOf(date!);
         return index === -1 ? undefined : `dates.${index}`;
       }
@@ -870,9 +871,16 @@ export class HoursScreen extends LitElement {
    * The sentence under a refused field. A duplicate's refusal names its target date when the
    * clock skips a time there, and the neighbouring date when the hours clash with it.
    */
-  #fieldSentence(editor: Editor, code: string, { date }: { date?: string }, name: string): string {
+  #fieldSentence(
+    editor: Editor,
+    code: string,
+    { date, departmentId }: { date?: string; departmentId?: string },
+    name: string,
+  ): string {
     if (code === "special_date.date_taken")
       return format("hours.date_taken", { date: formatDate(date!) });
+    if (code === "menu_timetable.invalid")
+      return format("hours.menu_clash", { department: this.#departmentName(departmentId) });
     if (name.includes(".periods."))
       return t(editor.kind === "date" ? "hours.time_skipped" : "hours.field_refused");
     if (date === undefined)
@@ -888,9 +896,15 @@ export class HoursScreen extends LitElement {
   #sentence(
     editor: Editor,
     code: string,
-    { field = "", date }: { field?: string; date?: string },
+    { field = "", date, departmentId }: { field?: string; date?: string; departmentId?: string },
   ): string {
     if (code === "special_date.not_found") return t("hours.date_not_found");
+    if (code === "menu_timetable.invalid") {
+      const department = this.#departmentName(departmentId);
+      return editor.kind === "delete" && date !== undefined
+        ? format("hours.menu_delete_clash", { department, date: formatDate(date) })
+        : format("hours.menu_clash", { department });
+    }
     if (code === "station.always_open") return t("hours.always_open");
     if (code === "special_date.date_taken")
       return format("hours.date_taken", { date: formatDate(date!) });
@@ -904,6 +918,14 @@ export class HoursScreen extends LitElement {
     return format(editor.kind === "delete" ? "hours.delete_clash" : "hours.invalid_clash", {
       date: formatDate(date),
     });
+  }
+
+  /** A department's name from the model, which lists inactive departments too. */
+  #departmentName(id: string | undefined): string {
+    return (
+      this.model!.subjects.find((subject) => subject.kind === "department" && subject.id === id)
+        ?.name ?? ""
+    );
   }
 
   async #focusInvalid(): Promise<void> {

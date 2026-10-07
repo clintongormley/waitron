@@ -1,4 +1,5 @@
 import "@waitron/shared";
+import type { MenuPeriodUse } from "./menu-timetable-types.js";
 
 /** Something that still names a menu of a department's list, so the menu cannot leave it. */
 export type MenuUse =
@@ -17,6 +18,14 @@ declare module "@waitron/shared" {
     "department_menu.not_found": { departmentId: string; menuId: string };
     /** Removing a menu from a department's list that `uses` still name, every one of them. */
     "department_menu.in_use": { departmentId: string; menuId: string; uses: MenuUse[] };
+    "menu_period.not_found": { periodId: string };
+    /** Deleting a named period that `uses` still place, past special dates included. */
+    "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
+    /**
+     * `field` is the request path of the refused value, as for `hours.invalid`. A clash with the
+     * menu timetable either side also names the date and the department.
+     */
+    "menu_timetable.invalid": { field: string; date?: string; departmentId?: string };
     "zone.name_taken": { name: string };
     "service_zone.default_missing": Record<string, never>;
     "service_zone.offer_not_allowed": { zoneId: string; menuItemId: string };

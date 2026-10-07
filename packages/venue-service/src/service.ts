@@ -6,6 +6,7 @@ import {
   stationStates,
 } from "./routing-store.js";
 import type { VenueServiceContribution } from "@waitron/module";
+import { resolveDefaultMenu } from "./menu-timetable.js";
 import {
   copyOrderServiceContext,
   copyWorkingLineContext,
@@ -69,6 +70,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   stationStates,
   describeMakers,
   listZoneOffers,
+  resolveDefaultMenu,
   menuState,
   resolveNewOrderZone,
   readProfileServiceAccess,

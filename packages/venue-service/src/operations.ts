@@ -36,8 +36,14 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./schema/service.js";
-import { departmentAllDayMenus, departmentMenus, zoneAllDayMenus } from "./schema/menus.js";
+import {
+  departmentAllDayMenus,
+  departmentMenus,
+  zoneAllDayMenus,
+  zonePeriodMenus,
+} from "./schema/menus.js";
 import { addDepartmentMenu, setZoneAllDayMenu } from "./department-menus.js";
+import { resolveZoneMenus, servedDefault } from "./menu-timetable.js";
 import { routeExceptions } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
@@ -431,13 +437,21 @@ export async function configureZone(
   if (department === undefined) {
     throw new AppError("department.not_found", { departmentId: input.departmentId });
   }
-  // A zone moving department drops its override, which named the old department's list.
+  // A zone moving department drops its own menus, which named the old department's list and periods.
   await tx
     .delete(zoneAllDayMenus)
     .where(
       and(
         eq(zoneAllDayMenus.zoneId, input.zoneId),
         ne(zoneAllDayMenus.departmentId, input.departmentId),
+      ),
+    );
+  await tx
+    .delete(zonePeriodMenus)
+    .where(
+      and(
+        eq(zonePeriodMenus.zoneId, input.zoneId),
+        ne(zonePeriodMenus.departmentId, input.departmentId),
       ),
     );
   await tx
@@ -538,7 +552,6 @@ export async function resolveZoneContext(
   departmentId: string;
   departmentName: string;
   serviceMode: ServiceMode;
-  defaultMenuId: string | null;
 }> {
   const [row] = await tx
     .select({
@@ -547,12 +560,9 @@ export async function resolveZoneContext(
       departmentName: departments.name,
       zoneMode: zoneServicePolicies.serviceMode,
       departmentMode: departments.defaultServiceMode,
-      defaultMenuId: allDayMenuId,
     })
     .from(zoneServicePolicies)
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .leftJoin(zoneAllDayMenus, zoneAllDayJoin)
-    .leftJoin(departmentAllDayMenus, departmentAllDayJoin)
     .where(
       and(
         eq(zoneServicePolicies.locationId, cfg.locationId),
@@ -566,7 +576,6 @@ export async function resolveZoneContext(
     departmentId: row.departmentId,
     departmentName: row.departmentName,
     serviceMode: (row.zoneMode ?? row.departmentMode) as ServiceMode,
-    defaultMenuId: row.defaultMenuId,
   };
 }
 
@@ -790,10 +799,12 @@ async function zoneLiveDocuments(
 /**
  * What the zone sells: each published menu's live version, with the current availability put back
  * (an unavailable offer is served marked, in its place), and that version's structure and Device
- * Home Page. An inactive menu, or one with no live version, is left out, and a default that is
- * inactive or unpublished gives way to the zone's first menu that is served. Refused
- * `menu.version_changed` unless every `asserted` version is the live version of one of the zone's
- * active menus. With `menuItemIds`, only the offers it names are served; the menus are all listed.
+ * Home Page. An inactive menu, or one with no live version, is left out. The default is the menu
+ * timetable's at `at` (now when absent), and one that is inactive or unpublished gives way to the
+ * zone's first menu that is served; with `withDefault: false` the timetable is not read and no
+ * menu is the default. Refused `menu.version_changed` unless every `asserted` version is the live
+ * version of one of the zone's active menus. With `menuItemIds`, only the offers it names are
+ * served; the menus are all listed.
  */
 export async function listZoneOffers(
   tx: Transaction,
@@ -802,9 +813,11 @@ export async function listZoneOffers(
   options: {
     asserted?: readonly { menuId: string; versionId: string }[];
     menuItemIds?: readonly string[];
+    at?: Date;
+    withDefault?: false;
   } = {},
 ): Promise<ZoneOffers> {
-  const context = await resolveZoneContext(tx, cfg, zoneId);
+  await resolveZoneContext(tx, cfg, zoneId);
   const published = await zoneLiveDocuments(tx, zoneId, options.asserted);
   const served = await applyLiveFields(
     tx,
@@ -812,10 +825,12 @@ export async function listZoneOffers(
     options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
   );
   const defaultMenuId =
-    context.defaultMenuId === null ||
-    published.some((menu) => menu.menuId === context.defaultMenuId)
-      ? context.defaultMenuId
-      : (published[0]?.menuId ?? null);
+    options.withDefault === false
+      ? null
+      : servedDefault(
+          (await resolveZoneMenus(tx, cfg, zoneId, options.at ?? new Date())).defaultMenuId,
+          published.map((menu) => menu.menuId),
+        );
   // Catalogue's `ServedMenu` is the type the till reads each menu as.
   const menus: ServedMenu[] = published.map(({ menuId, versionId, document }) => ({
     id: menuId,
@@ -857,7 +872,6 @@ export async function resolveNewOrderZone(
   departmentId: string;
   departmentName: string;
   serviceMode: ServiceMode;
-  defaultMenuId: string | null;
 }> {
   if (input.zoneId !== undefined && input.zoneId !== null) {
     return resolveZoneContext(tx, cfg, input.zoneId);

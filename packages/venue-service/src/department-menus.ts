@@ -3,7 +3,13 @@ import { catalogues, floorZones, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { MenuUse } from "./errors.js";
 import type { VenueScope } from "./operations.js";
-import { departmentAllDayMenus, departmentMenus, zoneAllDayMenus } from "./schema/menus.js";
+import {
+  departmentAllDayMenus,
+  departmentMenus,
+  menuPeriods,
+  zoneAllDayMenus,
+  zonePeriodMenus,
+} from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import "./errors.js";
 
@@ -45,7 +51,8 @@ export async function listDepartmentMenus(
   }));
 }
 
-async function assertDepartment(tx: Transaction, cfg: VenueScope, departmentId: string) {
+/** Refused `department.not_found` unless the department is this venue's. */
+export async function assertDepartment(tx: Transaction, cfg: VenueScope, departmentId: string) {
   const [row] = await tx
     .select({ id: departments.id })
     .from(departments)
@@ -67,7 +74,12 @@ async function assertMenus(tx: Transaction, menuIds: readonly string[]) {
   if (missing !== undefined) throw new AppError("catalogue.not_found", { catalogueId: missing });
 }
 
-async function assertMember(tx: Transaction, departmentId: string, menuId: string): Promise<void> {
+/** Refused `department_menu.not_found` unless the department's list holds the menu. */
+export async function assertMember(
+  tx: Transaction,
+  departmentId: string,
+  menuId: string,
+): Promise<void> {
   const [row] = await tx
     .select({ menuId: departmentMenus.menuId })
     .from(departmentMenus)
@@ -93,6 +105,14 @@ async function menuUses(
     ))
     uses.get(row.menuId)!.push({ kind: "department_all_day" });
   for (const row of await tx
+    .select({ periodId: menuPeriods.id, menuId: menuPeriods.menuId })
+    .from(menuPeriods)
+    .where(
+      and(eq(menuPeriods.departmentId, departmentId), inArray(menuPeriods.menuId, [...menuIds])),
+    )
+    .orderBy(asc(menuPeriods.name), asc(menuPeriods.id)))
+    uses.get(row.menuId)!.push({ kind: "period", periodId: row.periodId });
+  for (const row of await tx
     .select({ zoneId: zoneAllDayMenus.zoneId, menuId: zoneAllDayMenus.menuId })
     .from(zoneAllDayMenus)
     .innerJoin(floorZones, eq(floorZones.id, zoneAllDayMenus.zoneId))
@@ -104,6 +124,29 @@ async function menuUses(
     )
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id)))
     uses.get(row.menuId)!.push({ kind: "zone_all_day", zoneId: row.zoneId });
+  for (const row of await tx
+    .select({
+      zoneId: zonePeriodMenus.zoneId,
+      periodId: zonePeriodMenus.periodId,
+      menuId: zonePeriodMenus.menuId,
+    })
+    .from(zonePeriodMenus)
+    .innerJoin(floorZones, eq(floorZones.id, zonePeriodMenus.zoneId))
+    .innerJoin(menuPeriods, eq(menuPeriods.id, zonePeriodMenus.periodId))
+    .where(
+      and(
+        eq(zonePeriodMenus.departmentId, departmentId),
+        inArray(zonePeriodMenus.menuId, [...menuIds]),
+      ),
+    )
+    .orderBy(
+      asc(floorZones.displayOrder),
+      asc(floorZones.name),
+      asc(floorZones.id),
+      asc(menuPeriods.name),
+      asc(menuPeriods.id),
+    ))
+    uses.get(row.menuId)!.push({ kind: "zone_period", zoneId: row.zoneId, periodId: row.periodId });
   return uses;
 }
 

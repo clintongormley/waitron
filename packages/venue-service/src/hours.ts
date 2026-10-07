@@ -656,7 +656,8 @@ export async function assertDemotedStationHours(
 
 /**
  * Creates a special date (`id` null) or edits one in place, keeping its id. Its cells replace the
- * stored ones; an `inherit` cell stores nothing.
+ * stored ones; an `inherit` cell stores nothing. A change of an existing date's date is handed to
+ * each participant's `beforeMove` before anything is written.
  */
 export async function saveSpecialDate(
   tx: Transaction,
@@ -664,6 +665,7 @@ export async function saveSpecialDate(
   id: string | null,
   input: SpecialDateInput,
   at: Date,
+  participants: readonly SpecialDateParticipant[] = [],
 ): Promise<SpecialDate> {
   const parsed = parseSpecialDateInput(input);
   const current = id === null ? null : await requireSpecialDate(tx, cfg, id);
@@ -705,6 +707,9 @@ export async function saveSpecialDate(
   );
   await assertEndpointsOccur(tx, cfg, parsed);
   await assertSpecialDateBesideNeighbours(tx, cfg, parsed, current?.date ?? null, id, at);
+  if (current !== null && current.date !== parsed.date)
+    for (const participant of participants)
+      await participant.beforeMove?.(tx, cfg, current.id, parsed.date, at);
 
   const values = {
     date: parsed.date,
@@ -777,14 +782,28 @@ export async function renameSpecialDate(
 }
 
 /**
- * A module that keeps its own rows per special date, such as a menu timetable's overrides. It
- * works inside the caller's transaction and never opens its own. `copy` runs after the target date
- * and its hours are written; `beforeDelete` may only refuse, since the date's own foreign keys
- * remove what hangs from it.
+ * A module that keeps its own rows per special date, such as a menu timetable. It works inside the
+ * caller's transaction and never opens its own, and `at` is the caller's "now". `copy` runs after
+ * the target date and its hours are written; `beforeMove` runs before a date's new date is
+ * written; `beforeDelete` may only refuse, since the date's own foreign keys remove what hangs
+ * from it.
  */
 export interface SpecialDateParticipant {
-  copy(tx: Transaction, cfg: VenueScope, sourceId: string, targetId: string): Promise<void>;
-  beforeDelete(tx: Transaction, cfg: VenueScope, id: string): Promise<void>;
+  copy(
+    tx: Transaction,
+    cfg: VenueScope,
+    sourceId: string,
+    targetId: string,
+    at: Date,
+  ): Promise<void>;
+  beforeMove?(
+    tx: Transaction,
+    cfg: VenueScope,
+    id: string,
+    toDate: LocalDate,
+    at: Date,
+  ): Promise<void>;
+  beforeDelete(tx: Transaction, cfg: VenueScope, id: string, at: Date): Promise<void>;
 }
 
 /**
@@ -876,7 +895,7 @@ export async function duplicateSpecialDate(
           periods: cell.periods.map((period) => ({ ...period, id: newId() })),
         },
       );
-    for (const participant of participants) await participant.copy(tx, cfg, sourceId, targetId);
+    for (const participant of participants) await participant.copy(tx, cfg, sourceId, targetId, at);
     copies.push({ id: targetId, date, ...values });
   }
   return copies;
@@ -898,7 +917,7 @@ export async function deleteSpecialDate(
   await assertDatesBesideNeighbours(tx, cfg, at, new Map(), [row.date], id, (_, other, subject) =>
     invalidHours("date", { date: other, subjectId: subject.id }),
   );
-  for (const participant of participants) await participant.beforeDelete(tx, cfg, id);
+  for (const participant of participants) await participant.beforeDelete(tx, cfg, id, at);
   await tx.delete(specialDates).where(eq(specialDates.id, id));
 }
 

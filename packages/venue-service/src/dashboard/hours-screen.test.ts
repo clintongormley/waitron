@@ -1574,6 +1574,14 @@ describe("Hours: special dates", () => {
     ],
     [{ code: "hours.invalid", params: { field: "name" } }, "name", "Check this value."],
     [
+      {
+        code: "menu_timetable.invalid",
+        params: { field: "date", date: "2026-10-20", departmentId: "restaurant" },
+      },
+      "date",
+      "Restaurant's menu timetable would overlap a neighbouring date's menus here, or use a time the clock skips.",
+    ],
+    [
       { code: "hours.invalid", params: { field: "cells.0.cell" } },
       "department.restaurant.mode",
       "Check the highlighted hours: periods must not overlap, including past midnight.",
@@ -1687,6 +1695,14 @@ describe("Hours: special dates", () => {
       "dates.1",
       "These hours overlap the hours on Sun, 8 Nov 2026.",
     ],
+    [
+      {
+        code: "menu_timetable.invalid",
+        params: { field: "date", date: "2026-11-09", departmentId: "restaurant" },
+      },
+      "dates.1",
+      "Restaurant's menu timetable would overlap a neighbouring date's menus here, or use a time the clock skips.",
+    ],
   ])(
     "puts a duplicate's refusal beside the target date it names: %j",
     async (refusal, name, message) => {
@@ -1716,6 +1732,13 @@ describe("Hours: special dates", () => {
       "Check the highlighted hours: periods must not overlap, including past midnight.",
     ],
     [{ code: "connection.failed" }, "The change could not be saved."],
+    [
+      {
+        code: "menu_timetable.invalid",
+        params: { field: "date", date: "2026-12-01", departmentId: "restaurant" },
+      },
+      "Restaurant's menu timetable would overlap a neighbouring date's menus here, or use a time the clock skips.",
+    ],
   ])(
     "says a duplicate's refusal that names no target at the bottom: %j",
     async (refusal, message) => {
@@ -1770,6 +1793,24 @@ describe("Hours: special dates", () => {
       ["/management-api/venue-service/special-dates/staff", undefined],
     ]);
     expect(modal(el)).toBeNull();
+  });
+
+  it("says at the bottom when deleting would leave a department's menu week overlapping a neighbour's menus", async () => {
+    const { api, state } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Staff"), "delete-date");
+    state.writes.push({
+      reject: {
+        code: "menu_timetable.invalid",
+        params: { field: "date", date: "2026-10-14", departmentId: "restaurant" },
+      },
+    });
+    await click(el, saveButton(el));
+    expect(await bottomMessage(el)).toBe(
+      "Deleting this date would leave Restaurant's normal menu week overlapping the menu timetable on Wed, 14 Oct 2026.",
+    );
+    expect(saveButton(el).disabled).toBe(false);
   });
 
   it("says there are no special dates yet", async () => {

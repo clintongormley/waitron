@@ -453,6 +453,10 @@ const en = {
     "Moving this date away from {date} would leave its standard hours overlapping a neighbouring date.",
   "hours.delete_clash":
     "Deleting this date would leave the standard hours overlapping the hours on {date}.",
+  "hours.menu_clash":
+    "{department}'s menu timetable would overlap a neighbouring date's menus here, or use a time the clock skips.",
+  "hours.menu_delete_clash":
+    "Deleting this date would leave {department}'s normal menu week overlapping the menu timetable on {date}.",
   "hours.field_refused": "Check this value.",
   "hours.period_unsaved":
     "One of these periods could not be saved as sent. Close this editor and open it again to start from the saved hours.",
@@ -1042,6 +1046,10 @@ const es: Record<keyof typeof en, string> = {
     "Mover esta fecha desde el {date} haría que su horario habitual se solapara con una fecha vecina.",
   "hours.delete_clash":
     "Borrar esta fecha haría que el horario habitual se solapara con el del {date}.",
+  "hours.menu_clash":
+    "El horario de cartas de {department} se solaparía aquí con las cartas de una fecha vecina, o usaría una hora que el reloj se salta.",
+  "hours.menu_delete_clash":
+    "Borrar esta fecha haría que la semana normal de cartas de {department} se solapara con el horario de cartas del {date}.",
   "hours.field_refused": "Revisa este valor.",
   "hours.period_unsaved":
     "Uno de estos periodos no se pudo guardar tal como se envió. Cierra este editor y vuelve a abrirlo para partir del horario guardado.",

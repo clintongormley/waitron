@@ -364,7 +364,10 @@ async function readBasketOffers(
     versionIds.add(menuVersionId.toLowerCase());
   }
   const named = menuItemIds.filter((id): id is string => typeof id === "string");
-  const offers = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, { menuItemIds: named });
+  const offers = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
+    menuItemIds: named,
+    withDefault: false,
+  });
   const live = new Set(offers.menus.map((menu) => menu.versionId));
   const stale = [...versionIds].filter((versionId) => !live.has(versionId));
   if (stale.length === 0) return offers;
@@ -376,6 +379,7 @@ async function readBasketOffers(
   return VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
     asserted: [...menus].map(([versionId, menuId]) => ({ menuId, versionId })),
     menuItemIds: named,
+    withDefault: false,
   });
 }
 

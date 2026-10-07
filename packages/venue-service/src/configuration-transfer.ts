@@ -17,6 +17,15 @@ import {
 } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableZone, skippedEndpoint } from "./hours-clock.js";
+import {
+  firstMenuClash,
+  menuPeriodName,
+  parseMenuWeek,
+  parseSlots,
+  slotCell,
+  slotIntervals,
+} from "./menu-timetable-rules.js";
+import type { MenuSlot } from "./menu-timetable-types.js";
 import { HOURS_CELL_MODES } from "./schema/hours.js";
 import "./errors.js";
 
@@ -34,7 +43,11 @@ function parsedAs<T>(table: string, parse: () => T): T {
   try {
     return parse();
   } catch (error) {
-    if (error instanceof AppError && error.code === "hours.invalid") refuse(table);
+    if (
+      error instanceof AppError &&
+      (error.code === "hours.invalid" || error.code === "menu_timetable.invalid")
+    )
+      refuse(table);
     throw error;
   }
 }
@@ -311,6 +324,125 @@ function validateDepartmentMenus(tables: Tables): void {
       refuse("zone_all_day_menus.department_id");
 }
 
+/**
+ * Refuses (`setup.request_invalid`, `field` naming the table or `<table>.<column>`) menu timetable
+ * rows a writer could not have written: a named period with a blank, untrimmed or repeated name or
+ * a menu its department does not list; a day that is not exactly one weekday or one of the bundle's
+ * special dates, or is held twice; a slot whose department or period is not its day's, whose times
+ * are not canonical, or which overlaps another within a day or across a midnight; and a zone's
+ * period menu filed under a department other than the zone's or the period's. A special-date slot
+ * may not open or close at a minute the clocks skip, and past pairs are left out, as for the
+ * hours rows above. A whole-venue closure plays no part.
+ */
+export function validateMenuTimetables(
+  tables: Tables,
+  bundle?: { readonly createdAt: Date; readonly timeZone: string },
+): void {
+  const departments = ids(tables.departments);
+  const members = new Set(
+    (tables.department_menus ?? []).map(
+      (row) => `${String(row.department_id)}:${String(row.menu_id)}`,
+    ),
+  );
+  const member = (row: Row) => members.has(`${String(row.department_id)}:${String(row.menu_id)}`);
+  const periodDepartment = new Map<unknown, unknown>();
+  const names = new Set<string>();
+  for (const row of tables.menu_periods ?? []) {
+    if (!departments.has(row.department_id)) refuse("menu_periods.department_id");
+    if (parsedAs("menu_periods.name", () => menuPeriodName(row.name)) !== row.name)
+      refuse("menu_periods.name");
+    const name = JSON.stringify([row.department_id, row.name]);
+    if (names.has(name)) refuse("menu_periods.name");
+    names.add(name);
+    if (!member(row)) refuse("menu_periods.menu_id");
+    periodDepartment.set(row.id, row.department_id);
+  }
+
+  const dates = new Map((tables.special_dates ?? []).map((row) => [row.id, row.date as LocalDate]));
+  const days = new Map<
+    unknown,
+    { departmentId: unknown; weekday: number | null; date: LocalDate | null }
+  >();
+  const held = new Set<string>();
+  for (const row of tables.menu_day_timetables ?? []) {
+    if (!departments.has(row.department_id)) refuse("menu_day_timetables.department_id");
+    const weekday = row.weekday ?? null;
+    const dateId = row.special_date_id ?? null;
+    if ((weekday === null) === (dateId === null)) refuse("menu_day_timetables.weekday");
+    if (
+      weekday !== null &&
+      (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
+    )
+      refuse("menu_day_timetables.weekday");
+    if (dateId !== null && !dates.has(dateId)) refuse("menu_day_timetables.special_date_id");
+    const day = JSON.stringify([row.department_id, weekday, dateId]);
+    if (held.has(day))
+      refuse(`menu_day_timetables.${weekday === null ? "special_date_id" : "weekday"}`);
+    held.add(day);
+    days.set(row.id, {
+      departmentId: row.department_id,
+      weekday: weekday as number | null,
+      date: dateId === null ? null : dates.get(dateId)!,
+    });
+  }
+
+  const slotsByDay = new Map<unknown, MenuSlot[]>([...days.keys()].map((id) => [id, []]));
+  for (const row of tables.menu_slots ?? []) {
+    const day = days.get(row.timetable_id);
+    if (day === undefined) refuse("menu_slots.timetable_id");
+    if (row.department_id !== day.departmentId) refuse("menu_slots.department_id");
+    if (periodDepartment.get(row.period_id) !== day.departmentId) refuse("menu_slots.period_id");
+    for (const column of ["starts_at", "ends_at"])
+      if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
+        refuse(`menu_slots.${column}`);
+    slotsByDay.get(row.timetable_id)!.push({
+      periodId: row.period_id as string,
+      startsAt: (row.starts_at as string).slice(0, 5),
+      endsAt: (row.ends_at as string).slice(0, 5),
+    });
+  }
+  for (const slots of slotsByDay.values()) {
+    slots.sort((a, b) => Number(a.startsAt > b.startsAt) - Number(a.startsAt < b.startsAt));
+    parsedAs("menu_slots", () => parseSlots(slots, "slots"));
+  }
+
+  const today = exportDate(bundle);
+  const zone = bundle !== undefined && isReadableZone(bundle.timeZone) ? bundle.timeZone : null;
+  for (const departmentId of departments) {
+    const own = [...days].filter(([, day]) => day.departmentId === departmentId);
+    const week = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+      weekday,
+      slots: slotsByDay.get(own.find(([, day]) => day.weekday === weekday)?.[0]) ?? [],
+    }));
+    parsedAs("menu_slots", () => parseMenuWeek(week));
+    const special = new Map<LocalDate, ReturnType<typeof slotIntervals>>();
+    for (const [id, day] of own) {
+      if (day.date === null) continue;
+      const slots = slotsByDay.get(id)!;
+      if (zone !== null && pairMatters(day.date, today)) {
+        const skipped = skippedEndpoint(day.date, [{ cell: slotCell(slots) }], zone);
+        if (skipped !== null)
+          refuse(`menu_slots.${skipped.end === "opensAt" ? "starts_at" : "ends_at"}`);
+      }
+      special.set(day.date, slotIntervals(slots));
+    }
+    const intervals = week.map((day) => slotIntervals(day.slots));
+    if (firstMenuClash(special, intervals, [...special.keys()], today) !== null)
+      refuse("menu_slots");
+  }
+
+  const zoneDepartment = new Map(
+    (tables.zone_service_policies ?? []).map((row) => [row.zone_id, row.department_id]),
+  );
+  for (const row of tables.zone_period_menus ?? []) {
+    if (!zoneDepartment.has(row.zone_id) || zoneDepartment.get(row.zone_id) !== row.department_id)
+      refuse("zone_period_menus.department_id");
+    if (periodDepartment.get(row.period_id) !== row.department_id)
+      refuse("zone_period_menus.period_id");
+    if (!member(row)) refuse("zone_period_menus.menu_id");
+  }
+}
+
 /** The module's import check: Hours' rows, the holiday rows, then the department menu rows. */
 function validateVenueServiceConfiguration(
   tables: Tables,
@@ -319,6 +451,7 @@ function validateVenueServiceConfiguration(
   validateHoursConfiguration(tables, bundle);
   validateHolidayConfiguration(tables);
   validateDepartmentMenus(tables);
+  validateMenuTimetables(tables, bundle);
 }
 
 export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
@@ -342,6 +475,10 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "hours_week_cells" },
     { name: "hours_week_periods" },
     { name: "special_dates", locationColumns: ["location_id"] },
+    { name: "menu_periods" },
+    { name: "menu_day_timetables" },
+    { name: "menu_slots" },
+    { name: "zone_period_menus" },
     { name: "special_date_hours" },
     { name: "special_date_hours_periods" },
     { name: "holiday_geographies", locationColumns: ["location_id"] },

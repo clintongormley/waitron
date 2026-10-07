@@ -5,6 +5,7 @@ import {
   VENUE_SERVICE_CONFIGURATION_TRANSFER,
   validateHolidayConfiguration,
   validateHoursConfiguration,
+  validateMenuTimetables,
 } from "./configuration-transfer.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
@@ -862,5 +863,335 @@ describe("the department menu rows of a bundle", () => {
     const noPolicy = tables(RESTAURANT);
     noPolicy.zone_service_policies = [];
     expect(() => validate(noPolicy)).toThrowError(refusal("zone_all_day_menus.department_id"));
+  });
+});
+
+describe("the menu timetable rows of a bundle", () => {
+  const BARRA = "z-barra";
+  const MANANAS = "11111111-1111-4111-8111-111111111111";
+  const MADRUGADA = "22222222-2222-4222-8222-222222222222";
+  const DELI_PERIOD = "33333333-3333-4333-8333-333333333333";
+  const dateRow = (id: string, date: string, closeWholeVenue = 0) => ({
+    id,
+    location_id: "location",
+    date,
+    name: "Fiesta",
+    colour: "red",
+    close_whole_venue: closeWholeVenue,
+  });
+  const slotRow = (timetableId: string, periodId: string, startsAt: string, endsAt: string) => ({
+    id: randomUUID(),
+    timetable_id: timetableId,
+    department_id: RESTAURANT,
+    period_id: periodId,
+    starts_at: startsAt,
+    ends_at: endsAt,
+  });
+
+  /**
+   * The restaurant's Mañanas (Desayunos) runs 09:00–12:00 on Monday and Madrugada (Copas)
+   * 22:00–02:00 on Friday; on Christmas, a Friday, Mañanas alone runs 10:00–13:00. Barra serves
+   * Café in Mañanas. Deli has a period of its own.
+   */
+  function menuTables(): Tables {
+    return {
+      departments: [
+        { id: RESTAURANT, is_default: 1 },
+        { id: DELI, is_default: 0 },
+      ],
+      special_dates: [dateRow(CHRISTMAS, "2026-12-25")],
+      zone_service_policies: [{ zone_id: BARRA, department_id: RESTAURANT }],
+      department_menus: [
+        { department_id: RESTAURANT, menu_id: "m-desayunos" },
+        { department_id: RESTAURANT, menu_id: "m-copas" },
+        { department_id: RESTAURANT, menu_id: "m-cafe" },
+        { department_id: DELI, menu_id: "m-deli" },
+      ],
+      menu_periods: [
+        { id: MANANAS, department_id: RESTAURANT, name: "Mañanas", menu_id: "m-desayunos" },
+        { id: MADRUGADA, department_id: RESTAURANT, name: "Madrugada", menu_id: "m-copas" },
+        { id: DELI_PERIOD, department_id: DELI, name: "Mañanas", menu_id: "m-deli" },
+      ],
+      menu_day_timetables: [
+        { id: "t-monday", department_id: RESTAURANT, weekday: 1, special_date_id: null },
+        { id: "t-friday", department_id: RESTAURANT, weekday: 5, special_date_id: null },
+        { id: "t-christmas", department_id: RESTAURANT, weekday: null, special_date_id: CHRISTMAS },
+      ],
+      menu_slots: [
+        slotRow("t-monday", MANANAS, "09:00:00", "12:00:00"),
+        slotRow("t-friday", MADRUGADA, "22:00:00", "02:00:00"),
+        slotRow("t-christmas", MANANAS, "10:00:00", "13:00:00"),
+      ],
+      zone_period_menus: [
+        { zone_id: BARRA, period_id: MANANAS, department_id: RESTAURANT, menu_id: "m-cafe" },
+      ],
+    };
+  }
+  const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
+  const madrid = (createdAt: string) => ({
+    createdAt: new Date(createdAt),
+    timeZone: "Europe/Madrid",
+  });
+
+  it("are transferred after the special dates and department lists their keys name", () => {
+    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    const at = names.indexOf("special_dates");
+    expect(names.slice(at + 1, at + 5)).toEqual([
+      "menu_periods",
+      "menu_day_timetables",
+      "menu_slots",
+      "zone_period_menus",
+    ]);
+    expect(at).toBeGreaterThan(names.indexOf("zone_all_day_menus"));
+  });
+
+  it("accept rows a writer could have written, and a bundle with none", () => {
+    expect(() =>
+      validateMenuTimetables(menuTables(), madrid("2026-10-07T10:00:00Z")),
+    ).not.toThrow();
+    expect(() => validateMenuTimetables({})).not.toThrow();
+    expect(() => validate(menuTables())).not.toThrow();
+  });
+
+  it.each([
+    [
+      "a period of a department the bundle lacks",
+      (t: Tables) => {
+        t.menu_periods![0]!.department_id = "d-gone";
+      },
+      "menu_periods.department_id",
+    ],
+    [
+      "a blank period name",
+      (t: Tables) => {
+        t.menu_periods![0]!.name = "  ";
+      },
+      "menu_periods.name",
+    ],
+    [
+      "an untrimmed period name",
+      (t: Tables) => {
+        t.menu_periods![0]!.name = "Mañanas ";
+      },
+      "menu_periods.name",
+    ],
+    [
+      "a period name its department uses twice",
+      (t: Tables) => {
+        t.menu_periods![1]!.name = "Mañanas";
+      },
+      "menu_periods.name",
+    ],
+    [
+      "a period menu its department does not list",
+      (t: Tables) => {
+        t.menu_periods![0]!.menu_id = "m-deli";
+      },
+      "menu_periods.menu_id",
+    ],
+    [
+      "a day of a department the bundle lacks",
+      (t: Tables) => {
+        t.menu_day_timetables![0]!.department_id = "d-gone";
+      },
+      "menu_day_timetables.department_id",
+    ],
+    [
+      "a day that is both a weekday and a special date",
+      (t: Tables) => {
+        t.menu_day_timetables![0]!.special_date_id = CHRISTMAS;
+      },
+      "menu_day_timetables.weekday",
+    ],
+    [
+      "a day that is neither",
+      (t: Tables) => {
+        t.menu_day_timetables![0]!.weekday = null;
+      },
+      "menu_day_timetables.weekday",
+    ],
+    [
+      "a weekday outside the week",
+      (t: Tables) => {
+        t.menu_day_timetables![0]!.weekday = 7;
+      },
+      "menu_day_timetables.weekday",
+    ],
+    [
+      "a special date the bundle lacks",
+      (t: Tables) => {
+        t.menu_day_timetables![2]!.special_date_id = "sd-gone";
+      },
+      "menu_day_timetables.special_date_id",
+    ],
+    [
+      "a weekday held twice",
+      (t: Tables) => {
+        t.menu_day_timetables![1]!.weekday = 1;
+      },
+      "menu_day_timetables.weekday",
+    ],
+    [
+      "a special date held twice by one department",
+      (t: Tables) => {
+        t.menu_day_timetables!.push({
+          id: "t-again",
+          department_id: RESTAURANT,
+          weekday: null,
+          special_date_id: CHRISTMAS,
+        });
+      },
+      "menu_day_timetables.special_date_id",
+    ],
+    [
+      "a slot of a day the bundle lacks",
+      (t: Tables) => {
+        t.menu_slots![0]!.timetable_id = "t-gone";
+      },
+      "menu_slots.timetable_id",
+    ],
+    [
+      "a slot filed under another department than its day's",
+      (t: Tables) => {
+        t.menu_slots![0]!.department_id = DELI;
+      },
+      "menu_slots.department_id",
+    ],
+    [
+      "a slot placing another department's period",
+      (t: Tables) => {
+        t.menu_slots![0]!.period_id = DELI_PERIOD;
+      },
+      "menu_slots.period_id",
+    ],
+    [
+      "a slot time that is not canonical",
+      (t: Tables) => {
+        t.menu_slots![0]!.starts_at = "09:00";
+      },
+      "menu_slots.starts_at",
+    ],
+    [
+      "a slot ending where it starts",
+      (t: Tables) => {
+        t.menu_slots![0]!.ends_at = "09:00:00";
+      },
+      "menu_slots",
+    ],
+    [
+      "two slots overlapping within a day",
+      (t: Tables) => {
+        t.menu_slots!.push(slotRow("t-monday", MADRUGADA, "11:00:00", "13:00:00"));
+      },
+      "menu_slots",
+    ],
+    [
+      "a week slot past midnight overlapping the next day's",
+      (t: Tables) => {
+        t.menu_day_timetables!.push({
+          id: "t-saturday",
+          department_id: RESTAURANT,
+          weekday: 6,
+          special_date_id: null,
+        });
+        t.menu_slots!.push(slotRow("t-saturday", MANANAS, "01:00:00", "03:00:00"));
+      },
+      "menu_slots",
+    ],
+    [
+      "a special date's slot overlapped by the week's tail the night before",
+      (t: Tables) => {
+        t.special_dates!.push(dateRow("sd-boxing", "2026-12-26"));
+        t.menu_day_timetables!.push({
+          id: "t-boxing",
+          department_id: RESTAURANT,
+          weekday: null,
+          special_date_id: "sd-boxing",
+        });
+        t.menu_slots!.push(slotRow("t-boxing", MANANAS, "01:00:00", "03:00:00"));
+        // Christmas's own timetable has no tail, so it is Friday 18 December that clashes.
+        t.special_dates!.push(dateRow("sd-18", "2026-12-19"));
+        t.menu_day_timetables!.push({
+          id: "t-18",
+          department_id: RESTAURANT,
+          weekday: null,
+          special_date_id: "sd-18",
+        });
+        t.menu_slots!.push(slotRow("t-18", MANANAS, "01:00:00", "03:00:00"));
+      },
+      "menu_slots",
+    ],
+    [
+      "a zone's period menu filed under another department than the zone's",
+      (t: Tables) => {
+        t.zone_service_policies![0]!.department_id = DELI;
+      },
+      "zone_period_menus.department_id",
+    ],
+    [
+      "a zone's period menu for another department's period",
+      (t: Tables) => {
+        t.zone_period_menus![0]!.period_id = DELI_PERIOD;
+      },
+      "zone_period_menus.period_id",
+    ],
+    [
+      "a zone's period menu its department does not list",
+      (t: Tables) => {
+        t.zone_period_menus![0]!.menu_id = "m-deli";
+      },
+      "zone_period_menus.menu_id",
+    ],
+  ])("refuse %s", (_, edit, field) => {
+    const tables = menuTables();
+    edit(tables);
+    expect(() => validateMenuTimetables(tables)).toThrowError(refusal(field));
+  });
+
+  it("refuse a special-date slot at a minute the clocks skip, unless its date was past at export", () => {
+    const forward = clockChangeAfter("Europe/Madrid", "2027-01-01T00:00:00Z", "forward");
+    const tables = menuTables();
+    tables.special_dates!.push(dateRow("sd-march", forward.date));
+    tables.menu_day_timetables!.push({
+      id: "t-march",
+      department_id: RESTAURANT,
+      weekday: null,
+      special_date_id: "sd-march",
+    });
+    tables.menu_slots!.push(
+      slotRow("t-march", MANANAS, `${minutesAfter(forward.before, 16)}:00`, "05:00:00"),
+    );
+    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
+      refusal("menu_slots.starts_at"),
+    );
+    tables.menu_slots!.at(-1)!.starts_at = "00:30:00";
+    tables.menu_slots!.at(-1)!.ends_at = `${minutesAfter(forward.before, 16)}:00`;
+    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
+      refusal("menu_slots.ends_at"),
+    );
+    expect(() => validateMenuTimetables(tables, madrid("2027-06-01T10:00:00Z"))).not.toThrow();
+    // With no export zone it goes unchecked, as a save leaves an unreadable clock unchecked.
+    expect(() => validateMenuTimetables(tables)).not.toThrow();
+  });
+
+  it("leave out a clash beside a special date already past at export, and ignore a closure", () => {
+    const tables = menuTables();
+    tables.special_dates!.push(dateRow("sd-boxing", "2026-12-26", 1));
+    tables.menu_day_timetables!.push({
+      id: "t-boxing",
+      department_id: RESTAURANT,
+      weekday: null,
+      special_date_id: "sd-boxing",
+    });
+    tables.menu_slots!.push(slotRow("t-boxing", MANANAS, "01:00:00", "03:00:00"));
+    // Christmas's own timetable has no tail; with it gone the Friday week runs into the 26th.
+    tables.menu_day_timetables = tables.menu_day_timetables!.filter(
+      (row) => row.id !== "t-christmas",
+    );
+    tables.menu_slots = tables.menu_slots!.filter((row) => row.timetable_id !== "t-christmas");
+    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
+      refusal("menu_slots"),
+    );
+    expect(() => validateMenuTimetables(tables, madrid("2027-01-10T10:00:00Z"))).not.toThrow();
   });
 });

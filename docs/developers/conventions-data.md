@@ -382,6 +382,39 @@ is in production" below).
   satisfies" above).
 - One special date per venue and date (`special_dates_location_date_key`).
 
+## Menu timetables share the special-date calendar
+
+W98 keeps each department's menu timetable in four venue-service tables, all classified `state`
+(`packages/venue-service/src/schema/menus.ts`): `menu_periods` (a named period such as "Mañanas"
+and its menu), `menu_day_timetables` (one weekday of the department's week, or one special date),
+`menu_slots` (a named period placed on that day, wall-clock times) and `zone_period_menus` (a
+zone's own menu for one named period). They are not opening-hours rows: a menu period has its own
+boundaries and a menu, and opening hours never stop a sale. What they share with Hours is the
+calendar.
+
+- A special date's menu timetable hangs off `special_dates` with a cascading key, so deleting the
+  date on Hours deletes its timetables and slots. Hours hands every duplicate, date move and delete
+  to `MENU_TIMETABLE_CALENDAR_PARTICIPANT` (`packages/venue-service/src/menu-timetable.ts`) through
+  `VENUE_SERVICE_CALENDAR_PARTICIPANTS`; it copies a date's timetables to each target and refuses,
+  with `menu_timetable.invalid`, a copy, move or delete that would leave a slot overlapping a
+  neighbouring day's across a midnight, or a copied or moved slot opening or closing at a minute the
+  clock skips there.
+- "No row" carries meaning twice, as for hours: a weekday with no `menu_day_timetables` row has no
+  slots (the all-day menu all day), and a special date with no row for a department follows that
+  department's week. A row with no slots on a special date replaces the week with the all-day menu.
+- A zone's override names a named period, not a slot, so it holds on every day and special date
+  that places the period. Deleting a period is refused `menu_period.in_use` while any slot places
+  it, past special dates included; once none does, its zones' overrides cascade with it.
+- A whole-venue closure does not close menus: the clash checks build their date state with
+  `closeWholeVenue: false` (`firstMenuClash`, `packages/venue-service/src/menu-timetable-rules.ts`)
+  and the resolver never reads `special_dates.close_whole_venue`.
+- A day's slots are replaced by deleting and inserting the whole set; nothing references a slot.
+- Pricing (`readBasketOffers` in `apps/server/src/working-order.ts`, `offersFor` in
+  `apps/server/src/order-drafts.ts`) passes `withDefault: false` to `listZoneOffers`, which then
+  reads no timetable table. The case "price a basket's offers without reading the timetable at all"
+  in `packages/venue-service/src/menu-timetable.test.ts` pins what `listZoneOffers` reads with that
+  option, by statement text; nothing checks that the pricing callers pass it.
+
 **Tables the application code may read and never write**
 
 ## The tables `scripts/write-path-tables.json` lists are read-only to the application, and one guard is the whole of the enforcement
