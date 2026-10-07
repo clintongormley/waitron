@@ -675,6 +675,8 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_ONBOARDING_INTENT: "demo",
       });
+      // The suite's own handle writes below; a write while a start-up transaction is open blocks
+      // the thread and fails "database is locked".
       await awaitListening(port);
       const [printer] = await sharedDb
         .select({ id: printers.id, active: printers.active })

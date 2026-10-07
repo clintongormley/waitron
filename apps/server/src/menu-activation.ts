@@ -6,6 +6,8 @@ import type { Logger } from "./logger.js";
 import { unrefTimer, type Timer } from "./unref-timer.js";
 
 const SCHEDULE = "menu_scheduled_publications";
+// Node fires a longer timer at once.
+const LONGEST_TIMER_MS = 2_147_483_647;
 
 /**
  * Puts each queued menu edition live at its time, on the primary only: one run at start, then one
@@ -52,6 +54,7 @@ export function startMenuActivation(deps: {
     } while (again && !stopped);
     running = undefined;
     if (stopped) return;
+    sleepMs = Math.min(sleepMs, LONGEST_TIMER_MS);
     deps.log("debug", "menu_publication.activation_armed", { sleepMs });
     armed = timer(sleepMs, wake);
   }

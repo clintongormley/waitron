@@ -29,7 +29,8 @@ import { startMenuActivation } from "./menu-activation.js";
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
-const MAX_WAIT_MS = 30 * 86_400_000;
+const MAX_WAIT_MS = 20 * 86_400_000;
+const LONGEST_TIMER_MS = 2_147_483_647;
 // Years after the real clock, so a read that takes the real clock never finds these editions due.
 const day = (date: number) => new Date(`2030-01-${String(date).padStart(2, "0")}T06:00:00.000Z`);
 const ANA = "manager-ana";
@@ -125,7 +126,12 @@ function instrumented(db: Database) {
 }
 
 function startDuty(
-  options: { isPrimary?: () => boolean; holdFirst?: Promise<void>; failFirst?: boolean } = {},
+  options: {
+    isPrimary?: () => boolean;
+    holdFirst?: Promise<void>;
+    failFirst?: boolean;
+    maxWaitMs?: number;
+  } = {},
 ) {
   const { db, door } = instrumented(fx.db);
   door.holdNext = options.holdFirst;
@@ -142,7 +148,7 @@ function startDuty(
     isPrimary: options.isPrimary ?? (() => true),
     now: () => clock.now,
     log,
-    maxWaitMs: MAX_WAIT_MS,
+    maxWaitMs: options.maxWaitMs ?? MAX_WAIT_MS,
     timer: (ms, fn) => {
       const entry = { ms, fn, cancelled: false };
       armed.push(entry);
@@ -215,6 +221,32 @@ describe("startMenuActivation", () => {
     try {
       await armedCount(1);
       expect(armed[0]!.ms).toBe(MAX_WAIT_MS);
+    } finally {
+      await duty.stop();
+    }
+  });
+
+  it("never arms a timer longer than Node honours, whatever the longest wait", async () => {
+    f = await menusFixture(fx.db);
+    await publishNow(f.lunch);
+    const { duty, armed, armedCount } = startDuty({ maxWaitMs: LONGEST_TIMER_MS * 10 });
+    try {
+      await armedCount(1);
+      expect(armed[0]!.ms).toBe(LONGEST_TIMER_MS);
+    } finally {
+      await duty.stop();
+    }
+  });
+
+  it("never arms a timer longer than Node honours for an edition further off than that", async () => {
+    f = await menusFixture(fx.db);
+    await publishNow(f.lunch);
+    await setSoup("5.50");
+    await queue(f.lunch, new Date(day(4).getTime() + LONGEST_TIMER_MS + 86_400_000));
+    const { duty, armed, armedCount } = startDuty({ maxWaitMs: LONGEST_TIMER_MS * 10 });
+    try {
+      await armedCount(1);
+      expect(armed[0]!.ms).toBe(LONGEST_TIMER_MS);
     } finally {
       await duty.stop();
     }
