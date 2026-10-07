@@ -42,7 +42,6 @@ export const PAY_WAYS = [
 
 const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 
-/** A typed amount with a decimal comma read as a point, or null when it is not an amount. */
 export function typedAmount(value: string): string | null {
   const typed = parseDecimalInput(value);
   return typed !== null && TYPED_AMOUNT.test(typed) ? typed : null;

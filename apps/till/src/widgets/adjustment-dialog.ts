@@ -110,7 +110,6 @@ const DO: Record<AdjustKind, StringKey> = {
   discount: "adjust.do_discount",
 };
 
-/** A typed amount: digits, then at most two decimals after a point or a comma. */
 const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 
 /**
@@ -370,7 +369,6 @@ export class TillAdjustmentDialog extends LitElement {
     return formatMoney(amount, currentLocale());
   }
 
-  /** The typed value with a decimal comma read as a point. */
   #typedNumber(): string {
     return parseDecimalInput(this.value) ?? this.value.trim();
   }
