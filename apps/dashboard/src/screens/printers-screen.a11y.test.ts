@@ -317,6 +317,33 @@ function bluetoothApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
 }
 
 describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (theme) => {
+  it.each(["en", "es-ES"] as const)(
+    "keeps the phone agent action accessible in %s",
+    async (locale) => {
+      const before = currentLocale();
+      await page.viewport(390, 844);
+      try {
+        setLocale(locale);
+        const { el, host } = await mountWidget<PrintersScreen>(
+          "dashboard-printers-screen",
+          { api: stubApi() },
+          theme,
+        );
+        host.style.width = "310px";
+        await flush(el);
+        q(el, "wt-tabs")!
+          .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="agents"]')!
+          .click();
+        await flush(el);
+        expect(q(el, "[data-test=open-add-agent]")!.checkVisibility()).toBe(true);
+        await expectNoA11yViolations(host);
+      } finally {
+        setLocale(before);
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
   it.each([390, 1280])("renders printer status accessibly at %ipx", async (width) => {
     await page.viewport(width, 900);
     const { el, host } = await mountWidget<PrintersScreen>(

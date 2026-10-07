@@ -209,7 +209,7 @@ describe("createSetupApp — rendering", () => {
         "192.168.20.5",
       )
     ).text();
-    expect(closedHtml).toContain("open Add a print agent on the Printers page");
+    expect(closedHtml).toContain("open Add an agent on the Printers page");
     expect(closedHtml).toContain('name="serverUrl"');
   });
 

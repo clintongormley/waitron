@@ -174,6 +174,18 @@ export class PrintersScreen extends LitElement {
       :host {
         display: block;
       }
+      @media (max-width: 640px) {
+        wt-tabs::part(tab-row) {
+          flex-wrap: wrap;
+        }
+        wt-tabs::part(tablist) {
+          flex-basis: 100%;
+        }
+        wt-tabs::part(tab-actions) {
+          max-width: 100%;
+          margin-inline-start: auto;
+        }
+      }
       wt-data-table::part(printer-meta) {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
