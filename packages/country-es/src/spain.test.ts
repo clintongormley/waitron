@@ -145,6 +145,8 @@ describe("regional content languages", () => {
   const CATALONIA = ["08", "17", "25", "43"];
   const VALENCIAN_COMMUNITY = ["03", "12", "46"];
   const GALICIA = ["15", "27", "32", "36"];
+  const BALEARIC_ISLANDS = ["07"];
+  const BASQUE_COUNTRY_AND_NAVARRE = ["01", "20", "48", "31"];
   const area = (code: string) => SPAIN.administrativeAreas.find((entry) => entry.code === code)!;
 
   it("names Spain's official languages", () => {
@@ -158,7 +160,7 @@ describe("regional content languages", () => {
   });
 
   it.each(VALENCIAN_COMMUNITY)(
-    "requires Valencian and Spanish in %s, with Catalan the default, and gives the one-foreign-language notice",
+    "requires Valencian and Spanish in %s, with Valencian the default, and gives the one-foreign-language notice",
     (code) => {
       expect(area(code).requiredContentLocales).toEqual(["ca-ES", "es-ES"]);
       expect(area(code).defaultContentLocale).toBe("ca-ES");
@@ -181,14 +183,17 @@ describe("regional content languages", () => {
     },
   );
 
-  it("requires Catalan and Spanish in the Balearic Islands, with Catalan the default", () => {
-    expect(area("07").requiredContentLocales).toEqual(["ca-ES", "es-ES"]);
-    expect(area("07").defaultContentLocale).toBe("ca-ES");
-    expect(area("07").foreignLanguageNotice).toBeUndefined();
-  });
+  it.each(BALEARIC_ISLANDS)(
+    "requires Catalan and Spanish in %s (the Balearic Islands), with Catalan the default",
+    (code) => {
+      expect(area(code).requiredContentLocales).toEqual(["ca-ES", "es-ES"]);
+      expect(area(code).defaultContentLocale).toBe("ca-ES");
+      expect(area(code).foreignLanguageNotice).toBeUndefined();
+    },
+  );
 
   it("requires nothing in the Basque Country and Navarre", () => {
-    for (const code of ["01", "20", "48", "31"]) {
+    for (const code of BASQUE_COUNTRY_AND_NAVARRE) {
       expect(area(code).requiredContentLocales, code).toBeUndefined();
       expect(area(code).defaultContentLocale, code).toBeUndefined();
       expect(area(code).foreignLanguageNotice, code).toBeUndefined();
@@ -200,11 +205,8 @@ describe("regional content languages", () => {
       ...CATALONIA,
       ...VALENCIAN_COMMUNITY,
       ...GALICIA,
-      "07",
-      "01",
-      "20",
-      "48",
-      "31",
+      ...BALEARIC_ISLANDS,
+      ...BASQUE_COUNTRY_AND_NAVARRE,
     ]);
     const others = SPAIN.administrativeAreas.filter(({ code }) => !ruled.has(code));
     expect(others.map(({ code }) => code)).toEqual(

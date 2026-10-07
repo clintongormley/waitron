@@ -69,7 +69,7 @@ afterEach(() => {
 
 const OFFICIAL = ["es", "ca", "gl", "eu"];
 const BARCELONA: ContentLanguageRules = { required: ["ca", "es"], official: OFFICIAL };
-const MADRID: ContentLanguageRules = { required: [], official: OFFICIAL };
+const NOTHING_REQUIRED: ContentLanguageRules = { required: [], official: OFFICIAL };
 const VALENCIA: ContentLanguageRules = {
   required: ["ca", "es"],
   official: OFFICIAL,
@@ -109,9 +109,9 @@ describe("required content languages", () => {
     expect(es["content_languages.required"]).toBe("Obligatorio");
   });
 
-  it("offers Remove on every language but the default where the region requires none", async () => {
+  it("offers Remove on every language but the default where none is required", async () => {
     const el = await mount(
-      rulesApi(MADRID, { defaultLanguage: "es", languages: ["es", "ca", "en"] }),
+      rulesApi(NOTHING_REQUIRED, { defaultLanguage: "es", languages: ["es", "ca", "en"] }),
     );
     expect(q(el, "[data-test=remove-ca]")).not.toBeNull();
     expect(q(el, "[data-test=remove-en]")).not.toBeNull();
@@ -162,12 +162,16 @@ describe("required content languages", () => {
   });
 
   it("shows no notice where the region gives none", async () => {
-    const el = await mount(rulesApi(MADRID, { defaultLanguage: "es", languages: ["es", "ca"] }));
+    const el = await mount(
+      rulesApi(NOTHING_REQUIRED, { defaultLanguage: "es", languages: ["es", "ca"] }),
+    );
     expect(notice(el)).toBeNull();
   });
 
   it("hands the official languages to the Add language dialog", async () => {
-    const el = await mount(rulesApi(MADRID, { defaultLanguage: "es", languages: ["es"] }));
+    const el = await mount(
+      rulesApi(NOTHING_REQUIRED, { defaultLanguage: "es", languages: ["es"] }),
+    );
     expect(dialog(el).official).toEqual(OFFICIAL);
   });
 
@@ -969,7 +973,9 @@ describe("missing translations", () => {
       { kind: "section", id: "section-1", name: "STAFF Drinks", reason: "partial", parent: menu },
       { kind: "unit", id: "unit-1", name: "ración", reason: "partial" },
     ];
-    const el = await mount(gapsApi(SPANISH_DEFAULT, MADRID, report({ es: [], ca: gaps, en: [] })));
+    const el = await mount(
+      gapsApi(SPANISH_DEFAULT, NOTHING_REQUIRED, report({ es: [], ca: gaps, en: [] })),
+    );
     disclosure(el, "ca")!.open = true;
     await flush(el);
     const found = await links(el, "ca");

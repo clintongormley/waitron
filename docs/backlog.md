@@ -4351,9 +4351,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 
 - **Product languages are hard-coded at setup** (owner, 2026-09-13) — **DONE (W109-6, Task 6 of
   `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`).** A new venue starts with
-  its region's required languages plus English, the regional language the default where one is
-  required (owner, 2026-10-06 ~17:23; entry "Content languages per region", A2); the fixed
-  `["es", "ca", "en"]` is gone from `packages/catalogue/src/provisioning.ts`.
+  the languages Waitron keeps enabled for its area plus English, the regional language the default
+  where one is kept (owner, 2026-10-06 ~17:23; entry "Content languages per region", A2); the
+  fixed `["es", "ca", "en"]` is gone from `packages/catalogue/src/provisioning.ts`.
 - **Two writers still skip the required-language check (`content.language_required`) — OPEN.**
   The demo seed (`apps/server/scripts/demo-seed/seed-catalogue.ts`) replaces setup's row with its
   own pair, fixed by the demo-data plan's Task 4 (W109-4); the Prepare-to-Live configuration copy

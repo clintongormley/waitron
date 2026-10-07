@@ -709,6 +709,7 @@ own pair, as it does today. It is placed here, before the demo's language work, 
   reason; the Balearic one also says it asks for more than the law, which wants at least one
   official language (`docs/compliance/regional-language-rules.md`, "Balearic Islands"). The
   existing comments at `:183-193`, `:206-208` and `:220-222` stay true and stay.
+  > 2026-10-07, finish-branch review: `languageLawFor` and `LanguageLaw` are now `languageRulesFor` and `LanguageRules` in `packages/country-es/src/spain.ts`.
 - Modify: `packages/country-packs/src/registry.ts` — export `VenueGeography` (declared without
   `export` at `:75`; `index.ts` re-exports `registry.js`), and add
   `resolveInstalledStartingContentLanguages` (below).
@@ -900,6 +901,7 @@ it("requires Spanish, with Spanish the default, everywhere else", () => {
     `provisioning.test.ts`'s Madrid row passes either way — with no rule the default falls back to
     Spain's own language, so the list is still `es, en` — which is why the required list is pinned
     in the other three files.
+    > 2026-10-07, finish-branch review: `languageLawFor` and `LanguageLaw` are now `languageRulesFor` and `LanguageRules` in `packages/country-es/src/spain.ts`.
 - [ ] **Step 6: Look.** In a worktree's dev stack (`wa-wt onboarding <worktree-name>`), set up a
   Prepare venue in Madrid and, after a reset, one in the Balearic Islands; open each one's Content
   languages page in both themes and at phone width. Madrid: Spanish (default, **Required**, no
@@ -1505,6 +1507,7 @@ untouched by the decisions. One stub now carries a name that no longer matches t
 `content-languages-screen.test.ts:72` (`MADRID`, `required: []`), used by "offers Remove on every
 language but the default where the region requires none" (`:112`). The screen behaviour it tests is
 still reachable (a Spanish venue with no province requires nothing), so it stays unchanged.
+> 2026-10-07, finish-branch review: the stub is now named `NOTHING_REQUIRED` and the test "…where none is required"; its value is unchanged.
 
 ## Known limits this plan leaves (recorded in the backlog, not built)
 

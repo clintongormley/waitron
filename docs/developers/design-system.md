@@ -2046,8 +2046,8 @@ the sidebar while editing" confusion, since the page never stopped being the pag
 buttons" below for the button styling this pairs with, and the `wt-modal` entry under "Primitives"
 above for the close-event race a shared, reused modal needs to guard against. One exception (C111,
 owner 2026-09-30): Content languages' Set as default and Remove save straight away, without a modal
-(removing a language keeps its translations); its Add language still opens one. A language the
-venue's region requires has no Remove and shows "Required". A second exception (A212): the course
+(removing a language keeps its translations); its Add language still opens one. A language Waitron
+keeps enabled for the venue's area has no Remove and shows "Required". A second exception (A212): the course
 list, on Venue settings' Kitchen tab and in the product editor's Courses window, adds, renames and disables
 courses in place without a modal, saving each change as it is made, and asks in a dialog before a Delete; the Courses window has one Done
 button. A third exception (W89, owner 2026-10-04): a menu's Price overrides tab sets each product's

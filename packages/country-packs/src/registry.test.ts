@@ -129,13 +129,14 @@ describe("content-language rules", () => {
       });
   });
 
-  it("gives a new Spanish venue the regional language as its default where one is required, Spanish elsewhere", () => {
+  it("gives a new Spanish venue the regional language as its default where one is required, Spanish where Spanish alone is required, and none in the Basque Country", () => {
     expect(resolveInstalledDefaultContentLanguage({ country: "es", area: "Barcelona" })).toBe("ca");
     expect(resolveInstalledDefaultContentLanguage({ country: "ES", area: "Valencia" })).toBe("ca");
     expect(resolveInstalledDefaultContentLanguage({ country: "ES", area: "Madrid" })).toBe("es");
     for (const input of [
       { country: "XX", area: "Barcelona" },
       { country: null, area: null },
+      { country: "ES", area: "Bizkaia" },
     ])
       expect(resolveInstalledDefaultContentLanguage(input)).toBeUndefined();
   });
