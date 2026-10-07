@@ -488,7 +488,7 @@ describe("stored preparation rules", () => {
       const [inside, garden] = await tx
         .insert(floorZones)
         .values([
-          { ...f.cfg, name: "Inside", displayOrder: 1 },
+          { ...f.cfg, name: "Upstairs", displayOrder: 1 },
           { ...f.cfg, name: "Garden", displayOrder: 0, active: false },
         ])
         .returning();
@@ -510,7 +510,7 @@ describe("stored preparation rules", () => {
       expect(model.zones.some((zone) => zone.id === garden!.id)).toBe(false);
       expect({ ...model, cells: sortCells(model.cells) }).toEqual({
         zones: [
-          { id: inside!.id, name: "Inside" },
+          { id: inside!.id, name: "Upstairs" },
           { id: f.terrace, name: "Terrace" },
         ],
         categories: [
