@@ -63,7 +63,8 @@ export type ImageUsage =
     }
   /**
    * An include's folder photo, held whether or not the include shows as a folder. `id` is the
-   * member; `menuId` owns the list it sits in; `includedMenuName` is the included root's staff name.
+   * member; `menuId` owns the list it sits in; `includedMenuName` is the included root's staff name,
+   * or the member's missing name when it includes no section.
    */
   | {
       kind: "menu_include";
