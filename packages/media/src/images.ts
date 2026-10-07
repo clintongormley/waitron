@@ -190,8 +190,8 @@ async function listImageUsagesForFilename(
       menuId: sections.ownerMenuId,
       menuName: catalogues.name,
       // Left-joined so a member that names no section is still listed, as `countUsages` and the
-      // delete trigger still see it.
-      includedMenuName: sql<string>`coalesce(${includedRoots.internalName}, '')`,
+      // delete trigger still see it, under its own missing name.
+      includedMenuName: sql<string>`coalesce(${includedRoots.internalName}, ${sectionMembers.missingName}, '')`,
     })
     .from(sectionMembers)
     .innerJoin(sections, eq(sections.id, sectionMembers.sectionId))

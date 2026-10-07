@@ -700,7 +700,7 @@ it("protects the photo an include's folder names, even switched off, and counts 
   });
 });
 
-it("lists a folder photo held by a member that includes no section, as the count and the delete trigger see it", async () => {
+it("lists a folder photo held by a member that includes no section, under its missing name, as the count and the delete trigger see it", async () => {
   const { sectionMembers, sections } = await import("@waitron/catalogue");
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
@@ -717,7 +717,7 @@ it("lists a folder photo held by a member that includes no section, as the count
       .values({
         sectionId: lunchRoot!.id,
         position: 0,
-        missingName: "Gone",
+        missingName: "Old drinks",
         folderOverrides: { image: image.filename },
       })
       .returning({ id: sectionMembers.id });
@@ -727,7 +727,7 @@ it("lists a folder photo held by a member that includes no section, as the count
         id: member!.id,
         menuId: lunch!.id,
         menuName: "Lunch Menu",
-        includedMenuName: "",
+        includedMenuName: "Old drinks",
       },
     ];
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
