@@ -892,7 +892,9 @@ height. The products-only "Disable N products?" dialog is compact too. Point (1)
 open — the same place named three ways — is DONE by A305 (#1333, owner 2026-10-06): the Move-to list, the
 product editor, the menu prices table, the sales-by-category report on screen and printed, and this
 dialog all read **No category** / **Sin categoría**; the Products tree's heading row keeps "All
-products". Point (2) — the SERVER refusing a delete with `category.contents_changed` when only
+products". A316 (owner 2026-10-07) is DONE: the report's own part under Not recorded reads
+**Category unknown** / **Categoría desconocida** on screen and in print, distinguishing missing
+category information from the explicitly uncategorised **No category** row. Point (2) — the SERVER refusing a delete with `category.contents_changed` when only
 disabled products changed, whose message said to check counts this dialog no longer shows — is
 DONE by A304 (#1338, owner 2026-10-06): after the refusal the dialog re-reads, and when nothing it
 shows changed it says the contents changed, that what it shows is up to date, and asks to choose

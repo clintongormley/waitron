@@ -39,7 +39,7 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
     net: "Net",
     uncategorised: "No category",
     notRecorded: "Not recorded",
-    noCategoryRecorded: "No category recorded",
+    noCategoryRecorded: "Category unknown",
     directlyIn: (name) => `Directly in ${name}`,
     total: "Total",
     incomplete: (n) =>
@@ -57,7 +57,7 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
     net: "Neto",
     uncategorised: "Sin categoría",
     notRecorded: "No registrada",
-    noCategoryRecorded: "Sin categoría registrada",
+    noCategoryRecorded: "Categoría desconocida",
     directlyIn: (name) => `Directamente en ${name}`,
     total: "Total",
     incomplete: (n) =>

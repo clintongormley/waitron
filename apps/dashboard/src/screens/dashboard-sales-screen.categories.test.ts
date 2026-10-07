@@ -332,7 +332,7 @@ describe("dashboard-sales-screen — category report", () => {
       ["Croquetas Casa", 2, "category", "20,00\u00a0€", "18,00\u00a0€"],
       ["Sin categoría", 0, "uncategorised", "3,00\u00a0€", "2,70\u00a0€"],
       ["No registrada", 0, "not_recorded", "1,00\u00a0€", "6,00\u00a0€"],
-      ["Sin categoría registrada", 1, "direct", "0,00\u00a0€", "2,00\u00a0€"],
+      ["Categoría desconocida", 1, "direct", "0,00\u00a0€", "2,00\u00a0€"],
       ["Tapas viejas", 1, "free_text", "1,00\u00a0€", "4,00\u00a0€"],
     ]);
     expect(q(el, "category-total-gross")!.textContent!.trim()).toBe("44,00\u00a0€");
@@ -429,7 +429,7 @@ describe("dashboard-sales-screen — category report", () => {
   it("shows no path for No category, Not recorded or what sits under Not recorded", async () => {
     const el = await mount(stubApi());
     const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=category-row] th")];
-    // Rows 7 to 10: Sin categoría, No registrada, Sin categoría registrada, Tapas viejas.
+    // Rows 7 to 10: Sin categoría, No registrada, Categoría desconocida, Tapas viejas.
     for (const cell of cells.slice(7)) {
       expect(cell.querySelector("[data-test=category-path]")).toBeNull();
     }
@@ -455,7 +455,7 @@ describe("dashboard-sales-screen — category report", () => {
     expect(names).toContain("Directly in Bebidas Casa");
     expect(names).toContain("No category");
     expect(names).toContain("Not recorded");
-    expect(names).toContain("No category recorded");
+    expect(names).toContain("Category unknown");
     expect(names).not.toContain("Directly in Not recorded");
     pickMode(el, "current");
     await flush(el);
