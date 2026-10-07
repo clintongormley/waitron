@@ -1219,7 +1219,7 @@ describe("unique category and product names", () => {
     expect((await send(app, "GET", `/management-api/categories/${first}`)).status).toBe(200);
   });
 
-  it("answers a duplicate Active product on create with product.name_taken (409)", async () => {
+  it("answers a duplicate Active product on create, editor rename and reactivation with product.name_taken (409)", async () => {
     const app = mountApp();
     const name = `Café ${tag()}`;
     await createNamedProductVia(app, name);
@@ -1234,6 +1234,21 @@ describe("unique category and product names", () => {
     };
     await refused(
       await send(app, "POST", "/management-api/products", { body }),
+      "product.name_taken",
+      { field: "name", name: name.toLowerCase() },
+    );
+    const other = await createNamedProductVia(app, `Té ${tag()}`);
+    await refused(await saveEditorFixture(app, other, { name }), "product.name_taken", {
+      field: "name",
+      name,
+    });
+    const inactive = await send(app, "POST", "/management-api/products", {
+      body: { ...body, active: false },
+    });
+    expect(inactive.status).toBe(201);
+    const inactiveId = ((await inactive.json()) as { id: string }).id;
+    await refused(
+      await saveEditorFixture(app, inactiveId, { active: true }),
       "product.name_taken",
       { field: "name", name: name.toLowerCase() },
     );
@@ -1899,6 +1914,27 @@ describe("mountCatalogueApi — products", () => {
       ownCategoryId,
     };
   }
+
+  it("keeps a product's own colour when its category is recoloured, and clears it through the editor", async () => {
+    const app = mountApp("es-ES");
+    const { parentId, categoryId } = await parentWithVariant(app);
+    const listedColor = async () =>
+      (
+        (await (await send(app, "GET", "/management-api/products")).json()) as {
+          id: string;
+          color: string | null;
+        }[]
+      ).find((product) => product.id === parentId)!.color;
+    expect((await saveEditorFixture(app, parentId, { color: "#256bb1" })).status).toBe(200);
+    expect(await listedColor()).toBe("#256bb1");
+    const recoloured = await send(app, "PATCH", `/management-api/categories/${categoryId}`, {
+      body: { color: "#b12525" },
+    });
+    expect(recoloured.status).toBe(200);
+    expect(await listedColor()).toBe("#256bb1");
+    expect((await saveEditorFixture(app, parentId, { color: null })).status).toBe(200);
+    expect(await listedColor()).toBeNull();
+  });
 
   it("reads a variant's own page: its own names, its blanks blank, its parent's values beside", async () => {
     const app = mountApp("es-ES");

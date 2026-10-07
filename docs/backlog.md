@@ -6675,7 +6675,7 @@ the ruling calls legitimate. Nobody has decided whether the form should be relax
 note should become its own document type.
 
 **A negative catalogue price can still be stored by a direct call — OPEN (left by #487).** A
-negative catalogue price is never valid (owner ruling 2026-09-21); the four catalogue writes in
+negative catalogue price is never valid (owner ruling 2026-09-21); the product-create and menu-item writes in
 `apps/server/src/catalogue-api.ts` refuse one at the request boundary. `createProduct` and
 `updateProduct` (`packages/catalogue/src/operations.ts`) still accept and store a negative when
 called directly — a seed, a script or a future caller — and `products.unit_price` carries no
@@ -6685,7 +6685,7 @@ cents, so a check constraint is now the only thing that would refuse it at the d
 
 **Two price rules disagree about a value that is not negative — OPEN (found 2026-09-21, task N4).**
 `isProductPrice` (`packages/catalogue/src/modifier-limits.ts:12`) allows at most two decimal places
-and ten whole digits; `stringToCents` (the `decimal()` + `decimalToCents` pair) that the four
+and ten whole digits; `stringToCents` (the `decimal()` + `decimalToCents` pair) that the
 screened catalogue writes use allows any number of decimals and twelve whole digits, and ROUNDS the
 excess. So `POST /management-api/products` with `unitPrice: "1.999"` stores `2.00` without saying
 so, while the product-editor route refuses the same value with `product.invalid`; an eleven-digit
