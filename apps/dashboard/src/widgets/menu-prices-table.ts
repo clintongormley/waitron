@@ -123,6 +123,10 @@ export class MenuPricesTable extends LitElement {
         display: block;
         container-type: inline-size;
       }
+      .error {
+        margin-block: 0 var(--wt-space-3);
+        color: var(--wt-color-danger);
+      }
       wt-data-table::part(name-box) {
         display: contents;
       }
@@ -270,6 +274,16 @@ export class MenuPricesTable extends LitElement {
     MenuPriceRow,
     { inherited: Inherited; sizes: ReturnType<typeof sizesInheritedFrom> }
   > = new Map();
+  /** Each row that clashes as this menu stores it, drafts aside, so a row under the Clashes filter
+   * stays while a price is typed into it. */
+  #clashing: ReadonlyMap<string, "size" | "own"> = new Map();
+  /** Clashing prices, counted per product as `clashesOf` counts them
+   * (packages/catalogue/src/menu-combine.ts): a product with variants by its clashing variants. */
+  #clashCount = 0;
+  /** Whether the price filter starts on Clashes, decided on the first loaded update of each load;
+   * undefined until then. Dropped for the rest of a load once it has no clash, so a clash that
+   * comes back does not move the filter. */
+  #startOnClashes: boolean | undefined = undefined;
   /** Per row key, what depends on its product's field, with the reading of that field it was
    * worked out for. */
   readonly #underParent = new Map<
@@ -290,13 +304,21 @@ export class MenuPricesTable extends LitElement {
         ]),
       );
       this.#underParent.clear();
+      this.#readClashes();
     }
     if (changed.has("products"))
       this.#variants = new Map(
         this.products.flatMap(({ variants }) => variants.map((variant) => [variant.id, variant])),
       );
     if (changed.has("rows") || changed.has("products")) this.#readLines();
-    if (changed.has("sections") || changed.has("categories") || changed.has("rows"))
+    const startedOnClashes = this.#startOnClashes;
+    this.#decideStart();
+    if (
+      changed.has("sections") ||
+      changed.has("categories") ||
+      changed.has("rows") ||
+      this.#startOnClashes !== startedOnClashes
+    )
       this.#columns = this.#buildColumns();
     if (changed.has("refusals")) {
       const before = changed.get("refusals") ?? {};
@@ -315,6 +337,33 @@ export class MenuPricesTable extends LitElement {
         changed.has("refusals") ? (changed.get("refusals") ?? {}) : this.refusals,
         changed.has("outcome") ? (changed.get("outcome") ?? null) : this.outcome,
       );
+  }
+
+  #readClashes(): void {
+    const clashing = new Map<string, "size" | "own">();
+    let count = 0;
+    for (const item of this.rows) {
+      const own =
+        item.override === null &&
+        (item.combined.price.state === "clash" ||
+          this.#productInheritance.get(item)!.inherited.state === "clash");
+      const product = sizeClash(item) ? "size" : own ? "own" : null;
+      if (product !== null) clashing.set(item.menuItemId, product);
+      if (product !== null && item.variants.length === 0) count++;
+      for (const { variantId, price } of item.variants) {
+        if (price !== null || variantInherited(item, variantId, undefined).state !== "clash")
+          continue;
+        clashing.set(`${item.menuItemId}:${variantId}`, "own");
+        count++;
+      }
+    }
+    this.#clashing = clashing;
+    this.#clashCount = count;
+  }
+
+  #decideStart(): void {
+    if (this.loading || this.failed) this.#startOnClashes = undefined;
+    else if (this.#startOnClashes !== false) this.#startOnClashes = this.#clashing.size > 0;
   }
 
   /** A refused price nothing says was refused any longer would read as stored and be sent again
@@ -813,8 +862,18 @@ export class MenuPricesTable extends LitElement {
         filter: {
           label: t("menu_prices.price_filter"),
           allLabel: t("menu_prices.all_prices"),
-          value: (line) => (this.#overridden(line) ? "overridden" : "product"),
-          options: [{ value: "overridden", label: t("menu_prices.overridden_only") }],
+          value: (line) => [
+            this.#overridden(line) ? "overridden" : "not_overridden",
+            ...(this.#clashing.has(keyOf(line)) ? ["clash"] : []),
+          ],
+          options: [
+            { value: "overridden", label: t("menu_prices.overridden_only") },
+            { value: "not_overridden", label: t("menu_prices.not_overridden") },
+            ...(this.#clashing.size > 0
+              ? [{ value: "clash", label: t("menu_prices.clashes_only") }]
+              : []),
+          ],
+          ...(this.#startOnClashes ? { initial: "clash" } : {}),
         },
       },
       {
@@ -868,8 +927,18 @@ export class MenuPricesTable extends LitElement {
     ];
   }
 
+  #clashMessage() {
+    const count = this.#clashCount;
+    if (this.loading || this.failed || count === 0) return nothing;
+    const words =
+      count === 1
+        ? t("menu_prices.clash_message_one")
+        : t("menu_prices.clash_message_other").replace("{count}", String(count));
+    return html`<p class="error" role="status" data-test="clash-message">${words}</p>`;
+  }
+
   override render() {
-    return html`<wt-data-table
+    return html`${this.#clashMessage()}<wt-data-table
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}

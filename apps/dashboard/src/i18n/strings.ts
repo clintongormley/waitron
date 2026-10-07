@@ -2072,6 +2072,11 @@ export const en = {
   "menu_prices.price_filter": "Filter by price override",
   "menu_prices.all_prices": "All prices",
   "menu_prices.overridden_only": "Overridden only",
+  "menu_prices.not_overridden": "Not overridden",
+  "menu_prices.clashes_only": "Clashes",
+  "menu_prices.clash_message_one": "1 price clashes. Settle it before this menu can be published.",
+  "menu_prices.clash_message_other":
+    "{count} prices clash. Settle them before this menu can be published.",
   "menu_prices.expand": "Show the variants of {name}",
   "menu_prices.collapse": "Hide the variants of {name}",
   "menu_prices.variant_overrides": "Variant overrides",
@@ -4529,6 +4534,12 @@ export const es: Record<StringKey, string> = {
   "menu_prices.price_filter": "Filtrar por precio propio",
   "menu_prices.all_prices": "Todos los precios",
   "menu_prices.overridden_only": "Solo con precio propio",
+  "menu_prices.not_overridden": "Sin precio propio",
+  "menu_prices.clashes_only": "Con discrepancias",
+  "menu_prices.clash_message_one":
+    "1 precio tiene una discrepancia. Resuélvela antes de poder publicar esta carta.",
+  "menu_prices.clash_message_other":
+    "{count} precios tienen discrepancias. Resuélvelas antes de poder publicar esta carta.",
   "menu_prices.expand": "Mostrar las variantes de {name}",
   "menu_prices.collapse": "Ocultar las variantes de {name}",
   "menu_prices.variant_overrides": "Precios propios en las variantes",

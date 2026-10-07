@@ -6,6 +6,7 @@ import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import type { MenuPricesTable } from "./menu-prices-table.js";
 import "./menu-prices-table.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => {
@@ -109,6 +110,9 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = table.shadowRoot!;
+    // A load holding a clash starts on the Clashes filter; every row is checked here.
+    await chooseOption(root.querySelector('wt-combobox[data-filter="override"]')!, "");
+    await table.updateComplete;
     root
       .querySelector<HTMLButtonElement>('tr[data-row-key="mi-lemonade"] button.tree-toggle')!
       .click();
