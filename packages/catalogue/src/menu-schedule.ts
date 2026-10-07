@@ -122,6 +122,43 @@ export async function cancelMenuPublication(
 }
 
 /**
+ * Moves a queued edition to `activatesAt`, inside the caller's one transaction. Refused, writing
+ * nothing, when the version has no schedule row of this menu, is no longer queued, `activatesAt`
+ * is not after `at`, or the move would overtake another queued edition.
+ */
+export async function rescheduleMenuPublication(
+  tx: Transaction,
+  menuId: string,
+  versionId: string,
+  activatesAt: Date,
+  options: { at?: Date } = {},
+): Promise<QueuedEdition> {
+  const at = options.at ?? now();
+  await settleDue(tx, at, [menuId]);
+  const [row] = await tx
+    .select({ state: menuScheduledPublications.state, number: menuVersions.number })
+    .from(menuScheduledPublications)
+    .innerJoin(menuVersions, eq(menuVersions.id, menuScheduledPublications.versionId))
+    .where(
+      and(
+        eq(menuScheduledPublications.versionId, versionId),
+        eq(menuScheduledPublications.menuId, menuId),
+      ),
+    );
+  if (row === undefined) throw new AppError("menu_publication.not_found", { menuId, versionId });
+  if (row.state !== "queued")
+    throw new AppError("menu_publication.not_queued", { menuId, versionId, state: row.state });
+  if (activatesAt.getTime() <= at.getTime())
+    throw new AppError("menu_publication.time_past", { activatesAt: activatesAt.toISOString() });
+  refuseOvertaken(menuId, await overtakenBy(tx, menuId, row.number, activatesAt));
+  await tx
+    .update(menuScheduledPublications)
+    .set({ activatesAt })
+    .where(eq(menuScheduledPublications.versionId, versionId));
+  return { versionId, number: row.number, activatesAt: activatesAt.toISOString() };
+}
+
+/**
  * The menu's live version at `at`, every edition still queued soonest first, then the latest
  * settled ones. Writes nothing: an edition whose time has passed reads as activated before any
  * settle marks it.

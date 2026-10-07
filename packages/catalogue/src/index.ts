@@ -104,6 +104,7 @@ export {
   cancelMenuPublication,
   listMenuPublications,
   queueMenuPublication,
+  rescheduleMenuPublication,
 } from "./menu-schedule.js";
 export * from "./sale-classification.js";
 export { currentClassifications } from "./current-classifications.js";

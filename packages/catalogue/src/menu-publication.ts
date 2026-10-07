@@ -1,5 +1,5 @@
 import { navigateMenuChanges } from "./menu-navigation.js";
-import { and, asc, eq, gt, gte, inArray, lt, lte, max, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lt, lte, max, or, sql } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { BATCH_SIZE, batches } from "./batches.js";
@@ -548,15 +548,14 @@ export async function nextNumber(tx: Transaction, menuId: string): Promise<numbe
 /**
  * The queued editions that an edition numbered `number` placed at `activatesAt` would overtake,
  * ascending by number: a lower number activating no earlier, or a higher one no later. Equal
- * instants count, because the higher number would hide the lower one for ever. `except` leaves
- * out the edition being moved.
+ * instants count, because the higher number would hide the lower one for ever. The edition being
+ * placed never matches itself: a menu has one version per number.
  */
 export async function overtakenBy(
   tx: Transaction,
   menuId: string,
   number: number,
   activatesAt: Date,
-  except?: string,
 ): Promise<OvertakenEdition[]> {
   const rows = await tx
     .select({
@@ -570,7 +569,6 @@ export async function overtakenBy(
       and(
         eq(menuScheduledPublications.menuId, menuId),
         eq(menuScheduledPublications.state, "queued"),
-        except === undefined ? undefined : ne(menuScheduledPublications.versionId, except),
         or(
           and(
             lt(menuVersions.number, number),
