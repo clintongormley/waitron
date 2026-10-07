@@ -3,7 +3,8 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
-import type { ContentLanguages } from "@waitron/shared";
+import { resolveContentText, type ContentLanguages } from "@waitron/shared";
+import { resolveMenuText } from "@waitron/catalogue/src/customer-menu-presentation.js";
 import {
   FOLLOWING_FOLDER,
   folderOverridesFrom,
@@ -195,17 +196,35 @@ export class IncludeFolderForm extends LitElement {
     this.#dismiss(...Object.keys(this.fieldErrors));
     this.#emit(event, "wt-submit", this.#submissionValue());
   }
+  /** Each name field's hint: what a customer reading that language sees while the field is blank,
+   * worked out from the names this form would save. Names the save would refuse are never shown, so
+   * they hint nothing. */
+  #placeholderFor(): (locale: string) => string {
+    const { names } = folderPresentation(this.#loaded.own, {
+      showAsFolder: true,
+      overrides: this.#overrides(),
+    });
+    const { defaultLanguage } = this.languages;
+    if (
+      Object.keys(names).length > 0 &&
+      !resolveContentText(names, defaultLanguage, defaultLanguage)
+    )
+      return () => "";
+    return (locale) =>
+      resolveMenuText(names, this.menuName, { kind: "customer", language: locale }, this.languages)
+        .text;
+  }
+  #overrides(): IncludeFolderOverrides {
+    return folderOverridesFrom(
+      this.#loaded.own,
+      { names: this.names, image: this.image, color: this.color },
+      this.languages.languages,
+      this.#loaded.stored.overrides,
+    );
+  }
   #submissionValue(): IncludeFolderInput {
     if (!this.showAsFolder) return { showAsFolder: false };
-    return {
-      showAsFolder: true,
-      overrides: folderOverridesFrom(
-        this.#loaded.own,
-        { names: this.names, image: this.image, color: this.color },
-        this.languages.languages,
-        this.#loaded.stored.overrides,
-      ),
-    };
+    return { showAsFolder: true, overrides: this.#overrides() };
   }
   commitSaved(submitted: IncludeFolderInput): void {
     this.#scope?.commit(submitted);
@@ -244,8 +263,7 @@ export class IncludeFolderForm extends LitElement {
             this.#scope?.changed();
             this.#dismiss("names", ...changed.map((language) => `names-${language}`));
           },
-          this.menuName,
-          this.languages.defaultLanguage,
+          this.#placeholderFor(),
         )}
         <span class="field-error">${errors.names ?? nothing}</span>
       </fieldset>

@@ -190,6 +190,13 @@ function item(el: MenuStructureTable, test: string): HTMLElement {
   return inTable(el, `[data-test="${CSS.escape(test)}"]`)!;
 }
 
+/** The notes under a row's name, as their text. */
+function notesOf(el: MenuStructureTable, key: string): string[] {
+  return [...row(el, key)!.querySelectorAll('[part~="note"]')].map((note) =>
+    note.textContent!.trim(),
+  );
+}
+
 function listen(el: MenuStructureTable, name: string): unknown[] {
   const seen: unknown[] = [];
   el.addEventListener(name, (event) => seen.push((event as CustomEvent).detail));
@@ -343,7 +350,8 @@ it("draws an included menu read-only, its menu offering Open, Edit and Remove", 
   const removes = listen(el, "wt-member-remove");
   const edits = listen(el, "wt-structure-edit");
   expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
-  expect(item(el, "read-only-included-wine").textContent!.trim()).toBe(t("menus.read_only_here"));
+  expect(item(el, "read-only-included-wine")).toBeNull();
+  expect(notesOf(el, "included-wine")).toEqual([t("menus.include_as_folder")]);
   expect(menuItems(el, "included-wine")).toEqual([
     "source-included-wine",
     "edit-included-wine",
@@ -384,6 +392,31 @@ it("draws an included menu read-only, its menu offering Open, Edit and Remove", 
   expect(shown(el)).not.toContain("included-wine/wine-red/wine-rioja");
   // Nothing inside another menu can be the list being edited here.
   expect(edits).toEqual([]);
+});
+
+it("draws an included menu's Open link as the same entry as its Edit and Remove", async () => {
+  const el = await mount({ nodes: [...lunchNodes(), wines()] });
+  const menu = inTable<HTMLElementTagNameMap["wt-row-actions"]>(
+    el,
+    '[data-test="actions-included-wine"]',
+  )!;
+  menu.show();
+  const link = item(el, "source-included-wine");
+  const look = (entry: Element) => {
+    const style = getComputedStyle(entry);
+    return {
+      border: [style.borderTopWidth, style.borderTopStyle, style.borderTopColor],
+      background: style.backgroundColor,
+      color: style.color,
+      decoration: style.textDecorationLine,
+      start: style.justifyContent,
+      width: entry.getBoundingClientRect().width,
+    };
+  };
+  for (const test of ["edit-included-wine", "remove-included-wine"]) {
+    const button = item(el, test).shadowRoot!.querySelector("button")!;
+    expect(look(link), test).toEqual(look(button));
+  }
 });
 
 it("Edit sends wt-include-edit with the list's path and the member", async () => {
@@ -442,7 +475,8 @@ it("the row says whether the include is a folder or shown directly", async () =>
     t("menus.include_direct"),
   );
   expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
-  expect(item(el, "read-only-included-wine").textContent!.trim()).toBe(t("menus.read_only_here"));
+  expect(item(el, "read-only-included-wine")).toBeNull();
+  expect(notesOf(el, "included-wine")).toEqual([t("menus.include_direct")]);
   // An include inside an included menu belongs to that menu's page, so it says nothing here.
   await toggle(el, "included-wine");
   expect(nameOf(el, "included-wine/wine-cava")).toBe(menuLabel("Cava"));

@@ -238,24 +238,6 @@ export class MenuStructureTable extends LitElement {
         border: 0;
         border-block-start: 1px solid var(--wt-color-border);
       }
-      wt-data-table::part(menu-link) {
-        display: inline-flex;
-        align-items: center;
-        width: 100%;
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-4);
-        border: 1px solid transparent;
-        border-radius: var(--wt-radius-md);
-        color: var(--wt-color-text);
-        font: inherit;
-        font-weight: var(--wt-font-weight-bold);
-        text-decoration: none;
-      }
-      wt-data-table::part(menu-link):focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
       .reorder-status {
         position: absolute;
         width: 1px;
@@ -748,15 +730,13 @@ export class MenuStructureTable extends LitElement {
       part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
       >${this.#nameSpan(row)}${
         node.includedMenuId && !row.readOnly
-          ? html`<span part="note" data-test=${`read-only-${key}`}
-                >${t("menus.read_only_here")}</span
-              ><span part="note" data-test=${`folder-setting-${key}`}
-                >${t(
-                  (node.folder ?? FOLLOWING_FOLDER).showAsFolder
-                    ? "menus.include_as_folder"
-                    : "menus.include_direct",
-                )}</span
-              >`
+          ? html`<span part="note" data-test=${`folder-setting-${key}`}
+              >${t(
+                (node.folder ?? FOLLOWING_FOLDER).showAsFolder
+                  ? "menus.include_as_folder"
+                  : "menus.include_direct",
+              )}</span
+            >`
           : nothing
       }</span
     >`;
@@ -833,7 +813,6 @@ export class MenuStructureTable extends LitElement {
     const { node, key } = row;
     if (node.includedMenuId)
       return html`<a
-          part="menu-link"
           data-test=${`source-${key}`}
           href=${`/manage/menus/menu/${node.includedMenuId}/view/structure`}
           >${t("menus.open_included").replace(

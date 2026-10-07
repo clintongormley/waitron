@@ -110,7 +110,7 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
       menu.show();
       expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
       if (state === "included menu open")
-        expect(menu.querySelector('a[part="menu-link"]')).not.toBeNull();
+        expect(menu.querySelector('a[href][data-test="source-included-wine"]')).not.toBeNull();
       if (state.startsWith("included"))
         expect(menu.querySelector('[data-test="edit-included-wine"]')).not.toBeNull();
     }

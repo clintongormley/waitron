@@ -22,6 +22,20 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  test("an open menu holding a link entry beside button entries", async () => {
+    const el = await mountThemed(
+      `<wt-row-actions label="Actions for Wine">
+        <a href="#wine">Open Wine</a>
+        <wt-button variant="secondary" align="start">Edit</wt-button>
+        <wt-button variant="secondary" align="start">Remove</wt-button>
+      </wt-row-actions>`,
+      theme,
+    );
+    (el as unknown as { show(): void }).show();
+    expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
   test("detects a missing accessible name on the hamburger", async () => {
     const el = await mountThemed(
       '<wt-row-actions label="Department actions"></wt-row-actions>',

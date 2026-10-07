@@ -422,6 +422,22 @@ describe("optionalTextFields", () => {
     ]);
   });
 
+  it("given a placeholder per language, hints each language with its own and nothing else", async () => {
+    const inputs = await renderAll<WtInput>(
+      optionalTextFields(
+        context({ locales: ["es", "en", "ca"] }),
+        "customer",
+        "Menu name",
+        { es: "Pan de la casa" },
+        () => {},
+        (locale) => ({ es: "Pan staff", en: "" })[locale] ?? `${locale} hint`,
+        "es",
+      ),
+      "wt-input",
+    );
+    expect(inputs.map((input) => input.placeholder)).toEqual(["Pan staff", "", "ca hint"]);
+  });
+
   it("shows each language's own error and merges an edit into the other languages", async () => {
     const change = vi.fn();
     const inputs = await renderAll<WtInput>(
