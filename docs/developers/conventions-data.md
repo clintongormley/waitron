@@ -470,9 +470,6 @@ files `scripts/write-path-tables.json` names, which is where such a write is all
 Keeping them in a handful of named files is the whole of the property now, because no connection
 makes the distinction for us any more.
 
-A write of one of them belongs on a path that opens the store deliberately for it, never on the
-handle a request is served on.
-
 **What the guard does not see.** `scripts/write-path-tables.test.ts` reads TEXT, so a table name
 reached through a variable is invisible to it; it judges a FILE against an allowance list rather
 than a call chain, so a request path that calls into an allowed file writes through it unseen; and

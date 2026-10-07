@@ -387,9 +387,11 @@ called weaker than its name, the topic file lists what it does not see.
   per-line resolver).
 - **The tables `scripts/write-path-tables.json` lists — `tenants`, `nodes`, `deployment`,
   `mirror_config`, `node_roles` — request code may read and never write, and the database does not
-  refuse the write.** A write of one of them belongs on a path that opens the store deliberately
-  for it. Guard: `scripts/write-path-tables.test.ts` is the whole of the enforcement, and weaker
-  than its name — it reads TEXT and judges a FILE, not a call chain.
+  refuse the write.** A write of one of them lives only in the files that JSON names: requests
+  and the paths that write these tables share one venue handle (`ownerDb` is a name, not a separate
+  handle), so that file list is the only separation. Guard: `scripts/write-path-tables.test.ts` is
+  the whole of the enforcement, and weaker than its name — it reads TEXT and judges a FILE, not a
+  call chain.
 - **Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.** Write-path
   functions take a `tx: Transaction` and never open their own; a route handler opens exactly one
   `withTransaction` per request. This is a convention, not a compiler guarantee — `Database` is
