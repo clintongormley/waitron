@@ -368,8 +368,8 @@ mixes active and disabled products still offers it, and the disabled ones stay d
 reads **Delete**, because the category itself is deleted. Products you selected directly are still
 only disabled. The products inside the category, its subcategories included, are disabled only if
 you choose the dialog's "Also: …" answer; with the other answer they stay active. Once that answer
-is chosen and the categories hold active products, the dialog adds "Products it disables come off
-every menu they are on.", with no count.
+is chosen and the categories hold active products, the dialog adds "Products disabled by this deletion
+come off every menu they are on.", with no count.
 
 A disabled product is on no menu. Disabling one, whichever way (this toolbar, a category deleted
 with its contents, the product's row menu or its editor), takes it off every list that holds it in

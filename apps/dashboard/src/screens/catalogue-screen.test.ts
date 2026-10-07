@@ -611,7 +611,7 @@ describe("catalogue-screen", () => {
     it("says the one menu it comes off in the singular", async () => {
       const el = await openDisable(stubApi({ countProductMenus: vi.fn().mockResolvedValue(1) }));
       expect(bodyOf(el)).toBe(
-        `${warning} It comes off the 1 menu it is on, which then shows unpublished changes.`,
+        `${warning} It comes off the one menu it is on, which then shows unpublished changes.`,
       );
     });
 

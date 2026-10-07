@@ -2891,7 +2891,7 @@ it.each([
   ],
   [
     1,
-    `${DISABLE_PRODUCTS} They come off the 1 menu they are on, which then shows unpublished changes.`,
+    `${DISABLE_PRODUCTS} They come off the one menu they are on, which then shows unpublished changes.`,
   ],
   [0, DISABLE_PRODUCTS],
 ] as const)(
@@ -2975,7 +2975,7 @@ it("in Spanish, says how many cartas the products come off", async () => {
 });
 it("says products a category's deletion disables come off every menu, only once its contents are to be deleted", async () => {
   const el = await mountBrowser();
-  const sentence = "Products it disables come off every menu they are on.";
+  const sentence = "Products disabled by this deletion come off every menu they are on.";
   await selectKeys(el, ["folder:d"]);
   await press(el, "delete");
   await vi.waitFor(() =>

@@ -108,9 +108,9 @@ export const en = {
   "folders.off_menus":
     "They come off the {count} menus they are on, which then show unpublished changes.",
   "folders.off_menus_one":
-    "They come off the 1 menu they are on, which then shows unpublished changes.",
+    "They come off the one menu they are on, which then shows unpublished changes.",
   "folders.off_menus_unknown": "They come off every menu they are on.",
-  "folders.delete_off_menus": "Products it disables come off every menu they are on.",
+  "folders.delete_off_menus": "Products disabled by this deletion come off every menu they are on.",
   "folders.delete_heading": "Delete {count} items?",
   "folders.delete_heading_one": "Delete 1 item?",
   "folders.deleting": "Categories to delete:",
@@ -1503,7 +1503,7 @@ export const en = {
   "product.off_menus":
     "It comes off the {count} menus it is on, which then show unpublished changes.",
   "product.off_menus_one":
-    "It comes off the 1 menu it is on, which then shows unpublished changes.",
+    "It comes off the one menu it is on, which then shows unpublished changes.",
   "product.off_menus_unknown": "It comes off every menu it is on.",
   "product.status": "Status",
   "product.allergens": "Allergens",
@@ -2581,7 +2581,7 @@ export const es: Record<StringKey, string> = {
     "Salen de la carta en la que están, que pasa a tener cambios sin publicar.",
   "folders.off_menus_unknown": "Salen de todas las cartas en las que están.",
   "folders.delete_off_menus":
-    "Los productos que deshabilita salen de todas las cartas en las que están.",
+    "Los productos que deshabilita esta eliminación salen de todas las cartas en las que están.",
   "folders.delete_heading": "¿Eliminar {count} elementos?",
   "folders.delete_heading_one": "¿Eliminar 1 elemento?",
   "folders.deleting": "Categorías que se eliminarán:",
