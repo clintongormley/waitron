@@ -141,13 +141,13 @@ export function demoContentLanguages(geography: VenueGeography): DemoLanguages {
 
 export const FALLBACK_DEMO_DATA_SET_ID = "casa-delgado-es";
 
-/** The pack's own data set, or the fallback when its identity names none. */
 export function demoDataSetFor(identity: CountryDemoIdentity): DemoDataSet {
   return demoDataSet(identity.dataSet ?? FALLBACK_DEMO_DATA_SET_ID);
 }
 
-/** A fallback demo's text is English only, so English is its default (the writers refuse a text
- * with nothing in the saved default); the area's required languages stay switched on. */
+/** A fallback demo defaults to English, by the owner's decision for a country with no demo data of
+ * its own; the area's required languages stay on because `writeContentLanguages` refuses a list
+ * without them. */
 export function englishFallbackLanguages(starting: StartingContentLanguages): DemoLanguages {
   const { required } = starting;
   return {

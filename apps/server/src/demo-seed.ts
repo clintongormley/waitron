@@ -29,7 +29,7 @@ export async function seedInstalledDemo(
       seriesId: result.seriesIds[0]!,
       locationId: result.locationId,
     },
-    // The fallback data set is written in English, so its staff names are too.
+    // A pack with no data set of its own gets English staff names (owner decision, W109 plan).
     locale: identity.dataSet === undefined ? "en" : demoSeedLocale(venue),
     salesDays: INSTALLED_DEMO_SALES_DAYS,
     departmentTradingNames: identity.departmentTradingNames,

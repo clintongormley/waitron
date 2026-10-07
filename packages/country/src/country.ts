@@ -90,7 +90,7 @@ export interface CountryDemoIdentity {
   readonly locationName: string;
   readonly departmentTradingNames: { readonly restaurant: string; readonly deli: string };
   /** The id of the server-side demo data set (menus, floor, staff) the seed writes; absent, the
-   * fallback set in English. */
+   * demo seeds the fallback set with English as its default. */
   readonly dataSet?: string;
 }
 

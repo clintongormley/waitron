@@ -1,5 +1,5 @@
 // The host's offset is stamped on each sale and hashed into each record, so the zone is pinned
-// before anything reads it.
+// before the seed runs.
 process.env.TZ = "Europe/Madrid";
 
 /**

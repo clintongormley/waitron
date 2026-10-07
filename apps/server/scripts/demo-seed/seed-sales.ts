@@ -149,8 +149,6 @@ function totalOf(breakdown: readonly VatBreakdownLine[]): Decimal {
   return sumDecimals(breakdown.flatMap((g) => [g.base, g.tax]));
 }
 
-/** The backend the composition's fiscal seat gives `nodeId`: its location's territory selects the
- * fiscal module, and `fiscalSlot` checks it against the node's stamped `filing_module`. */
 async function nodeBackend(
   db: Database,
   nodeId: string,
