@@ -1246,6 +1246,20 @@ describe("department transfer tab lifecycle", () => {
     expect((await state(f.tab)).tab!.status).toBe("abandoned");
     await withdrawn(f, id);
   });
+  async function pendingPartyFixture(f: Awaited<ReturnType<typeof ready>>) {
+    const [row] = await withTransaction(suite.db, (tx) =>
+      tx
+        .insert(departmentTransferRequests)
+        .values({
+          tabId: f.tab,
+          sourceDepartmentId: f.a,
+          destinationDepartmentId: f.b,
+          senderId: personId,
+        })
+        .returning(),
+    );
+    return row!.id;
+  }
   it("closes an empty party and withdraws each abandoned tab request", async () => {
     const f = await ready();
     const table = await v.table(randomUUID(), f.az);
@@ -1254,7 +1268,7 @@ describe("department transfer tab lifecycle", () => {
       await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
       return party.partyId;
     });
-    const id = await pending(f);
+    const id = await pendingPartyFixture(f);
     await withTransaction(suite.db, (tx) => closeParty(tx, party, [f.tab], personId));
     expect((await state(f.tab)).tab!.status).toBe("abandoned");
     await withdrawn(f, id);
@@ -1295,7 +1309,7 @@ describe("department transfer tab lifecycle", () => {
         }
         return party.partyId;
       });
-      const id = await pending(f);
+      const id = await pendingPartyFixture(f);
       const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
       await suite.db.update(persons).set({ role: "supervisor" }).where(eq(persons.id, personId));
       try {
@@ -1332,7 +1346,7 @@ describe("department transfer tab lifecycle", () => {
       await takeIntoParty(tx, v.cfg, target.tab, party.partyId, f.az);
       return party.partyId;
     });
-    const id = await pending(f);
+    const id = await pendingPartyFixture(f);
     await withTransaction(suite.db, (tx) => mergeCheckedBills(tx, v.cfg, party, target.tab, f.tab));
     expect((await state(f.tab)).tab!.status).toBe("abandoned");
     await withdrawn(f, id);

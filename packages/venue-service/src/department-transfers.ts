@@ -183,6 +183,7 @@ export async function requestDepartmentTransfer(
     `);
     if (rows[0]?.state !== "open")
       throw new AppError("department_transfer.tab_unavailable", { tabId });
+    throw new AppError("department_transfer.structure_unsupported", { tabId });
   }
   const context = await getOrderServiceContext(tx, cfg, tabId);
   if (context.departmentId !== sender.departmentId)

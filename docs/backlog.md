@@ -4838,8 +4838,10 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   selected-tab surface or matching counter basket, while a different basket stays intact. A resolved
   receiving request or accepted source request refreshes floor, held and waiting lists. A departed
   API client cannot install its list reply, and an outstanding retrieval cannot reopen the tab
-  after its transfer is accepted. Final branch integration, review and CI remain. Party-linked bills are
-  refused by the service rather than moving shared table/group links.**
+  after its transfer is accepted. The initial whole-branch run-it review is complete; remaining
+  review work is bounding department-wide source history and reproducing returned-tab cleanup and
+  local source-edit preservation before the push hook and CI. Party-linked bills are refused before
+  queuing, and again at acceptance, rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
   station/watcher bindings; drawers are independent of receipt

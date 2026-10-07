@@ -215,6 +215,38 @@ describe("departmental tab transfers", () => {
     ).toEqual([]);
   });
 
+  it("refuses an open party tab before reserving its pending transfer slot", async () => {
+    const v = await ready();
+    const [before] = await withTransaction(suite.db, async (tx) => {
+      const [party] = await tx.insert(parties).values({ openedBy: "sender" }).returning();
+      return tx
+        .update(workingOrders)
+        .set({ partyId: party!.id })
+        .where(eq(workingOrders.id, v.tab))
+        .returning();
+    });
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+          departmentId: v.a,
+          personId: "sender",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "department_transfer.structure_unsupported",
+      params: { tabId: v.tab },
+    });
+    expect(
+      await suite.db
+        .select()
+        .from(departmentTransferRequests)
+        .where(eq(departmentTransferRequests.tabId, v.tab)),
+    ).toEqual([]);
+    expect(await suite.db.select().from(workingOrders).where(eq(workingOrders.id, v.tab))).toEqual([
+      before,
+    ]);
+  });
+
   it.each(["sender", "missing", "inactive", "desk", "retired", "scope", "closed"] as const)(
     "refuses a request with %s no longer valid",
     async (kind) => {
