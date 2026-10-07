@@ -211,6 +211,7 @@ const ADDRESS_ROW_KEYS = {
   all: ["kind"],
   category: ["kind", "categoryId"],
   product: ["kind", "productId"],
+  no_category: ["kind"],
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -234,6 +235,7 @@ function requireCellAddress(value: unknown): CellAddress {
     if (zoneId === null) throw invalid();
     return { row: { kind }, zoneId };
   }
+  if (kind === "no_category") return { row: { kind }, zoneId };
   if (kind === "category")
     return { row: { kind, categoryId: requireBodyUuid(row.categoryId, "address") }, zoneId };
   return { row: { kind, productId: requireBodyUuid(row.productId, "address") }, zoneId };

@@ -496,7 +496,11 @@ export function validateRoutingConfiguration(tables: Tables): void {
     const zone = row.zone_id ?? null;
     const station = row.station_id ?? null;
     if (category !== null && product !== null) refuse("routing_cells.category_id");
-    if (category === null && product === null && zone === null) refuse("routing_cells.zone_id");
+    if (row.no_category !== 0 && row.no_category !== 1) refuse("routing_cells.no_category");
+    const noCategory = row.no_category === 1;
+    if (noCategory && (category !== null || product !== null)) refuse("routing_cells.no_category");
+    if (category === null && product === null && !noCategory && zone === null)
+      refuse("routing_cells.zone_id");
     if (row.no_preparation !== 0 && row.no_preparation !== 1)
       refuse("routing_cells.no_preparation");
     if ((station === null) !== (row.no_preparation === 1)) refuse("routing_cells.station_id");
@@ -504,9 +508,16 @@ export function validateRoutingConfiguration(tables: Tables): void {
     if (product !== null && !products.has(product)) refuse("routing_cells.product_id");
     if (zone !== null && !zones.has(zone)) refuse("routing_cells.zone_id");
     if (station !== null && !stations.has(station)) refuse("routing_cells.station_id");
-    const subject = category !== null ? "category" : product !== null ? "product" : "zone";
+    const subject =
+      category !== null
+        ? "category_id"
+        : product !== null
+          ? "product_id"
+          : noCategory
+            ? "no_category"
+            : "zone_id";
     const key = JSON.stringify([subject, category ?? product, zone]);
-    if (taken.has(key)) refuse(`routing_cells.${subject}_id`);
+    if (taken.has(key)) refuse(`routing_cells.${subject}`);
     taken.add(key);
   }
 }

@@ -1404,6 +1404,13 @@ describe("departments", () => {
         { kind: "no_preparation" },
       );
       await setRoutingCell(tx, cfg, { row: { kind: "all" }, zoneId }, station(bar));
+      await setRoutingCell(tx, cfg, { row: { kind: "no_category" }, zoneId }, station(kitchen));
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "no_category" }, zoneId: null },
+        { kind: "no_preparation" },
+      );
       await setRoutingCell(
         tx,
         cfg,
@@ -1432,14 +1439,16 @@ describe("departments", () => {
         .select({
           categoryId: routingCells.categoryId,
           productId: routingCells.productId,
+          noCategory: routingCells.noCategory,
           zoneId: routingCells.zoneId,
           stationId: routingCells.stationId,
         })
         .from(routingCells)
         .where(eq(routingCells.locationId, cfg.locationId));
     const remaining = [
-      { categoryId, productId: null, zoneId: null, stationId: kitchen },
-      { categoryId, productId: null, zoneId: otherZoneId, stationId: bar },
+      { categoryId, productId: null, noCategory: false, zoneId: null, stationId: kitchen },
+      { categoryId, productId: null, noCategory: false, zoneId: otherZoneId, stationId: bar },
+      { categoryId: null, productId: null, noCategory: true, zoneId: null, stationId: null },
     ];
     expect(await cells()).toEqual(expect.arrayContaining(remaining));
     expect(await cells()).toHaveLength(remaining.length);

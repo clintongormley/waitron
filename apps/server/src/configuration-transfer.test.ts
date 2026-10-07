@@ -3300,7 +3300,7 @@ it("transfers a department's menu list, its all-day menu and a zone's own all-da
     expect(sourceIds).not.toContain(id);
 });
 
-it("exports and imports all five cell classes into another venue, remapping every id and the location", async () => {
+it("exports and imports all seven cell classes into another venue, remapping every id and the location", async () => {
   const source = await applyVenue(planVenue(venue("B24681359"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -3356,6 +3356,19 @@ it("exports and imports all five cell classes into another venue, remapping ever
       { row: { kind: "all" }, zoneId: terraza.id },
       atStation(plancha!.id),
     );
+    const noCategoryRow = { kind: "no_category" as const };
+    await setRoutingCell(
+      tx,
+      scope,
+      { row: noCategoryRow, zoneId: null },
+      { kind: "no_preparation" },
+    );
+    await setRoutingCell(
+      tx,
+      scope,
+      { row: noCategoryRow, zoneId: terraza.id },
+      atStation(barra!.id),
+    );
     // A disabled station keeps its cells, and a zone moved into a switched-off department keeps its own.
     await tx
       .update(kitchenStations)
@@ -3393,7 +3406,7 @@ it("exports and imports all five cell classes into another venue, remapping ever
     ),
     "a strong passphrase",
   );
-  expect(decoded.tables.routing_cells).toHaveLength(5);
+  expect(decoded.tables.routing_cells).toHaveLength(7);
   const target = await applyVenue(planVenue(venue("B24681360"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -3423,7 +3436,7 @@ it("exports and imports all five cell classes into another venue, remapping ever
     expect(sourceIds).not.toContain(id);
   expect(sourceIds).not.toContain(target.locationId);
   const cells = await targetSuite.db.execute<Record<string, unknown>>(sql`
-    select location_id, category_id, product_id, zone_id, station_id, no_preparation
+    select location_id, category_id, product_id, zone_id, station_id, no_preparation, no_category
     from routing_cells`);
   const cell = (values: Record<string, unknown>) => ({
     location_id: target.locationId,
@@ -3432,6 +3445,7 @@ it("exports and imports all five cell classes into another venue, remapping ever
     zone_id: null,
     station_id: null,
     no_preparation: 0,
+    no_category: 0,
     ...values,
   });
   expect(cells.rows).toEqual(
@@ -3441,9 +3455,11 @@ it("exports and imports all five cell classes into another venue, remapping ever
       cell({ product_id: product, station_id: plancha }),
       cell({ product_id: product, zone_id: salon, station_id: barra }),
       cell({ zone_id: terraza, station_id: plancha }),
+      cell({ no_category: 1, no_preparation: 1 }),
+      cell({ no_category: 1, zone_id: terraza, station_id: barra }),
     ]),
   );
-  expect(cells.rows).toHaveLength(5);
+  expect(cells.rows).toHaveLength(7);
 });
 
 describe("opening hours in a configuration transfer", () => {

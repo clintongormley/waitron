@@ -2100,6 +2100,96 @@ describe("routing cell route", () => {
     expect(await cellsOf(fx)).toEqual([]);
   });
 
+  it("sets and clears a No category cell, Every zone included, and the model GET shows it", async () => {
+    const fx = await fixture();
+    await servedZone(fx);
+    const every = { row: { kind: "no_category" }, zoneId: null };
+    const terrace = { row: { kind: "no_category" }, zoneId: fx.zoneId };
+    const allTerrace = { row: { kind: "all" }, zoneId: fx.zoneId };
+    const station = { kind: "station", stationId: fx.stationId };
+    for (const [address, target] of [
+      [every, noPrep],
+      [terrace, station],
+      [allTerrace, noPrep],
+    ] as const)
+      expect(
+        (await send(fx.app, "PUT", `${base}/cell`, fx.managerCookie, { address, target })).status,
+        JSON.stringify(address),
+      ).toBe(204);
+    const shown = await cellsOf(fx);
+    expect(shown).toHaveLength(3);
+    expect(shown).toEqual(
+      expect.arrayContaining([
+        { ...every, target: noPrep },
+        { ...terrace, target: station },
+        { ...allTerrace, target: noPrep },
+      ]),
+    );
+    for (const address of [every, terrace])
+      expect(
+        (await send(fx.app, "PUT", `${base}/cell`, fx.managerCookie, { address, target: null }))
+          .status,
+      ).toBe(204);
+    expect(await cellsOf(fx)).toEqual([{ ...allTerrace, target: noPrep }]);
+  });
+
+  it("refuses a No category address with an extra key", async () => {
+    const fx = await fixture();
+    await servedZone(fx);
+    for (const row of [
+      { kind: "no_category", categoryId: fx.categoryId },
+      { kind: "no_category", productId: null },
+      { kind: "no_category", zoneId: fx.zoneId },
+    ])
+      for (const [method, path, body] of [
+        ["PUT", `${base}/cell`, { address: { row, zoneId: fx.zoneId }, target: noPrep }],
+        [
+          "POST",
+          `${base}/preview`,
+          { kind: "cell", address: { row, zoneId: null }, target: noPrep },
+        ],
+      ] as const) {
+        const response = await send(fx.app, method, path, fx.managerCookie, body);
+        expect(response.status, `${method} ${JSON.stringify(row)}`).toBe(400);
+        expect(await response.json()).toEqual({
+          error: { code: "management.request_invalid", params: { field: "address" } },
+        });
+      }
+    expect(await cellsOf(fx)).toEqual([]);
+  });
+
+  it("previews a No category cell change without writing", async () => {
+    const fx = await fixture();
+    await servedZone(fx);
+    await lager(fx);
+    const bread = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        name: "Bread",
+        categoryId: null,
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      }),
+    );
+    const response = await send(fx.app, "POST", `${base}/preview`, fx.managerCookie, {
+      kind: "cell",
+      address: { row: { kind: "no_category" }, zoneId: null },
+      target: noPrep,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      expect.objectContaining({
+        productId: bread.id,
+        productName: "Bread",
+        zoneId: fx.zoneId,
+        from: { kind: "station", stationId: fx.stationId },
+        to: { kind: "no_preparation" },
+      }),
+    ]);
+    expect(await cellsOf(fx)).toEqual([]);
+  });
+
   it("refuses a supervisor and staff (403) and an unauthenticated request (401); a manager is allowed", async () => {
     const fx = await fixture();
     const set = { address: categoryCell(fx.categoryId), target: noPrep };

@@ -1253,9 +1253,10 @@ describe("validateRoutingConfiguration", () => {
     zone?: string | null;
     station?: string | null;
     noPrep?: unknown;
+    noCategory?: unknown;
   };
   const cell = (spec: CellSpec) => {
-    const { category = null, product = null, zone = null, station = null } = spec;
+    const { category = null, product = null, zone = null, station = null, noCategory = 0 } = spec;
     return {
       id: randomUUID(),
       location_id: "location",
@@ -1264,10 +1265,11 @@ describe("validateRoutingConfiguration", () => {
       zone_id: zone,
       station_id: station,
       no_preparation: "noPrep" in spec ? spec.noPrep : station === null ? 1 : 0,
+      no_category: noCategory,
     };
   };
 
-  /** One cell of each of the five classes, an explicit No preparation and a disabled station. */
+  /** One cell of each of the seven classes, an explicit No preparation and a disabled station. */
   function routingTables(): Tables {
     return {
       departments: [
@@ -1302,6 +1304,8 @@ describe("validateRoutingConfiguration", () => {
         cell({ product: MOJITO, zone: TERRACE, station: KITCHEN }),
         cell({ zone: TERRACE, station: BAR }),
         cell({ zone: INSIDE, station: KITCHEN }),
+        cell({ noCategory: 1 }),
+        cell({ noCategory: 1, zone: TERRACE, station: BAR }),
       ],
     };
   }
@@ -1312,7 +1316,7 @@ describe("validateRoutingConfiguration", () => {
     expect(() => validateRoutingConfiguration(tables)).toThrowError(refusal(field));
   }
 
-  it("accepts all five classes, explicit No preparation and a retained disabled-station target", () => {
+  it("accepts all seven classes, explicit No preparation and a retained disabled-station target", () => {
     expect(() => validateRoutingConfiguration(routingTables())).not.toThrow();
     expect(() => validateRoutingConfiguration({})).not.toThrow();
   });
@@ -1351,6 +1355,36 @@ describe("validateRoutingConfiguration", () => {
     refusedFor({ product: MOJITO }, "routing_cells.product_id");
     refusedFor({ product: MOJITO, zone: TERRACE }, "routing_cells.product_id");
     refusedFor({ zone: TERRACE }, "routing_cells.zone_id");
+  });
+
+  it("refuses a No category flag that is not 0 or 1, including a row without one", () => {
+    refusedFor({ noCategory: 2, zone: INSIDE, station: BAR }, "routing_cells.no_category");
+    refusedFor({ noCategory: true, zone: INSIDE, station: BAR }, "routing_cells.no_category");
+    refusedFor({ noCategory: null, zone: INSIDE, station: BAR }, "routing_cells.no_category");
+    const tables = routingTables();
+    const withoutFlag: Record<string, unknown> = cell({ category: DRINKS, zone: INSIDE });
+    delete withoutFlag.no_category;
+    tables.routing_cells!.push(withoutFlag);
+    expect(() => validateRoutingConfiguration(tables)).toThrowError(
+      refusal("routing_cells.no_category"),
+    );
+  });
+
+  it("refuses a No category row that also names a category or a product", () => {
+    refusedFor({ noCategory: 1, category: DRINKS, zone: INSIDE }, "routing_cells.no_category");
+    refusedFor({ noCategory: 1, product: MOJITO, zone: INSIDE }, "routing_cells.no_category");
+  });
+
+  it("refuses a second No category cell at Every zone or at a zone", () => {
+    refusedFor({ noCategory: 1, station: KITCHEN }, "routing_cells.no_category");
+    refusedFor({ noCategory: 1, zone: TERRACE }, "routing_cells.no_category");
+  });
+
+  it("checks a No category cell's zone and station like any row's", () => {
+    refusedFor({ noCategory: 1, zone: CLOSED_ZONE, station: BAR }, "routing_cells.zone_id");
+    refusedFor({ noCategory: 1, zone: "z-missing", station: BAR }, "routing_cells.zone_id");
+    refusedFor({ noCategory: 1, zone: INSIDE, station: "k-missing" }, "routing_cells.station_id");
+    refusedFor({ noCategory: 1, zone: INSIDE, noPrep: 0 }, "routing_cells.station_id");
   });
 
   it("refuses a product the bundle does not hold, and a variant", () => {
