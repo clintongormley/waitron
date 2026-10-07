@@ -1068,8 +1068,10 @@ unused `units` property is gone (it closes W75's leftover).
   it flagged a product's own price when an Active variant is what sells, and Inactive products and
   variants, which publishing leaves out, and it missed a product whose every variant is Inactive.
   The tab now counts with the publish check's own `clashesOf` over the Active products and
-  variants, and marks rows by the same rule; the published menu's rule is unchanged. The menu
-  editor's heading says "Publishing waits on N clashes" on every tab, and the tab's red line offers
+  variants, and marks rows by the same rule, a product's row reading its price field as it stands
+  while it is edited; the published menu's rule is unchanged. The menu editor's heading says
+  "Publishing waits on N clashes" on every tab, as a link to the Price overrides tab everywhere
+  except that tab, and the tab's red line offers
   "Show clashes", which turns its Price filter to Clashes (`wt-data-table` gained `filterValues` and
   `chooseFilter` for it).
   - Decided as built: a product with both a variant that follows its clashing price and a variant

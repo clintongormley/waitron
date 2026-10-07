@@ -97,6 +97,8 @@ status of a pipe. Commands, from the worktree root
      "A size's sources disagree — set that size's price", because setting the product's price would
      not resolve it. An Inactive size's clash shows on that size's own row only. A single false
      price is never shown for a range or a clash.
+     (Partly superseded 2026-10-07 by A345: an Inactive size's clash, and when a product row carries
+     a size's clash; see D3.)
 8. **Saving.** The screen writes one field per request, one request at a time in the order made
    (the existing `ListWriteQueue`, `apps/dashboard/src/widgets/section-writes.ts:17`–`44`): a
    product's price through the existing `updateMenuItem`, a size's through the new route. Every
@@ -128,6 +130,12 @@ status of a pipe. Commands, from the worktree root
 - **D3. An Inactive row's clash shows on the tab but does not block publishing.** Offers leave
   Inactive items out, so publishing and the preview never meet it. The tab shows it so the owner
   sees it before making the row Active again.
+  - Superseded 2026-10-07 by A345 (docs/backlog.md): the tab no longer counts, marks or lists an
+    Inactive product's or size's clash, and a size's own clash marks its product even while the
+    product's price clashes, unless an Active size follows that clashing price, in which case the
+    product is marked for its own price first (backlog A345, "Decided as built"). Task 3's
+    Inactive-size row and `sizeClash` definition, and Task 4's "keeps an Inactive size's clash on
+    its own row" case, describe the replaced rule.
 - ★ **D4. Status shows Active or Inactive only.** Available (sold out) is not in the read and stays
   on the product page, keeping the two words apart as `design-system.md:2273`–`2283` asks. The
   column reuses the Products list's words (`product.status`, `product.active_badge`,
