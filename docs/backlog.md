@@ -2319,7 +2319,7 @@ answers to it is not checked.
 `dashboard-menu-structure-tree` (no longer drawn by Preview since W95) are deleted with their tests;
 the name helpers the Menus screen and `menu-structure-table.ts` still use moved to
 `apps/dashboard/src/widgets/member-names.ts`, and the strings only the deleted widgets read were
-retired. A314 then deleted `documentTree` from `apps/dashboard/src/widgets/menu-preview.ts`, along
+retired. A314 (#1346) then deleted `documentTree` from `apps/dashboard/src/widgets/menu-preview.ts`, along
 with its test; nothing else called it. It also deleted three checks in
 `apps/dashboard/src/screens/menus-screen.test.ts`: one that no `dashboard-member-list-editor` is
 drawn, and two that no `[name="member-ref"]` field is drawn, the first looking across the whole
