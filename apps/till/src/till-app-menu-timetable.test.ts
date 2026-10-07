@@ -425,6 +425,75 @@ describe("the remembered default", () => {
   });
 });
 
+describe("the remembered default and the session", () => {
+  it("is not applied by an offers reload that finishes after the sign-out", async () => {
+    let reload!: (value: ZoneOfferCatalogue) => void;
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn(async () => offers("zone-barra", [DESAYUNOS], "desayunos")),
+      listZoneOffers: vi.fn(() => new Promise<ZoneOfferCatalogue>((resolve) => (reload = resolve))),
+    });
+    await signIn(el);
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    await poll(el);
+    expect(api.listZoneOffers).toHaveBeenCalledWith("zone-barra");
+
+    emit(counter(el), "logout");
+    await flush(el);
+    reload(BARRA);
+    await flush(el);
+    expect(sessionStorage.getItem("waitron.lastMenu")).toBe("desayunos");
+  });
+
+  it("is forgotten when the device switches profile, which signs in again without signing out", async () => {
+    const identity = {
+      deviceId: "till-dev",
+      name: "Till 1",
+      formFactor: "till",
+      stationId: null,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      printerChoices: { receipt: [], paymentSlip: [] },
+      profileId: "pr-counter",
+      approvedProfiles: [
+        { id: "pr-counter", name: "Counter till" },
+        { id: "pr-bar", name: "Bar till" },
+      ],
+    };
+    const { el } = await mountApp({
+      getDeviceIdentity: vi.fn().mockResolvedValue(identity),
+      switchDeviceProfile: vi.fn().mockResolvedValue({
+        activeProfileId: "pr-bar",
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      }),
+    });
+    await signIn(el);
+    add(el, DESAYUNOS);
+    await flush(el);
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    await poll(el);
+    expect(selected(el)).toBe("desayunos");
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO]));
+
+    counter(el).store.removeLine(0);
+    el.shadowRoot!.querySelector("till-tab-shell")!
+      .shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!
+      .click();
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-profile-dialog")!, "profile-switch", {
+      profileId: "pr-bar",
+    });
+    await flush(el);
+    await flush(el);
+    expect(api.switchDeviceProfile).toHaveBeenCalledOnce();
+    expect(selected(el)).toBe("desayunos");
+    add(el, DESAYUNOS);
+    await park(el);
+    expect(counter(el).store.lineCount).toBe(0);
+    expect(selected(el)).toBe("desayunos");
+  });
+});
+
 describe("an open table's order", () => {
   const table = {
     id: "t2",
@@ -482,11 +551,9 @@ describe("an open table's order", () => {
       listDrafts: drafts.listDrafts,
       saveDraft: drafts.saveDraft,
       submitDraft: drafts.submitDraft,
-      menuState: vi.fn(async (zoneId: string) =>
-        zoneId === "zone-comedor"
-          ? state([DESAYUNOS, ALMUERZO], "almuerzo")
-          : state([DESAYUNOS, ALMUERZO], "desayunos"),
-      ),
+      // Both zones name a default other than the table's menu, so a counter that follows its own
+      // default cannot leave the table on Desayunos by coincidence.
+      menuState: vi.fn(async () => state([DESAYUNOS, ALMUERZO], "almuerzo")),
     });
     await signIn(el);
     emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
