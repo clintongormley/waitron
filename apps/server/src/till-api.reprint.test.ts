@@ -66,7 +66,7 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = makeCfg(loc!.id, nodeId);
 
-    // One sellable product with no claimed folder, routed to the default station.
+    // One sellable product no routing cell covers, routed to the default station.
     await withTransaction(db, async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Carta" });
       const cafe = await createProduct(tx, {
