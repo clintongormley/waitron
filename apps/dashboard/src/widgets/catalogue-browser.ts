@@ -379,8 +379,10 @@ export class CatalogueBrowser extends LitElement {
           this.operation = operation;
           const fresh = await this.#readAgain();
           if (fresh) {
+            this.operationError = this.#showsSame(fresh)
+              ? t("folders.changed_unshown")
+              : codeMessage("category.contents_changed");
             this.summaries = fresh;
-            this.operationError = codeMessage("category.contents_changed");
           }
           return;
         }
@@ -420,7 +422,14 @@ export class CatalogueBrowser extends LitElement {
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
-    const same = fresh.every((summary, index) => {
+    const same = this.#showsSame(fresh);
+    this.summaries = fresh;
+    if (same) return true;
+    this.operationError = t("folders.summary_changed");
+    return false;
+  }
+  #showsSame(fresh: readonly FolderSummary[]): boolean {
+    return fresh.every((summary, index) => {
       const shown = this.summaries[index];
       return (
         shown !== undefined &&
@@ -430,10 +439,6 @@ export class CatalogueBrowser extends LitElement {
         summary.ownRoutes === shown.ownRoutes
       );
     });
-    this.summaries = fresh;
-    if (same) return true;
-    this.operationError = t("folders.summary_changed");
-    return false;
   }
   /** Disabled products move up whichever answer is chosen, so they alone ask nothing. */
   #asksContents(): boolean {

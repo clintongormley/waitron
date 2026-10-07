@@ -139,6 +139,8 @@ export const en = {
     "What these categories hold could not be read, so they cannot be deleted yet.",
   "folders.summary_changed":
     "What these categories hold has changed since this opened. Check the new counts and confirm again.",
+  "folders.changed_unshown":
+    "These categories changed just as they were being deleted, so nothing was deleted. Nothing this dialog shows has changed; choose Delete to try again.",
   "folders.all_products": "All products",
   "folders.search": "Search products and categories",
   "folders.name": "Category name",
@@ -2519,6 +2521,8 @@ export const es: Record<StringKey, string> = {
     "No se pudo leer lo que contienen estas categorías, así que aún no se pueden eliminar.",
   "folders.summary_changed":
     "Lo que contienen estas categorías ha cambiado desde que se abrió. Revisa las nuevas cifras y vuelve a confirmar.",
+  "folders.changed_unshown":
+    "Estas categorías han cambiado justo mientras se eliminaban, así que no se ha eliminado nada. Nada de lo que muestra este diálogo ha cambiado; elige Eliminar para volver a intentarlo.",
   "folders.all_products": "Todos los productos",
   "folders.search": "Buscar productos y categorías",
   "folders.name": "Nombre de la categoría",
