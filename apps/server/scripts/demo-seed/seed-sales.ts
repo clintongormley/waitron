@@ -15,7 +15,7 @@ import { recordSale } from "@waitron/core";
 import type { RecordSaleInput, RecordSaleLine } from "@waitron/core";
 import type { FiscalBackend, TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
 import { locations, nodes, withTransaction } from "@waitron/db";
-import { enabledModules, fiscalSlot } from "@waitron/module";
+import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { Database } from "@waitron/db";
 import {
   customerPresentationText,
@@ -165,7 +165,7 @@ async function nodeBackend(
   if (node === undefined) throw new Error(`seedSales: no node ${nodeId}`);
   const modules = enabledModules(
     ALL_MODULES,
-    venueModuleConfig({ overrides: new Map() }, node.territory),
+    venueModuleConfig(parseModuleConfig({}, ALL_MODULES), node.territory),
   );
   return fiscalSlot(modules, node.filingModule).makeBackend({ db, clock, environment });
 }

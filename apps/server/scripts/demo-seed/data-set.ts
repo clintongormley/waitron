@@ -139,7 +139,7 @@ export function demoContentLanguages(geography: VenueGeography): DemoLanguages {
   return resolveInstalledStartingContentLanguages(geography);
 }
 
-export const FALLBACK_DEMO_DATA_SET_ID = "casa-delgado-es";
+const FALLBACK_DEMO_DATA_SET_ID = "casa-delgado-es";
 
 export function demoDataSetFor(identity: CountryDemoIdentity): DemoDataSet {
   return demoDataSet(identity.dataSet ?? FALLBACK_DEMO_DATA_SET_ID);
@@ -148,7 +148,7 @@ export function demoDataSetFor(identity: CountryDemoIdentity): DemoDataSet {
 /** A fallback demo defaults to English, by the owner's decision for a country with no demo data of
  * its own; the area's required languages stay on because `writeContentLanguages` refuses a list
  * without them. */
-export function englishFallbackLanguages(starting: StartingContentLanguages): DemoLanguages {
+function englishFallbackLanguages(starting: StartingContentLanguages): DemoLanguages {
   const { required } = starting;
   return {
     defaultLanguage: "en",

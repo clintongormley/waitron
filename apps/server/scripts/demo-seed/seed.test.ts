@@ -24,7 +24,6 @@ import { readWeekHours, resolveMakers, setClaim } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
-import { DEMO_DATA_SETS } from "./data-set.js";
 import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
@@ -729,7 +728,7 @@ describe("seedDemoRestaurant", () => {
       locale: "en",
       salesDays: 3,
       departmentTradingNames: DEPARTMENT_TRADING_NAMES,
-      dataSet: DEMO_DATA_SETS["casa-delgado-es"]!,
+      dataSet: CASA_DELGADO_ES,
     });
 
     const read = await withTransaction(suite.db, async (tx) => {

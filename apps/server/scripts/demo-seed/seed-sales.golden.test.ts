@@ -3,10 +3,9 @@
 process.env.TZ = "Europe/Madrid";
 
 /**
- * A Spanish venue's practice sales, row for row, against a copy captured before the seed changed how
- * it gets its fiscal backend. A failing comparison means the Spanish records changed: that is a
- * stop, never a reason to re-record. `WAITRON_WRITE_GOLDEN=1` writes the copy; it was for the first
- * capture only.
+ * A Spanish venue's practice sales, row for row, against a captured copy. A failing comparison means
+ * the Spanish records changed: stop; never re-record to make it pass. `WAITRON_WRITE_GOLDEN=1` writes
+ * the copy.
  *
  * Generated ids are left out of every column list; a column a later migration adds is not compared.
  */
