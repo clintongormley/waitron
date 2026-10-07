@@ -1,3 +1,4 @@
+import type { LiveEvents } from "./live-api.js";
 import type { ExtraSelection, OptionSelection, TillReaderProvider } from "@waitron/shared";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -221,6 +222,7 @@ import {
 } from "./zone-access.js";
 
 export interface TillApiDeps {
+  liveEvents?: LiveEvents;
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;

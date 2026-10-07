@@ -4803,8 +4803,11 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   acceptance race and an issued, placed tab whose fiscal rows, line contexts and queued kitchen work
   are read back unchanged. Authenticated reads now provide usable destinations, source status,
   the designated desk's durable pending queue/count and transfer-specific current tab/kitchen
-  detail without granting ordinary cross-department browsing. Live notifications, lifecycle
-  integration and receiving/sending screens remain to build. Party-linked bills are
+  detail without granting ordinary cross-department browsing. The server now streams authenticated
+  reload signals for committed transfer changes to tills, rechecks access on signals and heartbeats,
+  and leaves device sightings unchanged. Signals carry no request or tab identity; durable reads
+  remain the queue authority. Till notification/count presentation, lifecycle integration and
+  receiving/sending screens remain to build. Party-linked bills are
   refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and

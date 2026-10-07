@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
@@ -11,6 +11,8 @@ import {
   sales,
   saleLines,
   withTransaction,
+  installChangeFeed,
+  subscribeToChanges,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -29,6 +31,7 @@ import {
 } from "@waitron/venue-service";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { issueUnpaidInvoice, priceForIssuance, placeOrder } from "./working-order.js";
+import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { requestCfg } from "./request-config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mountTillApi } from "./till-api.js";
@@ -42,6 +45,7 @@ const suite = useVenueDb({
 });
 let v: PartyVenue;
 let app: Hono;
+const liveEvents = new LiveEvents();
 let personId: string;
 let nextOrderNumber = 0;
 
@@ -211,6 +215,7 @@ beforeAll(async () => {
     app,
     {
       db: suite.db,
+      liveEvents,
       cfg: v.cfg,
       backend: v.backend,
       clock: v.clock,
@@ -918,4 +923,217 @@ describe("department transfer read boundaries", () => {
       body: { error: { code: "management.request_invalid", params: { field: "requestId" } } },
     });
   });
+});
+
+describe("department transfer live invalidation", () => {
+  const path = "/api/department-transfers/events";
+  const text = (value: Uint8Array | undefined) => new TextDecoder().decode(value);
+
+  it("requires a till session before subscribing", async () => {
+    const response = await app.request(path);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: "session.required" } });
+    expect(liveEvents.subscriberCount).toBe(0);
+  });
+
+  for (const resolution of ["decline", "withdraw", "accept"] as const)
+    it(`invalidates both receiving devices and sender from committed ${resolution} without exposing ids`, async () => {
+      const f = await ready();
+      const anotherDesk = await login(f.deskProfile);
+      await installChangeFeed(suite.db, [
+        { table: "department_transfer_requests", type: "department_transfer_requests" },
+      ]);
+      const stop = subscribeToChanges(changeSubscriber(liveEvents, () => {}));
+      const readers: ReadableStreamDefaultReader<Uint8Array>[] = [];
+      try {
+        for (const login of [f.source, f.desk, anotherDesk]) {
+          const response = await app.request(path, { headers: { cookie: login.cookie } });
+          expect(response.status).toBe(200);
+          expect(response.headers.get("cache-control")).toBe("no-store");
+          const reader = response.body!.getReader();
+          readers.push(reader);
+          expect(text((await reader.read()).value)).toBe("event: ready\ndata: {}\n\n");
+        }
+        const id = await pending(f);
+        for (const reader of readers)
+          expect(text((await reader.read()).value)).toBe("event: change\ndata: {}\n\n");
+        expect((await state(f.tab)).requests[0]!.status).toBe("pending");
+        expect(
+          await post(
+            resolution === "withdraw" ? f.source.cookie : f.desk.cookie,
+            resolutionPath(id, resolution),
+            resolution === "accept"
+              ? { revision: 0, zoneId: f.bz, tableId: null }
+              : { reason: "Desk busy" },
+          ),
+        ).toMatchObject({ status: 200 });
+        for (const reader of readers)
+          expect(text((await reader.read()).value)).toBe("event: change\ndata: {}\n\n");
+        expect(await get(anotherDesk.cookie, "/api/department-transfers/incoming")).toEqual({
+          status: 200,
+          body: { count: 0, requests: [] },
+        });
+      } finally {
+        for (const reader of readers) await reader.cancel();
+        stop();
+      }
+      await vi.waitFor(() => expect(liveEvents.subscriberCount).toBe(0));
+    });
+
+  it("rebuilds a pending queue after disconnect without resolving its request", async () => {
+    const f = await ready();
+    const id = await pending(f);
+    for (let reconnect = 0; reconnect < 2; reconnect++) {
+      const response = await app.request(path, { headers: { cookie: f.desk.cookie } });
+      expect(response.status).toBe(200);
+      const reader = response.body!.getReader();
+      try {
+        expect(text((await reader.read()).value)).toContain("event: ready");
+        expect(await get(f.desk.cookie, "/api/department-transfers/incoming")).toMatchObject({
+          status: 200,
+          body: { count: 1, requests: [{ id, status: "pending" }] },
+        });
+      } finally {
+        await reader.cancel();
+      }
+    }
+    expect((await state(f.tab)).requests[0]!.status).toBe("pending");
+  });
+
+  it("does not forward unrelated resources or retain an identity burst", async () => {
+    const f = await ready();
+    const response = await app.request(path, { headers: { cookie: f.desk.cookie } });
+    expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    try {
+      await reader.read();
+      liveEvents.publish({ resources: [{ type: "printers", id: "secret-printer" }] });
+      for (let i = 0; i < 300; i++)
+        liveEvents.publish({
+          resources: [{ type: "department_transfer_requests", id: `secret-${i}` }],
+        });
+      expect(text((await reader.read()).value)).toBe("event: change\ndata: {}\n\n");
+      liveEvents.publish({ resources: [{ type: "department_transfer_desks" }] });
+      expect(text((await reader.read()).value)).toBe("event: change\ndata: {}\n\n");
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  for (const change of ["logout", "suspend", "revoke", "action", "admission"] as const)
+    it(`closes the stream when ${change} removes authorisation`, async () => {
+      const f = await ready();
+      const response = await app.request(path, { headers: { cookie: f.desk.cookie } });
+      expect(response.status).toBe(200);
+      const reader = response.body!.getReader();
+      const codes = {
+        logout: "session.required",
+        suspend: "person.suspended",
+        revoke: "device.unauthorized",
+        action: "device.forbidden_action",
+        admission: "device_profile.not_admitted",
+      };
+      try {
+        await reader.read();
+        await withTransaction(suite.db, async (tx) => {
+          if (change === "logout")
+            await tx
+              .update(sessions)
+              .set({ endedAt: new Date().toISOString() })
+              .where(eq(sessions.deviceId, f.desk.deviceId));
+          if (change === "suspend")
+            await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+          if (change === "revoke")
+            await tx.update(devices).set({ active: false }).where(eq(devices.id, f.desk.deviceId));
+          if (change === "action")
+            await tx
+              .update(deviceProfiles)
+              .set({ capabilities: CAPABILITY_FLAGS.filter((flag) => flag !== "take-orders") })
+              .where(eq(deviceProfiles.id, f.deskProfile));
+          if (change === "admission")
+            await setProfileAdmission(tx, f.deskProfile, {
+              personExceptions: [{ personId, admitted: false }],
+            });
+        });
+        liveEvents.publish({ resources: [{ type: "department_transfer_requests" }] });
+        expect(text((await reader.read()).value)).toBe(
+          `event: session-invalid\ndata: ${JSON.stringify({ code: codes[change] })}\n\n`,
+        );
+        expect((await reader.read()).done).toBe(true);
+      } finally {
+        await reader.cancel();
+        if (change === "suspend")
+          await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, personId));
+      }
+    });
+
+  it("checks an idle stream on heartbeat without refreshing the device sighting", async () => {
+    const f = await ready();
+    const earlier = new Date(Date.now() - 600_000).toISOString();
+    await suite.db
+      .update(devices)
+      .set({ lastSeenAt: earlier })
+      .where(eq(devices.id, f.desk.deviceId));
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const response = await app.request(path, { headers: { cookie: f.desk.cookie } });
+      expect(response.status).toBe(200);
+      reader = response.body!.getReader();
+      await reader.read();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(text((await reader.read()).value)).toBe("event: keepalive\ndata: {}\n\n");
+      expect(
+        (
+          await suite.db
+            .select({ lastSeenAt: devices.lastSeenAt })
+            .from(devices)
+            .where(eq(devices.id, f.desk.deviceId))
+        )[0]!.lastSeenAt,
+      ).toBe(earlier);
+      await suite.db
+        .update(sessions)
+        .set({ endedAt: new Date().toISOString() })
+        .where(eq(sessions.deviceId, f.desk.deviceId));
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(text((await reader.read()).value)).toContain('"code":"session.required"');
+      expect((await reader.read()).done).toBe(true);
+    } finally {
+      await reader?.cancel();
+      vi.useRealTimers();
+    }
+  });
+});
+
+it("releases transfer streams when their server bus shuts down", async () => {
+  const f = await ready();
+  const bus = new LiveEvents();
+  const isolated = new Hono();
+  mountTillApi(
+    isolated,
+    {
+      db: suite.db,
+      backend: v.backend,
+      clock: v.clock,
+      cfg: v.cfg,
+      secureCookies: false,
+      venueLocale: v.cfg.locale,
+      liveEvents: bus,
+    },
+    () => {},
+  );
+  const response = await isolated.request("/api/department-transfers/events", {
+    headers: { cookie: f.desk.cookie },
+  });
+  expect(response.status).toBe(200);
+  const reader = response.body!.getReader();
+  try {
+    await reader.read();
+    expect(bus.subscriberCount).toBe(1);
+    bus.close();
+    expect((await reader.read()).done).toBe(true);
+    expect(bus.subscriberCount).toBe(0);
+  } finally {
+    await reader.cancel();
+  }
 });

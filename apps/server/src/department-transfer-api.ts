@@ -1,5 +1,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
+import { codeOf } from "@waitron/server-kit";
 import {
   withTransaction,
   workingOrders,
@@ -57,6 +59,78 @@ export function mountDepartmentTransferApi(
   log: Logger,
   run: Run,
 ): void {
+  const bus = deps.liveEvents;
+  if (bus !== undefined)
+    app.get("/api/department-transfers/events", (c) =>
+      run(c, log, async () => {
+        const authenticate = async () => {
+          const session = await requireSession(deps, c, { action: "take-orders", passive: true });
+          await withTransaction(deps.db, (tx) => actor(tx, deps, session));
+        };
+        await authenticate();
+        const response = streamSSE(c, async (stream) => {
+          // Invalidation carries no identities: the queue and source history retain their own gates.
+          let pending = false;
+          let closed = false;
+          let wake = (): void => {};
+          const unsubscribe = bus.subscribe((event) => {
+            if (event.kind === "close") closed = true;
+            else if (
+              event.change.resources.some(
+                (resource) =>
+                  resource.type === "department_transfer_requests" ||
+                  resource.type === "department_transfer_desks" ||
+                  resource.type === "department_transfer_destinations" ||
+                  resource.type === "order_service_contexts",
+              )
+            )
+              pending = true;
+            else return;
+            wake();
+          });
+          const timer = setInterval(() => wake(), 15_000);
+          const cleanup = () => {
+            closed = true;
+            clearInterval(timer);
+            unsubscribe();
+            wake();
+          };
+          stream.onAbort(cleanup);
+          try {
+            await stream.writeSSE({ event: "ready", data: "{}" });
+            while (!closed && !stream.aborted) {
+              if (!pending)
+                await new Promise<void>((resolve) => {
+                  wake = resolve;
+                });
+              if (closed || stream.aborted) break;
+              try {
+                await authenticate();
+              } catch (error) {
+                if (error instanceof AppError)
+                  await stream.writeSSE({
+                    event: "session-invalid",
+                    data: JSON.stringify({ code: error.code }),
+                  });
+                else log("warn", "live.stream_failed", { errorCode: codeOf(error) });
+                break;
+              }
+              if (closed || stream.aborted) break;
+              const event = pending ? "change" : "keepalive";
+              pending = false;
+              await stream.writeSSE({ event, data: "{}" });
+            }
+          } catch (error) {
+            log("warn", "live.stream_failed", { errorCode: codeOf(error) });
+          } finally {
+            cleanup();
+          }
+        });
+        response.headers.set("Cache-Control", "no-store");
+        response.headers.set("X-Accel-Buffering", "no");
+        return response;
+      }),
+    );
   app.get("/api/department-transfers/destinations", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });

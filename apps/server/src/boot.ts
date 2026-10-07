@@ -1422,6 +1422,7 @@ async function bootServer(
     {
       db,
       backend: tillBackend,
+      liveEvents,
       clock: tillClock,
       cfg: till,
       // From the ENABLED set: a disabled module's table is not migrated, so its annotator must not run.

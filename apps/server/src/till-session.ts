@@ -92,7 +92,7 @@ export async function signedInPersonOn(
 export async function requireSession(
   deps: { db: Database },
   c: Context,
-  options: { permission?: Permission; action?: ProfileAction } = {},
+  options: { permission?: Permission; action?: ProfileAction; passive?: boolean } = {},
 ): Promise<{ personId: string; sessionId: string; deviceId: DeviceId; device: DeviceBinding }> {
   const token = readSessionToken(c);
   if (token === null || !isUuid(token)) throw new AppError("session.required", {});
@@ -113,9 +113,9 @@ export async function requireSession(
       .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
     if (found === undefined) throw new AppError("session.required", {});
     if (!found.active) throw new AppError("device.unauthorized", {});
-    // Write routes read no device cookie, so the session's requests keep its device's sighting.
     const seenAt = nowIso();
-    if (sightingDue(found.lastSeenAt, seenAt)) await recordSighting(tx, found.deviceId, seenAt);
+    if (options.passive !== true && sightingDue(found.lastSeenAt, seenAt))
+      await recordSighting(tx, found.deviceId, seenAt);
     if (options.permission !== undefined) {
       await authorize(tx, { sessionId: found.id, permission: options.permission });
     }
