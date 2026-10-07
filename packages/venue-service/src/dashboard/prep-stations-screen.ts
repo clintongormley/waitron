@@ -311,7 +311,7 @@ export class PrepStationsScreen extends LitElement {
   );
   /** A cell choice whose route-change preview is open. */
   @state() private pending?: {
-    change: RoutingChange & { kind: "cell" };
+    change: RoutingChange;
     moves: RoutingMove[];
     save: () => Promise<unknown>;
     isCurrent: () => boolean;
@@ -329,6 +329,10 @@ export class PrepStationsScreen extends LitElement {
   );
   #cellScope?: DraftScope<string>;
   #cellScopeOwner?: object;
+  /** A confirmed choice whose refresh is open: it keeps its committed scope until that settles. */
+  #cellRefreshing?: object;
+  /** A written choice the grid keeps showing until a read replaces the model. */
+  #writtenChoice?: RoutingPending;
   #cellRun = 0;
   #stationScope?: DraftScope<StationInput>;
   #renameScope?: DraftScope<{ name: string }>;
@@ -673,7 +677,7 @@ export class PrepStationsScreen extends LitElement {
   #syncCellDraft(): void {
     const pending = this.pending;
     if (!pending) {
-      this.#releaseCellScope();
+      if (this.#cellScopeOwner !== this.#cellRefreshing) this.#releaseCellScope();
       return;
     }
     if (this.#cellScopeOwner === pending) return;
@@ -735,6 +739,12 @@ export class PrepStationsScreen extends LitElement {
     this.#syncSettingsDraft();
     this.#syncPrinterDraft();
     this.#syncCellDraft();
+    const changedState = changed as Map<PropertyKey, unknown>;
+    if (changedState.has("view") && this.#writtenChoice !== undefined) {
+      if (this.cellChoice === this.#writtenChoice) this.cellChoice = null;
+      this.#writtenChoice = undefined;
+    }
+    if (changedState.has("tab")) this.cellRefusal = null;
     if (changed.has("readOnly") && this.readOnly) {
       this.tab = "stations";
       this.testProduct = "";
@@ -794,6 +804,9 @@ export class PrepStationsScreen extends LitElement {
     this.#renameScope?.dispose();
     this.pending = undefined;
     this.cellChoice = null;
+    this.cellRefusal = null;
+    this.#writtenChoice = undefined;
+    this.#cellRefreshing = undefined;
     this.#releaseCellScope();
     this.#stationScope = undefined;
     this.#renameScope = undefined;
@@ -911,6 +924,13 @@ export class PrepStationsScreen extends LitElement {
       { name, date: formatDate(params.date) },
     );
   }
+  async #makeDefault(stationId: string) {
+    const saved = await this.#act(
+      () => this.api.setDefaultStation(stationId),
+      (error) => this.#defaultRefusal(error),
+    );
+    if (saved && this.isConnected) this.cellRefusal = null;
+  }
   #savedCell(address: CellAddress): RouteTarget | null {
     return this.view?.routing.cells.find((cell) => sameAddress(cell, address))?.target ?? null;
   }
@@ -927,11 +947,7 @@ export class PrepStationsScreen extends LitElement {
     );
   }
   /** A choice that moves nothing is saved at once; otherwise its preview asks first. */
-  async #preview(
-    change: RoutingChange & { kind: "cell" },
-    save: () => Promise<unknown>,
-    isCurrent: () => boolean,
-  ) {
+  async #preview(change: RoutingChange, save: () => Promise<unknown>, isCurrent: () => boolean) {
     this.busy = true;
     this.#showError("");
     let moves: RoutingMove[];
@@ -972,15 +988,17 @@ export class PrepStationsScreen extends LitElement {
     }
     if (!pending.isCurrent()) return;
     if (this.#cellScopeOwner === pending) this.#cellScope?.commit(targetKey(pending.change.target));
+    this.#cellRefreshing = pending;
     this.pending = undefined;
-    const choice = this.cellChoice;
+    this.#writtenChoice = this.cellChoice ?? undefined;
     try {
       await this.#load();
     } finally {
-      if (pending.isCurrent()) {
-        if (this.cellChoice === choice) this.cellChoice = null;
-        this.busy = false;
+      if (this.#cellRefreshing === pending) {
+        this.#cellRefreshing = undefined;
+        if (this.#cellScopeOwner === pending) this.#releaseCellScope();
       }
+      if (pending.isCurrent()) this.busy = false;
     }
   }
   async #confirmRouting() {
@@ -3051,7 +3069,7 @@ export class PrepStationsScreen extends LitElement {
     );
   }
   /** "Drinks, Terrace: this changes Bar to Kitchen." — what the cell resolves to before and after. */
-  #cellSentence(change: RoutingChange & { kind: "cell" }): string {
+  #cellSentence(change: RoutingChange): string {
     const model = this.view!.routing;
     const rules = selectionRulesFromModel(model);
     const { row, zoneId } = change.address;
@@ -3283,7 +3301,7 @@ export class PrepStationsScreen extends LitElement {
                   this.tab = tab;
                   this.#url.write({ dashboard: "prep-stations", view: tab });
                 };
-                if (this.#cellScope) this.#leaveCell("navigation", proceed);
+                if (this.pending) this.#leaveCell("navigation", proceed);
                 else if (this.tab === "settings" && this.settingsEditor)
                   this.#leaveSettings("navigation", this.#settingsIdentity, proceed);
                 else if (this.printerEditor)
@@ -3345,10 +3363,7 @@ export class PrepStationsScreen extends LitElement {
                           @routing-cell-change=${(event: CustomEvent<RoutingCellChange>) =>
                             void this.#chooseCell(event.detail)}
                           @routing-make-default=${(event: CustomEvent<{ stationId: string }>) =>
-                            void this.#act(
-                              () => this.api.setDefaultStation(event.detail.stationId),
-                              (error) => this.#defaultRefusal(error),
-                            )}
+                            void this.#makeDefault(event.detail.stationId)}
                         ></venue-routing-grid>
                         <div class="cards">${active.map((s) => this.#stationCard(s))}</div>
                         ${

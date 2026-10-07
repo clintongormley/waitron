@@ -289,6 +289,14 @@ describe("venue-routing-grid", () => {
     expect(shown(old)).toEqual({ text: "Old kitchen (Disabled)", muted: false });
   });
 
+  it("a saved disabled station is drawn with its Spanish disabled wording", async () => {
+    setLocale("es");
+    const { el } = await mount();
+    const old = combo(el, "c:food", "inside")!;
+    await old.updateComplete;
+    expect(shown(old)).toEqual({ text: "Old kitchen (Deshabilitada)", muted: false });
+  });
+
   it("a saved disabled station is repaired by Clear setting or by an active station", async () => {
     const address: CellAddress = {
       row: { kind: "category", categoryId: "food" },

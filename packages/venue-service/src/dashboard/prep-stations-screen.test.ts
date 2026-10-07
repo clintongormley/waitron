@@ -2744,14 +2744,14 @@ it.each([
   {
     locale: "en",
     heading: "Category or product",
-    field: "All categories",
+    field: "All categories, Every zone: Bar, the default station",
     disable: "Disable",
     enable: "Enable",
   },
   {
     locale: "es",
     heading: "Categoría o producto",
-    field: "Todas las categorías",
+    field: "Todas las categorías, Todas las zonas: Bar, la estación predeterminada",
     disable: "Deshabilitar",
     enable: "Habilitar",
   },
@@ -2785,7 +2785,7 @@ it.each([
     expect(q(el, '[data-test="disable-bar"]')!.textContent!.trim()).toBe(disable);
     expect(q(el, '[data-test="enable-upstairs"]')!.textContent!.trim()).toBe(enable);
     expect(q(el, '[data-test="remove-watcher-pass"]')!.textContent!.trim()).toBe(disable);
-    expect(gridCombo(grid, "all", "every")!.label.startsWith(`${field}, `)).toBe(true);
+    expect(gridCombo(grid, "all", "every")!.label).toBe(field);
   },
 );
 
@@ -5580,6 +5580,10 @@ describe("Routing grid", () => {
     )!;
   const shownText = (box: WtCombobox) =>
     box.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim();
+  const formActions = (el: PrepStationsScreen) =>
+    gridOf(el).shadowRoot!.querySelector<
+      HTMLElement & { error: string; updateComplete: Promise<unknown> }
+    >("wt-form-actions")!;
   async function chooseCell(el: PrepStationsScreen, row: string, zone: string, label: string) {
     const box = cellCombo(el, row, zone);
     await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
@@ -5627,6 +5631,23 @@ describe("Routing grid", () => {
     expect(a.setCell).toHaveBeenCalledExactlyOnceWith(drinksTerrace, kitchenTarget);
     await vi.waitFor(() => expect(vi.mocked(a.load).mock.calls.length).toBeGreaterThan(loads));
     expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+  });
+
+  it("after a save, the cell shows what the refresh read rather than the written choice", async () => {
+    const saved = gridView();
+    saved.routing.cells = [
+      ...saved.routing.cells,
+      { row: drinksTerrace.row, zoneId: "terrace", target: { kind: "no_preparation" } },
+    ] as typeof saved.routing.cells;
+    const load = vi.fn().mockResolvedValueOnce(gridView()).mockResolvedValue(saved);
+    const { el } = await mountGrid({ load, preview: vi.fn().mockResolvedValue([breadMove]) });
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    await vi.waitFor(async () => {
+      await gridOf(el).updateComplete;
+      expect(cellCombo(el, "c:drinks", "terrace").value).toBe("no_preparation");
+    });
   });
 
   it("a zero-move choice saves directly", async () => {
@@ -5741,10 +5762,12 @@ describe("Routing grid", () => {
     const box = cellCombo(el, "c:drinks", "terrace");
     await vi.waitFor(() => expect(box.error).toBe(message));
     expect(box.value).toBe("");
-    const actions = gridOf(el).shadowRoot!.querySelector<HTMLElement & { error: string }>(
-      "wt-form-actions",
-    )!;
+    const actions = formActions(el);
     expect(actions.error).toBe(`Drinks, Terrace: ${message}`);
+    await actions.updateComplete;
+    expect(actions.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      `Drinks, Terrace: ${message}`,
+    );
     expect(
       [...el.shadowRoot!.querySelectorAll(".error")].filter((node) =>
         node.textContent!.includes(message),
@@ -5758,6 +5781,75 @@ describe("Routing grid", () => {
     await gridOf(el).updateComplete;
     expect(cellCombo(el, "c:drinks", "terrace").error).toBe("");
     expect(actions.error).toBe("");
+  });
+
+  for (const code of ["service_zone.not_found", "route.subject_not_found"]) {
+    it(`a write refused with ${code} shows the save error beside the cell and at the bottom`, async () => {
+      setLocale("en");
+      const message = "The change could not be saved.";
+      const { el } = await mountGrid({
+        preview: vi.fn().mockResolvedValue([breadMove]),
+        setCell: vi.fn().mockRejectedValue({ code }),
+      });
+      await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+      q(el, '[data-test="confirm-routing"]')!.click();
+      await settle(el);
+      await gridOf(el).updateComplete;
+      await vi.waitFor(() => expect(cellCombo(el, "c:drinks", "terrace").error).toBe(message));
+      const actions = formActions(el);
+      await actions.updateComplete;
+      expect(actions.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+        `Drinks, Terrace: ${message}`,
+      );
+    });
+  }
+
+  it("a cell refusal outlives a background refresh and clears on a successful Make default and on a tab change", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const refused = async (el: PrepStationsScreen) => {
+      await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+      q(el, '[data-test="confirm-routing"]')!.click();
+      await settle(el);
+      await gridOf(el).updateComplete;
+      await vi.waitFor(() =>
+        expect(cellCombo(el, "c:drinks", "terrace").error).toBe("The change could not be saved."),
+      );
+    };
+    const { a, el } = await mountGrid({
+      liveData,
+      preview: vi.fn().mockResolvedValue([breadMove]),
+      setCell: vi.fn().mockRejectedValue({ code: "service_zone.not_found" }),
+      setDefaultStation: vi.fn().mockResolvedValue(undefined),
+    });
+    await refused(el);
+    const loads = vi.mocked(a.load).mock.calls.length;
+    liveData.invalidate([{ type: "categories" }]);
+    await vi.waitFor(() => expect(vi.mocked(a.load).mock.calls.length).toBeGreaterThan(loads));
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(cellCombo(el, "c:drinks", "terrace").error).toBe("The change could not be saved.");
+    expect(formActions(el).error).toBe("Drinks, Terrace: The change could not be saved.");
+
+    await chooseCell(el, "all", "every", "Kitchen");
+    expect(a.setDefaultStation).toHaveBeenCalledExactlyOnceWith("kitchen");
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(cellCombo(el, "c:drinks", "terrace").error).toBe("");
+    expect(formActions(el).error).toBe("");
+
+    await refused(el);
+    el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+      new CustomEvent("wt-tab-change", { detail: { value: "stations" } }),
+    );
+    await settle(el);
+    el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+      new CustomEvent("wt-tab-change", { detail: { value: "routing" } }),
+    );
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(cellCombo(el, "c:drinks", "terrace").error).toBe("");
+    expect(formActions(el).error).toBe("");
   });
 
   it("Make default from All × Every zone calls the default route and maps its refusal", async () => {

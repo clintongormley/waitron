@@ -104,14 +104,15 @@ const move = {
   from: { kind: "station", stationId: "bar" },
   to: { kind: "station", stationId: "kitchen" },
 };
-async function mount(write?: Promise<void>, refreshFails = false) {
+/** `refresh` holds every read after the first until it settles; a rejected one fails them. */
+async function mount(write?: Promise<void>, refresh?: Promise<void>) {
   history.replaceState(null, "", "/manage/prep-stations/view/routing");
   const writes: unknown[] = [];
   let reads = 0;
   app = document.createElement("routing-cell-leave-test-app") as CellLeaveApp;
   app.api = {
     load: async () => {
-      if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
+      if (++reads > 1 && refresh) await refresh;
       return structuredClone(view);
     },
     readStationHealth: async () => ({
@@ -133,7 +134,7 @@ async function mount(write?: Promise<void>, refreshFails = false) {
     "dashboard-prep-stations-screen",
   )!;
   await expect.poll(() => screen.shadowRoot?.querySelector("venue-routing-grid")).not.toBeNull();
-  return { screen, writes };
+  return { screen, writes, reads: () => reads };
 }
 type Grid = HTMLElement & { updateComplete: Promise<unknown> };
 const grid = (screen: PrepStationsScreen) =>
@@ -265,24 +266,47 @@ describe("a pending routing cell choice", () => {
   }
 
   it("Confirm commits before a failed refresh", async () => {
-    const { screen, writes } = await mount(undefined, true);
+    const refresh = deferred();
+    const { screen, writes, reads } = await mount(undefined, refresh.promise);
     await choose(screen, "c:drinks", "terrace", "Kitchen");
     const confirmation = await preview(screen);
     confirmation.querySelector<HTMLElement>("[data-test=confirm-routing]")!.click();
-    await expect
-      .poll(() => screen.shadowRoot!.textContent)
-      .toContain("Prep stations could not be loaded.");
+    await expect.poll(reads).toBe(2);
     expect(writes).toEqual([
       {
         address: { row: { kind: "category", categoryId: "drinks" }, zoneId: "terrace" },
         target: { kind: "station", stationId: "kitchen" },
       },
     ]);
+    // The refresh is still open: the written choice is saved, so nothing asks.
     expect(screen.shadowRoot!.querySelector("[data-test=routing-preview]")).toBeNull();
+    expect(unload()).toBe(false);
+    let left = false;
+    await app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed: () => {
+        left = true;
+      },
+    });
+    expect(left).toBe(true);
+    changeTab(screen, "stations");
+    await expect.poll(() => tab(screen)).toBe("stations");
+    expect((await question()).open).toBe(false);
+    changeTab(screen, "routing");
+    await expect.poll(() => tab(screen)).toBe("routing");
+
+    refresh.reject({ code: "connection.failed" });
+    await expect
+      .poll(() => screen.shadowRoot!.textContent)
+      .toContain("Prep stations could not be loaded.");
+    // The write succeeded, so the cell keeps showing it until a read replaces the model.
+    expect(await shown(screen, "c:drinks", "terrace")).toBe("station:kitchen");
     expect(unload()).toBe(false);
     changeTab(screen, "stations");
     await expect.poll(() => tab(screen)).toBe("stations");
     expect((await question()).open).toBe(false);
+    expect(writes).toHaveLength(1);
   });
 
   it("disconnect disposes the pending question", async () => {
