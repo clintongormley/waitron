@@ -333,6 +333,7 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
       filter: {
         label: "Category",
         allLabel: "All categories",
+        multiple: { countLabel: (count) => `${count} categories` },
         value: (row) => row.category,
         options: [
           { value: "Drinks", label: "Drinks" },

@@ -1097,6 +1097,10 @@ export class ProductList extends LitElement {
         filter: {
           label: t("product.ordering"),
           allLabel: t("product.filter_ordering_all"),
+          multiple: {
+            countLabel: (count) =>
+              t("product.filter_ordering_count").replace("{count}", String(count)),
+          },
           value: ({ product }) => product.ordering,
           options: PRODUCT_ORDERINGS.map((ordering) => ({
             value: ordering,

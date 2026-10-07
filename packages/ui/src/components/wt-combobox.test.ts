@@ -3421,3 +3421,135 @@ describe.each(["light", "dark"] as const)("a link trigger's colours (%s theme)",
     expect(getComputedStyle(action).color).toBe(primary);
   });
 });
+
+const ANY_TAG: ComboboxOption[] = [{ value: "", label: "Any tag" }, ...TAGS];
+
+test("a multiple choice with show-empty-option shows its empty option chosen, in value text, while nothing is chosen", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" multiple show-empty-option placeholder="Choose tags"></wt-combobox>',
+    ANY_TAG,
+  );
+  const { value, trigger } = fieldParts(el);
+  expect(value.textContent!.trim()).toBe("Any tag");
+  expect(value.classList.contains("placeholder")).toBe(false);
+  await userEvent.click(trigger);
+  const rows = optionRows(el);
+  expect(rows.map((row) => row.getAttribute("aria-selected"))).toEqual([
+    "true",
+    "false",
+    "false",
+    "false",
+  ]);
+  expect(rows[0]!.querySelector(".check")!.classList.contains("checked")).toBe(true);
+});
+
+test("choosing the empty option of a multiple choice clears its values and reports it once", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" multiple show-empty-option></wt-combobox>',
+    ANY_TAG,
+  );
+  el.values = ["vegan", "vegetarian"];
+  await el.updateComplete;
+  const received: string[][] = [];
+  el.addEventListener("wt-change", (event) =>
+    received.push((event as CustomEvent<{ values: string[] }>).detail.values),
+  );
+  await userEvent.click(fieldParts(el).trigger);
+  expect(optionRows(el)[0]!.getAttribute("aria-selected")).toBe("false");
+  await userEvent.click(optionRows(el)[0]!);
+  expect(el.values).toEqual([]);
+  expect(received).toEqual([[]]);
+  expect(optionRows(el)[0]!.getAttribute("aria-selected")).toBe("true");
+  await userEvent.click(optionRows(el)[0]!);
+  expect(received).toEqual([[]]);
+  await userEvent.click(optionRows(el)[2]!);
+  expect(el.values).toEqual(["vegan"]);
+  expect(received).toEqual([[], ["vegan"]]);
+  expect(optionRows(el)[0]!.getAttribute("aria-selected")).toBe("false");
+});
+
+test("Enter on the highlighted empty option of a multiple choice clears its values and reports it once", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" multiple show-empty-option></wt-combobox>',
+    ANY_TAG,
+  );
+  el.values = ["vegan", "vegetarian"];
+  await el.updateComplete;
+  const received: string[][] = [];
+  el.addEventListener("wt-change", (event) =>
+    received.push((event as CustomEvent<{ values: string[] }>).detail.values),
+  );
+  await userEvent.click(fieldParts(el).trigger);
+  expect(
+    el.shadowRoot!.querySelector('[role="listbox"]')!.getAttribute("aria-multiselectable"),
+  ).toBe("true");
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  search.focus();
+  await userEvent.keyboard("{Home}");
+  expect(search.getAttribute("aria-activedescendant")).toBe(optionRows(el)[0]!.id);
+  await userEvent.keyboard("{Enter}");
+  expect(el.values).toEqual([]);
+  expect(received).toEqual([[]]);
+  expect(optionRows(el)[0]!.getAttribute("aria-selected")).toBe("true");
+  await userEvent.keyboard("{Enter}");
+  expect(received).toEqual([[]]);
+});
+
+test("stable-width on a multiple choice also reserves the count text of every count from two to the choosable options", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" multiple show-empty-option stable-width></wt-combobox>',
+    [
+      ...ANY_TAG,
+      { value: "kosher", label: "Kosher", disabled: true },
+      { value: "new", label: "New tag", action: true },
+    ],
+  );
+  el.countLabel = (count) => `${count} tags`;
+  await el.updateComplete;
+  const reserved = () =>
+    [...el.shadowRoot!.querySelectorAll(".width-option")].map((span) => span.textContent!.trim());
+  expect(reserved()).toEqual([
+    "Any tag",
+    "Gluten-free",
+    "Vegan",
+    "Vegetarian",
+    "Kosher",
+    "2 tags",
+    "3 tags",
+  ]);
+  el.options = [{ value: "", label: "Any tag" }, TAGS[0]!];
+  await el.updateComplete;
+  expect(reserved()).toEqual(["Any tag", "Gluten-free"]);
+});
+
+test("stable-width on a multiple choice does not ask for its count texts again when only the chosen values change", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" multiple show-empty-option stable-width></wt-combobox>',
+    ANY_TAG,
+  );
+  const countLabel = vi.fn((count: number) => `${count} tags`);
+  el.countLabel = countLabel;
+  await el.updateComplete;
+  expect(countLabel.mock.calls).toEqual([[2], [3]]);
+  countLabel.mockClear();
+  el.values = ["vegan"];
+  await el.updateComplete;
+  el.values = [];
+  await el.updateComplete;
+  expect(countLabel).not.toHaveBeenCalled();
+});
+
+test("stable-width on a multiple choice keeps the trigger's width when a smaller count's text is the widest", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" multiple show-empty-option stable-width style="display: inline-block"></wt-combobox>',
+    ANY_TAG,
+  );
+  el.countLabel = (count) => (count === 2 ? "two chosen, a much longer label" : `${count} chosen`);
+  await el.updateComplete;
+  const { trigger, value } = fieldParts(el);
+  const before = trigger.getBoundingClientRect().width;
+  el.values = ["gluten-free", "vegan"];
+  await el.updateComplete;
+  expect(value.textContent!.trim()).toBe("two chosen, a much longer label");
+  expect(trigger.getBoundingClientRect().width).toBe(before);
+});

@@ -1,7 +1,14 @@
 import { html } from "lit";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
-import { chooseOption, cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
+import {
+  chooseOption,
+  chooseOptions,
+  cleanup,
+  host,
+  mount,
+  mountInShadowRoot,
+} from "../test-helpers.js";
 // For its `parkPointer` command type only.
 import type {} from "../a11y-helpers.js";
 import type { WtCombobox } from "./wt-combobox.js";
@@ -7248,3 +7255,319 @@ for (const tree of [false, true]) {
     expect(rowKeysS(el)).toEqual(["1"]);
   });
 }
+
+const multiRows: RowS[] = [
+  { id: "1", name: "Ada", status: "active" },
+  { id: "2", name: "Bea", status: "off" },
+  { id: "3", name: "Cy", status: "paused" },
+  { id: "4", name: "Ada", status: "off" },
+];
+const multiStatusFilter = {
+  label: "Filter by status",
+  allLabel: "Any status",
+  value: (r: RowS) => r.status,
+  options: [
+    { value: "active", label: "Active" },
+    { value: "off", label: "Inactive" },
+    { value: "paused", label: "Paused" },
+  ],
+  multiple: { countLabel: (count: number) => `${count} statuses` },
+};
+const multiStatus: DataTableColumn<RowS>[] = [
+  {
+    key: "name",
+    label: "Name",
+    cell: (r) => r.name,
+    sortValue: (r) => r.name,
+    filter: {
+      label: "Filter by name",
+      allLabel: "Anyone",
+      value: (r) => r.name,
+      options: [
+        { value: "Ada", label: "Ada" },
+        { value: "Bea", label: "Bea" },
+        { value: "Cy", label: "Cy" },
+      ],
+    },
+  },
+  { key: "status", label: "Status", cell: (r) => r.status, filter: multiStatusFilter },
+];
+const multiInitial: DataTableColumn<RowS>[] = [
+  multiStatus[0]!,
+  { ...multiStatus[1]!, filter: { ...multiStatusFilter, initial: "active" } },
+];
+async function multiTable(props: Partial<WtDataTable<RowS>> = {}): Promise<WtDataTable<RowS>> {
+  return tableS({ rows: multiRows, columns: multiStatus, ...props });
+}
+function nameSelect(el: WtDataTable<RowS>): WtCombobox {
+  return el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="name"]')!;
+}
+function closedText(select: WtCombobox): string {
+  return select.shadowRoot!.querySelector(".value")!.textContent!.trim();
+}
+
+test("a multi-select filter with two values chosen keeps the rows matching either", async () => {
+  const el = await multiTable();
+  expect(statusSelect(el).multiple).toBe(true);
+  expect(nameSelect(el).multiple).toBe(false);
+  await chooseOptions(statusSelect(el), ["active", "paused"]);
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "3"]);
+});
+
+test("a list-valued multi-select filter keeps a row whose list holds any chosen value", async () => {
+  type Tagged = { id: string; tags: string[] };
+  const el = (await mount(
+    '<wt-data-table aria-label="Tagged"></wt-data-table>',
+  )) as WtDataTable<Tagged>;
+  Object.assign(el, {
+    rows: [
+      { id: "1", tags: ["a", "b"] },
+      { id: "2", tags: ["c"] },
+      { id: "3", tags: ["b"] },
+      { id: "4", tags: [] },
+    ],
+    rowKey: (r: Tagged) => r.id,
+    columns: [
+      {
+        key: "tags",
+        label: "Tags",
+        cell: (r: Tagged) => r.tags.join(","),
+        filter: {
+          label: "Tag",
+          allLabel: "Any tag",
+          value: (r: Tagged) => r.tags,
+          options: ["a", "b", "c"].map((value) => ({ value, label: value })),
+          multiple: { countLabel: (count: number) => `${count} tags` },
+        },
+      },
+    ],
+  });
+  await el.updateComplete;
+  await chooseOptions(el.shadowRoot!.querySelector('wt-combobox[data-filter="tags"]')!, ["a", "c"]);
+  await el.updateComplete;
+  expect(
+    [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) => r.getAttribute("data-row-key")),
+  ).toEqual(["1", "2"]);
+});
+
+test("a multi-select filter does not ask for its count texts again when a choice re-renders the table", async () => {
+  const countLabel = vi.fn((count: number) => `${count} statuses`);
+  const el = await multiTable({
+    columns: [
+      multiStatus[0]!,
+      { ...multiStatus[1]!, filter: { ...multiStatusFilter, multiple: { countLabel } } },
+    ],
+  });
+  expect(countLabel.mock.calls).toEqual([[2], [3]]);
+  countLabel.mockClear();
+  await chooseOptions(statusSelect(el), ["active"]);
+  await el.updateComplete;
+  await statusSelect(el).updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(countLabel).not.toHaveBeenCalled();
+});
+
+test("a multi-select filter and a second filter still narrow together", async () => {
+  const el = await multiTable();
+  await chooseOptions(statusSelect(el), ["active", "off"]);
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "2", "4"]);
+  await chooseOption(nameSelect(el), "Ada");
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "4"]);
+});
+
+test("a multi-select filter holding two values counts once in the badge and marks its heading", async () => {
+  const el = await multiTable();
+  const root = el.shadowRoot!;
+  await chooseOptions(statusSelect(el), ["active", "off"]);
+  await el.updateComplete;
+  expect(root.querySelector(".filters-count")!.textContent!.trim()).toBe("1");
+  const filtered = [...root.querySelectorAll("thead th[data-filtered]")];
+  expect(filtered.map((cell) => cell.textContent!.trim())).toEqual(["Status"]);
+});
+
+test("a multi-select filter reports every chosen value once per change, and its key goes once none is", async () => {
+  const el = await multiTable({ viewKey: "test.multi-event" });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) =>
+    seen.push((event as CustomEvent).detail.filters),
+  );
+  await chooseOptions(statusSelect(el), ["active"]);
+  await chooseOptions(statusSelect(el), ["active", "off"]);
+  await chooseOptions(statusSelect(el), []);
+  expect(seen).toEqual([{ status: ["active"] }, { status: ["active", "off"] }, {}]);
+  expect(storedFilters("test.multi-event")).toEqual({});
+});
+
+test("unticking every value of a multi-select filter with an initial choice remembers none", async () => {
+  const el = await multiTable({ viewKey: "test.multi-initial", columns: multiInitial });
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) =>
+    seen.push((event as CustomEvent).detail.filters),
+  );
+  await chooseOptions(statusSelect(el), []);
+  await el.updateComplete;
+  expect(seen).toEqual([{ status: [] }]);
+  expect(storedFilters("test.multi-initial")).toEqual({ status: [] });
+  expect(rowKeysS(el)).toEqual(["1", "2", "3", "4"]);
+});
+
+test("a multi-select filter's closed dropdown shows the one value's label, or the count for two", async () => {
+  const el = await multiTable();
+  expect(closedText(statusSelect(el))).toBe("Any status");
+  await chooseOptions(statusSelect(el), ["off"]);
+  await el.updateComplete;
+  expect(closedText(statusSelect(el))).toBe("Inactive");
+  await chooseOptions(statusSelect(el), ["off", "paused"]);
+  await el.updateComplete;
+  expect(closedText(statusSelect(el))).toBe("2 statuses");
+});
+
+test("a multi-select filter's list keeps its all row first, and choosing it shows every row", async () => {
+  const el = await multiTable();
+  await chooseOptions(statusSelect(el), ["off"]);
+  await el.updateComplete;
+  await clickFilterRow(statusSelect(el), "Any status");
+  await el.updateComplete;
+  expect(statusSelect(el).values).toEqual([]);
+  expect(rowKeysS(el)).toEqual(["1", "2", "3", "4"]);
+  const options = [...statusSelect(el).shadowRoot!.querySelectorAll('[role="option"]')];
+  expect(options.map((row) => row.textContent!.trim())).toEqual([
+    "Any status",
+    "Active",
+    "Inactive",
+    "Paused",
+  ]);
+  await userEvent.click(options[3]!);
+  await el.updateComplete;
+  await userEvent.click(options[1]!);
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "3"]);
+});
+
+test("a stored list restores a multi-select filter and its dropdown shows those values", async () => {
+  sessionStorage.setItem(
+    "test.multi-restore",
+    JSON.stringify({ filters: { status: ["off", "paused"] } }),
+  );
+  const el = await multiTable({ viewKey: "test.multi-restore" });
+  expect(rowKeysS(el)).toEqual(["2", "3", "4"]);
+  expect(statusSelect(el).values).toEqual(["off", "paused"]);
+  expect(closedText(statusSelect(el))).toBe("2 statuses");
+});
+
+test("a stored filter whose shape does not match its column's mode is dropped", async () => {
+  sessionStorage.setItem(
+    "test.multi-shape",
+    JSON.stringify({ filters: { status: "off", name: ["Ada"] } }),
+  );
+  const el = await multiTable({ viewKey: "test.multi-shape" });
+  expect(rowKeysS(el)).toEqual(["1", "2", "3", "4"]);
+  expect(storedFilters("test.multi-shape")).toEqual({});
+});
+
+test("a stored list loses the values its column stops offering once options load", async () => {
+  sessionStorage.setItem(
+    "test.multi-unoffered",
+    JSON.stringify({ filters: { status: ["off", "gone"] } }),
+  );
+  const loading: DataTableColumn<RowS>[] = [
+    multiStatus[0]!,
+    { ...multiStatus[1]!, filter: { ...multiStatusFilter, options: [] } },
+  ];
+  const el = await multiTable({ viewKey: "test.multi-unoffered", columns: loading });
+  expect(storedFilters("test.multi-unoffered")).toEqual({ status: ["off", "gone"] });
+  el.columns = multiStatus;
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["2", "4"]);
+  expect(storedFilters("test.multi-unoffered")).toEqual({ status: ["off"] });
+});
+
+test("a stored list whose every value stops being offered is removed, so the column's initial applies again", async () => {
+  sessionStorage.setItem("test.multi-emptied", JSON.stringify({ filters: { status: ["gone"] } }));
+  const plain = await multiTable({ viewKey: "test.multi-emptied" });
+  expect(rowKeysS(plain)).toEqual(["1", "2", "3", "4"]);
+  expect(storedFilters("test.multi-emptied")).toEqual({});
+  cleanup();
+  sessionStorage.setItem("test.multi-emptied2", JSON.stringify({ filters: { status: ["gone"] } }));
+  const initial = await multiTable({ viewKey: "test.multi-emptied2", columns: multiInitial });
+  expect(rowKeysS(initial)).toEqual(["1"]);
+  expect(storedFilters("test.multi-emptied2")).toEqual({});
+  expect(statusSelect(initial).values).toEqual(["active"]);
+});
+
+test("a stored empty list is kept as none only where the column has an initial", async () => {
+  sessionStorage.setItem("test.multi-none", JSON.stringify({ filters: { status: [] } }));
+  const plain = await multiTable({ viewKey: "test.multi-none" });
+  expect(rowKeysS(plain)).toEqual(["1", "2", "3", "4"]);
+  expect(storedFilters("test.multi-none")).toEqual({});
+  cleanup();
+  sessionStorage.setItem("test.multi-none2", JSON.stringify({ filters: { status: [] } }));
+  const initial = await multiTable({ viewKey: "test.multi-none2", columns: multiInitial });
+  expect(rowKeysS(initial)).toEqual(["1", "2", "3", "4"]);
+  expect(storedFilters("test.multi-none2")).toEqual({ status: [] });
+});
+
+test("Clear all empties a multi-select filter, to none where the column has an initial", async () => {
+  const plain = await multiTable({ viewKey: "test.multi-clear" });
+  await chooseOptions(statusSelect(plain), ["off", "paused"]);
+  plain.shadowRoot!.querySelector<HTMLButtonElement>(".filters-clear-all")!.click();
+  await plain.updateComplete;
+  expect(rowKeysS(plain)).toEqual(["1", "2", "3", "4"]);
+  expect(storedFilters("test.multi-clear")).toEqual({});
+  cleanup();
+  const initial = await multiTable({ viewKey: "test.multi-clear2", columns: multiInitial });
+  initial.shadowRoot!.querySelector<HTMLButtonElement>(".filters-clear-all")!.click();
+  await initial.updateComplete;
+  expect(rowKeysS(initial)).toEqual(["1", "2", "3", "4"]);
+  expect(storedFilters("test.multi-clear2")).toEqual({ status: [] });
+  expect(statusSelect(initial).values).toEqual([]);
+});
+
+test("a multi-select filter with an initial choice starts on that one value", async () => {
+  const el = await multiTable({ columns: multiInitial });
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(statusSelect(el).values).toEqual(["active"]);
+});
+
+test("a multi-select filter reporting the chosen values in another order is no change", async () => {
+  const el = await multiTable({ viewKey: "test.multi-order" });
+  await chooseOptions(statusSelect(el), ["active", "paused"]);
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) =>
+    seen.push((event as CustomEvent).detail.filters),
+  );
+  await chooseOptions(statusSelect(el), ["paused", "active"]);
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(storedFilters("test.multi-order")).toEqual({ status: ["active", "paused"] });
+});
+
+test("a listener changing a reported multi-select list does not change the table's filter", async () => {
+  const el = await multiTable({ viewKey: "test.multi-detail" });
+  el.addEventListener(
+    "wt-filter-change",
+    (event) => (event as CustomEvent).detail.filters.status.push("off"),
+    { once: true },
+  );
+  await chooseOptions(statusSelect(el), ["active"]);
+  await chooseOption(nameSelect(el), "Ada");
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(storedFilters("test.multi-detail")).toEqual({ status: ["active"], name: "Ada" });
+});
+
+test("a listener changing the list Clear all reports does not change the table's filter", async () => {
+  const el = await multiTable({ viewKey: "test.multi-clear-detail", columns: multiInitial });
+  el.addEventListener("wt-filter-change", (event) =>
+    (event as CustomEvent).detail.filters.status.push("off"),
+  );
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-clear-all")!.click();
+  await el.updateComplete;
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "2", "3", "4"]);
+  expect(storedFilters("test.multi-clear-detail")).toEqual({ status: [] });
+});

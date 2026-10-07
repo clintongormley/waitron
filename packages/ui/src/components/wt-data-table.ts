@@ -32,13 +32,16 @@ export interface DataTableColumn<Row> {
   filter?: {
     label: string;
     allLabel: string;
-    /** A list keeps the row when it holds the chosen option. */
+    /** A list keeps the row when it holds a chosen option. */
     value: (row: Row) => string | readonly string[];
     options: { value: string; label: string }[];
     /** The option the filter starts on, while no choice is made or restored and the column's
      * options include it. Choosing the all option is then remembered as a choice of its own, so on
      * a table with a `viewKey` it outlives a reload. */
     initial?: string;
+    /** Present, several options can be chosen at once and a row passes when it matches any of them.
+     * `countLabel` is the closed dropdown's text once two or more are chosen. */
+    multiple?: { countLabel: (count: number) => string };
   };
   align?: "start" | "end";
   /** Offers the column in the column chooser, shown or hidden until the person chooses. Absent, the
@@ -50,6 +53,8 @@ export interface DataTableColumn<Row> {
   /** Keep the whole cell outside row activation, including blank space beside its action. */
   activatesRow?: false;
 }
+
+type Filter<Row> = NonNullable<DataTableColumn<Row>["filter"]>;
 
 type SortDirection = "ascending" | "descending";
 
@@ -73,6 +78,47 @@ function repeatKeys(keys: readonly string[]): (_item: unknown, index: number) =>
  * over the whole screen: the panel is seven `--wt-tap-min` steps wide, so at this width and above
  * the rows beside it stay wider than NARROW_TREE_WIDTH at the default tokens. */
 const SIDE_FILTERS_WIDTH = 768;
+
+type FilterChoice = string | string[];
+
+function isFilterChoice(value: unknown): value is FilterChoice {
+  return (
+    typeof value === "string" ||
+    (Array.isArray(value) && value.every((each) => typeof each === "string"))
+  );
+}
+
+function sameValues(a: readonly string[], b: readonly string[]): boolean {
+  const right = new Set(b);
+  return new Set(a).size === right.size && a.every((value) => right.has(value));
+}
+
+/** The lists are copied so a listener cannot change the table's own filter state through them. */
+function copyChoices(choices: Record<string, FilterChoice>): Record<string, FilterChoice> {
+  return Object.fromEntries(
+    Object.entries(choices).map(([key, value]) => [
+      key,
+      typeof value === "string" ? value : [...value],
+    ]),
+  );
+}
+
+function sameChoices(a: Record<string, FilterChoice>, b: Record<string, FilterChoice>): boolean {
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => {
+      const [left, right] = [a[key]!, b[key]];
+      if (typeof left === "string" || typeof right === "string") return left === right;
+      return right !== undefined && sameValues(left, right);
+    })
+  );
+}
+
+interface ActiveFilter<Row> {
+  value: (row: Row) => string | readonly string[];
+  selected: readonly string[];
+}
 
 /** The host width, in px, at or below which the table's own search box takes a line of its own
  * under the toolbar's buttons: the Products list's catalogue browser moves its search at 40rem. */
@@ -806,11 +852,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ type: Boolean, reflect: true, attribute: "top-aligned" }) topAligned = false;
   @state() private sideFilters = false;
   @state() private searchText = "";
-  /** Every filter choice, chosen or restored, keyed by column key; an absent key means the column's
-   * `initial` option, or "all" when it has none, and "" is "all" chosen over an `initial` one. A
-   * choice filters rows only while its column offers it (see #activeFilter), and #judgeFilters
-   * removes one its column's options no longer include. */
-  @state() private filterSelections: Record<string, string> = {};
+  /** Every filter choice, chosen or restored, keyed by column key: a string for a single-choice
+   * filter, a list for a multi-select one. An absent key means the column's `initial` option, or
+   * "all" when it has none, and "" or [] is "all" chosen over an `initial` one. A choice filters
+   * rows only while its column offers it (see #activeValues), and #judgeFilters removes what its
+   * column's options no longer include. */
+  @state() private filterSelections: Record<string, FilterChoice> = {};
   /** A filter must not let disappearing or returning rows resize the headings. */
   private filterColumnWidths: number[] | null = null;
   private filterHostWidth: number | null = null;
@@ -1029,7 +1076,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   /** Reads the stored view once there are columns to check it against. A stored sort is adopted
    * only if a current column can sort by it, and its direction only together with that column.
-   * Stored filter strings join filterSelections, to be judged like any other choice. */
+   * Stored filter strings and lists of strings join filterSelections, to be judged like any other
+   * choice. */
   #restoreView(): void {
     if (!this.viewKey || this.columns.length === 0) return;
     if (!this.#restored) {
@@ -1058,7 +1106,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         }
         if (parsed.filters && typeof parsed.filters === "object") {
           const stored = Object.entries(parsed.filters as Record<string, unknown>).filter(
-            (entry): entry is [string, string] => typeof entry[1] === "string",
+            (entry): entry is [string, FilterChoice] => isFilterChoice(entry[1]),
           );
           this.filterSelections = { ...this.filterSelections, ...Object.fromEntries(stored) };
         }
@@ -1313,57 +1361,79 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return options && options.length > 0 ? options : undefined;
   }
 
-  /** Removes every choice whose column offers options that do not include it, and reports whether it
-   * removed any. A chosen "all" (an empty string) is the exception: it is kept exactly while its
-   * column names an `initial`, and removed otherwise. Any other choice whose column offers none
-   * waits, kept and stored but not applied, until the column offers a non-empty list to judge it by. */
+  /** Removes every choice whose column offers options that do not include it, or whose shape (a
+   * string or a list) is not its column's mode, and reports whether it changed any. A list loses
+   * only the values its column's options do not include, and is removed when that leaves none. A
+   * chosen "all" ("" or an empty list) is kept exactly while its column names an `initial`, and
+   * removed otherwise. Any other choice whose column offers no options waits, kept and stored but
+   * not applied, until the column offers a non-empty list to judge it by. */
   #judgeFilters(): boolean {
-    const kept = Object.entries(this.filterSelections).filter(([key, value]) => {
-      // The all option is kept only where it overrides an initial choice; anywhere else it is what
-      // an absent choice already means.
-      if (value === "") return this.#initial(key) !== undefined;
-      const options = this.#offered(key);
-      return !options || options.some((option) => option.value === value);
-    });
-    if (kept.length === Object.keys(this.filterSelections).length) return false;
-    this.filterSelections = Object.fromEntries(kept);
+    const judged = Object.entries(this.filterSelections).flatMap(
+      ([key, value]): [string, FilterChoice][] => {
+        const filter = this.columns.find((column) => column.key === key)?.filter;
+        if (filter && Array.isArray(value) !== Boolean(filter.multiple)) return [];
+        const options = this.#offered(key);
+        const offered = (choice: string) =>
+          !options || options.some((option) => option.value === choice);
+        // The all option is kept only where it overrides an initial choice; anywhere else it is
+        // what an absent choice already means.
+        if (value.length === 0) return filter?.initial !== undefined ? [[key, value]] : [];
+        const kept = typeof value === "string" ? value : value.filter(offered);
+        if (kept.length === 0) return [];
+        return typeof kept === "string" && !offered(kept) ? [] : [[key, kept]];
+      },
+    );
+    const next = Object.fromEntries(judged);
+    if (sameChoices(next, this.filterSelections)) return false;
+    this.filterSelections = next;
     return true;
   }
 
-  #initial(key: string): string | undefined {
-    return this.columns.find((column) => column.key === key)?.filter?.initial;
+  #filterOptions = new WeakMap<
+    Filter<Row>,
+    { allLabel: string; options: Filter<Row>["options"]; list: Filter<Row>["options"] }
+  >();
+
+  /** The same list while the filter's options and all label are unchanged, so a table render does
+   * not make each filter dropdown recompute what depends on its options. */
+  #filterOptionList(filter: Filter<Row>): Filter<Row>["options"] {
+    const cached = this.#filterOptions.get(filter);
+    if (cached?.allLabel === filter.allLabel && cached.options === filter.options)
+      return cached.list;
+    const list = [{ value: "", label: filter.allLabel }, ...filter.options];
+    this.#filterOptions.set(filter, { allLabel: filter.allLabel, options: filter.options, list });
+    return list;
   }
 
-  /** The choice that narrows rows for this column, or "" when there is none or it is waiting. An
+  /** The values that narrow rows for this column, none when there are none or they are waiting. An
    * initial choice applies only while nothing was chosen and the column offers it. */
-  #activeFilter(column: DataTableColumn<Row>): string {
+  #activeValues(column: DataTableColumn<Row>): readonly string[] {
     const options = this.#offered(column.key);
-    if (!options) return "";
+    if (!options) return [];
     const chosen = this.filterSelections[column.key];
-    if (chosen !== undefined) return chosen;
+    if (chosen !== undefined) return typeof chosen === "string" ? (chosen ? [chosen] : []) : chosen;
     const initial = column.filter?.initial;
-    return options.some((option) => option.value === initial) ? initial! : "";
+    return options.some((option) => option.value === initial) ? [initial!] : [];
   }
 
-  #chooseFilter(column: DataTableColumn<Row>, value: string): void {
+  #chooseFilter(column: DataTableColumn<Row>, values: readonly string[]): void {
+    const stored = this.filterSelections[column.key];
     if (
-      value === this.#activeFilter(column) &&
-      (value !== "" ||
-        this.filterSelections[column.key] === undefined ||
-        this.filterSelections[column.key] === "")
+      sameValues(values, this.#activeValues(column)) &&
+      (values.length > 0 || stored === undefined || stored.length === 0)
     )
       return;
     const widths = this.filterColumnWidths ?? this.#currentColumnWidths();
     const next = { ...this.filterSelections };
-    if (value === "" && column.filter?.initial === undefined) delete next[column.key];
-    else next[column.key] = value;
+    if (values.length === 0 && column.filter?.initial === undefined) delete next[column.key];
+    else next[column.key] = column.filter?.multiple ? [...values] : (values[0] ?? "");
     this.filterSelections = next;
     this.filterColumnWidths = widths;
     if (widths) this.#hostObserver.observe(this);
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
-        detail: { filters: { ...next } },
+        detail: { filters: copyChoices(next) },
         bubbles: true,
         composed: true,
       }),
@@ -1375,20 +1445,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const next = Object.fromEntries(
       this.columns
         .filter((column) => column.filter?.initial !== undefined)
-        .map((column) => [column.key, ""]),
+        .map((column): [string, FilterChoice] => [column.key, column.filter?.multiple ? [] : ""]),
     );
-    if (
-      Object.keys(next).length === Object.keys(this.filterSelections).length &&
-      Object.entries(next).every(([key, value]) => this.filterSelections[key] === value)
-    )
-      return;
+    if (sameChoices(next, this.filterSelections)) return;
     this.filterSelections = next;
     this.filterColumnWidths = widths;
     if (widths) this.#hostObserver.observe(this);
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
-        detail: { filters: { ...next } },
+        detail: { filters: copyChoices(next) },
         bubbles: true,
         composed: true,
       }),
@@ -1560,20 +1626,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return term === "" || this.#searchHaystack(row).includes(term);
   }
 
-  #activeFilters(): { value: (row: Row) => string | readonly string[]; selected: string }[] {
+  #activeFilters(): ActiveFilter<Row>[] {
     return this.columns.flatMap((column) => {
-      const selected = this.#activeFilter(column);
-      return selected === "" ? [] : [{ value: column.filter!.value, selected }];
+      const selected = this.#activeValues(column);
+      return selected.length === 0 ? [] : [{ value: column.filter!.value, selected }];
     });
   }
 
-  #passesFilters(
-    row: Row,
-    active: readonly { value: (row: Row) => string | readonly string[]; selected: string }[],
-  ): boolean {
+  #passesFilters(row: Row, active: readonly ActiveFilter<Row>[]): boolean {
     return active.every(({ value, selected }) => {
       const held = value(row);
-      return typeof held === "string" ? held === selected : held.includes(selected);
+      return typeof held === "string"
+        ? selected.includes(held)
+        : held.some((each) => selected.includes(each));
     });
   }
 
@@ -1867,9 +1932,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 data-align=${column.align ?? "start"}
                 data-pinned=${column.pinned ?? nothing}
                 data-actions=${column.key === "actions" ? "" : nothing}
-                data-filtered=${column.filter && this.#activeFilter(column) !== "" ? "" : nothing}
+                data-filtered=${column.filter && this.#activeValues(column).length > 0 ? "" : nothing}
                 aria-label=${
-                  column.filter && this.#activeFilter(column) !== ""
+                  column.filter && this.#activeValues(column).length > 0
                     ? `${column.label}: ${this.filteredColumnLabel}`
                     : nothing
                 }
@@ -1974,7 +2039,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #renderToolbar() {
     const hasFilters = this.columns.some((column) => column.filter);
     const activeCount = this.columns.filter(
-      (column) => column.filter && this.#activeFilter(column) !== "",
+      (column) => column.filter && this.#activeValues(column).length > 0,
     ).length;
     const chooser = this.#offersChooser();
     const slotted = (name: string) => this.querySelector(`:scope > [slot="${name}"]`) !== null;
@@ -2102,7 +2167,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
       </div>
       <div class="table-filters">
         ${this.columns.map((column) => {
-          const active = this.#activeFilter(column);
+          const active = this.#activeValues(column);
+          const multiple = column.filter?.multiple;
           return column.filter
             ? html`<div
                 class="filter-section"
@@ -2123,11 +2189,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   stable-width
                   searchPlaceholder=${this.filterSearchPlaceholder}
                   noResultsLabel=${this.filterNoResultsLabel}
-                  .options=${[{ value: "", label: column.filter.allLabel }, ...column.filter.options]}
-                  .value=${active}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  ?multiple=${Boolean(multiple)}
+                  .countLabel=${multiple?.countLabel ?? String}
+                  .options=${this.#filterOptionList(column.filter)}
+                  .value=${multiple ? "" : (active[0] ?? "")}
+                  .values=${multiple ? [...active] : []}
+                  @wt-change=${(event: CustomEvent<{ value?: string; values?: string[] }>) => {
                     event.stopPropagation();
-                    this.#chooseFilter(column, event.detail.value);
+                    const { value, values } = event.detail;
+                    this.#chooseFilter(column, values ?? (value ? [value] : []));
                   }}
                 ></wt-combobox>
               </div>`

@@ -1,7 +1,7 @@
 import { html } from "lit";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { chooseOption, cleanup, host } from "../test-helpers.js";
+import { chooseOption, chooseOptions, cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import type { WtCombobox } from "./wt-combobox.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
@@ -455,6 +455,49 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
     await filter.updateComplete;
     expect(filter.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  test("an open Filters panel with a multi-select filter holding two values, its list open", async () => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (r) => r.name },
+      {
+        key: "status",
+        label: "Status",
+        cell: (r) => r.status,
+        filter: {
+          label: "Filter by status",
+          allLabel: "Any status",
+          value: (r) => r.status,
+          options: [
+            { value: "Active", label: "Active" },
+            { value: "Inactive", label: "Inactive" },
+            { value: "Paused", label: "Paused" },
+          ],
+          multiple: { countLabel: (count) => `${count} statuses` },
+        },
+      },
+    ];
+    el.rows = [
+      { id: "1", name: "Ada", status: "Active" },
+      { id: "2", name: "Bea", status: "Paused" },
+    ];
+    el.rowKey = (row) => row.id;
+    await el.updateComplete;
+    const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
+    await chooseOptions(filter, ["Active", "Paused"]);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    const panel = el.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+    await vi.waitFor(() => expect(panel.hasAttribute("hidden")).toBe(false));
+    await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    await filter.updateComplete;
+    expect(filter.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    expect(filter.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("2 statuses");
     await expectNoA11yViolations(host);
   });
 

@@ -7,7 +7,7 @@ import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { MenuPricesTable, type PriceSave } from "./menu-prices-table.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { chooseOption, expectFiltersFirst } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions, expectFiltersFirst } from "@waitron/ui/src/test-helpers.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => {
@@ -182,11 +182,17 @@ function shown(el: MenuPricesTable): string[] {
   );
 }
 
-async function choose(el: MenuPricesTable, filter: string, value: string): Promise<void> {
+/** A list is every value ticked in a multi-select filter; a string is a single-choice filter's. */
+async function choose(
+  el: MenuPricesTable,
+  filter: string,
+  value: string | string[],
+): Promise<void> {
   const select = table(el).shadowRoot.querySelector<HTMLElement>(
     `wt-combobox[data-filter="${filter}"]`,
   )!;
-  await chooseOption(select, value);
+  if (typeof value === "string") await chooseOption(select, value);
+  else await chooseOptions(select, value);
   await table(el).updateComplete;
 }
 
@@ -361,7 +367,7 @@ it("names a missing section or category, and a product with no reporting categor
   });
   expect(column(el, "placements")).toEqual([t("members.missing"), t("menu_prices.top_level")]);
   expect(column(el, "category")).toEqual([t("categories.none"), t("editor.missing_choice")]);
-  await choose(el, "category", "c-drinks");
+  await choose(el, "category", ["c-drinks"]);
   expect(shown(el)).toEqual([]);
 });
 
@@ -443,11 +449,11 @@ it("filters by a section, keeping every product reached through it, and offers t
     "Drinks",
     "Favourites",
   ]);
-  await choose(el, "placements", "s-drinks");
+  await choose(el, "placements", ["s-drinks"]);
   expect(shown(el)).toEqual(["mi-lemonade", "mi-lager"]);
-  await choose(el, "placements", "s-beer");
+  await choose(el, "placements", ["s-beer"]);
   expect(shown(el)).toEqual(["mi-lager"]);
-  await choose(el, "placements", "s-fav");
+  await choose(el, "placements", ["s-fav"]);
   expect(shown(el)).toEqual(["mi-lemonade"]);
 });
 
@@ -481,10 +487,75 @@ it("filters by a reporting category, including the categories inside it", async 
     "Bebidas › Cerveza",
     "Principales",
   ]);
-  await choose(el, "category", "c-drinks");
+  await choose(el, "category", ["c-drinks"]);
   expect(shown(el)).toEqual(["mi-lemonade", "mi-lager"]);
-  await choose(el, "category", "c-beer");
+  await choose(el, "category", ["c-beer"]);
   expect(shown(el)).toEqual(["mi-lager"]);
+  await choose(el, "category", ["c-beer", "c-mains"]);
+  expect(shown(el)).toEqual(["mi-burger", "mi-lager"]);
+});
+
+it("filters by several sections at once, keeping the products reached through any of them", async () => {
+  const el = await mount();
+  await choose(el, "placements", ["s-beer", "s-fav"]);
+  expect(shown(el)).toEqual(["mi-lemonade", "mi-lager"]);
+});
+
+it("filters by a parent category and an unrelated one, keeping the parent's sub-category rows and the other's", async () => {
+  const water: MenuPriceRow = {
+    ...burger,
+    menuItemId: "mi-water",
+    name: "Water",
+    categoryId: null,
+  };
+  const el = await mount({ rows: [burger, lemonade, lager, water] });
+  expect(shown(el)).toContain("mi-water");
+  await choose(el, "category", ["c-drinks", "c-mains"]);
+  expect(shown(el)).toEqual(["mi-burger", "mi-lemonade", "mi-lager"]);
+});
+
+it("narrows by the section filter and the category filter together", async () => {
+  const el = await mount();
+  await choose(el, "placements", ["s-fav", "s-beer"]);
+  await choose(el, "category", ["c-mains", "c-beer"]);
+  expect(shown(el)).toEqual(["mi-lager"]);
+});
+
+it.each([
+  ["en-GB", "2 sections", "2 categories"],
+  ["es-ES", "2 secciones", "2 categorías"],
+])(
+  "names two chosen sections or categories by their count in the closed dropdown (%s)",
+  async (locale, sections, categories) => {
+    setLocale(locale);
+    try {
+      const el = await mount();
+      const closed = (filter: string) =>
+        text(
+          table(el)
+            .shadowRoot.querySelector(`wt-combobox[data-filter="${filter}"]`)!
+            .shadowRoot!.querySelector(".value"),
+        );
+      await choose(el, "placements", ["s-beer", "s-fav"]);
+      await choose(el, "category", ["c-beer", "c-mains"]);
+      expect([closed("placements"), closed("category")]).toEqual([sections, categories]);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("keeps the price filter a single choice", async () => {
+  const el = await mount();
+  const multiple = (filter: string) =>
+    table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      `wt-combobox[data-filter="${filter}"]`,
+    )!.multiple;
+  expect([multiple("override"), multiple("placements"), multiple("category")]).toEqual([
+    false,
+    true,
+    true,
+  ]);
 });
 
 it("shows only the products this menu sets its own price for", async () => {
@@ -1886,7 +1957,7 @@ describe("variants", () => {
 
   it("keeps a product's variants under the section and category filters that keep the product", async () => {
     const el = await mountVariants();
-    await choose(el, "placements", "s-drinks");
+    await choose(el, "placements", ["s-drinks"]);
     await expand(el, "mi-wine");
     expect(shown(el)).toEqual([
       "mi-wine",
@@ -1894,8 +1965,8 @@ describe("variants", () => {
       "mi-wine:v-bottle",
       "mi-wine:v-carafe",
     ]);
-    await choose(el, "placements", "");
-    await choose(el, "category", "c-drinks");
+    await choose(el, "placements", []);
+    await choose(el, "category", ["c-drinks"]);
     await expand(el, "mi-juice");
     expect(shown(el)).toEqual([
       "mi-wine",

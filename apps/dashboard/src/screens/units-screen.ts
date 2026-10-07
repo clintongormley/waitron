@@ -460,6 +460,10 @@ export class UnitsScreen extends LitElement {
         filter: {
           label: t("units.precision"),
           allLabel: t("units.filter_precision_all"),
+          multiple: {
+            countLabel: (count) =>
+              t("units.filter_precision_count").replace("{count}", String(count)),
+          },
           value: (unit) => String(unit.precision),
           options: this.#precisionOptions(),
         },

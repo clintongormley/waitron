@@ -1,6 +1,7 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
+import { guard } from "lit/directives/guard.js";
 import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
@@ -377,10 +378,13 @@ export class WtCombobox extends LitElement {
   @property() searchPlaceholder = "Search";
   @property({ type: Boolean, reflect: true }) multiple = false;
   @property() value = "";
-  /** Treat an offered empty-string option as a selection, while its value remains empty. */
+  /** Treat an offered empty-string option as a selection, while its value remains empty. In a
+   * multiple choice it is the chosen row while `values` is empty, and choosing it empties them. */
   @property({ type: Boolean, attribute: "show-empty-option" }) showEmptyOption = false;
-  /** Reserve the width of each option's closed-trigger text (`valueLabel`, else `label`) when every
-   * possible trigger text is one of them. Ignored with `appearance="link"`. */
+  /** Reserve the width of each option's closed-trigger text (`valueLabel`, else `label`), and in a
+   * multiple choice every count text too: `countLabel(k)` for every k from 2 to the number of
+   * choosable options (not an action, not disabled, not the empty value). Ignored with
+   * `appearance="link"`. */
   @property({ type: Boolean, reflect: true, attribute: "stable-width" }) stableWidth = false;
   @property({ attribute: false }) values: string[] = [];
   @property() placeholder = "";
@@ -457,6 +461,8 @@ export class WtCombobox extends LitElement {
 
   private isSelected(option: ComboboxOption): boolean {
     if (option.action) return false;
+    if (this.multiple && this.showEmptyOption && option.value === "")
+      return this.values.length === 0;
     return this.multiple ? this.values.includes(option.value) : this.value === option.value;
   }
 
@@ -468,7 +474,10 @@ export class WtCombobox extends LitElement {
    * once more than one is chosen. */
   private get selectedText(): string {
     if (this.multiple) {
-      if (this.values.length === 0) return "";
+      if (this.values.length === 0) {
+        const empty = this.showEmptyOption && this.options.find((o) => !o.action && o.value === "");
+        return empty ? closedText(empty) : "";
+      }
       if (this.values.length === 1) {
         const chosen = this.options.find((o) => !o.action && o.value === this.values[0]);
         return chosen ? closedText(chosen) : "";
@@ -484,7 +493,11 @@ export class WtCombobox extends LitElement {
   // just after it closes can still reach its search box.
   private commitSelection(optionValue: string, sourceEvent: Event): void {
     if (this.disabled) return;
-    if (this.multiple) {
+    if (this.multiple && this.showEmptyOption && optionValue === "") {
+      if (this.values.length === 0) return;
+      this.values = [];
+      dispatchWtChange(this, sourceEvent, { values: this.values });
+    } else if (this.multiple) {
       this.values = this.values.includes(optionValue)
         ? this.values.filter((v) => v !== optionValue)
         : [...this.values, optionValue];
@@ -750,8 +763,18 @@ export class WtCombobox extends LitElement {
    * the list nor stay on a list that no longer handles keys. */
   private keepingPanelFocus = false;
 
+  private reservedTexts: string[] = [];
+
   override willUpdate(changed: PropertyValues<this>): void {
     this.keepingPanelFocus = Boolean(this.popup?.contains(this.shadowRoot!.activeElement));
+    if (
+      changed.has("stableWidth") ||
+      changed.has("options") ||
+      changed.has("multiple") ||
+      changed.has("countLabel")
+    ) {
+      this.reservedTexts = this.stableWidth ? this.widthTexts() : [];
+    }
     if (changed.has("options") && this.activeIndex >= 0) {
       // The active row follows its option by value, and the add row stays active while it is shown;
       // failing that, the chosen row, else the first.
@@ -917,6 +940,17 @@ export class WtCombobox extends LitElement {
     return rows;
   }
 
+  /** Every count's text is reserved, not only the largest count's, because a smaller count's text
+   * can be the wider one. */
+  private widthTexts(): string[] {
+    const options = this.options.filter((option) => !option.action);
+    const texts = options.map(closedText);
+    if (!this.multiple) return texts;
+    const choosable = options.filter((option) => !option.disabled && option.value !== "").length;
+    for (let count = 2; count <= choosable; count += 1) texts.push(this.countLabel(count));
+    return texts;
+  }
+
   private renderField({
     id: triggerId,
     invalid,
@@ -975,18 +1009,11 @@ export class WtCombobox extends LitElement {
           @keydown=${this.onTriggerKeydown}
         >
           <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
-          ${
-            this.stableWidth
-              ? this.options
-                  .filter((option) => !option.action)
-                  .map(
-                    (option) =>
-                      html`<span class="width-option" aria-hidden="true"
-                        >${closedText(option)}</span
-                      >`,
-                  )
-              : nothing
-          }
+          ${guard([this.reservedTexts], () =>
+            this.reservedTexts.map(
+              (text) => html`<span class="width-option" aria-hidden="true">${text}</span>`,
+            ),
+          )}
           <wt-icon class="chevron" name="chevron-down"></wt-icon>
         </button>
       </div>

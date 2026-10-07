@@ -1,7 +1,7 @@
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { capitaliseFirst, type ContentLanguageRules, type ContentLanguages } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
-import { chooseOption, expectFiltersFirst } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions, expectFiltersFirst } from "@waitron/ui/src/test-helpers.js";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, LanguageTranslationGaps, TranslationGap } from "../api/client.js";
@@ -1025,6 +1025,31 @@ describe("missing translations", () => {
       'wt-combobox[data-filter="kind"]',
     )!;
     expect([kind.searchPlaceholder, kind.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
+  });
+
+  it("narrows the gaps to any kind chosen, naming two kinds by their count, while Why stays a single choice", async () => {
+    const gaps: TranslationGap[] = [
+      PAN,
+      { kind: "extra_list", id: "extras-1", name: "STAFF Sides", reason: "partial" },
+      { kind: "unit", id: "unit-1", name: "ración", reason: "absent" },
+    ];
+    const el = await mount(
+      gapsApi(SPANISH_DEFAULT, NOTHING_REQUIRED, report({ es: [], ca: gaps, en: [] })),
+    );
+    disclosure(el, "ca")!.open = true;
+    await flush(el);
+    const filter = (key: string) =>
+      table(el, "ca")!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        `wt-combobox[data-filter="${key}"]`,
+      )!;
+    expect([filter("kind").multiple, filter("reason").multiple]).toEqual([true, false]);
+    await chooseOptions(filter("kind"), ["product", "unit"]);
+    const names = (await links(el, "ca")).map((link) => link.getAttribute("aria-label"));
+    const open = (label: string) => t("content_gaps.open_named").replace("{name}", label);
+    expect(names.sort()).toEqual([open("STAFF Pan"), open("ración")].sort());
+    expect(filter("kind").shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
+      t("content_gaps.kind_count").replace("{count}", "2"),
+    );
   });
 
   it("opens a product's editor inside the dashboard rather than reloading the page", async () => {

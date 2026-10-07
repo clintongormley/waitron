@@ -992,6 +992,17 @@ unused `units` property is gone (it closes W75's leftover).
     `wt-help-tooltip` set their open state only from the popover's toggle events, so one taken off
     the page while open may come back with its button still marked open — the bug #1362 fixed in
     `wt-data-table`'s Filters. A359 has since changed `wt-row-actions`; check it first.
+- **A342, owner 2026-10-07 — DONE (#1366, several values in one table filter):** a `wt-data-table` filter
+  declared with `multiple` takes several values, and keeps a row matching any of them; separate
+  filters still all apply, and the Filters badge counts a filter once. Its list keeps the "All …"
+  row first, which clears it. Multi-select: a menu's prices (Section, Main category — a category
+  still keeps the ones inside it), Products' Ordering, Units' Precision, Content languages' Kind.
+  Every two-value filter (each Status, Content languages' Why) and a menu's Price filter stay
+  single. A view a tab saved before this change with a single value for a filter that is now
+  multi-select is dropped, not converted.
+  - Not changed, single-choice dropdowns outside `wt-data-table`: the Add products dialog's
+    Category, the Staff screen's Role and the Orders screen's Status (a server query). Each could
+    take several values later if wanted.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
@@ -1190,10 +1201,9 @@ Whether the Pricing fold should also name an empty base price or VAT is a questi
 **An Add course button beside the course dropdown (A212) — DONE (#1087); left open:** a disabled course keeps its name, because `kitchen_courses_name_key` covers disabled
 rows too, so adding a course with a disabled course's name is refused as taken (measured
 2026-10-03 with a throwaway case in `apps/server/src/kitchen.test.ts`: create "Mains", deactivate
-it, create "Mains" again → `course.name_taken`); a deleted course frees its name (read, not run). Raised in #1087's review and not changed there:
-`wt-combobox`'s `stable-width` attribute (`packages/ui/src/components/wt-combobox.ts`) is not in
-`docs/developers/design-system.md`; and the catalogue-screen test "ignores the closed window's late
-close…" catches its guard's removal only through an unhandled error, because the late close throws
+it, create "Mains" again → `course.name_taken`); a deleted course frees its name (read, not run). Raised in #1087's review and not changed there
+(its other point, `wt-combobox`'s `stable-width` missing from `docs/developers/design-system.md`,
+A342 documented): the catalogue-screen test "ignores the closed window's late close…" catches its guard's removal only through an unhandled error, because the late close throws
 before it changes anything a state assertion could see.
 
 **Allergens and dietary preferences are edited in place (A213) — DONE (#1079); left open by #1079

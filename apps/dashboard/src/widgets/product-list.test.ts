@@ -2,7 +2,11 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
-import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  chooseOptions,
+  expectRowMenusOnScreen,
+} from "@waitron/ui/src/test-helpers.js";
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Product, Unit } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
@@ -109,12 +113,14 @@ const counted = (categories: number, products: number) =>
       : []),
   ].join(", ");
 
-async function choose(el: ProductList, column: string, value: string): Promise<void> {
+/** A list is every value ticked in a multi-select filter; a string is a single-choice filter's. */
+async function choose(el: ProductList, column: string, value: string | string[]): Promise<void> {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   const select = table.shadowRoot!.querySelector<HTMLElement>(
     `wt-combobox[data-filter="${column}"]`,
   )!;
-  await chooseOption(select, value);
+  if (typeof value === "string") await chooseOption(select, value);
+  else await chooseOptions(select, value);
   await table.updateComplete;
 }
 
@@ -647,7 +653,7 @@ describe("product-list", () => {
     expect(rowKeys(root)).toEqual(["public", "staff", "not-sold"]);
   });
 
-  it("narrows the list to the products of one ordering", async () => {
+  it("narrows the list to the products of the orderings chosen", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: orderings(),
     });
@@ -660,13 +666,13 @@ describe("product-list", () => {
       ["staff_only", t("product.ordering_staff_only")],
       ["not_sold_separately", t("product.ordering_not_sold_separately")],
     ]);
-    await choose(el, "ordering", "not_sold_separately");
+    await choose(el, "ordering", ["not_sold_separately"]);
     expect(rowKeys(root)).toEqual(["c-topping"]);
-    await choose(el, "ordering", "staff_only");
-    expect(rowKeys(root)).toEqual(["b-staff"]);
-    await choose(el, "ordering", "public");
+    await choose(el, "ordering", ["not_sold_separately", "staff_only"]);
+    expect(rowKeys(root)).toEqual(["b-staff", "c-topping"]);
+    await choose(el, "ordering", ["public"]);
     expect(rowKeys(root)).toEqual(["a-dish"]);
-    await choose(el, "ordering", "");
+    await choose(el, "ordering", []);
     expect(rowKeys(root)).toEqual(["a-dish", "b-staff", "c-topping"]);
   });
 
@@ -679,13 +685,27 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    await choose(el, "ordering", "not_sold_separately");
+    await choose(el, "ordering", ["not_sold_separately"]);
     expect(rowKeys(root)).toEqual(["bun"]);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["bun", "bun:small"]);
-    await choose(el, "ordering", "public");
+    await choose(el, "ordering", ["public"]);
     expect(rowKeys(root)).toEqual(["dish"]);
+  });
+
+  it("lets Ordering hold several choices and keeps Status a single one, naming two orderings by their count", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: orderings(),
+    });
+    const root = await tableRoot(el);
+    const select = (key: string) =>
+      root.querySelector<WtCombobox>(`wt-combobox[data-filter="${key}"]`)!;
+    expect([select("ordering").multiple, select("active").multiple]).toEqual([true, false]);
+    await choose(el, "ordering", ["public", "staff_only"]);
+    expect(select("ordering").shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
+      "2 opciones de pedido",
+    );
   });
 
   it("leaves a variant row's ordering cell empty", async () => {

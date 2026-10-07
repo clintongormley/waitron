@@ -8,6 +8,7 @@ import type { WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOption,
+  chooseOptions,
   expectFiltersFirst,
   expectRowMenusOnScreen,
   formMessageOf,
@@ -300,10 +301,25 @@ describe("units-screen", () => {
     const optionLabels = filter.options.map((o) => o.label);
     expect(optionLabels).toEqual([t("units.filter_precision_all"), "0", ",000"]);
     expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
-    await chooseOption(filter, "3");
+    await chooseOptions(filter, ["3"]);
     await el.updateComplete;
     await table.updateComplete;
     expect(listedKeys(el)).toEqual(["u2"]);
+  });
+
+  it("narrows the list to the units of any precision chosen, naming two by their count", async () => {
+    const box: Unit = { id: "u3", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 2 };
+    const el = await mountWith([...units, box]);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const filter = table.shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[data-filter="precision"]',
+    )!;
+    expect(filter.multiple).toBe(true);
+    await chooseOptions(filter, ["0", "3"]);
+    await table.updateComplete;
+    expect(listedKeys(el)).toEqual(["u2", "u1"]);
+    expect(filter.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("2 precisiones");
   });
 
   it("names the Filters panel and its always visible precision choice in Spanish", async () => {
@@ -333,7 +349,11 @@ describe("units-screen", () => {
     setLocale("es-ES");
     sessionStorage.setItem(
       "waitron.units.table",
-      JSON.stringify({ sortKey: "name", sortDirection: "descending", filters: { precision: "3" } }),
+      JSON.stringify({
+        sortKey: "name",
+        sortDirection: "descending",
+        filters: { precision: ["3"] },
+      }),
     );
     const el = await mount();
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -341,6 +361,16 @@ describe("units-screen", () => {
     expect(table.sortDirection).toBe("descending");
     // The stored precision filter keeps only the precision-3 unit.
     expect(listedKeys(el)).toEqual(["u2"]);
+  });
+
+  it("drops a precision filter stored as one value, as views saved before it took several did", async () => {
+    setLocale("es-ES");
+    sessionStorage.setItem("waitron.units.table", JSON.stringify({ filters: { precision: "3" } }));
+    const el = await mount();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(listedKeys(el)).toEqual(["u2", "u1"]);
+    expect(JSON.parse(sessionStorage.getItem("waitron.units.table")!).filters ?? {}).toEqual({});
   });
 
   it("offers every column but the unit's name and its actions in the column chooser, and remembers a hidden one", async () => {
