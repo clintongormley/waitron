@@ -428,13 +428,19 @@ describe("venue operations screen", () => {
     expect(action).not.toBeNull();
     expect(action!.textContent).toContain("Set one up in Menu timetable");
     expect(action!.getAttribute("href")).toBe("/manage/menu-timetable/department/d1");
-    const followed = vi.fn();
-    addEventListener("popstate", followed);
+    // A plain link: the dashboard's same-app link handler navigates in the app.
+    const before = location.href;
+    let reachedBrowser = false;
+    const blockDefault = (event: MouseEvent) => {
+      reachedBrowser = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener("click", blockDefault, { once: true });
     action!.click();
-    removeEventListener("popstate", followed);
+    document.removeEventListener("click", blockDefault);
     await settle(el);
-    expect(location.pathname + location.search).toBe("/manage/menu-timetable/department/d1");
-    expect(followed).toHaveBeenCalledTimes(1);
+    expect(reachedBrowser).toBe(true);
+    expect(location.href).toBe(before);
     expect(modal(el)).toBeNull();
   });
 
