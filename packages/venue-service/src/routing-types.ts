@@ -105,3 +105,6 @@ export interface RoutingModel {
   /** Includes referenced inactive stations, which the active-station management list omits. */
   stations: { id: string; name: string; active: boolean }[];
 }
+
+/** `canMakeDefault`: the session may use Make default (`venue.configure`). */
+export type RoutingView = RoutingModel & { canMakeDefault: boolean };

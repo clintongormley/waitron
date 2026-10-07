@@ -266,15 +266,6 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
 
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
-    const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-      withTransaction(ctx.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: MANAGE_VENUE_SERVICE,
-        });
-        return fn(tx);
-      });
-
     const gatedAs = <T>(
       sessionId: string,
       fn: (tx: Transaction, role: PersonRoleValue) => Promise<T>,
@@ -286,6 +277,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         });
         return fn(tx, role);
       });
+    const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+      gatedAs(sessionId, fn);
 
     const viewed = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
       withTransaction(ctx.db, async (tx) => {

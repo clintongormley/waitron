@@ -359,6 +359,57 @@ describe("route explanation", () => {
           unavailableStationId: null,
         });
     }));
+  it("decides varies-by-zone among several zones where only some have cells, an inactive one ignored", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const zone = async (name: string) => {
+        const [row] = await tx
+          .insert(floorZones)
+          .values({ ...f.cfg, name })
+          .returning();
+        await configureZone(tx, f.cfg, { zoneId: row!.id, departmentId: f.department });
+        return row!.id;
+      };
+      const patio = await zone("Patio");
+      await zone("Hall");
+      const old = await zone("Old");
+      const soup = (
+        await createProduct(tx, {
+          catalogueId: (await createCatalogue(tx, { name: "Kitchen" })).id,
+          name: "Soup",
+          categoryId: f.food,
+          pricingUnit: "each",
+          unitPrice: "3.00",
+          vatClass: "general",
+        })
+      ).id;
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: { kind: "all" }, zoneId: f.terrace },
+        station(f.terraceBar),
+      );
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: categoryRow(f.cocktails), zoneId: patio },
+        station(f.terraceBar),
+      );
+      await setCategoryCell(tx, f.cfg, f.food, station(f.bar));
+      await setRoutingCell(tx, f.cfg, { row: categoryRow(f.food), zoneId: old }, noPrep);
+      await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, old));
+      const makers = await describeMakers(tx, f.cfg);
+      const expected = (variesByZone: boolean) => ({
+        route: station(f.bar),
+        variesByZone,
+        noReplacement: false,
+        unavailableStationId: null,
+      });
+      expect(makers.get(f.mojito)).toEqual(expected(true));
+      expect(makers.get(f.variant)).toEqual(expected(true));
+      expect(makers.get(f.bread)).toEqual(expected(true));
+      expect(makers.get(soup)).toEqual(expected(false));
+    }));
   it("names the matching cell, including a variant's parent product cell", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);

@@ -27,13 +27,14 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import {
+  cellKey,
   selectRoutingCell,
   selectionRulesFromModel,
+  targetKey,
   type CellAddress,
   type RouteTarget,
   type RouteExplanation,
   type RoutingModel,
-  type RoutingRow,
   type RoutingSelectionRules,
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
@@ -84,13 +85,6 @@ const TIMING_LABELS = {
 type WatcherCell = "follows" | "zones" | "pass";
 const EVERY_MEMBER = "__every__";
 
-const targetKey = (target: RouteTarget | null): string =>
-  target === null
-    ? ""
-    : target.kind === "no_preparation"
-      ? "no_preparation"
-      : `station:${target.stationId}`;
-
 type SettingsDraft = {
   stationId: string;
   field: "rest" | "fallback" | TimingField;
@@ -100,16 +94,7 @@ type SettingsDraft = {
   confirming: boolean;
   attempted: boolean;
 };
-const rowKey = (row: RoutingRow): string =>
-  row.kind === "all"
-    ? "all"
-    : row.kind === "no_category"
-      ? "no_category"
-      : row.kind === "category"
-        ? `c:${row.categoryId}`
-        : `p:${row.productId}`;
-const sameAddress = (a: CellAddress, b: CellAddress) =>
-  a.zoneId === b.zoneId && rowKey(a.row) === rowKey(b.row);
+const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
 @customElement("dashboard-prep-stations-screen")
 export class PrepStationsScreen extends LitElement {

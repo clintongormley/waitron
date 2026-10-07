@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { getCountryPack } from "@waitron/country-packs";
 import {
+  cellKey,
   chooseMaker,
   chooseExtraMaker,
   closedSendsTo,
   followFallbacks,
   folderAncestors,
+  rowKey,
   selectRoutingCell,
   stationStatus,
+  targetKey,
   type RouteTarget,
   type RoutingCell,
   type RoutingMoment,
@@ -735,6 +738,35 @@ describe("folderAncestors", () => {
       ["b", "a"],
     ]);
     expect(folderAncestors(loop, "a")).toEqual(["a", "b"]);
+  });
+});
+
+describe("the text keys", () => {
+  const rows: RoutingRow[] = [
+    { kind: "all" },
+    { kind: "no_category" },
+    { kind: "category", categoryId: "x" },
+    { kind: "product", productId: "x" },
+  ];
+
+  it("gives every row kind its own key, No category apart from All categories, and keeps the grid's spellings", () => {
+    expect(rows.map(rowKey)).toEqual(["all", "no_category", "c:x", "p:x"]);
+  });
+
+  it("gives every row in Every zone and in a zone its own cell key", () => {
+    const keys = rows.flatMap((row) => [null, "z"].map((zoneId) => cellKey({ row, zoneId })));
+    expect(new Set(keys).size).toBe(8);
+    expect(cellKey({ row: { kind: "all" }, zoneId: null })).toBe("all|every");
+    expect(cellKey({ row: { kind: "category", categoryId: "x" }, zoneId: "z" })).toBe("c:x|z");
+  });
+
+  it("gives no target, No preparation and each station its own key", () => {
+    expect([null, noPreparation, station("a"), station("b")].map(targetKey)).toEqual([
+      "",
+      "no_preparation",
+      "station:a",
+      "station:b",
+    ]);
   });
 });
 

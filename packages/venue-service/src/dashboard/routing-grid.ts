@@ -10,7 +10,11 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { ComboboxOption } from "@waitron/ui/src/components/wt-combobox.js";
 import {
+  cellKey,
   followFallbacks,
+  rowKey,
+  targetKey,
+  zoneKey,
   selectRoutingCell,
   selectionRulesFromModel,
   type CellAddress,
@@ -22,9 +26,9 @@ import {
   type RoutingRow,
   type RoutingRules,
   type RoutingSelectionRules,
+  type RoutingView,
 } from "../routing.js";
 import { format } from "./hours-view.js";
-import type { RoutingView } from "./routing-client.js";
 import {
   collapseAll,
   collapseCategory,
@@ -40,40 +44,21 @@ export type RoutingCellChange = { address: CellAddress; target: RouteTarget | nu
 /** A choice the host has not saved yet, shown at its address in place of the saved value. */
 export type RoutingPending = RoutingCellChange;
 
-function rowKey(row: RoutingRow): string {
-  return row.kind === "all"
-    ? "all"
-    : row.kind === "no_category"
-      ? "no_category"
-      : row.kind === "category"
-        ? `c:${row.categoryId}`
-        : `p:${row.productId}`;
-}
-
 type Zone = { id: string | null; name: string };
-const zoneKey = (zoneId: string | null) => zoneId ?? "every";
-const coordinate = (row: RoutingRow, zoneId: string | null) => `${rowKey(row)}|${zoneKey(zoneId)}`;
 
-const NO_PREPARATION = "no_preparation";
 const STATION = "station:";
 
-function encode(target: RouteTarget | null): string {
-  if (target === null) return "";
-  return target.kind === "no_preparation" ? NO_PREPARATION : `${STATION}${target.stationId}`;
-}
-
-/** `undefined` for a value no option carries; "" is Clear setting, never a station. */
+/** Reverses `targetKey`; `undefined` for a value no option carries. */
 function decode(value: string): RouteTarget | null | undefined {
   if (value === "") return null;
-  if (value === NO_PREPARATION) return { kind: "no_preparation" };
+  if (value === targetKey({ kind: "no_preparation" })) return { kind: "no_preparation" };
   if (value.startsWith(STATION) && value.length > STATION.length) {
     return { kind: "station", stationId: value.slice(STATION.length) };
   }
   return undefined;
 }
 
-const sameAddress = (a: CellAddress, b: CellAddress) =>
-  coordinate(a.row, a.zoneId) === coordinate(b.row, b.zoneId);
+const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
 @customElement("venue-routing-grid")
 export class RoutingGrid extends LitElement {
@@ -236,7 +221,7 @@ export class RoutingGrid extends LitElement {
         ]),
       ),
     };
-    this.#cells = new Map(model.cells.map((c) => [coordinate(c.row, c.zoneId), c]));
+    this.#cells = new Map(model.cells.map((c) => [cellKey(c), c]));
     this.#products = new Map(model.products.map((product) => [product.id, product]));
     this.#categories = new Map(model.categories.map((category) => [category.id, category]));
     this.#allRows = null;
@@ -248,7 +233,7 @@ export class RoutingGrid extends LitElement {
     const locale = currentLocale();
     if (this.#options?.model !== model || this.#options.locale !== locale) {
       const stations = this.#activeStations().map((station) => ({
-        value: `${STATION}${station.id}`,
+        value: targetKey({ kind: "station", stationId: station.id }),
         label: station.name,
       }));
       this.#options = {
@@ -258,7 +243,7 @@ export class RoutingGrid extends LitElement {
         cell: [
           { value: "", label: t("routing.clear") },
           ...stations,
-          { value: NO_PREPARATION, label: t("prep.no_preparation") },
+          { value: targetKey({ kind: "no_preparation" }), label: t("prep.no_preparation") },
         ],
       };
     }
@@ -348,7 +333,7 @@ export class RoutingGrid extends LitElement {
 
   #editor(entry: GridRow, zone: Zone) {
     const address: CellAddress = { row: entry.row, zoneId: zone.id };
-    const own = this.#cells.get(coordinate(entry.row, zone.id));
+    const own = this.#cells.get(cellKey({ row: entry.row, zoneId: zone.id }));
     const inherited = this.#inherited(entry.row, zone.id);
     const pending = this.pending;
     const shown =
@@ -363,7 +348,7 @@ export class RoutingGrid extends LitElement {
         ? cell
         : [
             ...cell.slice(0, -1),
-            { value: encode(disabled), label: this.#targetText(disabled), disabled: true },
+            { value: targetKey(disabled), label: this.#targetText(disabled), disabled: true },
             ...cell.slice(-1),
           ];
     const label = format("routing.cell_label", {
@@ -380,13 +365,13 @@ export class RoutingGrid extends LitElement {
         searchPlaceholder=${t("venue.combobox_search")}
         noResultsLabel=${t("venue.combobox_no_results")}
         .options=${options}
-        .value=${live(encode(shown))}
+        .value=${live(targetKey(shown))}
         placeholder=${this.#targetText(inherited)}
         error=${this.#refusalAt(address)}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           if (!this.#fromLiveField(event)) return;
           const target = decode(event.detail.value);
-          if (target === undefined || encode(target) === encode(shown)) return;
+          if (target === undefined || targetKey(target) === targetKey(shown)) return;
           this.#emit<RoutingCellChange>("routing-cell-change", { address, target });
         }}
       ></wt-combobox
@@ -430,7 +415,7 @@ export class RoutingGrid extends LitElement {
         searchPlaceholder=${t("venue.combobox_search")}
         noResultsLabel=${t("venue.combobox_no_results")}
         .options=${this.#optionLists().stations}
-        .value=${live(active ? `${STATION}${active.id}` : "")}
+        .value=${live(targetKey(active ? { kind: "station", stationId: active.id } : null))}
         placeholder=${t("routing.no_station")}
         error=${this.#refusalAt(address)}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {

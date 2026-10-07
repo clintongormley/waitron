@@ -10,11 +10,13 @@ import {
 import { AppError, normaliseUuid } from "@waitron/shared";
 import { resolveZoneContext, type VenueScope } from "./operations.js";
 import {
+  cellKey,
   chooseMaker,
   chooseExtraMaker,
   closedSendsTo,
   stationDayHours,
   stationStatus,
+  targetKey,
   type RouteTarget,
   type RoutingRules,
   type RoutingMoment,
@@ -41,6 +43,7 @@ import type {
   RoutingMove,
 } from "./routing-types.js";
 import { routingCells } from "./schema/routing.js";
+import { departments, zoneServicePolicies } from "./schema/service.js";
 import "./errors.js";
 import type { ExtraMakerOutcome, MakerOutcome, MakerResolver } from "@waitron/module";
 export type { RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
@@ -66,11 +69,17 @@ const readCell = (row: typeof routingCells.$inferSelect): RoutingCell => ({
   target: readTarget(row),
 });
 
-const cellKey = ({ row, zoneId }: CellAddress) =>
-  `${row.kind === "category" ? row.categoryId : row.kind === "product" ? row.productId : ""}|${row.kind}|${zoneId ?? ""}`;
+/** Active zones in the grid's column order. */
+function activeZones(tx: Transaction, cfg: VenueScope) {
+  return tx
+    .select({ id: floorZones.id, name: floorZones.name })
+    .from(floorZones)
+    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
+    .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
+}
 
 /** Refuses an address or target no ordinary write may store; returns the canonical spelling. */
-export async function validateRoutingCell(
+async function validateRoutingCell(
   tx: Transaction,
   cfg: VenueScope,
   address: CellAddress,
@@ -81,12 +90,20 @@ export async function validateRoutingCell(
     throw new AppError("management.request_invalid", { field: "address" });
   const zoneId = address.zoneId === null ? null : normaliseUuid(address.zoneId, "ZoneId");
   if (zoneId !== null) {
-    await resolveZoneContext(tx, cfg, zoneId);
-    // resolveZoneContext still answers for a zone deactivateServiceZone switched off.
+    // resolveZoneContext's check, and the zone switched on, which it does not ask.
     const [zone] = await tx
       .select({ id: floorZones.id })
-      .from(floorZones)
-      .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
+      .from(zoneServicePolicies)
+      .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+      .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
+      .where(
+        and(
+          eq(zoneServicePolicies.locationId, cfg.locationId),
+          eq(zoneServicePolicies.zoneId, zoneId),
+          eq(departments.active, true),
+          eq(floorZones.active, true),
+        ),
+      );
     if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
   }
   let canonicalRow = row;
@@ -389,10 +406,7 @@ export async function previewRoutingChange(
   const cells = rules.cells.filter((cell) => cellKey(cell) !== key);
   if (target !== null) cells.push({ ...address, target });
   const after: RoutingRules = { ...rules, cells: Object.freeze(cells) };
-  const zones = await tx
-    .select({ id: floorZones.id, name: floorZones.name })
-    .from(floorZones)
-    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)));
+  const zones = await activeZones(tx, cfg);
   const productsToCheck = await tx
     .select({
       id: products.id,
@@ -434,11 +448,7 @@ export async function previewRoutingChange(
   );
 }
 
-function sameRoute(a: RouteTarget | null, b: RouteTarget | null): boolean {
-  if (a === null || b === null) return a === b;
-  if (a.kind === "station") return b.kind === "station" && a.stationId === b.stationId;
-  return a.kind === b.kind;
-}
+const sameRoute = (a: RouteTarget | null, b: RouteTarget | null) => targetKey(a) === targetKey(b);
 
 /** Canonical database spelling, also used to group caller spellings of one product. */
 function storedUuid(id: string): string {
@@ -599,10 +609,9 @@ export async function describeMakers(
   >
 > {
   const rules = await loadRoutingRules(tx, cfg, null);
-  const zones = await tx
-    .select({ id: floorZones.id })
-    .from(floorZones)
-    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)));
+  // A zone no cell names routes every product as Every zone does.
+  const zoned = new Set(rules.cells.map((cell) => cell.zoneId));
+  const zones = (await activeZones(tx, cfg)).filter(({ id }) => zoned.has(id));
   const rows = await tx
     .select({
       id: products.id,
@@ -651,11 +660,7 @@ export async function routingModel(
   const cutover = clock.dayCutover.slice(0, 5);
   const nextChange = nextChangeFinder(rules, at, clock, moment);
   const restricted = await stationsRestrictedFrom(tx, cfg, moment?.civilDate ?? null);
-  const zones = await tx
-    .select({ id: floorZones.id, name: floorZones.name })
-    .from(floorZones)
-    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
-    .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
+  const zones = await activeZones(tx, cfg);
   const gridProducts = await tx
     .select({ id: products.id, name: products.name, categoryId: products.categoryId })
     .from(products)

@@ -1,7 +1,7 @@
 import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { RouteTarget, RoutingModel, RouteExplanation } from "../routing.js";
-import type { CellAddress, RoutingChange, RoutingMove } from "../routing-types.js";
+import type { CellAddress, RoutingChange, RoutingMove, RoutingView } from "../routing-types.js";
 import type { RoutingMoment } from "../routing.js";
 import type { WatcherView } from "./watchers-seen.js";
 
@@ -58,8 +58,6 @@ export interface PrepStation {
   timingDefaults: StationThresholds;
   timingOverrides: { [Field in keyof StationThresholds]: number | null };
 }
-/** `canMakeDefault`: the session may use Make default (`venue.configure`). */
-export type RoutingView = RoutingModel & { canMakeDefault: boolean };
 export interface PrepStationsView {
   routing: RoutingView;
   stations: PrepStation[];

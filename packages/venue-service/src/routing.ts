@@ -1,6 +1,7 @@
 import type { ExtraMakerOutcome, PreparationRoute } from "@waitron/module";
 import { addDays } from "./hours-rules.js";
 import type {
+  CellAddress,
   RoutingCell,
   RoutingDecision,
   RoutingModel,
@@ -20,6 +21,7 @@ export type {
   RoutingModel,
   RoutingRow,
   RoutingSelectionRules,
+  RoutingView,
   SelectedCell,
 } from "./routing-types.js";
 
@@ -105,14 +107,25 @@ export function folderAncestors(
   return ancestors;
 }
 
-function rowKey(row: RoutingRow): string {
+/** The grid's `data-row` and `data-zone` attributes show these keys. */
+export function rowKey(row: RoutingRow): string {
   return row.kind === "all"
     ? "all"
     : row.kind === "no_category"
-      ? "none"
-      : row.kind === "product"
-        ? `p:${row.productId}`
-        : `c:${row.categoryId}`;
+      ? "no_category"
+      : row.kind === "category"
+        ? `c:${row.categoryId}`
+        : `p:${row.productId}`;
+}
+
+export const zoneKey = (zoneId: string | null): string => zoneId ?? "every";
+
+export const cellKey = ({ row, zoneId }: CellAddress): string =>
+  `${rowKey(row)}|${zoneKey(zoneId)}`;
+
+export function targetKey(target: RouteTarget | null): string {
+  if (target === null) return "";
+  return target.kind === "no_preparation" ? "no_preparation" : `station:${target.stationId}`;
 }
 
 const cellIndexes = new WeakMap<readonly RoutingCell[], ReadonlyMap<string, RoutingCell>>();
@@ -121,7 +134,7 @@ const cellIndexes = new WeakMap<readonly RoutingCell[], ReadonlyMap<string, Rout
 function cellIndex(cells: readonly RoutingCell[]): ReadonlyMap<string, RoutingCell> {
   const cached = cellIndexes.get(cells);
   if (cached !== undefined) return cached;
-  const index = new Map(cells.map((cell) => [`${rowKey(cell.row)}|${cell.zoneId ?? ""}`, cell]));
+  const index = new Map(cells.map((cell) => [cellKey(cell), cell]));
   if (Object.isFrozen(cells)) cellIndexes.set(cells, index);
   return index;
 }
@@ -151,14 +164,15 @@ export function selectRoutingCell(
   }
   lineage.push({ kind: "all" });
   const byCoordinate = cellIndex(rules.cells);
-  const own = skipOwn ? `${rowKey(row)}|${zoneId ?? ""}` : null;
-  const at = (coordinate: string) =>
-    coordinate === own ? undefined : byCoordinate.get(coordinate);
+  const own = skipOwn ? cellKey({ row, zoneId }) : null;
+  const at = (address: CellAddress) => {
+    const key = cellKey(address);
+    return key === own ? undefined : byCoordinate.get(key);
+  };
   let best: RoutingCell | undefined;
   for (const candidate of lineage) {
-    const key = rowKey(candidate);
-    if (zoneId !== null) best = at(`${key}|${zoneId}`);
-    if (best === undefined && candidate.kind !== "all") best = at(`${key}|`);
+    if (zoneId !== null) best = at({ row: candidate, zoneId });
+    if (best === undefined && candidate.kind !== "all") best = at({ row: candidate, zoneId: null });
     if (best !== undefined) break;
   }
   if (best !== undefined) {

@@ -82,7 +82,9 @@ export function folderMadeAt(
       ]),
     ),
   };
-  const zones = [null, ...routing.zones.map(({ id }) => id)];
+  // A zone no cell names routes everything as Every zone does.
+  const zoned = new Set(routing.cells.map(({ zoneId }) => zoneId));
+  const zones = [null, ...routing.zones.map(({ id }) => id).filter((id) => zoned.has(id))];
 
   const baselines = new Map(categories.map(({ id }) => [id, categoryChoice(rules, id, null)]));
   const elsewhere = new Set<string>();

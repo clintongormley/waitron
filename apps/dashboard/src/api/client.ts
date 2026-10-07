@@ -13,7 +13,7 @@ import type { ContentLanguageRules, ContentLanguages } from "@waitron/shared";
  * catalogue's type-only leaf files (`scripts/dashboard-browser-purity.test.ts`).
  */
 import type { StationThresholds, TimingBand } from "@waitron/shared";
-import type { RoutingModel } from "@waitron/venue-service/routing";
+import type { RoutingView } from "@waitron/venue-service/routing";
 import {
   createRequest,
   LiveData,
@@ -2278,12 +2278,8 @@ export class DashboardApi {
     return this.#request<Record<string, MadeAt>>("/management-api/products/made-at", "GET");
   }
 
-  /** `canMakeDefault`: the session may use Make default (`venue.configure`). */
-  getFolderRouting(): Promise<RoutingModel & { canMakeDefault: boolean }> {
-    return this.#request<RoutingModel & { canMakeDefault: boolean }>(
-      "/management-api/venue-service/routing",
-      "GET",
-    );
+  getFolderRouting(): Promise<RoutingView> {
+    return this.#request<RoutingView>("/management-api/venue-service/routing", "GET");
   }
 
   getProductEditor(id: string): Promise<ProductEditorValue> {

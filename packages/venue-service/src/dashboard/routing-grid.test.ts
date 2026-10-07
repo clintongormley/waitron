@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { CellAddress, RouteTarget, RoutingCell } from "../routing.js";
-import type { RoutingView } from "./routing-client.js";
+import type { RoutingView } from "../routing.js";
 import type { RoutingGrid } from "./routing-grid.js";
 import "./routing-grid.js";
 

@@ -302,6 +302,32 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("drinks")?.someElsewhere).toBe(false);
   });
 
+  it("among several zones where only some have cells, qualifies by the zones with cells and ignores an inactive one", () => {
+    const sides = folder("sides", "Sides", null);
+    const result = folderMadeAt(
+      routing({
+        zones: [
+          { id: "terrace-zone", name: "Terrace" },
+          { id: "patio-zone", name: "Patio" },
+          { id: "hall-zone", name: "Hall" },
+        ],
+        cells: [
+          onCategory("drinks", station("bar")),
+          cell(category("beer"), station("kitchen"), "patio-zone"),
+          cell({ kind: "all" }, station("terrace"), "terrace-zone"),
+          onCategory("food", station("kitchen")),
+          cell(category("food"), station("bar"), "old-zone"),
+        ],
+        defaultStationId: "kitchen",
+      }),
+      [...CATEGORIES, sides],
+      [product("chips", "sides"), product("bread", null)],
+    );
+    expect(
+      Object.fromEntries([...result].map(([id, { someElsewhere }]) => [id, someElsewhere])),
+    ).toEqual({ drinks: true, beer: true, craft: true, food: false, sides: true });
+  });
+
   it("ignores a cell on a zone that is not an active zone", () => {
     const result = madeAt(
       routing({
