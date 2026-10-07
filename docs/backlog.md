@@ -900,7 +900,7 @@ the parents differ; routing rules naming a subcategory join the "Also: deletes �
 holding only disabled products is no longer asked what happens to them. Being compact, the dialog
 now fits its content, which closes W74's finding that it stretched to nearly the full screen
 height. The products-only "Disable N products?" dialog is compact too. Point (1) of what was left
-open — the same place named three ways — is DONE by A305 (owner 2026-10-06): the Move-to list, the
+open — the same place named three ways — is DONE by A305 (#1333, owner 2026-10-06): the Move-to list, the
 product editor, the menu prices table, the sales-by-category report on screen and printed, and this
 dialog all read **No category** / **Sin categoría**; the Products tree's heading row keeps "All
 products". **Still left open (owner's call):** (2) if the SERVER refuses a
