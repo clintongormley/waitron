@@ -3,10 +3,12 @@
 // the root guard (`scripts/alert-codes.test.ts`) can load it.
 //
 // No sentence promises a later check by the server: the daily payments check looks at each day once,
-// and the fiscal reconciliation sweep has no production caller. Only `alert.source_unavailable`
-// and `fiscal.estado_desconocido` promise an automatic retry: an open dashboard asks for its alerts
-// again every minute, and the drain puts such a record back to waiting (`awaitReadableAnswer`,
-// `@waitron/fiscal-verifactu`); a sentence that asks for a retry or a restart asks the owner to do it.
+// and the fiscal reconciliation sweep has no production caller. Only `alert.source_unavailable`,
+// `fiscal.estado_desconocido` and `fiscal.respuesta_descuadrada` promise an automatic retry, the
+// two fiscal ones only while no earlier record of the record's chain is on hold: an open dashboard
+// asks for its alerts again every minute, and the drain puts such a record back to waiting
+// (`awaitReadableAnswer`, `@waitron/fiscal-verifactu`); a sentence that asks for a retry or a
+// restart asks the owner to do it.
 
 // An open payment incident swallows later detections for the same till and code, so its figures
 // are from when it was raised, and a bill payment's alert may stand for more than one payment.
@@ -114,8 +116,12 @@ export const ALERT_MESSAGES: Readonly<
     es: "La AEAT ha aceptado un registro de facturación, pero ha indicado un problema: {mensaje} (código {codigo}).",
   },
   "fiscal.estado_desconocido": {
-    en: "The tax agency (AEAT) answered for an invoice record without a status Waitron recognises, or said it already holds a record for this invoice and Waitron could not confirm it is this one, so it is not known whether AEAT kept it. Waitron will send it again. AEAT's message: {mensaje} (code {codigo}).",
-    es: "La AEAT ha respondido sobre un registro de facturación sin un estado que Waitron reconozca, o ha dicho que ya tiene un registro para esta factura y Waitron no ha podido confirmar que sea este, así que no se sabe si la AEAT lo ha guardado. Waitron lo volverá a enviar. Mensaje de la AEAT: {mensaje} (código {codigo}).",
+    en: "The tax agency (AEAT) answered for an invoice record without a status Waitron recognises, said it already holds a record for this invoice and Waitron could not confirm it is this one, or gave no answer Waitron could be sure belongs to this record, so it is not known whether AEAT kept it. Waitron will send it again unless an earlier record on its chain is on hold. AEAT's message, if any: {mensaje} (code {codigo}).",
+    es: "La AEAT ha respondido sobre un registro de facturación sin un estado que Waitron reconozca, ha dicho que ya tiene un registro para esta factura y Waitron no ha podido confirmar que sea este, o no ha dado ninguna respuesta que Waitron pueda asegurar que corresponde a este registro, así que no se sabe si la AEAT lo ha guardado. Waitron lo volverá a enviar salvo que esté en espera un registro anterior de su cadena. Mensaje de la AEAT, si lo hay: {mensaje} (código {codigo}).",
+  },
+  "fiscal.respuesta_descuadrada": {
+    en: "The tax agency (AEAT) answered a submission with a different number of lines than the invoice records Waitron sent, so Waitron applied none of them and will send each again unless an earlier record on its chain is on hold. Contact support.",
+    es: "La AEAT ha respondido a un envío con un número de líneas distinto del de registros de facturación que Waitron envió, así que Waitron no ha aplicado ninguna y volverá a enviar cada uno salvo que esté en espera un registro anterior de su cadena. Contacta con soporte.",
   },
   "fiscal.duplicado_anulado": {
     en: "The tax agency (AEAT) already holds this invoice record as cancelled. Sending on this chain is on hold. Contact support.",

@@ -2551,12 +2551,17 @@ specification has not been checked for it.
 > correcto, o procede además dirigirse a la AEAT?
 
 **Proposed interim treatment (owner, 2026-10-06):** pair line N with record N, and apply it only
-when it also names that record (our reference and the invoice's issuer, number and date). Any
-other record's outcome is unknown: it is sent again, an alert is raised, and the alert shows the
-line it was compared with. When the reply's line count differs from the records sent, every record
-of that envío is unknown and the whole reply is kept once. A reordered reply can therefore never
-make an invoice wrongly taken as accepted; if AEAT always reordered, though, a multi-record envío
-would never be confirmed and its records would be sent again and again, holding their chain.
+when it also names that record (our reference and the invoice's issuer, number and date) and
+names no other operation. Any other record's outcome is unknown: it is sent again unless an
+earlier record on its chain is on hold, an alert is raised, and the line it was compared with is
+kept in the alert's details, which `GET /management-api/alerts` returns (`readOpenAlerts`,
+`apps/server/src/alerts.ts`); the dashboard's sentence does not show it. When the reply's line
+count differs from the records sent, every record of that envío is unknown and the whole reply is
+kept once in an alert, unless an alert for a mismatched reply is already open for the sale of the
+envío's first record. A reordered reply can therefore never make an invoice wrongly taken as
+accepted. A record whose line is still at its position is applied as usual; a record whose line
+AEAT moved in every reply it was sent in, though, would never be confirmed and would be sent again
+and again while the later records of its chain wait behind it.
 
 **Approved, 2026-10-07 (owner).** After the measurement below, the owner approved this treatment to
 land unchanged as #1304 (W41s-3c), with two choices made explicit. Only the line at a record's own

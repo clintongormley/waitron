@@ -130,11 +130,20 @@ These are proposed requirements, not a claim that all current paths have been ve
 | D9: short series checked against local/device/AEAT history | Replace the allocation method with §2–3. Lookups supply evidence, not reservations. Add the agreed emergency prefix and explicit later short-series change. |
 
 **Implemented, 2026-10-06 (W41s-3; owner review pending).** A pointer, not a revision of the
-table above: `packages/fiscal-verifactu/src/drain.ts` keeps every line of AEAT's reply. A rejection
+table above: `packages/fiscal-verifactu/src/drain.ts` keeps every line of AEAT's reply (but see
+the 2026-10-07 note that follows).
+_(2026-10-07, W41s-3c: line N of the reply is applied to record N of the envío only when it carries
+that record's reference and invoice and names no other operation; otherwise that record is unknown.
+When the reply's line count differs from the records sent, no line is applied, every record is
+unknown, and the lines are kept once in `fiscal.respuesta_descuadrada`, unless one is already open
+for the sale of the envío's first record. Whether AEAT keeps the order sent is unproven (asesor
+Q43); see `docs/backlog.md`.)_
+A rejection
 on its own no longer holds its chain (D2, on §7.1's receipts; only code 1161 was tested, triggered
 artificially). A conflict, or a held cancellation, holds the later unsent records of its chain. A
 record of the conflict's own envío is not held when the reply is applied; one whose outcome is still
-unknown is held at its next claim like any later record of that chain, and is not sent again. A
+unknown is held at its next claim like any later record of that chain, and is not sent again
+_(narrowed 2026-10-07: only when it comes after the conflict on the chain)_. A
 cancellation whose original is rejected or held is held and never sent. A failed duplicate lookup
 makes only that record's outcome unknown. Filing cases (`src/filing-cases.ts`) are append-only,
 and resolving one releases nothing until Tasks 8–9. A new ongoing alert,

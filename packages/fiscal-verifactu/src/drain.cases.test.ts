@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
-import type { RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
+import { createClient } from "@waitron/verifactu";
+import type { IDFactura, RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
   appendCancellation,
@@ -15,13 +16,7 @@ import {
   type SeededDrain,
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
-import {
-  DEFAULT_SKIP_RETRY_MS,
-  RECUPERACION_ENVIANDO_MS,
-  backoffMs,
-  drain,
-  type DrainDeps,
-} from "./drain.js";
+import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
 import { heldRecords, listFilingCases, recordCaseEvent } from "./filing-cases.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
@@ -77,7 +72,7 @@ function rewritingLines(
   };
 }
 
-/** The reply's line for `registroId` names a record outside the envío. */
+/** The reply's line for `registroId` carries a reference outside the envío. */
 const misnaming = (client: VerifactuClient, registroId: string) =>
   rewritingLines(client, (linea) =>
     linea.RefExterna === registroId ? { ...linea, RefExterna: "not-in-this-batch" } : linea,
@@ -122,6 +117,15 @@ async function incidentCodes(): Promise<string[]> {
 }
 
 const cases = () => withTransaction(suite.db, (tx) => listFilingCases(tx));
+
+/** `fiscal.estado_desconocido`'s params that ./errors.ts says are present only when the reply
+ * gave no line that can be trusted to be the record's. */
+const POSITIONAL_ONLY_PARAMS = [
+  "operacionEnviada",
+  "identidadEnviada",
+  "lineaRespuesta",
+  "lineasEnRespuesta",
+] as const;
 
 describe("drain — a lone rejection is kept and does not hold its chain", () => {
   it("applies every line of a reply whose first line is a rejection, and opens a case for the rejected record", async () => {
@@ -465,17 +469,17 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       expect((await envioOf(unreadable)).estado).not.toBe("detenido");
     });
 
-    it("sends again, once its claim is recovered, a record the run's reply had no line for", async () => {
+    it("sends again, at its retry, a record whose line in the reply carries another reference", async () => {
       const aeat = fakeAeat();
       const seeded = await seedPendingEnvios(suite.db, { count: 4 });
       for (const key of seeded.facturaKeys.slice(0, 3)) aeat.reject(key, 1100, "Rechazo 1100");
       const unanswered = seeded.registroIds[3]!;
       const real = aeat.client();
       await drain(deps(misnaming(real, unanswered)), FIRST);
-      expect((await envioOf(unanswered)).estado).toBe("enviando");
+      expect(await envioOf(unanswered)).toMatchObject({ estado: "pendiente", incidencia: true });
       const wire = recording(real);
 
-      await drain(deps(wire.client), new Date(FIRST.getTime() + RECUPERACION_ENVIANDO_MS + 1));
+      await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
 
       expect(wire.sent).toEqual([[unanswered]]);
       expect((await envioOf(unanswered)).estado).not.toBe("detenido");
@@ -531,12 +535,12 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       expect(afterRetry.recordsHalted).toBe(1);
     });
 
-    it("sends the records appended after a missing answer together with its recovered claim", async () => {
+    it("sends the records appended after an answer whose line carries another reference together with its retry", async () => {
       const { real, fourth, appended } = await runThenUnanswered(misnaming);
-      expect((await envioOf(fourth)).estado).toBe("enviando");
+      expect(await envioOf(fourth)).toMatchObject({ estado: "pendiente", incidencia: true });
       const wire = recording(real);
 
-      await drain(deps(wire.client), new Date(FIRST.getTime() + RECUPERACION_ENVIANDO_MS + 1));
+      await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
 
       expect(wire.sent).toEqual([[fourth, ...appended]]);
     });
@@ -631,7 +635,7 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     expect(await cases()).toHaveLength(1);
   });
 
-  it("does not hold a record of the same envío when the reply is applied, even when the reply has no line for it", async () => {
+  it("does not hold a record of the same envío when the reply is applied, even when its line carries another reference", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [conflicting, unanswered] = seeded.registroIds;
@@ -642,11 +646,11 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     await drain(deps(secondLineMisnamed), FIRST);
 
     expect((await envioOf(conflicting!)).estado).toBe("detenido");
-    expect(await envioOf(unanswered!)).toMatchObject({ estado: "enviando", incidencia: false });
+    expect(await envioOf(unanswered!)).toMatchObject({ estado: "pendiente", incidencia: true });
     expect(await ackOf(unanswered!)).toBeUndefined();
   });
 
-  it("holds an unanswered record of the conflict's envío at its next claim, once its claim is recovered, and never sends it again", async () => {
+  it("holds an unanswered record of the conflict's envío at its next claim, once its retry is due, and never sends it again", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [conflicting, unanswered] = seeded.registroIds;
@@ -656,11 +660,8 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     await drain(deps(secondLineMisnamed), FIRST);
     const wire = recording(real);
 
-    // Past the claim's staleness cutoff: the pass recovers it to pending, then claims it.
-    const result = await drain(
-      deps(wire.client),
-      new Date(FIRST.getTime() + RECUPERACION_ENVIANDO_MS + 1),
-    );
+    // Past the unanswered record's retry (`backoffMs(1)`), so this pass claims it.
+    const result = await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
 
     expect(wire.sent).toEqual([]);
     expect(await envioOf(unanswered!)).toMatchObject({ estado: "detenido", incidencia: true });
@@ -781,12 +782,16 @@ describe("drain — a duplicate whose lookup fails", () => {
     `);
     expect(unknown).toHaveLength(1);
     expect(unknown[0]!.severity).toBe("warning");
-    expect(JSON.parse(unknown[0]!.params)).toMatchObject({
+    const unknownParams = JSON.parse(unknown[0]!.params) as Record<string, unknown>;
+    expect(unknownParams).toMatchObject({
       registroId: duplicate,
       codigo: 3000,
       csv,
       lookupFailed: true,
     });
+    for (const positionalOnly of POSITIONAL_ONLY_PARAMS) {
+      expect(unknownParams).not.toHaveProperty(positionalOnly);
+    }
     expect(result.recordsAccepted).toBe(1);
     expect(result.nextDueAt).toEqual(retryAt);
 
@@ -840,6 +845,9 @@ describe("drain — an unknown outcome says whether a duplicate lookup failed", 
     const params = await unknownParams();
     expect(params).toHaveLength(1);
     expect(params[0]).not.toHaveProperty("lookupFailed");
+    for (const positionalOnly of POSITIONAL_ONLY_PARAMS) {
+      expect(params[0]).not.toHaveProperty(positionalOnly);
+    }
   });
 
   it("says lookupFailed false when the lookup answered without the record", async () => {
@@ -860,7 +868,11 @@ describe("drain — an unknown outcome says whether a duplicate lookup failed", 
     await drain(deps(lookupFindsNothing), SECOND);
 
     expect((await envioOf(duplicate!)).estado).toBe("pendiente");
-    expect(await unknownParams()).toEqual([expect.objectContaining({ lookupFailed: false })]);
+    const params = await unknownParams();
+    expect(params).toEqual([expect.objectContaining({ lookupFailed: false })]);
+    for (const positionalOnly of POSITIONAL_ONLY_PARAMS) {
+      expect(params[0]).not.toHaveProperty(positionalOnly);
+    }
   });
 });
 
@@ -1013,5 +1025,529 @@ describe("drain — resolving a case releases nothing", () => {
     );
     expect(after.rows).toEqual(before.rows);
     expect((await cases()).map((c) => c.status)).toEqual(["resolved"]);
+  });
+});
+
+describe("drain — reply lines are paired with the records sent by position", () => {
+  /** The `IDFactura` AEAT's reply carries for the record `facturaKey` (from the seeding fixtures). */
+  const idOf = (facturaKey: string): IDFactura => {
+    const [IDEmisorFactura, NumSerieFactura, FechaExpedicionFactura] = facturaKey.split("|");
+    return {
+      IDEmisorFactura: IDEmisorFactura!,
+      NumSerieFactura: NumSerieFactura!,
+      FechaExpedicionFactura: FechaExpedicionFactura!,
+    };
+  };
+
+  /** An invoice as `fiscal.estado_desconocido`'s params spell it. */
+  const asParams = (id: IDFactura) => ({
+    idEmisorFactura: id.IDEmisorFactura,
+    numSerieFactura: id.NumSerieFactura,
+    fechaExpedicionFactura: id.FechaExpedicionFactura,
+  });
+
+  /** A reply line as the incidents' params spell it. */
+  const lineParams = (linea: RespuestaLinea) => ({
+    refExterna: linea.RefExterna ?? null,
+    tipoOperacion: linea.Operacion?.TipoOperacion ?? null,
+    ...asParams(linea.IDFactura),
+    estado: linea.EstadoRegistro ?? null,
+    codigo: linea.CodigoErrorRegistro ?? null,
+    mensaje: linea.DescripcionErrorRegistro ?? null,
+  });
+
+  async function unknownParamsOf(registroId: string): Promise<Record<string, unknown>[]> {
+    const { rows } = await suite.db.execute<{ params: string }>(sql`
+      select params from incidents where code = 'fiscal.estado_desconocido'
+    `);
+    return rows
+      .map((row) => JSON.parse(row.params) as Record<string, unknown>)
+      .filter((params) => params["registroId"] === registroId);
+  }
+
+  async function incidentsCoded(
+    code: string,
+  ): Promise<{ sale_id: string | null; severity: string; params: Record<string, unknown> }[]> {
+    const { rows } = await suite.db.execute<{
+      sale_id: string | null;
+      severity: string;
+      params: string;
+    }>(sql`
+      select sale_id, severity, params from incidents where code = ${code}
+    `);
+    return rows.map((row) => ({
+      sale_id: row.sale_id,
+      severity: row.severity,
+      params: JSON.parse(row.params) as Record<string, unknown>,
+    }));
+  }
+
+  async function saleOf(registroId: string): Promise<string> {
+    const { rows } = await suite.db.execute<{ sale_id: string }>(sql`
+      select sale_id from registros_facturacion where id = ${registroId}
+    `);
+    return rows[0]!.sale_id;
+  }
+
+  /**
+   * AEAT's whole reply passes through `reshape` before the drain reads it; `delivered` holds the
+   * lines of the last reply it handed over.
+   */
+  function reshaping(
+    client: VerifactuClient,
+    reshape: (lines: RespuestaLinea[]) => RespuestaLinea[],
+  ): { client: VerifactuClient; delivered: RespuestaLinea[] } {
+    const delivered: RespuestaLinea[] = [];
+    return {
+      delivered,
+      client: {
+        submit: async (cabecera, registros) => {
+          const respuesta = await client.submit(cabecera, registros);
+          delivered.splice(0, delivered.length, ...reshape(respuesta.RespuestaLinea));
+          return { ...respuesta, RespuestaLinea: [...delivered] };
+        },
+        consultar: (...args) => client.consultar(...args),
+      },
+    };
+  }
+
+  /** A line naming no record of any envío, and no operation. */
+  const strayLine: RespuestaLinea = {
+    IDFactura: {
+      IDEmisorFactura: "B99999999",
+      NumSerieFactura: "STRAY/1",
+      FechaExpedicionFactura: "01-07-2026",
+    },
+    RefExterna: "not-ours",
+    EstadoRegistro: "Incorrecto",
+    CodigoErrorRegistro: 1100,
+    DescripcionErrorRegistro: "Campo obligatorio ausente",
+  } as RespuestaLinea;
+
+  it("applies the first record's own line and leaves the second unknown when the second's line carries the first's reference", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [rejected, accepted] = seeded.registroIds;
+    aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente");
+    const acceptedLineMisnamed = rewritingLines(aeat.client(), (linea) =>
+      linea.RefExterna === accepted ? { ...linea, RefExterna: rejected } : linea,
+    );
+
+    const result = await drain(deps(acceptedLineMisnamed), FIRST);
+
+    const csv = expect.any(String);
+    expect(await envioOf(rejected!)).toMatchObject({ estado: "rechazado", incidencia: true });
+    expect(await ackOf(rejected!)).toBe("rejected");
+    expect(await envioOf(accepted!)).toMatchObject({
+      estado: "pendiente",
+      incidencia: true,
+      proximo_intento_en: new Date(FIRST.getTime() + backoffMs(1)).toISOString(),
+    });
+    expect(await ackOf(accepted!)).toBeUndefined();
+    expect(result.recordsAccepted).toBe(0);
+    expect(result.recordsHalted).toBe(1);
+    expect(await unknownParamsOf(accepted!)).toEqual([
+      {
+        registroId: accepted,
+        estado: null,
+        codigo: null,
+        mensaje: null,
+        csv,
+        operacionEnviada: "Alta",
+        identidadEnviada: asParams(idOf(seeded.facturaKeys[1]!)),
+        lineaRespuesta: {
+          refExterna: rejected,
+          tipoOperacion: "Alta",
+          ...asParams(idOf(seeded.facturaKeys[1]!)),
+          estado: "Correcto",
+          codigo: null,
+          mensaje: null,
+        },
+      },
+    ]);
+    expect(await incidentCodes()).toEqual([
+      "fiscal.estado_desconocido",
+      "fiscal.registro_rechazado",
+    ]);
+    expect((await cases()).map((c) => [c.registroId, c.cause])).toEqual([
+      [rejected, "fiscal.registro_rechazado"],
+    ]);
+  });
+
+  it("applies neither line of a pair AEAT answered in the other order", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [first, second] = seeded.registroIds;
+    const swapped = reshaping(aeat.client(), (lines) => [...lines].reverse());
+
+    const result = await drain(deps(swapped.client), FIRST);
+
+    expect(result.recordsAccepted).toBe(0);
+    const [secondLine, firstLine] = swapped.delivered;
+    expect(firstLine!.RefExterna).toBe(first);
+    for (const [id, other] of [
+      [first!, secondLine!],
+      [second!, firstLine!],
+    ] as const) {
+      expect(await envioOf(id)).toMatchObject({ estado: "pendiente", incidencia: true });
+      expect(await ackOf(id)).toBeUndefined();
+      expect(await unknownParamsOf(id)).toEqual([
+        expect.objectContaining({ lineaRespuesta: lineParams(other) }),
+      ]);
+    }
+  });
+
+  it("applies only the line still at its record's position when AEAT swapped the first two of three, and sends the other two again at their retry", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    const [first, second, third] = seeded.registroIds;
+    const real = aeat.client();
+    const partlyReordered = reshaping(real, ([a, b, c]) => [b!, a!, c!]);
+
+    const result = await drain(deps(partlyReordered.client), FIRST);
+
+    const [secondLine, firstLine, thirdLine] = partlyReordered.delivered;
+    expect([firstLine!.RefExterna, secondLine!.RefExterna, thirdLine!.RefExterna]).toEqual([
+      first,
+      second,
+      third,
+    ]);
+    for (const [id, other] of [
+      [first!, secondLine!],
+      [second!, firstLine!],
+    ] as const) {
+      expect(await envioOf(id)).toMatchObject({ estado: "pendiente", incidencia: true });
+      expect(await ackOf(id)).toBeUndefined();
+      expect(await unknownParamsOf(id)).toEqual([
+        expect.objectContaining({ lineaRespuesta: lineParams(other) }),
+      ]);
+    }
+    expect(await envioOf(third!)).toMatchObject({ estado: "aceptado", incidencia: false });
+    expect(await ackOf(third!)).toBe("accepted");
+    expect(result.recordsAccepted).toBe(1);
+    expect(await incidentsCoded("fiscal.respuesta_descuadrada")).toEqual([]);
+    const wire = recording(real);
+
+    await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
+
+    expect(wire.sent).toEqual([[first, second]]);
+  });
+
+  it.each([
+    ["one line fewer than the records sent", 3, (lines: RespuestaLinea[]) => lines.slice(0, 2)],
+    [
+      "one line more than the records sent, naming no record",
+      2,
+      (lines: RespuestaLinea[]) => [...lines, strayLine],
+    ],
+    [
+      "one line more than the records sent, a copy of the first",
+      2,
+      (lines: RespuestaLinea[]) => [...lines, lines[0]!],
+    ],
+    ["no lines at all", 2, () => []],
+  ] as const)(
+    "applies no line, and keeps the reply's lines once, when the reply holds %s",
+    async (_label, count, reshape) => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count });
+      const reply = reshaping(aeat.client(), reshape);
+
+      const result = await drain(deps(reply.client), FIRST);
+
+      expect(result.recordsAccepted).toBe(0);
+      expect(result.recordsHalted).toBe(0);
+      const lineasEnRespuesta = reply.delivered.length;
+      expect(lineasEnRespuesta).not.toBe(count);
+      for (const [i, id] of seeded.registroIds.entries()) {
+        expect(await envioOf(id)).toMatchObject({
+          estado: "pendiente",
+          incidencia: true,
+          proximo_intento_en: new Date(FIRST.getTime() + backoffMs(1)).toISOString(),
+        });
+        expect(await ackOf(id)).toBeUndefined();
+        expect(await unknownParamsOf(id)).toEqual([
+          {
+            registroId: id,
+            estado: null,
+            codigo: null,
+            mensaje: null,
+            csv: expect.any(String),
+            operacionEnviada: "Alta",
+            identidadEnviada: asParams(idOf(seeded.facturaKeys[i]!)),
+            lineasEnRespuesta,
+          },
+        ]);
+      }
+      expect(await incidentsCoded("fiscal.respuesta_descuadrada")).toEqual([
+        {
+          sale_id: await saleOf(seeded.registroIds[0]!),
+          severity: "warning",
+          params: {
+            registroIds: seeded.registroIds,
+            csv: expect.any(String),
+            lineasRespuesta: reply.delivered.map(lineParams),
+          },
+        },
+      ]);
+      expect((await incidentCodes()).filter((c) => c !== "fiscal.estado_desconocido")).toEqual([
+        "fiscal.respuesta_descuadrada",
+      ]);
+      expect(await cases()).toEqual([]);
+    },
+  );
+
+  it("keeps only the first mismatched reply's lines while its incident is open", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [only] = seeded.registroIds;
+    await drain(deps(reshaping(aeat.client(), () => []).client), FIRST);
+    const retry = new Date(FIRST.getTime() + backoffMs(1));
+
+    const second = reshaping(aeat.client(), (lines) => [...lines, strayLine]);
+    await drain(deps(second.client), retry);
+
+    expect(second.delivered).toHaveLength(2);
+    expect(await envioOf(only!)).toMatchObject({
+      estado: "pendiente",
+      proximo_intento_en: new Date(retry.getTime() + backoffMs(2)).toISOString(),
+    });
+    expect(await incidentsCoded("fiscal.respuesta_descuadrada")).toEqual([
+      expect.objectContaining({
+        params: expect.objectContaining({ lineasRespuesta: [] }),
+      }),
+    ]);
+  });
+
+  it.each([
+    ["issuer NIF", { IDEmisorFactura: "B00000000" }],
+    ["invoice number", { NumSerieFactura: "OTHER/1" }],
+    ["issue date", { FechaExpedicionFactura: "19-07-2026" }],
+  ])(
+    "leaves a record unknown when the line at its position names another invoice by %s",
+    async (_field, differs) => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+      const [mismatched, matched] = seeded.registroIds;
+      const client = rewritingLines(aeat.client(), (linea) =>
+        linea.RefExterna === mismatched
+          ? { ...linea, IDFactura: { ...linea.IDFactura, ...differs } }
+          : linea,
+      );
+
+      const result = await drain(deps(client), FIRST);
+
+      expect(await envioOf(mismatched!)).toMatchObject({ estado: "pendiente", incidencia: true });
+      expect(await ackOf(mismatched!)).toBeUndefined();
+      expect(await envioOf(matched!)).toMatchObject({ estado: "aceptado", incidencia: false });
+      expect(await ackOf(matched!)).toBe("accepted");
+      expect(result.recordsAccepted).toBe(1);
+      expect(await unknownParamsOf(mismatched!)).toEqual([
+        {
+          registroId: mismatched,
+          estado: null,
+          codigo: null,
+          mensaje: null,
+          csv: expect.any(String),
+          operacionEnviada: "Alta",
+          identidadEnviada: asParams(idOf(seeded.facturaKeys[0]!)),
+          lineaRespuesta: expect.objectContaining({
+            refExterna: mismatched,
+            ...asParams({ ...idOf(seeded.facturaKeys[0]!), ...differs }),
+            estado: "Correcto",
+          }),
+        },
+      ]);
+      expect(await cases()).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["a reference outside this envío", "not-in-this-batch"],
+    ["no reference at all", undefined],
+  ])(
+    "leaves a record unknown when the line at its position names its invoice but carries %s",
+    async (_label, refExterna) => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+      const [matched, unreferenced] = seeded.registroIds;
+      const client = rewritingLines(aeat.client(), (linea) =>
+        linea.RefExterna === unreferenced ? { ...linea, RefExterna: refExterna } : linea,
+      );
+
+      const result = await drain(deps(client), FIRST);
+
+      expect(await envioOf(unreferenced!)).toMatchObject({ estado: "pendiente", incidencia: true });
+      expect(await ackOf(unreferenced!)).toBeUndefined();
+      expect(await envioOf(matched!)).toMatchObject({ estado: "aceptado" });
+      expect(result.recordsAccepted).toBe(1);
+      expect(await unknownParamsOf(unreferenced!)).toEqual([
+        expect.objectContaining({
+          identidadEnviada: asParams(idOf(seeded.facturaKeys[1]!)),
+          lineaRespuesta: expect.objectContaining({
+            refExterna: refExterna ?? null,
+            ...asParams(idOf(seeded.facturaKeys[1]!)),
+          }),
+        }),
+      ]);
+    },
+  );
+
+  it.each([
+    ["an identical copy", "Correcto"],
+    ["a copy saying Incorrecto", "Incorrecto"],
+  ] as const)(
+    "applies a record's own line and consults no other, when the next record's line is %s of it",
+    async (_label, estado) => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+      const [applied, unknown] = seeded.registroIds;
+      const reply = reshaping(aeat.client(), ([own]) => [
+        own!,
+        { ...own!, EstadoRegistro: estado },
+      ]);
+
+      const result = await drain(deps(reply.client), FIRST);
+
+      expect(await envioOf(applied!)).toMatchObject({ estado: "aceptado", incidencia: false });
+      expect(result.recordsAccepted).toBe(1);
+      expect(await envioOf(unknown!)).toMatchObject({ estado: "pendiente", incidencia: true });
+      expect(await unknownParamsOf(unknown!)).toEqual([
+        expect.objectContaining({ lineaRespuesta: lineParams(reply.delivered[1]!) }),
+      ]);
+      expect(await incidentCodes()).toEqual(["fiscal.estado_desconocido"]);
+    },
+  );
+
+  it("sends no later record of a chain whose record was left unknown by a mismatched line until that record's retry", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [mismatched, matched] = seeded.registroIds;
+    const real = aeat.client();
+    const client = rewritingLines(real, (linea) =>
+      linea.RefExterna === mismatched
+        ? { ...linea, IDFactura: { ...linea.IDFactura, NumSerieFactura: "OTHER/1" } }
+        : linea,
+    );
+    await drain(deps(client), FIRST);
+    expect((await envioOf(matched!)).estado).toBe("aceptado");
+    const later = await appendPendingAlta(suite.db, seeded, 3);
+    const wire = recording(real);
+
+    await drain(deps(wire.client), SECOND);
+    expect(wire.sent).toEqual([]);
+
+    await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
+    expect(wire.sent).toEqual([[mismatched, later.registroId]]);
+  });
+
+  /**
+   * Answers through the real client and its XML parser: each line keeps the reference and invoice
+   * the fake AEAT gave it, says `Correcto`, and carries `operacion` as its `Operacion` element.
+   */
+  function answeringWith(real: VerifactuClient, operacion: string): VerifactuClient {
+    return {
+      submit: async (cabecera, registros) => {
+        const respuesta = await real.submit(cabecera, registros);
+        const lineas = respuesta.RespuestaLinea.map(
+          ({ IDFactura: id, RefExterna }) =>
+            `<RespuestaLinea><IDFactura><IDEmisorFactura>${id.IDEmisorFactura}</IDEmisorFactura>` +
+            `<NumSerieFactura>${id.NumSerieFactura}</NumSerieFactura>` +
+            `<FechaExpedicionFactura>${id.FechaExpedicionFactura}</FechaExpedicionFactura>` +
+            `</IDFactura>${operacion}<RefExterna>${RefExterna}</RefExterna>` +
+            `<EstadoRegistro>Correcto</EstadoRegistro></RespuestaLinea>`,
+        );
+        const xml =
+          `<Envelope><Body><RespuestaRegFactuSistemaFacturacion><CSV>${respuesta.CSV}</CSV>` +
+          `<EstadoEnvio>Correcto</EstadoEnvio><TiempoEsperaEnvio>5</TiempoEsperaEnvio>` +
+          `${lineas.join("")}</RespuestaRegFactuSistemaFacturacion></Body></Envelope>`;
+        return createClient({
+          endpoint: "https://aeat.invalid/",
+          fetch: async () => new Response(xml),
+        }).submit(cabecera, registros);
+      },
+      consultar: (...args) => real.consultar(...args),
+    };
+  }
+
+  const tipo = (tipoOperacion: string) =>
+    `<Operacion><TipoOperacion>${tipoOperacion}</TipoOperacion></Operacion>`;
+
+  /** One record waiting to be sent as `operation`: a fresh alta, or the anulación of a filed one. */
+  async function waitingAs(
+    aeat: ReturnType<typeof fakeAeat>,
+    operation: "Alta" | "Anulacion",
+  ): Promise<{ id: string; now: Date; facturaKey: string }> {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [original] = seeded.registroIds;
+    const facturaKey = seeded.facturaKeys[0]!;
+    if (operation === "Alta") return { id: original!, now: FIRST, facturaKey };
+    await drain(deps(aeat.client()), FIRST);
+    expect((await envioOf(original!)).estado).toBe("aceptado");
+    const id = await appendCancellation(suite.db, seeded, original!, 2);
+    return { id, now: SECOND, facturaKey };
+  }
+
+  it.each([
+    ["registration", "Alta", "Anulacion"],
+    ["cancellation", "Anulacion", "Alta"],
+    ["registration", "Alta", "Modificacion"],
+  ] as const)(
+    "leaves a %s unknown when the line at its position names an operation other than the one sent (%s → %s)",
+    async (_kind, sent, answered) => {
+      const aeat = fakeAeat();
+      const { id, now, facturaKey } = await waitingAs(aeat, sent);
+
+      const result = await drain(deps(answeringWith(aeat.client(), tipo(answered))), now);
+
+      expect(await envioOf(id)).toMatchObject({
+        estado: "pendiente",
+        incidencia: true,
+        proximo_intento_en: new Date(now.getTime() + backoffMs(1)).toISOString(),
+      });
+      expect(await ackOf(id)).toBeUndefined();
+      expect(result.recordsAccepted).toBe(0);
+      expect(await unknownParamsOf(id)).toEqual([
+        {
+          registroId: id,
+          estado: null,
+          codigo: null,
+          mensaje: null,
+          csv: expect.any(String),
+          operacionEnviada: sent,
+          identidadEnviada: asParams(idOf(facturaKey)),
+          lineaRespuesta: {
+            refExterna: id,
+            tipoOperacion: answered,
+            ...asParams(idOf(facturaKey)),
+            estado: "Correcto",
+            codigo: null,
+            mensaje: null,
+          },
+        },
+      ]);
+      expect(await incidentCodes()).toEqual(["fiscal.estado_desconocido"]);
+      expect(await cases()).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["registration whose line states Alta", "Alta", tipo("Alta")],
+    ["cancellation whose line states Anulacion", "Anulacion", tipo("Anulacion")],
+    ["registration whose line has no Operacion", "Alta", ""],
+    [
+      "registration whose Operacion has no TipoOperacion",
+      "Alta",
+      "<Operacion><Subsanacion>N</Subsanacion></Operacion>",
+    ],
+  ] as const)("applies the line of a %s", async (_label, sent, operacion) => {
+    const aeat = fakeAeat();
+    const { id, now } = await waitingAs(aeat, sent);
+
+    const result = await drain(deps(answeringWith(aeat.client(), operacion)), now);
+
+    expect(await envioOf(id)).toMatchObject({ estado: "aceptado", incidencia: false });
+    expect(result.recordsAccepted).toBe(1);
+    expect(await incidentCodes()).toEqual([]);
   });
 });

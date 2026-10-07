@@ -1717,13 +1717,15 @@ landed with public F1 disabled. **Next action:** continue the approved dependent
 keeping each task's fiscal and adviser gates.
 **Update, 2026-10-06 (W41s-3, landed):** Task 3 landed as
 [#1289](https://github.com/clintongormley/waitron/pull/1289), with the owner's approval of its
-nine changed filing checks and of the landing. Every line of AEAT's reply is kept. A
+nine changed filing checks and of the landing. Every line of AEAT's reply is kept (but see W41s-3c
+below). A
 rejection on its own no longer holds the later records of its chain (D2, on
 [§7.1's receipts](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1));
 only rejection code 1161 was tested, and it was triggered artificially. A conflict with AEAT's
 copy, or a held cancellation, holds the later records of its chain that have not been sent. A
-record sent in the conflict's own envío is not held when the reply is applied; one whose outcome is
-still unknown is held at its next claim like any later record of that chain, and is not sent again.
+record sent in the conflict's own envío is not held when the reply is applied; a record of the
+conflict's envío that comes after it on the chain and whose outcome is still unknown is held at its
+next claim like any later record of that chain, and is not sent again.
 A cancellation whose original was rejected or is held is itself held and never sent. When the
 lookup that follows a duplicate answer fails, only that record's outcome becomes unknown. Each
 record that needs a person's decision gets a filing case, kept in tables whose rows cannot be
@@ -1751,12 +1753,45 @@ records added after a run's unanswered successor sent with its retry, as built. 
 the run's code, the run is broken and nothing would explain such a hold: the
 `fiscal.refusals_repeated` alert would not show, and when that answer is not a refusal at all
 `heldRecords` would name no case for the held records.
-**Follow-up W41s-3c (a defect W41s-3's review found that predates W41s-3):**
-`resolveLines` in `packages/fiscal-verifactu/src/drain.ts` matches a reply line to a claimed record
-by `RefExterna` alone, without checking the line's invoice identity or a repeated reference. A
-review probe gave invoice B's accepted line invoice A's reference, and the drain marked A
-`aceptado` though AEAT had rejected it; the same probe failed the same way on base `429f18b0b`.
-This is defensive handling of a malformed reply, and its fix is its own fiscal item.
+**Follow-up W41s-3c (done on `fix/w41s-reply-line-identity`, #1304, reworked 2026-10-07, awaiting
+the owner's review):** `resolveLines` in `packages/fiscal-verifactu/src/drain.ts` used to match a
+reply line to a claimed record by `RefExterna` alone; a review probe gave invoice B's accepted line
+invoice A's reference and the drain marked A `aceptado` though AEAT had rejected it. Now, as the
+owner chose (2026-10-06), line N of AEAT's reply is paired with record N of the envío, and is
+applied only when it carries that record's reference, names the invoice (issuer NIF, number, date)
+the record was sent as, and names no operation (`Operacion.TipoOperacion`) other than the one sent;
+a line with no operation is not refused for that. No other line is consulted for that record, so a
+copy of record A's line at record B's position leaves B unknown and still applies A's own line,
+whatever the copy says. Any record whose line fails becomes unknown at once: it waits for its retry,
+its chain's records not yet sent wait behind it, and its `fiscal.estado_desconocido` carries the
+operation and invoice sent and the line at its position (`lineaRespuesta`). Before, a record with no
+line sat `enviando` until the five-minute recovery or a restart. When the reply holds a different
+number of lines than records sent, no line is applied, every record of the envío is unknown with the
+reply's line count (`lineasEnRespuesta`) on its alert, and the reply's lines are kept once, in a
+warning `fiscal.respuesta_descuadrada` on the sale of the envío's first record, with the envío's
+record ids and its CSV. The dashboard's sentence does not show those lines; `readOpenAlerts`
+(`apps/server/src/alerts.ts`), behind `GET /management-api/alerts`, returns them in the alert's
+params. **Still open:** nothing we hold says AEAT answers in the order sent — the saved preproduction
+replies were stored in the order sent by the probe itself, whatever order AEAT used — and the
+question is with the asesor as [Q43](compliance/asesor-questions.md). A line AEAT moves away from
+its record's position is never applied, so that record stays unknown and is retried unless an
+earlier record on its chain is on hold, while records whose line is still at their position are
+applied as usual. A record whose line AEAT moved in every reply it was sent in would never be
+confirmed: Route B's lookup never runs for it, each retry sends it again in the same chain order
+while the later records of its chain wait behind it — loud (an alert per record) and never a wrong
+acceptance. One option for the owner, not built: after a mismatch, send
+each unknown record again in an envío of its own. An incident is not stored while one with the same
+code for the same sale is open, so while a `fiscal.respuesta_descuadrada` is open for a sale, a later
+mismatched reply to an envío whose first record belongs to the same sale (that record again, or the
+sale's cancellation) keeps none of its lines. And no run
+against real AEAT has shown that a cancellation's reply line names the cancelled invoice (the schema
+types the line's `IDFactura` with the plain field names, and the library's fake echoes the cancelled
+invoice there). If AEAT named a different invoice on that line, the cancellation would come back
+unknown and be retried with an alert; a line without the plain field names is refused by the
+library's parser, which backs off the whole envío; that back-off raises no incident and keeps no
+CSV, and every resend would meet the same refusal, so those records would wait until the four-hour
+delayed-submission alert (`fiscal.submission_delayed`,
+`packages/fiscal-verifactu/src/submission-alerts.ts`).
 **Re-examine the hold behind an unknown outcome once the asesor answers — OPEN (waiting on the
 asesor; owner 2026-10-06).** `claimBatch` in `packages/fiscal-verifactu/src/drain.ts` does not send a
 record while an earlier record of its chain is `enviando` or waits for a retry (W41s-2, #1213,

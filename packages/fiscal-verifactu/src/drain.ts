@@ -5,18 +5,20 @@ import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
 import { emptyDrainResult, type DrainResult } from "@waitron/fiscal";
 import { AppError, isAppError, jobOrigin } from "@waitron/shared";
-import type { SaleId } from "@waitron/shared";
+import type { ErrorParams, SaleId } from "@waitron/shared";
 import { MAX_REGISTROS_POR_ENVIO, resolveEstadoEfectivo } from "@waitron/verifactu";
 import type {
   Cabecera,
   EnvioRegistro,
   EstadoEfectivo,
+  IDFactura,
   RespuestaConsulta,
   RespuestaLinea,
   VerifactuClient,
   RegistroAlta,
 } from "@waitron/verifactu";
 import { writeAck } from "./acks.js";
+import type { FacturaParams, LineaParams, Operacion } from "./errors.js";
 import { openFilingCase, type FilingCaseCause } from "./filing-cases.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
@@ -228,10 +230,10 @@ async function drainDue(
       // Counted as soon as AEAT has answered: the envío was sent whether or not its reply is kept.
       result.batchesSent += 1;
       result.recordsSubmitted += batch.length;
-      const lines = await resolveLines(client, batch, respuesta);
+      const resolved = await resolveLines(client, batch, registros, respuesta);
 
       dueCount = await countOnCommit(db, result, async (tx, counts) => {
-        await persistResponse(tx, batch, lines, respuesta.CSV ?? null, now, counts);
+        await persistResponse(tx, batch, resolved, respuesta.CSV ?? null, now, counts);
         return countDue(tx, now);
       });
       // `@waitron/verifactu` leaves the wait undefined when AEAT's reply has no usable one. The
@@ -650,24 +652,65 @@ interface ResolvedLine {
   duplicateAcceptedWithErrors: boolean;
 }
 
+/** A claimed row no reply line can be applied to, with what its incident says instead. */
+interface UnmatchedRow {
+  row: DueRow;
+  answer: UnknownAnswer;
+}
+
+interface ResolvedReply {
+  lines: ResolvedLine[];
+  unmatched: UnmatchedRow[];
+  /** The reply's lines, when their count differs from the records sent; otherwise `null`. */
+  descuadrada: LineaParams[] | null;
+}
+
 /**
- * Matches each response line to its claimed row by `RefExterna`, in AEAT's order, and makes Route
- * B's lookups one at a time. A lookup's failure is kept rather than thrown, so it leaves only its
- * own record unknown (`handleDuplicate`).
+ * Pairs line i of the reply with row i of the envío. No document we hold promises that AEAT
+ * answers in the order sent, so a line is applied only when it carries its row's `RefExterna`,
+ * names the invoice the row was sent as, and names no other `TipoOperacion`; any other row is
+ * unmatched, and so is every row when the reply's line count differs from the envío's. A line in
+ * another position can then only leave records unknown, never be applied to a record it does not
+ * name.
+ * Route B's lookups run one at a time; a lookup's failure is kept rather than thrown, so it leaves
+ * only its own record unknown (`handleDuplicate`).
  */
 async function resolveLines(
   client: VerifactuClient,
   batch: DueRow[],
+  registros: EnvioRegistro[],
   respuesta: Awaited<ReturnType<VerifactuClient["submit"]>>,
-): Promise<ResolvedLine[]> {
-  const byId = new Map(batch.map((row) => [row.id, row]));
+): Promise<ResolvedReply> {
+  const reply = respuesta.RespuestaLinea;
+  const tallies = reply.length === batch.length;
   const lines: ResolvedLine[] = [];
-  for (const linea of respuesta.RespuestaLinea) {
-    // Skipped rather than thrown: one unmatched line must not back the whole batch off and discard
-    // every other line of this response. The skipped row stays `enviando` until
-    // `recoverStaleClaims` or a restart requeues it.
-    const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
-    if (row === undefined) continue;
+  const unmatched: UnmatchedRow[] = [];
+  for (const [i, row] of batch.entries()) {
+    const operacionEnviada = operacionOf(registros[i]!);
+    const identidadEnviada = sentIdentityOf(registros[i]!);
+    const linea = tallies ? reply[i]! : undefined;
+    const tipo = linea?.Operacion?.TipoOperacion;
+    if (
+      linea === undefined ||
+      linea.RefExterna !== row.id ||
+      !sameFactura(linea.IDFactura, identidadEnviada) ||
+      (tipo !== undefined && tipo !== operacionEnviada)
+    ) {
+      unmatched.push({
+        row,
+        answer: {
+          estado: null,
+          codigo: null,
+          mensaje: null,
+          operacionEnviada,
+          identidadEnviada: facturaParams(identidadEnviada),
+          ...(linea === undefined
+            ? { lineasEnRespuesta: reply.length }
+            : { lineaRespuesta: lineaParams(linea) }),
+        },
+      });
+      continue;
+    }
     const resolved = resolveEstadoEfectivo(linea);
     const efectivo =
       linea.CodigoErrorRegistro === 3000 &&
@@ -686,7 +729,51 @@ async function resolveLines(
         linea.CodigoErrorRegistro === 3000 && resolved === "accepted_with_errors",
     });
   }
-  return lines;
+  return { lines, unmatched, descuadrada: tallies ? null : reply.map(lineaParams) };
+}
+
+function operacionOf(registro: EnvioRegistro): Operacion {
+  return "RegistroAlta" in registro ? "Alta" : "Anulacion";
+}
+
+/** The invoice a record names on the wire; an anulación names it under the `...Anulada` fields. */
+function sentIdentityOf(registro: EnvioRegistro): IDFactura {
+  if ("RegistroAlta" in registro) {
+    const { IDEmisorFactura, NumSerieFactura, FechaExpedicionFactura } =
+      registro.RegistroAlta.IDFactura;
+    return { IDEmisorFactura, NumSerieFactura, FechaExpedicionFactura };
+  }
+  const id = registro.RegistroAnulacion.IDFactura;
+  return {
+    IDEmisorFactura: id.IDEmisorFacturaAnulada,
+    NumSerieFactura: id.NumSerieFacturaAnulada,
+    FechaExpedicionFactura: id.FechaExpedicionFacturaAnulada,
+  };
+}
+
+function sameFactura(a: IDFactura, b: IDFactura): boolean {
+  return (
+    a.IDEmisorFactura === b.IDEmisorFactura &&
+    a.NumSerieFactura === b.NumSerieFactura &&
+    a.FechaExpedicionFactura === b.FechaExpedicionFactura
+  );
+}
+
+function facturaParams(id: IDFactura): FacturaParams {
+  return {
+    idEmisorFactura: id.IDEmisorFactura,
+    numSerieFactura: id.NumSerieFactura,
+    fechaExpedicionFactura: id.FechaExpedicionFactura,
+  };
+}
+
+function lineaParams(linea: RespuestaLinea): LineaParams {
+  return {
+    refExterna: linea.RefExterna ?? null,
+    tipoOperacion: linea.Operacion?.TipoOperacion ?? null,
+    ...facturaParams(linea.IDFactura),
+    ...answerOf(linea),
+  };
 }
 
 async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
@@ -698,14 +785,15 @@ async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
 }
 
 /**
- * Applies every line with its own outcome, whatever an earlier line of the same reply did (design
- * §7.1, docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md). This reply is
- * never returned again.
+ * Applies every matched line with its own outcome, whatever an earlier line of the same reply did
+ * (design §7.1,
+ * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md), and marks
+ * each unmatched row unknown (`resolveLines`). This reply is never returned again.
  */
 async function persistResponse(
   tx: Transaction,
   batch: DueRow[],
-  lines: ResolvedLine[],
+  { lines, unmatched, descuadrada }: ResolvedReply,
   csv: string | null,
   now: Date,
   result: CommittedCounts,
@@ -714,6 +802,23 @@ async function persistResponse(
 
   for (const line of lines) {
     await applyOutcome(tx, line, csv, now, result, sentIds);
+  }
+  for (const { row, answer } of unmatched) {
+    await awaitReadableAnswer(tx, row, csv, now, result, answer);
+  }
+  if (descuadrada !== null) {
+    await raiseIncident(
+      tx,
+      batch[0]!,
+      "warning",
+      new AppError("fiscal.respuesta_descuadrada", {
+        registroIds: sentIds,
+        csv,
+        lineasRespuesta: descuadrada,
+      }),
+      now,
+      result,
+    );
   }
 }
 
@@ -772,7 +877,7 @@ async function applyOutcome(
       return;
     }
     case "status_unknown":
-      await awaitReadableAnswer(tx, row, linea, csv, now, result);
+      await awaitReadableAnswer(tx, row, csv, now, result, answerOf(linea));
       return;
     // duplicate_annulled / duplicate_unknown — error 3000; see `handleDuplicate`.
     default:
@@ -812,19 +917,28 @@ async function openCase(
   });
 }
 
+type UnknownAnswer = Omit<ErrorParams["fiscal.estado_desconocido"], "registroId" | "csv">;
+
+function answerOf(linea: RespuestaLinea): Pick<UnknownAnswer, "estado" | "codigo" | "mensaje"> {
+  return {
+    estado: linea.EstadoRegistro ?? null,
+    codigo: linea.CodigoErrorRegistro ?? null,
+    mensaje: linea.DescripcionErrorRegistro ?? null,
+  };
+}
+
 /**
- * An unreadable reply, or a duplicate lookup that failed or did not settle whose record AEAT holds,
- * stays pending for a later send. The incident keeps the envío's CSV, which AEAT never returns
- * again. `lookupFailed` is given only when a duplicate lookup ran.
+ * An unreadable reply, a duplicate lookup that failed or did not settle whose record AEAT holds,
+ * or a reply with no line to trust for this record, stays pending for a later send. The incident
+ * keeps the envío's CSV, which AEAT never returns again.
  */
 async function awaitReadableAnswer(
   tx: Transaction,
   row: DueRow,
-  linea: RespuestaLinea,
   csv: string | null,
   now: Date,
   result: CommittedCounts,
-  lookupFailed?: boolean,
+  answer: UnknownAnswer,
 ): Promise<void> {
   const next = new Date(now.getTime() + backoffMs(row.intentos));
   await tx.execute(sql`
@@ -836,14 +950,7 @@ async function awaitReadableAnswer(
     tx,
     row,
     "warning",
-    new AppError("fiscal.estado_desconocido", {
-      registroId: row.id,
-      estado: linea.EstadoRegistro ?? null,
-      codigo: linea.CodigoErrorRegistro ?? null,
-      mensaje: linea.DescripcionErrorRegistro ?? null,
-      csv,
-      ...(lookupFailed === undefined ? {} : { lookupFailed }),
-    }),
+    new AppError("fiscal.estado_desconocido", { registroId: row.id, csv, ...answer }),
     now,
     result,
   );
@@ -1031,7 +1138,10 @@ async function handleDuplicate(
   const annulled = efectivo === "duplicate_annulled";
   if (lookup !== null) {
     if ("failed" in lookup) {
-      await awaitReadableAnswer(tx, row, linea, csv, now, result, true);
+      await awaitReadableAnswer(tx, row, csv, now, result, {
+        ...answerOf(linea),
+        lookupFailed: true,
+      });
       return;
     }
     if (lookup.matched) {
@@ -1060,7 +1170,10 @@ async function handleDuplicate(
       return;
     }
     if (lookup.matched === null) {
-      await awaitReadableAnswer(tx, row, linea, csv, now, result, false);
+      await awaitReadableAnswer(tx, row, csv, now, result, {
+        ...answerOf(linea),
+        lookupFailed: false,
+      });
       return;
     }
   }
