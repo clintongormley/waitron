@@ -647,8 +647,7 @@ export async function importConfigurationTables(
   `);
 
   // Moves the key checks to COMMIT, for this transaction only; the caller's commit still checks the
-  // final state. Measured 2026-10-07: with this line removed, every case in
-  // `configuration-transfer.test.ts` still passed.
+  // final state.
   // `packages/db/src/testing/venue-db.ts` empties a whole venue the same way.
   await tx.execute(sql`pragma defer_foreign_keys = on`);
   for (const [declaration] of [...checked].reverse()) {

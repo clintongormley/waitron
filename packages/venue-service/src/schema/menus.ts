@@ -24,8 +24,8 @@ export const departmentMenus = table(
       foreignColumns: [catalogues.id],
       name: "department_menus_menu_fk",
     }),
-    // Not unique: two of a department's rows may hold one position (`allowMenuInZone` writes 0
-    // unless given one); readers order a tie by menu id.
+    // Not unique: two of a department's rows share a position only when one was given explicitly
+    // (`addDepartmentMenu`'s `displayOrder`, or an imported row); readers order a tie by menu id.
     index("department_menus_order_idx").on(t.departmentId, t.displayOrder),
   ],
 );
