@@ -157,8 +157,8 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
   return result;
 }
 
-/** A section body's fields, or an include folder's overrides, shape only: `createSectionIn`,
- * `updateSection` and `setIncludeFolder` check the values. */
+/** A section's, a menu's or an include folder's presentation body, shape only: the catalogue
+ * function each route hands it to checks the values. */
 function sectionInput(body: Record<string, unknown>, creating: true): SectionInput;
 function sectionInput(body: Record<string, unknown>, creating: false): SectionPatch;
 function sectionInput(body: Record<string, unknown>, creating: boolean): SectionPatch {

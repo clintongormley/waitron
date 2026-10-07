@@ -51,7 +51,8 @@ A menu included in another menu can give its folder customer-facing names of its
 **Edit** in that include's ⋮ on the including menu's **Structure** tab. When such a folder's names,
 its own together with the ones it takes from the included menu, are filled in for some languages but
 not the new default, it holds the change up too, and **Missing translations** lists it as
-**Included menu folder**.
+**Included menu folder**. This holds while the include shows its sections directly too; turn
+**Show as a folder** on to see the names.
 
 **Missing translations** lists, for each of your content languages, the customer-facing names that
 have no text in it. A language marked **Required** comes first, opens by itself when something is

@@ -309,7 +309,8 @@ media's `ImageUsage`; the translation-gap report's kinds). FULL `/finish-branch`
     menu, parented by the including menu, linked to that menu's structure. Stored names count
     whether or not the include is shown as a folder (they are restored by switching back).
 12. **`replaceMember` resets both columns** to a folder that follows: a swapped-in menu must not
-    wear the previous one's folder name.
+    wear the previous one's folder name. _2026-10-07 (finish-branch fix wave): a replace that keeps
+    the same included menu keeps its folder setting._
 13. **Dashboard:** the include's ⋮ gains **Edit** (`action.edit`), opening a new
     `dashboard-include-folder-form`; the link becomes **"Open {name}"** under a renamed key
     `menus.open_included`; the row adds a note `menus.include_as_folder` ("Shown as a folder") or
@@ -334,6 +335,9 @@ media's `ImageUsage`; the translation-gap report's kinds). FULL `/finish-branch`
     compares each copy with the copy at the same path, and change navigation targets the copy
     whose fields differ (Task 4b). A list cannot hold the same included menu twice
     (`section_members_child_uq`, `schema/sections.ts:84`), so "the same path" is unambiguous.
+    _2026-10-07 (finish-branch fix wave): two copies can still sit side by side once flattened, so
+    the open path now records which drawn copy was opened (`SectionStep`, `sectionTrail` and
+    `tilePaths` in `device-home.ts`), and `#trail` is gone._
 17. **Configuration import refuses a malformed `folder_overrides` or a bad override colour**
     (`setup.request_invalid { field: "section_members.folder_overrides" }`), as it refuses a bad
     section colour.

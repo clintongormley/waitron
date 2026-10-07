@@ -2506,8 +2506,8 @@ include's row (`section_members.show_as_folder` and `folder_overrides`, catalogu
 and `0029`), a folder's fixed photo is protected like a section's (media `0009`), and the route is
 `PUT /management-api/sections/:id/members/:memberId/folder`. The menu document gains `direct` and
 `fixed` on an include, so a published edition keeps the setting. How it works:
-[design-system.md](developers/design-system.md) (the Structure tab, and Forms on a switch that hides
-fields), [product-categories.md](developers/product-categories.md) (the route) and the dated A322
+[design-system.md](developers/design-system.md) (the Structure tab, and Forms on the include dialog's
+switch), [product-categories.md](developers/product-categories.md) (the route) and the dated A322
 notes in the [menus design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md).
 Left open:
 

@@ -94,7 +94,7 @@ export interface HomeIndex<P> {
   sections: Map<string, DocumentSection>;
   /** Keyed by product id: each product the structure reaches and `offerOf` answers, once. */
   products: Map<string, P>;
-  /** The members home draws. */
+  /** The members home's list shows, before tiles with nothing to order are dropped. */
   home: DocumentMember[];
   /** Keyed by section id: the first copy `home` draws of each section in `sections`. */
   homeCopies: Map<string, DocumentSection>;
@@ -142,8 +142,9 @@ function drawnCopy(
 }
 
 /** The sections `path` opens, or null once a step's section is not in the index or its list no
- * longer draws that copy. A first copy is also looked for where a device can still open it: a
- * list's own member shown directly, and at home the index's copy, which a shortcut opens. */
+ * longer draws that copy. A first copy is also looked for among a list's own members, so a folder
+ * left open stays open when a new menu shows it directly, and at home in the index, which is where
+ * a shortcut opens it. */
 export function sectionTrail(
   path: readonly SectionStep[],
   index: Pick<HomeIndex<unknown>, "sections" | "home" | "homeCopies">,
