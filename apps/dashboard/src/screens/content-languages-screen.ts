@@ -414,9 +414,27 @@ export class ContentLanguagesScreen extends LitElement {
       ></dashboard-add-content-language>`;
   }
 
-  #gapColumns(gaps: readonly TranslationGap[]): DataTableColumn<TranslationGap>[] {
+  #gapColumnLists = new Map<string, { key: string; columns: DataTableColumn<TranslationGap>[] }>();
+
+  #gapColumns(
+    language: string,
+    gaps: readonly TranslationGap[],
+  ): DataTableColumn<TranslationGap>[] {
     const kinds = GAP_KINDS.filter((kind) => gaps.some((gap) => gap.kind === kind));
     const reasons = GAP_REASONS.filter((reason) => gaps.some((gap) => gap.reason === reason));
+    const key = JSON.stringify([currentLocale(), kinds, reasons]);
+    let held = this.#gapColumnLists.get(language);
+    if (held?.key !== key) {
+      held = { key, columns: this.#buildGapColumns(kinds, reasons) };
+      this.#gapColumnLists.set(language, held);
+    }
+    return held.columns;
+  }
+
+  #buildGapColumns(
+    kinds: readonly TranslationGapKind[],
+    reasons: readonly TranslationGapReason[],
+  ): DataTableColumn<TranslationGap>[] {
     const kindText = (gap: TranslationGap) => t(`content_gaps.kind_${gap.kind}`);
     const reasonText = (gap: TranslationGap) => t(`content_gaps.${gap.reason}`);
     return [
@@ -574,7 +592,7 @@ export class ContentLanguagesScreen extends LitElement {
                   sortKey="name"
                   sortDirection="ascending"
                   .rows=${gaps}
-                  .columns=${this.#gapColumns(gaps)}
+                  .columns=${this.#gapColumns(language, gaps)}
                   .rowKey=${(gap: TranslationGap) => `${gap.kind}:${gap.id}`}
                 ></wt-data-table>`
           }</wt-disclosure

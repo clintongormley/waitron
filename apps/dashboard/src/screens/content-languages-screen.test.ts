@@ -1259,3 +1259,94 @@ describe("receipt language warning", () => {
     );
   });
 });
+
+it("keeps gap column inputs on redraw and refreshes new kinds and language", async () => {
+  setLocale("en");
+  const client = api({
+    liveData: new LiveData(),
+    getContentTranslationGaps: vi
+      .fn()
+      .mockResolvedValue([
+        { language: "en", gaps: [{ id: "p", kind: "product", name: "Dish", reason: "absent" }] },
+      ]),
+  });
+  const el = await mount(client);
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const columns = table.columns;
+  el.requestUpdate();
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(table.columns).toBe(columns);
+  vi.mocked(client.getContentTranslationGaps).mockResolvedValue([
+    {
+      language: "en",
+      gaps: [
+        { id: "p", kind: "product", name: "Dish", reason: "absent" },
+        { id: "p2", kind: "product", name: "Bread", reason: "partial" },
+      ],
+    },
+  ]);
+  client.liveData.refresh();
+  await vi.waitFor(() => expect(table.rows).toHaveLength(2));
+  await table.updateComplete;
+  expect(
+    table.columns
+      .find((column) => column.key === "kind")!
+      .filter!.options.map(({ value }) => value),
+  ).toEqual(["product"]);
+  expect(
+    table.columns
+      .find((column) => column.key === "reason")!
+      .filter!.options.map(({ value }) => value),
+  ).toEqual(["partial", "absent"]);
+  vi.mocked(client.getContentTranslationGaps).mockResolvedValue([
+    {
+      language: "en",
+      gaps: [
+        { id: "p", kind: "product", name: "Dish", reason: "absent" },
+        { id: "p2", kind: "product", name: "Bread", reason: "partial" },
+        { id: "u", kind: "unit", name: "Each", reason: "partial" },
+      ],
+    },
+  ]);
+  client.liveData.refresh();
+  await vi.waitFor(() => expect(table.rows).toHaveLength(3));
+  await table.updateComplete;
+  expect(
+    table.columns
+      .find((column) => column.key === "kind")!
+      .filter!.options.map(({ value }) => value),
+  ).toEqual(["product", "unit"]);
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(table.columns[0]!.label).toBe("Nombre");
+});
+
+it("keeps separate gap columns for languages with different missing choices", async () => {
+  const el = await mount(
+    api({
+      getContentTranslationGaps: vi.fn().mockResolvedValue([
+        { language: "en", gaps: [{ id: "p", kind: "product", name: "Dish", reason: "absent" }] },
+        { language: "de", gaps: [{ id: "u", kind: "unit", name: "Each", reason: "partial" }] },
+      ]),
+    }),
+  );
+  const tables = [...el.shadowRoot!.querySelectorAll("wt-data-table")];
+  expect(tables).toHaveLength(2);
+  await Promise.all(tables.map((table) => table.updateComplete));
+  const columns = tables.map((table) => table.columns);
+  el.requestUpdate();
+  await el.updateComplete;
+  await Promise.all(tables.map((table) => table.updateComplete));
+  tables.forEach((table, index) => expect(table.columns).toBe(columns[index]));
+  expect(
+    tables.map((table) =>
+      table.columns
+        .find((column) => column.key === "kind")!
+        .filter!.options.map(({ value }) => value),
+    ),
+  ).toEqual([["unit"], ["product"]]);
+});

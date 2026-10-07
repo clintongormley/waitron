@@ -1020,13 +1020,9 @@ unused `units` property is gone (it closes W75's leftover).
   - DONE (A368): search follows the toolbar buttons in markup at both widths, so Tab follows
     the drawn controls at 390 and 1280 px. Products uses the shared `toolbar-search` slot;
     its English/Spanish cases cover both themes.
-  - Open (A368 review, reproduced on base `825fc59ae` and candidate `a1133dddb`): type a
-    search with no matches in Products, then resize 1280 → 390 → 1280 → 390. The browser
-    reports `Cannot read properties of null (reading 'scrollLeft')` from
-    `apps/dashboard/src/widgets/product-list.ts:796` (`#fitNames`), where the no-matches table
-    has no `.scroll` element. Both disposable-checkout probes failed their no-error assertion.
-    Next: retain a no-match resize regression and handle that table state before measuring names;
-    A368 changes toolbar order only.
+  - DONE (A388, bundled with A370): a no-match Products search survives resizing
+    1280 → 390 → 1280 → 390. The fitting pass returns when the table has no scroll area;
+    the Chromium regression checks the retained search and no-match message and catches uncaught errors.
   - DONE (A369): Chromium detach/reinsert tests reproduced stale `aria-expanded="true"` in
     `wt-row-actions`, `wt-combobox` and `wt-help-tooltip` immediately after reinsertion, with native popups closed by
     removal. Each resets its open state on disconnect. The regressions check closed state on
@@ -1036,6 +1032,7 @@ unused `units` property is gone (it closes W75's leftover).
   - Open, untested (A369 review): `wt-relative-time` also keeps disclosure state from `toggle`
     and has document listeners. Next: reproduce open/remove/reinsert, including removal before
     the opening toggle arrives, before deciding whether it needs the same lifecycle correction.
+
 - **A342, owner 2026-10-07 — DONE (#1366, several values in one table filter):** a `wt-data-table` filter
   declared with `multiple` takes several values, and keeps a row matching any of them; separate
   filters still all apply, and the Filters badge counts a filter once. Its list keeps the "All …"
@@ -1047,11 +1044,14 @@ unused `units` property is gone (it closes W75's leftover).
   - Not changed, single-choice dropdowns outside `wt-data-table`: the Add products dialog's
     Category, the Staff screen's Role and the Orders screen's Status (a server query). Each could
     take several values later if wanted.
-  - Open, from #1366's review (read, not measured): Units, Products and Content languages build a
-    new column list on every redraw, so each filter dropdown works out its hidden width texts again
-    each time; #1366 made a dropdown redo that only when its options or wording change, which these
-    three screens defeat. Next: keep their column lists between redraws when nothing they read
-    changed.
+  - DONE (A370): Units, Products and Content languages retain column lists on unrelated
+    redraws; language and available filter choices still refresh. On the 45-product demo,
+    ten Products redraws invoked the two dropdowns' width-text builder 20 times before
+    and zero times after (Chromium, Node 26.7.0, 2026-10-08).
+  - OPEN (A370 caller audit, code reading only): Modifiers' Status and Printers' Agent/Printer
+    Status filters still receive column lists built during render. Their redraw work was not
+    measured in this item. Next: measure it before deciding whether to retain those lists.
+
 - **A343, owner 2026-10-07 — DONE (#1368, a menu's Price overrides tab tidied):** the two summary
   sentences above the table are gone; the Price override column, heading and fields, starts at the
   left; a product's variants stay in the product's own order under every sort, as on Products; and

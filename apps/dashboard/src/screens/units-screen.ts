@@ -434,7 +434,20 @@ export class UnitsScreen extends LitElement {
       .map((precision) => ({ value: String(precision), label: this.#precisionLabel(precision) }));
   }
 
+  #columnKey = "";
+  #columnList: DataTableColumn<Unit>[] = [];
+
   #columns(): DataTableColumn<Unit>[] {
+    const options = this.#precisionOptions();
+    const key = JSON.stringify([currentLocale(), options]);
+    if (key !== this.#columnKey) {
+      this.#columnKey = key;
+      this.#columnList = this.#buildColumns(options);
+    }
+    return this.#columnList;
+  }
+
+  #buildColumns(options: { value: string; label: string }[]): DataTableColumn<Unit>[] {
     return [
       {
         key: "name",
@@ -465,7 +478,7 @@ export class UnitsScreen extends LitElement {
               t("units.filter_precision_count").replace("{count}", String(count)),
           },
           value: (unit) => String(unit.precision),
-          options: this.#precisionOptions(),
+          options,
         },
       },
       {
