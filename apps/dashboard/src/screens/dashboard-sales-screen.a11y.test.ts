@@ -69,7 +69,7 @@ const period: SalesPeriodDto = {
 
 const direct = (gross: string, net: string, lines: number) => ({ gross, net, lines });
 
-// Every row kind the table draws: a parent with a Directly-in row, a leaf, Uncategorised, and Not
+// Every row kind the table draws: a parent with a Directly-in row, a leaf, No category, and Not
 // recorded with its own row and a free-text child; and the incomplete note.
 const categories: CategorySalesDto = {
   mode: "at_time_of_sale",

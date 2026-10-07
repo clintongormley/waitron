@@ -14,7 +14,7 @@ export interface AddableProduct {
   id: string;
   /** The staff name. */
   name: string;
-  /** The main reporting category, or null for Uncategorised. */
+  /** The main reporting category, or null when it has none. */
   categoryId: string | null;
 }
 

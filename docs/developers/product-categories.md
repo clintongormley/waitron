@@ -23,8 +23,8 @@ breaks this is refused with `category.name_taken`. A category moving into a pare
 children a delete moves up, is checked against the categories already there, and two categories
 that share a name are refused when they move in together. Categories that already share a name
 are not refused when a save leaves them as they are. A product's category is
-`products.category_id`. When this is null, the product sits in **No category**, which is not a category
-row you can rename or delete.
+`products.category_id`. When this is null the product is in no category: it sits directly under
+**All products** in the tree, and elsewhere the dashboard labels its category **No category**.
 
 A category is named in the tree itself: Add category and a row's Rename open a box in place, which
 Enter or leaving the box saves, and Esc or a blank name cancels. A colour square sits before each
@@ -272,9 +272,9 @@ reaches no device until the menu is published" in `apps/server/src/till-api.sell
 ## Moving and deleting
 
 Use **Select**, tick products and categories, and choose **Move to…** in the action bar below Search.
-The bar shows how many you selected. Pick a destination category or
-**No category**. The destination list shows the categories as a tree after
-**No category**, each category's children indented under it and each level sorted by
+The bar shows how many you selected. Pick a destination category, or **No category** to file
+products in none and make categories top-level. The destination list shows the categories as a
+tree after **No category**, each category's children indented under it and each level sorted by
 name the way the tables sort text (numbers by value, case ignored); a chosen destination, and each
 match while searching, shows the full path ("Dinner › Mains"). A selected category and its
 descendants are excluded as destinations, and the server also refuses such a move with `category.parent_cycle`. Anything
