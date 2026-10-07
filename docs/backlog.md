@@ -1791,11 +1791,15 @@ arrangement. The build is in progress: the shared document content has been extr
 with captured mixed-rate discounted F1 bytes preserved on 58/80 mm paper. The A4 PDF and
 300/600 dpi glyph-outline page renderers now share a paginated layout. Tests extract the saved
 figures, decode the drawn QR, compare raster text with the PDF rendered at 300 dpi, and check
-repeatable PDF bytes. The PWG and Apple Raster encoders now match native CUPS reference files
-at 300/600 dpi. Native readback compared every decoded pixel and header size, resolution and
+repeatable PDF bytes. Spanish, Catalan, Galician and Basque fixtures preserve their saved names,
+localized labels and cent-exact figures in extracted PDF text. At 300 and 600 dpi, each nonblank
+text row passes a threshold of 99% of the PDF reference ink present within two dots in the raster;
+the bundled font has a glyph for every character in those rendered fixtures. Removing the accented é outline fails the Spanish and Galician row
+comparisons while the Catalan and Basque controls pass. The PWG and Apple Raster encoders
+now match native CUPS reference files at 300/600 dpi. Native readback compared every decoded pixel and header size, resolution and
 colour space for the invoice page and two-page pattern fixtures. A synthetic `ippeveprinter`
 completed all four format/resolution jobs; its command decoded both pattern pages unchanged.
-Those are codec checks: the production delivery path, receipt-language matrix, image/box checks,
+These checks ran against source modules. The production delivery path, image/box checks,
 delivery metadata, SMTP, office transport and delivery UI remain. It settles A3's
 open "Printing A4 invoices on an office printer" work when complete.
 Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe
