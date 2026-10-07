@@ -268,6 +268,17 @@ describe("the menu timetable routes", () => {
     );
   });
 
+  it("update a period only by PATCH: a PUT to its address finds no route and changes nothing", async () => {
+    const r = await routed();
+    const before = await r.model();
+    const put = await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, {
+      name: "Desayunos tempranos",
+      menuId: r.cafe,
+    });
+    expect(put.status).toBe(404);
+    expect(await r.model()).toEqual(before);
+  });
+
   it("tell a period name another period has apart from a name refused for itself", async () => {
     const r = await routed();
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {

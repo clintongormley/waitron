@@ -71,7 +71,7 @@ export class MenuTimetableApi {
     periodId: string,
     input: { name: string; menuId?: string } | { name?: string; menuId: string },
   ): Promise<MenuPeriod> {
-    return this.request(`${BASE}/menu-periods/${at(periodId)}`, "PUT", input);
+    return this.request(`${BASE}/menu-periods/${at(periodId)}`, "PATCH", input);
   }
 
   deletePeriod(periodId: string): Promise<void> {

@@ -625,7 +625,9 @@ calendar" section beside "Opening hours store 'no claim' as no row").
   `menu-timetable-routes.test.ts`: `GET /management-api/venue-service/menu-timetable` (`venue.view`)
   returns the model; `POST …/departments/:departmentId/menu-periods` `{ name, menuId }` → 201;
   `PUT …/menu-periods/:periodId` `{ name, menuId }` → 200 with the period (2026-10-07 review: each
-  field optional, at least one, and a missing one keeps its stored value); `DELETE
+  field optional, at least one, and a missing one keeps its stored value) (2026-10-07 review: the
+  update is `PATCH …/menu-periods/:periodId`, as the department and sale-policy partial updates
+  are, and a `PUT` there finds no route); `DELETE
   …/menu-periods/:periodId` → 204; `PUT …/departments/:departmentId/menu-week` `{ days }` → 204;
   `PUT …/special-dates/:id/menu-timetables/:departmentId` `{ slots }` → 204; `DELETE` the same path
   → 204; `PUT …/zones/:zoneId/period-menus/:periodId` `{ menuId | null }` → 204 (writes behind

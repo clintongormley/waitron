@@ -997,7 +997,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.put("/management-api/venue-service/menu-periods/:periodId", (c) =>
+    app.patch("/management-api/venue-service/menu-periods/:periodId", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
