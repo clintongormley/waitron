@@ -1,6 +1,6 @@
 import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, lte, isNull, gt } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, isNull, gt, sql } from "drizzle-orm";
 import {
   invoiceDeliveries,
   printJobs,
@@ -174,7 +174,7 @@ export async function claimInvoiceDelivery(
     .update(invoiceDeliveries)
     .set({
       status: "sending",
-      attempts: 1,
+      attempts: sql`${invoiceDeliveries.attempts} + 1`,
       claimTokenHash: tokenHash(token),
       claimedBy: holder,
       claimedAgentId: delivery.medium === "receipt" ? holder : null,
@@ -294,4 +294,37 @@ export async function reportInvoiceDelivery(
       .where(and(eq(printJobs.id, delivery.printJobId), eq(printJobs.claimedBy, claim.holder)));
   }
   return { updated: !historical, historical };
+}
+
+export async function reportInvoiceEmailDelivery(
+  tx: Transaction,
+  claim: InvoiceDeliveryClaim,
+  outcome: InvoiceDeliveryOutcome,
+  now = new Date(),
+): Promise<{ updated: boolean; historical: boolean }> {
+  const result = await reportInvoiceDelivery(tx, claim, outcome, now);
+  if (!result.updated || outcome.status !== "failed") return result;
+  const [delivery] = await tx
+    .select()
+    .from(invoiceDeliveries)
+    .where(eq(invoiceDeliveries.id, claim.deliveryId));
+  if (delivery!.medium !== "email" || delivery!.status !== "failed" || delivery!.attempts >= 5) {
+    return result;
+  }
+  const delays = [5_000, 30_000, 120_000, 600_000];
+  // Each automatic retry keeps the completed refusal and its authenticated claim in history.
+  await tx.insert(invoiceDeliveries).values({
+    saleId: delivery!.saleId,
+    requestKey: randomUUID(),
+    medium: "email",
+    designation: delivery!.designation,
+    generation: delivery!.generation + 1,
+    attempts: delivery!.attempts,
+    recipient: delivery!.recipient,
+    consent: delivery!.consent,
+    personId: delivery!.personId,
+    createdAt: now.toISOString(),
+    nextAttemptAt: new Date(now.getTime() + delays[delivery!.attempts - 1]!).toISOString(),
+  });
+  return result;
 }
