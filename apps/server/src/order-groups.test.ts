@@ -1691,7 +1691,7 @@ describe("a group's summary", () => {
       .set({ quantity: 1500 })
       .where(eq(workingOrderLines.id, fish!.id));
 
-    expect((await groupsOf(s.partyId)).groups[0]!.summary).toBe("1 × Steak Rare, 11.5 × Fish");
+    expect((await groupsOf(s.partyId)).groups[0]!.summary).toBe("1 × Steak (Rare), 11.5 × Fish");
   });
 });
 

@@ -40,12 +40,12 @@ Files: `packages/catalogue/src/product-names.ts`, `configuration-transfer.ts`,
 Files: `packages/catalogue/src/product-presentation.ts` and its test,
 `apps/till/src/widgets/product-name.ts`, `apps/server/src/receipt-lines.ts` and tests.
 
-- [ ] Test staff `Seagrams Gin (Single)`, customer `Customer gin (Customer single)`
+- [x] Test staff `Seagrams Gin (Single)`, customer `Customer gin (Customer single)`
   and kitchen `GIN (SGL)` with all audience names different, plus no-variant and fallback
   cases. Update old variant-alone checks with the approved pair expectations; watch RED.
-- [ ] Join each audience's parent and variant through the shared resolver. Retain separate
+- [x] Join each audience's parent and variant through the shared resolver. Retain separate
   snapshot maps and use frozen maps when joining receipt names.
-- [ ] Run resolver, till name, receipt and kitchen focused suites. Verify unedited fiscal
+- [x] Run resolver, till name, receipt and kitchen focused suites. Verify unedited fiscal
   write-path.e2e and inmutabilidad before committing.
 
 ## 3. Audit standalone and nested consumers
@@ -54,7 +54,7 @@ Files selected by `rg 'staffPresentationName|kitchenPresentationName|joinCustome
 
 - [ ] Record each caller's standalone/nested decision; trace reporting, exports, history,
   order detail and reprint. Add failing behavioral cases for uncovered standalone readers.
-- [ ] Use shared staff resolver for standalone order detail; leave nested top-seller variants
+- [x] Use shared staff resolver for standalone order detail; leave nested top-seller variants
   relative. Verify parent grouping distinguishes both gin products through real database tests.
 - [ ] Run each affected screen in Chromium, including axe where markup changes, with different
   audience fixtures. Update demo seeds and fixtures from full to relative names.

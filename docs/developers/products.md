@@ -35,13 +35,12 @@ Name (untagged staff text), rather than substituting a different customer transl
 to each other, and a product with a customer-facing name but no kitchen name still prints its staff
 Name to the kitchen.
 
-**A variant is named in full and shown under its own names alone.** "Wine by the glass" has the
-variants "Wine 125" and "Wine 175", and a line sold as Wine 125 reads `Wine 125` on the till, the
-tab, the kitchen ticket, the kitchen screens, the receipt and the sales report, where it sits nested
-under its product (a screen reader hears the product's name first: "Wine by the glass, Wine 125").
-A variant's names are never inherited: a blank customer or kitchen name falls back to the VARIANT's
-staff name, never to the parent's. A line that names no variant renders exactly as it did before
-variants existed.
+**Name a variant relative to its product.** Give Seagrams Gin and London Gin variants called
+Single or Double. A standalone line shows `Seagrams Gin (Single)`: the product and variant's
+staff names on the till and tab, customer names on the receipt, and kitchen names on kitchen
+paper and screens. Each half falls back independently to its own staff name. A product without
+a variant keeps its name. Where the product is already shown — a variant picker, editor table,
+or nested top-sellers row — the variant's own relative name is enough.
 
 **Active product names are unique among products; active variant names are unique within their
 product.** You can give Seagrams Gin and London Gin a variant named Single, and you can also
@@ -63,12 +62,12 @@ lowercase `#rrggbb`, with `setup.request_invalid` naming the column.
 
 The three resolvers, one per audience:
 
-- `staffPresentationName` — the variant's staff name, else the product's. Takes only the two staff
+- `staffPresentationName` — the product's staff name followed by its relative variant in parentheses. Takes only the two staff
   names, so a caller holding a row with nothing else on it does not have to invent four empty fields.
 - `customerPresentationText` — applies the blank-falls-back-to-Name rule to the customer-facing
   maps, and hands back the product's map and the variant's map still separate.
-- `kitchenPresentationName` — the variant's kitchen name falling back to its staff name, else the
-  product's kitchen name falling back to its staff name. Like `staffPresentationName` it takes no
+- `kitchenPresentationName` — the product and relative variant's kitchen names in the same format,
+  each falling back to its own staff name. Like `staffPresentationName` it takes no
   locale: a kitchen name carries no per-language text, so there is nothing to resolve against.
 
 Turning the two frozen customer maps of a sold line into the one label a receipt prints is
@@ -83,7 +82,7 @@ comes from the published menu, and the rate from the day the invoice is issued, 
 
 - `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
   line with no variant this is what the basket and a retrieved tab show after the product has been
-  renamed or deleted; on a variant line they show `variant_name` instead.
+  renamed or deleted; on a variant line they join it with `variant_name`.
 - `descriptions` — the customer-facing text, already resolved through `customerPresentationText` and
   then narrowed to exactly the location's saved receipt languages (`locations.invoice_locales`) by
   `toInvoiceLineDescriptions`. A receipt prints the entry for the sale's language (`sales.locale`),
@@ -102,6 +101,9 @@ comes from the published menu, and the rate from the day the invoice is issued, 
   `fillBlankLocalesWithStaffName` (`packages/catalogue/src/product-presentation.ts`), when the line
   is priced (`priceOrderLines`, `apps/server/src/working-order.ts`).
   Keeping both sets is what lets a report group variant lines under their parent.
+  An extras item naming a variant freezes a composed pair from the published offer instead
+  (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`); its child line carries
+  that pair in its name fields, with no separate variant fields.
 - `option_snapshots` — the diner's answers to the options lists this dish offered, each one frozen
   as the list's three names and the chosen label's three names, and no ids at all
   (`OptionSnapshot`, `packages/shared/src/option-selection.ts`). So this column carries
@@ -189,7 +191,7 @@ Where each one surfaces:
 
 | Surface | Reads | Code |
 | --- | --- | --- |
-| Receipt line — the goods identification, art. 7.1.e | the variant's frozen customer map on a variant line, else the product's | `apps/server/src/receipt-lines.ts` |
+| Receipt line — the goods identification, art. 7.1.e | the product and relative variant's frozen customer maps joined in parentheses | `apps/server/src/receipt-lines.ts` |
 | Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts` |
 | Kitchen ticket, including a watcher's copy | dishes and split-off extras read frozen kitchen names, falling back to staff names; a following extra's `+` line reads its frozen staff name; cross-references read kitchen names; options answers read kitchen names, falling back to staff names | `buildTicketItems`, `apps/server/src/kitchen-print.ts` |
 | Also on this order (not for this station), on a station's own ticket and in its kitchen screen's order card | the kitchen names, through `kitchenPresentationName` | `readRestOfOrder`, `apps/server/src/rest-of-order.ts` |
@@ -202,7 +204,7 @@ Where each one surfaces:
 | Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the tab drawer | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Printed allergen sheet | the customer-facing name held in the menu's published version | `apps/till/src/screens/till-allergen-screen.ts` |
 | Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |
-| An adjustment record's `line_name` | the line's frozen staff names through `staffPresentationName`: the variant's staff name on a variant line, else the product's | `recordAdjustment`, `packages/adjustments/src/record.ts`, given it by `applyAdjustment`, `apps/server/src/adjustments-apply.ts` |
+| An adjustment record's `line_name` | the line's frozen staff names through `staffPresentationName`: the product and any relative variant joined in parentheses | `recordAdjustment`, `packages/adjustments/src/record.ts`, given it by `applyAdjustment`, `apps/server/src/adjustments-apply.ts` |
 
 Two of those rows are worth reading twice.
 
@@ -226,7 +228,7 @@ venue has none (`resolveHttpOrderZone`, `apps/server/src/till-api.ts`; `resolveN
 The top-sellers report groups lines under the parent's staff name, `sale_lines.name`, ranks those
 products by quantity sold (name breaks a tie), and lists
 under each one a row per `sale_lines.variant_name` sold with it — so "Wine by the glass" shows its
-total with "Wine 175" and "Wine 125" beneath. The product's own row counts every line under its
+total with "175 ml" and "125 ml" beneath. The product's own row counts every line under its
 name, including any sold as the product itself with no variant, and the report's row limit counts
 products, not variants. It is a staff-facing report, so it shows the names staff use, not the
 wording a diner reads on a receipt.
@@ -366,8 +368,8 @@ two painted (dark and pale) sold-out tiles and a weighed product's tile, has no 
 
 ## Variants
 
-A variant is a `products` row whose `parent_id` names its parent product — "Wine 125" and
-"Wine 175" under "Wine by the glass". There is no separate variant table. A variant's parent is a
+A variant is a `products` row whose `parent_id` names its parent product — "125 ml" and
+"175 ml" under "Wine by the glass". There is no separate variant table. A variant's parent is a
 top-level product in the same catalogue, is fixed when the variant is created, and a variant has no
 variants of its own (the one-level rule is the core migration `packages/db/drizzle/0004_variant_one_level.sql`). A product
 may have any number of variants, one included.

@@ -1,3 +1,4 @@
+import { joinCustomerPresentationText } from "@waitron/catalogue";
 import {
   FEED_BEFORE_CUT,
   LOGO_MAX_HEIGHT_DOTS,
@@ -2822,6 +2823,38 @@ describe("the top block is centred: logo, names, slogan, address, phone, email, 
         }),
       );
       expect(lines).toContain(centred(PRINTER_80, "Tel. 912 345 678"));
+    },
+  );
+});
+
+describe("relative variant names on paper", () => {
+  it.each([PRINTER_58, PRINTER_80])(
+    "wraps a complete frozen customer pair on $paperWidth",
+    (printer) => {
+      const descriptions = joinCustomerPresentationText(
+        { "es-ES": "Seagrams Gin reserva especial de la casa" },
+        { "es-ES": "Single con hielo y rodaja de lima" },
+        "Single",
+      );
+      const lines = printedLines(
+        formatReceipt({
+          result: {
+            ...FILED_WITHOUT_TEXT,
+            lines: FILED_WITHOUT_TEXT.lines.map((line, index) =>
+              index === 0 ? { ...line, descriptions } : line,
+            ),
+          },
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: "es-ES",
+          printer,
+        }),
+      );
+      for (const line of lines)
+        expect(line.length, line).toBeLessThanOrEqual(columnsFor(printer.paperWidth));
+      expect(lines.map((line) => line.trim()).join(" ")).toContain(
+        "Seagrams Gin reserva especial de la casa (Single con hielo y rodaja de lima)",
+      );
     },
   );
 });

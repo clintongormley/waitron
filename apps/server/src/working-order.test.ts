@@ -511,27 +511,11 @@ async function seedVariantOffer(
   return { offerId: offer.id, variantId: variants[0]!.id, productId: product.id };
 }
 
-/**
- * Every screen that shows a sold line shows ONE label, and a line that named a variant froze its
- * product text and its variant text in separate columns. A variant is named in full, so the label is
- * the variant's own name: without it a large coffee and a small one are
- * indistinguishable on the tab, on the kitchen queue, on the pass and on the retrieve screen, at
- * prices that only make sense with the size.
- *
- * Which of the three names each reader shows is the other half of what this pins. A table tab's line
- * list is read by a waiter, so it carries the variant's STAFF name. The station queue and the pass
- * are read by cooks, so they carry its KITCHEN name, exactly as the printed ticket does. The retrieve
- * screen is the till's own and resolves the name itself (`lineProductName`,
- * `apps/till/src/widgets/product-name.ts`), so it receives both halves.
- *
- * The fixture's three pairs are three different strings, so a reader that shows the wrong name fails
- * here rather than passing. All four readers run over the SAME fired order.
- */
-describe("a sold line naming a variant is labelled by the variant's own name", () => {
-  const STAFF = "Large";
-  const KITCHEN = "LG";
+describe("a sold variant line carries its product and relative variant names", () => {
+  const STAFF = "Coffee (Large)";
+  const KITCHEN = "COF (LG)";
 
-  it("shows the variant's name alone on the tab, the station queue and the pass, and hands the retrieve screen both names", async () => {
+  it("shows the product and variant names on the tab, the station queue and the pass, and hands the retrieve screen both names", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     const { tabLines, stationItems, expoItems } = await withTransaction(db, async (tx) => {
@@ -8345,9 +8329,9 @@ describe("editing a saved order prices only what the edit adds", () => {
 
 /**
  * "Wine by the glass" (reduced, category "Vinos", course Primero, sulphites, vegan) on the venue's
- * zone menu, with two variants: "Wine 125" sets nothing but its staff name and price, so every other
- * field reads its parent's; "Wine 175" sets its own customer and kitchen names, VAT, course,
- * allergens and dietary declarations, so a reader of the parent's value gets it wrong. Wine 175 also
+ * zone menu, with two variants: "125 ml" sets nothing but its staff name and price, so every other
+ * field reads its parent's; "175 ml" sets its own customer and kitchen names, VAT, course,
+ * allergens and dietary declarations, so a reader of the parent's value gets it wrong. 175 ml also
  * still stores a category of its own ("Copas"), which a variant never reads: its category is
  * always its parent's.
  */
@@ -8379,7 +8363,7 @@ async function seedWine(tx: Transaction, cfg: DeviceRequestConfig, catalogueId: 
     parent.id,
     [
       {
-        name: "Wine 125",
+        name: "125 ml",
         customerName: null,
         kitchenName: null,
         image: null,
@@ -8387,7 +8371,7 @@ async function seedWine(tx: Transaction, cfg: DeviceRequestConfig, catalogueId: 
         available: true,
       },
       {
-        name: "Wine 175",
+        name: "175 ml",
         customerName: { [LOCALE]: "Copa grande" },
         kitchenName: "V175",
         image: null,
@@ -8506,8 +8490,8 @@ describe("a variant is sold as the product it is", () => {
         ...parentNames,
         // The variant's OWN raw names: no kitchen name of its own is stored as none, and its
         // customer text falls back to its own staff name, never to the parent's.
-        variantName: "Wine 125",
-        variantDescriptions: { [LOCALE]: "Wine 125" },
+        variantName: "125 ml",
+        variantDescriptions: { [LOCALE]: "125 ml" },
         variantKitchenName: null,
         unitPriceGross: 450,
         vatClass: "reduced",
@@ -8517,7 +8501,7 @@ describe("a variant is sold as the product it is", () => {
       {
         productId: wine.wine175,
         ...parentNames,
-        variantName: "Wine 175",
+        variantName: "175 ml",
         variantDescriptions: { [LOCALE]: "Copa grande" },
         variantKitchenName: "V175",
         unitPriceGross: 550,
@@ -8532,7 +8516,7 @@ describe("a variant is sold as the product it is", () => {
     const { cfg, zoneId, catalogueId, kgUnitId } = await setupVenue();
     const wine = await withTransaction(db, async (tx) => {
       const seeded = await seedWine(tx, cfg, catalogueId);
-      // Wine by the glass sells by the each; Wine 175 still stores kg, from before a variant always
+      // Wine by the glass sells by the each; 175 ml still stores kg, from before a variant always
       // took its product's unit. The menu is published after, so the live menu is built from it.
       await tx.execute(
         sql`insert into product_units (product_id, unit_id) values (${seeded.wine175}, ${kgUnitId})`,
@@ -8638,8 +8622,8 @@ describe("a variant is sold as the product it is", () => {
         tx,
         wine.parentId,
         [
-          kept(wine.wine125, "Wine 125", "4.50"),
-          kept(wine.wine175, "Wine 175", "5.50"),
+          kept(wine.wine125, "125 ml", "4.50"),
+          kept(wine.wine175, "175 ml", "5.50"),
           fresh("Wine 250"),
           fresh("Wine 500", false),
         ],
@@ -8930,14 +8914,14 @@ describe("a variant is sold as the product it is", () => {
       };
     });
     expect(seen).toEqual({
-      stored: { [LOCALE]: "Wine 125", "en-GB": "Wine 125" },
-      tab: ["Wine 125"],
+      stored: { [LOCALE]: "125 ml", "en-GB": "125 ml" },
+      tab: ["Wine by the glass (125 ml)"],
       // The line's own frozen precision: the till splits by it, since a variant is never one of the
       // till's products (it lists the offers' parents).
       tabUnitPrecision: [0],
-      station: ["Wine 125"],
-      expo: ["Wine 125"],
-      receipt: [{ [LOCALE]: "Wine 125", "en-GB": "Wine 125" }],
+      station: ["VINO (125 ml)"],
+      expo: ["VINO (125 ml)"],
+      receipt: [{ [LOCALE]: "Vino de la casa (125 ml)", "en-GB": "Vino de la casa (125 ml)" }],
     });
   });
 
@@ -8970,7 +8954,7 @@ describe("a variant is sold as the product it is", () => {
       .select({ variantDescriptions: workingOrderLines.variantDescriptions })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    expect(stored!.variantDescriptions).toEqual({ [LOCALE]: "Wine 175", "en-GB": "Wine 175" });
+    expect(stored!.variantDescriptions).toEqual({ [LOCALE]: "175 ml", "en-GB": "175 ml" });
   });
 
   it("re-prices a kept line whose variant alone changed", async () => {
@@ -9009,7 +8993,7 @@ describe("a variant is sold as the product it is", () => {
     expect(after).toEqual([
       {
         productId: wine.wine175,
-        variantName: "Wine 175",
+        variantName: "175 ml",
         unitPriceGross: 550,
         vatClass: "general",
       },

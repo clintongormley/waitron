@@ -50,7 +50,7 @@ it("draws each product's variants as rows beneath it, in the order the server se
           total: "24.50",
           variants: [
             { name: "Wine 175", quantity: "3.000", total: "16.50" },
-            { name: "Wine 125", quantity: "2.000", total: "8.00" },
+            { name: "125 ml", quantity: "2.000", total: "8.00" },
           ],
         },
         { name: "Tea", quantity: "2.000", total: "4.00", variants: [] },

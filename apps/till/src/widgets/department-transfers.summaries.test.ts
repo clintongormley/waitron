@@ -46,7 +46,7 @@ const detail = {
     {
       id: "line-1",
       name: "Soup / Sopa",
-      variantName: null,
+      variantName: "Half",
       quantity: "0.500",
       unitPriceGross: "2.80",
       note: "No salt / Sin sal",
@@ -123,8 +123,11 @@ for (const locale of ["en-GB", "es-ES"]) {
               "Deli grill / Plancha",
             ),
           );
+          expect(el.shadowRoot!.querySelector("[data-current-lines]")?.textContent).toContain(
+            "Soup / Sopa (Half)",
+          );
           expect(el.shadowRoot!.querySelector("[data-current-work]")?.textContent).toContain(
-            "Soup / Sopa",
+            "Soup / Sopa (Half)",
           );
           expect(el.shadowRoot!.querySelector("[data-current-work]")?.textContent).toContain(
             "Collect at deli / Recoger en mostrador",
