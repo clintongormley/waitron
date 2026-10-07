@@ -259,6 +259,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       canMakeDefault: false,
     }),
     getProductEditor: vi.fn().mockResolvedValue(value),
+    countProductMenus: vi.fn().mockResolvedValue(0),
     createProductEditor: vi.fn().mockResolvedValue({ ...value, id: "new" }),
     updateProductEditor: vi.fn().mockResolvedValue(value),
     getMenuStructure: vi.fn().mockImplementation((id: string) => Promise.resolve(structures[id])),
@@ -539,7 +540,7 @@ describe("catalogue-screen", () => {
         const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
         await flush(el);
         emit(list(el), "delete-product", { productId: "p1" });
-        await el.updateComplete;
+        await flush(el);
         const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
         expect(dialog.getAttribute("heading")).toBe(heading);
         expect(dialog.querySelector("p")!.textContent!.trim()).toBe(body);
@@ -569,6 +570,107 @@ describe("catalogue-screen", () => {
     expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
     expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
     expect(dialog.textContent).not.toContain(codeMessage("server.internal"));
+  });
+
+  describe("the Disable confirmation names the menus the product comes off", () => {
+    const warning =
+      "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.";
+    const deferred = <T>() => {
+      let resolve!: (value: T) => void;
+      let reject!: (reason: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    const dialogOf = (el: CatalogueScreen) =>
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
+    const bodyOf = (el: CatalogueScreen) =>
+      dialogOf(el).querySelector("p")!.textContent!.replace(/\s+/g, " ").trim();
+    async function openDisable(api: DashboardApi, productId = "p1", locale = "en-GB") {
+      const before = currentLocale();
+      setLocale(locale);
+      onTestFinished(() => setLocale(before));
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "delete-product", { productId });
+      await flush(el);
+      return el;
+    }
+
+    it("says how many menus it comes off when the product is on two", async () => {
+      const api = stubApi({ countProductMenus: vi.fn().mockResolvedValue(2) });
+      const el = await openDisable(api);
+      expect(api.countProductMenus).toHaveBeenCalledWith(["p1"]);
+      expect(bodyOf(el)).toBe(
+        `${warning} It comes off the 2 menus it is on, which then show unpublished changes.`,
+      );
+    });
+
+    it("says the one menu it comes off in the singular", async () => {
+      const el = await openDisable(stubApi({ countProductMenus: vi.fn().mockResolvedValue(1) }));
+      expect(bodyOf(el)).toBe(
+        `${warning} It comes off the 1 menu it is on, which then shows unpublished changes.`,
+      );
+    });
+
+    it("adds nothing when the product is on no menu", async () => {
+      const el = await openDisable(stubApi({ countProductMenus: vi.fn().mockResolvedValue(0) }));
+      expect(bodyOf(el)).toBe(warning);
+    });
+
+    it("in Spanish, names the menus as cartas", async () => {
+      const el = await openDisable(
+        stubApi({ countProductMenus: vi.fn().mockResolvedValue(3) }),
+        "p1",
+        "es",
+      );
+      expect(bodyOf(el)).toBe(
+        "Esto deshabilita el producto: la caja deja de venderlo y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlo, y sus ventas anteriores se conservan. Sale de las 3 cartas en las que está, que pasan a tener cambios sin publicar.",
+      );
+    });
+
+    it("says every menu while the count is still loading, and Disable works meanwhile", async () => {
+      const api = stubApi({ countProductMenus: vi.fn().mockReturnValue(new Promise(() => {})) });
+      const el = await openDisable(api);
+      expect(bodyOf(el)).toBe(`${warning} It comes off every menu it is on.`);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledWith("p1", { ...value, active: false });
+    });
+
+    it("says every menu when the count cannot be read, and Disable still works", async () => {
+      const api = stubApi({
+        countProductMenus: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      });
+      const el = await openDisable(api);
+      expect(bodyOf(el)).toBe(`${warning} It comes off every menu it is on.`);
+      expect(dialogOf(el).textContent).not.toContain(codeMessage("server.internal"));
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledWith("p1", { ...value, active: false });
+      expect(dialogOf(el).getAttribute("open")).toBeNull();
+    });
+
+    it("never shows an earlier dialog's late count in the next one", async () => {
+      const first = deferred<number>();
+      const second = deferred<number>();
+      const counts = [first, second];
+      const api = stubApi({
+        countProductMenus: vi.fn().mockImplementation(() => counts.shift()!.promise),
+      });
+      const el = await openDisable(api);
+      dialogOf(el).querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+      await flush(el);
+      emit(list(el), "delete-product", { productId: "p1" });
+      await flush(el);
+      second.resolve(0);
+      await flush(el);
+      first.resolve(4);
+      await flush(el);
+      expect(bodyOf(el)).toBe(warning);
+    });
   });
 
   it("enables a disabled product from its own row through the editor's write, then shows the row as active", async () => {
@@ -2624,6 +2726,24 @@ describe("catalogue-screen", () => {
         available: false,
       });
       expect(dialog.getAttribute("open")).toBeNull();
+    });
+
+    it("says how many menus a variant comes off, asking about the variant itself", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const before = currentLocale();
+      setLocale("en-GB");
+      onTestFinished(() => setLocale(before));
+      const api = variantApi();
+      (api as unknown as Record<string, unknown>).countProductMenus = vi.fn().mockResolvedValue(2);
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "delete-product", { productId: "v1" });
+      await flush(el);
+      expect(api.countProductMenus).toHaveBeenCalledWith(["v1"]);
+      const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
+      expect(dialog.querySelector("p")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+        "This disables the variant: the till stops offering it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept. It comes off the 2 menus it is on, which then show unpublished changes.",
+      );
     });
 
     it("restores a removed variant through its own write, then refreshes the list", async () => {

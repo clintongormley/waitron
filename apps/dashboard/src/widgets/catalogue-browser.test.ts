@@ -72,6 +72,7 @@ export async function mountBrowser(overrides: Partial<CatalogueBrowser> = {}) {
   const api = {
     moveCatalogueItems: vi.fn().mockResolvedValue(undefined),
     deleteCatalogueItems: vi.fn().mockResolvedValue(undefined),
+    countProductMenus: vi.fn().mockResolvedValue(0),
     summariseFolders: vi
       .fn()
       .mockResolvedValue([
@@ -2869,6 +2870,120 @@ it.each([1, 2])(
     );
   },
 );
+const DISABLE_PRODUCTS =
+  "This disables the products: the till stops selling them and they leave this list until you choose to show disabled products. You can enable them again, and their past sales are kept.";
+const disableBody = (el: CatalogueBrowser) =>
+  dialog(el)!.querySelector("form > p")!.textContent!.replace(/\s+/g, " ").trim();
+async function openDisableProducts(keys: string[], menus: () => Promise<number>) {
+  const el = await mountBrowser();
+  vi.mocked(el.api.countProductMenus).mockImplementation(menus);
+  await toggleCategory(el, "d");
+  await selectKeys(el, keys);
+  await press(el, "delete");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  return el;
+}
+it.each([
+  [
+    3,
+    `${DISABLE_PRODUCTS} They come off the 3 menus they are on, which then show unpublished changes.`,
+  ],
+  [
+    1,
+    `${DISABLE_PRODUCTS} They come off the 1 menu they are on, which then shows unpublished changes.`,
+  ],
+  [0, DISABLE_PRODUCTS],
+] as const)(
+  "says how many menus the products come off when they are on %i",
+  async (menus, body) => {
+    const el = await openDisableProducts(["bread", "cola"], () => Promise.resolve(menus));
+    expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith(["bread", "cola"]);
+    expect(disableBody(el)).toBe(body);
+  },
+);
+it("says the menus one selected product comes off with the product as the subject", async () => {
+  const el = await openDisableProducts(["bread"], () => Promise.resolve(2));
+  expect(disableBody(el)).toBe(
+    "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept. It comes off the 2 menus it is on, which then show unpublished changes.",
+  );
+});
+it("says every menu while the products' count loads and when it cannot be read, and Disable still works", async () => {
+  let fail!: (reason: unknown) => void;
+  const el = await openDisableProducts(
+    ["bread", "cola"],
+    () => new Promise<number>((_, reject) => (fail = reject)),
+  );
+  const unknown = `${DISABLE_PRODUCTS} They come off every menu they are on.`;
+  expect(disableBody(el)).toBe(unknown);
+  fail({ code: "server.internal" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(disableBody(el)).toBe(unknown);
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+      { productIds: ["bread", "cola"], categoryIds: [] },
+      "move_up",
+      [],
+    ),
+  );
+});
+it("never shows an earlier Disable dialog's late count in the next one", async () => {
+  const answers: Array<(menus: number) => void> = [];
+  const el = await openDisableProducts(
+    ["bread", "cola"],
+    () => new Promise<number>((resolve) => answers.push(resolve)),
+  );
+  dialog(el)!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  await vi.waitFor(() => expect(dialog(el)).toBeNull());
+  await press(el, "delete");
+  answers[1]!(0);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  answers[0]!(4);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(disableBody(el)).toBe(DISABLE_PRODUCTS);
+});
+it("in Spanish, says how many cartas the products come off", async () => {
+  setLocale("es");
+  const el = await openDisableProducts(["bread", "cola"], () => Promise.resolve(2));
+  expect(disableBody(el)).toBe(
+    "Esto deshabilita los productos: la caja deja de venderlos y salen de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlos, y sus ventas anteriores se conservan. Salen de las 2 cartas en las que están, que pasan a tener cambios sin publicar.",
+  );
+});
+it("says products a category's deletion disables come off every menu, only once its contents are to be deleted", async () => {
+  const el = await mountBrowser();
+  const sentence = "Products it disables come off every menu they are on.";
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+  );
+  expect(dialog(el)!.textContent).not.toContain(sentence);
+  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+  await el.updateComplete;
+  expect(dialog(el)!.textContent).toContain(sentence);
+  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
+  await el.updateComplete;
+  expect(dialog(el)!.textContent).not.toContain(sentence);
+  expect(el.api.countProductMenus).not.toHaveBeenCalled();
+});
+it("says nothing about menus when a deleted category's contents disable no product", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "d", folders: 1, products: 1, activeProducts: 0, routes: 0, ownRoutes: 0 },
+  ]);
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+  await el.updateComplete;
+  expect(dialog(el)!.textContent).not.toContain("come off every menu");
+});
 it("says Disable for products alone in Spanish, and Delete once a category is selected", async () => {
   setLocale("es");
   const el = await mountBrowser();

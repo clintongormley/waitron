@@ -43,6 +43,7 @@ import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
 import "../widgets/catalogue-browser.js";
+import { offMenusSentence } from "../widgets/off-menus.js";
 import "../widgets/course-list.js";
 import type { CourseList } from "../widgets/course-list.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
@@ -122,6 +123,9 @@ export class CatalogueScreen extends LitElement {
   @state() private refusedLists: string[] = [];
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
   @state() private deleteErrorKey: string | null = null;
+  /** How many Active menus the product in the Disable dialog is on; null while unread or unreadable. */
+  @state() private deletingMenus: number | null = null;
+  #deletingRead = 0;
   /** The list the nested form is EDITING, or null while it is creating one: this decides which write
    * its Save performs. One state serves both kinds because only one nested form is ever open. */
   @state() private editingList: {
@@ -375,6 +379,19 @@ export class CatalogueScreen extends LitElement {
       : null;
     this.deleteErrorKey = null;
     this.#showError(null);
+    if (found) void this.#readDeletingMenus(found.id);
+  }
+
+  async #readDeletingMenus(productId: string): Promise<void> {
+    const read = ++this.#deletingRead;
+    this.deletingMenus = null;
+    let menus: number | null = null;
+    try {
+      menus = await (this.api.background ?? this.api).countProductMenus([productId]);
+    } catch {
+      // The sentence for an unknown count stays; the read never blocks Disable.
+    }
+    if (read === this.#deletingRead) this.deletingMenus = menus;
   }
 
   #closeDelete(): void {
@@ -817,6 +834,7 @@ export class CatalogueScreen extends LitElement {
               ? "product.disable_variant_warning"
               : "product.disable_warning",
           )}
+          ${offMenusSentence("product.off_menus", this.deletingMenus)}
         </p>
         <wt-form-actions
           slot="footer"

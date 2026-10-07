@@ -29,6 +29,7 @@ import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "
 import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
+import { offMenusSentence } from "./off-menus.js";
 
 interface OperationDraft {
   destination: string;
@@ -134,6 +135,9 @@ export class CatalogueBrowser extends LitElement {
   @state() private summaries: FolderSummary[] = [];
   @state() private summaryLoading = false;
   @state() private summaryFailed = false;
+  /** How many Active menus the products alone being disabled are on; null while unread or unreadable. */
+  @state() private disablingMenus: number | null = null;
+  #disablingRead = 0;
   @state() private operationBusy = false;
   @state() private operationError = "";
   @state() private dropError = "";
@@ -311,7 +315,10 @@ export class CatalogueBrowser extends LitElement {
     this.summaryFailed = false;
     this.operationError = "";
     this.operation = selection.productIds.length ? "delete" : null;
-    if (!selection.categoryIds.length) return;
+    if (!selection.categoryIds.length) {
+      void this.#readDisablingMenus(selection.productIds);
+      return;
+    }
     this.summaryLoading = true;
     try {
       const summaries = await this.api.summariseFolders(selection.categoryIds);
@@ -336,6 +343,17 @@ export class CatalogueBrowser extends LitElement {
     } finally {
       this.summaryLoading = false;
     }
+  }
+  async #readDisablingMenus(productIds: string[]): Promise<void> {
+    const read = ++this.#disablingRead;
+    this.disablingMenus = null;
+    let menus: number | null = null;
+    try {
+      menus = await (this.api.background ?? this.api).countProductMenus(productIds);
+    } catch {
+      // The sentence for an unknown count stays; the read never blocks Disable.
+    }
+    if (read === this.#disablingRead) this.disablingMenus = menus;
   }
   /** A confirmation from the dialog reads its counts again before deleting. */
   async #confirm(operation = this.operation, fromDialog = false): Promise<void> {
@@ -616,7 +634,23 @@ export class CatalogueBrowser extends LitElement {
                 }}
               ></wt-combobox>`
             : html`
-                ${selection.productIds.length ? html`<p>${selection.productIds.length === 1 ? t("product.disable_warning") : t("folders.disable_products_body")}</p>` : nothing}
+                ${
+                  selection.productIds.length
+                    ? html`<p>
+                        ${selection.productIds.length === 1 ? t("product.disable_warning") : t("folders.disable_products_body")}
+                        ${
+                          selection.categoryIds.length
+                            ? nothing
+                            : offMenusSentence(
+                                selection.productIds.length === 1
+                                  ? "product.off_menus"
+                                  : "folders.off_menus",
+                                this.disablingMenus,
+                              )
+                        }
+                      </p>`
+                    : nothing
+                }
                 ${
                   selection.categoryIds.length
                     ? html`<p>${t("folders.deleting")}</p>
@@ -631,46 +665,51 @@ export class CatalogueBrowser extends LitElement {
                     ? html`${
                         this.#asksContents()
                           ? html`<fieldset .disabled=${this.operationBusy}>
-                              <legend>${t("folders.contents_question")} *</legend>
-                              <label class="radio"
-                                ><input
-                                  type="radio"
-                                  name="contents"
-                                  required
-                                  value="move_up"
-                                  .checked=${this.contents === "move_up"}
-                                  @change=${(event: Event) => {
-                                    if (
-                                      !(event.currentTarget as HTMLElement).isConnected ||
-                                      this.operationBusy ||
-                                      !this.operation
-                                    )
-                                      return;
-                                    this.contents = "move_up";
-                                    this.#operationScope?.changed();
-                                  }}
-                                />${keepLabel}</label
-                              >
-                              <label class="radio"
-                                ><input
-                                  type="radio"
-                                  name="contents"
-                                  required
-                                  value="delete"
-                                  .checked=${this.contents === "delete"}
-                                  @change=${(event: Event) => {
-                                    if (
-                                      !(event.currentTarget as HTMLElement).isConnected ||
-                                      this.operationBusy ||
-                                      !this.operation
-                                    )
-                                      return;
-                                    this.contents = "delete";
-                                    this.#operationScope?.changed();
-                                  }}
-                                />${deleteLabel}</label
-                              >
-                            </fieldset>`
+                                <legend>${t("folders.contents_question")} *</legend>
+                                <label class="radio"
+                                  ><input
+                                    type="radio"
+                                    name="contents"
+                                    required
+                                    value="move_up"
+                                    .checked=${this.contents === "move_up"}
+                                    @change=${(event: Event) => {
+                                      if (
+                                        !(event.currentTarget as HTMLElement).isConnected ||
+                                        this.operationBusy ||
+                                        !this.operation
+                                      )
+                                        return;
+                                      this.contents = "move_up";
+                                      this.#operationScope?.changed();
+                                    }}
+                                  />${keepLabel}</label
+                                >
+                                <label class="radio"
+                                  ><input
+                                    type="radio"
+                                    name="contents"
+                                    required
+                                    value="delete"
+                                    .checked=${this.contents === "delete"}
+                                    @change=${(event: Event) => {
+                                      if (
+                                        !(event.currentTarget as HTMLElement).isConnected ||
+                                        this.operationBusy ||
+                                        !this.operation
+                                      )
+                                        return;
+                                      this.contents = "delete";
+                                      this.#operationScope?.changed();
+                                    }}
+                                  />${deleteLabel}</label
+                                >
+                              </fieldset>
+                              ${
+                                this.contents === "delete" && totals.active
+                                  ? html`<p>${t("folders.delete_off_menus")}</p>`
+                                  : nothing
+                              }`
                           : nothing
                       }
                       ${ownRoutes ? html`<p>${this.#plural("folders.routes_warning", ownRoutes)}</p>` : nothing}`

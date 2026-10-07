@@ -105,6 +105,12 @@ export const en = {
   "folders.disable_products_heading_one": "Disable 1 product?",
   "folders.disable_products_body":
     "This disables the products: the till stops selling them and they leave this list until you choose to show disabled products. You can enable them again, and their past sales are kept.",
+  "folders.off_menus":
+    "They come off the {count} menus they are on, which then show unpublished changes.",
+  "folders.off_menus_one":
+    "They come off the 1 menu they are on, which then shows unpublished changes.",
+  "folders.off_menus_unknown": "They come off every menu they are on.",
+  "folders.delete_off_menus": "Products it disables come off every menu they are on.",
   "folders.delete_heading": "Delete {count} items?",
   "folders.delete_heading_one": "Delete 1 item?",
   "folders.deleting": "Categories to delete:",
@@ -1494,6 +1500,11 @@ export const en = {
   "product.disable_variant_named": "Disable {name}",
   "product.disable_variant_warning":
     "This disables the variant: the till stops offering it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.",
+  "product.off_menus":
+    "It comes off the {count} menus it is on, which then show unpublished changes.",
+  "product.off_menus_one":
+    "It comes off the 1 menu it is on, which then shows unpublished changes.",
+  "product.off_menus_unknown": "It comes off every menu it is on.",
   "product.status": "Status",
   "product.allergens": "Allergens",
   "diet.section": "Dietary override",
@@ -2564,6 +2575,13 @@ export const es: Record<StringKey, string> = {
   "folders.disable_products_heading_one": "¿Deshabilitar 1 producto?",
   "folders.disable_products_body":
     "Esto deshabilita los productos: la caja deja de venderlos y salen de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlos, y sus ventas anteriores se conservan.",
+  "folders.off_menus":
+    "Salen de las {count} cartas en las que están, que pasan a tener cambios sin publicar.",
+  "folders.off_menus_one":
+    "Salen de la carta en la que están, que pasa a tener cambios sin publicar.",
+  "folders.off_menus_unknown": "Salen de todas las cartas en las que están.",
+  "folders.delete_off_menus":
+    "Los productos que deshabilita salen de todas las cartas en las que están.",
   "folders.delete_heading": "¿Eliminar {count} elementos?",
   "folders.delete_heading_one": "¿Eliminar 1 elemento?",
   "folders.deleting": "Categorías que se eliminarán:",
@@ -3966,6 +3984,11 @@ export const es: Record<StringKey, string> = {
   "product.disable_variant_named": "Deshabilitar {name}",
   "product.disable_variant_warning":
     "Esto deshabilita la variante: la caja deja de ofrecerla y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarla, y sus ventas anteriores se conservan.",
+  "product.off_menus":
+    "Sale de las {count} cartas en las que está, que pasan a tener cambios sin publicar.",
+  "product.off_menus_one":
+    "Sale de la carta en la que está, que pasa a tener cambios sin publicar.",
+  "product.off_menus_unknown": "Sale de todas las cartas en las que está.",
   "product.status": "Estado",
   "product.allergens": "Alérgenos",
   "diet.section": "Anulación dietética",
