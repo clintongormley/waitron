@@ -49,6 +49,11 @@ of one active product, are refused with `product.name_taken`, ignoring case and 
 spaces (`packages/catalogue/src/product-names.ts`). A save that preserves an existing clash
 without creating another keeps the existing behavior.
 
+You can name a product `Gin (Double)` even when `Gin` has a `Double` variant: the saved-name
+checks permit both, and their displayed labels match. A held-group summary combines quantities
+with matching display labels while retaining the individual line ids (`listOrderGroups`,
+`apps/server/src/order-groups.ts`). Choose different saved names if you need distinct labels.
+
 Each name write stores its folded `products.name_key`. Product and single-variant lookups
 compare that key within the relevant parent scope; a row with a null key is absent from those
 lookups. A whole-family save compares the submitted variant names directly. Configuration

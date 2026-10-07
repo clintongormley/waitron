@@ -982,6 +982,11 @@ unused `units` property is gone (it closes W75's leftover).
   freeze the composed audience pair in their existing name fields. Demo variants use relative
   names. Long receipt and kitchen pairs wrap at 58 and 80 mm. No stored-name migration or fiscal
   builder change. See [the plan](superpowers/plans/2026-10-07-relative-variant-names.md).
+  Known edge from the second review: a product literally named `Gin (Double)` and `Gin`'s
+  `Double` variant have the same display label; saved/imported raw names satisfy the requested
+  scopes. A held-group summary combines their displayed quantities, retaining both line ids.
+  Choose distinct saved names for now. Any future restriction on composed labels needs an owner
+  decision about the naming policy; this change adds no such restriction.
 - **A330, owner 2026-10-07 — DONE (#1354; variant rows show their photo):** an opened variant's row
   in the Products list now draws a photo square in its product's column: the variant's own photo,
   else its product's, else the same square its product's row shows. The till draws no variant photo today,
