@@ -1112,6 +1112,26 @@ unused `units` property is gone (it closes W75's leftover).
     Next: the owner picks one word.
   - Open, from #1383's review: on the Preview tab a failed live refresh keeps the heading's old
     clash count, as the rest of that line already does (`#menuReadFailed`, from A290, #1307).
+- **A347, owner 2026-10-07 — DONE (branch `fix/inactive-off-menus`, a disabled product or size is on
+  no menu):** disabling a product takes it off every menu list in the same transaction and clears
+  its prices on every menu, so each menu that reached it shows unpublished changes; a Device Home
+  Page shortcut to it becomes a missing tile, and enabling it again puts it on no menu. Disabling a
+  size deletes its price on every menu; enabled again, it follows its product back with no menu
+  price of its own. Every writer does it (`takeOffMenus`, `packages/catalogue/src/menu-removal.ts`:
+  the product save and editor, the Products list's Disable, a category deleted with its contents, a
+  variant save); the list writers refuse an Inactive product, the size-price route refuses a
+  Disabled size, and a configuration import refuses either on a menu (`setup.request_invalid`).
+  `GET /management-api/products/menus` counts the menus the products are on, and the Disable
+  dialogs say "They come off the N menus they are on…" (or "every menu" when the count is unknown,
+  and for products picked beside a category).
+  - Open, found in A347's review, believed to predate it: an imported bundle may carry priced menu
+    rows for a product no menu reaches, and adding the product back to a menu revives those prices.
+    Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
+    reaches.
+  - Open: a bulk Disable of about 400 or more products cannot read the count, because the ids go in
+    the URL (A347's review measured 500 ids answered HTTP 431), so the dialog says "every menu".
+  - Open: deleting a category with its contents says its products come off every menu, with no
+    count.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
