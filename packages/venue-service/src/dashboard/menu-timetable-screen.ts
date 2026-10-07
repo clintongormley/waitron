@@ -5,9 +5,13 @@ import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
   focusFirstInvalid,
+  leaveCoordinatorFor,
   submitOnEnter,
   visuallyHiddenStyles,
   type DataTableColumn,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -72,6 +76,27 @@ type Editor = { departmentId: string } & (
 );
 
 const dayName = (weekday: number) => t(`hours.day.${weekday}` as Key);
+
+/**
+ * What saving `editor` sends of its own input, compared to tell an edited draft from its opening:
+ * the list in its order, the trimmed name and menu, and slots in their saved order. Undefined for
+ * an editor that only confirms.
+ */
+function payloadOf(editor: Editor): unknown {
+  switch (editor.kind) {
+    case "list":
+      return editor.draft;
+    case "period":
+      return { name: editor.name.trim(), menuId: editor.menuId };
+    case "day":
+      return wireSlots(editor.draft);
+    case "date":
+      return editor.draft.mode === "inherit" ? null : wireSlots(editor.draft);
+    case "delete-period":
+    case "normal-week":
+      return undefined;
+  }
+}
 
 /** "08:00–12:00 Mañanas, 13:00–16:00 Mediodía", or the all-day menu's words for no slots. */
 function slotsText(department: Department, slots: readonly MenuSlot[]): string {
@@ -293,6 +318,13 @@ export class MenuTimetableScreen extends LitElement {
   /** Each editor opened or closed is a new generation, drawn as a modal of its own. */
   #generation = 0;
   #returnTo?: ReturnTo;
+  #leave?: LeaveCoordinator;
+  /** The open editor's staged input, or the one a "Use normal week" will go back to. */
+  #scope?: DraftScope<Editor>;
+  /** That editor as it was opened, which Discard puts back and a successful save replaces. */
+  #baseline?: Editor;
+  /** Stable while one editor is open: the modal refuses a close if its callback changes. */
+  #beforeClose?: (reason: LeaveReason) => Promise<boolean>;
 
   readonly #followUrl = (): void => {
     const asked = new URL(location.href).searchParams.get("departmentId");
@@ -303,6 +335,7 @@ export class MenuTimetableScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#register();
     this.#followUrl();
     window.addEventListener("popstate", this.#followUrl);
     this.#detach = this.api.watchTimetable(
@@ -320,9 +353,16 @@ export class MenuTimetableScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
     super.disconnectedCallback();
     window.removeEventListener("popstate", this.#followUrl);
     this.#detach?.();
+  }
+
+  protected override updated(changed: Map<PropertyKey, unknown>): void {
+    if (changed.has("editor")) this.#scope?.changed();
   }
 
   /** The department shown: the one chosen or linked, else the first active one. */
@@ -366,17 +406,67 @@ export class MenuTimetableScreen extends LitElement {
 
   // --- Editors -------------------------------------------------------------------------------
 
-  #open(editor: Editor, returnTo: ReturnTo): void {
+  /** `keepDraft` carries the open draft's protection over to `editor`, which holds or resumes it. */
+  #open(editor: Editor, returnTo: ReturnTo, keepDraft = false): void {
     this.#generation++;
+    const generation = this.#generation;
+    this.#beforeClose = (reason) => this.#askBeforeClose(reason, generation);
     this.#returnTo = returnTo;
+    if (!keepDraft) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#baseline = payloadOf(editor) === undefined ? undefined : structuredClone(editor);
+    }
     this.editor = editor;
     this.attempted = false;
     this.refused = {};
     this.bottomRefusal = "";
     this.busy = false;
+    this.#register();
+  }
+
+  /** The editor whose input a save sends, or a "Use normal week" goes back to. */
+  #draftOwner(): Editor | undefined {
+    const editor = this.editor;
+    return editor?.kind === "normal-week" ? editor.resume : editor;
+  }
+
+  #register(): void {
+    const baseline = this.#baseline;
+    if (this.#scope !== undefined || baseline === undefined || this.editor === undefined) return;
+    this.#leave = leaveCoordinatorFor(this);
+    let registering = true;
+    this.#scope = this.#leave?.register<Editor>({
+      id: {},
+      parent: this,
+      current: () => (registering ? baseline : (this.#draftOwner() ?? baseline)),
+      snapshot: (value) => structuredClone(value),
+      equal: (a, b) => JSON.stringify(payloadOf(a)) === JSON.stringify(payloadOf(b)),
+      restore: (value) => {
+        const editor = this.editor;
+        if (editor?.kind === "normal-week" && editor.resume !== undefined)
+          this.editor = { ...editor, resume: value };
+        else if (editor !== undefined) this.editor = value;
+      },
+    });
+    registering = false;
+    this.#scope?.changed();
+  }
+
+  async #askBeforeClose(reason: LeaveReason, generation: number): Promise<boolean> {
+    if (!this.isConnected || generation !== this.#generation || this.busy) return false;
+    // Closing a "Use normal week" goes back to the draft it was offered from, which stays.
+    if (this.editor?.kind === "normal-week") return true;
+    const scope = this.#scope;
+    if (scope === undefined) return true;
+    const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed: () => {} });
+    return outcome === "proceeded" && generation === this.#generation;
   }
 
   #close(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#baseline = undefined;
     this.#generation++;
     this.editor = undefined;
     this.attempted = false;
@@ -482,6 +572,9 @@ export class MenuTimetableScreen extends LitElement {
 
   /** The editor cannot be closed or replaced while `busy`, so the answer always belongs to it. */
   async #write(editor: Editor): Promise<void> {
+    const scope = this.#scope;
+    const submitted =
+      scope !== undefined && editor.kind !== "normal-week" ? structuredClone(editor) : undefined;
     this.busy = true;
     try {
       await this.#send(editor);
@@ -490,7 +583,12 @@ export class MenuTimetableScreen extends LitElement {
       this.#refuse(editor, error);
       return;
     }
-    this.#finish(editor);
+    if (submitted !== undefined) {
+      this.#baseline = submitted;
+      scope!.commit(submitted);
+    }
+    this.busy = false;
+    if (submitted === undefined || !scope!.isDirty()) this.#finish(editor);
     this.api.rereadWatches();
   }
 
@@ -629,13 +727,13 @@ export class MenuTimetableScreen extends LitElement {
           ? { ...editor, uses: undefined }
           : undefined;
     const returnTo = this.#returnTo ?? (() => null);
-    this.#open({ kind: "normal-week", departmentId, special, resume }, returnTo);
+    this.#open({ kind: "normal-week", departmentId, special, resume }, returnTo, true);
   }
 
   /** Closes the editor, or goes back to the one a "Use normal week" was offered from. */
   #finish(editor: Editor): void {
     if (editor.kind === "normal-week" && editor.resume !== undefined)
-      this.#open(editor.resume, this.#returnTo ?? (() => null));
+      this.#open(this.#draftOwner() ?? editor.resume, this.#returnTo ?? (() => null), true);
     else this.#close();
   }
 
@@ -942,6 +1040,7 @@ export class MenuTimetableScreen extends LitElement {
         size=${"compact" in content && content.compact ? "compact" : "standard"}
         heading=${content.heading}
         .dismissible=${!this.busy}
+        .beforeClose=${this.#beforeClose}
         @wt-close=${() => this.#finish(editor)}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'))}
@@ -964,7 +1063,8 @@ export class MenuTimetableScreen extends LitElement {
             data-test="cancel-editor"
             ?disabled=${this.busy}
             @click=${() => {
-              if (!this.busy) this.#finish(editor);
+              if (!this.busy)
+                void this.renderRoot.querySelector("wt-modal")?.requestClose("cancel");
             }}
             >${t("menu.cancel")}</wt-button
           >
