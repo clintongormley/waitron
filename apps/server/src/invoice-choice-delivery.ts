@@ -1,6 +1,14 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
-import { pagePrinters, locations, type StagedInvoiceDelivery, type Transaction } from "@waitron/db";
+import {
+  pagePrinters,
+  locations,
+  sales,
+  workingOrders,
+  type StagedInvoiceDelivery,
+  type Transaction,
+} from "@waitron/db";
+import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { isValidEmail } from "@waitron/identity";
 import { getReceipt } from "@waitron/layouts";
 import { AppError } from "@waitron/shared";
@@ -91,4 +99,36 @@ export async function checkedInvoiceChoiceDelivery(
       ...(contact.phone === undefined ? {} : { contactPhone: contact.phone }),
     },
   };
+}
+
+export async function reserveStagedInvoiceDelivery(
+  tx: Transaction,
+  saleId: string,
+): Promise<boolean> {
+  const [sale] = await tx
+    .select({
+      recipient: sales.counterpartyTaxId,
+      personId: sales.operatorId,
+      delivery: workingOrders.invoiceDelivery,
+    })
+    .from(sales)
+    .leftJoin(workingOrders, eq(workingOrders.id, sales.workingOrderId))
+    .where(eq(sales.id, saleId));
+  const delivery = sale?.delivery;
+  if (sale?.recipient == null || delivery == null || delivery.medium === "receipt") return false;
+  const personId =
+    sale.personId ?? (delivery.medium === "email" ? delivery.consent.personId : null);
+  if (personId === null) invalid("operatorId");
+  // A destination accepted with the draft may be disabled after the card was captured.
+  await reserveInvoiceDelivery(
+    tx,
+    saleId,
+    {
+      ...delivery,
+      requestKey: `issuance:${saleId}`,
+      personId,
+    },
+    { allowInactivePagePrinter: true },
+  );
+  return true;
 }

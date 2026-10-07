@@ -22,6 +22,7 @@ import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { formatReceipt } from "./receipt-ticket.js";
+import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
 import { expireInvoiceDeliveryClaims, reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptAddress } from "./venue-address.js";
@@ -197,7 +198,7 @@ async function resolvePrinterAndReceipt(
   return { printer, receiptBytes };
 }
 
-/** The optional receipt policy does not suppress an F1 original. */
+/** Receipt policy applies to F2; an F1 follows its saved original delivery choice. */
 export async function enqueueSaleReceipt(
   tx: Transaction,
   cfg: OriginConfig,
@@ -215,6 +216,7 @@ export async function enqueueSaleReceipt(
   if (context?.serviceMode === "prepay") {
     await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber, printers);
   }
+  if (await reserveStagedInvoiceDelivery(tx, saleId)) return;
   const mode = context
     ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
     : "auto";
