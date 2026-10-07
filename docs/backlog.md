@@ -1138,7 +1138,9 @@ already scrolls, so "+ New options list…" sits at or just below its bottom edg
 `--wt-color-primary-text` has fixed light and dark values that do not follow `--wt-color-primary`,
 and a tenant theme cannot set it (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored
 tenant theme yet. The same holds for `--wt-color-primary-hover` and `--wt-color-danger-hover`
-(A306), which do not follow `--wt-color-primary` and `--wt-color-danger`.
+(A306), which do not follow `--wt-color-primary` and `--wt-color-danger`, so a tenant or deployment
+that sets only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a
+hovered primary or danger `wt-button`.
 
 **With variants, Pricing folds and Variants becomes its own section (A219) — DONE (#1065).**
 **Decided (owner, 2026-10-02):** the price comes before VAT, everywhere. **Open:** in
@@ -1229,16 +1231,17 @@ selected item read `--wt-color-primary-text`.
 
 **Hover contrast A306 measured but did not fix — OPEN.** A306's axe probes in real Chromium
 (2026-10-07) also measured two hovered treatments that do not use the filled buttons it fixed:
-(1) card actions drawn as a secondary button with coloured text and the opacity dip — the till
-profile's "Confirmar" 3.66:1 light, 4.19:1 dark, and the content-languages page's primary-coloured
+(1) card actions drawn as a secondary button with coloured text and the opacity dip — the Account
+settings screen's pending-email "Confirmar" (`apps/dashboard/src/screens/profile-screen.ts`) 3.66:1 light, 4.19:1 dark, and the content-languages page's primary-coloured
 actions 3.61:1 light, 4.21:1 dark (its danger-coloured "Quitar" passed, 5.04:1 and 4.74:1); (2) a
 hovered till tile's muted price and kind text — 4.38:1 on an unpainted tile in light (dark 5.44:1),
-and 4.1:1 on a blue-painted tile in light (dark 4.84:1). The bar is 4.5:1. Not measured: the
-profile's hidden actions, disabled or sold-out tiles, a category row's made-at link, the prep
+and the price at 4.1:1 on a blue-painted tile in light (dark 4.84:1). The bar is 4.5:1. Not measured: the
+Account settings screen's other card actions, disabled or sold-out tiles, a category row's made-at link, the prep
 stations screen. Next action: an item of its own that moves those hovers off the opacity dip, as
 A306 did for filled buttons, with axe cases that hover. Also seen in A306's screenshots, not
 measured: on a hovered Products row in the dark theme the status and allergen badges' borders
-disappear into the row; A306 changed no border or surface token, so it does not come from A306.
+disappear into the row; A306's review saw the same in a screenshot of the base commit (`53acadca6`), so it does not come
+from A306.
 
 **Dark modal danger-button hover contrast (found during W69, 2026-10-06), and its light reading of
 2026-10-07 — DONE (A306).** Primary and danger buttons hover onto their own fill tokens instead of
@@ -4036,9 +4039,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   that use a colon and lack the `waitron.` prefix — cheap to rename until a venue is live.
 
 - **The sidebar's page search (C46, #836) — left open:** its accessibility case checks the search
-  box and its message only, because at desktop width (1280 px) the light theme's sidebar headers and
-  current page already fail the colour-contrast rule (the primary-blue entry under "Also open, and
-  product-wide"). Two choices are **DECIDED (owner, 2026-09-29): keep both** — "ñ" is matched as
+  box and its message only; the sidebar's headers and current page have their own case since A306
+  (`apps/dashboard/src/dashboard-app.a11y.test.ts`, "the desktop sidebar's group headers and current
+  page are accessible at rest and under the pointer"). Two choices are **DECIDED (owner, 2026-09-29): keep both** — "ñ" is matched as
   "n", so "espana" finds "España"; and the box is not pinned, so it scrolls away with a long
   sidebar.
 

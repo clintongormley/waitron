@@ -104,6 +104,11 @@ layer's own specificity). Never patch component styles.
 
 This works whether or not `#app` also carries `data-theme` — see "Themes" above.
 
+Overriding `--wt-color-primary` leaves every token that holds Waitron's blue as its own value at
+that blue — among them `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-focus` and
+`--wt-color-field-label-focus` — and overriding `--wt-color-danger` leaves `--wt-color-danger-hover`
+at Waitron's red. Set each one too, with a light and a dark value (see Tokens → Colour).
+
 ## Tokens
 
 ### Colour
@@ -166,7 +171,7 @@ yet.
 each further from its button's text colour than the resting fill, so the label reads at 4.5:1 or
 more on it (the "hover fills" cases in `colors.test.ts`). Like `--wt-color-primary-text` they hold
 their own values, so a deployment rule that overrides `--wt-color-primary` or `--wt-color-danger`
-(as `structure.test.ts`'s `.brand` case does) must set the matching hover token too, in both
+must set the matching hover token too, in both
 themes; and `THEMEABLE_TOKENS` does not list them either, so a tenant theme cannot set them.
 
 The Hours calendar (`packages/venue-service/src/dashboard/hours-calendar.ts`) paints dates
@@ -2215,6 +2220,9 @@ render solid at rest everywhere else (the till's checkout button, for one, needs
 all). The part hook lets a screen layer an accent onto specific buttons without touching that
 contract.
 
+Under the pointer the primary accent measured 3.61 to 4.21:1 wherever A306 measured it
+(2026-10-07), under the 4.5:1 bar; see the backlog entry "Hover contrast A306 measured but did not fix".
+
 Give every card action a fixed `min-width` (`ch`-based — see `--dashboard-sidebar-width` in
 `dashboard-app.ts` for the same reasoning) so a row of differently-worded actions still reads as
 one uniform set rather than a jumble of pill widths, and keep labels short — reuse the small shared
@@ -2385,7 +2393,13 @@ pairing actually used by every primitive in the table above, in either theme, ac
 invalid, `wt-switch` checked/unchecked, `wt-dialog` open, `wt-button` icon-only and every variant,
 disabled and loading states; `wt-spinner` as a status region and decorative — all verified
 2026-09-11; `wt-button` as a menu trigger, open and closed — verified 2026-09-27 by running
-`packages/ui-core/src/components/wt-button.a11y.test.ts`; `wt-combobox` closed, closed and named only by a forwarded `aria-label`, open with
+`packages/ui-core/src/components/wt-button.a11y.test.ts`; `wt-button` in each variant under the
+pointer on `--wt-color-surface` and `--wt-color-surface-raised`, and primary and danger focused from
+the keyboard and then hovered — verified 2026-10-07 by running
+`packages/ui-core/src/components/wt-button.a11y.test.ts`; `wt-modal` with a primary or a danger
+footer button under the pointer, and `wt-unsaved-changes`' Discard under the pointer — verified
+2026-10-07 by running `packages/ui/src/components/wt-modal.a11y.test.ts` and
+`packages/ui/src/components/wt-unsaved-changes.a11y.test.ts`, both themes; `wt-combobox` closed, closed and named only by a forwarded `aria-label`, open with
 results, open with the add row, open with no matches, multi-select with a selection, invalid with an
 error message, disabled and required — verified 2026-09-13 by running
 `packages/ui/src/components/wt-combobox.a11y.test.ts`, which covers those states in both themes —
