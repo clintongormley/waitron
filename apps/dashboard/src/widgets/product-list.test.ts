@@ -4938,8 +4938,8 @@ describe("stable column inputs", () => {
     await el.updateComplete;
     await table.updateComplete;
     await Promise.all(filters.map((filter) => filter.updateComplete));
-    expect(table.columns).toBe(columns);
     expect(widths.map((spy) => spy.mock.calls.length)).toEqual([0, 0]);
+    expect(table.columns).toBe(columns);
     setLocale("es");
     el.requestUpdate();
     await el.updateComplete;
@@ -4979,4 +4979,23 @@ describe("stable column inputs", () => {
       await page.viewport(1280, 844);
     }
   });
+});
+
+it("keeps columns while live folder warnings and add permission update", async () => {
+  const { el, table, root } = await mountTree({ canAddProduct: true });
+  const columns = table.columns;
+  expect(root.querySelector('[data-test="unrouted-folder"]')).toBeNull();
+  const add = root.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    `[data-test="add-product-${ROOT_KEY}"]`,
+  )!;
+  expect(add.disabled).toBe(false);
+  el.unroutedFolderIds = ["d"];
+  el.canAddProduct = false;
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(
+    root.querySelector('tr[data-row-key="folder:d"] [data-test="unrouted-folder"]'),
+  ).not.toBeNull();
+  expect(add.disabled).toBe(true);
+  expect(table.columns).toBe(columns);
 });

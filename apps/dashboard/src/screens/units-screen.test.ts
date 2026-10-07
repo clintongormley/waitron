@@ -1306,3 +1306,20 @@ it("keeps unit column inputs on a redraw and refreshes precision choices and lan
   await table.updateComplete;
   expect(table.columns[0]!.label).toBe("Nombre");
 });
+
+it("translates unit columns when whole-number precision choices stay the same", async () => {
+  setLocale("en");
+  const el = await mountWith([units[0]!]);
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  expect(table.columns[0]!.label).toBe("Name");
+  const options = table.columns.find((column) => column.key === "precision")!.filter!.options;
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(table.columns.find((column) => column.key === "precision")!.filter!.options).toEqual(
+    options,
+  );
+  expect(table.columns[0]!.label).toBe("Nombre");
+});
