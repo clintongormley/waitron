@@ -1,12 +1,22 @@
 import type { Database } from "@waitron/db";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { hashPassword, hashPin } from "@waitron/identity";
+import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../../src/modules.js";
+import { venueModuleConfig } from "../../../src/provision.js";
+
+/** A United Kingdom venue's enabled modules, as `fiscal-none.e2e.test.ts` provisions one. */
+const GB_MODULES = enabledModules(
+  ALL_MODULES,
+  venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat"),
+);
 
 export function createDemoVenueProvisioner(
   db: () => Database,
   options: {
+    /** Spain unless given. */
+    country?: "GB";
     nifBase: number;
     nifFormat?: "fixed_k" | "calculated";
     invoiceLocale: string;
@@ -21,27 +31,30 @@ export function createDemoVenueProvisioner(
   return async () => {
     nifCounter += 1;
     const number = options.nifBase + nifCounter;
-    const taxId =
-      options.nifFormat === "calculated"
+    const gb = options.country === "GB";
+    const modules = gb ? GB_MODULES : ALL_MODULES;
+    const taxId = gb
+      ? `GB${String(number).padStart(9, "0")}`
+      : options.nifFormat === "calculated"
         ? nifWithControlLetter(number)
         : `${String(number).padStart(8, "0")}K`;
     const venue = await applyVenue(
       planVenue(
         {
-          country: "ES",
+          country: gb ? "GB" : "ES",
           taxId,
-          legalName: "Casa Delgado SL",
+          legalName: gb ? "Deli London Ltd" : "Casa Delgado SL",
           location: {
-            name: "Sala principal",
-            fiscalTerritory: "ES-common",
+            name: gb ? "Main counter" : "Sala principal",
+            fiscalTerritory: gb ? "GB-vat" : "ES-common",
             invoiceLocales: [options.invoiceLocale],
-            operationDescription: "Venta en establecimiento",
-            addressLine1: "Calle Mayor 1",
+            operationDescription: gb ? "Sale on premises" : "Venta en establecimiento",
+            addressLine1: gb ? "1 High Street" : "Calle Mayor 1",
             addressLine2: null,
-            postalCode: options.postalCode ?? "28013",
-            city: options.city ?? "Madrid",
-            province: options.province ?? "Madrid",
-            timeZone: "Europe/Madrid",
+            postalCode: options.postalCode ?? (gb ? "EC1A 1AA" : "28013"),
+            city: options.city ?? (gb ? "London" : "Madrid"),
+            province: options.province ?? (gb ? "London" : "Madrid"),
+            timeZone: gb ? "Europe/London" : "Europe/Madrid",
             dayCutover: "05:00",
           },
           seriesCode: "A",
@@ -53,9 +66,9 @@ export function createDemoVenueProvisioner(
             email: options.adminEmail ?? "owner@example.test",
           },
         },
-        ALL_MODULES,
+        modules,
       ),
-      { db: db(), modules: ALL_MODULES },
+      { db: db(), modules },
     );
     // planVenue puts the standard series before the rectificative one.
     return { ...venue, seriesId: venue.seriesIds[0]! };

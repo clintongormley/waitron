@@ -20,7 +20,7 @@ import {
   writeContentLanguages,
 } from "@waitron/catalogue";
 import type { SeedLocale } from "./menu.js";
-import { demoContentLanguages, type DemoDataSet, type SeedCatalogue } from "./data-set.js";
+import { demoLanguagesFor, type DemoDataSet, type SeedCatalogue } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 
 export interface SeedCataloguesInput {
@@ -92,7 +92,7 @@ export async function seedCatalogues(
     select l.province, t.country from locations l
     cross join tenants t
     where l.id = ${locationId}`);
-  const { defaultLanguage, languages, required } = demoContentLanguages({
+  const { defaultLanguage, languages, required } = demoLanguagesFor(dataSet, {
     country: geography[0]?.country,
     area: geography[0]?.province,
   });

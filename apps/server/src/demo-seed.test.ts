@@ -5,6 +5,26 @@ import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 const { seedDemoRestaurant } = vi.hoisted(() => ({ seedDemoRestaurant: vi.fn() }));
 vi.mock("../scripts/demo-seed/seed.js", () => ({ seedDemoRestaurant }));
 
+// A made-up country whose identity names no data set of its own; every other code is the real one.
+vi.mock("@waitron/country-packs", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/country-packs")>();
+  const nowhere = {
+    ...real.getCountryPack("GB")!,
+    countryCode: "XX",
+    demo: {
+      legalName: "Nowhere Foods Ltd",
+      taxId: "XX123456789",
+      locationName: "Nowhere Street",
+      departmentTradingNames: { restaurant: "Nowhere Bar", deli: "Nowhere Deli" },
+    },
+  };
+  return {
+    ...real,
+    getCountryPack: (code: string) =>
+      code.trim().toUpperCase() === "XX" ? nowhere : real.getCountryPack(code),
+  };
+});
+
 import { INSTALLED_DEMO_SALES_DAYS, demoSeedLocale, seedInstalledDemo } from "./demo-seed.js";
 import { DEMO_DATA_SETS } from "../scripts/demo-seed/data-set.js";
 
@@ -116,5 +136,25 @@ describe("seedInstalledDemo", () => {
       seedInstalledDemo({} as Database, RESULT, venueWithLocales(["en-GB"], "GB")),
     ).rejects.toThrow(/GB/);
     expect(seedDemoRestaurant).not.toHaveBeenCalled();
+  });
+
+  it("seeds a country with no data set of its own from Casa Delgado in English, under its own trading names", async () => {
+    seedDemoRestaurant.mockReset();
+    seedDemoRestaurant.mockResolvedValue(undefined);
+
+    await seedInstalledDemo({} as Database, RESULT, venueWithLocales(["es-ES"], "XX"));
+
+    expect(seedDemoRestaurant).toHaveBeenCalledTimes(1);
+    expect(seedDemoRestaurant.mock.calls[0]![1]).toStrictEqual({
+      venue: {
+        nodeId: "node-1",
+        seriesId: "series-standard",
+        locationId: "location-1",
+      },
+      locale: "en",
+      salesDays: 30,
+      departmentTradingNames: { restaurant: "Nowhere Bar", deli: "Nowhere Deli" },
+      dataSet: DEMO_DATA_SETS["casa-delgado-es"],
+    });
   });
 });

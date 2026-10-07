@@ -1,19 +1,21 @@
-// Back-fills the last N days with hash-chained sales through `recordSale`, so the report screens
-// are non-blank when the demo is first opened. It writes fiscal records ONLY through `recordSale`
-// and never drains: the resulting `envios` rows stay pending.
+// Back-fills the last N days with sales through `recordSale`, so the report screens are non-blank
+// when the demo is first opened. Each sale goes through the backend the composition's fiscal seat
+// gives the venue's node, as a till sale does; it writes fiscal records ONLY through `recordSale`
+// and never drains, so whatever the backend queues for submission stays pending.
 //
-// The `entorno` stamp comes from `deploymentEnvironment(process.env)`, which is `preproduction`
-// when `WAITRON_ENV` is unset; `demoSeedEnvironment` refuses `production` before any write, because
-// a wrong stamp on a production chain is unrecoverable (CLAUDE.md §5).
+// The environment a backend stamps comes from `deploymentEnvironment(process.env)`, which is
+// `preproduction` when `WAITRON_ENV` is unset; `demoSeedEnvironment` refuses `production` before
+// any write, because a wrong stamp on a production chain is unrecoverable (CLAUDE.md §5).
 //
 // A settable clock files each sale — its `issued_at` and its fiscal record's timestamp — into
 // the past.
 
+import { eq } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput, RecordSaleLine } from "@waitron/core";
-import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import type { TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
-import { withTransaction } from "@waitron/db";
+import type { FiscalBackend, TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
+import { locations, nodes, withTransaction } from "@waitron/db";
+import { enabledModules, fiscalSlot } from "@waitron/module";
 import type { Database } from "@waitron/db";
 import {
   customerPresentationText,
@@ -40,6 +42,8 @@ import {
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
 import type { DeploymentEnvironment } from "../../src/config.js";
+import { ALL_MODULES } from "../../src/modules.js";
+import { venueModuleConfig } from "../../src/provision.js";
 import "../../src/errors.js";
 
 /** `seriesId` is the standard series, the first of `applyVenue`'s `seriesIds`. */
@@ -145,6 +149,29 @@ function totalOf(breakdown: readonly VatBreakdownLine[]): Decimal {
   return sumDecimals(breakdown.flatMap((g) => [g.base, g.tax]));
 }
 
+/** The backend the composition's fiscal seat gives `nodeId`: its location's territory selects the
+ * fiscal module, and `fiscalSlot` checks it against the node's stamped `filing_module`. */
+async function nodeBackend(
+  db: Database,
+  nodeId: string,
+  clock: TrustedClock,
+  environment: DeploymentEnvironment,
+): Promise<FiscalBackend> {
+  const [node] = await withTransaction(db, (tx) =>
+    tx
+      .select({ filingModule: nodes.filingModule, territory: locations.fiscalTerritory })
+      .from(nodes)
+      .innerJoin(locations, eq(locations.id, nodes.locationId))
+      .where(eq(nodes.id, nodeId)),
+  );
+  if (node === undefined) throw new Error(`seedSales: no node ${nodeId}`);
+  const modules = enabledModules(
+    ALL_MODULES,
+    venueModuleConfig({ overrides: new Map() }, node.territory),
+  );
+  return fiscalSlot(modules, node.filingModule).makeBackend({ db, clock, environment });
+}
+
 /** The environment demo data may be written under. Production is refused before any write. */
 export function demoSeedEnvironment(env: NodeJS.ProcessEnv): DeploymentEnvironment {
   const environment = deploymentEnvironment(env);
@@ -174,15 +201,7 @@ export async function seedSales(
   );
 
   const backDating = clock ?? backDatingClock();
-  const backend = new VerifactuBackend({
-    clock: backDating.clock,
-    db,
-    environment,
-    deploymentEnvironment: environment,
-    // Never reached: `recordSale` does not contact AEAT.
-    resolveClient: () =>
-      Promise.reject(new Error("seed-sales: resolveClient must never be called by recordSale")),
-  });
+  const backend = await nodeBackend(db, venue.nodeId, backDating.clock, environment);
 
   const nodeId = brandNodeId(venue.nodeId);
   const seriesId = brandSeriesId(venue.seriesId);
