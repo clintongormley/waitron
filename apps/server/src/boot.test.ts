@@ -69,11 +69,19 @@ import {
 } from "@waitron/migrations";
 import { enabledModules, orderedMigrationSets, parseModuleConfig } from "@waitron/module";
 import {
+  addMember,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
   createProduct,
+  menuPublications,
+  menuScheduledPublications,
+  previewMenu,
+  publishMenu,
+  queueMenuPublication,
   readContentLanguages,
+  readMenuStructure,
+  updateProduct,
   writeContentLanguages,
 } from "@waitron/catalogue";
 import { runTunnelClient } from "@waitron/tunnel";
@@ -667,6 +675,7 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_ONBOARDING_INTENT: "demo",
       });
+      await awaitListening(port);
       const [printer] = await sharedDb
         .select({ id: printers.id, active: printers.active })
         .from(printers)
@@ -2803,6 +2812,95 @@ describe("startServer, against a migrated venue directory", () => {
       }
     } finally {
       await sharedDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+    }
+  }, 60_000);
+
+  // On a folder of its own: the editions it writes are append-only, and every other case here
+  // boots against the shared folder.
+  it("puts the menu editions that fell due while it was down live on its first start", async () => {
+    const venue = await freshVenue();
+    const queuedAt = new Date("2026-01-01T00:00:00.000Z");
+    const db = venue.store.venue;
+    let menuId: string;
+    let queued: string[];
+    try {
+      await seedTradingVenue(db);
+      ({ menuId, queued } = await withTransaction(db, async (tx) => {
+        const menu = await createCatalogue(tx, { name: "Carta" });
+        const food = await createCategory(tx, { name: "Comida" });
+        const soup = await createProduct(tx, {
+          catalogueId: menu.id,
+          categoryId: food.id,
+          name: "Sopa",
+          pricingUnit: "each",
+          unitPrice: "5.00",
+          vatClass: "reduced",
+        });
+        const root = (await readMenuStructure(tx, menu.id)).rootSectionId;
+        await addMember(tx, root, { kind: "product", productId: soup.id });
+        const first = await previewMenu(tx, menu.id);
+        await publishMenu(tx, menu.id, first.hash, "manager-ana", { at: queuedAt });
+        const ids: string[] = [];
+        for (const [unitPrice, activatesAt] of [
+          ["5.50", "2026-01-02T00:00:00.000Z"],
+          ["6.00", "2026-01-03T00:00:00.000Z"],
+        ] as const) {
+          await updateProduct(tx, soup.id, { unitPrice });
+          const { hash } = await previewMenu(tx, menu.id);
+          const edition = await queueMenuPublication(
+            tx,
+            menu.id,
+            hash,
+            new Date(activatesAt),
+            "manager-ana",
+            { at: queuedAt },
+          );
+          ids.push(edition.versionId);
+        }
+        return { menuId: menu.id, queued: ids };
+      }));
+    } finally {
+      await venue.store.close();
+    }
+
+    try {
+      const port = await freePort();
+      const server = await withCapturedStdout(async (lines) => {
+        const started = await startServer({
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: venue.directory,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "preproduction",
+        });
+        await waitForEvent(lines, "menu_publication.activated");
+        await awaitListening(port);
+        return started;
+      });
+      try {
+        const reader = await openVenueDatabase(venue.directory, { exclusive: false });
+        try {
+          const [pointer] = await reader.venue
+            .select({ versionId: menuPublications.versionId })
+            .from(menuPublications)
+            .where(eq(menuPublications.menuId, menuId));
+          expect(pointer?.versionId).toBe(queued[1]);
+          const rows = await reader.venue
+            .select({
+              versionId: menuScheduledPublications.versionId,
+              state: menuScheduledPublications.state,
+            })
+            .from(menuScheduledPublications);
+          expect(rows).toHaveLength(2);
+          for (const row of rows) expect(row.state).toBe("activated");
+        } finally {
+          await reader.close();
+        }
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await rm(venue.directory, { recursive: true, force: true });
     }
   }, 60_000);
 

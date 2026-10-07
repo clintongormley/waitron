@@ -1,4 +1,4 @@
-import { createServer as createNetServer, type AddressInfo, type Socket } from "node:net";
+import { connect, createServer as createNetServer, type AddressInfo, type Socket } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +23,7 @@ import { runCloudWorker } from "./cloud-worker.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
 import { LiveEvents } from "./live-api.js";
 import { startMdnsResponder } from "./mdns.js";
+import { startMenuActivation } from "./menu-activation.js";
 import { freePorts } from "./testing/free-ports.js";
 
 /**
@@ -57,6 +58,10 @@ vi.mock("./cloud-worker.js", async (importOriginal) => {
 vi.mock("./cloud-snapshot-loop.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./cloud-snapshot-loop.js")>();
   return { ...actual, runCloudSnapshotLoop: vi.fn(actual.runCloudSnapshotLoop) };
+});
+vi.mock("./menu-activation.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./menu-activation.js")>();
+  return { ...actual, startMenuActivation: vi.fn(actual.startMenuActivation) };
 });
 
 const TILL_ENV = {
@@ -95,6 +100,7 @@ afterEach(async () => {
   vi.mocked(subscribeToChanges).mockReset();
   vi.mocked(runCloudWorker).mockClear();
   vi.mocked(runCloudSnapshotLoop).mockClear();
+  vi.mocked(startMenuActivation).mockClear();
   for (const dir of cleanup.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
@@ -103,6 +109,19 @@ afterAll(async () => {
     if (dir !== undefined) await rm(dir, { recursive: true, force: true });
   }
 });
+
+/** Spies on the stop of the next menu activation duty boot starts. */
+async function spyOnMenuActivationStop() {
+  const { startMenuActivation: realStart } =
+    await vi.importActual<typeof import("./menu-activation.js")>("./menu-activation.js");
+  const stop = vi.fn<() => Promise<void>>();
+  vi.mocked(startMenuActivation).mockImplementationOnce((deps) => {
+    const duty = realStart(deps);
+    stop.mockImplementation(() => duty.stop());
+    return { stop };
+  });
+  return stop;
+}
 
 async function tempDir(prefix: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), prefix));
@@ -383,6 +402,19 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(vi.mocked(runCloudSnapshotLoop).mock.calls.at(-1)![0].signal.aborted).toBe(true);
   }, 60_000);
 
+  it("in trading mode, when a step after the listener is started throws, stopping the menu activation duty", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state, { landing: true });
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    const stop = await spyOnMenuActivationStop();
+
+    await expect(startServer(env)).rejects.toBe(failure);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
   it("waits for the cloud snapshot loop when the cloud worker refuses to stop", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
@@ -553,6 +585,31 @@ describe("closing a started server", () => {
     expect(events).toContain("stream.stopped");
     expect(readVenueHolder(venueDir)).toBeNull();
     await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
+  }, 60_000);
+
+  it("stops the menu activation duty", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state);
+    const stop = await spyOnMenuActivationStop();
+    const server = await startServer(env);
+    // `startServer` resolves before its listener binds, and closing an unbound listener rejects.
+    await vi.waitFor(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const socket = connect(Number(env.WAITRON_HTTP_PORT), "127.0.0.1", () => {
+            socket.destroy();
+            resolve();
+          });
+          socket.once("error", reject);
+        }),
+      { timeout: 10_000 },
+    );
+    expect(stop).not.toHaveBeenCalled();
+
+    await server.close();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
   it("when unsubscribing from the change feed throws, still closes the tunnel and gives the folder back", async () => {

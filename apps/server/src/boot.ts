@@ -188,6 +188,7 @@ import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
+import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets, mintedBoxLeaf, tightenTlsDir } from "./box-secrets.js";
 import { resolveTradingTls } from "./trading-tls.js";
@@ -2000,6 +2001,15 @@ async function bootServer(
   const unsubscribeFromChanges = subscribeToChanges(changeSubscriber(liveEvents, log));
   undoOnFailure.push(async () => liveEvents.close());
   undoOnFailure.push(async () => unsubscribeFromChanges());
+  const menuActivation = startMenuActivation({
+    db,
+    bus: liveEvents,
+    isPrimary: () => holders.singletonRole.current === "primary",
+    now,
+    log,
+    maxWaitMs: config.maxTickMs,
+  });
+  undoOnFailure.push(() => menuActivation.stop());
 
   // `config.environment` is the value `assertDeploymentMatches` pinned against the database at boot.
   //
@@ -2163,6 +2173,7 @@ async function bootServer(
           () => cloudWorker,
           () => cloudSnapshots,
           unsubscribeFromChanges,
+          () => menuActivation.stop(),
           () => liveEvents.close(),
           () => tunnelController.abort(),
           () => loop,
