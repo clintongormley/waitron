@@ -125,12 +125,15 @@ import type {
   FrozenOffer,
   HomeDevice,
   HomeDisplay,
+  LocalTime,
   MenuChange,
   MenuDocument,
   MenuPreview,
+  MenuPublicationsAnswer,
   MenuStatus,
   ProductChangeField,
   PublishedMenuVersion,
+  QueuedEdition,
   SectionChangeField,
 } from "@waitron/catalogue/src/menu-document-types.js";
 export type {
@@ -138,14 +141,24 @@ export type {
   FrozenOffer,
   HomeDevice,
   HomeDisplay,
+  LocalTime,
   MenuChange,
   MenuDocument,
   MenuPreview,
+  MenuPublicationsAnswer,
   MenuStatus,
   ProductChangeField,
   PublishedMenuVersion,
+  QueuedEdition,
   SectionChangeField,
 };
+
+/** A venue-local date and time; `occurrence` picks one of a time the clock shows twice. */
+export interface ActivationTime {
+  date: string;
+  time: string;
+  occurrence?: "earlier" | "later";
+}
 
 export interface MenuReadModels {
   structure: MenuStructure;
@@ -2089,6 +2102,43 @@ export class DashboardApi {
     return this.#request<PublishedMenuVersion>(`/management-api/catalogues/${id}/publish`, "POST", {
       expectedHash,
     });
+  }
+
+  getMenuPublications(menuId: string): Promise<MenuPublicationsAnswer> {
+    return this.#request<MenuPublicationsAnswer>(
+      `/management-api/catalogues/${menuId}/publications`,
+      "GET",
+    );
+  }
+
+  scheduleMenuPublication(
+    menuId: string,
+    input: { expectedHash: string; activatesAt: ActivationTime },
+  ): Promise<QueuedEdition> {
+    return this.#request<QueuedEdition>(
+      `/management-api/catalogues/${menuId}/publications`,
+      "POST",
+      input,
+    );
+  }
+
+  rescheduleMenuPublication(
+    menuId: string,
+    versionId: string,
+    input: { activatesAt: ActivationTime },
+  ): Promise<QueuedEdition> {
+    return this.#request<QueuedEdition>(
+      `/management-api/catalogues/${menuId}/publications/${versionId}`,
+      "PATCH",
+      input,
+    );
+  }
+
+  cancelMenuPublication(menuId: string, versionId: string): Promise<void> {
+    return this.#request<void>(
+      `/management-api/catalogues/${menuId}/publications/${versionId}/cancel`,
+      "POST",
+    );
   }
 
   /** A null `grossPrice` clears the menu's price, so the product's own applies. */

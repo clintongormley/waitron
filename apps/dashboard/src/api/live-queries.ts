@@ -12,6 +12,7 @@ const MENU_PUBLICATION_READS = [
   "menu_item_variant_overrides",
   "menu_items",
   "menu_publications",
+  "menu_scheduled_publications",
   "menu_versions",
   "option_labels",
   "option_lists",
@@ -190,6 +191,13 @@ export const QUERY_DEPENDENCIES = {
   getMenuStatuses: MENU_PUBLICATION_READS,
   getMenuStatus: MENU_PUBLICATION_READS,
   getMenuPreview: MENU_PUBLICATION_READS,
+  // The route converts each time with the location's zone.
+  getMenuPublications: [
+    "menu_scheduled_publications",
+    "menu_publications",
+    "menu_versions",
+    "locations",
+  ],
   // `readMenuHome` (packages/catalogue/src/menu-home.ts): the details row, the section graph with
   // its menus, and each shortcut's name.
   getMenuHome: ["menu_details", "sections", "section_members", "products", "catalogues"],

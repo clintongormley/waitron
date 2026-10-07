@@ -166,6 +166,7 @@ for (const succeeds of [true, false]) {
       getMenuPreview: async () => {
         throw { code: "connection.failed" };
       },
+      getMenuPublications: async () => ({ timeZone: "Europe/Madrid", live: null, editions: [] }),
       setHomeDisplay: async (...args: unknown[]) => {
         writes.push(args);
         if (!succeeds)

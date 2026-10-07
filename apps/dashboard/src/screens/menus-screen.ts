@@ -33,6 +33,7 @@ import { HOME_KEY, ROOT_KEY, type StructureAddAction } from "../widgets/menu-str
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
+import "../widgets/menu-publications.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
@@ -2229,6 +2230,13 @@ export class MenusScreen extends LitElement {
         event.stopPropagation();
         void this.#watchPreview(this.menuId!);
       }}
+      ><dashboard-menu-publications
+        slot="schedule"
+        .api=${this.api}
+        menuId=${this.menuId!}
+        menuName=${this.#menuName()}
+        .preview=${this.preview}
+      ></dashboard-menu-publications
     ></dashboard-menu-preview>`;
   }
 

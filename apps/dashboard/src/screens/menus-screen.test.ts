@@ -341,6 +341,9 @@ const WRITES = [
   "removeHomeShortcut",
   "moveHomeShortcut",
   "setHomeDisplay",
+  "scheduleMenuPublication",
+  "rescheduleMenuPublication",
+  "cancelMenuPublication",
 ] as const;
 
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
@@ -546,6 +549,14 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       id === "menu-lunch" ? lunchPreview() : dinnerPreview(),
     ),
     publishMenu: vi.fn().mockResolvedValue({ versionId: "v-lunch-3", number: 3 }),
+    getMenuPublications: vi.fn(async () => ({
+      timeZone: "Europe/Madrid",
+      live: null,
+      editions: [],
+    })),
+    scheduleMenuPublication: vi.fn(),
+    rescheduleMenuPublication: vi.fn(),
+    cancelMenuPublication: vi.fn(),
     getMenuHome: vi.fn(async (id: string) => (id === "menu-lunch" ? menuHome() : emptyHome())),
     addHomeShortcut: vi.fn().mockResolvedValue(productMember("t-new", 3, "p-lager")),
     removeHomeShortcut: vi.fn().mockResolvedValue(undefined),
@@ -5041,6 +5052,24 @@ describe("publishing", () => {
     inPanel(el, "publish-confirm")?.click();
     await el.updateComplete;
   }
+
+  it("renders the publications widget for the open menu with the preview it read", async () => {
+    const client = api();
+    const el = await mountPreview(client);
+    const schedule = panel(el).querySelector<HTMLElementTagNameMap["dashboard-menu-publications"]>(
+      "dashboard-menu-publications",
+    )!;
+    expect(schedule.slot).toBe("schedule");
+    expect(schedule.menuId).toBe("menu-lunch");
+    expect(schedule.menuName).toBe("Lunch Menu");
+    expect(schedule.api).toBe(client);
+    expect(schedule.preview).toBe(panel(el).preview);
+    expect(schedule.preview?.hash).toBe(LUNCH_HASH);
+    const slot = panel(el).shadowRoot!.querySelector('slot[name="schedule"]');
+    expect(slot).not.toBeNull();
+    expect(schedule.assignedSlot).toBe(slot);
+    await vi.waitFor(() => expect(client.getMenuPublications).toHaveBeenCalledWith("menu-lunch"));
+  });
 
   function navigablePreview(): MenuPreview {
     const snapshot = lunchPreview();
