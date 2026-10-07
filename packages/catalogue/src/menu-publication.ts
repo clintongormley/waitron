@@ -43,7 +43,7 @@ export interface LiveVersion {
   document: MenuDocument | null;
 }
 
-/** Each named menu's highest-numbered queued edition due at `at`, chosen in SQL. */
+/** Every queued edition due at `at`, ranked per menu by number (rank 1 is the highest). */
 function dueEditions(tx: Transaction, at: Date, menuIds?: readonly string[]) {
   return tx
     .select({
@@ -233,11 +233,10 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Each published menu's version live at this instant and its document. Unsupported formats require a venue reset.
- * A version's row is never changed once written
- * (`menu_versions` is `appendOnly()`), so each handle keeps the parsed documents it has read,
- * frozen, and reads a document again only when it is not kept or its row's content hash differs
- * from the kept one.
+ * Each published menu's version live at this instant and its document. Unsupported formats require
+ * a venue reset. A version's row is never changed once written (`menu_versions` is `appendOnly()`),
+ * so each handle keeps the parsed documents it has read, frozen, and reads a document again only
+ * when it is not kept or its row's content hash differs from the kept one.
  */
 export async function readLiveDocuments(
   tx: Transaction,

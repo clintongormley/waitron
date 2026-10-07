@@ -706,6 +706,21 @@ describe("a due edition is live at once", () => {
     expect(await pointer()).toMatchObject({ versionId: published!.versionId, publishedAt: day(9) });
   });
 
+  it("settles a due edition before queuing another", async () => {
+    await setSoup("5.50");
+    const second = await queue(day(8));
+
+    vi.setSystemTime(day(9));
+    await setSoup("6.00");
+    const third = await queue(day(10), day(9));
+    expect(third.number).toBe(3);
+    expect(await scheduleRow(second.versionId)).toMatchObject({
+      state: "activated",
+      activatedAt: day(9),
+    });
+    expect((await pointer()).versionId).toBe(second.versionId);
+  });
+
   it("writes only the schedule and the pointer when it activates", async () => {
     await queueThree();
     const written = await statements((tx) => activateDueMenuPublications(tx, day(9)));
