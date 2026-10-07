@@ -207,6 +207,8 @@ describe("service-status-screen", () => {
       api,
     });
     await flush(el);
+    type(el, "[data-test=label-s1]", "Bill please");
+    await el.updateComplete;
     q(el, "[data-test=save-s1]")!.click();
     await flush(el);
     expect(errorKey(el)).toBe("status.not_found");
@@ -312,9 +314,13 @@ it.each([
     await userEvent.keyboard("{Enter}");
     await flush(el);
     expect(request).toHaveBeenCalledTimes(2);
-    expect((el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(
-      false,
-    );
+    const action = el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton;
+    expect(action.disabled).toBe(true);
+    expect(action.variant).toBe("secondary");
+    input.value = "Updated again";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(action.disabled).toBe(false);
   },
 );
 
@@ -450,6 +456,8 @@ describe("service-status keeps a save's message while the reads recover", () => 
     api.liveData.refresh();
     await vi.waitFor(() => expect(q(el, "[role=alert]")).not.toBeNull());
 
+    type(el, "[data-test=label-s1]", "Bill please");
+    await el.updateComplete;
     q(el, "[data-test=save-s1]")!.click();
     await vi.waitFor(() => expect(api.updateStatus).toHaveBeenCalledTimes(1));
     await flush(el);
@@ -463,6 +471,41 @@ describe("service-status keeps a save's message while the reads recover", () => 
     await vi.waitFor(() => expect(q(el, "[data-test=row-s2]")).not.toBeNull());
     await flush(el);
     expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(codeMessage("connection.failed"));
+  });
+
+  it("a deactivation finishing after its row was removed and listed again leaves the new row untouched", async () => {
+    let finish!: () => void;
+    const api = Object.assign(
+      stubApi({
+        deactivateStatus: vi.fn().mockReturnValueOnce(
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+        ),
+      }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
+      api,
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=row-s1]")).not.toBeNull());
+    q(el, "[data-test=deactivate-s1]")!.click();
+    await vi.waitFor(() => expect(api.deactivateStatus).toHaveBeenCalledTimes(1));
+
+    vi.mocked(api.listStatuses).mockResolvedValue([]);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=row-s1]")).toBeNull());
+    vi.mocked(api.listStatuses).mockResolvedValue(SEED.map((s) => ({ ...s })));
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=row-s1]")).not.toBeNull());
+
+    const reads = vi.mocked(api.listStatuses).mock.calls.length;
+    finish();
+    await vi.waitFor(() => expect(api.listStatuses).toHaveBeenCalledTimes(reads + 1));
+    await flush(el);
+    const save = q(el, "[data-test=save-s1]") as import("@waitron/ui").WtButton;
+    expect(save.variant).toBe("secondary");
+    expect(save.disabled).toBe(true);
   });
 
   it("keeps a failed deactivation when an earlier deactivation completes after it", async () => {

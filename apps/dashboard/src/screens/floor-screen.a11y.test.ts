@@ -66,6 +66,16 @@ async function flush(el: FloorScreen): Promise<void> {
 
 afterEach(cleanupWidgets);
 
+function change(el: FloorScreen, selector: string, value: string): void {
+  el.shadowRoot!.querySelector(selector)!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+
+function button(el: FloorScreen, selector: string) {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`wt-button${selector}`)!;
+}
+
 describe.each(["light", "dark"] as const)("floor-screen a11y (%s theme)", (theme) => {
   it("renders accessibly with a populated list", async () => {
     const { el, host } = await mountWidget<FloorScreen>(
@@ -87,6 +97,22 @@ describe.each(["light", "dark"] as const)("floor-screen a11y (%s theme)", (theme
     );
     await flush(el);
     expect(el.shadowRoot!.querySelector('[data-test="table-enable-t2"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with Save quiet on an untouched table and loud on an edited one", async () => {
+    const { el, host } = await mountWidget<FloorScreen>(
+      "dashboard-floor-screen",
+      { api: stubApi(ZONES, [...TABLES, { ...TABLES[0]!, id: "t2", label: "5" }]) },
+      theme,
+    );
+    await flush(el);
+    change(el, '[data-test="table-label-t1"]', "4B");
+    change(el, "[data-new-table]", "12");
+    await el.updateComplete;
+    expect(button(el, '[data-test="table-save-t1"]').variant).toBe("primary");
+    expect(button(el, '[data-test="table-save-t2"]').variant).toBe("secondary");
+    expect(button(el, "[data-add-table]").variant).toBe("primary");
     await expectNoA11yViolations(host);
   });
 

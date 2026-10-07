@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./service-status-screen.js";
 import type { ServiceStatusScreen } from "./service-status-screen.js";
@@ -39,6 +39,18 @@ async function flush(el: ServiceStatusScreen): Promise<void> {
 
 afterEach(cleanupWidgets);
 
+function change(el: ServiceStatusScreen, test: string, value: string): void {
+  el.shadowRoot!.querySelector(`[data-test=${test}]`)!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+
+function button(el: ServiceStatusScreen, test: string) {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    `wt-button[data-test=${test}]`,
+  )!;
+}
+
 describe.each(["light", "dark"] as const)("service-status-screen a11y (%s theme)", (theme) => {
   it("renders accessibly with a populated list", async () => {
     const { el, host } = await mountWidget<ServiceStatusScreen>(
@@ -47,6 +59,36 @@ describe.each(["light", "dark"] as const)("service-status-screen a11y (%s theme)
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with Save quiet on untouched rows and loud on an edited one", async () => {
+    const { el, host } = await mountWidget<ServiceStatusScreen>(
+      "dashboard-service-status-screen",
+      { api: stubApi(SEED) },
+      theme,
+    );
+    await flush(el);
+    change(el, "label-s1", "Bill please");
+    change(el, "new-label", "Needs water");
+    await el.updateComplete;
+    expect(button(el, "save-s1").variant).toBe("primary");
+    expect(button(el, "save-s2").variant).toBe("secondary");
+    expect(button(el, "add").variant).toBe("primary");
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with a colour picked and no name, the add action loud but disabled", async () => {
+    const { el, host } = await mountWidget<ServiceStatusScreen>(
+      "dashboard-service-status-screen",
+      { api: stubApi(SEED) },
+      theme,
+    );
+    await flush(el);
+    change(el, "new-color", "#10b981");
+    await el.updateComplete;
+    expect(button(el, "add").variant).toBe("primary");
+    expect(button(el, "add").disabled).toBe(true);
     await expectNoA11yViolations(host);
   });
 

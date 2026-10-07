@@ -306,7 +306,8 @@ describe("floor-screen", () => {
     const api = stubApi({ updateTable: vi.fn().mockRejectedValue({ code: "table.label_taken" }) });
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
-    type(el, "[data-test=table-label-t1]", "4");
+    type(el, "[data-test=table-label-t1]", "5");
+    await el.updateComplete;
     q(el, "[data-test=table-save-t1]")!.click();
     await flush(el);
     expect(errorKey(el)).toBe("table.label_taken");
@@ -827,9 +828,13 @@ it.each([
     await userEvent.keyboard("{Enter}");
     await flush(el);
     expect(request).toHaveBeenCalledTimes(2);
-    expect((el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(
-      false,
-    );
+    const action = el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton;
+    expect(action.disabled).toBe(true);
+    expect(action.variant).toBe("secondary");
+    input.value = "Updated again";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(action.disabled).toBe(false);
   },
 );
 

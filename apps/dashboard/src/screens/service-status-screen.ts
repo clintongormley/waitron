@@ -2,7 +2,13 @@ import { DraftRows } from "@waitron/dashboard-kit";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
+import {
+  submitOnEnter,
+  baseStyles,
+  draftScopeFor,
+  saveActionState,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -89,7 +95,7 @@ export class ServiceStatusScreen extends LitElement {
 
   #registerNew(): void {
     if (this.readOnly || this.#newScope) return;
-    this.#newScope = leaveCoordinatorFor(this)?.register({
+    this.#newScope = draftScopeFor<NewStatusDraft>(this, {
       id: {},
       parent: this,
       current: () => this.#newDraft(),
@@ -99,7 +105,7 @@ export class ServiceStatusScreen extends LitElement {
         this.newLabel = value.label;
         this.newColor = value.color;
       },
-    });
+    }).scope;
   }
 
   #acceptRows(rows: EditableStatus[]): void {
@@ -122,8 +128,6 @@ export class ServiceStatusScreen extends LitElement {
       if (!rows.some((row) => row.id === id)) this.statuses = [...this.statuses, current.get(id)!];
     }
     if (this.readOnly) return;
-    const coordinator = leaveCoordinatorFor(this);
-    if (!coordinator) return;
     for (const row of this.statuses) {
       const entry = this.#rowScopes.get(row.id);
       if (entry) {
@@ -132,7 +136,7 @@ export class ServiceStatusScreen extends LitElement {
           entry.scope.commit(row);
         }
       } else {
-        const scope = coordinator.register({
+        const { scope } = draftScopeFor<EditableStatus>(this, {
           id: {},
           parent: this,
           current: () => this.statuses.find((value) => value.id === row.id)!,
@@ -230,7 +234,7 @@ export class ServiceStatusScreen extends LitElement {
   }
 
   async #create(): Promise<void> {
-    if (this.submitting) return;
+    if (this.submitting || saveActionState(this.#newScope).unchanged) return;
     this.#showError(null);
     const label = this.newLabel.trim();
     if (label === "") return;
@@ -265,11 +269,12 @@ export class ServiceStatusScreen extends LitElement {
 
   async #saveRow(id: string): Promise<void> {
     if (this.submitting) return;
-    this.#showError(null);
     const row = this.statuses.find((s) => s.id === id);
-    if (row === undefined) return;
-    const submitted = { ...row };
     const entry = this.#rowScopes.get(id);
+    if (row !== undefined && saveActionState(entry?.scope).unchanged) return;
+    this.#showError(null);
+    if (row === undefined || entry === undefined) return;
+    const submitted = { ...row };
     const connection = this.#connection;
     this.submitting = true;
     try {
@@ -280,10 +285,8 @@ export class ServiceStatusScreen extends LitElement {
         active: row.active,
       });
       if (connection !== this.#connection) return;
-      if (entry) {
-        entry.saved = submitted;
-        entry.scope.commit(submitted);
-      }
+      entry.saved = submitted;
+      entry.scope.commit(submitted);
       await this.#load();
     } catch (error) {
       if (connection === this.#connection) this.#showError(codeOf(error));
@@ -313,6 +316,7 @@ export class ServiceStatusScreen extends LitElement {
   }
 
   #renderRow(s: EditableStatus): TemplateResult {
+    const save = saveActionState(this.#rowScopes.get(s.id)?.scope);
     if (this.readOnly) {
       return html`<li data-test="row-${s.id}">
         <wt-card>
@@ -373,10 +377,10 @@ export class ServiceStatusScreen extends LitElement {
             }}
           ></wt-switch>
           <wt-button
-            variant="primary"
+            variant=${save.variant}
             size="sm"
             data-test="save-${s.id}"
-            ?disabled=${this.submitting}
+            ?disabled=${save.unchanged || this.submitting}
             @click=${() => void this.#saveRow(s.id)}
             >${t("action.save")}</wt-button
           >
@@ -394,6 +398,7 @@ export class ServiceStatusScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    const add = saveActionState(this.#newScope);
     return html`
       <ol>
         ${this.statuses.map((s) => this.#renderRow(s))}
@@ -421,9 +426,9 @@ export class ServiceStatusScreen extends LitElement {
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewColor(e)}
               ></wt-input>
               <wt-button
-                variant="primary"
+                variant=${add.variant}
                 data-test="add"
-                ?disabled=${this.submitting}
+                ?disabled=${add.unchanged || this.submitting || this.newLabel.trim() === ""}
                 @click=${() => void this.#create()}
                 >${t("action.create")}</wt-button
               >
