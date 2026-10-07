@@ -587,8 +587,7 @@ export class DashboardApp extends LitElement {
          content row, below the banner. It leaves the flow and slides in when the layout gains
          the drawer-open class; the hamburger appears to toggle it. A CSS media query cannot read a
          --custom-property, so the breakpoint is a literal here (and mirrored in the JS DRAWER_BREAKPOINT
-         constant that drives the narrow state); 48rem matches the existing repo precedent in
-         apps/till/src/screens/till-counter-screen.ts:111. */
+         constant that drives the narrow state). */
       @media (max-width: 48rem) {
         /* A phone cannot fit the lockup, the legal name, the mode pill and the trailing controls on
            one line, so the name, the pill and the inbox link, when shown, take a second row and the
@@ -627,6 +626,11 @@ export class DashboardApp extends LitElement {
         .venue-name {
           padding-inline-start: 0;
           border-inline-start: 0;
+        }
+        /* The closed drawer is moved out past .layout's left edge, which is not the window's: the
+           page's own padding would show its last strip. */
+        .layout {
+          overflow: clip;
         }
         .alert-toast {
           inset-inline: var(--wt-space-2);

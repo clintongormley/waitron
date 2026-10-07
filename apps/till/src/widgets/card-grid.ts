@@ -1,6 +1,6 @@
 import { type DietPredicate, memoVisibleProducts, shownMenu } from "../menu-filter.js";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 // Side-effect imports: registering each widget element so the switch below can render its tag.
@@ -46,6 +46,7 @@ import type { WorkingOrderStore } from "../state/working-order.js";
 import type { StoredLines } from "./basket.js";
 import type { OtherDraft } from "../screens/till-table-order-screen.js";
 import type { CardOutcome, CardProvider } from "./tender-pay.js";
+import { PHONE_WIDTH } from "./language-chooser-styles.js";
 
 /**
  * Lays a canvas tab's cards on a grid. Every store-backed card is handed the SAME `store`; card events
@@ -68,6 +69,19 @@ export class TillCardGrid extends LitElement {
        the shared disabled-opacity token, not a hardcoded number. */
     .cell.locked {
       opacity: var(--wt-opacity-disabled);
+    }
+    /* A phone is too narrow for any card to share a row, so the cards stack full width in the tab's
+       order and the page scrolls. !important because the tab's columns and spans are inline. */
+    @media ${unsafeCSS(PHONE_WIDTH)} {
+      .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+        grid-auto-rows: auto;
+        height: auto;
+      }
+      .cell {
+        grid-column: auto !important;
+        grid-row: auto !important;
+      }
     }
     .pay-rest {
       display: flex;
@@ -161,6 +175,26 @@ export class TillCardGrid extends LitElement {
   /** The app opens a station's view from the floor: false on a device without one. */
   @property({ type: Boolean }) canOpenStation = false;
 
+  /** On a phone the basket stacks each line's name above its controls. */
+  @state() private phone = false;
+  #phoneWidth?: MediaQueryList;
+  readonly #onPhoneWidth = (event: MediaQueryListEvent) => {
+    this.phone = event.matches;
+  };
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#phoneWidth = window.matchMedia(PHONE_WIDTH);
+    this.phone = this.#phoneWidth.matches;
+    this.#phoneWidth.addEventListener("change", this.#onPhoneWidth);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#phoneWidth?.removeEventListener("change", this.#onPhoneWidth);
+    this.#phoneWidth = undefined;
+  }
+
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
   readonly #unfilteredProducts = memoVisibleProducts();
@@ -247,6 +281,7 @@ export class TillCardGrid extends LitElement {
       }
       case "basket":
         return html`<till-basket
+          ?stacked=${this.phone}
           .store=${this.store}
           .storedLines=${this.storedLines}
           .makeAtStations=${this.makeAtStations}

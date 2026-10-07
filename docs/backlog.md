@@ -2265,10 +2265,25 @@ look (2026-10-07, a Barcelona demo) met the same restart. Seen in that look, in 
 touch, not checked further, OPEN, unqueued: the till's printed allergen sheet lists dishes in
 Catalan under English fixed text (title, column headings, "Allergen info pending"), because the
 till has no Catalan wording; the Missing translations section says "Every name has a English
-translation"; at 390px the dashboard shows a strip about 24px wide of the hidden side menu along
-the left edge (the #1320 shots show it too), and the till's basket squeezes into a narrow column
-that cuts off its prices, remove buttons and total; switching the dashboard to English left the
+translation"; at 390px the dashboard showed a strip about 24px wide of the hidden side menu along
+the left edge, and the till's basket squeezed into a narrow column that cut off its prices, remove
+buttons and total — both FIXED by A310 (follow-ups below); switching the dashboard to English left the
 alert text in Spanish until a reload. Screenshots: `~/waitron-campaign/w109-4-shots/`.
+
+**Till and dashboard layout points seen during A310's look (2026-10-07), OPEN, unqueued — not
+checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-shots/`.
+- **Tablet widths (641–1024 px): the counter basket's remove button is still cut off.** A310 changed
+  only widths below 40rem. In the test harness the × was 0% on screen at 720 px and 75% at 1024 px.
+- **At 1280 px a three-digit line total pushes the × about 11 px past the basket** (harness only).
+  On CI's Linux runner a two-digit total (2 × 7.80) put it 11 px past too; on a Mac it sits exactly
+  at the basket's edge.
+- **Desktop till, 1280 px: the total and the Cash/Card/Hold buttons sit below a large empty area**
+  and need scrolling. Harness screenshots are identical before and after A310, so A310 did not cause it.
+- **Phone till: the top bar (clock notice and about eight buttons) keeps about 440 of 844 px**,
+  leaving roughly 400 px for selling.
+- **Spanish till: the tab buttons still read "Counter" and "Floor"**, the service-area label is cut
+  to "Zona de servi…", and some demo dish names ("Spanish omelette", "House bread") stay English.
+- **Dashboard at 1280 px: the overview's top-row cards have uneven heights.**
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
@@ -3770,8 +3785,11 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   - **Nothing says WHY Add is disabled when a list's minimum is unmet.** The only cues are a `*` on the
     legend and a dimmed Add — and that `*` is also the only thing telling `minPicks: 1` from
     `minPicks: 2`. Wants a sentence beside the list stating the minimum in words.
-  - **A long dish name pushes that line's remove control outside the basket at phone width**
-    (`apps/till/src/widgets/basket.ts`): the `1fr` grid column bottoms out at the longest word.
+  - **A long dish name pushes that line's remove control outside the basket**
+    (`apps/till/src/widgets/basket.ts`): the unstacked layout's `1fr` column bottoms out at the
+    longest word. Measured at phone width before A310. Since A310 a canvas tab's basket at 40rem or
+    less (`card-grid.ts`) puts the name on its own row; not re-measured there. Above 40rem the
+    unstacked layout and its `1fr` column are unchanged.
   - **A pick's money column sits right of the dish total it belongs under**, further right than the
     dish row's own remove button, because `.line` and `.option` use different column templates.
   - **Product-grid tiles: a long name starts left of its own card border, and a unit price crosses the
@@ -4334,9 +4352,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Enter (`submitOnEnter`, which design-system.md → "Submit ordinary forms with Enter" asks for and
   `stream-settings-panel.ts` uses); and no test covers only the second box being invalid, or where
   focus lands after a failed check on the Save form;
-  (5) on the dashboard at 390 px a sliver of the closed side-menu drawer's search box shows at the
-  left edge, in the page's 24 px margin (seen while looking at C93, #933; I believe it predates C93,
-  not checked on `main`);
+  (5) FIXED (A310): the closed phone drawer no longer shows in the page's 24 px margin;
   (6) the setup live-source screen's refusals go through a catch-all in
   `#onConfigurationRequested` that drops the code, so a wrong passphrase cannot be placed under its
   field;
@@ -6068,9 +6084,7 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
     "KDS-2/3" and "(Copilot)" in the `till-api*` and `till-config` suites, and 29 titles
     saying "opaque 500".
   - Found by #612 (the rest of `apps/dashboard`), not fixable in a comments-only change.
-    `apps/dashboard/src/dashboard-app.ts` (a comment inside its `css` template, around line 435)
-    points at `till-counter-screen.ts:111` for the 48rem breakpoint; that file no longer contains
-    48rem. `date-utils.test.ts` has a test titled as guarding "against a vacuous pass", but #612's
+    `date-utils.test.ts` has a test titled as guarding "against a vacuous pass", but #612's
     review removed the timezone pin and ran the file under `TZ=UTC`, and all four cases failed on
     their own. `catalogues` in `apps/dashboard/src/i18n/strings.ts` is read by nothing but
     `i18n/t.test.ts` (`t.ts` registers `{ en, es }` with the kit), so that test's "registers en-GB"
