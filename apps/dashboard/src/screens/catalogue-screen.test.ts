@@ -671,6 +671,27 @@ describe("catalogue-screen", () => {
       await flush(el);
       expect(bodyOf(el)).toBe(warning);
     });
+
+    it("forgets the last dialog's count while the next product's is still being read", async () => {
+      const both = [...products, { ...products[0]!, id: "p2", name: "Patatas" }];
+      const api = stubApi({
+        listProducts: vi
+          .fn()
+          .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? both : [])),
+        countProductMenus: vi
+          .fn()
+          .mockResolvedValueOnce(4)
+          .mockReturnValueOnce(new Promise(() => {})),
+      });
+      const el = await openDisable(api);
+      expect(bodyOf(el)).toContain("the 4 menus");
+      dialogOf(el).querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+      await flush(el);
+      emit(list(el), "delete-product", { productId: "p2" });
+      await flush(el);
+      expect(api.countProductMenus).toHaveBeenLastCalledWith(["p2"]);
+      expect(bodyOf(el)).toBe(`${warning} It comes off every menu it is on.`);
+    });
   });
 
   it("enables a disabled product from its own row through the editor's write, then shows the row as active", async () => {

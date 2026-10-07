@@ -2946,6 +2946,26 @@ it("never shows an earlier Disable dialog's late count in the next one", async (
   await el.updateComplete;
   expect(disableBody(el)).toBe(DISABLE_PRODUCTS);
 });
+it("forgets the last Disable dialog's count while the next one's is still being read", async () => {
+  const answers: Array<(menus: number) => void> = [];
+  const el = await openDisableProducts(
+    ["bread", "cola"],
+    () => new Promise<number>((resolve) => answers.push(resolve)),
+  );
+  answers[0]!(4);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(disableBody(el)).toContain("the 4 menus");
+  dialog(el)!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  await vi.waitFor(() => expect(dialog(el)).toBeNull());
+  (await tableOf(el))
+    .shadowRoot!.querySelector<HTMLInputElement>('tr[data-row-key="cola"] input[type="checkbox"]')!
+    .click();
+  await el.updateComplete;
+  await press(el, "delete");
+  expect(el.api.countProductMenus).toHaveBeenLastCalledWith(["bread"]);
+  expect(disableBody(el)).toBe(`${DISABLE_ONE_PRODUCT} It comes off every menu it is on.`);
+});
 it("in Spanish, says how many cartas the products come off", async () => {
   setLocale("es");
   const el = await openDisableProducts(["bread", "cola"], () => Promise.resolve(2));
