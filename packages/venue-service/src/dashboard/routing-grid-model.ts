@@ -21,8 +21,8 @@ function hasNoCategoryCell(model: RoutingModel): boolean {
  * are all expanded, every category or product holding a cell (at its own place, without its
  * hidden ancestors), then the No category row — while a product has no category or the row holds
  * a cell — and the products with no category under it. A shown category's children are shown
- * exactly when its id is in `expanded`, so a category shown only for its cell opens too. A category whose children are not shown counts the rows of its
- * subtree that are absent. Siblings are sorted by name with the shared label comparison, equal
+ * exactly when its id is in `expanded`, so a category shown only for its cell opens too. A
+ * category whose children are not shown counts the rows of its subtree that are absent. Siblings are sorted by name with the shared label comparison, equal
  * names keeping the model's order. A category that is its own parent is sorted with the roots.
  * Categories on or below a longer parent cycle follow the roots, and the cycle members placed at
  * the top level are not sorted by name; a category's subcategories come before its products.
