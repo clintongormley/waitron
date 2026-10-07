@@ -8,18 +8,23 @@ import { describe, expect, it } from "vitest";
  * Contract: a browser test's `screenshot({ path })` lands where git ignores it, so a run leaves no
  * untracked image beside the test. Vitest resolves the path against the TEST FILE's directory.
  *
- * Weaker than its name: it reads only `*.test.ts` under `apps/` and `packages/`, and only a
- * `.screenshot(...)` call whose first argument is an object literal with its own `path`. A path
- * written as a string or template literal is judged with each `${...}` read as one segment of
- * plain text; any other path (a variable, a call) is reported as unreadable. A path outside the
- * repository is allowed without being checked.
+ * Weaker than its name: it parses only `*.test.ts` under `apps/` and `packages/`, skipping
+ * `node_modules`, `dist` and dot-directories, and only a `.screenshot(...)` call whose first
+ * argument is an object literal; any other call, `screenshot(options)` or
+ * `screenshot({ … } as Options)` included, passes unchecked. A `path` written as a string or
+ * template literal is judged with each `${...}` read as one segment of plain text. Any other way
+ * the object could set the last path is reported as unreadable: a variable or call as the value,
+ * the shorthand `{ path }`, a getter or method named `path`, a spread, or a computed key other
+ * than a string literal naming another option. A path outside the repository is allowed without
+ * being checked.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
 const ROOTS = ["apps", "packages"];
-const GIT_SPAWN_TIMEOUT_MS = 10_000;
-// Above the git wait, plus parsing every screenshot-taking test file.
-const IGNORED_TEST_TIMEOUT_MS = 20_000;
+// A per-call kill timeout for a hung `git` (Vitest's timer cannot interrupt a blocking child), and
+// a per-test bound above it.
+const GIT_SPAWN_TIMEOUT_MS = 30_000;
+const SPAWN_TEST_TIMEOUT_MS = 60_000;
 
 /** Git exports `GIT_DIR` to every hook and `.husky/pre-push` runs this suite. */
 const GIT_LOCATION_OVERRIDES = [
@@ -34,19 +39,32 @@ const GIT_LOCATION_OVERRIDES = [
 
 interface ScreenshotPath {
   line: number;
-  /** The path as written, each `${...}` read as `x`; `undefined` when it is not a literal. */
+  /** The path as written, each `${...}` read as `x`; `undefined` when the guard cannot read it. */
   path: string | undefined;
 }
 
-function ownProperty(node: ts.ObjectLiteralExpression, name: string): ts.Expression | undefined {
-  for (const property of node.properties)
-    if (
-      ts.isPropertyAssignment(property) &&
-      (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) &&
-      property.name.text === name
-    )
-      return property.initializer;
-  return undefined;
+/** Where the options set `path`, `value` unset when unreadable; `undefined` when nothing does. */
+function pathProperty(
+  node: ts.ObjectLiteralExpression,
+): { at: ts.Node; value: ts.Expression | undefined } | undefined {
+  let found: { at: ts.Node; value: ts.Expression | undefined } | undefined;
+  for (const property of node.properties) {
+    if (ts.isSpreadAssignment(property)) {
+      found = { at: property, value: undefined };
+      continue;
+    }
+    const name = property.name;
+    if (ts.isComputedPropertyName(name)) {
+      if (!ts.isStringLiteralLike(name.expression) || name.expression.text === "path")
+        found = { at: property, value: undefined };
+      continue;
+    }
+    if (!(ts.isIdentifier(name) || ts.isStringLiteral(name)) || name.text !== "path") continue;
+    found = ts.isPropertyAssignment(property)
+      ? { at: property.initializer, value: property.initializer }
+      : { at: property, value: undefined };
+  }
+  return found;
 }
 
 function literalText(node: ts.Expression): string | undefined {
@@ -54,6 +72,10 @@ function literalText(node: ts.Expression): string | undefined {
   if (ts.isTemplateExpression(node))
     return node.head.text + node.templateSpans.map((span) => `x${span.literal.text}`).join("");
   return undefined;
+}
+
+export function mayTakeScreenshots(source: string): boolean {
+  return source.includes("screenshot");
 }
 
 /** Each `.screenshot({ path })` call in `source`, with the path it writes to. */
@@ -69,12 +91,12 @@ export function screenshotPaths(source: string): ScreenshotPath[] {
       const options = node.arguments[0];
       const path =
         options !== undefined && ts.isObjectLiteralExpression(options)
-          ? ownProperty(options, "path")
+          ? pathProperty(options)
           : undefined;
       if (path !== undefined)
         found.push({
-          line: file.getLineAndCharacterOfPosition(path.getStart()).line + 1,
-          path: literalText(path),
+          line: file.getLineAndCharacterOfPosition(path.at.getStart()).line + 1,
+          path: path.value === undefined ? undefined : literalText(path.value),
         });
     }
     ts.forEachChild(node, visit);
@@ -114,6 +136,46 @@ describe("the matcher", () => {
     ].join("\n");
     expect(screenshotPaths(source)).toEqual([]);
   });
+
+  it("reports a spread after the last path as unreadable, and reads a path after a spread", () => {
+    const source = [
+      'await page.screenshot({ path: "__screenshots__/a.png", ...{ path: "look/leak.png" } });',
+      "await page.screenshot({ ...options });",
+      'await page.screenshot({ ...defaults, path: "__screenshots__/b.png" });',
+      'await page.screenshot({ ["path"]: target, path: "__screenshots__/c.png" });',
+    ].join("\n");
+    expect(screenshotPaths(source)).toEqual([
+      { line: 1, path: undefined },
+      { line: 2, path: undefined },
+      { line: 3, path: "__screenshots__/b.png" },
+      { line: 4, path: "__screenshots__/c.png" },
+    ]);
+  });
+
+  it("reports a shorthand path, a getter or method named path and a computed key as unreadable", () => {
+    const source = [
+      "await page.screenshot({ path });",
+      'await page.screenshot({ get path() { return "look/a.png"; } });',
+      'await page.screenshot({ path() { return "look/a.png"; } });',
+      'await page.screenshot({ ["path"]: "look/a.png" });',
+      "await page.screenshot({ [key]: target });",
+      'await page.screenshot({ ["fullPage"]: true });',
+    ].join("\n");
+    expect(screenshotPaths(source)).toEqual([
+      { line: 1, path: undefined },
+      { line: 2, path: undefined },
+      { line: 3, path: undefined },
+      { line: 4, path: undefined },
+      { line: 5, path: undefined },
+    ]);
+  });
+
+  it("reads a call written with a space before its parenthesis", () => {
+    expect(screenshotPaths('await page.screenshot ({ path: "look/a.png" });')).toEqual([
+      { line: 1, path: "look/a.png" },
+    ]);
+    expect(mayTakeScreenshots('page.screenshot ({ path: "look/a.png" })')).toBe(true);
+  });
 });
 
 /** Every `*.test.ts` file under `dir`; a failing browser test writes a DIRECTORY named after one. */
@@ -151,7 +213,7 @@ describe("the tree", () => {
   const written = new Map<string, string>();
   for (const file of ROOTS.flatMap((root) => testFilesIn(join(repoRoot, root)))) {
     const source = readFileSync(file, "utf8");
-    if (!source.includes("screenshot(")) continue;
+    if (!mayTakeScreenshots(source)) continue;
     const name = relative(repoRoot, file);
     for (const { line, path } of screenshotPaths(source)) {
       if (path === undefined) {
@@ -181,6 +243,6 @@ describe("the tree", () => {
         .map(([site, target]) => `${site} -> ${target}`);
       expect(tracked.sort()).toEqual([]);
     },
-    IGNORED_TEST_TIMEOUT_MS,
+    SPAWN_TEST_TIMEOUT_MS,
   );
 });

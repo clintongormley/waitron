@@ -906,15 +906,15 @@ will meet:
 - **Raising the root entry to version 7 breaks `pnpm lint`,** with the message above and no lint
   results at all. Leave it on the alias until typescript-eslint's issue 10940 ships version 7
   support — the message names 7.1 as its target — then, after porting `scripts/comments-only.mjs`,
-  `scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts` and
-  `scripts/native-form-fields.test.ts` to version 7's API or keeping the alias for them,
+  `scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts`,
+  `scripts/native-form-fields.test.ts` and `scripts/screenshot-paths.test.ts` to version 7's API or keeping the alias for them,
   collapse both back to one plain range
   (`docs/backlog.md` → Track C).
 
 The root DOES therefore have a working TypeScript compiler API, at version 6, importable from the
 root Vitest project. The root scripts that import it, `scripts/comments-only.mjs`,
-`scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts` and
-`scripts/native-form-fields.test.ts`, all parse with `ts.createSourceFile`. Two places had named its absence as the reason a guard
+`scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts`,
+`scripts/native-form-fields.test.ts` and `scripts/screenshot-paths.test.ts`, all parse with `ts.createSourceFile`. Two places had named its absence as the reason a guard
 reads text instead of parsing — the header of `scripts/dashboard-browser-purity.test.ts`, and the
 backlog note on `scripts/column-vocabulary.test.ts` — and both were corrected in the same change.
 
@@ -925,7 +925,8 @@ claim the tree also makes in `packages/payments-stripe/src/wiring.test.ts`'s bar
 you can check directly by running a package's suite with no `tsc` involved. That is what bounds a
 TypeScript bump's blast radius to `pnpm typecheck`, `pnpm lint`, `scripts/comments-only.mjs` with
 its suite `scripts/comments-only.test.mjs`, `scripts/apply-migrations-callers.test.ts`,
-`scripts/pinned-actions-column.test.ts` and `scripts/native-form-fields.test.ts`, every suite
+`scripts/pinned-actions-column.test.ts`, `scripts/native-form-fields.test.ts` and
+`scripts/screenshot-paths.test.ts`, every suite
 among them in the root Vitest project.
 
 One thing version 7 catches that 5.9.3 did not: a file imported by a relative path that climbs out
