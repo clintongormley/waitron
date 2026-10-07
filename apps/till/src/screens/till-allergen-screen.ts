@@ -6,6 +6,7 @@ import type { PropertyValues } from "lit";
 import { baseStyles } from "@waitron/ui";
 import { FALLBACK_LOCALE } from "@waitron/shared";
 import { t } from "../i18n/t.js";
+import { catalogues } from "../i18n/strings.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
 import { customerProductName, productName } from "../widgets/product-name.js";
@@ -50,9 +51,7 @@ type Chrome = "title" | "notice" | "pending" | "contains" | "may_contain" | "pri
  *  - `allergens === {}` — reviewed, none declared: genuinely all-clear.
  *  - `allergens === { code: {…} }` — reviewed with declarations.
  *
- * On screen the matrix renders in the OPERATOR locale ({@link locale}); a Print re-renders in the
- * INVOICE locale ({@link invoiceLocale}), because the printed sheet is a customer document. Product
- * names differ between the two renders by more than language: see `#productLabel`.
+ * Printed chrome and customer names share a language with a shipped till catalogue.
  */
 @customElement("till-allergen-screen")
 export class TillAllergenScreen extends LitElement {
@@ -203,22 +202,18 @@ export class TillAllergenScreen extends LitElement {
   @state() private printing = false;
 
   #activeLocale(): string {
-    return this.printing ? this.invoiceLocale : this.locale;
+    if (!this.printing) return this.locale;
+    return Object.hasOwn(catalogues, this.invoiceLocale) ? this.invoiceLocale : FALLBACK_LOCALE;
   }
 
   #t(key: Chrome): string {
     return t(`allergens.${key}`, this.#activeLocale());
   }
 
-  /**
-   * A product's name for the render in hand. The PRINTED sheet is a customer document (RD 126/2015
-   * Art. 6.5.a.2° puts the record in front of consumers as well as staff and inspectors), so it
-   * names dishes the way the customer menu does and in the invoice locale — otherwise a diner
-   * matching a dish on the menu to a row here finds no row that matches. On screen this is an
-   * operator lookup, so it reads the venue's own staff name.
-   */
   #productLabel(product: TillProduct): string {
-    return this.printing ? customerProductName(product, this.invoiceLocale) : productName(product);
+    return this.printing
+      ? customerProductName(product, this.#activeLocale())
+      : productName(product);
   }
 
   #openDetail(product: TillProduct): void {

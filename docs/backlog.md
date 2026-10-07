@@ -2292,10 +2292,10 @@ provisions, the stack started by `wa-wt onboarding <worktree>` restarted into se
 the dev launcher (`apps/server/scripts/dev-server.mjs`) looked for `trading.env` only in the state
 folder `apps/server/.env` names, not the one `wa-wt` passes; the look worked round it with links. #1322's
 look (2026-10-07, a Barcelona demo) met the same restart. Seen in that look, in files #1322 did not
-touch, not checked further, OPEN, unqueued: the till's printed allergen sheet lists dishes in
-Catalan under English fixed text (title, column headings, "Allergen info pending"), because the
-till has no Catalan wording; the Missing translations section says "Every name has a English
-translation"; at 390px the dashboard showed a strip about 24px wide of the hidden side menu along
+touch: A311 fixes the printed allergen sheet's mixed languages: unsupported receipt languages
+use English headings and enabled English customer names, with the staff name when that translation
+is absent. The Missing translations section now says "a translation in {language}" in English
+and "una traducción en {language}" in Spanish (Chromium regression cases and both-theme accessibility checks). at 390px the dashboard showed a strip about 24px wide of the hidden side menu along
 the left edge, and the till's basket squeezed into a narrow column that cut off its prices, remove
 buttons and total — both FIXED by A310 (follow-ups below); switching the dashboard to English left the
 alert text in Spanish until a reload. Screenshots: `~/waitron-campaign/w109-4-shots/`.

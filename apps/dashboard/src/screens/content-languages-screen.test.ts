@@ -1131,13 +1131,31 @@ describe("missing translations", () => {
     expect(asked).toEqual([]);
   });
 
+  it.each([
+    ["en-GB", "en", "Every name has a translation in English."],
+    ["en-GB", "es", "Every name has a translation in Spanish."],
+    ["es-ES", "en", "Todos los nombres tienen una traducción en inglés."],
+    ["es-ES", "es", "Todos los nombres tienen una traducción en español."],
+  ])(
+    "writes the complete translation sentence in %s for %s",
+    async (locale, language, sentence) => {
+      setLocale(locale);
+      const el = await mount(
+        gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [], en: [] })),
+      );
+      expect(disclosure(el, language)!.textContent!.trim()).toBe(sentence);
+    },
+  );
+
   it("names the section's text in each UI language", () => {
     expect(en["content_gaps.title"]).toBe("Missing translations");
     expect(es["content_gaps.title"]).toBe("Traducciones que faltan");
     expect(en["content_gaps.count"]).toBe("{count} missing");
     expect(es["content_gaps.count"]).toBe("{count} sin traducir");
-    expect(en["content_gaps.complete"]).toBe("Every name has a {language} translation.");
-    expect(es["content_gaps.complete"]).toBe("Todos los nombres están traducidos al {language}.");
+    expect(en["content_gaps.complete"]).toBe("Every name has a translation in {language}.");
+    expect(es["content_gaps.complete"]).toBe(
+      "Todos los nombres tienen una traducción en {language}.",
+    );
   });
 
   it("writes the required-language warning in English when the UI is in English", async () => {
@@ -1154,7 +1172,9 @@ describe("missing translations", () => {
     );
     expect(disclosure(el, "ca")!.heading).toBe("Catalan · Required");
     expect(disclosure(el, "ca")!.summary).toBe("2 missing");
-    expect(disclosure(el, "es")!.textContent!.trim()).toBe("Every name has a Spanish translation.");
+    expect(disclosure(el, "es")!.textContent!.trim()).toBe(
+      "Every name has a translation in Spanish.",
+    );
   });
 });
 

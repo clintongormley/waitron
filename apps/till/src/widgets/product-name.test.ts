@@ -68,6 +68,14 @@ describe("customerProductName", () => {
     expect(customerProductName(product(), "es")).toBe("Café recién hecho");
   });
 
+  it("does not substitute another content language for the printed sheet's language", () => {
+    setContentLanguages({ defaultLanguage: "ca", languages: ["ca", "en"] });
+    expect(customerProductName(product({ customerName: { ca: "Cafè" } }), "en-GB")).toBe("Coffee");
+    expect(
+      customerProductName(product({ customerName: { en: "English coffee", ca: "Cafè" } }), "es-ES"),
+    ).toBe("Coffee");
+  });
+
   it("is the CUSTOMER text, never the staff name, whenever the product has one", () => {
     expect(customerProductName(product(), "es")).not.toBe("Coffee");
   });
