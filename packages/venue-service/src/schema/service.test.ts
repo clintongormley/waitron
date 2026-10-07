@@ -17,7 +17,7 @@ import {
 import { departmentAllDayMenus, departmentMenus, zoneAllDayMenus } from "./menus.js";
 import { serviceSettings } from "./settings.js";
 import { kitchenNotices } from "./kitchen-notices.js";
-import { routeExceptions, routingCells, stationClaims } from "./routing.js";
+import { routingCells } from "./routing.js";
 import { stationDayStates, stationFallbacks } from "./station-times.js";
 
 /**
@@ -148,18 +148,6 @@ const EXPECTED: Record<
     uniqueConstraints: [],
     primaryKeys: ["device_profile_watchers_pk"],
   },
-  station_claims: {
-    table: stationClaims,
-    foreignKeys: [
-      "station_claims_location_fk",
-      "station_claims_category_fk",
-      "station_claims_station_fk",
-    ],
-    checks: ["station_claims_target_ck"],
-    indexes: ["station_claims_folder_key"],
-    uniqueConstraints: [],
-    primaryKeys: [],
-  },
   station_fallbacks: {
     table: stationFallbacks,
     foreignKeys: ["station_fallbacks_station_fk", "station_fallbacks_fallback_fk"],
@@ -173,24 +161,6 @@ const EXPECTED: Record<
     foreignKeys: ["station_day_states_station_fk"],
     checks: [],
     indexes: ["station_day_states_day_key"],
-    uniqueConstraints: [],
-    primaryKeys: [],
-  },
-  route_exceptions: {
-    table: routeExceptions,
-    foreignKeys: [
-      "route_exceptions_location_fk",
-      "route_exceptions_zone_fk",
-      "route_exceptions_category_fk",
-      "route_exceptions_product_fk",
-      "route_exceptions_station_fk",
-    ],
-    checks: [
-      "route_exceptions_what_ck",
-      "route_exceptions_condition_ck",
-      "route_exceptions_target_ck",
-    ],
-    indexes: ["route_exceptions_order_idx"],
     uniqueConstraints: [],
     primaryKeys: [],
   },
@@ -277,8 +247,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers the twenty-one tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(21);
+  it("covers the nineteen tables it lists", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(19);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

@@ -613,17 +613,6 @@ describe("stored preparation rules", () => {
       });
     }));
 
-  it("exports both rule tables with their location columns", () => {
-    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables).toContainEqual({
-      name: "station_claims",
-      locationColumns: ["location_id"],
-    });
-    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables).toContainEqual({
-      name: "route_exceptions",
-      locationColumns: ["location_id"],
-    });
-  });
-
   it("exports routing cells with their location column", () => {
     expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables).toContainEqual({
       name: "routing_cells",

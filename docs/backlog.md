@@ -296,8 +296,8 @@ older build before using the new published document. Status and remaining work:
   R6). The delete dialog counts claims and exceptions removed but lists no products whose
   destination changes, and **Move to…** changes folder ancestry without a routing preview. Add that
   preview before extending these operations during service.
-- **A future rebuild of `categories` can empty its routing rules.** `station_claims_category_fk`
-  and `route_exceptions_category_fk` both use `ON DELETE CASCADE`
+- **A future rebuild of `categories` can empty its routing rules.** `routing_cells_category_fk`
+  uses `ON DELETE CASCADE`
   (`packages/venue-service/src/schema/routing.ts`); follow CLAUDE.md §3's rebuild rule and add a
   populated-upgrade check before another categories rebuild.
 - **The Spanish menu preview's selected Preview tab showed clipped at 390 px** after programmatic

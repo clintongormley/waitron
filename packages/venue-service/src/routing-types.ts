@@ -78,14 +78,6 @@ export interface ExtraExplanation {
   fallbacks: FallbackStep[];
 }
 
-/** @deprecated The old exception writers' input; deleted with them in Task 8a. */
-export interface ExceptionInput {
-  zoneId: string | null;
-  categoryId: string | null;
-  productId: string | null;
-  target: RouteTarget;
-}
-
 /** `target: null` clears the cell; No preparation is an explicit saved value. */
 export type RoutingChange = { kind: "cell"; address: CellAddress; target: RouteTarget | null };
 

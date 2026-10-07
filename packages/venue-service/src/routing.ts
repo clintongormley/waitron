@@ -10,7 +10,6 @@ import type {
 } from "./routing-types.js";
 export type {
   CellAddress,
-  ExceptionInput,
   GridCategory,
   GridProduct,
   GridRow,
