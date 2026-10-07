@@ -5052,8 +5052,8 @@ till → a recorded preproduction sale.
 One guard here is narrower than its name. `scripts/trust-page-logo.test.ts` checks that the logo
 pasted into the server's source still matches the brand lockup — the two drawings agree, and nothing
 else. It does not check that the page renders, that either theme is readable, or that the logo is
-visible at all. **Next action:** name it and its hedge on the `CLAUDE.md` §4 line about pages
-asserted as a string, whenever `CLAUDE.md` is next opened for a PR.
+visible at all. **Done 2026-10-07** by branch `chore/claude-md-contained`: the guard and its hedge are named in
+`docs/developers/testing-guide.md`, in the section on pages asserted as a string.
 
 **DECIDED (owner, 2026-09-29): the mode screen's certificate note stays as built** (C40, #833) — it
 shows only on the path where the wizard skipped the connection question, and the question is not
@@ -5193,7 +5193,7 @@ approved.
     failed migration; it does not prevent one.
 
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.**
-  `conventions-data.md` holds the list, and it is longer than what CLAUDE.md §3 names — it adds a
+  `conventions-data.md` holds the full list — among them a
   readiness runner and the dev, demo and Cloud fixture scripts under `apps/server/scripts`, two of
   the Cloud fixture scripts migrating through `restore.ts` rather than calling `applyMigrations`
   themselves, which a grep for that name alone does not find.
@@ -6026,10 +6026,11 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
     `packages/fiscal-verifactu/src/venue-fields.ts`. Prune with those.
   - `packages/store`, found by #568 and not changed: `isLocked` in `venue-lock.ts` reads `.errcode`
     without a null check, so a thrown `null` would raise a `TypeError` (the driver throws real
-    errors). `CLAUDE.md` §3's read-routing rule says a read-only connection does not refuse an
-    `ATTACH`; #568's probe (Node v26.7.0) found one naming a file that does not exist IS refused
-    there (errcode 14, no file created), while an existing file and `:memory:` attach — narrow that
-    sentence in a pull request, since a root `CLAUDE.md` change takes the normal flow.
+    errors). Done: the read-routing rule's sentence that a read-only connection does not refuse an
+    `ATTACH` now lives in `docs/developers/conventions-data.md`, and was narrowed on 2026-10-07 by
+    branch `chore/claude-md-contained` — #568's probe (Node v26.7.0) found one naming a file that
+    does not exist IS refused there (errcode 14, no file created), while an existing file and
+    `:memory:` attach.
   - `packages/payments-stripe`, found by #570 and not changed (each a code or config change, not a
     comment): the two `provider.test.ts` cases named "throws payment.not_found" assert only
     `rejects.toThrow()`, not the code (CLAUDE.md §4); `tenant-scoping.test.ts` is named for tenant

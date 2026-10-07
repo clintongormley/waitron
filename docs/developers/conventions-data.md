@@ -78,6 +78,10 @@ fails on a clash. `apps/*`
 is out of scope by a recorded decision, so Spanish IDENTIFIERS in app UI code are caught only by
 review. Designed and built in #240.
 
+**What the guard does not see.** `scripts/english-only.test.ts` is weaker than its name — it finds
+comments without a parser, guessing from the code before a `/` whether it opens a regular
+expression, and a wrong guess can hide a Spanish word in code on a later line.
+
 **Module and package boundaries**
 
 ## The composition list lives in `@waitron/composition`, and it is the only place that names every module
@@ -96,6 +100,10 @@ establishment, and the till's backend construction imported the Spanish regime d
 `@waitron/dashboard-modules` is the composition list's twin — the one place that names every
 UI-bearing module (guarded by `module-seams` + `dashboard-browser-purity`), so `apps/dashboard`
 mounts modules without naming one, exactly as generic provisioning does not.
+
+**What the guard does not see.** `scripts/module-seams.test.ts` blanks comments then reads text; the
+shared reader guesses whether `/` opens a regular expression, and import-like strings can still
+match.
 
 ## A test-only dependency closes a workspace dependency loop as surely as a runtime one
 
@@ -166,6 +174,11 @@ provenance file names the header's font sha256, never that the table was drawn f
 image (`deploy/Dockerfile`'s `print-agent` stage) also ships the Debian copyright
 files of python3-minimal and the packages its install added under `/app/third-party/python3-minimal/`,
 and none for bluez (`docs/backlog.md`).
+
+**What the guards do not see.** Every third-party block but the npm one covers one named component,
+so a new binary or system package is seen by none of them. npm notices are generated per bundle;
+that block reads the Dockerfile and image-smoke as text for a hand-written list of apps, so it
+checks that each app's notice folder is named, not that each generated file is copied.
 
 ## `@waitron/db`'s `exports` map is enumerated, not a wildcard
 
@@ -243,6 +256,14 @@ after the first package converted: root `CLAUDE.md` §7 says a written rule with
 needs a guard rather than another paragraph, and until the last package converted every unconverted
 one was such a violation.
 
+A table declares its columns from the vocabulary so the NEXT engine change replaces one file rather
+than every column in the tree.
+
+**What the guard does not see.** `scripts/column-vocabulary.test.ts` reads the IMPORT or re-export
+line as text, so a builder reached through `import * as` is invisible to it. A builder the
+vocabulary STOPS importing would leave the set the same day; the hand-written list that holds such a
+name forbidden sits beside the derived one, and it is empty.
+
 ## No new table enters the core migration set without a stated reason in the commit
 
 A domain table a module owns belongs to that module's own migration set (`migrations.from`),
@@ -265,6 +286,11 @@ options as before: **escape** (`quoteIdent` in `packages/provisioning/src/identi
 `quoteLiteral` in `packages/shared/src/sql-literal.ts`) or **validate and throw** (`assertSafeIdentifier`,
 `packages/db/src/testing/identifiers.ts`, which records the same reading at its own head). Neither is
 not acceptable; "the callers only pass safe values" is the §1 defect class.
+
+The engine takes no bound value in the body of a generated trigger either. For an identifier and
+for such a body, either escape (`quoteIdent`/`quoteLiteral`, as the change feed does with each
+source's type, `packages/db/src/change-feed.ts`) or validate and throw (as the append-only installer
+does with each table name, `packages/store/src/append-only.ts`).
 
 ## A `sql` scalar subquery correlated to the OUTER query's table breaks silently when that table is the `.from()` base rather than a join
 
@@ -444,6 +470,12 @@ files `scripts/write-path-tables.json` names, which is where such a write is all
 Keeping them in a handful of named files is the whole of the property now, because no connection
 makes the distinction for us any more.
 
+**What the guard does not see.** `scripts/write-path-tables.test.ts` reads TEXT, so a table name
+reached through a variable is invisible to it; it judges a FILE against an allowance list rather
+than a call chain, so a request path that calls into an allowed file writes through it unseen; and
+it walks `<member>/src` under `apps` and `packages` alone, so a package's `test/` directory and
+`apps/<app>/scripts` are outside it.
+
 ## A money column holds a count of whole cents, and the conversion happens at the row
 
 Landed 2026-09-20 as task P5 of the SQLite storage swap (#475). EVERY column declared through
@@ -555,6 +587,17 @@ true when written; they were not rewritten.
 
 The documents corrected in place are named here rather than described as a class, because the
 class was not swept: this file and `CLAUDE.md` §3, which carry the rule.
+
+**The converters, by name.** `packages/shared/src/cents.ts` has `decimalToCents` in
+(`stringToCents` when the value is still a decimal string), `centsToDecimal` out, and
+`rawCentsToDecimal` for a raw-SQL read of an AMOUNT, which casts the expression `cast(x as text)` —
+this engine has no `::` operator, and an uncast integer arrives as a JavaScript number, which that
+reader refuses.
+
+**Guards, both narrower than their names:** `packages/db/src/schema/columns.test.ts` (`money` and
+`bigCount` emit the SAME SQL type, so only its read-mode case separates them) and
+`packages/shared/src/conventions.test.ts` (reads `cents.ts` as TEXT, and nothing outside
+`packages/shared/src`, so a second file crossing into the number type is seen by nobody).
 
 ## A quantity counts whole thousandths and a rate whole basis points, and neither is the money scale
 
@@ -669,9 +712,17 @@ table file on the same day it stopped being used in any. The guard now carries a
 the `ALLOWED` list only shrinks. It still cannot cover a builder the vocabulary never imported —
 `bigserial` is the standing example.
 
+_2026-10-07: that paragraph describes the PostgreSQL-era guard. The move to SQLite (#489) emptied
+`RETIRED` in `scripts/column-vocabulary.test.ts`; the current guard is described under "`columns.ts`
+is the only file that names the engine's column and table types" above._
+
 **What the conversion did NOT touch.** The pricer, `assertQuantityPrecision`, the purchasing
 validators, every receipt and ticket formatter, the HTTP contract, `apps/till` and `apps/dashboard`.
 All of them work in decimal strings and all of them still do.
+
+`packages/shared/src/scales.ts` sits beside `cents.ts`, with the same two raw-SQL readers and the
+same cast-to-text rule. The money rule's two guards and both its hedges apply unchanged, and
+`quantity`, `money` and `bigCount` are all `integer(name)`, so only the caller separates them.
 
 ### The database never rounds a quantity — the converter owns the third place
 
@@ -855,6 +906,12 @@ migrating the full manifest twice: through `migrationOptionsFor(...)`, `registro
 `apps/` passes a `migrationOptionsFor(...)` result, directly or through a `const` declared once in
 the file; its header lists where it is weaker than its name.
 
+**What the callers guard does not see.** `scripts/apply-migrations-callers.test.ts` is weaker than
+its name in the ways its header lists, among them: it checks the call's shape and trusts what that
+function returns, never reading the sets handed to it; a `const` it accepts can be changed after it
+is declared; a function injected beside it through `??` runs unseen; and a path that migrates
+without `applyMigrations` (`runMigrations` called directly) is invisible to it.
+
 ## A `local` row belongs to one node, so no foreign key may join a `local` table to a `ledger`/`state` one
 
 Every table is in `venue.db`, which a primary streams whole to the owner's bucket once one is set up
@@ -863,6 +920,8 @@ replaced the topology design's plan to put `local` tables in `node.db`). A `loca
 node, so no venue row may depend on one, and `node.db` stays reserved for a later slice that may
 move `local` tables into it — which a key in either direction would block. Guard:
 `scripts/two-file-foreign-keys.test.ts`.
+
+Cost of the shape it replaced: six such keys existed and nothing would have failed at the flip.
 
 **What it reads, and the two things it therefore cannot see.** It reads drizzle's own generated head
 snapshot for each migration set — `meta/_journal.json` names the head and `tables[*].foreignKeys[*]`
@@ -906,6 +965,19 @@ node-filtered read of the same id (the "belong to the node" cases in
 `apps/server/src/join-requests.test.ts`), and the `node_sealed_state` reader
 (`readSealedStateRow`, the "reads only the named node's row" case in
 `apps/server/src/sealed-state.test.ts`).
+
+## Anything that works as a live login is stored as a hash
+
+**Anything that works as a live login is stored as a hash, because a primary streams the whole
+database to the owner's bucket once one is set up.** The dashboard and till session cookies carry a
+random token and the row keeps its SHA-256 (`hashSessionToken`, `@waitron/identity`), as pairing
+tokens and the Google sign-in state already did: reading the bucket must never let anyone into the
+live box.
+
+**Guards, weaker than the rule:** the "what a copy of the database holds" cases in
+`apps/server/src/me-api.test.ts` and `apps/server/src/till-api.test.ts` present the row's id alone,
+and only the dashboard's stored hash is tried as a token
+(`packages/identity/src/management-session.test.ts`); a new login table is seen by nothing.
 
 ## A migration set depends on another through a foreign key, a trigger on its table, or a trigger body naming its table
 
@@ -988,6 +1060,12 @@ table that does not exist is created without complaint, and the insert that fire
 other direction: a trigger ON a missing table is refused when it is created. So a missing
 dependency of this shape surfaces only when the trigger first fires.
 
+**The rule in full.** A module depends on another migration set when its SQL `REFERENCES` one of
+that set's tables, puts a `CREATE TRIGGER … ON` one of them, names one inside a trigger's body, or
+writes one at top level — and its descriptor's `requires` must name it. Cost: the first `requires`
+graph was derived from `REFERENCES` alone and missed two edges made by triggers ON another module's
+tables, caught by hand in review.
+
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 
 A configuration import gives every row whose `id` is text a new one, and rewrites a value to the new
@@ -1000,6 +1078,9 @@ the EXPORTING venue's id. Before W72a (#1230) the import replaced any text equal
 column, so a product named like an id arrived renamed; the narrowing is what makes this rule
 necessary. A reference the schema cannot give a foreign key goes in `references`, as
 `option_lists.default_label_id` does.
+
+Cost: W72a's narrowing (#1230) made two existing columns need a `references` entry; without them
+two transfer cases failed.
 
 Guard: `scripts/id-columns-are-references.test.ts`, which migrates a real database and reads every
 transferred table's columns and keys. Weaker than its name: it knows an id column only by a name
@@ -1172,6 +1253,12 @@ whichever connection serves it, so it is a smoke test over the read path rather 
 where a statement lands. Re-run that mutation before treating any single case in these files as a
 control; what the other cases in the set catch is not what this one catches.
 
+**The three shapes outside the rule, as the rule states them.** Each is stated at its site: a
+transaction opened by RUNNING `begin`, a write issued from outside a running body, and a statement
+that changes a CONNECTION rather than the file — a temporary table, an `ATTACH` of an existing
+file or `:memory:` (one naming a missing file is refused, errcode 14 — measured 2026-10-07, Node
+v26.7.0), a connection-scoped pragma — which a read-only connection does not refuse.
+
 ## A refused statement does NOT abort the transaction here, and all a savepoint still buys is confinement of a losing attempt's own writes
 
 **This is the sentence in the file most worth getting right: a refusal leaves the transaction
@@ -1229,6 +1316,9 @@ The layouts stores (`packages/layouts/src/canvas-store.ts`, `device-profile-stor
 1811 alone. They gave the right answer only because one trigger sat on the device-profile path,
 `device_profile_form_factor_locked`, whose meaning matched `device_profile.in_use`. That store now
 matches it by its own words (`FORM_FACTOR_REFUSAL`, `packages/db/src/trigger-refusals.ts`).
+
+Cost: the two layouts stores asked for the code alone, so a second refusing trigger on either path
+would have been reported as `canvas.in_use` or `device_profile.in_use`.
 
 ## One process per venue folder
 
@@ -1389,6 +1479,10 @@ does not prove that every caller that should take the lock does: a new caller pa
 false` wrongly, or a new command that changes the folder's files without `lockVenueDatabase`, is seen
 by nothing.
 
+Every change to `recovery.json` goes through `updateRecoveryState` under `recovery.lock`. Its guard,
+`apps/server/src/recovery-race.test.ts`, is weaker than its name in the same way: it proves the
+lock, not that every writer of the file takes it.
+
 **Every caller, and what it does** (from `grep -rln "openVenueStore\|openVenueDatabase"` over `apps`,
 `packages`, `scripts` and `bench`, non-test files, 2026-09-25):
 
@@ -1445,6 +1539,12 @@ unsubscribe. Against the changed suite, removing `.reverse()` timed out in the t
 cases, and removing `liveEvents.close()` failed its assertion. Removing `await loop` still passed
 all 15 cases. The 2026-09-26 deletion results above describe the suite as it stood then.
 
+The landing listener, started last, is the one step not on the list.
+
+**What the guard does not see.** `apps/server/src/boot.failed-start.test.ts` is weaker than its
+name — it covers only the duties it names, so a new one that forgets is seen by nothing. Removing
+`await loop` still passes, so not every stop is proven to finish before the store closes.
+
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
 
 > **Superseded 2026-09-14.** There is no tenant column to compare against any more: the taxpayer is
@@ -1460,6 +1560,14 @@ alone, so tenant A could read AND abandon tenant B's order in a multi-tenant DB 
 per-task review and four quality lenses all reasoned it "safe under one-tenant-per-db"; only the
 run-it seat, which RAN a two-tenant probe, caught it — reading missed it,
 running caught it (§1, §4).
+
+## There is no tenant column
+
+**There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
+query that wants "this tenant's rows" reads the table.** (2026-09-14, #378.) Guard:
+`scripts/no-tenant-column.test.ts`, weaker than its name in ways its own header states, among
+them — it matches the column's SPELLINGS, so a column reintroduced under an unrelated name passes,
+and it does not read test files.
 
 ## No backwards-compatibility or data-migration code until Waitron is in production
 
@@ -1479,6 +1587,11 @@ back to: `resolveVenueDir` (`packages/provisioning/src/cli.ts`) takes `--venue-d
 `WAITRON_VENUE_DIR`, then a prompt, and throws `provisioning.venue_dir_missing` when all three give
 nothing — because every path the store builds is `join(directory, …)`, so an empty directory is the
 RELATIVE `venue.db` rather than no directory at all.
+
+An env or prompt value set to `""` falls back to its default exactly as an unset one does (in
+`apps/server`, through `isUnset` in `apps/server/src/env-value.ts`; the log folder through
+`resolveLogDir` in `packages/db/src/venue-holder-identity.ts`), and a reader with no default refuses
+`""` explicitly, as `resolveVenueDir` does with `provisioning.venue_dir_missing`.
 
 **Migrations**
 
@@ -1579,6 +1692,21 @@ own empties `media_image_data` through that table's cascading key (with the trig
 copy, the upgrade test found it empty; recorded in the commit "Photos keep only a name: drop alt
 text and labels from the image table"), so the copy aside and the copy back sit in the same file as
 the rebuild and no migration step ends with the bytes gone.
+
+## A constraint that lives only in hand-written migration SQL is one regeneration away from gone
+
+**A constraint that lives only in hand-written migration SQL is one regeneration away from gone,
+and nothing else in the tree notices.** Declare every foreign key and every unique index in the
+TypeScript schema, so `drizzle-kit generate` carries it; where one genuinely cannot be declared,
+say at the column what it cost and where the refusal moved to. Cost: regenerating the thirteen
+sets for the storage switch dropped 33 foreign keys and 13 unique indexes, so an insert naming a
+`device_profile_id` that exists nowhere was accepted and stored the dangling id; the first thing
+that would have failed was a route test several step groups later.
+
+**What the guard does not see.** `scripts/schema-constraints.test.ts` is weaker than its name in
+ways its header states — it reads the schema the migrations BUILD rather than trying an offending
+insert, so it cannot tell a key SQLite records from a key SQLite enforces, and it matches a unique
+index by NAME, so an index whose columns changed under a kept name passes.
 
 ## Editing a shipped migration file, even a comment, needs a venue reset
 
@@ -1710,6 +1838,22 @@ instead of serving a half-migrated schema. Cost: a database at the core set's en
 with 10 of 15 applied and no error, and the wrong schema surfaced later as an unclassified driver
 failure. Pointer: `packages/migrations/src/apply-complete.test.ts`.
 
+**The sale path and failover**
+
+## Nothing external may block a sale, and a till needs the venue's primary
+
+**Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** AEAT, the card network
+and the internet are never on the sale path of whichever node is primary: records chain locally and
+the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
+is an outbox, never inline.
+
+What a till DOES need is the one node accepting sales. INTENDED: the on-site box when the internet
+is down, a promoted cloud when the box is dead (which needs the internet), box-down AND
+internet-down together being no failover — the MVP's accepted case. TODAY there is none of it: a
+venue has ONE node and no failover at all until slice 3 (2026-09-19, `docs/backlog.md` →
+_Replication, membership & failover — residuals_). The till follows the primary and never chooses
+(till reroute, #244 to #265); only the primary sells.
+
 **Provisioning and boot**
 
 ## A restore re-registers a filing node; the working-time chain continues
@@ -1721,6 +1865,28 @@ writes the box's identity only after that commits — #248. The working-time cha
 survivor's forked row is refused by `time_entries_chain_position_uq`, reported by this engine as
 `UNIQUE constraint failed: time_entries.node_id, …`, errcode 2067 — it names the COLUMNS, never the
 index. Guard: `packages/workforce/src/restore-continuation.test.ts`.
+
+A cold restore (`waitron-restore`) does that re-registering automatically for a node that was filing
+(#248), and so does a rebuild from the bucket (`waitron-restore restore --from-bucket`, or the setup
+wizard's "Restore from my bucket"), which places its copy through the same path — one restore takes
+one source, never both, or one event would mint two installation numbers. UNLIKE the fiscal chain,
+the working-time chain is NOT reset on a cold restore — it continues from the backup's head,
+because the fiscal reset exists to mint a fresh SIF for AEAT and the working-time record has no
+equivalent. A survivor's forked row is refused by the chain-position unique index however it
+reaches the database; nothing carries rows between nodes today.
+
+## On a node that files, every start puts each sale left "being sent" back to waiting
+
+**On a node that files, every start puts each sale left "being sent" back to waiting before its
+first filing pass** (`resetInFlightClaims`, `packages/fiscal-verifactu/src/drain.ts`, run by
+`resetBeforeFirstDrain`, `apps/server/src/restart-reset.ts`) — safe only while no second process
+files from the database: the server opens the folder exclusively (`provisioning.database_in_use`),
+and the tools that open it with `exclusive: false` file nothing.
+
+Guards: `apps/server/src/restart-reset.test.ts`, which holds that the reset runs before the first
+pass, and the case in `apps/server/src/boot.test.ts` that returns a previous run's in-flight claim
+to `pendiente` on a start's first pass — weaker than the rule, because nothing checks that a tool
+opening the folder with `exclusive: false` never files.
 
 ## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
 
