@@ -272,14 +272,19 @@ it:
   still decrypt while `rotate` re-seals them under the current one. Setting one without the other is
   a boot-time `credentials.key_ring_incomplete` failure, not a runtime surprise later.
 
-Provisioning and rotating credentials themselves (`fiscal.aeat`, `payments.stripe`, `payments.sumup`,
-`email.smtp`) is
-`packages/credentials`'s own CLI, not this process — e.g.
-`waitron-credentials set --purpose fiscal.aeat` with the JSON payload on stdin (that CLI refuses a
-`--tenant` flag: one database holds one taxpayer). Run
+Use `packages/credentials`'s CLI to provision and rotate credentials (`fiscal.aeat`,
+`payments.stripe`, `payments.sumup`, `email.smtp`), for example
+`waitron-credentials set --purpose fiscal.aeat` with the JSON payload on stdin. That CLI refuses a
+`--tenant` flag because one database holds one taxpayer. Run
 `waitron-credentials` with no arguments for its own usage text (`set` / `list` / `delete` /
 `rotate` — `packages/credentials/src/cli.ts`'s `USAGE` constant); there is no `get`, since that CLI
 never prints a decrypted credential.
+
+For outgoing mail, the live trading server also accepts manager-authorised settings through
+`GET` and `PUT /management-api/email/settings`, with `POST /management-api/email/settings/test`
+sending a test to the signed-in person's address. These routes require `system.manage`; the read
+omits authentication secrets. Demo and Prepare refuse settings changes. The live setup test endpoint
+is `POST /setup-api/email-test`; the wizard and dashboard editors remain A231q work.
 
 ### Account email
 

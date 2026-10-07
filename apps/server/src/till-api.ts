@@ -440,6 +440,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "fiscal.taxpayer_domicile_missing": 409,
   "invoice.recipient_invalid": 400,
   "invoice.choice_locked": 409,
+  "invoice_delivery.active": 409,
+  "invoice_delivery.receipt_invalid": 409,
   "invoice_delivery.email_unavailable": 409,
   "invoice_delivery.printer_invalid": 409,
   "sale.voided": 409,

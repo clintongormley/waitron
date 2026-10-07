@@ -2853,7 +2853,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
           await reportInvoiceDelivery(tx, claim!, { status: "sent" });
         });
       const res = await post("receipt");
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(409);
       expect(await res.json()).toMatchObject({
         error: {
           code:
@@ -2887,7 +2887,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
     expect(job).toMatchObject({ receiptCopy: true, kind: "document" });
     expect(decodeTicket(job!.payload)).toContain("DUPLICADO");
     const second = await post("reprint");
-    expect(second.status).toBe(400);
+    expect(second.status).toBe(409);
     expect(await second.json()).toMatchObject({ error: { code: "invoice_delivery.active" } });
     expect(await suite.db.select().from(printJobs)).toHaveLength(1);
   });
@@ -2896,7 +2896,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
     const { post, email } = await issued();
     await email();
     const res = await post("reprint");
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "invoice_delivery.active" } });
     expect(await suite.db.select().from(printJobs)).toEqual([]);
   });

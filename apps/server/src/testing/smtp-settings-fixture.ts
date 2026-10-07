@@ -14,6 +14,7 @@ export const smtpTestTls = mintSelfSignedServerCert({
 export async function smtpRig(reply: Reply, secure = false) {
   const sockets = new Set<Socket>();
   const messages: string[] = [];
+  const authentications: string[] = [];
   let received!: () => void;
   let closed!: () => void;
   const connectionClosed = new Promise<void>((resolve) => {
@@ -51,7 +52,12 @@ export async function smtpRig(reply: Reply, secure = false) {
           else if (reply === "data-refused") socket.write("550 secret-smtp-password rejected\r\n");
           else if (reply === "accepted") socket.write("250 accepted\r\n");
         } else if (line.startsWith("EHLO") || line.startsWith("HELO")) {
-          socket.write("250 invoice-test\r\n");
+          socket.write("250-invoice-test\r\n250 AUTH PLAIN\r\n");
+        } else if (line.startsWith("AUTH PLAIN ")) {
+          authentications.push(
+            Buffer.from(line.slice("AUTH PLAIN ".length), "base64").toString("utf8"),
+          );
+          socket.write("235 authenticated\r\n");
         } else if (line.startsWith("RCPT")) {
           socket.write(
             reply === "recipient-refused"
@@ -80,6 +86,7 @@ export async function smtpRig(reply: Reply, secure = false) {
       from: "venue@example.test",
     },
     messages,
+    authentications,
     dataReceived,
     connectionClosed,
     sockets,

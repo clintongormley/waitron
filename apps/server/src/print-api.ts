@@ -59,6 +59,7 @@ import {
   claimInvoicePrintJobs,
   reportInvoicePrintJob,
   endInvoicePrintDeliveries,
+  endDeactivatedInvoicePrintDeliveries,
   resendInvoicePrintJob,
 } from "./invoice-print.js";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
@@ -981,6 +982,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           }
         }
         await updatePrinter(tx, deps.cfg, id, patch);
+        if (patch.active === false)
+          await endDeactivatedInvoicePrintDeliveries(tx, id, deps.now?.());
         if (portable !== undefined) await setPrinterPortable(tx, id, portable);
       });
       return c.body(null, 204);
@@ -1024,7 +1027,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      await gated(sessionId, (tx) => deactivatePrinter(tx, deps.cfg, id));
+      await gated(sessionId, async (tx) => {
+        await deactivatePrinter(tx, deps.cfg, id);
+        await endDeactivatedInvoicePrintDeliveries(tx, id, deps.now?.());
+      });
       return c.body(null, 204);
     }),
   );

@@ -505,3 +505,91 @@ describe("SMTP settings boundary cases", () => {
     expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
   });
 });
+
+it("allows another database write while an SMTP settings upload is unfinished", async () => {
+  const venue = await setupVenue();
+  const app = mount();
+  let release!: () => void;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      release = () => {
+        controller.enqueue(new TextEncoder().encode(JSON.stringify(settings)));
+        controller.close();
+      };
+    },
+  });
+  const raw = new Request(`http://box.test${path}`, {
+    method: "PUT",
+    headers: { cookie: venue.manager, "Content-Type": "application/json" },
+    body,
+    duplex: "half",
+  } as RequestInit);
+  let started!: () => void;
+  const reading = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const read = raw.text.bind(raw);
+  raw.text = () => {
+    started();
+    return read();
+  };
+  const save = app.request(raw);
+  await reading;
+  const write = withTransaction(suite.db, async (tx) => {
+    await tx
+      .update(persons)
+      .set({ displayName: "Saved beside slow upload" })
+      .where(eq(persons.role, "manager"));
+    return true;
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const progressed = await Promise.race([
+      write,
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), 500);
+      }),
+    ]);
+    expect(progressed).toBe(true);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    release();
+    expect((await save).status).toBe(200);
+    await write;
+  }
+});
+
+it.each([
+  ["smtp-user", "plain-pass"],
+  ["smtp-user", "a:b@c#d"],
+  ["smtp-user", "p%41ss"],
+  ["u%41", "plain-pass"],
+])("preserves SMTP credentials %s / %s on the real authenticated wire", async (user, password) => {
+  const venue = await setupVenue();
+  const rig = await smtpRig("accepted", true);
+  try {
+    const app = mount(
+      "live",
+      () => {},
+      (config, recipient) => sendSmtpTestMessage(config, recipient, { ca: smtpTestTls.caCertPem }),
+    );
+    const response = await app.request(`${path}/test`, {
+      method: "POST",
+      headers: { cookie: venue.manager, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...settings,
+        server: "127.0.0.1",
+        port: Number(new URL(rig.config.url).port),
+        encryption: "tls",
+        user,
+        password,
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ accepted: true });
+    expect(rig.authentications).toEqual([`\0${user}\0${password}`]);
+    expect(rig.messages).toHaveLength(1);
+  } finally {
+    await rig.close();
+  }
+});

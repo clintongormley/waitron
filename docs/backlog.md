@@ -2279,6 +2279,8 @@ lost acknowledgement and timeout, as well as field validation and secret-free an
 the related six-file run passed 381 cases. The wizard screen, provisioning requirement and
 credential sealing, dashboard editor and restore checks remain open.
 
+**Part 1 review fixes, 2026-10-07.** Both printer deactivation routes now end correlated invoice receipt attempts: a queued one fails, a handed-out one becomes unknown, and authenticated late results retain their existing history rules. Ordinary queued jobs remain available on reactivation. The settings parser preserves literal percent sequences in SMTP authentication; real TLS/SMTP wire cases cover usernames and passwords beside punctuation controls. An unfinished settings upload no longer holds the write turn. Setup email tests share the setup-operation latch and release it after a refusal or timeout. Idle invoice email passes read for due work before joining the write queue; claim and expiry checks still run in the transaction when work exists. Temporary SMTP 4xx refusals are checked through the real sender. Till delivery conflicts have actionable English and Spanish wording and answer 409.
+
 **Owner decisions in place of the asesor's answers (2026-10-07, under the plan's Task 0.1), so A231p may be built.** Public F1 stays disabled until A231's own enablement gates are met; the asesor is asked to confirm these as [Q44](compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
 
 1. A PDF emailed after a paper original, or paper after an emailed original, is a «duplicado» and is marked so.

@@ -4,6 +4,7 @@ import { invoiceDeliveries, printJobs, sales, type Transaction } from "@waitron/
 import { AppError } from "@waitron/shared";
 import {
   claimPrintJobs,
+  MAX_DELIVERY_ATTEMPTS,
   reportPrintJob,
   resendPrintJob,
   type ClaimedJob,
@@ -139,4 +140,27 @@ export async function endInvoicePrintDeliveries(
         inArray(invoiceDeliveries.status, ["queued", "sending"]),
       ),
     );
+}
+
+export async function endDeactivatedInvoicePrintDeliveries(
+  tx: Transaction,
+  printerId: string,
+  now = new Date(),
+): Promise<void> {
+  const ended = await tx
+    .update(printJobs)
+    .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: "transport_failed" })
+    .where(
+      and(
+        eq(printJobs.printerId, printerId),
+        sql`exists (select 1 from ${invoiceDeliveries} where ${invoiceDeliveries.printJobId} = ${printJobs.id}
+        and ${invoiceDeliveries.medium} = 'receipt' and ${invoiceDeliveries.status} in ('queued', 'sending'))`,
+      ),
+    )
+    .returning({ id: printJobs.id });
+  await endInvoicePrintDeliveries(
+    tx,
+    ended.map(({ id }) => id),
+    now,
+  );
 }
