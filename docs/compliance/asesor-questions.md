@@ -24,7 +24,9 @@ match, and section 1 is now "at the table and the counter".
 
 On **2026-10-07**: **Q43** now records a measurement. In AEAT's preproduction environment, two
 runs of shuffled envíos of up to 1,000 records each got their replies back in the order sent. The
-question to the asesor stands; the Word copies do not carry Q43 yet.
+question to the asesor stands; the Word copies do not carry Q43 yet. The same day the owner
+approved the proposed interim treatment to land as #1304, and the probe as verifactu #138 (Q43's
+"Approved" paragraph).
 
 Late on **2026-10-06**: **Q43 added** at the end of the conflicts section, at the owner's request:
 whether AEAT's reply lists a batch's records in the order they were sent. The standalone English
@@ -2555,6 +2557,14 @@ line it was compared with. When the reply's line count differs from the records 
 of that envío is unknown and the whole reply is kept once. A reordered reply can therefore never
 make an invoice wrongly taken as accepted; if AEAT always reordered, though, a multi-record envío
 would never be confirmed and its records would be sent again and again, holding their chain.
+
+**Approved, 2026-10-07 (owner).** After the measurement below, the owner approved this treatment to
+land unchanged as #1304 (W41s-3c), with two choices made explicit. Only the line at a record's own
+position is read: a second line elsewhere naming the same record, even one saying it was refused, is
+ignored. And records left unknown after a mismatch are sent again together, in the same order as
+before, not one record per envío. The probe that measured the order (`reply-order`, verifactu PR #138) was
+approved to land the same day. Questions (a) and (b) still stand, because a measurement is not a
+guarantee.
 
 **Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; corrected 2026-10-07).** In
 all six replies with more than one line, including both 1,000-record envíos, each record sent was
