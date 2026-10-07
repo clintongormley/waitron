@@ -2238,10 +2238,25 @@ look (2026-10-07, a Barcelona demo) met the same restart. Seen in that look, in 
 touch, not checked further, OPEN, unqueued: the till's printed allergen sheet lists dishes in
 Catalan under English fixed text (title, column headings, "Allergen info pending"), because the
 till has no Catalan wording; the Missing translations section says "Every name has a English
-translation"; at 390px the dashboard shows a strip about 24px wide of the hidden side menu along
-the left edge (the #1320 shots show it too), and the till's basket squeezes into a narrow column
-that cuts off its prices, remove buttons and total; switching the dashboard to English left the
+translation"; at 390px the dashboard showed a strip about 24px wide of the hidden side menu along
+the left edge, and the till's basket squeezed into a narrow column that cut off its prices, remove
+buttons and total — both FIXED by A310 (branch `fix/phone-sidebar-and-basket`; follow-ups below); switching the dashboard to English left the
 alert text in Spanish until a reload. Screenshots: `~/waitron-campaign/w109-4-shots/`.
+
+**Till and dashboard layout points seen during A310's look (2026-10-07), OPEN, unqueued — not
+checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-shots/`.
+- **Tablet widths (641–1024 px): the counter basket's remove button is still cut off.** A310 changed
+  only widths below 40rem. In the test harness the × was 0% on screen at 720 px and 75% at 1024 px.
+- **At 1280 px a three-digit line total pushes the × about 11 px past the basket** (harness only).
+- **Desktop till, 1280 px: the total and the Cash/Card/Hold buttons sit below a large empty area**
+  and need scrolling. Harness screenshots are identical before and after A310, so A310 did not cause it.
+- **Phone till: the top bar (clock notice and about eight buttons) keeps about 440 of 844 px**,
+  leaving roughly 400 px for selling.
+- **Spanish till: the tab buttons still read "Counter" and "Floor"**, the service-area label is cut
+  to "Zona de servi…", and some demo dish names ("Spanish omelette", "House bread") stay English.
+- **The table-order screen's phone basket now wraps its line controls** (it shares the basket's
+  narrow layout A310 changed); its suites pass but nobody has looked at it on screen.
+- **Dashboard at 1280 px: the overview's top-row cards have uneven heights.**
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
