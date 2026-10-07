@@ -1891,7 +1891,7 @@ than an empty description.
 
 **A country with no demo data of its own gets the existing demo data in English, and every demo's
 practice sales go through the venue's own fiscal module (W109-2, Task 2 of the same plan) —
-DONE.** A pack's `demo.dataSet` is optional; a pack whose identity names none seeds
+DONE (#1324, 2026-10-07).** A pack's `demo.dataSet` is optional; a pack whose identity names none seeds
 `casa-delgado-es` under its own identity, with English the default content language and English
 staff names (`demoDataSetFor`, `demoLanguagesFor`, `apps/server/scripts/demo-seed/data-set.ts`).
 `seedSales` takes its backend from the composition's fiscal seat (`fiscalSlot(...).makeBackend`)
@@ -1911,6 +1911,10 @@ English default, `en`, `ca` and `es` enabled, every customer name in all three, 
 translations; the per-task review's earlier run found `ca` and `es` text written and no missing
 translations. The finish review also removed the Catalan text from the
 set: the Catalan texts were listed as missing translations, and the seed still completed.
+Left open (raised by #1324's finish review, not taken because it changes an existing test): the
+`data-set.test.ts` case that checks a demo carries every language its area can enable skips a pack
+with no data set of its own, so a fallback pack offered at setup is never checked there; a gap
+would show only under Missing translations, not break the seed. No real pack is such a pack.
 
 Seen during W109-5's look at a Barcelona demo set up in Spanish (2026-10-07), OPEN, unqueued:
 (1) practice-sale invoice numbers do not follow time order — `seedSales` fills days from today
