@@ -125,6 +125,8 @@ const weekOf = (fill: (weekday: number) => MenuSlot[]): MenuWeekDay[] =>
 
 describe("service-period writers", () => {
   it("checks an end equal to the changeover on the following calendar date", async () => {
+    expect(localTimeOccurrences("2026-03-28", "02:30", ZONE)).toHaveLength(1);
+    expect(localTimeOccurrences("2026-03-29", "02:30", ZONE)).toEqual([]);
     const v = await venue();
     await db
       .update(locations)
