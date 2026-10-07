@@ -265,7 +265,7 @@ describe("till-allergen-screen", () => {
     expect(dialog.querySelector(".detail-diet")).toBeNull();
   });
 
-  it("clears the selection when the dialog closes itself (escape/backdrop)", async () => {
+  it("clears the selection when the dialog closes itself on Escape", async () => {
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
       products,
       locale: "en",

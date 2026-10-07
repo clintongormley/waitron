@@ -722,10 +722,9 @@ component rules harden around the dashboard alone.
 
 **Image library: Delete left, Edit right, and a preview showing where an image is used — DONE (W78, #1215;
 the portrait-photo bands W78a, #1280; on a phone a narrow photo centred and at most 40% of the
-window high, A293, #1313); left open by #1215's review:** a test title in
-`apps/till/src/screens/till-allergen-screen.test.ts` says its dialog closes on "escape/backdrop",
-but the shared dialog does not close on a click outside it — the title, not the behaviour, looks
-wrong (unchecked beyond the reviewer's reading).
+window high, A293, #1313; the till allergen test title #1215's review questioned, W78b — in
+Playwright's Chromium 153, a real click on the dialog's backdrop left it open and Escape closed it,
+so the title now says Escape).**
 
 **The folding section jumps about when it opens (A169) — DONE (#1026).**
 
@@ -5737,9 +5736,7 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
     "since Task 7" and "this tenant's devices" in `device-api.test.ts`; "(R1 behaviour preserved)"
     in `membership-mint.test.ts`.
   - Found by #616 (`apps/till/src/widgets`), not fixable in a comments-only change. Test titles
-    repeat claims the branch corrected: `apps/till/src/screens/till-allergen-screen.test.ts`
-    "(escape/backdrop)" — `wt-dialog` closes on Escape and, measured in Playwright's Chromium 153,
-    not on a backdrop click — and `apps/server/src/working-order.test.ts` "lists the node's open
+    repeat claims the branch corrected: `apps/server/src/working-order.test.ts` "lists the node's open
     orders" (the list is venue-wide); `station-queue.test.ts` "(nothing to release)" is false for a
     held line with no course, and several `station-queue`, `tender-pay` and `modifier-picker` test
     titles carry task numbers. `css` comments in `apps/till/src/widgets/station-queue.ts` and
