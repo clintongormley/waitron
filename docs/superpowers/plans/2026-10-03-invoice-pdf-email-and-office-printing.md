@@ -173,6 +173,17 @@ focused coverage of that file is 100% statements/functions/lines and 97.05% bran
 The pending boot composition must call this reader after the worker's claim commits,
 then close its projection transaction before sending. This does not complete Tasks 2 or 4.
 
+**2026-10-07 boot composition checkpoint.** Trading boot now starts the routed
+email worker after inherited-claim recovery. Each pass checks the held singleton role;
+read-only mirrors start no email worker. The projection uses `readInvoiceDocument`.
+The failed-start undo is registered immediately after the worker starts, and both
+that undo and normal close abort and join the worker before the store closes.
+Real local SMTP cases exercise a queued duplicate with the stored invoice and sender
+facts, normal shutdown during a held acceptance, and a later startup failure during
+a held acceptance. Local-secondary and mirror cases leave queued email unchanged.
+This connects the worker to boot; bill staging, SMTP setup/settings, delivery UI,
+A4 references and transport remain. It does not complete Tasks 2 or 4.
+
 ## 3. Set up email for a live venue, without a terminal
 
 **Inspect/change:** `apps/setup/src/setup-app.ts` (venue advances to certificate or review at `:807`; `apps/setup/src/screens/cert-screen.ts:276` advances to fiscal test, and `fiscal-test-screen.ts:66` to review), a new Email screen beside those screens, `apps/setup/src/api/client.ts`, `apps/server/src/setup-api.ts` and `setup-operation.ts`, `apps/server/src/email-delivery.ts`, `packages/credentials/src/purposes.ts` (read only: `email.smtp` keeps its `url` and `from` fields), a settings card on `apps/dashboard/src/screens/email-screen.ts` and its server route, the setup and dashboard translations. Keep the existing CLI path in Task 0.
