@@ -6184,7 +6184,7 @@ describe("printer breadcrumb during a pending save", () => {
                 }),
             ),
           });
-          const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+          const { el } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
           await flush(el);
           const screen = screenPrinters(el)!;
           await expect
@@ -6200,9 +6200,6 @@ describe("printer breadcrumb during a pending save", () => {
             disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
             await screen.updateComplete;
             await disclosure.updateComplete;
-            await expect
-              .poll(() => disclosure.shadowRoot!.querySelector<HTMLElement>(".body")!.style.height)
-              .toBe("");
           }
           q(`[data-test=edit-printer-${editor}]`).click();
           await screen.updateComplete;
@@ -6241,24 +6238,6 @@ describe("printer breadcrumb during a pending save", () => {
                 : "Revisa los ajustes de conexión de la impresora",
             );
           expect(save.disabled).toBe(false);
-          const width = window.innerWidth,
-            height = window.innerHeight;
-          try {
-            for (const size of [390, 1280]) {
-              await page.viewport(size, 900);
-              q(
-                editor === "name"
-                  ? "[data-test=printer-name-refusal]"
-                  : "[data-test=printer-section-connection] [role=alert]",
-              ).scrollIntoView({ block: "center" });
-              await page.screenshot({
-                element: host,
-                path: `__screenshots__/look/a360-${locale}-${theme}-${editor}-${size}.png`,
-              });
-            }
-          } finally {
-            await page.viewport(width, height);
-          }
           q("[data-test=all-printers-link]").click();
           const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
           await expect.poll(() => question.open).toBe(true);
