@@ -329,8 +329,11 @@ Rules the tests pin:
   location's `day_cutover` (`readLocationClock`, `packages/reporting/src/business-day.ts:220`) and
   refuse another department's period (existing `assertOwnPeriods`). The cross-midnight neighbour
   checks go (see "Behaviour this slice removes").
-- The clock-skip check (`skippedSlot`, `menu-timetable.ts:201-211`, and `assertPlaced`) checks each
-  time against `calendarDateOfTime(date, time, cutover)`, not the special date's own date.
+- The clock-skip check (`skippedSlot` and `assertPlaced`) checks each endpoint on its calendar
+  date: `calendarDateOfTime(date, time, cutover)` for a start; the same for an end, except an
+  end exactly equal to the changeover belongs to the next calendar date. A start exactly at the
+  changeover belongs to the business date. This also governs copies and moves (owner approved
+  2026-10-08).
 - `placeOpenPeriod` creates "Open" with the menu and places 09:00–17:00 on Monday to Friday — only
   when the department has no periods.
 - Provisioning replaces `addDepartmentMenu` and the all-day insert (`:106-112`) with
