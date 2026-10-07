@@ -2197,7 +2197,6 @@ export class MenusScreen extends LitElement {
 
   #renderPrices() {
     return html`<dashboard-menu-prices-table
-        .nodes=${this.structure?.nodes ?? []}
         .rows=${this.prices ?? []}
         .loading=${this.prices === null && !this.pricesError}
         .failed=${this.pricesError}

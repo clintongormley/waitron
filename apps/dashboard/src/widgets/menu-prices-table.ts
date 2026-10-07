@@ -30,7 +30,6 @@ import type {
   SectionDetails,
   MenuPriceRow,
   MenuPriceVariant,
-  MenuStructureNode,
   Product,
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -92,6 +91,7 @@ const keyOf = ({ item, variant }: Line): string =>
 const parentKey = ({ item, variant }: Line): string | null => (variant ? item.menuItemId : null);
 const toggleLabel = ({ item }: Line, expanded: boolean): string =>
   t(expanded ? "menu_prices.collapse" : "menu_prices.expand").replace("{name}", item.name);
+const keepsVariantOrder = ({ variant }: Line): boolean => variant === null;
 
 /** Whether this menu stores a price for any of the product's sizes. */
 const pricesASize = (item: MenuPriceRow): boolean =>
@@ -209,7 +209,6 @@ export class MenuPricesTable extends LitElement {
   ];
 
   @property({ attribute: false }) rows: MenuPriceRow[] = [];
-  @property({ attribute: false }) nodes: MenuStructureNode[] = [];
   @property({ type: Boolean }) loading = false;
   @property({ type: Boolean }) failed = false;
   @property({ attribute: false }) sections: SectionDetails[] = [];
@@ -245,12 +244,6 @@ export class MenuPricesTable extends LitElement {
   #lines: Line[] = [];
   #lineOf: ReadonlyMap<string, Line> = new Map();
   #columns: DataTableColumn<Line>[] = [];
-  /** For the summary: per menu this one includes, how many of its products this menu prices, and
-   * how many of this menu's own products it prices. */
-  #counts: { included: { name: string | null; prices: number }[]; own: number } = {
-    included: [],
-    own: 0,
-  };
   /** Per product, what it charges with its field blank and where each Active size's price comes
    * from, neither of which typing changes. */
   #productInheritance: ReadonlyMap<
@@ -285,7 +278,6 @@ export class MenuPricesTable extends LitElement {
     if (changed.has("rows") || changed.has("products")) this.#readLines();
     if (changed.has("sections") || changed.has("categories") || changed.has("rows"))
       this.#columns = this.#buildColumns();
-    if (changed.has("nodes") || changed.has("rows")) this.#countPrices();
     if (changed.has("refusals")) {
       const before = changed.get("refusals") ?? {};
       // A refusal sent anew shows again under a field changed since the last one.
@@ -861,7 +853,6 @@ export class MenuPricesTable extends LitElement {
       {
         key: "override",
         label: t("menu_prices.override_column"),
-        align: "end",
         // A range sorts by its low end.
         sortValue: (line) => {
           const shown = this.#shown(line);
@@ -938,56 +929,8 @@ export class MenuPricesTable extends LitElement {
     ];
   }
 
-  #countPrices(): void {
-    const own = new Set<string>();
-    const included = new Map<string, { name: string | null; products: Set<string> }>();
-    const collect = (nodes: readonly MenuStructureNode[], products: Set<string>): void => {
-      for (const node of nodes) {
-        if (node.ref.kind === "product") products.add(node.ref.productId);
-        else collect(node.children ?? [], products);
-      }
-    };
-    const walk = (nodes: readonly MenuStructureNode[]): void => {
-      for (const node of nodes) {
-        if (node.ref.kind === "product") own.add(node.ref.productId);
-        else if (node.includedMenuId) {
-          let menu = included.get(node.includedMenuId);
-          if (!menu) {
-            menu = { name: node.internalName ?? null, products: new Set() };
-            included.set(node.includedMenuId, menu);
-          }
-          collect(node.children ?? [], menu.products);
-        } else walk(node.children ?? []);
-      }
-    };
-    walk(this.nodes);
-    const priced = (item: MenuPriceRow) => this.#overridden({ item, variant: null });
-    this.#counts = {
-      included: [...included.values()].map(({ name, products }) => ({
-        name,
-        prices: this.rows.filter((row) => products.has(row.productId) && priced(row)).length,
-      })),
-      own: this.rows.filter((row) => own.has(row.productId) && priced(row)).length,
-    };
-  }
-
-  #summary() {
-    return html`<div data-test="price-summary">
-      ${this.#counts.included.map(
-        ({ name, prices }) =>
-          html`<p>
-            ${t("menu_prices.summary_included")
-              .replace("{prices}", String(prices))
-              .replace("{priceItems}", t(prices === 1 ? "menu_prices.item" : "menu_prices.items"))
-              .replace("{menu}", name ?? t("members.missing"))}
-          </p>`,
-      )}
-      <p>${t("menu_prices.summary_own").replace("{prices}", String(this.#counts.own))}</p>
-    </div>`;
-  }
-
   override render() {
-    return html`${this.#summary()}<wt-data-table
+    return html`<wt-data-table
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
@@ -1013,6 +956,7 @@ export class MenuPricesTable extends LitElement {
         .columns=${this.#columns}
         .rowKey=${keyOf}
         .rowParent=${parentKey}
+        .rowKeepsChildOrder=${keepsVariantOrder}
         initiallyCollapsed
         .rowToggleLabel=${toggleLabel}
         .loading=${this.loading}

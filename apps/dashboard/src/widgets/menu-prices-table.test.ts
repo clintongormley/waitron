@@ -641,6 +641,35 @@ it("sorts by name and by where a product first appears", async () => {
   expect(shown(el)).toEqual(["mi-lager", "mi-lemonade", "mi-burger"]);
 });
 
+it.each(["en-GB", "es-ES"])("draws no count of its prices above the table (%s)", async (locale) => {
+  setLocale(locale);
+  try {
+    // Lemonade sets a price of this menu's own, which the count would have counted.
+    const el = await mount();
+    expect(el.shadowRoot!.querySelector('[data-test="price-summary"]')).toBeNull();
+    const shownText = (el.shadowRoot!.textContent ?? "").toLowerCase();
+    expect(shownText).not.toContain("sets its own price for");
+    expect(shownText).not.toContain("fija su propio precio para");
+    expect(el.shadowRoot!.firstElementChild!.localName).toBe("wt-data-table");
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("lines the price override column's heading and cells up at the start", async () => {
+  const el = await mount();
+  const index = headers(el).indexOf("override");
+  const heading = table(el).shadowRoot.querySelectorAll("thead th")[index]!;
+  const cells = [...table(el).shadowRoot.querySelectorAll("tbody tr")].map(
+    (tr) => tr.children[index]!,
+  );
+  expect(cells).toHaveLength(3);
+  for (const node of [heading, ...cells]) {
+    expect(node.getAttribute("data-align")).toBe("start");
+    expect(getComputedStyle(node).textAlign).toBe("start");
+  }
+});
+
 it("passes the loading, failed and empty states to the table", async () => {
   const el = await mount({ loading: true });
   expect(text(table(el).shadowRoot.querySelector("[role=status]"))).toBe(t("menu_prices.loading"));
@@ -1894,30 +1923,63 @@ describe("variants", () => {
     expect(shown(el)).toEqual(["mi-wine", "mi-burger", "mi-cider", "mi-juice", "mi-tea"]);
   });
 
-  it("sorts the variants under their product by their own prices", async () => {
+  it("keeps the variants under their product in the product's order under every sort", async () => {
     const el = await mountVariants({ rows: [wine] });
     await expand(el, "mi-wine");
+    const inOrder = ["mi-wine", "mi-wine:v-glass", "mi-wine:v-bottle", "mi-wine:v-carafe"];
     await sortBy(el, "override");
-    expect(shown(el)).toEqual([
-      "mi-wine",
-      "mi-wine:v-glass",
-      "mi-wine:v-bottle",
-      "mi-wine:v-carafe",
-    ]);
+    expect(shown(el)).toEqual(inOrder);
     await sortBy(el, "override");
-    expect(shown(el)).toEqual([
-      "mi-wine",
-      "mi-wine:v-carafe",
-      "mi-wine:v-bottle",
-      "mi-wine:v-glass",
-    ]);
+    expect(shown(el)).toEqual(inOrder);
     await sortBy(el, "name");
-    expect(shown(el)).toEqual([
-      "mi-wine",
-      "mi-wine:v-bottle",
-      "mi-wine:v-carafe",
-      "mi-wine:v-glass",
-    ]);
+    expect(shown(el)).toEqual(inOrder);
+  });
+
+  it("keeps a product's variants in its order while the products sort by the column", async () => {
+    // Alphabetically, and by price, Alpha comes before Zeta; the product lists Zeta first.
+    const pizzaProduct = {
+      id: "p-pizza",
+      name: "Pizza",
+      variants: [variant("v-zeta", "Zeta", "9.00"), variant("v-alpha", "Alpha", "5.00")],
+    } as unknown as Product;
+    const pizza: MenuPriceRow = {
+      menuItemId: "mi-pizza",
+      combined: combinedFixture(
+        "p-pizza",
+        "6.00",
+        [
+          { variantId: "v-zeta", price: null },
+          { variantId: "v-alpha", price: null },
+        ],
+        null,
+        "6.00",
+        { "v-zeta": "9.00", "v-alpha": "5.00" },
+      ),
+      productId: "p-pizza",
+      name: "Pizza",
+      categoryId: "c-mains",
+      placements: [[]],
+      override: null,
+      effectivePrice: "6.00",
+      active: true,
+      variants: [
+        { variantId: "v-zeta", price: null, active: true },
+        { variantId: "v-alpha", price: null, active: true },
+      ],
+    };
+    const el = await mount({ rows: [pizza, burger], products: [pizzaProduct] });
+    await expand(el, "mi-pizza");
+    const pizzaLines = ["mi-pizza", "mi-pizza:v-zeta", "mi-pizza:v-alpha"];
+    expect(column(el, "name").slice(1, 3)).toEqual(["Zeta", "Alpha"]);
+    expect(shown(el)).toEqual([...pizzaLines, "mi-burger"]);
+    await sortBy(el, "name");
+    expect(shown(el)).toEqual(["mi-burger", ...pizzaLines]);
+    await sortBy(el, "name");
+    expect(shown(el)).toEqual([...pizzaLines, "mi-burger"]);
+    await sortBy(el, "override");
+    expect(shown(el)).toEqual([...pizzaLines, "mi-burger"]);
+    await sortBy(el, "override");
+    expect(shown(el)).toEqual(["mi-burger", ...pizzaLines]);
   });
 
   it("says a product's menu prices are on its variants when only they have one", async () => {
@@ -2048,7 +2110,7 @@ describe("variants", () => {
     expect(headers(again)).toEqual(["name", "override", "placements", "category", "status", ""]);
   });
 
-  it("counts Active sizes only in a product's tooltip, and every stored price in the summary", async () => {
+  it("counts Active sizes only in a product's tooltip", async () => {
     setLocale("en-GB");
     try {
       const inactiveLarge = {
@@ -2058,18 +2120,10 @@ describe("variants", () => {
       };
       const el = await mount({
         rows: [inactiveLarge, { ...lager, active: false, override: "4.00" }],
-        nodes: [
-          { memberId: "a", ref: { kind: "product", productId: "p-lemonade" } },
-          { memberId: "b", ref: { kind: "product", productId: "p-lager" } },
-        ],
-      } as Partial<MenuPricesTable>);
+      });
       const tip = cell(el, "override", "mi-lemonade").querySelector("wt-help-tooltip")!;
       expect(tip.textContent).toContain("Small");
       expect(tip.textContent).not.toContain("Large");
-      // Lemonade's only own price is on its Inactive Large; Lager is Inactive with its own price.
-      expect(text(el.shadowRoot!.querySelector('[data-test="price-summary"] p:last-child'))).toBe(
-        "Sets its own price for 2 of its own items",
-      );
     } finally {
       setLocale("es-ES");
     }
@@ -2861,61 +2915,6 @@ it.each([
   }
 });
 
-it("counts inherited overrides once per included menu and own item", async () => {
-  setLocale("en-GB");
-  try {
-    const drinks = {
-      state: "decided",
-      value: "3.50",
-      source: drinksSource,
-      otherwise: null,
-    } as MenuPriceRow["combined"]["price"];
-    const rows = [
-      {
-        ...lager,
-        placements: [],
-        override: "4.00",
-        combined: {
-          ...lager.combined,
-          price: { state: "decided", value: "4.00", source: { kind: "own" }, otherwise: drinks },
-        },
-      },
-      {
-        ...burger,
-        placements: [],
-        override: "14.00",
-        combined: {
-          ...burger.combined,
-          price: { state: "decided", value: "14.00", source: { kind: "own" }, otherwise: drinks },
-        },
-      },
-      lemonade,
-    ] as MenuPriceRow[];
-    const el = await mount({
-      rows,
-      nodes: [
-        {
-          memberId: "included",
-          ref: { kind: "section", sectionId: "root-drinks" },
-          internalName: "Drinks",
-          includedMenuId: "drinks",
-          children: [
-            { memberId: "lp", ref: { kind: "product", productId: "p-lager" } },
-            { memberId: "bp", ref: { kind: "product", productId: "p-burger" } },
-          ],
-        },
-        { memberId: "own", ref: { kind: "product", productId: "p-lemonade" } },
-      ],
-    } as Partial<MenuPricesTable>);
-    const summary = el.shadowRoot!.querySelector('[data-test="price-summary"]');
-    expect([...summary!.querySelectorAll("p")].map(text)).toEqual([
-      "This menu sets its own price for 2 items from Drinks",
-      "Sets its own price for 1 of its own items",
-    ]);
-  } finally {
-    setLocale("es-ES");
-  }
-});
 it("gives a size one localized tooltip, and its product's tooltip describes each size", async () => {
   const el = await mount({ rows: [lemonade] });
   table(el)
@@ -2942,52 +2941,6 @@ it("gives a size one localized tooltip, and its product's tooltip describes each
     "Small: 3,00\u00a0€. Sigue el precio de Lemonade en esta carta. El precio propio del producto. Large: 3,75\u00a0€. Esta carta fija 3,75\u00a0€. Sin él: 3,40\u00a0€, el precio propio del producto.",
   );
   expect(override(el, "mi-lemonade").placeholder).toBe("3.00 – 3.75");
-});
-
-it("counts equal-price direct sources once and excludes roots nested inside another menu", async () => {
-  setLocale("en-GB");
-  try {
-    const ownBurger = {
-      ...burger,
-      override: "12.00",
-      combined: combinedFixture("p-burger", "12.00", [], "12.00", "12.00"),
-    };
-    const product = { memberId: "burger", ref: { kind: "product", productId: "p-burger" } };
-    const wines = {
-      memberId: "wines",
-      ref: { kind: "section", sectionId: "root-wines" },
-      internalName: "Wines",
-      includedMenuId: "wines",
-      children: [product],
-    };
-    const drinks = {
-      memberId: "drinks",
-      ref: { kind: "section", sectionId: "root-drinks" },
-      internalName: "Drinks",
-      includedMenuId: "drinks",
-      children: [product, wines],
-    };
-    const el = await mount({
-      rows: [ownBurger],
-      nodes: [
-        product,
-        drinks,
-        {
-          memberId: "specials",
-          ref: { kind: "section", sectionId: "specials" },
-          children: [{ ...drinks, memberId: "again" }],
-        },
-      ],
-    } as unknown as Partial<MenuPricesTable>);
-    expect([...el.shadowRoot!.querySelectorAll('[data-test="price-summary"] p')].map(text)).toEqual(
-      [
-        "This menu sets its own price for 1 item from Drinks",
-        "Sets its own price for 1 of its own items",
-      ],
-    );
-  } finally {
-    setLocale("es-ES");
-  }
 });
 
 it("names the included menu behind a variant that follows its product", async () => {
@@ -3209,44 +3162,6 @@ describe("without a switch of the menu's own", () => {
         t("menu_prices.range").replace("{low}", eur("3.00")).replace("{high}", eur("3.75")),
       ),
     );
-  });
-
-  it.each([
-    ["en-GB", "This menu sets its own price for 1 item from Drinks"],
-    ["es-ES", "Esta carta fija su propio precio para 1 producto de Drinks"],
-  ])("counts only the prices it sets on an included menu's products (%s)", async (locale, want) => {
-    setLocale(locale);
-    try {
-      const own = {
-        state: "decided",
-        value: "4.00",
-        source: { kind: "own" },
-        otherwise: { state: "decided", value: "3.50", source: drinksSource, otherwise: null },
-      } as MenuPriceRow["combined"]["price"];
-      const el = await mount({
-        rows: [
-          { ...lager, override: "4.00", combined: { ...lager.combined, price: own } },
-          // Stored without a price of this menu's own, so nothing here counts it.
-          burger,
-        ],
-        nodes: [
-          {
-            memberId: "included",
-            ref: { kind: "section", sectionId: "root-drinks" },
-            internalName: "Drinks",
-            includedMenuId: "drinks",
-            children: [
-              { memberId: "lp", ref: { kind: "product", productId: "p-lager" } },
-              { memberId: "bp", ref: { kind: "product", productId: "p-burger" } },
-            ],
-          },
-        ],
-      } as Partial<MenuPricesTable>);
-      const summary = el.shadowRoot!.querySelector('[data-test="price-summary"]')!;
-      expect(text(summary.querySelector("p"))).toBe(want);
-    } finally {
-      setLocale("es-ES");
-    }
   });
 });
 
