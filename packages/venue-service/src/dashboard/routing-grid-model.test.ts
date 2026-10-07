@@ -117,14 +117,13 @@ describe("visibleRoutingRows", () => {
     ]);
   });
 
-  it("variants count zero; each product counts once", () => {
+  it("a cell for a product the model does not list counts zero; each product counts once", () => {
     const venue = model(
       [folder("drinks"), folder("wine")],
       [item("cola", "drinks"), item("lemonade", "drinks"), item("red", "wine")],
       [
         productCell("red"),
         productCell("red", kitchen, "terrace"),
-        // A cell naming a product the model does not list, as a variant's id would.
         productCell("red-glass", kitchen),
       ],
     );
@@ -162,9 +161,31 @@ describe("visibleRoutingRows", () => {
       [item("p-x", "x"), item("p-y", "y")],
       [categoryCell("x")],
     );
-    const collapsed = ["[All]", "  C:root {1,2}", "    C:x <root> {1,2}"];
-    expect(outline(visibleRoutingRows(venue, none))).toEqual(collapsed);
-    expect(outline(visibleRoutingRows(venue, new Set(["x"])))).toEqual(collapsed);
+    expect(outline(visibleRoutingRows(venue, none))).toEqual([
+      "[All]",
+      "  C:root {1,2}",
+      "    C:x <root> {1,2}",
+    ]);
+  });
+
+  it("an explicitly expanded exceptional category under a collapsed ancestor shows its children, and the ancestor's counts no longer include them", () => {
+    const venue = model(
+      [folder("root"), folder("x", "root"), folder("y", "x")],
+      [item("p-x", "x"), item("p-y", "y")],
+      [categoryCell("x")],
+    );
+    expect(outline(visibleRoutingRows(venue, new Set(["x"])))).toEqual([
+      "[All]",
+      "  C:root {0,1}",
+      "    C:x <root>",
+      "      C:y <root/x> {0,1}",
+      "      P:p-x <root/x>",
+    ]);
+    expect(outline(visibleRoutingRows(venue, new Set(["y"])))).toEqual([
+      "[All]",
+      "  C:root {1,2}",
+      "    C:x <root> {1,2}",
+    ]);
   });
 
   it("expand one, expand all, collapse all change the rows and counts exactly", () => {
@@ -262,7 +283,8 @@ describe("visibleRoutingRows", () => {
     expect(outline(visibleRoutingRows(disabled, none))).toEqual(["[All]", "  C:food"]);
     const stray = model(folders, [], [productCell("bread")]);
     expect(outline(visibleRoutingRows(stray, none))).toEqual(["[All]", "  C:food"]);
-    expect(outline(visibleRoutingRows(enabled, none))).toEqual([
+    const again = model(folders, [item("bread", "food")], [productCell("bread")]);
+    expect(outline(visibleRoutingRows(again, none))).toEqual([
       "[All]",
       "  C:food",
       "    P:bread <food>",
@@ -289,12 +311,47 @@ describe("visibleRoutingRows", () => {
       "      P:p <a/b>",
     ]);
   });
+
+  it("places a cycle member's descendants under it, once, even when listed before the cycle", () => {
+    const venue = model(
+      [folder("c", "b"), folder("a", "b"), folder("b", "a")],
+      [item("p", "c")],
+      [productCell("p")],
+    );
+    expect(outline(visibleRoutingRows(venue, none))).toEqual([
+      "[All]",
+      "  C:b {2,0}",
+      "      P:p <b/c>",
+    ]);
+    expect(outline(visibleRoutingRows(venue, expandAll(venue)))).toEqual([
+      "[All]",
+      "  C:b",
+      "    C:c <b>",
+      "      P:p <b/c>",
+      "    C:a <b>",
+    ]);
+  });
+
+  it("treats a category whose parent the model does not list as a root", () => {
+    const venue = model([folder("orphan", "missing")], [item("p", "orphan")]);
+    expect(outline(visibleRoutingRows(venue, none))).toEqual(["[All]", "  C:orphan {0,1}"]);
+  });
+
+  it("lists a product whose category the model does not list under No category", () => {
+    const venue = model([folder("food")], [item("stray", "missing")]);
+    expect(outline(visibleRoutingRows(venue, none))).toEqual([
+      "[All]",
+      "  C:food",
+      "[No category]",
+      "  P:stray",
+    ]);
+  });
 });
 
 describe("selectionRulesFromModel", () => {
   type Station = { id: string; name: string; active: boolean; isDefault: boolean };
 
-  // The same rows the server reads: `snapshot` derives its rules from them, `routingModel` the model.
+  // `server` is a hand copy of the rules `snapshot` (routing-store.ts) derives from these rows.
   function both(stations: Station[]) {
     const folders = [folder("drinks"), folder("cocktails", "drinks"), folder("food")];
     const cells = [
@@ -395,7 +452,7 @@ describe("selectionRulesFromModel", () => {
       target: null,
       decidedBy: null,
     });
-    // The model's default names an inactive station only if the server's did; check that too.
+    // An out-of-date model can name a default its station list says is inactive.
     const staleDefault = { ...inactiveDefault.wire, defaultStationId: "kitchen" };
     expect(selectRoutingCell(selectionRulesFromModel(staleDefault), loose, null)).toEqual({
       target: null,

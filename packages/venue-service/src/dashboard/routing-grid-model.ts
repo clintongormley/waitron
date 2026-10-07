@@ -1,7 +1,7 @@
 import type { GridCategory, GridProduct, GridRow, RoutingModel } from "../routing.js";
 
 /** Heads the products with no category. It has no cell address, so nothing can edit it. */
-export type NoCategoryHeading = { readonly kind: "no_category_heading" };
+export type NoCategoryHeading = { readonly kind: "no_category_heading"; readonly row?: never };
 export type RoutingGridEntry = GridRow | NoCategoryHeading;
 
 export function isNoCategoryHeading(entry: RoutingGridEntry): entry is NoCategoryHeading {
@@ -22,9 +22,10 @@ function append<T>(lists: Map<string, T[]>, key: string, value: T): void {
 /**
  * The grid's rows in tree order: All categories, the root categories, every row whose ancestors
  * are all expanded, every category or product holding a cell (at its own place, without its
- * hidden ancestors), then the products with no category under their heading. A category whose
- * children are not shown counts the rows of its subtree that are absent. Siblings keep the
- * model's order; a category's subcategories come before its products.
+ * hidden ancestors), then the products with no category under their heading. A shown category's
+ * children are shown exactly when its id is in `expanded`, so a category shown only for its cell
+ * opens too. A category whose children are not shown counts the rows of its subtree that are
+ * absent. Siblings keep the model's order; a category's subcategories come before its products.
  */
 export function visibleRoutingRows(
   model: RoutingModel,
@@ -62,11 +63,12 @@ export function visibleRoutingRows(
   ];
   const placed = new Set<string>();
 
-  // Returns the absent rows below `category`, for its ancestors' counts.
+  // Returns the absent rows of `category`'s subtree, itself included, for its ancestors' counts.
   function place(category: GridCategory, path: string[], shown: boolean): Hidden {
     placed.add(category.id);
     const depth = path.length + 1;
-    const open = shown && expanded.has(category.id);
+    const visible = shown || categoriesWithCells.has(category.id);
+    const open = visible && expanded.has(category.id);
     const entry: GridRow = {
       row: { kind: "category", categoryId: category.id },
       name: category.name,
@@ -75,7 +77,6 @@ export function visibleRoutingRows(
       hiddenProducts: 0,
       hiddenCategories: 0,
     };
-    const visible = shown || categoriesWithCells.has(category.id);
     if (visible) entries.push(entry);
     const below: Hidden = { categories: 0, products: 0 };
     const childPath = [...path, category.name];
@@ -107,9 +108,17 @@ export function visibleRoutingRows(
   }
 
   for (const root of roots) place(root, [], true);
-  // A category on a parent cycle has no root above it; it is placed as a root of its own.
+  // What is left sits on or below a parent cycle, every ancestor unplaced and listed. Walking up
+  // reaches a cycle member, placed as a root so the rest of its cycle and subtree fall under it.
   for (const category of model.categories) {
-    if (!placed.has(category.id)) place(category, [], true);
+    if (placed.has(category.id)) continue;
+    const seen = new Set<string>();
+    let member = category;
+    while (!seen.has(member.id)) {
+      seen.add(member.id);
+      member = known.get(member.parentId!)!;
+    }
+    place(member, [], true);
   }
 
   if (uncategorised.length > 0) {

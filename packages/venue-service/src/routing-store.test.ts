@@ -21,7 +21,14 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import type { RouteTarget, RoutingMoment } from "./routing.js";
+import {
+  selectRoutingCell,
+  selectionRulesFromModel,
+  type RouteTarget,
+  type RoutingModel,
+  type RoutingMoment,
+  type RoutingRow,
+} from "./routing.js";
 import {
   describeMakers,
   explainRoute,
@@ -566,6 +573,87 @@ describe("stored preparation rules", () => {
       expect(model.defaultStationId).toBeNull();
       expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: false });
       expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
+    }));
+});
+
+describe("the browser's selection rules", () => {
+  it("choose the cell the server's rules choose, for every row and zone, after a trip over the wire", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const [upstairs] = await tx
+        .insert(floorZones)
+        .values({ ...f.cfg, name: "Upstairs" })
+        .returning();
+      await configureZone(tx, f.cfg, { zoneId: upstairs!.id, departmentId: f.department });
+      const written: RoutingCell[] = [
+        { row: productRow(f.mojito), zoneId: null, target: station(f.terraceBar) },
+        { row: categoryRow(f.cocktails), zoneId: f.terrace, target: station(f.bar) },
+        { row: categoryRow(f.drinks), zoneId: upstairs!.id, target: station(f.terraceBar) },
+        { row: categoryRow(f.food), zoneId: f.terrace, target: noPrep },
+        { row: productRow(f.bread), zoneId: f.terrace, target: station(f.terraceBar) },
+        { row: { kind: "all" }, zoneId: upstairs!.id, target: noPrep },
+      ];
+      for (const { target, ...address } of written)
+        await setRoutingCell(tx, f.cfg, address, target);
+      const rows: [RoutingRow, string | null][] = [
+        [{ kind: "all" }, null],
+        [categoryRow(f.drinks), null],
+        [categoryRow(f.beer), null],
+        [categoryRow(f.cocktails), null],
+        [categoryRow(f.food), null],
+        [productRow(f.mojito), f.cocktails],
+        [productRow(f.bread), null],
+      ];
+      const zones = [null, f.terrace, upstairs!.id];
+      const at = new Date("2026-10-02T18:00:00Z");
+      const compare = async () => {
+        const server = await loadRoutingRules(tx, f.cfg, null);
+        const model: RoutingModel = JSON.parse(JSON.stringify(await routingModel(tx, f.cfg, at)));
+        const browser = selectionRulesFromModel(model);
+        const categoryOf = new Map(
+          model.products.map((product) => [product.id, product.categoryId]),
+        );
+        const chosen = new Map<string, ReturnType<typeof selectRoutingCell>>();
+        for (const [row, categoryId] of rows) {
+          const browserCategory = row.kind === "product" ? categoryOf.get(row.productId)! : null;
+          for (const zoneId of zones) {
+            const expected = selectRoutingCell(server, row, zoneId, categoryId);
+            expect(
+              selectRoutingCell(browser, row, zoneId, browserCategory),
+              `${JSON.stringify(row)} × ${zoneId}`,
+            ).toEqual(expected);
+            chosen.set(JSON.stringify([row, zoneId]), expected);
+          }
+        }
+        return (row: RoutingRow, zoneId: string | null) =>
+          chosen.get(JSON.stringify([row, zoneId]));
+      };
+      const decided = (row: RoutingRow, zoneId: string | null) => ({
+        kind: "cell",
+        address: { row, zoneId },
+      });
+      const active = await compare();
+      // Same-row Every zone beats the parent's Terrace cell.
+      expect(active(productRow(f.mojito), f.terrace)?.decidedBy).toEqual(
+        decided(productRow(f.mojito), null),
+      );
+      // An ancestor's zone cell.
+      expect(active(categoryRow(f.beer), upstairs!.id)?.decidedBy).toEqual(
+        decided(categoryRow(f.drinks), upstairs!.id),
+      );
+      expect(active(categoryRow(f.food), f.terrace)?.target).toEqual(noPrep);
+      // A product with no category: its own cell, then All categories, then the default.
+      expect(active(productRow(f.bread), f.terrace)?.decidedBy).toEqual(
+        decided(productRow(f.bread), f.terrace),
+      );
+      expect(active(productRow(f.bread), upstairs!.id)?.target).toEqual(noPrep);
+      expect(active(productRow(f.bread), null)).toEqual({
+        target: station(f.bar),
+        decidedBy: { kind: "default" },
+      });
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
+      const inactiveDefault = await compare();
+      expect(inactiveDefault(productRow(f.bread), null)).toEqual({ target: null, decidedBy: null });
     }));
 });
 
