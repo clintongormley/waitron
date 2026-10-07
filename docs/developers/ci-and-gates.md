@@ -751,6 +751,15 @@ every esbuild command it runs, and the box image carries sharp beside the bundle
   sharp anywhere above it, it printed its usage and exited 2, because `prepare.ts` imports sharp only
   when a photo is prepared.
 
+**2026-10-07 update:** the shared banner imports `createRequire` as
+`__waitronCreateRequire`, so an entry importing Node's `createRequire` can load alongside
+the CommonJS shim. `pnpm exec vitest run scripts/bundle-node.test.mjs` first failed its new
+load case with `Identifier 'createRequire' has already been declared`, then passed all 15
+cases with the alias. The fixture also calls the shim; removing its declaration fails with
+`Dynamic require of "node:path" is not supported`, while the package-licence control
+passes. The 2026-09-23 duplicate-name failure above records the old banner. Sharp's separate
+native runtime remains external.
+
 In the image built from the Dockerfile on linux/arm64 (2026-09-23), run as uid 10001: sharp 0.35.4
 loaded libvips 8.18.6 from `/app/node_modules`, and image-smoke's shrink script passed. With
 `/app/node_modules` removed, `import("sharp")` failed `ERR_MODULE_NOT_FOUND`. `ldd` on the addon
