@@ -127,9 +127,6 @@ declare module "@waitron/shared" {
      * parent's save leaves Active, or `active` on a variant's own save.
      */
     "product.offered_as_extra": { field: string; extraLists: { id: string; name: string }[] };
-    /** Another Active product or variant already has this staff name, ignoring case and surrounding
-     * whitespace. `field` (`name`, or `variants.<i>.name` in the product editor) beside the siblings'
-     * `{ name }` lets the editor place it, as `product.invalid` does. */
     "product.name_taken": { field: string; name: string };
     /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };

@@ -974,6 +974,13 @@ unused `units` property is gone (it closes W75's leftover).
   draft. Existing products keep their class. Both product-create APIs still require an explicit
   class. The singleton setting belongs to the catalogue module and travels with configuration
   exports; the rate table and product VAT model are unchanged.
+- **A357, owner 2026-10-07 — in progress on `feat/relative-variant-names`:** variants become
+  relative names, with Single allowed under both Seagrams Gin and London Gin. Catalogue save
+  and configuration-import scopes are implemented and locally checked; products remain unique
+  among products and active variants within their product. Standalone paired names for staff,
+  customer and kitchen, consumer/demo/documentation audit, printed wrapping checks and the full
+  review/CI/landing gate remain. See
+  [the plan](superpowers/plans/2026-10-07-relative-variant-names.md).
 - **A330, owner 2026-10-07 — DONE (#1354; variant rows show their photo):** an opened variant's row
   in the Products list now draws a photo square in its product's column: the variant's own photo,
   else its product's, else the same square its product's row shows. The till draws no variant photo today,
