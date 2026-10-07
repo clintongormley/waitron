@@ -946,7 +946,7 @@ describe("overtakeSentence", () => {
 
   it("names several versions on each side, the lower ones first", () => {
     expect(overtakeSentence([V4_IN_THE_WAY, V3_IN_THE_WAY, V2_IN_THE_WAY], 1, queue())).toBe(
-      "Versions 2 (8 Oct 2026, 08:00), 3 (9 Oct 2026, 08:00) and 4 (25 Oct 2026, 02:30 (UTC+01:00)) must go live after this one. Cancel them or move them later, then try again.",
+      "Versions 2 (8 Oct 2026, 08:00), 3 (9 Oct 2026, 08:00), and 4 (25 Oct 2026, 02:30 (UTC+01:00)) must go live after this one. Cancel them or move them later, then try again.",
     );
     expect(overtakeSentence([V4_IN_THE_WAY, V2_IN_THE_WAY], 3, queue())).toBe(
       "Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again. " +
@@ -1135,5 +1135,187 @@ describe("placing a schedule refusal by what it carries", () => {
     refuse({ code: "menu_publication.time_past", params: {} });
     await flush(el);
     expect(field(el, "time").error).toBe("");
+  });
+});
+
+describe("schedule fix round 1", () => {
+  it("ignores edits while a schedule is out, and places its refusal against the values it sent", async () => {
+    let refuse!: (reason: unknown) => void;
+    const api = stubApi({
+      scheduleMenuPublication: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
+    });
+    const el = await mount(api, { preview: draftPreview() });
+    await openSchedule(el);
+    await enter(el, "date", "2026-10-25");
+    await enter(el, "time", "02:30");
+    submitButton(el).click();
+    await flush(el);
+    expect(field(el, "time").disabled).toBe(true);
+    expect(field(el, "date").disabled).toBe(true);
+    field(el, "time").dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "03:30" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    refuse(REPEATED);
+    await flush(el);
+    await flush(el);
+    expect(field(el, "time").value).toBe("02:30");
+    expect(field(el, "time").disabled).toBe(false);
+    expect(occurrence(el)!.label).toBe("Which 02:30");
+    await chooseOption(occurrence(el)!, "earlier");
+    await flush(el);
+    await submit(el);
+    expect(api.scheduleMenuPublication.mock.calls[1]![1].activatesAt).toEqual({
+      date: "2026-10-25",
+      time: "02:30",
+      occurrence: "earlier",
+    });
+  });
+
+  it("says why nothing happens when the preview is gone at the press", async () => {
+    const api = stubApi();
+    const el = await mount(api, { preview: draftPreview() });
+    await openSchedule(el);
+    await enter(el, "date", "2026-10-10");
+    await enter(el, "time", "12:00");
+    el.preview = null;
+    await flush(el);
+    await submit(el);
+    expect(api.scheduleMenuPublication).not.toHaveBeenCalled();
+    expect(await bottom(el)).toBe(
+      "The preview could not be read, so nothing was scheduled. Try again once the preview shows.",
+    );
+    expect(submitButton(el).disabled).toBe(false);
+  });
+
+  it("says it in Spanish too", async () => {
+    setLocale("es-ES");
+    const el = await mount(stubApi(), { preview: draftPreview() });
+    await openSchedule(el);
+    await enter(el, "date", "2026-10-10");
+    await enter(el, "time", "12:00");
+    el.preview = null;
+    await flush(el);
+    await submit(el);
+    expect(await bottom(el)).toBe(
+      "No se pudo leer la vista previa, así que no se ha programado nada. Vuelve a intentarlo cuando se muestre la vista previa.",
+    );
+  });
+
+  it("rewords a refusal it is showing when the screen language changes", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: OVERTAKES,
+        params: { menuId: "menu-lunch", overtaken: [V2_IN_THE_WAY] },
+      }),
+    });
+    const el = await scheduleAt(api, "2026-10-08", "08:00");
+    expect(field(el, "time").error).toBe(
+      "Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
+    );
+    try {
+      setLocale("es-ES");
+      await flush(el);
+      expect(field(el, "time").error).toBe(
+        "La versión 2, programada para el 8 oct 2026, 08:00, debe publicarse antes. Cancélala o adelántala y vuelve a intentarlo.",
+      );
+      expect(await bottom(el)).toBe("Corrige los campos marcados para continuar.");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("rewords a skipped time it is showing when the screen language changes", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: "menu_publication.time_skipped",
+        params: { date: "2027-03-28", time: "02:30" },
+      }),
+    });
+    const el = await scheduleAt(api, "2027-03-28", "02:30");
+    try {
+      setLocale("es-ES");
+      await flush(el);
+      expect(field(el, "time").error).toBe(
+        "El reloj se salta las 02:30 el 28 mar 2027. Elige otra hora.",
+      );
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("keeps a newer live list when an older re-read after a cancel resolves later", async () => {
+    const live = new LiveData();
+    const newer = queue();
+    newer.editions[0] = { ...newer.editions[0]!, state: "cancelled" };
+    let older!: (value: MenuPublicationsAnswer) => void;
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(queue())
+      .mockImplementationOnce(
+        () => new Promise<MenuPublicationsAnswer>((resolve) => (older = resolve)),
+      )
+      .mockResolvedValue(newer);
+    const el = await mount(stubApi({ liveData: live, getMenuPublications: read }));
+    await openCancel(el);
+    inShadow(el, "cancel-confirm")!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    live.invalidate([{ type: "menu_scheduled_publications" }]);
+    await vi.waitFor(() => expect(cell(el, "state-v-lunch-2")).toBe("Cancelled"));
+    older(queue());
+    await flush(el);
+    await flush(el);
+    expect(cell(el, "state-v-lunch-2")).toBe("Cancelled");
+  });
+
+  it("keeps a newer live list when the overtake re-read resolves later", async () => {
+    const live = new LiveData();
+    const newer = queue();
+    newer.editions[0] = { ...newer.editions[0]!, state: "cancelled" };
+    let older!: (value: MenuPublicationsAnswer) => void;
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(queue())
+      .mockImplementationOnce(
+        () => new Promise<MenuPublicationsAnswer>((resolve) => (older = resolve)),
+      )
+      .mockResolvedValue(newer);
+    const api = stubApi({
+      liveData: live,
+      getMenuPublications: read,
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: OVERTAKES,
+        params: { menuId: "menu-lunch", overtaken: [V2_IN_THE_WAY] },
+      }),
+    });
+    const el = await mount(api, { preview: draftPreview() });
+    await openSchedule(el);
+    await enter(el, "date", "2026-10-08");
+    await enter(el, "time", "08:00");
+    submitButton(el).click();
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    live.invalidate([{ type: "menu_scheduled_publications" }]);
+    await vi.waitFor(() => expect(cell(el, "state-v-lunch-2")).toBe("Cancelled"));
+    older(queue());
+    await flush(el);
+    await flush(el);
+    expect(cell(el, "state-v-lunch-2")).toBe("Cancelled");
+    expect(field(el, "time").error).toBe(
+      "Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
+    );
+  });
+
+  it("gives the choice of a repeated time a placeholder", async () => {
+    const api = stubApi({ scheduleMenuPublication: vi.fn().mockRejectedValue(REPEATED) });
+    const el = await scheduleAt(api, "2026-10-25", "02:30");
+    expect(occurrence(el)!.placeholder).toBe("Choose a time");
+  });
+
+  it("gives it in Spanish", async () => {
+    setLocale("es-ES");
+    const api = stubApi({ scheduleMenuPublication: vi.fn().mockRejectedValue(REPEATED) });
+    const el = await scheduleAt(api, "2026-10-25", "02:30");
+    expect(occurrence(el)!.placeholder).toBe("Elige una hora");
   });
 });

@@ -2330,6 +2330,9 @@ export const en = {
   "menu_publications.time_repeated":
     "{time} happens twice on {date}, because the clocks go back. Choose which.",
   "menu_publications.occurrence_label": "Which {time}",
+  "menu_publications.occurrence_choose": "Choose a time",
+  "menu_publications.preview_unavailable":
+    "The preview could not be read, so nothing was scheduled. Try again once the preview shows.",
   "menu_publications.occurrence_earlier": "First {time} (UTC{offset})",
   "menu_publications.occurrence_later": "Second {time} (UTC{offset})",
   "menu_publications.in_the_way_item": "{number} ({time})",
@@ -4769,6 +4772,9 @@ export const es: Record<StringKey, string> = {
   "menu_publications.time_repeated":
     "Las {time} se repiten el {date}, porque se atrasa la hora. Elige cuál de las dos.",
   "menu_publications.occurrence_label": "Cuál de las {time}",
+  "menu_publications.occurrence_choose": "Elige una hora",
+  "menu_publications.preview_unavailable":
+    "No se pudo leer la vista previa, así que no se ha programado nada. Vuelve a intentarlo cuando se muestre la vista previa.",
   "menu_publications.occurrence_earlier": "Primera {time} (UTC{offset})",
   "menu_publications.occurrence_later": "Segunda {time} (UTC{offset})",
   "menu_publications.in_the_way_item": "{number} ({time})",

@@ -27,6 +27,7 @@ import type {
   MenuPublicationsAnswer,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { conjunctionList } from "../i18n/list.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -112,11 +113,7 @@ export function overtakeSentence(
         time: localTimeWords(edition.local),
       }),
     );
-    return [
-      fill(many, {
-        list: new Intl.ListFormat(screenLocale(), { type: "conjunction" }).format(items),
-      }),
-    ];
+    return [fill(many, { list: conjunctionList(items) })];
   });
   return sentences.length === 0 ? null : sentences.join(" ");
 }
@@ -127,10 +124,35 @@ interface ScheduleDraft {
   occurrence: string;
 }
 
-/** A refusal placed under the field it names, or in the bottom message when `field` is null. */
+/**
+ * A refusal placed under the field it names, or in the bottom message when `field` is null, kept
+ * untranslated so a language change rewords it. A null `code` is a press with no preview to
+ * schedule; `answer` is the list read after an overtake refusal.
+ */
 interface ScheduleRefusal {
   field: "date" | "time" | "occurrence" | null;
-  message: string;
+  code: string | null;
+  params: Record<string, unknown>;
+  answer?: MenuPublicationsAnswer | null;
+}
+
+function refusalMessage({ code, params, answer }: ScheduleRefusal): string {
+  if (code === null) return t("menu_publications.preview_unavailable");
+  if (code === "menu_publication.overtakes_queued" && answer && Array.isArray(params.overtaken))
+    return (
+      overtakeSentence(params.overtaken as { versionId: string }[], null, answer) ??
+      codeMessage(code)
+    );
+  if (
+    code === "menu_publication.time_skipped" &&
+    typeof params.date === "string" &&
+    typeof params.time === "string"
+  )
+    return fill("menu_publications.time_skipped", {
+      time: params.time,
+      date: localDateWords(params.date),
+    });
+  return codeMessage(code);
 }
 
 /** The two instants a repeated venue-local minute names, earlier first, as the route lists them. */
@@ -223,6 +245,10 @@ export class MenuPublicationsPanel extends LitElement {
 
   /** The menu whose editions are followed. */
   #watching: string | null = null;
+  /** Numbers each list read as it starts; a live answer counts as started when it lands. */
+  #readCount = 0;
+  /** The number of the read whose answer the table shows, so an older one never replaces it. */
+  #shownRead = 0;
   /** A row menu's popover closes on the click, so the dialog hands focus back to its trigger. */
   #focusTarget: HTMLElement | null = null;
   /** Replaced at each opening of the schedule form, so a late answer cannot reach a later one. */
@@ -283,6 +309,7 @@ export class MenuPublicationsPanel extends LitElement {
     this.readError = null;
     try {
       await this.#queries.watch("getMenuPublications", [menuId], (answer) => {
+        this.#shownRead = ++this.#readCount;
         this.answer = answer;
         // The controller's recovery fires only for its own failed reads, not a failed re-read.
         this.readError = null;
@@ -295,15 +322,21 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   /** After a write: a failed read here is a load failure, not a failed cancel. */
-  async #refresh(): Promise<void> {
+  async #refresh(): Promise<MenuPublicationsAnswer | null> {
     const menuId = this.menuId;
+    const read = ++this.#readCount;
+    const current = () => menuId === this.menuId && this.#shownRead < read;
     try {
       const answer = await this.api.getMenuPublications(menuId);
-      if (menuId !== this.menuId) return;
-      this.answer = answer;
-      this.readError = null;
+      if (current()) {
+        this.#shownRead = read;
+        this.answer = answer;
+        this.readError = null;
+      }
+      return answer;
     } catch (error) {
-      if (menuId === this.menuId) this.readError = codeOf(error);
+      if (current()) this.readError = codeOf(error);
+      return null;
     }
   }
 
@@ -414,6 +447,7 @@ export class MenuPublicationsPanel extends LitElement {
   /** A changed date or time is a different instant, so what was said about the old one goes. */
   #changeWhen(field: "date" | "time", event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    if (this.scheduleBusy) return;
     this[field] = event.detail.value;
     this.repeated = null;
     this.occurrence = "";
@@ -423,6 +457,7 @@ export class MenuPublicationsPanel extends LitElement {
 
   #changeOccurrence(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    if (this.scheduleBusy) return;
     this.occurrence = event.detail.value;
     if (this.scheduleRefusal?.field === "occurrence") this.scheduleRefusal = null;
     this.#scope?.changed();
@@ -442,9 +477,13 @@ export class MenuPublicationsPanel extends LitElement {
 
   async #submitSchedule(): Promise<void> {
     const preview = this.preview;
-    if (this.scheduleBusy || preview === null) return;
+    if (this.scheduleBusy) return;
     this.attempted = true;
     this.scheduleRefusal = null;
+    if (preview === null) {
+      this.scheduleRefusal = { field: null, code: null, params: {} };
+      return;
+    }
     if (Object.keys(this.#ownErrors()).length > 0) {
       await this.updateComplete;
       await focusFirstInvalid(this.#scheduleDialog());
@@ -474,27 +513,24 @@ export class MenuPublicationsPanel extends LitElement {
   async #placeRefusal(error: unknown, menuId: string, opening: object): Promise<void> {
     const code = codeOf(error);
     const params = (error as { params?: Record<string, unknown> }).params ?? {};
-    let refusal: ScheduleRefusal = { field: null, message: codeMessage(code) };
+    const refusal: ScheduleRefusal = { field: null, code, params };
     if (code === "menu_publication.time_repeated") {
       const repeated = repeatedTime(params);
       if (opening === this.#opening && repeated !== null) {
         this.repeated = repeated;
         this.occurrence = "";
+        this.scheduleBusy = false;
         await this.updateComplete;
         await focusFirstInvalid(this.#scheduleDialog());
         return;
       }
     } else if (code === "menu_publication.overtakes_queued") {
-      refusal = { field: "time", message: await this.#overtakeMessage(params, menuId) };
-    } else if (code === "menu_publication.time_past") {
       refusal.field = "time";
-    } else if (code === "menu_publication.time_skipped") {
+      // Read once more to name each edition in the way as the list now stands.
+      if (Array.isArray(params.overtaken) && menuId === this.menuId)
+        refusal.answer = await this.#refresh();
+    } else if (code === "menu_publication.time_past" || code === "menu_publication.time_skipped") {
       refusal.field = "time";
-      if (typeof params.date === "string" && typeof params.time === "string")
-        refusal.message = fill("menu_publications.time_skipped", {
-          time: params.time,
-          date: localDateWords(params.date),
-        });
     } else if (code === "management.request_invalid" && typeof params.field === "string") {
       const field = REQUEST_FIELDS[params.field] ?? null;
       refusal.field = field === "occurrence" && this.repeated === null ? null : field;
@@ -502,26 +538,10 @@ export class MenuPublicationsPanel extends LitElement {
     if (opening !== this.#opening) return;
     this.scheduleRefusal = refusal;
     if (refusal.field !== null) {
+      // The fields are disabled while the request is out, and a disabled field cannot take focus.
+      this.scheduleBusy = false;
       await this.updateComplete;
       await focusFirstInvalid(this.#scheduleDialog());
-    }
-  }
-
-  /** Reads the list once more to name each edition in the way, as it now stands. */
-  async #overtakeMessage(params: Record<string, unknown>, menuId: string): Promise<string> {
-    const fallback = codeMessage("menu_publication.overtakes_queued");
-    if (!Array.isArray(params.overtaken)) return fallback;
-    try {
-      const answer = await this.api.getMenuPublications(menuId);
-      if (menuId === this.menuId) {
-        this.answer = answer;
-        this.readError = null;
-      }
-      return (
-        overtakeSentence(params.overtaken as { versionId: string }[], null, answer) ?? fallback
-      );
-    } catch {
-      return fallback;
     }
   }
 
@@ -621,10 +641,10 @@ export class MenuPublicationsPanel extends LitElement {
     const own = this.attempted ? this.#ownErrors() : {};
     const refusal = this.scheduleRefusal;
     const errors = { ...own };
-    if (refusal?.field != null) errors[refusal.field] ??= refusal.message;
+    if (refusal?.field != null) errors[refusal.field] ??= refusalMessage(refusal);
     const marked = Object.values(errors).some(Boolean);
     const bottom = [
-      ...(refusal !== null && refusal.field === null ? [refusal.message] : []),
+      ...(refusal !== null && refusal.field === null ? [refusalMessage(refusal)] : []),
       ...(marked ? [t("form.fix_fields")] : []),
     ].join(" ");
     const invalid = Object.keys(own).length > 0;
@@ -654,6 +674,7 @@ export class MenuPublicationsPanel extends LitElement {
         type="date"
         required
         label=${t("menu_publications.date_label")}
+        ?disabled=${this.scheduleBusy}
         error=${errors.date ?? ""}
         .value=${this.date}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeWhen("date", event)}
@@ -664,6 +685,7 @@ export class MenuPublicationsPanel extends LitElement {
         type="time"
         required
         label=${t("menu_publications.time_label")}
+        ?disabled=${this.scheduleBusy}
         error=${errors.time ?? ""}
         .value=${this.time}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeWhen("time", event)}
@@ -676,6 +698,8 @@ export class MenuPublicationsPanel extends LitElement {
               name="occurrence"
               required
               search="never"
+              placeholder=${t("menu_publications.occurrence_choose")}
+              ?disabled=${this.scheduleBusy}
               label=${fill("menu_publications.occurrence_label", { time: repeated.time })}
               .options=${[
                 {
