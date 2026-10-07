@@ -1873,6 +1873,15 @@ Left open:
 and the staff-facing names — is one data set, `casa-delgado-es`, which Spain's pack names; nothing
 a demo seeds changes.
 
+**The demo data carries Catalan and Galician text (W109-3, Task 3 of the same plan) — DONE; the
+text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** Every customer-facing text
+in `casa-delgado-es` (`apps/server/scripts/demo-seed/menu.ts`, `seed-adjustments.ts`) has a
+Catalan and a Galician value, written by Claude; nothing writes them until Task 4 (W109-4). The PR
+carries the side-by-side table. A speaker of each should read it; the drafter was least sure of
+the Galician "Charcutaría", "Lombo embuchado", "Ventrecha de bonito", "Luras á romana", "Polbo á
+feira", "Café só", "Tortilla de patacas" and the doneness choices, and the Catalan "Salsitxó",
+"Llom embotit", "Filet al whisky", "Error en marcar" and "Invitació de l'encarregat".
+
 **Content languages per region, for real venues and the demo — owner DECIDED 2026-10-06 ~17:23
 (W109; was "Demo languages per region — owner decision pending").** As relayed in lane A's queue
 (`~/waitron-campaign/queue.md`, WATCHER NOTE of 17:23 above W109-1) and
