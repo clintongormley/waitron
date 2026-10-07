@@ -2812,6 +2812,72 @@ describe("department transfers across operator lifetimes", () => {
     expect(pendingCount(el)?.textContent).toContain("0");
   });
 
+  it("accepts from the actual shell with a catalogue zone and reloads its durable pending count", async () => {
+    const desk = transfers();
+    let accepted = false;
+    const catalogue = zoneOffers(
+      { menus: [defaultMenu], products: [cafe] },
+      "terrace",
+      "table_tab",
+    );
+    catalogue.zones = [
+      {
+        id: "terrace",
+        name: "Terrace",
+        departmentId: "restaurant",
+        departmentName: "Restaurant",
+        serviceMode: "table_tab",
+      },
+    ];
+    const accept = vi.fn(async () => {
+      accepted = true;
+      return { ...request, status: "accepted" };
+    });
+    const { el } = await mountApp({
+      ...desk.calls,
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      listIncomingDepartmentTransfers: vi.fn(async () => ({
+        count: accepted ? 0 : 1,
+        requests: accepted ? [] : [request],
+      })),
+      getDepartmentTransfer: vi.fn().mockResolvedValue(currentDetail),
+      acceptDepartmentTransfer: accept,
+    });
+    await signIn(el);
+    await openTransfers(el);
+    transferRoot(el)!.querySelector<HTMLElement>("[data-view]")!.click();
+    await vi.waitFor(() =>
+      expect(transferRoot(el)?.querySelector("[data-current-tab]")).not.toBeNull(),
+    );
+    transferRoot(el)!.querySelector<HTMLElement>("[data-accept]")!.click();
+    await vi.waitFor(() =>
+      expect(
+        transferRoot(el)?.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+          ?.disabled,
+      ).toBe(false),
+    );
+    const field = transferRoot(el)!.querySelector<
+      HTMLElement & { options: { value: string; label: string }[] }
+    >("[name=zoneId]")!;
+    expect(field.options).toEqual([{ value: "terrace", label: "Terrace" }]);
+    emit(field, "wt-change", { value: "terrace" });
+    await vi.waitFor(() =>
+      expect(field.getAttribute("value") ?? (field as unknown as { value: string }).value).toBe(
+        "terrace",
+      ),
+    );
+    transferRoot(el)!.querySelector<HTMLElement>("[data-save-transfer]")!.click();
+    await vi.waitFor(() =>
+      expect(accept).toHaveBeenCalledWith("request-1", {
+        revision: 9,
+        zoneId: "terrace",
+        tableId: null,
+      }),
+    );
+    await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("0"));
+    expect(transferRoot(el)?.querySelector("[data-current-tab]")).toBeNull();
+  });
+
   it("starts a fresh detail read after close and ignores the previous opening's late reply", async () => {
     const desk = transfers();
     let oldReply!: (value: typeof currentDetail) => void;

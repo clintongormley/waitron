@@ -8897,6 +8897,8 @@ export class TillApp extends LitElement {
                         this.transferSnapshot === undefined
                           ? nothing
                           : html`<till-department-transfers
+                              .serviceZones=${this.counterServiceZones}
+                              @transfer-changed=${() => this.#departmentTransfers?.refresh()}
                               .api=${this.api}
                               .snapshot=${this.transferSnapshot}
                               .open=${this.transferQueueOpen}

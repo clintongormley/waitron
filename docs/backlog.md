@@ -4823,9 +4823,14 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   without logging out an otherwise signed-in operator. Till notifications now show incoming requests
   and resolved sender statuses; dismissal leaves the durable queue and history intact. A read-only
   transfer dialog lists pending requests and sender history, and opens the current ordered items and
-  outstanding kitchen work. Closing or replacing a detail read aborts it and ignores late replies;
-  a resolved request clears its displayed detail. Receiving actions and sender request/withdraw
-  controls remain to build. Party-linked bills are
+  outstanding kitchen work. Receiving actions now require a chosen destination zone and optional
+  table for acceptance, or a reason for decline, and submit the displayed tab revision. Their drafts
+  use the shared leave confirmation; field refusals retain input and allow a valid retry. Table-choice
+  reads time out after 25 seconds and can be cancelled or retried. A successful receiving write
+  clears the editor and reloads the durable queue. Closing or replacing a detail read aborts it and
+  ignores late replies; a resolved request or lost receiving access clears its displayed detail.
+  Sender request/withdraw controls, human tab/department/station summaries and transfer-driven
+  refresh of ordinary tab lists remain to build. Party-linked bills are
   refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and

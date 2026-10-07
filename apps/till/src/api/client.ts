@@ -2771,8 +2771,8 @@ export class TillApi {
   }
 
   /** The live-floor occupancy read-model → `GET /api/tables/state`, one row per active table. */
-  getTablesState(): Promise<TableState[]> {
-    return this.#request<TableState[]>("/api/tables/state", "GET");
+  getTablesState(options: ReadOptions = {}): Promise<TableState[]> {
+    return this.#request<TableState[]>("/api/tables/state", "GET", undefined, options.signal);
   }
 
   /**
