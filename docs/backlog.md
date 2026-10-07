@@ -2432,6 +2432,12 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
   headings and actions, and the certificate trust instructions (`apps/till/src/main.ts`)
   have fixed English prose. Reproduce in Spanish before deciding their translation scope;
   this branch changes the standard selling tabs only.
+- **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).**
+  A unit with no enabled text has an empty label; the tile and basket-refresh price templates
+  still append a slash. Render those empty-label cases before choosing their display.
+  Legacy unit maps cover English and Spanish only. The default Kitchen title remains
+  English when the tab shell is shown in a synthetic Spanish probe; check whether any
+  real kitchen session shows that bar before widening the standard-tab translation.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A

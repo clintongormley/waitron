@@ -177,6 +177,12 @@ describe("unit labels without ids", () => {
     expect(unitName(product())).toBe("ud");
   });
 
+  it("labels the legacy weighed product in Spanish when Spanish is the only content language", () => {
+    setLocale("es-ES");
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    expect(unitName(product({ pricingUnit: "weight" }))).toBe("kg");
+  });
+
   it("uses the enabled full name when the abbreviation has no enabled text", () => {
     setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
     expect(
