@@ -286,13 +286,15 @@ it("read failures and recovery cannot erase an action refusal", async () => {
   expect(field(el, "addressLine1").error).toBe(refusal);
   expect(actions(el).error).toContain("highlighted");
 });
-it("does not PATCH or prompt when all values are unchanged", async () => {
+it("does not PATCH or prompt when all values are unchanged, and keeps the quiet form open", async () => {
   const { api } = rig();
   const el = await editing(api);
+  expect([save(el).variant, save(el).disabled]).toEqual(["secondary", true]);
   await click(el, "[data-test=save]");
   expect(api.patchVenueDetails).not.toHaveBeenCalled();
   expect(q(el, "[data-test=acknowledge]")).toBeNull();
-  expect(q(el, "wt-input")).toBeNull();
+  expect(q(el, "wt-input")).not.toBeNull();
+  expect([save(el).variant, save(el).disabled]).toEqual(["secondary", true]);
 });
 
 it("editing away from an acknowledged patch and back requires a fresh acknowledgement", async () => {

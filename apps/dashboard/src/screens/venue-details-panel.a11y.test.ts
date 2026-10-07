@@ -127,6 +127,12 @@ it.each(cases)(
           }
         }
       }
+      const saveAction =
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]");
+      if (state === "locked")
+        expect([saveAction?.variant, saveAction?.disabled]).toEqual(["secondary", true]);
+      if (state === "stale")
+        expect([saveAction?.variant, saveAction?.disabled]).toEqual(["primary", false]);
       await expectNoA11yViolations(host);
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await page.screenshot({

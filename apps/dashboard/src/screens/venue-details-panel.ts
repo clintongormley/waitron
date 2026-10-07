@@ -2,7 +2,8 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
@@ -179,9 +180,7 @@ export class VenueDetailsPanel extends LitElement {
   }
   #registerDraft(): void {
     if (!this.isConnected || !this.draft || !this.#expected || this.#scope) return;
-    this.#leave = leaveCoordinatorFor(this);
-    if (!this.#leave) return;
-    this.#scope = this.#leave.register({
+    const { coordinator, scope } = draftScopeFor<VenueDetailValues>(this, {
       id: this,
       current: () => this.draft!,
       snapshot: (value) => ({ ...value }),
@@ -195,7 +194,9 @@ export class VenueDetailsPanel extends LitElement {
         this.#refreshPreview();
       },
     });
-    this.#scope.commit(this.#expected);
+    this.#leave = coordinator;
+    this.#scope = scope;
+    scope.commit(this.#expected);
   }
   #requestCancel(): void {
     if (this.submitting || !this.isConnected) return;
@@ -376,6 +377,7 @@ export class VenueDetailsPanel extends LitElement {
   }
   async #save(): Promise<void> {
     if (this.submitting || this.readOnly || !this.draft || !this.#expected) return;
+    if (saveActionState(this.#scope).unchanged) return;
     const patch = this.#patch();
     const problems = venueDetailProblems(patch);
     this.attempted = true;
@@ -388,10 +390,6 @@ export class VenueDetailsPanel extends LitElement {
       return;
     }
     if (this.#needsAcknowledgement()) return;
-    if (Object.keys(patch).length === 0) {
-      this.#cancel();
-      return;
-    }
     const generation = this.#generation;
     this.submitting = true;
     this.errors = {};
@@ -494,6 +492,7 @@ export class VenueDetailsPanel extends LitElement {
     const generation = this.#generation;
     const current = () =>
       this.isConnected && expected === this.#expected && generation === this.#generation;
+    const saveAction = saveActionState(this.#scope);
     return html`<h2>${t("venue_details.title")}</h2>
       ${this.readError && !this.actionError ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>` : nothing}
       ${
@@ -561,8 +560,9 @@ export class VenueDetailsPanel extends LitElement {
                         >
                         <wt-button
                           data-test="save"
-                          variant="primary"
+                          variant=${saveAction.variant}
                           ?disabled=${
+                            saveAction.unchanged ||
                             this.submitting ||
                             this.#needsAcknowledgement() ||
                             (this.attempted &&
