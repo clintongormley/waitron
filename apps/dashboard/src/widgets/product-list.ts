@@ -159,8 +159,7 @@ export class ProductList extends LitElement {
       wt-data-table[narrow]::part(thumb-placeholder) {
         display: none;
       }
-      /* Keep wrapped names on their first-line baseline beside the media slot. A variant's cell
-         takes another part name because a pointerdown on product-cell starts a drag. */
+      /* Keep wrapped names on their first-line baseline beside the media slot. */
       wt-data-table::part(product-cell),
       wt-data-table::part(variant-cell) {
         display: block;

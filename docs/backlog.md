@@ -960,7 +960,7 @@ unused `units` property is gone (it closes W75's leftover).
   page keeps "Edit variant", as its `InheritedValues` (`packages/catalogue/src/product-types.ts`) has no name.
 - **A330, owner 2026-10-07 — DONE (#PR; variant rows show their photo):** an opened variant's row
   in the Products list now draws a photo square in its product's column: the variant's own photo,
-  else its product's, else a square in its product's colour. The till draws no variant photo today,
+  else its product's, else the same square its product's row shows. The till draws no variant photo today,
   but the menus it reads give a variant its own photo, else its product's
   (`packages/catalogue/src/variant-fallback.ts`), and the list follows that rule. The variant's
   square opens the variant's own editor at its photo, as a click on its row opens its editor. At

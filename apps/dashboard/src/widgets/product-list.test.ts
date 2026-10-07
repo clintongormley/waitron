@@ -3358,7 +3358,6 @@ describe("a product's variants in the list", () => {
         const productName = nameCell(root, "cecina").querySelector("strong")!;
         for (const key of ["cecina:thin", "cecina:thick"]) {
           const name = nameCell(root, key).querySelector<HTMLElement>('[part~="variant-name"]')!;
-          // The text itself, not the box, which starts at its padding.
           const text = document.createRange();
           text.selectNodeContents(name);
           expect(
@@ -4808,7 +4807,14 @@ describe("variant media slot", () => {
       color: "#256bb1",
       variants: [
         { ...bunVariant, id: "half", name: "1/2 Pollo", image: "half.webp" },
-        { ...bunVariant, id: "quarter", name: "1/4 Pollo", image: null },
+        {
+          ...bunVariant,
+          id: "quarter",
+          name: "1/4 Pollo",
+          customerName: { es: "Cuarto de pollo" },
+          kitchenName: "1/4 POLLO",
+          image: null,
+        },
       ],
     });
   const tortilla = () =>
