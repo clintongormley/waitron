@@ -17,6 +17,10 @@ export const productMediaStyles = css`
   wt-data-table::part(media-link) {
     border-radius: var(--wt-radius-md);
   }
+  wt-data-table::part(media-link-busy) {
+    cursor: default;
+    opacity: var(--wt-opacity-disabled);
+  }
   wt-data-table::part(media-link):focus-visible {
     outline: var(--wt-focus-ring);
     outline-offset: var(--wt-focus-offset);
@@ -60,8 +64,9 @@ export function productMedia(options: {
       >${frame}</span
     >`;
   return html`<a
-    part="product-media media-link"
+    part=${busy ? "product-media media-link media-link-busy" : "product-media media-link"}
     data-test=${`color-${key}`}
+    ?data-own-click=${open !== undefined}
     href=${`/manage/catalogue/product/${encodeURIComponent(productId)}?field=image`}
     aria-label=${t("product.edit_named").replace("{name}", name)}
     aria-disabled=${busy ? "true" : nothing}

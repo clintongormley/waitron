@@ -1606,6 +1606,19 @@ describe("colour swatches", () => {
     expect(prevented).toEqual([true]);
     expect(sent).toEqual([]);
   });
+
+  it("dims a busy product swatch the way it dims a busy section swatch", async () => {
+    const el = await mountColoured({ busy: true });
+    const section = getComputedStyle(swatchOf(el, "m-drinks"));
+    const product = getComputedStyle(swatchOf(el, "m-burger"));
+    expect(Number(section.opacity)).toBeLessThan(1);
+    expect(product.opacity).toBe(section.opacity);
+    expect(product.cursor).toBe("default");
+    el.busy = false;
+    await settle(el);
+    expect(getComputedStyle(swatchOf(el, "m-burger")).opacity).toBe("1");
+    expect(getComputedStyle(swatchOf(el, "m-burger")).cursor).toBe("pointer");
+  });
 });
 
 describe("the Device Home Page row", () => {

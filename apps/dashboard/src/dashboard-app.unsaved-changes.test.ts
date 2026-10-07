@@ -1,8 +1,10 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { render } from "lit";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { leaveCoordinatorFor, navigationGuardFor, type WtInput } from "@waitron/ui";
 import type { DashboardApi, OwnProfile } from "./api/client.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import { productMedia } from "./widgets/product-media.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 
 const profile: OwnProfile = {
@@ -1032,3 +1034,74 @@ it.each([
     expect(unload()).toBe(false);
   },
 );
+
+describe("a product swatch link under the app's link router", () => {
+  async function swatch(busy: boolean, open?: () => void) {
+    const m = await mount({
+      getMe: async () => ({
+        personId: "p1",
+        email: "ada@example.com",
+        role: "manager",
+        locale: "en-GB",
+        venueLocale: "en-GB",
+        sessionDefault: "en-GB",
+        venueName: "Venue",
+        permissions: ["product.manage"],
+        modules: [],
+      }),
+    });
+    const host = document.createElement("div");
+    host.attachShadow({ mode: "open" });
+    m.screen.shadowRoot!.append(host);
+    render(
+      productMedia({
+        key: "probe",
+        name: "Probe",
+        image: null,
+        color: null,
+        busy,
+        ...(open ? { open } : {}),
+      }),
+      host.shadowRoot!,
+    );
+    const anchor = host.shadowRoot!.querySelector("a")!;
+    let leaked = false;
+    anchor.addEventListener("click", (event) => {
+      if (event.defaultPrevented) return;
+      leaked = true;
+      event.preventDefault();
+    });
+    const write = vi.spyOn(navigationGuardFor(window)!, "write");
+    const event = new MouseEvent("click", { bubbles: true, composed: true, cancelable: true });
+    anchor.querySelector("span")!.dispatchEvent(event);
+    return { m, event, write, leaked: () => leaked };
+  }
+
+  it("does nothing when busy: the browser does not follow it and the app does not route it", async () => {
+    const { event, write, leaked } = await swatch(true);
+    expect(event.defaultPrevented).toBe(true);
+    expect(leaked()).toBe(false);
+    expect(write).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/manage/profile");
+  });
+
+  it("opens the product's Edit in place when the list gives it a way to, without routing", async () => {
+    const open = vi.fn();
+    const { event, write, leaked } = await swatch(false, open);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+    expect(leaked()).toBe(false);
+    expect(write).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/manage/profile");
+  });
+
+  it("is routed in the app to the product's Edit when nothing opens it in place", async () => {
+    const { event, write, leaked } = await swatch(false);
+    expect(event.defaultPrevented).toBe(true);
+    expect(leaked()).toBe(false);
+    expect(write).toHaveBeenCalled();
+    const url = new URL(String(write.mock.calls[0]![0]));
+    expect(`${url.pathname}${url.search}`).toBe("/manage/catalogue/product/probe?field=image");
+    await expect.poll(() => location.pathname).toBe("/manage/catalogue/product/probe");
+  });
+});

@@ -1540,7 +1540,10 @@ Its leave callback receives the destination URL so Account settings can retain u
 page drafts. Sidebar and product-link requests defer screen changes until acceptance. Plain
 same-app anchors use the dispatched click's composed path; modified clicks, new-tab targets
 and downloads keep browser handling. Fragment-only form links keep their target's handler,
-which owns any leave request. Preview department changes and same-page receipt Back retain
+which owns any leave request. The dashboard catches a link click before the link's own handler
+sees it, so a link that handles a plain click itself (the product swatch that opens Edit in
+place) carries `data-own-click` to keep it, and a link with `aria-disabled="true"` is cancelled
+there and goes nowhere. Preview department changes and same-page receipt Back retain
 staged inputs; a tab or management-link departure asks before leaving them.
 
 Each form owns its comparison and successful-write boundary. Compare membership for selected
