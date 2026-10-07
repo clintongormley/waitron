@@ -157,7 +157,7 @@ export const customerMenuStyles: CSSResult = css`
   }
   .change-marker {
     font-weight: var(--wt-font-weight-bold);
-    color: var(--wt-color-primary);
+    color: var(--wt-color-primary-text);
   }
 `;
 
@@ -474,6 +474,8 @@ function detail(input: CustomerMenuRenderInput): TemplateResult | typeof nothing
   </section>`;
 }
 type SectionMember = Extract<DocumentMember, { kind: "section" }>;
+/** Marks where a sentence takes a name, so the name can be drawn with its own language tag. */
+const NAME_SLOT = "\u{E000}";
 /** An include shown directly has no box of its own, so one line stands for it and is where a
  * change to the include lands, an order change among the members drawn beside it included. */
 function directly(
@@ -481,10 +483,10 @@ function directly(
   member: SectionMember,
   base: SectionTarget,
 ): TemplateResult {
-  const name =
-    resolveMenuText(member.names, member.internalName, input.view, input.languages).text ||
-    input.label("missing_value");
-  const note = input.label("shown_directly", { name });
+  const [before = "", after = ""] = input
+    .label("shown_directly", { name: NAME_SLOT })
+    .split(NAME_SLOT);
+  const note = html`${before}${text(input, member.names, member.internalName)}${after}`;
   const path = JSON.stringify(base.sectionIds);
   const fields: MenuField[] = [
     { kind: "direct" },

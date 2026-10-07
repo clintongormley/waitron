@@ -818,6 +818,16 @@ it("draws an included menu shown directly as one line and its members at the sam
   expect(q(el, "[data-direct]").textContent!.replace(/\s+/g, " ").trim()).toBe(
     "Drinks: shown directly",
   );
+  expect(q(el, "[data-direct] span").getAttribute("lang")).toBe("en");
+  el.view = { kind: "customer", language: "es" };
+  await el.updateComplete;
+  expect(q(el, "[data-direct]").textContent).toBe("Bebidas: shown directly");
+  expect(q(el, "[data-direct] span").getAttribute("lang")).toBe("es");
+  el.view = { kind: "internal" };
+  await el.updateComplete;
+  expect(q(el, "[data-direct]").textContent).toBe("Counter drinks menu: shown directly");
+  expect(q(el, "[data-direct] span").getAttribute("lang")).toBe("");
+  el.view = { kind: "customer", language: "en" };
   for (const id of ["cold", "hot"]) {
     const section = q(el, `[data-section='["drinks-menu","${id}"]']`);
     expect(section.parentElement!.closest(".section")).toBeNull();

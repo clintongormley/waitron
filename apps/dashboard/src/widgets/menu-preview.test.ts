@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { page } from "vitest/browser";
 import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -1005,24 +1006,27 @@ it.each([
 );
 
 it.each([
-  ["en", "Drinks: shown as a folder or directly", "this menu", "Drinks: shown directly"],
+  ["en", "Counter bar menu: shown as a folder or directly", "this menu", "Bebidas: shown directly"],
   [
     "es-ES",
-    "Drinks: mostrada como carpeta o directamente",
+    "Counter bar menu: mostrada como carpeta o directamente",
     "esta carta",
-    "Drinks: se muestra directamente",
+    "Bebidas: se muestra directamente",
   ],
 ])(
   "names an include switched between a folder and its sections, and draws it in place, in %s",
   async (locale, words, source, note) => {
     setLocale(locale);
+    const content = currentContentLanguages();
+    setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+    onTestFinished(() => setContentLanguages(content));
     const document = menuDocument(
       [
         {
           kind: "section",
           sectionId: "s-bar",
           internalName: "Counter bar menu",
-          names: { en: "Drinks", es: "Drinks" },
+          names: { en: "Drinks", es: "Bebidas" },
           image: null,
           color: null,
           includedMenu: { id: "menu-bar", name: "Bar list" },
@@ -1043,7 +1047,7 @@ it.each([
             },
             kind: "section_changed",
             sectionId: "s-bar",
-            name: "Drinks",
+            name: "Counter bar menu",
             fields: ["direct"],
             source: "this_menu",
           },
@@ -1057,6 +1061,7 @@ it.each([
     const view = q<CustomerMenu>(el, "dashboard-customer-menu")!;
     await view.updateComplete;
     expect(text(view.shadowRoot!.querySelector("[data-direct]"))).toBe(note);
+    expect(view.shadowRoot!.querySelector("[data-direct] span")!.getAttribute("lang")).toBe("es");
   },
 );
 

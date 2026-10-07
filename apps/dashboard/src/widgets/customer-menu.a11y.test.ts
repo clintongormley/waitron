@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { CustomerMenu } from "./customer-menu.js";
 import {
   cleanupWidgets,
@@ -22,9 +22,25 @@ describe.each(["light", "dark"] as const)("customer menu (%s)", (theme) => {
     "failed image",
     "unmet limits",
     "highlighted",
+    "included menu shown directly",
   ])("renders %s accessibly", async (state) => {
     const doc = menuDocument(
       [
+        ...(state === "included menu shown directly"
+          ? [
+              {
+                kind: "section" as const,
+                sectionId: "bar",
+                internalName: "Staff bar menu",
+                names: { en: "Drinks", es: "Bebidas" },
+                image: null,
+                color: "#336699",
+                includedMenu: { id: "menu-bar", name: "Bar list" },
+                direct: true as const,
+                members: [documentSection("cold", "Staff cold", [])],
+              },
+            ]
+          : []),
         documentSection("s", "Staff section", [documentProduct("mi", "p")]),
         documentSection("empty", "Empty", []),
       ],
@@ -73,7 +89,13 @@ describe.each(["light", "dark"] as const)("customer menu (%s)", (theme) => {
       },
       theme,
     );
-    if (state !== "collapsed")
+    if (state === "included menu shown directly") {
+      el.highlighted = [{ kind: "section", sectionIds: ["bar"], field: { kind: "direct" } }];
+      await el.reveal({ kind: "section", sectionIds: ["bar", "cold"], field: { kind: "summary" } });
+      expect(
+        el.shadowRoot!.querySelector("[data-highlighted] [data-direct] span[lang=en]"),
+      ).not.toBeNull();
+    } else if (state !== "collapsed")
       await el.reveal(
         state === "expanded"
           ? { kind: "section", sectionIds: ["s"], field: { kind: "summary" } }
