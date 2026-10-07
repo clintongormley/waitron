@@ -124,6 +124,13 @@ export class TillHeldOrders extends LitElement {
   /** A table another party holds, waiting for the bill choice. */
   @state() private choosing: TableState | null = null;
 
+  focusMove(orderId: string): void {
+    const button = [...this.renderRoot.querySelectorAll<HTMLElement>(".move")].find(
+      (candidate) => candidate.dataset.orderId === orderId,
+    );
+    button?.shadowRoot?.querySelector<HTMLButtonElement>("button")?.focus();
+  }
+
   #emit(type: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
@@ -204,6 +211,7 @@ export class TillHeldOrders extends LitElement {
             order.partyId === null
               ? html`<wt-button
                   class="move"
+                  data-order-id=${order.id}
                   variant="secondary"
                   aria-label=${`${t("held.move_to_table")} ${scope}`}
                   @click=${() => this.#openPicker(order)}

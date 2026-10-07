@@ -15652,6 +15652,225 @@ describe("W69 till shell leave routes", () => {
   });
 });
 
+describe("W69 held move basket protection", () => {
+  async function loaded(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
+    const { el } = await mountApp(
+      {
+        getTablesState: vi.fn().mockResolvedValue([{ ...freeTable, id: "t9", label: "Mesa 9" }]),
+        askOrderDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [] }),
+        moveBill: vi
+          .fn()
+          .mockResolvedValue({ partyId: "party-new", billId: "wo-1", merged: false }),
+        ...overrides,
+      },
+      theme,
+    );
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => c.store.id).toBe("wo-1");
+    return { el, c };
+  }
+  function move(c: TillCounterScreen, orderId = "wo-1") {
+    emit(c, "move-held-order", { orderId, tableId: "t9", seated: null, bills: "merge" });
+  }
+  function warning(el: TillApp) {
+    return el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  }
+  async function choose(el: TillApp, choice: "keep" | "discard") {
+    const q = warning(el);
+    await q.updateComplete;
+    q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${choice}]`)!.click();
+    await expect.poll(() => q.open).toBe(false);
+  }
+  function unloadCancelled() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  it("asks before moving the edited basket; Keep retains values and Discard moves once", async () => {
+    const { el, c } = await loaded();
+    c.store.setLineQuantity(0, "3");
+    c.store.label = "Local lunch";
+    move(c);
+    await flush(el);
+    expect(warning(el).open).toBe(true);
+    expect(currentApi.askOrderDeadEnds).not.toHaveBeenCalled();
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+    await choose(el, "keep");
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.label).toBe("Local lunch");
+    expect(c.store.lines[0]!.quantity).toBe("3");
+    move(c);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => c.store.lines.length).toBe(0);
+    expect(currentApi.moveBill).toHaveBeenCalledExactlyOnceWith(
+      "wo-1",
+      { tableId: "t9" },
+      "merge",
+      { partyId: null, otherPartyId: null },
+    );
+    expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("moving another held order retains the dirty basket without asking", async () => {
+    const { el, c } = await loaded();
+    c.store.setLineQuantity(0, "3");
+    move(c, "other-held");
+    await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
+    expect(warning(el).open).toBe(false);
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.lines[0]!.quantity).toBe("3");
+    expect(unloadCancelled()).toBe(true);
+  });
+  it("a reverted retrieved basket moves directly and clears unload protection", async () => {
+    const { el, c } = await loaded();
+    c.store.setLineQuantity(0, "3");
+    c.store.setLineQuantity(0, "2");
+    move(c);
+    await expect.poll(() => c.store.lines.length).toBe(0);
+    expect(warning(el).open).toBe(false);
+    expect(currentApi.moveBill).toHaveBeenCalledOnce();
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("a move refusal after Discard keeps the edited basket and unload warning", async () => {
+    const { el, c } = await loaded({
+      moveBill: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    c.store.label = "Local lunch";
+    move(c);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
+    await flush(el);
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.label).toBe("Local lunch");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    expect(unloadCancelled()).toBe(true);
+  });
+  it("a pending move cannot clear a later local basket edit", async () => {
+    let release!: (value: { partyId: string; billId: string; merged: boolean }) => void;
+    const { el, c } = await loaded({
+      moveBill: vi.fn(() => new Promise((resolve) => (release = resolve))),
+    });
+    move(c);
+    await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
+    c.store.label = "Typed during move";
+    release({ partyId: "party-new", billId: "wo-1", merged: false });
+    await flush(el);
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.label).toBe("Typed during move");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    expect(unloadCancelled()).toBe(true);
+  });
+  it("a pending move cannot clear a newly loaded copy with the same id and values", async () => {
+    let release!: (value: { partyId: string; billId: string; merged: boolean }) => void;
+    const { el, c } = await loaded({
+      moveBill: vi.fn(() => new Promise((resolve) => (release = resolve))),
+    });
+    move(c);
+    await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
+    c.store.loadFrom("wo-1", [...c.store.lines], "Mesa 4", 3);
+    release({ partyId: "party-new", billId: "wo-1", merged: false });
+    await flush(el);
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.label).toBe("Mesa 4");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+  });
+  it("a replaced basket makes its pending move decision inert", async () => {
+    const { el, c } = await loaded();
+    c.store.label = "Local lunch";
+    move(c);
+    await expect.poll(() => warning(el).open).toBe(true);
+    const stale = warning(el).shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    c.store.loadFrom("other", [{ product: jamon, quantity: "1" }], "Other", 1);
+    await expect.poll(() => warning(el).open).toBe(false);
+    stale.click();
+    await flush(el);
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+    expect(c.store.id).toBe("other");
+    expect(c.store.lines[0]!.product.id).toBe("jamon");
+  });
+  for (const locale of ["en-GB", "es-ES"])
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`native held move Keep/Escape/Discard ${locale} ${theme} ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const { el, c } = await loaded(
+              {
+                getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+                listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+              },
+              theme,
+            );
+            c.store.label = "Local lunch";
+            const held = counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")!;
+            async function pick() {
+              await held.updateComplete;
+              await userEvent.click(
+                held.shadowRoot!.querySelector(".move")!.shadowRoot!.querySelector("button")!,
+              );
+              await expect
+                .poll(() => held.shadowRoot!.querySelector('[data-target="t9"]'))
+                .not.toBeNull();
+              await userEvent.click(
+                held
+                  .shadowRoot!.querySelector('[data-target="t9"]')!
+                  .shadowRoot!.querySelector("button")!,
+              );
+              await expect.poll(() => warning(el).open).toBe(true);
+            }
+            await pick();
+            const q = warning(el);
+            const keep = q
+              .shadowRoot!.querySelector("[data-choice=keep]")!
+              .shadowRoot!.querySelector("button")!;
+            await expect.poll(() => keep.matches(":focus")).toBe(true);
+            expect(currentApi.moveBill).not.toHaveBeenCalled();
+            await expectNoA11yViolations(q);
+            await page.screenshot({
+              path: `__screenshots__/w69-held-move-look/${locale}-${theme}-${width}-warning.png`,
+            });
+            await userEvent.keyboard("{Escape}");
+            await expect.poll(() => q.open).toBe(false);
+            expect(c.store.label).toBe("Local lunch");
+            await expect
+              .poll(() =>
+                held
+                  .shadowRoot!.querySelector(".move")!
+                  .shadowRoot!.querySelector("button")!
+                  .matches(":focus"),
+              )
+              .toBe(true);
+            await pick();
+            await choose(el, "keep");
+            expect(c.store.label).toBe("Local lunch");
+            await expect
+              .poll(() =>
+                held
+                  .shadowRoot!.querySelector(".move")!
+                  .shadowRoot!.querySelector("button")!
+                  .matches(":focus"),
+              )
+              .toBe(true);
+            expect(currentApi.moveBill).not.toHaveBeenCalled();
+            await page.screenshot({
+              path: `__screenshots__/w69-held-move-look/${locale}-${theme}-${width}-kept.png`,
+            });
+            await pick();
+            await choose(el, "discard");
+            await expect.poll(() => c.store.lines.length).toBe(0);
+            expect(currentApi.moveBill).toHaveBeenCalledOnce();
+            expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+          } finally {
+            await page.viewport(size.width, size.height);
+          }
+        });
+});
+
 describe("basket unsaved replacement", () => {
   function unloadCancelled() {
     const event = new Event("beforeunload", { cancelable: true });

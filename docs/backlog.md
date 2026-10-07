@@ -1490,6 +1490,13 @@ history and logout changes do not ask for the basket. The dated audit records te
 native visual and deletion-control receipts. Remaining basket/context commands, dirty unindexed
 till navigation, activated native reload, links and the advancing-owner audit keep W69 incomplete.
 
+Held move checkpoint (2026-10-07): moving the retrieved order you have edited now asks before
+the move request. Keep retains your local label and quantities; Discard moves the stored order
+without saving or deleting those edits. A refused move retains the basket. A reply does not clear
+values typed while the move was pending or a newly loaded copy of the same order. Moving another
+held order and moving a reverted basket remain direct. The dated audit records tests and native
+picker inspection. The remaining context/navigation/native reload paths and final owner audit
+still keep W69 incomplete.
 
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected

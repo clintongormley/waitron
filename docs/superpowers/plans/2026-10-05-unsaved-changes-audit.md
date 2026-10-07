@@ -3578,3 +3578,70 @@ Next: audit remaining basket replacement/context commands (including moving a he
 dirty unindexed till navigation, native reload and remaining links, then the complete advancing-owner
 inventory. Tasks 2/3 remain complete; Tasks 1/4/5/6 stay partial. W69 is not ready for finish-branch
 or landing.
+
+
+## Held move basket checkpoint, 2026-10-07
+
+Moving the retrieved order can clear its local basket. The held-move event now requests the shared
+basket decision before calling the move handler when its order id is the basket id. Moving another
+held order does not leave the basket and stays direct. After Escape or Keep, the application returns focus to the retained order's Move control. The handler captures the local payload and
+load generation before awaiting; its success clears only the same unchanged basket. Discard here
+allows the move of the stored order, without saving the local edits or deleting an order.
+
+The test-first command was:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t 'W69 held move basket protection'
+```
+
+Initial output: three failures and two passing controls. The missing prompt failed both the edited
+move and refused-move cases; the late-response case observed a new basket id after its local label
+was cleared. After implementation, five passed. The first green attempt additionally exposed an
+incomplete new fixture: `askOrderDeadEnds` was undefined. The corrected fixture supplies that read
+and a target table; the earlier attempt is retained, not counted as a pass.
+
+Consumer command:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts src/till-app-drafts.test.ts src/screens/till-counter-screen.test.ts
+```
+
+Output: three files, 946 tests passed. This ran before the final same-id/new-copy, stale-decision and
+native picker cases were added. Its log also prints the intentionally malformed printer fixture's
+rejection at `printerChoices.receipt`; the earlier till-pages checkpoint retains the installed
+baseline reproduction. This change does not alter that printer path.
+
+Final focused runs cover the pending move's later typing, same-id/new-copy identity, replaced-scope
+stale decision, failure retention, unrelated-order and revert controls. Eight native picker flows
+exercise English and Spanish, light and dark, at 390 and 1280 pixels: the real Move to table button,
+free-table target, warning initial focus, Escape, Keep, return focus and Discard. Warning-only axe scans pass;
+sixteen warning/kept captures and four contact sheets were inspected. These are stub-API flows,
+not live venue moves or full-shell accessibility scans. The Spanish product-button price spelling
+and phone total clipping are visible in these fixtures too; their real-stack cause remains unverified,
+as the earlier basket checkpoint records.
+
+In an installed independent measuring copy, deleting the move event gate makes the edited-move
+case fail beside a passing unrelated-order control. Removing the payload check makes the later-label
+case fail; removing the load-generation check makes the same-id/new-copy case fail. Each deletion
+run reports one failure and one passing control. Restored focused cases pass. Logs, captures and
+byte-comparison receipts remain in the local campaign directory:
+`receipts/w69-move-basket-20261007/`.
+
+The native return-focus assertion initially failed in all eight variants after Escape while seven
+behavioral controls passed. The picker has closed and its target button is no longer retained when
+the warning opens. The held-orders component exposes focus for a specific order; after a kept
+decision and the application update, the event's connected component receives that focus request.
+The final native run passes all fifteen cases, including Escape/Keep focus assertions. Removing the
+kept-decision focus callback fails the phone/light/English case beside its unrelated-order control.
+A separate two-row case selects the second order and leaves focus alone if the requested row vanished.
+
+The final consumer run adds `src/widgets/held-orders.test.ts` and
+`src/widgets/held-orders.a11y.test.ts` to the three files above: five files and 994 tests pass.
+The unedited fiscal `write-path.e2e.test.ts` and `inmutabilidad.test.ts` report twenty passing tests.
+The till typecheck, four-file ESLint and source formatting commands pass; `git diff --check` passes.
+Only these new documentation sections were formatted through Prettier's Markdown stdin parser,
+without claiming that an ignored whole-document check read historical text.
+
+Existing behavioral assertions are unchanged. Remaining basket/context routes, dirty unindexed
+navigation, activated native reload, other links and the advancing-owner audit still keep the
+whole W69 item incomplete. No push, external review, PR, CI or landing is claimed here.

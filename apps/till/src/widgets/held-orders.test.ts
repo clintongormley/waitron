@@ -35,6 +35,21 @@ const barra: HeldOrderSummary = {
 afterEach(cleanupWidgets);
 
 describe("till-held-orders", () => {
+  it("returns focus to the chosen order's Move control and leaves focus alone if it disappeared", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [mesa, barra] });
+    const buttons = [...el.shadowRoot!.querySelectorAll(".move")];
+    await Promise.all(
+      buttons.map(
+        (button) => (button as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete,
+      ),
+    );
+    const second = buttons[1]!.shadowRoot!.querySelector("button")!;
+    el.focusMove("wo-2");
+    expect(second.matches(":focus")).toBe(true);
+    el.focusMove("gone");
+    expect(second.matches(":focus")).toBe(true);
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-held-orders")).toBe(TillHeldOrders);
   });

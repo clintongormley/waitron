@@ -146,7 +146,7 @@ import type { PrinterSlot } from "./widgets/printers-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
-import type { MoveHeldOrderDetail } from "./widgets/held-orders.js";
+import { TillHeldOrders, type MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import type { PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import type { SeatedRead } from "./widgets/table-targets.js";
 import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
@@ -1199,16 +1199,22 @@ export class TillApp extends LitElement {
     this.#basketScope?.commit(payload);
   }
 
-  #replaceBasket(proceed: () => void | Promise<void>): void {
+  #replaceBasket(proceed: () => void | Promise<void>, onKeep?: () => void): void {
     if (!this.#basketScope?.isDirty()) {
       void proceed();
       return;
     }
-    void this.leave.coordinator.request({
-      scopes: [this.#basketOwner],
-      reason: "navigation",
-      proceed,
-    });
+    void this.leave.coordinator
+      .request({
+        scopes: [this.#basketOwner],
+        reason: "navigation",
+        proceed,
+      })
+      .then(async (outcome) => {
+        if (outcome !== "kept" || !this.isConnected) return;
+        await this.updateComplete;
+        onKeep?.();
+      });
   }
 
   /** A stable field, so the shell's `loadLocales` property does not change on every render. */
@@ -6392,6 +6398,8 @@ export class TillApp extends LitElement {
   async #onMoveHeldOrder(event: Event, retried = false): Promise<void> {
     const { orderId, tableId, seated, bills } = (event as CustomEvent<MoveHeldOrderDetail>).detail;
     const session = this.#operatorSession;
+    const basket = this.#basketPayload();
+    const generation = this.#store.loadGeneration;
     const label = this.tables.find((table) => table.id === tableId)?.label ?? "";
     this.errorKey = undefined;
     try {
@@ -6415,7 +6423,11 @@ export class TillApp extends LitElement {
       await this.#refreshHeldOrders().catch(() => undefined);
       return;
     }
-    if (this.#store.id === orderId) {
+    if (
+      this.#store.id === orderId &&
+      generation === this.#store.loadGeneration &&
+      basket === this.#basketPayload()
+    ) {
       this.#dismissStationChoices();
       this.#store.clear();
       this.cardOutcome = undefined;
@@ -8341,7 +8353,17 @@ export class TillApp extends LitElement {
         @move-guests=${(event: Event) => void this.#onMoveGuests(event)}
         @move-bill=${(event: Event) => void this.#onMoveBill(event)}
         @move-held-order-open=${() => this.#onFloorRefresh()}
-        @move-held-order=${(event: Event) => void this.#onMoveHeldOrder(event)}
+        @move-held-order=${(event: CustomEvent<MoveHeldOrderDetail>) => {
+          if (event.detail.orderId === this.#store.id) {
+            const held = event.composedPath().find((node) => node instanceof TillHeldOrders);
+            this.#replaceBasket(
+              () => this.#onMoveHeldOrder(event),
+              () => {
+                if (held?.isConnected) held.focusMove(event.detail.orderId);
+              },
+            );
+          } else void this.#onMoveHeldOrder(event);
+        }}
         @join-tables=${(event: Event) => void this.#onJoinTables(event)}
         @split-table=${(event: Event) => void this.#onSplitTable(event)}
         @name-party=${(event: Event) => void this.#onNameParty(event)}
