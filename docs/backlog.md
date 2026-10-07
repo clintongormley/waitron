@@ -1046,7 +1046,7 @@ unused `units` property is gone (it closes W75's leftover).
     hidden — the docs say so, but no test covers that case. And when the message closes (its ×, or
     Undo replacing it), keyboard focus is not put back where it was, unlike the dashboard's alert
     toast. Next: a test for the first, and return focus to the field the save came from.
-- **A344, owner 2026-10-07 — DONE (a menu's Price overrides tab shows its clashes):** a red line
+- **A344, owner 2026-10-07 — DONE (#1375, a menu's Price overrides tab shows its clashes):** a red line
   above the table says how many prices clash and that they must be settled before the menu can be
   published, counted by the same per-product rule as `clashesOf` (a product without variants once,
   else each clashing variant). The Price filter offers Overridden only, Not overridden and, while
