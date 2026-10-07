@@ -65,3 +65,4 @@ export { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
 export type * from "./hours-types.js";
 export { CALENDAR_COLOURS, HOURS_RANGE_MAX_DAYS, WEEK_DISPLAY_ORDER } from "./hours-types.js";
 export * from "./department-transfers.js";
+export { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";

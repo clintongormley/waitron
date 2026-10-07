@@ -466,6 +466,108 @@ describe("departmental tab transfers", () => {
       }),
     );
 
+  it("withdraws only pending requests at tab lifecycle changes and keeps resolved history", async () => {
+    const v = await pending();
+    const other = await pending();
+    await withTransaction(suite.db, (tx) => service.withdrawPendingDepartmentTransfers(tx, []));
+    await withTransaction(suite.db, (tx) =>
+      service.withdrawPendingDepartmentTransfers(tx, [v.tab]),
+    );
+    expect(
+      (
+        await service.readDepartmentTransfer(suite.db, other.cfg, other.request.id, {
+          departmentId: other.a,
+          personId: "sender",
+        })
+      ).status,
+    ).toBe("pending");
+    const [withdrawn] = await suite.db
+      .select()
+      .from(departmentTransferRequests)
+      .where(eq(departmentTransferRequests.id, v.request.id));
+    expect(withdrawn).toMatchObject({
+      status: "withdrawn",
+      revision: 1,
+      resolvedBy: null,
+      resolvedAt: expect.any(String),
+    });
+    expect(
+      await withTransaction(suite.db, (tx) => service.listDepartmentTransfers(tx, v.cfg, v.b)),
+    ).toEqual([]);
+    await expect(accept(v)).rejects.toMatchObject({ code: "department_transfer.not_pending" });
+    await withTransaction(suite.db, (tx) =>
+      service.withdrawPendingDepartmentTransfers(tx, [v.tab]),
+    );
+    expect(
+      await suite.db
+        .select()
+        .from(departmentTransferRequests)
+        .where(eq(departmentTransferRequests.id, v.request.id)),
+    ).toEqual([withdrawn]);
+    const accepted = await pending();
+    await accept(accepted);
+    const before = await suite.db
+      .select()
+      .from(departmentTransferRequests)
+      .where(eq(departmentTransferRequests.id, accepted.request.id));
+    await withTransaction(suite.db, (tx) =>
+      service.withdrawPendingDepartmentTransfers(tx, [accepted.tab]),
+    );
+    expect(
+      await suite.db
+        .select()
+        .from(departmentTransferRequests)
+        .where(eq(departmentTransferRequests.id, accepted.request.id)),
+    ).toEqual(before);
+  });
+
+  it("keeps a pending request if the lifecycle transaction rolls back", async () => {
+    const v = await pending();
+    const before = await suite.db
+      .select()
+      .from(departmentTransferRequests)
+      .where(eq(departmentTransferRequests.id, v.request.id));
+    await expect(
+      withTransaction(suite.db, async (tx) => {
+        await service.withdrawPendingDepartmentTransfers(tx, [v.tab]);
+        throw new Error("rollback lifecycle");
+      }),
+    ).rejects.toThrow("rollback lifecycle");
+    expect(
+      await suite.db
+        .select()
+        .from(departmentTransferRequests)
+        .where(eq(departmentTransferRequests.id, v.request.id)),
+    ).toEqual(before);
+    expect((await accept(v)).status).toBe("accepted");
+  });
+
+  it("withdraws a pending request when another operation changes the tab department", async () => {
+    const v = await pending();
+    await withTransaction(suite.db, (tx) =>
+      service.retargetOrderServiceContext(tx, v.cfg, v.tab, v.bz),
+    );
+    const [request] = await suite.db
+      .select()
+      .from(departmentTransferRequests)
+      .where(eq(departmentTransferRequests.id, v.request.id));
+    expect(request).toMatchObject({ status: "withdrawn", revision: 1 });
+    await expect(accept(v)).rejects.toMatchObject({ code: "department_transfer.not_pending" });
+    const unchanged = await pending();
+    await withTransaction(suite.db, (tx) =>
+      service.retargetOrderServiceContext(tx, unchanged.cfg, unchanged.tab, unchanged.az),
+    );
+    expect(
+      (
+        await service.readDepartmentTransfer(suite.db, unchanged.cfg, unchanged.request.id, {
+          departmentId: unchanged.a,
+          personId: "sender",
+        })
+      ).status,
+    ).toBe("pending");
+    expect((await accept(unchanged)).status).toBe("accepted");
+  });
+
   it("accepts once against the latest revision while retaining ordered line values and source kitchen instructions", async () => {
     const v = await pending();
     const before = await withTransaction(suite.db, async (tx) => {

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
+  parties,
   devices,
   workingOrders,
   workingOrderLines,
@@ -30,13 +31,36 @@ import {
   workingLineContexts,
 } from "@waitron/venue-service";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
-import { issueUnpaidInvoice, priceForIssuance, placeOrder } from "./working-order.js";
+import {
+  abandonHeldOrder,
+  parkOrder,
+  issueUnpaidInvoice,
+  priceForIssuance,
+  placeOrder,
+} from "./working-order.js";
+import {
+  payWorkingOrder,
+  payWorkingOrderIntegrated,
+  collectOrder,
+  settleIssuedOwingNothing,
+} from "./till-sale.js";
+import { takeBillPayment } from "./bill-payments.js";
+import { closeParty, openParty } from "./parties.js";
+import { mergeCheckedBills } from "./bill-actions.js";
+import { takeIntoParty } from "./move-bill.js";
 import { LiveEvents, changeSubscriber } from "./live-api.js";
+import { decimal } from "@waitron/shared";
+import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { requestCfg } from "./request-config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { setupPartyVenue, counterOrder, type PartyVenue } from "./testing/party-venue.js";
+import {
+  setupPartyVenue,
+  counterOrder,
+  pricedInZone,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -1192,4 +1216,311 @@ describe("department-wide sent transfer discovery", () => {
       body: { error: { code: "device.forbidden_action" } },
     });
   });
+});
+
+describe("department transfer tab lifecycle", () => {
+  async function withdrawn(f: Awaited<ReturnType<typeof ready>>, id: string) {
+    expect((await state(f.tab)).requests.find((row) => row.id === id)).toMatchObject({
+      status: "withdrawn",
+      revision: 1,
+      resolvedAt: expect.any(String),
+    });
+    const queue = await app.request("/api/department-transfers/incoming", {
+      headers: { cookie: f.desk.cookie },
+    });
+    expect(queue.status).toBe(200);
+    expect((await queue.json()).requests.map((row: { id: string }) => row.id)).not.toContain(id);
+    const stale = await post(f.desk.cookie, resolutionPath(id, "accept"), {
+      revision: 0,
+      zoneId: f.bz,
+      tableId: null,
+    });
+    expect(stale.body).toMatchObject({ error: { code: "department_transfer.not_pending" } });
+  }
+  it("abandons a held tab and withdraws its pending request", async () => {
+    const f = await ready();
+    const id = await pending(f);
+    await abandonHeldOrder({ db: suite.db }, v.cfg, f.tab);
+    expect((await state(f.tab)).tab!.status).toBe("abandoned");
+    await withdrawn(f, id);
+  });
+  it("closes an empty party and withdraws each abandoned tab request", async () => {
+    const f = await ready();
+    const table = await v.table(randomUUID(), f.az);
+    const party = await withTransaction(suite.db, async (tx) => {
+      const party = await openParty(tx, { tableId: table, guestCount: null, operatorId: personId });
+      await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
+      return party.partyId;
+    });
+    const id = await pending(f);
+    await withTransaction(suite.db, (tx) => closeParty(tx, party, [f.tab], personId));
+    expect((await state(f.tab)).tab!.status).toBe("abandoned");
+    await withdrawn(f, id);
+  });
+  it.each([false, true])(
+    "closing a party withdraws a placed bill request while keeping its unpaid invoice (absorbed: %s)",
+    async (absorbed) => {
+      const f = await ready();
+      f.tab = await counterOrder(v, "Agua");
+      const table = await v.table(randomUUID(), f.az);
+      const rootTable = absorbed ? await v.table(randomUUID(), f.az) : table;
+      const party = await withTransaction(suite.db, async (tx) => {
+        const party = await openParty(tx, {
+          tableId: table,
+          guestCount: null,
+          operatorId: personId,
+        });
+        await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
+        const priced = await priceForIssuance(tx, v.clock, v.cfg, f.tab);
+        await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId);
+        await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, f.tab));
+        if (absorbed) {
+          const root = await openParty(tx, {
+            tableId: rootTable,
+            guestCount: null,
+            operatorId: personId,
+          });
+          await tx
+            .update(parties)
+            .set({
+              state: "closed",
+              closedAt: new Date().toISOString(),
+              closedBy: personId,
+              mergedIntoPartyId: root.partyId,
+            })
+            .where(eq(parties.id, party.partyId));
+          return root.partyId;
+        }
+        return party.partyId;
+      });
+      const id = await pending(f);
+      const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
+      await suite.db.update(persons).set({ role: "supervisor" }).where(eq(persons.id, personId));
+      try {
+        const departure = await post(f.source.cookie, `/api/parties/${party}/unpaid-departure`, {
+          expectedPartyRevision: 0,
+          reason: "Guests left without paying",
+        });
+        expect(departure).toMatchObject({
+          status: 200,
+          body: { state: "closed", departures: [{ workingOrderId: f.tab, amount: "2.00" }] },
+        });
+      } finally {
+        await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+      }
+      expect((await state(f.tab)).tab!.status).toBe("placed");
+      await withdrawn(f, id);
+      expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab))).toEqual(
+        before,
+      );
+      const again = await post(f.source.cookie, requestPath(f.tab), {
+        destinationDepartmentId: f.b,
+      });
+      expect(again.body).toMatchObject({ error: { code: "department_transfer.tab_unavailable" } });
+    },
+  );
+
+  it("merges a tab and withdraws the request for the abandoned source", async () => {
+    const f = await ready();
+    const table = await v.table(randomUUID(), f.az);
+    const target = await ready();
+    const party = await withTransaction(suite.db, async (tx) => {
+      const party = await openParty(tx, { tableId: table, guestCount: null, operatorId: personId });
+      await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
+      await takeIntoParty(tx, v.cfg, target.tab, party.partyId, f.az);
+      return party.partyId;
+    });
+    const id = await pending(f);
+    await withTransaction(suite.db, (tx) => mergeCheckedBills(tx, v.cfg, party, target.tab, f.tab));
+    expect((await state(f.tab)).tab!.status).toBe("abandoned");
+    await withdrawn(f, id);
+  });
+  it("reassigns a tab into a party in the same zone and withdraws its pending request", async () => {
+    const f = await ready();
+    const id = await pending(f);
+    const table = await v.table(randomUUID(), f.az);
+    await withTransaction(suite.db, async (tx) => {
+      const party = await openParty(tx, { tableId: table, guestCount: null, operatorId: personId });
+      await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
+    });
+    await withdrawn(f, id);
+  });
+  it("cancels a placed uninvoiced tab and withdraws its pending request", async () => {
+    const f = await ready();
+    f.tab = await counterOrder(v, "Agua");
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await placeOrder(
+      { db: suite.db, backend: v.backend, clock: v.clock },
+      requestCfg(v.cfg, f.source),
+      f.tab,
+      personId,
+    );
+    const id = await pending(f);
+    const cancellation = await post(f.source.cookie, `/api/working-orders/${f.tab}/cancel`, {
+      reason: "Guest left",
+    });
+    expect(cancellation.status).toBe(200);
+    expect((await state(f.tab)).tab!.status).toBe("abandoned");
+    await withdrawn(f, id);
+    expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab))).toEqual([]);
+  });
+
+  it("rolls back the withdrawal with a refused reassignment", async () => {
+    const f = await ready();
+    const id = await pending(f);
+    const before = await state(f.tab);
+    const table = await v.table(randomUUID(), f.az);
+    await expect(
+      withTransaction(suite.db, async (tx) => {
+        const party = await openParty(tx, {
+          tableId: table,
+          guestCount: null,
+          operatorId: personId,
+        });
+        await takeIntoParty(tx, v.cfg, f.tab, party.partyId, randomUUID());
+      }),
+    ).rejects.toMatchObject({ code: "service_zone.not_found" });
+    expect(await state(f.tab)).toEqual(before);
+    const accepted = await post(f.desk.cookie, resolutionPath(id, "accept"), {
+      revision: before.tab!.revision,
+      zoneId: f.bz,
+      tableId: null,
+    });
+    expect(accepted).toMatchObject({ status: 200, body: { status: "accepted" } });
+    const second = await post(f.source.cookie, requestPath(f.tab), {
+      destinationDepartmentId: f.b,
+    });
+    expect(second.body).toMatchObject({ error: { code: "service_zone.not_allowed" } });
+  });
+
+  it("settles an issued bill owing nothing and withdraws its pending request", async () => {
+    const f = await ready();
+    const offer = await pricedInZone(v, f.az, "Agua", "0.00");
+    f.tab = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id: f.tab,
+      zoneId: f.az,
+      lines: [{ menuItemId: offer, quantity: "1" }],
+      operatorId: personId,
+    });
+    const invoice = await withTransaction(suite.db, async (tx) => {
+      const priced = await priceForIssuance(tx, v.clock, v.cfg, f.tab);
+      return issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId);
+    });
+    const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
+    expect(before).toMatchObject([{ total: 0 }]);
+    const id = await pending(f);
+    await withTransaction(suite.db, (tx) =>
+      settleIssuedOwingNothing(tx, { clock: v.clock }, f.tab, invoice.saleId),
+    );
+    expect((await state(f.tab)).tab!.status).toBe("settled");
+    await withdrawn(f, id);
+    expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab))).toEqual(
+      before,
+    );
+  });
+
+  it.each(["integrated", "capture recovery", "issued integrated", "issued recovery"] as const)(
+    "%s withdraws its request while preserving invoice history on retry",
+    async (kind) => {
+      const f = await ready();
+      f.tab = await counterOrder(v, "Agua");
+      await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+      const deps = {
+        db: suite.db,
+        backend: v.backend,
+        clock: v.clock,
+        provider: new SimulatorPaymentProvider(suite.db),
+      };
+      if (kind.startsWith("issued")) {
+        await withTransaction(suite.db, async (tx) => {
+          const priced = await priceForIssuance(tx, v.clock, v.cfg, f.tab);
+          await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId);
+        });
+        await placeOrder(deps, v.cfg, f.tab, personId);
+      }
+      const id = await pending(f);
+      if (kind.endsWith("recovery"))
+        await withTransaction(suite.db, (tx) =>
+          insertCapturedPayment(tx, {
+            origin: v.cfg.origin,
+            workingOrderId: f.tab,
+            provider: "simulator",
+            paymentRef: randomUUID(),
+            amount: decimal("2.00"),
+            settledAt: new Date(),
+            externalRef: randomUUID(),
+          }),
+        );
+      const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
+      const pay = () =>
+        payWorkingOrderIntegrated(
+          deps,
+          v.cfg,
+          { id: f.tab, lines: [], simulationOutcome: "captured" },
+          personId,
+        );
+      expect((await pay()).outcome).toBe("captured");
+      expect((await state(f.tab)).tab!.status).toBe("settled");
+      await withdrawn(f, id);
+      const issued = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
+      expect(issued).toHaveLength(1);
+      if (kind.startsWith("issued")) expect(issued).toEqual(before);
+      expect((await pay()).outcome).toBe("captured");
+      expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab))).toEqual(
+        issued,
+      );
+    },
+  );
+
+  it.each(["immediate", "bill", "issued"] as const)(
+    "%s settlement withdraws the pending request without creating another invoice on retry",
+    async (kind) => {
+      const f = await ready();
+      f.tab = await counterOrder(v, "Agua");
+      await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+      const deps = { db: suite.db, backend: v.backend, clock: v.clock };
+      if (kind === "issued")
+        await withTransaction(suite.db, async (tx) => {
+          const priced = await priceForIssuance(tx, v.clock, v.cfg, f.tab);
+          await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId);
+        });
+      if (kind === "issued") await placeOrder(deps, v.cfg, f.tab, personId);
+      const id = await pending(f);
+      const pay = () =>
+        kind === "bill"
+          ? takeBillPayment(
+              deps,
+              v.cfg,
+              f.tab,
+              {
+                submissionId: id,
+                kind: "contribution",
+                amount: "2.00",
+                method: "cash",
+                tendered: "2.00",
+                applied: "2.00",
+                tip: "0.00",
+              },
+              personId,
+            )
+          : (kind === "issued" ? collectOrder : payWorkingOrder)(
+              deps,
+              v.cfg,
+              { id: f.tab, lines: [], tender: { method: "cash", amount: "2.00" } },
+              personId,
+            );
+      const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
+      await pay();
+      expect((await state(f.tab)).tab!.status).toBe("settled");
+      await withdrawn(f, id);
+      const issued = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
+      expect(issued).toHaveLength(1);
+      if (kind === "issued") expect(issued).toEqual(before);
+      await pay();
+      expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab))).toEqual(
+        issued,
+      );
+    },
+  );
 });

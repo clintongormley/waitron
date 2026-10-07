@@ -1,3 +1,4 @@
+import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import {
   listDepartmentTransferDestinations,
   listIncomingDepartmentTransfers,
@@ -64,6 +65,7 @@ import {
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
+  withdrawPendingDepartmentTransfers,
   listDepartmentTransferDestinations,
   listIncomingDepartmentTransfers,
   readIncomingDepartmentTransfer,

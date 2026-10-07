@@ -613,6 +613,15 @@ export async function closeParty(
       .where(inArray(workingOrders.id, [...emptyBillIds]));
   }
 
+  const family = await partyFamily(tx, partyId);
+  const bills = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(inArray(workingOrders.partyId, family));
+  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(
+    tx,
+    bills.map((bill) => bill.id),
+  );
   await discardPartyDrafts(tx, partyId, operatorId);
 
   const at = nowIso();

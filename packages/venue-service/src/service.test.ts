@@ -57,6 +57,7 @@ describe("VENUE_SERVICE", () => {
       "setProfileServiceScope",
       "stationStates",
       "withdrawDepartmentTransfer",
+      "withdrawPendingDepartmentTransfers",
     ]);
   });
 

@@ -4811,8 +4811,14 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   separates notification dismissal from the pending queue and forgets its source selection at
   session end. A department-wide sent-history read now discovers accepted tabs after they leave
   the source list, including after a fresh login; the monitor can follow this history without a
-  selected tab. The monitor is not yet connected to the till app; notification/count presentation,
-  lifecycle integration and receiving/sending screens remain to build. Party-linked bills are
+  selected tab. Settlement, abandonment, merging and reassignment now withdraw pending requests
+  in the writer's transaction; resolved transfer history stays recorded. The server cases exercise
+  cash, bill and integrated-card settlement, capture recovery, cancellation, party closure, merging
+  and reassignment, including rollback and invoice preservation on retries. Closing a party
+  withdraws requests for its retained unpaid invoices too, and a closed party refuses new requests.
+  The monitor is not yet
+  connected to the till app; notification/count presentation, session wiring and receiving/sending
+  screens remain to build. Party-linked bills are
   refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and

@@ -145,6 +145,8 @@ export async function moveBill(
     }
   }
 
+  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
+
   // After any merge, so the tickets name the bill the dishes are now on.
   await printHoldTickets(tx, cfg, held);
   await enqueueMovedSlips(tx, cfg, before, result.billId, new Map(), {
@@ -343,6 +345,7 @@ export async function takeIntoParty(
     .set({ partyId, deliveryTableId: null, revision: movedRevision })
     .where(eq(workingOrders.id, billId))
     .returning({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt });
+  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
   if (bill!.status === "open" && zoneId !== null) await adoptZone(tx, cfg, billId, zoneId);
   return bill!;
 }

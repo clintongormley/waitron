@@ -814,6 +814,7 @@ async function fileImmediateSale(
       settledAt: settledAt.toISOString(),
     })
     .where(eq(workingOrders.id, workingOrderId));
+  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
   await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
 
   // After both writes above, so a manual acquirer reference is visible.
@@ -1339,6 +1340,7 @@ async function finalizeCapture(
           ...(wasPlaced ? {} : { paymentAttemptAt: null }),
         })
         .where(eq(workingOrders.id, req.id));
+      await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
       if (notSent !== null) {
         await raiseDishesNotSent(
@@ -1488,6 +1490,7 @@ async function finalizeRecovery(
         ...(locked?.status === "placed" ? {} : { paymentAttemptAt: null }),
       })
       .where(eq(workingOrders.id, req.id));
+    await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
     await clearBillRequestIfPaid(tx, req.id, deps.log);
     if (notSent !== null) {
       await raiseDishesNotSent(
@@ -1617,6 +1620,7 @@ async function finalizeSettle(
         .update(workingOrders)
         .set({ status: "settled", settledAt: settledAt.toISOString() })
         .where(eq(workingOrders.id, req.id));
+      await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
@@ -1703,6 +1707,7 @@ async function finalizeSettleRecovery(
       .update(workingOrders)
       .set({ status: "settled", settledAt: settledAt.toISOString() })
       .where(eq(workingOrders.id, req.id));
+    await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
     await clearBillRequestIfPaid(tx, req.id, deps.log);
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
@@ -1814,6 +1819,7 @@ export async function collectOrder(
         .update(workingOrders)
         .set({ status: "settled", settledAt: settledAt.toISOString() })
         .where(eq(workingOrders.id, req.id));
+      await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
@@ -1857,6 +1863,7 @@ export async function settleIssuedOwingNothing(
     .update(workingOrders)
     .set({ status: "settled", settledAt })
     .where(eq(workingOrders.id, workingOrderId));
+  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
   await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
 }
 

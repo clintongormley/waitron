@@ -392,6 +392,7 @@ export interface VenueServiceContribution {
     requestId: string,
     sender: DepartmentTransferActor,
   ): Promise<DepartmentTransfer>;
+  withdrawPendingDepartmentTransfers(tx: Transaction, tabIds: readonly string[]): Promise<void>;
   withdrawDepartmentTransfer(
     tx: Transaction,
     cfg: { locationId: LocationId },

@@ -6,6 +6,7 @@ import {
   billPaymentRefunds,
   deviceProfiles,
   diningTables,
+  parties,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
@@ -160,11 +161,24 @@ export async function requestDepartmentTransfer(
   sender: DepartmentTransferActor,
 ) {
   const [tab] = await tx
-    .select({ status: workingOrders.status })
+    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(and(eq(workingOrders.id, tabId), eq(workingOrders.locationId, cfg.locationId)));
   if (tab === undefined || (tab.status !== "open" && tab.status !== "placed"))
     throw new AppError("department_transfer.tab_unavailable", { tabId });
+  if (tab.partyId !== null) {
+    const { rows } = await tx.execute<{ state: string }>(sql`
+      with recursive family(id, state, merged_into_party_id) as (
+        select id, state, merged_into_party_id from ${parties} where id = ${tab.partyId}
+        union
+        select p.id, p.state, p.merged_into_party_id from ${parties} p
+        join family f on p.id = f.merged_into_party_id
+      )
+      select state from family where merged_into_party_id is null
+    `);
+    if (rows[0]?.state !== "open")
+      throw new AppError("department_transfer.tab_unavailable", { tabId });
+  }
   const context = await getOrderServiceContext(tx, cfg, tabId);
   if (context.departmentId !== sender.departmentId)
     throw new AppError("department_transfer.not_allowed", {});
@@ -398,15 +412,16 @@ export async function acceptDepartmentTransfer(
     if (table === undefined)
       throw new AppError("department_transfer.destination_invalid", { field: "tableId" });
   }
+  const accepted = await resolveRequest(tx, request.id, receiver, {
+    status: "accepted",
+    destinationZoneId: input.zoneId,
+  });
   await retargetOrderServiceContext(tx, cfg, tab.id, input.zoneId);
   await tx
     .update(workingOrders)
     .set({ deliveryTableId: input.tableId, revision: sql`${workingOrders.revision} + 1` })
     .where(eq(workingOrders.id, tab.id));
-  return resolveRequest(tx, request.id, receiver, {
-    status: "accepted",
-    destinationZoneId: input.zoneId,
-  });
+  return accepted;
 }
 
 export async function declineDepartmentTransfer(

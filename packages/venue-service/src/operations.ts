@@ -1,3 +1,4 @@
+import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import {
   catalogues,
@@ -906,6 +907,9 @@ export async function retargetOrderServiceContext(
   zoneId: string,
 ): Promise<void> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
+  const previous = await getOrderServiceContext(tx, cfg, workingOrderId);
+  if (previous.departmentId !== context.departmentId)
+    await withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
   const serviceMode =
     context.serviceMode === "table_tab"
       ? context.serviceMode
