@@ -944,14 +944,14 @@ export class ProductEditor extends LitElement {
   private addVariant(event: Event) {
     event.stopPropagation();
     if (this.suspended) return;
-    this.openVariant(null);
+    this.openVariant(null, "menu");
   }
 
-  private openVariant(index: number | null): void {
+  private openVariant(index: number | null, via: "row" | "menu"): void {
     const body = this.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector(".body")!;
     this.#variantReturn = {
       index,
-      row: deepActiveElement()?.getAttribute("data-test") === `edit-row-${index}`,
+      row: via === "row",
       scrollTop: body.scrollTop,
     };
     this.variantIndex = index;
@@ -967,7 +967,6 @@ export class ProductEditor extends LitElement {
     await form.updateComplete;
     await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
     const table = this.shadowRoot!.querySelector("dashboard-variant-table");
-    await table?.updateComplete;
     const target =
       opener.index === null
         ? this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")
@@ -1604,9 +1603,9 @@ export class ProductEditor extends LitElement {
                     available: event.detail.available,
                   }));
                 }}
-                @wt-edit=${(event: CustomEvent<{ index: number }>) => {
+                @wt-edit=${(event: CustomEvent<{ index: number; via: "row" | "menu" }>) => {
                   event.stopPropagation();
-                  this.openVariant(event.detail.index);
+                  this.openVariant(event.detail.index, event.detail.via);
                 }}
                 @wt-open=${(event: CustomEvent<{ index: number }>) => {
                   event.stopPropagation();

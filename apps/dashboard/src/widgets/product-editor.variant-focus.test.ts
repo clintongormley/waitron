@@ -40,7 +40,7 @@ function active(): Element | null {
 
 const cases = [1280, 390]
   .flatMap((width) =>
-    ["add", "row", "menu"].flatMap((via) =>
+    ["add", "row", "menu", "row-without-focus"].flatMap((via) =>
       ["save", "cancel"].map((action) => ({ width, via, action })),
     ),
   )
@@ -92,12 +92,13 @@ it.each(cases)(
         via === "add"
           ? el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!
           : table!.shadowRoot!.querySelector<HTMLElement>(
-              `[data-test=${via === "row" ? "edit-row" : "actions"}-0]`,
+              `[data-test=${via.startsWith("row") ? "edit-row" : "actions"}-0]`,
             )!;
       target().scrollIntoView({ block: "center" });
       const before = body.scrollTop;
       expect(before).toBeGreaterThan(0);
-      await userEvent.click(target());
+      if (via === "row-without-focus") target().click();
+      else await userEvent.click(target());
       if (via === "menu")
         await userEvent.click(table!.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-0]")!);
       expect(body.scrollTop).toBe(before);
@@ -123,7 +124,7 @@ it.each(cases)(
       );
       expect(Math.abs(body.scrollTop - before)).toBeLessThanOrEqual(1);
       expect(active()).toBe(
-        via === "row" ? target() : target().shadowRoot!.querySelector("button"),
+        via.startsWith("row") ? target() : target().shadowRoot!.querySelector("button"),
       );
       if (via === "add" && action === "save") {
         await userEvent.keyboard("{Enter}");

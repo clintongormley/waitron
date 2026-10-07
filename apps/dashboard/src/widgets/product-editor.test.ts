@@ -899,7 +899,11 @@ it("re-checks a variant row after a failed submission, and frees Save once the v
   expect(saveButton(el).hasAttribute("disabled")).toBe(true);
 
   variantTable(el)!.dispatchEvent(
-    new CustomEvent("wt-edit", { detail: { index: 1 }, bubbles: true, composed: true }),
+    new CustomEvent("wt-edit", {
+      detail: { index: 1, via: "menu" },
+      bubbles: true,
+      composed: true,
+    }),
   );
   await el.updateComplete;
   variantForm(el).dispatchEvent(
@@ -2541,7 +2545,11 @@ it("applies a reorder, an availability toggle and an edit from the variants tabl
   await el.updateComplete;
   expect(el.currentValue.variants[0]!.available).toBe(true);
   table.dispatchEvent(
-    new CustomEvent("wt-edit", { detail: { index: 1 }, bubbles: true, composed: true }),
+    new CustomEvent("wt-edit", {
+      detail: { index: 1, via: "menu" },
+      bubbles: true,
+      composed: true,
+    }),
   );
   await el.updateComplete;
   expect(variantForm(el).open).toBe(true);
@@ -3045,7 +3053,11 @@ it("suspends Save and Cancel while a nested window is open", async () => {
   el.addEventListener("wt-submit", submit);
   el.addEventListener("wt-cancel", cancelled);
   variantTable(el)!.dispatchEvent(
-    new CustomEvent("wt-edit", { detail: { index: 0 }, bubbles: true, composed: true }),
+    new CustomEvent("wt-edit", {
+      detail: { index: 0, via: "menu" },
+      bubbles: true,
+      composed: true,
+    }),
   );
   await el.updateComplete;
   save(el);
@@ -4418,7 +4430,7 @@ it("counts a variant edit that ends where it started as no change, whatever orde
   await tableEvent(el, "wt-restore", { index: 1 });
   // The window hands a variant back as a NEW object with its keys in its own order.
   const reordered = Object.fromEntries(Object.entries(small).reverse()) as EditorVariant;
-  await tableEvent(el, "wt-edit", { index: 0 });
+  await tableEvent(el, "wt-edit", { index: 0, via: "menu" });
   variantForm(el).dispatchEvent(
     new CustomEvent("wt-submit", { detail: { value: reordered }, bubbles: true, composed: true }),
   );
