@@ -152,8 +152,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El reloj del local marca esa hora dos veces, porque se atrasa al cambiar la hora. Elige cuál.",
   },
   "time_zone.unreadable": {
-    en: "The venue's time zone cannot be read. Check the time zone in Venue details.",
-    es: "No se puede leer la zona horaria del local. Revisa la zona horaria en Datos del local.",
+    en: "The venue's time zone or day cutover cannot be read. Check them in Venue details.",
+    es: "No se puede leer la zona horaria o el corte del día del local. Revísalos en Datos del local.",
   },
   "sale_classification.invalid": {
     en: "Today's categories could not be read: a product's category setup is inconsistent. The report at time of sale still works.",
