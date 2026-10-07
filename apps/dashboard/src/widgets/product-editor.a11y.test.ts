@@ -124,6 +124,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
   it.each([
     "empty",
     "errors",
+    "changed",
     "selected",
     "variants",
     "modifiers",
@@ -228,7 +229,35 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       if (state === "photo-refused")
         expect(el.shadowRoot!.querySelector("[data-test=image-error]")).not.toBeNull();
     }
-    if (state === "errors") el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    if (state === "errors" || state === "changed") {
+      // Save stays disabled on an untouched form, so one edit comes first.
+      if (state === "errors")
+        el.shadowRoot!.querySelector("wt-switch[name=available]")!.dispatchEvent(
+          new CustomEvent("wt-change", {
+            detail: { checked: false },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      else
+        el.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value: "Tea" }, bubbles: true, composed: true }),
+        );
+      await el.updateComplete;
+      const save = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "wt-button[data-test=save]",
+      )!;
+      expect([save.variant, save.disabled]).toEqual(["primary", false]);
+      if (state === "errors") {
+        save.click();
+        await el.updateComplete;
+        // Without this the scan could pass on a form that never showed its errors.
+        expect(
+          el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=name]")!
+            .error,
+        ).not.toBe("");
+      }
+    }
     if (state === "categories" || state === "category-tree") {
       // Without this the scan could pass on an editor that drew no chosen category.
       const field = el.shadowRoot!.querySelector<
