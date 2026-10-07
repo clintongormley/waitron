@@ -126,6 +126,17 @@ export class TillTenderPay extends LitElement {
         margin-top: var(--wt-space-3);
       }
 
+      .idle-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .idle-actions .cash-at-till,
+      .idle-actions .tenders,
+      .idle-actions .place {
+        grid-column: 1 / -1;
+      }
+
       /* Two equal columns, falling to one where the widget is too narrow for both. */
       .tenders {
         display: grid;
@@ -159,6 +170,10 @@ export class TillTenderPay extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-2);
         margin-bottom: var(--wt-space-3);
+      }
+
+      .simulation-options p {
+        margin: 0 0 var(--wt-space-2);
       }
 
       .reader-control {
@@ -731,7 +746,7 @@ export class TillTenderPay extends LitElement {
       <wt-button
         class="pay-card"
         variant="primary"
-        size="lg"
+        size="md"
         ?disabled=${disabled || (this.tipAttempted && this.#tipInvalid())}
         @click=${() => this.#onCardTap()}
       >
@@ -751,7 +766,7 @@ export class TillTenderPay extends LitElement {
         <wt-button
           class="pay"
           variant="primary"
-          size="lg"
+          size="md"
           ?disabled=${disabled}
           @click=${() => this.#startPaying()}
         >
@@ -789,8 +804,8 @@ export class TillTenderPay extends LitElement {
     return html`
       ${this.#renderCardExtras()}
       ${formMessage(this.tipAttempted && this.#tipInvalid() ? t("form.fix_fields") : "")}
-      <div class="actions">
-        ${this.#renderTenderButtons(disabled)} ${this.#renderInvoiceButton(disabled)}
+      <div class="actions idle-actions">
+        ${this.#renderTenderButtons(disabled)}
         ${
           withPlace
             ? html`<wt-button
@@ -804,10 +819,11 @@ export class TillTenderPay extends LitElement {
               </wt-button>`
             : nothing
         }
+        ${this.#renderInvoiceButton(disabled)}
         <wt-button
           class="hold"
           variant="secondary"
-          size="lg"
+          size="md"
           ?disabled=${disabled}
           @click=${() => this.#startHolding()}
         >

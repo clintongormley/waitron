@@ -2981,3 +2981,18 @@ name, by each app's own `::part` rule (`apps/setup/src/setup-app.ts`,
 accessible name is the full name either way. Its menu opens downwards. The parent passes the
 page's language as `active` and decides what a pick means. A signed-in operator's choice uses the
 existing preference write; login, pairing and kitchen-display choices are local UI changes.
+
+
+### Counter basket and payment space
+
+On the standard counter canvas, the menu sits beside a basket that scrolls within its own card.
+Menu and dietary controls stay in the menu side. Total and payment controls take the space their
+contents need underneath the basket. Held orders follow the products within that side's scroll area. The counter
+uses this arrangement when its first four cards are Product grid, Basket, Total and Tender/pay,
+with the menu and basket filling one row and the total and payment cards matching the basket's
+width; only Held orders with the menu's width may follow. Other arrangements keep their configured row spans.
+At phone width the cards stack in their configured order and the page scrolls. Basket rows wrap
+controls that do not fit beside the dish name. Full invoice and Hold share a row in both payment
+modes. When Place is offered, it fills the row above them. The cash-at-till explanation spans the
+payment card. Cash, Card and Hold use the shared medium button size. The Chromium payment-mode
+cases in `apps/till/src/screens/till-counter-screen.layout.test.ts` hold those arrangements.

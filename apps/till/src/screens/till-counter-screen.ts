@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { type WtCombobox, baseStyles } from "@waitron/ui";
@@ -8,6 +8,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { type DietPredicate, hasDietData } from "../menu-filter.js";
 import type { TabDef } from "../layout.js";
+import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
 import "../widgets/card-grid.js";
 import "../widgets/menu-switcher.js";
@@ -52,12 +53,14 @@ export class TillCounterScreen extends LitElement {
     css`
       :host {
         display: block;
+        height: 100%;
       }
 
       .screen {
         display: flex;
         flex-direction: column;
-        min-height: 100%;
+        height: 100%;
+        min-height: 0;
       }
 
       .header {
@@ -84,13 +87,37 @@ export class TillCounterScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The sale body stacks the menu/diet chrome above the card grid, which owns its own internal
-         grid. */
       .body.grid-body {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
         padding: var(--wt-space-4);
+        flex: 1;
+        min-height: 0;
+      }
+
+      .menu-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+      }
+
+      .menu-controls till-menu-switcher::part(options),
+      .menu-controls till-diet-filter::part(options) {
+        margin-bottom: 0;
+      }
+
+      till-card-grid {
+        flex: 1;
+        min-height: 0;
+      }
+
+      @media ${unsafeCSS(PHONE_WIDTH)} {
+        :host,
+        .screen {
+          height: auto;
+        }
       }
 
       .service-zone {
@@ -266,8 +293,8 @@ export class TillCounterScreen extends LitElement {
    * keeps the FULL set, because allergen lookup must reach every product. */
   #gridBody(): TemplateResult {
     return html`<div class="body grid-body">
-      ${this.#menuControls()}
       <till-card-grid
+        fitSale
         .tab=${this.counterTab}
         .store=${this.store}
         .storedLines=${this.storedLines}
@@ -295,7 +322,10 @@ export class TillCounterScreen extends LitElement {
         .cardAttemptsOver=${this.cardAttemptsOver}
         .activeReaders=${this.activeReaders}
         .defaultReaderId=${this.defaultReaderId}
-      ></till-card-grid>
+        ><div slot="menu-controls" class="menu-controls">
+          ${this.#menuControls()}
+        </div></till-card-grid
+      >
     </div>`;
   }
 
