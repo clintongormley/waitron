@@ -899,11 +899,7 @@ describe("Menu timetable: menus by zone", () => {
         "/management-api/venue-service/departments/restaurant/all-day-menu",
         { menuId: m("Cena") },
       ],
-      [
-        "PUT",
-        "/management-api/venue-service/menu-periods/mediodia",
-        { name: "Mediodía", menuId: m("Bebidas") },
-      ],
+      ["PUT", "/management-api/venue-service/menu-periods/mediodia", { menuId: m("Bebidas") }],
     ]);
   });
 

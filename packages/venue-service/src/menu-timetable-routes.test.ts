@@ -377,7 +377,7 @@ describe("the menu timetable routes", () => {
         { name: "X", menuId: r.cafe, departmentId: r.deli },
         "departmentId",
       ],
-      ["PUT", `/menu-periods/${r.mananas}`, { name: "X" }, "menuId"],
+      ["PUT", `/menu-periods/${r.mananas}`, { name: "X", menuId: "x" }, "menuId"],
       ["PUT", `/departments/${r.restaurant}/menu-week`, { days: [], extra: 1 }, "extra"],
       ["PUT", `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`, { at: 1 }, "at"],
       ["PUT", `/zones/${r.barra}/period-menus/${r.mananas}`, { menuId: "x" }, "menuId"],
