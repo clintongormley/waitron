@@ -1009,7 +1009,7 @@ unused `units` property is gone (it closes W75's leftover).
   spreading the toolbar over three lines at 390 px.
   - DONE (A367): the Printers screen's Add action reads "Add an agent" / "Añadir un agente".
     Chromium checks at 390 px in English and Spanish keep it inside the viewport and clear of
-    every tab, including after resizing from desktop; below 640 px its action sits under the tabs.
+    every tab, including after resizing from desktop; at 640 px or less its action sits under the tabs.
     A menu's prices table showing only a sliver of the price box at 390 px — DONE (A344):
     the Resolve column is gone and a name wraps under a phone-width cap, so each price box is whole
     on screen in English and Spanish.

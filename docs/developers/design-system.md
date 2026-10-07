@@ -2772,7 +2772,7 @@ If a tab has an Add or Create action, put it in the `actions` slot for the selec
 places the action beside the tabs and outside the tab list's accessibility role. At phone width,
 the tabs and a group of actions scroll separately, so the action area stays on screen when the tabs
 scroll. You can style the `tab-row`, `tablist` and `tab-actions` parts to put an action on its own
-line when the strip leaves too little room. Printers does this below 640 px, with the action under
+line when the strip leaves too little room. Printers does this at 640 px or less, with the action under
 the tabs at the trailing edge. Keep actions for other tabs out of sight until their tab is selected.
 A tab whose list is a
 tree puts its adds in row menus instead, as the Products tree does in its All products row: a menu's
