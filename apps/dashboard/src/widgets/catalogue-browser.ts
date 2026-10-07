@@ -638,16 +638,12 @@ export class CatalogueBrowser extends LitElement {
                   selection.productIds.length
                     ? html`<p>
                         ${selection.productIds.length === 1 ? t("product.disable_warning") : t("folders.disable_products_body")}
-                        ${
-                          selection.categoryIds.length
-                            ? nothing
-                            : offMenusSentence(
-                                selection.productIds.length === 1
-                                  ? "product.off_menus"
-                                  : "folders.off_menus",
-                                this.disablingMenus,
-                              )
-                        }
+                        ${offMenusSentence(
+                          selection.productIds.length === 1
+                            ? "product.off_menus"
+                            : "folders.off_menus",
+                          selection.categoryIds.length ? null : this.disablingMenus,
+                        )}
                       </p>`
                     : nothing
                 }

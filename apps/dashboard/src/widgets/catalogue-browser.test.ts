@@ -2984,6 +2984,31 @@ it("says nothing about menus when a deleted category's contents disable no produ
   await el.updateComplete;
   expect(dialog(el)!.textContent).not.toContain("come off every menu");
 });
+it.each([
+  [
+    ["bread"],
+    "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept. It comes off every menu it is on.",
+  ],
+  [["bread", "burger"], `${DISABLE_PRODUCTS} They come off every menu they are on.`],
+] as const)(
+  "says products %j picked beside a category come off every menu, whichever way its contents go",
+  async (productIds, body) => {
+    const el = await mountBrowser();
+    await toggleCategory(el, "f");
+    await selectKeys(el, [...productIds, "folder:d"]);
+    await press(el, "delete");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+    );
+    expect(disableBody(el)).toBe(body);
+    for (const contents of ["delete", "move_up"]) {
+      el.shadowRoot!.querySelector<HTMLInputElement>(`input[value=${contents}]`)!.click();
+      await el.updateComplete;
+      expect(disableBody(el)).toBe(body);
+    }
+    expect(el.api.countProductMenus).not.toHaveBeenCalled();
+  },
+);
 it("says Disable for products alone in Spanish, and Delete once a category is selected", async () => {
   setLocale("es");
   const el = await mountBrowser();
