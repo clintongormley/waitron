@@ -1195,3 +1195,43 @@ describe("the menu timetable rows of a bundle", () => {
     expect(() => validateMenuTimetables(tables, madrid("2027-01-10T10:00:00Z"))).not.toThrow();
   });
 });
+
+describe("department transfer settings in a configuration bundle", () => {
+  const valid = (): Tables => ({
+    departments: [{ id: RESTAURANT }, { id: DELI }],
+    device_profiles: [{ id: "receiving-profile" }],
+    department_transfer_desks: [
+      { department_id: RESTAURANT, receiving_profile_id: "receiving-profile" },
+    ],
+    department_transfer_destinations: [
+      { source_department_id: DELI, destination_department_id: RESTAURANT },
+    ],
+  });
+  it("accepts retained directional settings and a bundle without transfer settings", () => {
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(valid())).not.toThrow();
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({})).not.toThrow();
+  });
+  it.each([
+    ["department_transfer_desks", "department_id", "missing"],
+    ["department_transfer_desks", "receiving_profile_id", "missing"],
+    ["department_transfer_destinations", "source_department_id", "missing"],
+    ["department_transfer_destinations", "destination_department_id", "missing"],
+    ["department_transfer_destinations", "destination_department_id", DELI],
+  ])("refuses an invalid %s.%s", (table, column, value) => {
+    const tables = valid();
+    tables[table!]![0]![column!] = value;
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables)).toThrowError(
+      refusal(`${table}.${column}`),
+    );
+  });
+  it.each(["department_transfer_desks", "department_transfer_destinations"])(
+    "refuses duplicate %s rows",
+    (table) => {
+      const tables = valid();
+      tables[table]!.push({ ...tables[table]![0]! });
+      expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables)).toThrowError(
+        refusal(table),
+      );
+    },
+  );
+});

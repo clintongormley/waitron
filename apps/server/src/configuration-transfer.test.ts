@@ -93,6 +93,8 @@ import {
 import { payments } from "@waitron/payments";
 import {
   createDepartment,
+  setDepartmentTransferSettings,
+  setProfileServiceScope,
   createServiceZone,
   departmentSalePolicies,
   departments,
@@ -4026,4 +4028,113 @@ describe("public holidays in a configuration transfer", () => {
       }),
     );
   });
+});
+
+it("round-trips departmental transfer directions and desks with remapped ids, leaving operational requests behind", async () => {
+  const source = await applyVenue(planVenue(venue("B36472851"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const cfg = { locationId: brandLocationId(source.locationId) };
+  const original = await withTransaction(suite.db, async (tx) => {
+    const a = await createDepartment(tx, cfg, {
+      name: "Transfer deli",
+      defaultServiceMode: "table_tab",
+    });
+    const b = await createDepartment(tx, cfg, {
+      name: "Transfer restaurant",
+      defaultServiceMode: "table_tab",
+    });
+    const zone = await createServiceZone(tx, cfg, {
+      name: "Transfer receiving zone",
+      departmentId: b.id,
+    });
+    const [profile] = await tx
+      .insert(deviceProfiles)
+      .values({
+        name: "Transfer receiving desk",
+        formFactor: "till",
+        capabilities: ["take-orders"],
+      })
+      .returning();
+    await setProfileServiceScope(tx, cfg, profile!.id, {
+      departmentId: b.id,
+      allowedZoneIds: null,
+      startingZoneId: zone.id,
+    });
+    await setDepartmentTransferSettings(tx, cfg, a.id, {
+      receivingProfileId: null,
+      destinationDepartmentIds: [b.id],
+    });
+    await setDepartmentTransferSettings(tx, cfg, b.id, {
+      receivingProfileId: profile!.id,
+      destinationDepartmentIds: [],
+    });
+    return [a.id, b.id, profile!.id];
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-07T10:00:00Z"),
+    versions,
+  );
+  expect(bundle.tables).not.toHaveProperty("department_transfer_requests");
+  const decoded = decodeConfigurationBundle(
+    encodeConfigurationBundle(bundle, "a strong passphrase"),
+    "a strong passphrase",
+  );
+  await applyVenue(planVenue(venue("B36472852"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: async (tx, result) =>
+      importConfigurationTables(
+        tx,
+        decoded,
+        { locationId: result.locationId },
+        ALL_MODULES,
+        versions,
+      ),
+  });
+  const direction = await targetSuite.db.execute<{
+    source: string;
+    destination: string;
+    source_id: string;
+    destination_id: string;
+  }>(sql`
+    select a.name as source, b.name as destination, t.source_department_id as source_id, t.destination_department_id as destination_id
+    from department_transfer_destinations t join departments a on a.id=t.source_department_id join departments b on b.id=t.destination_department_id
+    where a.name='Transfer deli'`);
+  expect(direction.rows).toEqual([
+    {
+      source: "Transfer deli",
+      destination: "Transfer restaurant",
+      source_id: expect.any(String),
+      destination_id: expect.any(String),
+    },
+  ]);
+  const desk = await targetSuite.db.execute<{
+    department: string;
+    profile: string;
+    department_id: string;
+    profile_id: string;
+  }>(sql`
+    select d.name as department, p.name as profile, t.department_id, t.receiving_profile_id as profile_id
+    from department_transfer_desks t join departments d on d.id=t.department_id join device_profiles p on p.id=t.receiving_profile_id
+    where d.name='Transfer restaurant'`);
+  expect(desk.rows).toEqual([
+    {
+      department: "Transfer restaurant",
+      profile: "Transfer receiving desk",
+      department_id: expect.any(String),
+      profile_id: expect.any(String),
+    },
+  ]);
+  for (const id of [
+    direction.rows[0]!.source_id,
+    direction.rows[0]!.destination_id,
+    desk.rows[0]!.profile_id,
+  ])
+    expect(original).not.toContain(id);
 });

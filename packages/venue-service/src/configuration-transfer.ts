@@ -443,7 +443,33 @@ export function validateMenuTimetables(
   }
 }
 
-/** The module's import check: Hours' rows, the holiday rows, then the department menu rows. */
+function validateDepartmentTransfers(tables: Tables): void {
+  const departments = ids(tables.departments);
+  const profiles = ids(tables.device_profiles);
+  const desks = new Set<unknown>();
+  for (const row of tables.department_transfer_desks ?? []) {
+    if (!departments.has(row.department_id)) refuse("department_transfer_desks.department_id");
+    if (!profiles.has(row.receiving_profile_id))
+      refuse("department_transfer_desks.receiving_profile_id");
+    if (desks.has(row.department_id)) refuse("department_transfer_desks");
+    desks.add(row.department_id);
+  }
+  const directions = new Map<unknown, Set<unknown>>();
+  for (const row of tables.department_transfer_destinations ?? []) {
+    if (!departments.has(row.source_department_id))
+      refuse("department_transfer_destinations.source_department_id");
+    if (
+      !departments.has(row.destination_department_id) ||
+      row.destination_department_id === row.source_department_id
+    )
+      refuse("department_transfer_destinations.destination_department_id");
+    const destinations = directions.get(row.source_department_id) ?? new Set<unknown>();
+    if (destinations.has(row.destination_department_id)) refuse("department_transfer_destinations");
+    destinations.add(row.destination_department_id);
+    directions.set(row.source_department_id, destinations);
+  }
+}
+
 function validateVenueServiceConfiguration(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string },
@@ -452,6 +478,7 @@ function validateVenueServiceConfiguration(
   validateHolidayConfiguration(tables);
   validateDepartmentMenus(tables);
   validateMenuTimetables(tables, bundle);
+  validateDepartmentTransfers(tables);
 }
 
 export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
@@ -468,6 +495,8 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "device_profile_zones" },
     { name: "device_profile_stations" },
     { name: "device_profile_watchers" },
+    { name: "department_transfer_desks" },
+    { name: "department_transfer_destinations" },
     { name: "station_claims", locationColumns: ["location_id"] },
     { name: "station_fallbacks" },
     { name: "route_exceptions", locationColumns: ["location_id"] },
