@@ -1,8 +1,7 @@
 // Sales are seeded after the main transaction commits, because each sale opens its own transaction
 // and reads the committed products.
 
-import { eq } from "drizzle-orm";
-import { locations, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import type { CountryDemoIdentity } from "@waitron/country";
 import { createPrinter } from "@waitron/printing";
@@ -12,6 +11,7 @@ import {
   menuDocumentHash,
   publishMenu,
   readContentLanguages,
+  readReceiptLanguage,
 } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { seedFloor } from "./seed-floor.js";
@@ -78,13 +78,9 @@ export async function seedDemoRestaurant(
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "demo-seed");
     }
-    const [location] = await tx
-      .select({ invoiceLocales: locations.invoiceLocales })
-      .from(locations)
-      .where(eq(locations.id, locationId));
     return {
       products: (await listAvailableProducts(tx, locationId)).products,
-      invoiceLocale: location!.invoiceLocales[0]!,
+      invoiceLocale: (await readReceiptLanguage(tx, locationId)).locale,
     };
   });
 

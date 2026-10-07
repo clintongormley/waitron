@@ -18,6 +18,7 @@ import type { Database } from "@waitron/db";
 import {
   customerPresentationText,
   localCalendarDate,
+  readContentLanguages,
   toInvoiceLineDescriptions,
   vatRateOn,
 } from "@waitron/catalogue";
@@ -163,6 +164,12 @@ export async function seedSales(
     throw new Error("seedSales: products must be non-empty when days > 0");
   }
 
+  // Falls back to the content default, as a till sale does (`working-order.ts`): the demo writes its
+  // text in every content language, and the receipt language may not be one of them.
+  const { defaultLanguage } = await withTransaction(db, (tx) =>
+    readContentLanguages(tx, invoiceLocale),
+  );
+
   const backDating = clock ?? backDatingClock();
   const backend = new VerifactuBackend({
     clock: backDating.clock,
@@ -235,10 +242,10 @@ export async function seedSales(
                 variantCustomerName: null,
                 variantKitchenName: null,
               },
-              invoiceLocale,
+              defaultLanguage,
             ).product,
             [invoiceLocale],
-            invoiceLocale,
+            defaultLanguage,
           ),
           quantity: "1",
           unitPrice: base,

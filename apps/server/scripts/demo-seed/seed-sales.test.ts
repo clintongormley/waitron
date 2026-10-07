@@ -89,7 +89,7 @@ describe("seedSales", () => {
 
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
-      invoiceLocale: "es-ES",
+      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
       days: 3,
       products: PRODUCTS,
     });
@@ -168,7 +168,7 @@ describe("seedSales", () => {
     // the future, so only yesterday guarantees any.
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
-      invoiceLocale: "es-ES",
+      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
       days: 2,
       products: PRODUCTS,
     });
@@ -193,7 +193,7 @@ describe("seedSales", () => {
     await expect(
       seedSales(suite.db, {
         venue: venueFor(venue),
-        invoiceLocale: "es-ES",
+        invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
         days: 3,
         products: PRODUCTS,
       }),
@@ -214,7 +214,7 @@ describe("seedSales", () => {
 
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
-      invoiceLocale: "es-ES",
+      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
       days: 0,
       products: PRODUCTS,
     });
