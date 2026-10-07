@@ -5626,7 +5626,7 @@ describe("till-app", () => {
     await el.updateComplete;
 
     emit(c, "retrieve-order", { id: "wo-1" });
-    await flush(el);
+    await discardBasketChanges(el);
 
     // non-fatal, translated banner — never the raw code
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
@@ -7830,7 +7830,7 @@ describe("till-app", () => {
 
       // Retrieve a DIFFERENT order (wo-1) into the basket instead of retrying the card.
       emit(counter(el)!, "retrieve-order", { id: "wo-1" });
-      await flush(el);
+      await discardBasketChanges(el);
 
       // loadFrom swapped in wo-1's lines — the decline described the basket that was just replaced,
       // not this one.
@@ -14075,7 +14075,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     await el.updateComplete;
 
     emit(waitingList(el)!, "pay-waiting-order", { id: "wo-sent" });
-    await flush(el);
+    await discardBasketChanges(el);
 
     expect(c.store.id).toBe(id);
     expect(tenderPay(el).stage).toBe("order");
@@ -15650,4 +15650,427 @@ describe("W69 till shell leave routes", () => {
     expect(input.value).toBe("Family visit");
     expect(location.href).toBe(href);
   });
+});
+
+describe("basket unsaved replacement", () => {
+  function unloadCancelled() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  function question(el: TillApp) {
+    return el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  }
+  async function answer(el: TillApp, decision: "keep" | "discard") {
+    const q = question(el);
+    await q.updateComplete;
+    q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
+    await expect.poll(() => q.open).toBe(false);
+  }
+  it("registers memory-only lines and label for unload, including reverts", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    expect(unloadCancelled()).toBe(false);
+    c.store.label = "Lunch";
+    expect(unloadCancelled()).toBe(true);
+    c.store.label = undefined;
+    expect(unloadCancelled()).toBe(false);
+    c.store.addProduct(cafe, "2");
+    expect(unloadCancelled()).toBe(true);
+    c.store.removeLine(0);
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("Keep retains the basket; Discard retrieves once without abandoning or paying it", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(jamon, "1");
+    c.store.label = "Lunch";
+    const id = c.store.id;
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(question(el).open).toBe(true);
+    expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+    await answer(el, "keep");
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines[0]!.product.id).toBe("jamon");
+    expect(c.store.label).toBe("Lunch");
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "discard");
+    await expect.poll(() => c.store.id).toBe("wo-1");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1");
+    expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+    expect(currentApi.parkOrder).not.toHaveBeenCalled();
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("retrieved label and line edits warn, and reverting to the loaded values clears unload", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => c.store.id).toBe("wo-1");
+    expect(unloadCancelled()).toBe(false);
+    c.store.label = "New label";
+    expect(c.store.dirty).toBe(false);
+    expect(unloadCancelled()).toBe(true);
+    c.store.label = "Mesa 4";
+    expect(unloadCancelled()).toBe(false);
+    c.store.setLineQuantity(0, "3");
+    expect(unloadCancelled()).toBe(true);
+    c.store.setLineQuantity(0, "2");
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("an approved failed retrieval preserves the local basket and unload warning", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(jamon, "1");
+    const id = c.store.id;
+    emit(c, "retrieve-order", { id: "gone" });
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "discard");
+    await expect.poll(() => currentApi.retrieveWorkingOrder).toHaveBeenCalledOnce();
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines[0]!.product.id).toBe("jamon");
+    expect(unloadCancelled()).toBe(true);
+    expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+  });
+  it("retained basket remains unload-protected through tabs and logout without asking", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    selectTab(el, "floor");
+    await flush(el);
+    expect(question(el).open).toBe(false);
+    expect(unloadCancelled()).toBe(true);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(question(el).open).toBe(false);
+    expect(unloadCancelled()).toBe(true);
+    expect(c.store.lines[0]!.quantity).toBe("2");
+  });
+  it("a successful sale clears basket unload protection without asking before payment", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    expect(unloadCancelled()).toBe(true);
+    emit(c, "confirm-payment", { method: "cash", amount: "3" });
+    await expect.poll(() => ticket(el)).not.toBeNull();
+    expect(question(el).open).toBe(false);
+    expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    expect(unloadCancelled()).toBe(false);
+    emit(ticket(el)!, "new-sale");
+    await flush(el);
+    expect(counter(el)!.store.lines).toEqual([]);
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("a clean retrieval answered after another local edit cannot overwrite that edit", async () => {
+    const saved = await stubApi().retrieveWorkingOrder("wo-1");
+    let resolve!: (value: typeof saved) => void;
+    const pending = new Promise<typeof saved>((answer) => {
+      resolve = answer;
+    });
+    const { el } = await mountApp({ retrieveWorkingOrder: vi.fn().mockReturnValue(pending) });
+    const c = await toCounter(el);
+    const id = c.store.id;
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => currentApi.retrieveWorkingOrder).toHaveBeenCalledOnce();
+    c.store.addProduct(jamon, "1");
+    c.store.label = "Newer basket";
+    resolve(saved);
+    await flush(el);
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines[0]!.product.id).toBe("jamon");
+    expect(c.store.label).toBe("Newer basket");
+    expect(unloadCancelled()).toBe(true);
+  });
+  it("opening Pay from the waiting list asks before replacing a memory-only basket", async () => {
+    const saved = await stubApi().retrieveWorkingOrder("wo-1");
+    const { el } = await mountApp({ retrievePlacedOrder: vi.fn().mockResolvedValue(saved) });
+    const c = await toCounter(el);
+    c.store.addProduct(jamon, "1");
+    const id = c.store.id;
+    emit(c, "pay-waiting-order", { id: "wo-1" });
+    await flush(el);
+    expect(question(el).open).toBe(true);
+    expect(currentApi.retrievePlacedOrder).not.toHaveBeenCalled();
+    await answer(el, "keep");
+    expect(c.store.id).toBe(id);
+    emit(c, "pay-waiting-order", { id: "wo-1" });
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "discard");
+    await expect.poll(() => c.store.id).toBe("wo-1");
+    expect(currentApi.retrievePlacedOrder).toHaveBeenCalledOnce();
+    expect(currentApi.collectOrder).not.toHaveBeenCalled();
+    expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+    expect(unloadCancelled()).toBe(false);
+  });
+});
+
+describe("basket protection lifetimes", () => {
+  function unloadCancelled() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  it("display-only basket notifications leave a pending replacement decision open", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "retrieve-order", { id: "wo-1" });
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    c.store.setBlocked(["removed"]);
+    await flush(el);
+    expect(question.open).toBe(true);
+    expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+    await discardBasketChanges(el);
+    await expect.poll(() => c.store.id).toBe("wo-1");
+  });
+  it("a captured card payment clears basket unload protection without another confirmation", async () => {
+    const { el } = await mountApp({
+      pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "collect-card", {});
+    await expect.poll(() => ticket(el)).not.toBeNull();
+    expect(currentApi.pay).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("an accepted line save stays clean when the subsequent payment is refused", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+    });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => c.store.id).toBe("wo-1");
+    c.store.setLineExtras(0, { note: "No sugar" });
+    expect(unloadCancelled()).toBe(true);
+    emit(c, "confirm-payment", { method: "cash", amount: "3" });
+    await expect.poll(() => currentApi.recordSale).toHaveBeenCalledOnce();
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1", {
+      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2", makeAt: null, note: "No sugar" }],
+      label: "Mesa 4",
+      revision: 3,
+    });
+    expect(unloadCancelled()).toBe(false);
+    expect(c.store.lines[0]!.note).toBe("No sugar");
+  });
+  it("compares modifier membership without offered order while retaining line positions", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    const extras = [
+      { listId: "x1", productId: "e1", quantity: 1, name: "First", price: "1.00" },
+      { listId: "x2", productId: "e2", quantity: 2, name: "Second", price: "2.00" },
+    ];
+    const options = [
+      { listId: "o1", labelId: "l1" },
+      { listId: "o2", labelId: "l2" },
+    ];
+    c.store.loadFrom(
+      "stored",
+      [{ product: cafe, quantity: "2.000", extras, options }],
+      "Stored",
+      2,
+    );
+    expect(unloadCancelled()).toBe(false);
+    c.store.setLineModifiers(0, { extras: [...extras].reverse(), options: [...options].reverse() });
+    expect(unloadCancelled()).toBe(false);
+    c.store.setLineModifiers(0, {
+      extras: [{ ...extras[0]!, listId: "another-list" }, extras[1]!],
+      options,
+    });
+    expect(unloadCancelled()).toBe(true);
+    c.store.setLineModifiers(0, { extras, options });
+    expect(unloadCancelled()).toBe(false);
+    c.store.setLineExtras(0, { note: "No sugar" });
+    expect(unloadCancelled()).toBe(true);
+    c.store.setLineExtras(0, { note: "" });
+    expect(unloadCancelled()).toBe(false);
+    c.store.setLineMakeAt(0, "kitchen");
+    expect(unloadCancelled()).toBe(true);
+    c.store.setLineMakeAt(0, undefined);
+    expect(unloadCancelled()).toBe(false);
+    c.store.addProduct(jamon, "1");
+    expect(unloadCancelled()).toBe(true);
+    c.store.removeLine(1);
+    expect(unloadCancelled()).toBe(false);
+    el.remove();
+    expect(unloadCancelled()).toBe(false);
+  });
+});
+
+async function discardBasketChanges(el: TillApp): Promise<void> {
+  await flush(el);
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  expect(question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await flush(el);
+}
+
+describe("basket native replacement warning", () => {
+  for (const locale of ["en-GB", "es-ES"])
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`Retrieve / Keep / Escape / Discard, ${locale}, ${theme}, ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const { el } = await mountApp(
+              {
+                getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+                listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+              },
+              theme,
+            );
+            const c = await toCounter(el);
+            c.store.addProduct(jamon, "1");
+            c.store.label = "Lunch";
+            const id = c.store.id;
+            const held = counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")!;
+            await held.updateComplete;
+            const retrieve = held
+              .shadowRoot!.querySelector(".retrieve")!
+              .shadowRoot!.querySelector("button")!;
+            await userEvent.click(retrieve);
+            const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+            await expect.poll(() => question.open).toBe(true);
+            expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+            const keep = question
+              .shadowRoot!.querySelector("[data-choice=keep]")!
+              .shadowRoot!.querySelector("button")!;
+            await expect.poll(() => keep.matches(":focus")).toBe(true);
+            expect(question.heading).toBe(
+              locale === "en-GB"
+                ? "Discard unsaved changes?"
+                : "¿Descartar los cambios sin guardar?",
+            );
+            await expectNoA11yViolations(question);
+            await page.screenshot({
+              path: `__screenshots__/w69-basket-look/${locale}-${theme}-${width}-warning.png`,
+            });
+            await userEvent.keyboard("{Escape}");
+            await expect.poll(() => question.open).toBe(false);
+            expect(c.store.id).toBe(id);
+            expect(c.store.label).toBe("Lunch");
+            await expect.poll(() => retrieve.matches(":focus")).toBe(true);
+            await userEvent.click(retrieve);
+            await expect.poll(() => question.open).toBe(true);
+            await userEvent.click(
+              question
+                .shadowRoot!.querySelector("[data-choice=keep]")!
+                .shadowRoot!.querySelector("button")!,
+            );
+            await expect.poll(() => question.open).toBe(false);
+            expect(c.store.lines[0]!.product.id).toBe("jamon");
+            expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+            await page.screenshot({
+              path: `__screenshots__/w69-basket-look/${locale}-${theme}-${width}-kept.png`,
+            });
+            await userEvent.click(retrieve);
+            await discardBasketChanges(el);
+            await expect.poll(() => c.store.id).toBe("wo-1");
+            expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1");
+            expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+            expect(currentApi.recordSale).not.toHaveBeenCalled();
+          } finally {
+            await page.viewport(size.width, size.height);
+          }
+        });
+});
+
+it("retained basket traverses indexed and unindexed history without a discard warning", async () => {
+  const { el } = await mountApp();
+  const c = await toCounter(el);
+  c.store.addProduct(cafe, "2");
+  c.store.label = "History basket";
+  const id = c.store.id;
+  selectTab(el, "floor");
+  await flush(el);
+  history.back();
+  await expect.poll(() => counter(el)).not.toBeNull();
+  expect(counter(el)!.store.id).toBe(id);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  history.forward();
+  await expect.poll(() => shell(el)!.activeTabKey).toBe("floor");
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  const accepted = location.href;
+  history.pushState({ external: "retained" }, "", accepted);
+  history.back();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  history.forward();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  selectTab(el, "counter");
+  await flush(el);
+  expect(counter(el)!.store.id).toBe(id);
+  expect(counter(el)!.store.label).toBe("History basket");
+  const unload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+});
+
+it("New sale keeps edits made during payment until you explicitly discard them", async () => {
+  let answer!: (value: TillSaleResult) => void;
+  const paid = new Promise<TillSaleResult>((resolve) => (answer = resolve));
+  const { el } = await mountApp({ recordSale: vi.fn().mockReturnValue(paid) });
+  const c = await toCounter(el);
+  c.store.addProduct(cafe, "2");
+  const id = c.store.id;
+  emit(c, "confirm-payment", { method: "cash", amount: "3" });
+  await expect.poll(() => currentApi.recordSale).toHaveBeenCalledOnce();
+  c.store.label = "Later label";
+  answer(saleResult);
+  await expect.poll(() => ticket(el)).not.toBeNull();
+  const unload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+  emit(ticket(el)!, "new-sale");
+  await flush(el);
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  expect(question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => question.open).toBe(false);
+  expect(ticket(el)).not.toBeNull();
+  expect(c.store.id).toBe(id);
+  expect(c.store.label).toBe("Later label");
+  emit(ticket(el)!, "new-sale");
+  await discardBasketChanges(el);
+  await expect.poll(() => counter(el)).not.toBeNull();
+  expect(counter(el)!.store.id).not.toBe(id);
+  expect(counter(el)!.store.lines).toEqual([]);
+  expect(currentApi.recordSale).toHaveBeenCalledOnce();
+  expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+});
+
+it("a completed sale can start the next basket while its held-list refresh is still pending", async () => {
+  let release!: (rows: HeldOrderSummary[]) => void;
+  const pending = new Promise<HeldOrderSummary[]>((resolve) => (release = resolve));
+  const { el } = await mountApp({
+    listWorkingOrders: vi.fn().mockResolvedValueOnce([]).mockReturnValue(pending),
+  });
+  const c = await toCounter(el);
+  c.store.addProduct(cafe, "2");
+  const id = c.store.id;
+  emit(c, "confirm-payment", { method: "cash", amount: "3" });
+  await expect.poll(() => ticket(el)).not.toBeNull();
+  emit(ticket(el)!, "new-sale");
+  await flush(el);
+  const next = counter(el);
+  expect(next).not.toBeNull();
+  expect(next!.store.id).not.toBe(id);
+  expect(next!.store.lines).toEqual([]);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  release([]);
+  await flush(el);
+  expect(counter(el)!.store.id).toBe(next!.store.id);
+  expect(currentApi.recordSale).toHaveBeenCalledOnce();
 });

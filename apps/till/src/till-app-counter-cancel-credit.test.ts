@@ -527,7 +527,7 @@ describe("till-app: cancelling and crediting an invoiced counter order", () => {
     await typeReason(el, "Wrong order");
     await confirmCancel(el);
     emit(counter(el), "logout");
-    await flush(el);
+    await discardBasketChanges(el);
     expect(dialog(el)).toBeNull();
     emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
     await flush(el);
@@ -684,3 +684,12 @@ it("an accepted counter credit clears unload protection before its queue refresh
   await expect.poll(() => dialog(el)).toBeNull();
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
 });
+
+async function discardBasketChanges(el: TillApp): Promise<void> {
+  await flush(el);
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  expect(question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await flush(el);
+}

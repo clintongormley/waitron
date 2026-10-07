@@ -3531,3 +3531,50 @@ worktree and empty parent were removed.
 Next: memory-only basket unload/destructive replacement, retrieved-order local edits, unindexed
 till history, native reload, remaining link/context routes and the complete advancing-owner audit.
 Tasks 2/3 remain complete; Tasks 1/4/5/6 stay partial. W69 is not ready for finish-branch or landing.
+
+
+## 2026-10-07 — retained basket checkpoint
+
+The basket now owns a separate draft scope. Its immutable comparison includes the label,
+ordered lines, quantities, modifier membership and list identity, notes and preparation station.
+Display-only notifications leave an open decision intact. Loaded orders establish a baseline;
+accepted line saves, cash sales and captured card payments commit the submitted snapshot.
+Later local edits remain protected. Counter tabs, indexed/unindexed history and sign-out retain
+the basket without asking; synthetic beforeunload events still see its dirty scope.
+
+Retrieve, waiting-list Pay and New sale ask before replacing a dirty basket. Keep preserves it;
+Discard proceeds once through the existing action. A refused read preserves the local basket,
+and a late read cannot overwrite newer edits. Clean replacements run directly, preserving the
+existing newer-Pay arbitration and allowing New sale while the held-list refresh is pending.
+
+Test-first failures and the consumer fixes are retained in the local campaign receipt folder
+`receipts/w69-basket-20261007/`. Five existing setups now explicitly choose Discard: stale Retrieve,
+Retrieve after declined card payment, unavailable waiting-list Pay, and voluntary logout during
+pending adjustment or credit. Their original assertions remain unchanged. The two logout cases
+also failed on the installed original checkpoint `3adec09d67511b61cb31aaeba2f624afe4ba928d`;
+`prior-checkpoint-boundaries.log` records that experiment.
+
+The six-file till family reported 1187 passes before the final New sale controls. After those
+changes the focused basket/race group reported 24 passes. The shared core reported 46 passes.
+Root vocabulary/token/field/subscription/module/CLAUDE pointer guards reported 3425 passes.
+The unedited fiscal write-path and inmutabilidad suites reported 20 passes. Commands and test
+counts are retained in `final-family.log`, `final-focused.log`, `core-green.log`, `guards.log`
+and `fiscal.log`. The family still prints the malformed printer-choice rejection documented
+in the prior till-pages checkpoint; this run is not a claim of empty stderr.
+
+Thirteen independent deletions in an installed disposable checkout each produced one intended
+assertion failure beside a passing control. Restored basket tests reported 15 passes; all six
+changed source/test files matched the feature tree byte for byte before the measuring checkout
+and its empty parent were removed. `deletions.json` and `candidate-cleanup.txt` retain the receipts.
+
+Eight native Retrieve flows cover English/Spanish, light/dark and 390/1280 widths. Each checks
+initial Keep focus, Escape, return to Retrieve, explicit Keep and Discard. Eight axe scans cover
+the warning only; sixteen captures and four contact sheets were inspected. These are synthetic
+API fixtures, not live venue writes, full-shell accessibility or activated native reload checks.
+The phone background clips the Counter total, and the Spanish fixture quantities look padded;
+those observations still need reproduction through the real venue path before assigning a cause.
+
+Next: audit remaining basket replacement/context commands (including moving a held order),
+dirty unindexed till navigation, native reload and remaining links, then the complete advancing-owner
+inventory. Tasks 2/3 remain complete; Tasks 1/4/5/6 stay partial. W69 is not ready for finish-branch
+or landing.

@@ -1482,6 +1482,15 @@ and native EN/ES, light/dark, phone/desktop inspection. Memory-only basket unloa
 replacement, unindexed till history, native reload, remaining link/context routes and the final
 advancing-owner audit remain open; W69 is not ready for finishing or landing.
 
+Retained basket checkpoint (2026-10-07): memory-only and retrieved-order edits now participate
+in unload protection. Retrieve, waiting-list Pay and New sale ask before replacing them; Keep
+retains the basket and Discard proceeds once. Failed or stale reads retain local edits. Accepted
+saves and payments commit their submitted snapshot; later edits stay protected. Retained view,
+history and logout changes do not ask for the basket. The dated audit records test-first, consumer,
+native visual and deletion-control receipts. Remaining basket/context commands, dirty unindexed
+till navigation, activated native reload, links and the advancing-owner audit keep W69 incomplete.
+
+
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected
 EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell receipts are

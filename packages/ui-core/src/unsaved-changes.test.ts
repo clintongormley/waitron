@@ -681,3 +681,20 @@ it("aborting a request after acceptance does not cancel its asynchronous continu
   expect(await pending).toBe("proceeded");
   expect(await f.request([d.id])).toBe("proceeded");
 });
+
+it("ignores retained scopes for navigation while keeping their unload protection", () => {
+  const f = fixture();
+  const retained = draft(f.coordinator, "saved");
+  const child = draft(f.coordinator, "saved", { parent: retained.id });
+  const page = draft(f.coordinator, "saved");
+  retained.set("basket");
+  child.set("retained child");
+  expect(f.coordinator.isDirty(undefined, [retained.id])).toBe(false);
+  expect(unload(f.target).defaultPrevented).toBe(true);
+  page.set("page edit");
+  expect(f.coordinator.isDirty(undefined, [retained.id])).toBe(true);
+  expect(f.coordinator.isDirty([retained.id], [retained.id])).toBe(false);
+  page.scope.commit("page edit");
+  expect(f.coordinator.isDirty(undefined, [retained.id])).toBe(false);
+  expect(f.coordinator.isDirty()).toBe(true);
+});

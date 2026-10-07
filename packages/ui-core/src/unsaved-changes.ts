@@ -35,7 +35,7 @@ export type ConfirmLeave = (
 export interface LeaveCoordinator {
   register<T>(owner: DraftOwner<T>): DraftScope<T>;
   request(request: LeaveRequest): Promise<LeaveOutcome>;
-  isDirty(scopes?: readonly object[]): boolean;
+  isDirty(scopes?: readonly object[], except?: readonly object[]): boolean;
   forceReset(): void;
   dispose(): void;
 }
@@ -199,8 +199,8 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
         if (pending === attempt) pending = undefined;
       }
     },
-    isDirty(scopes) {
-      return selected(scopes).some((owner) => owner.dirty());
+    isDirty(scopes, except) {
+      return selected(scopes, except).some((owner) => owner.dirty());
     },
     forceReset: clear,
     dispose() {

@@ -28,6 +28,7 @@ import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi, isNetworkFailure, type MadeHereItem } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
+import { trimQuantity } from "./widgets/dish-format.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import {
   displayQuantity,
@@ -1104,6 +1105,7 @@ export class TillApp extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#subscribeRouter();
+    this.#syncBasketDraft();
     // pointerdown/keydown are composed, so they reach this host from inside the screens' shadow roots.
     this.addEventListener("pointerdown", this.#onInteraction);
     this.addEventListener("keydown", this.#onInteraction);
@@ -1112,6 +1114,8 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#basketScope?.dispose();
+    this.#basketScope = undefined;
     this.#releaseEditDeadEnds();
     this.#invoiceRecipientLifetime = {};
     this.invoiceRecipientSaving = false;
@@ -1134,6 +1138,78 @@ export class TillApp extends LitElement {
 
   /** The one basket the whole flow shares. A stable reference (widgets subscribe to it directly). */
   readonly #store = new WorkingOrderStore();
+
+  readonly #basketOwner = {};
+  #basketScope?: DraftScope<string>;
+  #basketBaseline = JSON.stringify([null, []]);
+  #basketGeneration = 0;
+  #basketObserved?: string;
+
+  #basketPayload(): string {
+    return JSON.stringify([
+      this.#store.label ?? null,
+      this.#store.lines.map((line) => [
+        line.product.id,
+        line.product.menuItemId ?? null,
+        line.product.variantId ?? null,
+        line.product.menuVersionId ?? null,
+        line.workingOrderLineId ?? null,
+        trimQuantity(line.quantity),
+        line.note ?? null,
+        line.makeAt ?? null,
+        (line.extras ?? [])
+          .map((pick) => JSON.stringify([pick.listId, pick.productId, pick.quantity]))
+          .sort(),
+        (line.options ?? [])
+          .map((answer) => JSON.stringify([answer.listId, answer.labelId]))
+          .sort(),
+      ]),
+    ]);
+  }
+
+  #syncBasketDraft(): void {
+    if (this.#basketGeneration !== this.#store.loadGeneration) {
+      this.#basketGeneration = this.#store.loadGeneration;
+      this.#basketBaseline = this.#basketPayload();
+      this.#basketScope?.dispose();
+      this.#basketScope = undefined;
+    }
+    if (!this.isConnected) return;
+    if (!this.#basketScope) {
+      this.#basketScope = this.leave.coordinator.register({
+        id: this.#basketOwner,
+        current: () => this.#basketPayload(),
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        // The accepted replacement owns the reset; a refused read keeps the local basket.
+        restore: () => undefined,
+      });
+      this.#basketScope.commit(this.#basketBaseline);
+      this.#basketObserved = this.#basketPayload();
+    }
+    const payload = this.#basketPayload();
+    if (this.#basketObserved !== payload) {
+      this.#basketObserved = payload;
+      this.#basketScope.changed();
+    }
+  }
+
+  #commitBasket(payload: string): void {
+    this.#basketBaseline = payload;
+    this.#basketScope?.commit(payload);
+  }
+
+  #replaceBasket(proceed: () => void | Promise<void>): void {
+    if (!this.#basketScope?.isDirty()) {
+      void proceed();
+      return;
+    }
+    void this.leave.coordinator.request({
+      scopes: [this.#basketOwner],
+      reason: "navigation",
+      proceed,
+    });
+  }
 
   /** A stable field, so the shell's `loadLocales` property does not change on every render. */
   readonly #loadLocales = () =>
@@ -1176,7 +1252,10 @@ export class TillApp extends LitElement {
     new LocaleChangeController(this);
     // Subscribed before any widget, so the marks this sets inside the basket's own notification
     // reach every later listener in that same notification.
-    this.#store.subscribe(() => this.#evaluateBasket(false));
+    this.#store.subscribe(() => {
+      this.#evaluateBasket(false);
+      this.#syncBasketDraft();
+    });
     this.#store.on("refused", (payload) => {
       this.errorKey = { overLimit: (payload as BasketRefusal).limit };
     });
@@ -1686,9 +1765,15 @@ export class TillApp extends LitElement {
   readonly #url = new UrlStateController(this, () => this.#onHistory(), {
     ...tillPath,
     leave: {
-      isDirty: () => this.leave.coordinator.isDirty(),
+      isDirty: () => this.leave.coordinator.isDirty(undefined, [this.#basketOwner]),
       request: (proceed, signal) =>
-        this.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+        this.leave.coordinator.request({
+          scopes: "all",
+          except: [this.#basketOwner],
+          reason: "navigation",
+          proceed,
+          signal,
+        }),
     },
   });
 
@@ -1706,11 +1791,16 @@ export class TillApp extends LitElement {
     proceed: () => void | Promise<void>,
     reason: "navigation" | "signout" = "navigation",
   ): void {
-    if (!this.leave.coordinator.isDirty()) {
+    if (!this.leave.coordinator.isDirty(undefined, [this.#basketOwner])) {
       void proceed();
       return;
     }
-    void this.leave.coordinator.request({ scopes: "all", reason, proceed });
+    void this.leave.coordinator.request({
+      scopes: "all",
+      except: [this.#basketOwner],
+      reason,
+      proceed,
+    });
   }
 
   #requestedTab(): string | undefined {
@@ -1782,6 +1872,7 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (!this.#basketScope) this.#syncBasketDraft();
     this.#syncEditDeadEnds();
     if (changed.has("api")) this.api.onMadeHere?.(this.#onMadeHere);
     if (changed.has("canvas") || changed.has("capabilities"))
@@ -2698,6 +2789,7 @@ export class TillApp extends LitElement {
     const id = this.#store.id;
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
+    const payload = this.#basketPayload();
     const sendsToKitchen = this.#paySendsToKitchen();
     this.errorKey = undefined;
     let reachedFiscal = false;
@@ -2718,6 +2810,7 @@ export class TillApp extends LitElement {
         : await this.api.recordSale(lines, tender, id);
       if (session !== this.#operatorSession) return;
       this.result = result;
+      if (this.#store.id === id) this.#commitBasket(payload);
       this.#showTicket(id);
       paid = true;
     } catch (error) {
@@ -2810,6 +2903,7 @@ export class TillApp extends LitElement {
     if (demoAttemptId !== undefined) this.#demoAttempt = { orderId: id, attemptId: demoAttemptId };
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
+    const payload = this.#basketPayload();
     const sendsToKitchen = this.#paySendsToKitchen();
     this.errorKey = undefined;
     this.cardOutcome = undefined;
@@ -2840,6 +2934,7 @@ export class TillApp extends LitElement {
       if (session !== this.#operatorSession) return;
       if (out.outcome === "captured") {
         this.result = out.ticket;
+        if (this.#store.id === id) this.#commitBasket(payload);
         this.#showTicket(id);
         paid = true;
       } else {
@@ -3062,6 +3157,7 @@ export class TillApp extends LitElement {
   async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<boolean> {
     if (!(this.#store.persisted && this.#store.dirty)) return true;
     const session = this.#operatorSession;
+    const payload = this.#basketPayload();
     try {
       const saved = await this.api.updateWorkingOrder(id, {
         lines,
@@ -3070,6 +3166,7 @@ export class TillApp extends LitElement {
       });
       if (session !== this.#operatorSession) return false;
       this.#store.markSaved(saved.revision);
+      this.#commitBasket(payload);
     } catch (error) {
       if (session !== this.#operatorSession) return false;
       const code = (error as { code?: string }).code;
@@ -3109,12 +3206,14 @@ export class TillApp extends LitElement {
       if (session !== this.#operatorSession) return;
       const lines = this.#currentSaleLines();
       const label = this.#store.label;
+      const payload = this.#basketPayload();
       if (this.#store.persisted) {
         if (!(await this.#syncIfDirty(id, lines, label))) return;
       } else {
         await this.api.parkOrder({ id, lines, label });
         if (session !== this.#operatorSession) return;
         this.#store.markPersisted();
+        this.#commitBasket(payload);
       }
       if (this.invoiceChoice?.orderId === id) {
         const saved = await this.api.setOrderInvoiceChoice(id, {
@@ -3520,9 +3619,17 @@ export class TillApp extends LitElement {
   async #onRetrieveOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
     const session = this.#operatorSession;
+    const generation = this.#store.loadGeneration;
+    const payload = this.#basketPayload();
     this.errorKey = undefined;
     try {
-      await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
+      await this.#loadHeldOrder(
+        id,
+        () =>
+          session !== this.#operatorSession ||
+          generation !== this.#store.loadGeneration ||
+          payload !== this.#basketPayload(),
+      );
       if (session !== this.#operatorSession) return;
       this.#refusePaidInPart();
     } catch {
@@ -7189,6 +7296,8 @@ export class TillApp extends LitElement {
   #endOperatorSession(): void {
     this.#stopClockStatus();
     this.leave.forceReset();
+    this.#basketScope = undefined;
+    this.#syncBasketDraft();
     navigationGuardFor(window)?.reset();
     this.#releaseEditDeadEnds();
     this.editDeadEnds = null;
@@ -8169,7 +8278,7 @@ export class TillApp extends LitElement {
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @hand-over-order=${(event: Event) => void this.#onHandOverOrder(event)}
-        @pay-waiting-order=${(event: Event) => void this.#onPayWaitingOrder(event)}
+        @pay-waiting-order=${(event: Event) => this.#replaceBasket(() => this.#onPayWaitingOrder(event))}
         @cancel-credit-waiting-order=${(event: Event) => this.#onCancelCreditWaitingOrder(event)}
         @show-station=${(event: Event) => this.#requestLeave(() => this.#onShowStation(event))}
         @enrolled=${() => void this.#onEnrolled()}
@@ -8177,9 +8286,9 @@ export class TillApp extends LitElement {
         @device-unauthorized=${() => void this.#onDeviceUnauthorized()}
         @show-expo=${() => this.#requestLeave(() => this.#onShowExpo())}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
-        @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
+        @retrieve-order=${(event: Event) => this.#replaceBasket(() => this.#onRetrieveOrder(event))}
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
-        @new-sale=${() => this.#onNewSale()}
+        @new-sale=${() => this.#replaceBasket(() => this.#onNewSale())}
         @reprint=${() => void this.#onReprint()}
         @print-receipt=${() => void this.#onPrintReceipt()}
         @retry-receipt=${() => void this.#onPrintReceipt(true)}

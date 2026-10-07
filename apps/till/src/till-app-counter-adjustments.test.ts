@@ -1114,7 +1114,7 @@ describe("till-app: an answer after the basket moved on", () => {
     await flush(el);
 
     emit(counter(el), "logout");
-    await flush(el);
+    await discardBasketChanges(el);
     answer.resolve({ adjustmentIds: ["a-1"], revision: 5, party: null });
     await flush(el);
 
@@ -1740,3 +1740,12 @@ describe("till-app: unsaved adjustment inputs", () => {
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });
 });
+
+async function discardBasketChanges(el: TillApp): Promise<void> {
+  await flush(el);
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  expect(question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await flush(el);
+}
