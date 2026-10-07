@@ -5063,6 +5063,10 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       does not name the thing. A read that fails, or that still leaves its row or zone out of the
       grid, leaves it; a refresh that brings its row and zone back, the next cell choice or a tab
       change clears it (`#dropChoice`, `packages/venue-service/src/dashboard/prep-stations-screen.ts`).
+      Left open by A375 (its review, 2026-10-07): the reason is chosen once, when the choice is
+      dropped, so if its zone and its category both go and only the zone comes back, the message
+      still names the zone; and only a returning zone or product has a test that the message
+      clears — a returning category or No category row has none.
     - **A routing preview can miss an extra that stops following its dish.** The preview compares
       where each product would be made on its own (`previewRoutingChange`,
       `packages/venue-service/src/routing-store.ts`), as it did before A261-4. Giving an extra a
