@@ -666,8 +666,44 @@ describe("venue-routing-grid", () => {
     expect(actions.error).toBe(text);
     const box = combo(el, "no_category", "inside")!;
     expect(box.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe("Refused.");
-    expect((combo(el, "all", "terrace") as unknown as { error: string }).error).toBe("");
+    expect((combo(el, "all", "inside") as unknown as { error: string }).error).toBe("");
+    const carrying = [...root(el).querySelectorAll<Combo>("wt-combobox")].filter(
+      (other) => (other as unknown as { error: string }).error !== "",
+    );
+    expect(carrying).toEqual([box]);
   });
+
+  /** No category × Every zone goes to the Bar; All categories × Terrace is No preparation. */
+  const noCategoryAtBar = () =>
+    routing({
+      cells: [
+        ...routing().cells,
+        { row: { kind: "no_category" }, zoneId: null, target: station("bar") },
+      ],
+    });
+
+  it("a No category cell inherits its own row's Every zone before All categories × its zone", async () => {
+    const { el } = await mount(noCategoryAtBar());
+    expect(shown(combo(el, "no_category", "every")!)).toEqual({ text: "Bar", muted: false });
+    expect(shown(combo(el, "no_category", "terrace")!)).toEqual({ text: "Bar", muted: true });
+    expect(shown(combo(el, "p:bread", "terrace")!)).toEqual({ text: "Bar", muted: true });
+    expect(shown(combo(el, "all", "terrace")!)).toEqual({ text: "No preparation", muted: false });
+  });
+
+  it.each([
+    ["en", "No category, Terrace: Bar, inherited", "No category, Every zone: Bar, set here"],
+    ["es", "Sin categoría, Terrace: Bar, heredado", null],
+  ] as const)(
+    "a No category editor's label names No category in %s",
+    async (locale, zone, every) => {
+      setLocale(locale);
+      const { el } = await mount(noCategoryAtBar());
+      expect(trigger(combo(el, "no_category", "terrace")!).getAttribute("aria-label")).toBe(zone);
+      if (every !== null) {
+        expect(trigger(combo(el, "no_category", "every")!).getAttribute("aria-label")).toBe(every);
+      }
+    },
+  );
 
   it("zone columns share the width evenly however long a cell's warning is", async () => {
     const { el } = await mount();
