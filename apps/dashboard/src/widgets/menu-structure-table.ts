@@ -11,7 +11,7 @@ import {
   pointerElementsAt,
   releasePageCursor,
 } from "@waitron/ui/src/reorder-table.js";
-import { memberKindLabel, memberName } from "./member-list-editor.js";
+import { memberKindLabel, memberName } from "./member-names.js";
 import {
   blockClickAfterDrag,
   clearDragMarks,

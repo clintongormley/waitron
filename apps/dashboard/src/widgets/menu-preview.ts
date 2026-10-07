@@ -14,7 +14,6 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { formatMoney } from "@waitron/shared";
-import "./menu-structure-tree.js";
 import type {
   DocumentMember,
   MenuChange,
