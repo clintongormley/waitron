@@ -72,9 +72,9 @@ const confirmButton = (el: TillAdjustmentDialog) =>
 const actions = (el: TillAdjustmentDialog) =>
   root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
 const field = (el: TillAdjustmentDialog, name: string) =>
-  root(el).querySelector<HTMLElement & { error: string; required: boolean }>(
-    `wt-input[name="${name}"]`,
-  )!;
+  root(el).querySelector<
+    HTMLElement & { error: string; required: boolean; updateComplete: Promise<unknown> }
+  >(`wt-input[name="${name}"]`)!;
 const fieldsetError = (el: TillAdjustmentDialog, which: string) =>
   root(el).querySelector(`[data-error-for="${which}"]`)?.textContent?.trim() ?? "";
 

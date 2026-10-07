@@ -57,9 +57,14 @@ const text = (node: Element | ShadowRoot | null) =>
   (node?.textContent ?? "").replace(/\s+/g, " ").trim();
 const money = (amount: string) => formatMoney(amount, currentLocale());
 const field = (el: TillBillPayDialog, name: string) =>
-  root(el).querySelector<HTMLElement & { error: string; required: boolean; value: string }>(
-    `wt-input[name="${name}"]`,
-  );
+  root(el).querySelector<
+    HTMLElement & {
+      error: string;
+      required: boolean;
+      updateComplete: Promise<unknown>;
+      value: string;
+    }
+  >(`wt-input[name="${name}"]`);
 const actions = (el: TillBillPayDialog) =>
   root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
 const button = (el: TillBillPayDialog, selector: string) =>
@@ -1244,7 +1249,7 @@ for (const locale of ["en", "es"]) {
     setLocale(locale);
     const el = await mount({ way: "contribution" });
 
-    const control = field(el, "amount")! as HTMLElement & { updateComplete: Promise<unknown> };
+    const control = field(el, "amount")!;
     await control.updateComplete;
     const native = control.shadowRoot!.querySelector("input")!;
     for (const separator of [".", ","]) {

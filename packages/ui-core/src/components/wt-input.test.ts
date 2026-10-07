@@ -755,7 +755,7 @@ for (const locale of ["en", "es"]) {
     input.value = locale === "en" ? "12,50" : "12.50";
     input.setSelectionRange(3, 3);
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-    await (el as { updateComplete: Promise<unknown> }).updateComplete;
+    await (el as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     expect(input.value).toBe(locale === "en" ? "12.50" : "12,50");
     expect(input.selectionStart).toBe(3);
     expect(input.selectionEnd).toBe(3);

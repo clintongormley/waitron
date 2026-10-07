@@ -34,9 +34,9 @@ async function mount() {
   return el;
 }
 function input(el: TillFindBillDialog, name: string) {
-  return el.shadowRoot!.querySelector<HTMLElement & { value: string; error: string }>(
-    `[name="${name}"]`,
-  )!;
+  return el.shadowRoot!.querySelector<
+    HTMLElement & { value: string; error: string; updateComplete: Promise<unknown> }
+  >(`[name="${name}"]`)!;
 }
 async function type(el: TillFindBillDialog, name: string, value: string) {
   input(el, name).shadowRoot!.querySelector<HTMLInputElement>("input")!.value = value;
@@ -305,7 +305,7 @@ it("decimal input cash collection shows Spanish and refuses grouped or over-prec
   await click(el, "[data-search]");
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
   await click(el, "[data-bill]");
-  const control = input(el, "cash-received") as HTMLElement & { updateComplete: Promise<unknown> };
+  const control = input(el, "cash-received");
   await control.updateComplete;
   const native = control.shadowRoot!.querySelector("input")!;
   expect(native.value).toBe("30,00");

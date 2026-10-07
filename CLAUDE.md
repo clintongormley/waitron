@@ -1091,6 +1091,8 @@ before treating an implementation as a rule violation.
   _Dependabot pull requests_. Config: `.github/dependabot.yml`.
 - **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
   approval; nothing else is.
+- **Read a review report for completed findings, not just a successful wrapper exit.** Cost: A284's
+  first report was only pending prose. Receipt: [workflow-guide.md](docs/developers/workflow-guide.md).
 - **Merging requires resolved conversations.** Copilot is off here; the second model on the diff is
   Codex in `/finish-branch`'s run-it seat, before the PR exists. Verify CI runs belong to the current
   head SHA.

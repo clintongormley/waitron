@@ -52,9 +52,9 @@ const root = (el: TillBillRefundDialog) => el.shadowRoot!;
 const text = (node: Element | null) => (node?.textContent ?? "").replace(/\s+/g, " ").trim();
 const money = (amount: string) => formatMoney(amount, currentLocale());
 const field = (el: TillBillRefundDialog, name: string) =>
-  root(el).querySelector<HTMLElement & { error: string; required: boolean }>(
-    `wt-input[name="${name}"]`,
-  );
+  root(el).querySelector<
+    HTMLElement & { error: string; required: boolean; updateComplete: Promise<unknown> }
+  >(`wt-input[name="${name}"]`);
 const actions = (el: TillBillRefundDialog) =>
   root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
 const button = (el: TillBillRefundDialog, selector: string) =>
@@ -340,7 +340,7 @@ for (const locale of ["en", "es"]) {
     setLocale(locale);
     const el = await mount();
     await pick(el, "part");
-    const control = field(el, "amount")! as HTMLElement & { updateComplete: Promise<unknown> };
+    const control = field(el, "amount")!;
     await control.updateComplete;
     const native = control.shadowRoot!.querySelector("input")!;
     for (const separator of [".", ","]) {
