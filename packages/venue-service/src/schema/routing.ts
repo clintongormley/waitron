@@ -112,6 +112,7 @@ export const routingCells = table(
     zoneId: id("zone_id"),
     stationId: id("station_id"),
     noPreparation: flag("no_preparation").notNull().default(false),
+    noCategory: flag("no_category").notNull().default(false),
   },
   (t) => [
     foreignKey({
@@ -145,11 +146,15 @@ export const routingCells = table(
     ),
     check(
       "routing_cells_coordinate_ck",
-      sql`not (${t.categoryId} is null and ${t.productId} is null and ${t.zoneId} is null)`,
+      sql`not (${t.categoryId} is null and ${t.productId} is null and ${t.noCategory} = 0 and ${t.zoneId} is null)`,
     ),
     check(
       "routing_cells_target_ck",
       sql`(${t.stationId} is not null and ${t.noPreparation} = 0) or (${t.stationId} is null and ${t.noPreparation} = 1)`,
+    ),
+    check(
+      "routing_cells_no_category_ck",
+      sql`${t.noCategory} = 0 or (${t.noCategory} = 1 and ${t.categoryId} is null and ${t.productId} is null)`,
     ),
     uniqueIndex("routing_cells_category_every_zone_key")
       .on(t.locationId, t.categoryId)
@@ -165,6 +170,14 @@ export const routingCells = table(
       .where(sql`${t.productId} is not null and ${t.zoneId} is not null`),
     uniqueIndex("routing_cells_all_zone_key")
       .on(t.locationId, t.zoneId)
-      .where(sql`${t.categoryId} is null and ${t.productId} is null and ${t.zoneId} is not null`),
+      .where(
+        sql`${t.categoryId} is null and ${t.productId} is null and ${t.noCategory} = 0 and ${t.zoneId} is not null`,
+      ),
+    uniqueIndex("routing_cells_no_category_every_zone_key")
+      .on(t.locationId, t.noCategory)
+      .where(sql`${t.noCategory} = 1 and ${t.zoneId} is null`),
+    uniqueIndex("routing_cells_no_category_zone_key")
+      .on(t.locationId, t.noCategory, t.zoneId)
+      .where(sql`${t.noCategory} = 1 and ${t.zoneId} is not null`),
   ],
 );

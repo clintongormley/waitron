@@ -109,9 +109,11 @@ export function folderAncestors(
 function rowKey(row: RoutingRow): string {
   return row.kind === "all"
     ? "all"
-    : row.kind === "product"
-      ? `p:${row.productId}`
-      : `c:${row.categoryId}`;
+    : row.kind === "no_category"
+      ? "none"
+      : row.kind === "product"
+        ? `p:${row.productId}`
+        : `c:${row.categoryId}`;
 }
 
 const cellIndexes = new WeakMap<readonly RoutingCell[], ReadonlyMap<string, RoutingCell>>();
@@ -126,8 +128,8 @@ function cellIndex(cells: readonly RoutingCell[]): ReadonlyMap<string, RoutingCe
 }
 
 /**
- * Row order decides before zone: the product, its category, each parent, All categories, and
- * within each row its zone cell before Every zone. All categories × Every zone is the implicit
+ * Row order decides before zone: the product, its category, each parent (or No category when the
+ * effective category is null), All categories, and within each row its zone cell before Every zone. All categories × Every zone is the implicit
  * default station, never a stored cell. A product row's `categoryId` is its effective category.
  */
 export function selectRoutingCell(
@@ -137,7 +139,9 @@ export function selectRoutingCell(
   categoryId: string | null = null,
 ): SelectedCell {
   const lineage: RoutingRow[] = row.kind === "product" ? [row] : [];
-  if (row.kind !== "all") {
+  if (row.kind === "no_category" || (row.kind === "product" && categoryId === null)) {
+    lineage.push({ kind: "no_category" });
+  } else if (row.kind !== "all") {
     const leaf = row.kind === "category" ? row.categoryId : categoryId;
     for (const id of folderAncestors(rules.parentOf, leaf)) {
       lineage.push({ kind: "category", categoryId: id });

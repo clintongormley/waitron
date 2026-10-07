@@ -10,6 +10,7 @@ import type { ExtraMakerOutcome } from "@waitron/module";
 
 export type RoutingRow =
   | { kind: "all" }
+  | { kind: "no_category" }
   | { kind: "category"; categoryId: string }
   | { kind: "product"; productId: string };
 

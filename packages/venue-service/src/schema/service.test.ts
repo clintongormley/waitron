@@ -203,13 +203,20 @@ const EXPECTED: Record<
       "routing_cells_zone_fk",
       "routing_cells_station_fk",
     ],
-    checks: ["routing_cells_subject_ck", "routing_cells_coordinate_ck", "routing_cells_target_ck"],
+    checks: [
+      "routing_cells_subject_ck",
+      "routing_cells_coordinate_ck",
+      "routing_cells_target_ck",
+      "routing_cells_no_category_ck",
+    ],
     indexes: [
       "routing_cells_category_every_zone_key",
       "routing_cells_category_zone_key",
       "routing_cells_product_every_zone_key",
       "routing_cells_product_zone_key",
       "routing_cells_all_zone_key",
+      "routing_cells_no_category_every_zone_key",
+      "routing_cells_no_category_zone_key",
     ],
     uniqueConstraints: [],
     primaryKeys: [],
@@ -306,6 +313,8 @@ describe("venue-service schema", () => {
       ["routing_cells_product_every_zone_key", true],
       ["routing_cells_product_zone_key", true],
       ["routing_cells_all_zone_key", true],
+      ["routing_cells_no_category_every_zone_key", true],
+      ["routing_cells_no_category_zone_key", true],
     ]);
   });
 });

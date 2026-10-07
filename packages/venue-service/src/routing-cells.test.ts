@@ -122,13 +122,15 @@ type RawCell = {
   zone?: string | null;
   station?: string | null;
   noPrep?: boolean;
+  noCategory?: boolean | number;
 };
 
 function rawInsert(f: Fixture, cell: RawCell) {
   return sql`insert into routing_cells
-      (id, location_id, category_id, product_id, zone_id, station_id, no_preparation)
+      (id, location_id, category_id, product_id, zone_id, station_id, no_preparation, no_category)
     values (${randomUUID()}, ${f.cfg.locationId}, ${cell.category ?? null}, ${cell.product ?? null},
-      ${cell.zone ?? null}, ${cell.station ?? null}, ${cell.noPrep === true ? 1 : 0})`;
+      ${cell.zone ?? null}, ${cell.station ?? null}, ${cell.noPrep === true ? 1 : 0},
+      ${typeof cell.noCategory === "number" ? cell.noCategory : cell.noCategory === true ? 1 : 0})`;
 }
 
 const insert = (statement: ReturnType<typeof sql>) =>
@@ -146,7 +148,7 @@ const UNIQUE = (...columns: string[]) =>
   `UNIQUE constraint failed: ${columns.map((column) => `routing_cells.${column}`).join(", ")}`;
 
 describe("the routing_cells table", () => {
-  it("stores each of the five coordinate classes once and refuses a second identical one", async () => {
+  it("stores each of the seven coordinate classes once and refuses a second identical one", async () => {
     const f = await setup();
     const classes: [RawCell, string][] = [
       [{ category: f.drinks }, UNIQUE("location_id", "category_id")],
@@ -154,13 +156,15 @@ describe("the routing_cells table", () => {
       [{ product: f.mojito }, UNIQUE("location_id", "product_id")],
       [{ product: f.mojito, zone: f.terrace }, UNIQUE("location_id", "product_id", "zone_id")],
       [{ zone: f.terrace }, UNIQUE("location_id", "zone_id")],
+      [{ noCategory: true }, UNIQUE("location_id", "no_category")],
+      [{ noCategory: true, zone: f.terrace }, UNIQUE("location_id", "no_category", "zone_id")],
     ];
     for (const [cell] of classes) await insert(rawInsert(f, { ...cell, station: f.bar }));
     for (const [cell, words] of classes)
       await refused(rawInsert(f, { ...cell, noPrep: true }), UNIQUE_VIOLATION, words);
     const [stored] = (await db.execute<{ n: number }>(sql`select count(*) as n from routing_cells`))
       .rows;
-    expect(stored!.n).toBe(5);
+    expect(stored!.n).toBe(7);
   });
 
   it("lets different categories, products and zones coexist", async () => {
@@ -178,6 +182,9 @@ describe("the routing_cells table", () => {
       { product: f.beer, zone: f.terrace },
       { zone: f.terrace },
       { zone: f.inside },
+      { noCategory: true },
+      { noCategory: true, zone: f.terrace },
+      { noCategory: true, zone: f.inside },
     ];
     for (const cell of cells) await insert(rawInsert(f, { ...cell, station: f.kitchen }));
     const [stored] = (await db.execute<{ n: number }>(sql`select count(*) as n from routing_cells`))
@@ -212,6 +219,21 @@ describe("the routing_cells table", () => {
       CHECK_VIOLATION,
       "CHECK constraint failed: routing_cells_coordinate_ck",
     );
+    await refused(
+      rawInsert(f, { noCategory: 0, station: f.bar }),
+      CHECK_VIOLATION,
+      "CHECK constraint failed: routing_cells_coordinate_ck",
+    );
+    for (const cell of [
+      { noCategory: true, category: f.drinks },
+      { noCategory: true, product: f.mojito, zone: f.terrace },
+      { noCategory: 2 },
+    ])
+      await refused(
+        rawInsert(f, { ...cell, station: f.bar }),
+        CHECK_VIOLATION,
+        "CHECK constraint failed: routing_cells_no_category_ck",
+      );
   });
 });
 
@@ -221,14 +243,15 @@ type StoredCell = {
   zone_id: string | null;
   station_id: string | null;
   no_preparation: number;
+  no_category: number;
 };
 
 async function readStoredCells(f: Fixture): Promise<StoredCell[]> {
   return (
     await db.execute<StoredCell>(
-      sql`select category_id, product_id, zone_id, station_id, no_preparation
+      sql`select category_id, product_id, zone_id, station_id, no_preparation, no_category
         from routing_cells where location_id = ${f.cfg.locationId}
-        order by category_id, product_id, zone_id`,
+        order by category_id, product_id, no_category, zone_id`,
     )
   ).rows;
 }
@@ -239,6 +262,7 @@ async function readStoredCell(f: Fixture, address: CellAddress): Promise<StoredC
     (cell) =>
       cell.category_id === (row.kind === "category" ? row.categoryId : null) &&
       cell.product_id === (row.kind === "product" ? row.productId : null) &&
+      cell.no_category === (row.kind === "no_category" ? 1 : 0) &&
       cell.zone_id === address.zoneId,
   );
 }
@@ -260,6 +284,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         zone_id: f.terrace,
         station_id: f.bar,
         no_preparation: 0,
+        no_category: 0,
       },
     ]);
     await scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.kitchen)));
@@ -270,6 +295,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         zone_id: f.terrace,
         station_id: f.kitchen,
         no_preparation: 0,
+        no_category: 0,
       },
     ]);
     await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
@@ -285,11 +311,13 @@ describe("setRoutingCell / clearRoutingCell", () => {
       { row: { kind: "product", productId: f.mojito }, zoneId: null },
       { row: { kind: "product", productId: f.mojito }, zoneId: f.terrace },
       { row: { kind: "all" }, zoneId: f.terrace },
+      { row: { kind: "no_category" }, zoneId: null },
+      { row: { kind: "no_category" }, zoneId: f.terrace },
     ];
     await scoped(async (tx) => {
       for (const address of addresses) await setRoutingCell(tx, f.cfg, address, station(f.kitchen));
     });
-    expect(await readStoredCells(f)).toHaveLength(5);
+    expect(await readStoredCells(f)).toHaveLength(7);
     await scoped((tx) => clearRoutingCell(tx, f.cfg, addresses[1]!));
     expect(await readStoredCell(f, addresses[1]!)).toBeUndefined();
     for (const address of [addresses[0]!, ...addresses.slice(2)])
@@ -312,6 +340,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       zone_id: f.terrace,
       station_id: f.bar,
       no_preparation: 0,
+      no_category: 0,
     };
     await scoped((tx) => setRoutingCell(tx, f.cfg, terrace, station(f.bar)));
     await scoped((tx) => setRoutingCell(tx, f.cfg, everyZone, station(f.kitchen)));
@@ -322,6 +351,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         zone_id: null,
         station_id: f.kitchen,
         no_preparation: 0,
+        no_category: 0,
       },
       terraceRow,
     ]);
@@ -339,6 +369,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       zone_id: null,
       station_id: null,
       no_preparation: 1,
+      no_category: 0,
     });
     await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
     expect(await readStoredCell(f, address)).toBeUndefined();
@@ -359,6 +390,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         zone_id: f.terrace,
         station_id: f.kitchen,
         no_preparation: 0,
+        no_category: 0,
       },
     ]);
     await scoped((tx) => clearRoutingCell(tx, f.cfg, upper));
@@ -487,6 +519,89 @@ describe("setRoutingCell / clearRoutingCell", () => {
     expect(await readStoredCells(f)).toEqual([]);
   });
 
+  it("a No category cell and an All categories cell at the same zone are separate: setting, replacing and clearing one leaves the other", async () => {
+    const f = await setup();
+    const all: CellAddress = { row: { kind: "all" }, zoneId: f.terrace };
+    const none: CellAddress = { row: { kind: "no_category" }, zoneId: f.terrace };
+    const allRow = {
+      category_id: null,
+      product_id: null,
+      zone_id: f.terrace,
+      station_id: f.bar,
+      no_preparation: 0,
+      no_category: 0,
+    };
+    const noneRow = (stationId: string) => ({
+      category_id: null,
+      product_id: null,
+      zone_id: f.terrace,
+      station_id: stationId,
+      no_preparation: 0,
+      no_category: 1,
+    });
+    await scoped((tx) => setRoutingCell(tx, f.cfg, all, station(f.bar)));
+    await scoped((tx) => setRoutingCell(tx, f.cfg, none, station(f.kitchen)));
+    expect(await readStoredCells(f)).toEqual([allRow, noneRow(f.kitchen)]);
+    await scoped((tx) => setRoutingCell(tx, f.cfg, none, station(f.bar)));
+    expect(await readStoredCells(f)).toEqual([allRow, noneRow(f.bar)]);
+    await scoped((tx) => clearRoutingCell(tx, f.cfg, none));
+    expect(await readStoredCells(f)).toEqual([allRow]);
+    await scoped((tx) => setRoutingCell(tx, f.cfg, none, station(f.kitchen)));
+    await scoped((tx) => setRoutingCell(tx, f.cfg, all, station(f.kitchen)));
+    expect(await readStoredCells(f)).toEqual([
+      { ...allRow, station_id: f.kitchen },
+      noneRow(f.kitchen),
+    ]);
+    await scoped((tx) => clearRoutingCell(tx, f.cfg, all));
+    expect(await readStoredCells(f)).toEqual([noneRow(f.kitchen)]);
+  });
+
+  it("stores explicit No preparation on No category × Every zone, and clears it", async () => {
+    const f = await setup();
+    const address: CellAddress = { row: { kind: "no_category" }, zoneId: null };
+    await scoped((tx) => setRoutingCell(tx, f.cfg, address, noPrep));
+    expect(await readStoredCells(f)).toEqual([
+      {
+        category_id: null,
+        product_id: null,
+        zone_id: null,
+        station_id: null,
+        no_preparation: 1,
+        no_category: 1,
+      },
+    ]);
+    await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
+    expect(await readStoredCells(f)).toEqual([]);
+  });
+
+  it("refuses an inactive zone and an inactive station for a No category cell with the same codes as any row", async () => {
+    const f = await setup();
+    await scoped((tx) => deactivateServiceZone(tx, f.cfg, f.inside));
+    const inside: CellAddress = { row: { kind: "no_category" }, zoneId: f.inside };
+    await expect(
+      scoped((tx) => setRoutingCell(tx, f.cfg, inside, station(f.bar))),
+    ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId: f.inside } });
+    await expect(scoped((tx) => clearRoutingCell(tx, f.cfg, inside))).rejects.toMatchObject({
+      code: "service_zone.not_found",
+      params: { zoneId: f.inside },
+    });
+    for (const zoneId of [null, f.terrace])
+      await expect(
+        scoped((tx) =>
+          setRoutingCell(
+            tx,
+            f.cfg,
+            { row: { kind: "no_category" }, zoneId },
+            station(f.switchedOff),
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: "route.station_inactive",
+        params: { stationId: f.switchedOff },
+      });
+    expect(await readStoredCells(f)).toEqual([]);
+  });
+
   it("refuses the All × Every zone address for both set and clear", async () => {
     const f = await setup();
     const address: CellAddress = { row: { kind: "all" }, zoneId: null };
@@ -541,6 +656,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         zone_id: f.terrace,
         station_id: f.kitchen,
         no_preparation: 0,
+        no_category: 0,
       },
     ]);
   });

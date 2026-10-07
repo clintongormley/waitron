@@ -547,6 +547,115 @@ describe("selectRoutingCell", () => {
   });
 });
 
+describe("the No category row", () => {
+  const noCategory: RoutingRow = { kind: "no_category" };
+  const rules: RoutingRules = {
+    ...base,
+    cells: cells(
+      [product("bread"), "terrace", station("bar")],
+      [noCategory, "terrace", station("terraceBar")],
+      [noCategory, null, station("mainBar")],
+      [all, "terrace", station("cocktailBar")],
+      [all, "inside", station("cocktailBar")],
+    ),
+  };
+
+  it("an uncategorised product tries its product row, then No category, then All categories, zone before Every zone at each row", () => {
+    const walk: [RoutingRow, string | null][] = [
+      [product("bread"), "terrace"],
+      [noCategory, "terrace"],
+      [noCategory, null],
+      [all, "terrace"],
+    ];
+    let remaining = rules;
+    for (const [row, zoneId] of walk) {
+      expect(chooseMaker(remaining, bread, "terrace", null).decidedBy).toEqual(
+        decidedByCell(row, zoneId),
+      );
+      remaining = without(remaining, row, zoneId);
+    }
+    expect(chooseMaker(remaining, bread, "terrace", null)).toEqual({
+      route: station("kitchen"),
+      decidedBy: { kind: "default" },
+      fallbacks: [],
+      noReplacement: false,
+    });
+    expect(chooseMaker(rules, bread, "inside", null)).toEqual({
+      route: station("mainBar"),
+      decidedBy: decidedByCell(noCategory, null),
+      fallbacks: [],
+      noReplacement: false,
+    });
+  });
+
+  it("a variant of an uncategorised product follows No category, not the category it stores", () => {
+    const withStored: RoutingRules = {
+      ...rules,
+      cells: [...rules.cells, ...cells([category("drinks"), null, station("bar")])],
+    };
+    const roll = { productId: "bread-roll", routedProductId: "bread", categoryId: null };
+    expect(chooseMaker(withStored, roll, "inside", null).decidedBy).toEqual(
+      decidedByCell(noCategory, null),
+    );
+    expect(chooseMaker(withStored, roll, "terrace", null).decidedBy).toEqual(
+      decidedByCell(product("bread"), "terrace"),
+    );
+  });
+
+  it("a No category cell never decides for a categorised product, nor for a category row", () => {
+    const drinksOnly: RoutingRules = { ...rules, cells: rules.cells.slice(1) };
+    for (const zoneId of ["terrace", "inside"]) {
+      expect(chooseMaker(drinksOnly, lager, zoneId, null).decidedBy).toEqual(
+        decidedByCell(all, zoneId),
+      );
+      expect(selectRoutingCell(drinksOnly, category("food"), zoneId).decidedBy).toEqual(
+        decidedByCell(all, zoneId),
+      );
+    }
+    expect(chooseMaker(drinksOnly, lager, null, null).decidedBy).toEqual({ kind: "default" });
+  });
+
+  it("selectRoutingCell for the No category row: its zone cell, its Every zone, then All × zone, then the default", () => {
+    const row = rules.cells.slice(1);
+    expect(selectRoutingCell({ ...rules, cells: row }, noCategory, "terrace")).toEqual({
+      target: station("terraceBar"),
+      decidedBy: decidedByCell(noCategory, "terrace"),
+    });
+    const noZoneCell = without({ ...rules, cells: row }, noCategory, "terrace");
+    expect(selectRoutingCell(noZoneCell, noCategory, "terrace")).toEqual({
+      target: station("mainBar"),
+      decidedBy: decidedByCell(noCategory, null),
+    });
+    const noRowCells = without(noZoneCell, noCategory, null);
+    expect(selectRoutingCell(noRowCells, noCategory, "terrace")).toEqual({
+      target: station("cocktailBar"),
+      decidedBy: decidedByCell(all, "terrace"),
+    });
+    expect(selectRoutingCell(noRowCells, noCategory, "garden")).toEqual({
+      target: station("kitchen"),
+      decidedBy: { kind: "default" },
+    });
+  });
+
+  it("explicit No preparation on No category × Every zone stops the walk", () => {
+    const stops: RoutingRules = {
+      ...extrasRules,
+      cells: cells([noCategory, null, noPreparation], [all, "terrace", station("fryer")]),
+    };
+    expect(chooseMaker(stops, bread, "terrace", null)).toEqual({
+      route: noPreparation,
+      decidedBy: decidedByCell(noCategory, null),
+      fallbacks: [],
+      noReplacement: false,
+    });
+    expect(chooseExtraMaker(stops, bread, "terrace", null, "grill")).toEqual({
+      outcome: { kind: "follows_dish", why: "no_preparation" },
+      decidedBy: decidedByCell(noCategory, null),
+      fallbacks: [],
+    });
+  });
+});
+
 describe("folderAncestors", () => {
   it("walks up to the top, and stops at a loop", () => {
     expect(folderAncestors(parentOf, "cocktails")).toEqual(["cocktails", "drinks"]);

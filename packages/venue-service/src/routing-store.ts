@@ -59,7 +59,9 @@ const readCell = (row: typeof routingCells.$inferSelect): RoutingCell => ({
       ? { kind: "product", productId: row.productId }
       : row.categoryId !== null
         ? { kind: "category", categoryId: row.categoryId }
-        : { kind: "all" },
+        : row.noCategory
+          ? { kind: "no_category" }
+          : { kind: "all" },
   zoneId: row.zoneId,
   target: readTarget(row),
 });
@@ -135,6 +137,7 @@ function cellAt(cfg: VenueScope, { row, zoneId }: CellAddress) {
     row.kind === "product"
       ? eq(routingCells.productId, row.productId)
       : isNull(routingCells.productId),
+    eq(routingCells.noCategory, row.kind === "no_category"),
     zoneId === null ? isNull(routingCells.zoneId) : eq(routingCells.zoneId, zoneId),
   );
 }
@@ -158,6 +161,7 @@ export async function setRoutingCell(
     locationId: cfg.locationId,
     categoryId: row.kind === "category" ? row.categoryId : null,
     productId: row.kind === "product" ? row.productId : null,
+    noCategory: row.kind === "no_category",
     zoneId,
     ...stored,
   });
