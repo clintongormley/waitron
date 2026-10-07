@@ -62,6 +62,7 @@ export class MenuStatePoll {
       this.#applied.set(zoneId, request);
       this.#options.onState(zoneId, state);
     } catch (error) {
+      if (read.signal.aborted || request < (this.#applied.get(zoneId) ?? 0)) return;
       if ((error as { code?: string } | undefined)?.code === "session.required") this.stop();
     } finally {
       clearTimeout(limit);

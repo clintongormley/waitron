@@ -35,7 +35,12 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { verifySecretAsync } from "@waitron/identity";
-import { deleteDeviceProfile, setProfilePrinterLists } from "@waitron/layouts";
+import {
+  deleteDeviceProfile,
+  emptyPrinterLists,
+  resolveDevicePrinterId,
+  setProfilePrinterLists,
+} from "@waitron/layouts";
 import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -629,7 +634,7 @@ describe("acceptDeviceJoinRequest", () => {
     expect(status).toBe("approved");
   });
 
-  it("starts the device on the first printer of each of its profile's lists", async () => {
+  it("starts the device on Use default for each printer role", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");
     const [p1, p2, p3] = await suite.db
@@ -645,6 +650,7 @@ describe("acceptDeviceJoinRequest", () => {
       .returning({ id: printers.id });
     const accepted = await withTransaction(suite.db, async (tx) => {
       await setProfilePrinterLists(tx, profileId, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [p2!.id, p1!.id],
         paymentSlipPrinterIds: [p3!.id],
       });
@@ -658,7 +664,7 @@ describe("acceptDeviceJoinRequest", () => {
       })
       .from(devices)
       .where(eq(devices.id, accepted.deviceId));
-    expect(row).toEqual({ receiptPrinterId: p2!.id, paymentSlipPrinterId: p3!.id });
+    expect(row).toEqual({ receiptPrinterId: null, paymentSlipPrinterId: null });
   });
 
   it("rolls the consumption back when the device insert fails", async () => {
@@ -832,7 +838,7 @@ describe("a returning disabled device", () => {
     });
   }
 
-  it("keeps the printers it held under the same profile, and takes the new profile's first under another", async () => {
+  it("keeps the printers it held under the same profile, and goes to Use default under another", async () => {
     const venue = await setupVenue(suite.db);
     const [p1, p2, p3] = await suite.db
       .insert(printers)
@@ -848,16 +854,26 @@ describe("a returning disabled device", () => {
     const same = await seedProfile("till");
     const other = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
-      setProfilePrinterLists(tx, same, { receiptPrinterIds: [p1!.id], paymentSlipPrinterIds: [] }),
+      setProfilePrinterLists(tx, same, {
+        ...emptyPrinterLists(),
+        receiptPrinterIds: [p1!.id],
+        paymentSlipPrinterIds: [],
+      }),
     );
     const deviceId = await disabledDevice(venue, same);
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: p1!.id })
+      .where(eq(devices.id, deviceId));
     // The profile's first printer is no longer the one the device holds.
     await withTransaction(suite.db, async (tx) => {
       await setProfilePrinterLists(tx, same, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [p3!.id, p1!.id],
         paymentSlipPrinterIds: [],
       });
       await setProfilePrinterLists(tx, other, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [p2!.id],
         paymentSlipPrinterIds: [p3!.id],
       });
@@ -878,7 +894,7 @@ describe("a returning disabled device", () => {
 
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
     await comeBack(venue, deviceId, { label: "Bar till", profileId: other });
-    expect(await printersOf()).toEqual({ receiptPrinterId: p2!.id, paymentSlipPrinterId: p3!.id });
+    expect(await printersOf()).toEqual({ receiptPrinterId: null, paymentSlipPrinterId: null });
   });
 
   it("binds the kitchen screen it comes back as to the station the accept names", async () => {
@@ -1062,8 +1078,10 @@ describe("a returning disabled device", () => {
     const other = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, other, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [printer!.id],
         paymentSlipPrinterIds: [],
+        receiptPrinterDefaultId: printer!.id,
       }),
     );
     const deviceId = await disabledDevice(venue, first);
@@ -1088,7 +1106,10 @@ describe("a returning disabled device", () => {
       .select({ receiptPrinterId: devices.receiptPrinterId, locationId: devices.locationId })
       .from(devices)
       .where(eq(devices.id, deviceId));
-    expect(row).toEqual({ receiptPrinterId: printer!.id, locationId: venue.cfg.locationId });
+    expect(row).toEqual({ receiptPrinterId: null, locationId: venue.cfg.locationId });
+    expect(
+      await withTransaction(suite.db, (tx) => resolveDevicePrinterId(tx, deviceId, "receipt")),
+    ).toBe(printer!.id);
   });
 
   it("does not mark a request returning when an ACTIVE device has its id", async () => {

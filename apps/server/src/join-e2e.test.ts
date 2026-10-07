@@ -27,7 +27,8 @@ import {
 } from "@waitron/identity";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { cardReaders, deviceCardReaders } from "@waitron/payments";
+import { resolveDevicePrinterId } from "@waitron/layouts";
+import { cardReaders, deviceCardReaders, deviceProfileCardReaders } from "@waitron/payments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mountDeviceApi } from "./device-api.js";
@@ -83,6 +84,9 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 const noopLog: Logger = () => {};
+/** Puts the receipt role on Use default: a session-guarded write that changes nothing on a device
+ * already there. */
+const USE_DEFAULT_RECEIPT = { role: "receipt", selection: "default", via: "list" };
 
 /** `devMode` is left unset, so the real admin-approval flow runs rather than the dev auto-accept. */
 function mountBoth(cfg: TillConfig, pairingMode: PairingMode = createPairingMode()): Hono {
@@ -565,8 +569,9 @@ describe("a disabled device comes back as the same device", () => {
     return rows.length;
   }
 
+  /** A session-guarded request that changes nothing on a device left on its profile's defaults. */
   async function sessionRead(app: Hono, cookie: string): Promise<Response> {
-    return send(app, "PUT", "/api/device/printers", { cookie, body: {} });
+    return send(app, "PUT", "/api/device/equipment", { cookie, body: USE_DEFAULT_RECEIPT });
   }
 
   /** {@link mountBoth} plus the till's routes, so a sign-in goes through `POST /api/session`. */
@@ -628,6 +633,9 @@ describe("a disabled device comes back as the same device", () => {
       .insert(cardReaders)
       .values({ provider: "fake", providerRef: "reader-1", name: "Lector 1" })
       .returning({ id: cardReaders.id });
+    await suite.db
+      .insert(deviceProfileCardReaders)
+      .values({ deviceProfileId: profileId, readerId: reader!.id, position: 0 });
     await suite.db.insert(deviceCardReaders).values({ deviceId, readerId: reader!.id });
     // Read once while active, so the old token is in the verified-token memory when it is refused.
     expect((await send(app, "GET", "/api/device/me", { cookie: oldJar })).status).toBe(200);
@@ -700,9 +708,9 @@ describe("a disabled device comes back as the same device", () => {
       loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
     );
     const sessionCookie = `waitron_till_session=${session.token}`;
-    const live = await send(app, "PUT", "/api/device/printers", {
+    const live = await send(app, "PUT", "/api/device/equipment", {
       cookie: sessionCookie,
-      body: {},
+      body: USE_DEFAULT_RECEIPT,
     });
     expect(live.status).toBe(200);
     await disable(app, venue, deviceId);
@@ -712,9 +720,9 @@ describe("a disabled device comes back as the same device", () => {
       200,
     );
 
-    const after = await send(app, "PUT", "/api/device/printers", {
+    const after = await send(app, "PUT", "/api/device/equipment", {
       cookie: sessionCookie,
-      body: {},
+      body: USE_DEFAULT_RECEIPT,
     });
     expect(after.status).toBe(401);
     expect((await errorOf(after)).code).toBe("session.required");
@@ -1380,7 +1388,7 @@ describe("a disabled device comes back as the same device", () => {
     ]);
   });
 
-  it("a returning device whose profile was deleted is enabled on a live profile, with that profile's first usable printers", async () => {
+  it("a returning device whose profile was deleted is enabled on a live profile, printing on that profile's default", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
     const [oldPrinter, newPrinter] = await suite.db
@@ -1404,11 +1412,17 @@ describe("a disabled device comes back as the same device", () => {
     const newProfile = await seedProfile("till");
     await suite.db.insert(deviceProfilePrinters).values([
       { deviceProfileId: oldProfile, printerId: oldPrinter!.id, role: "receipt", position: 0 },
-      { deviceProfileId: newProfile, printerId: newPrinter!.id, role: "receipt", position: 0 },
+      {
+        deviceProfileId: newProfile,
+        printerId: newPrinter!.id,
+        role: "receipt",
+        position: 0,
+        isDefault: true,
+      },
     ]);
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", oldProfile);
-    expect((await deviceRow(deviceId)).receiptPrinterId).toBe(oldPrinter!.id);
+    expect((await deviceRow(deviceId)).receiptPrinterId).toBeNull();
     await disable(app, venue, deviceId);
     expect((await deleteProfile(venue, oldProfile)).status).toBe(204);
 
@@ -1422,9 +1436,12 @@ describe("a disabled device comes back as the same device", () => {
       id: deviceId,
       active: true,
       deviceProfileId: newProfile,
-      receiptPrinterId: newPrinter!.id,
+      receiptPrinterId: null,
       paymentSlipPrinterId: null,
     });
+    expect(
+      await withTransaction(suite.db, (tx) => resolveDevicePrinterId(tx, deviceId, "receipt")),
+    ).toBe(newPrinter!.id);
     expect(await pendingCount()).toBe(0);
   });
 

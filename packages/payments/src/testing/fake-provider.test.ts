@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError } from "@waitron/db";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openIncidents } from "@waitron/core";
 import {
@@ -21,7 +22,9 @@ import { FakePaymentProvider } from "./fake-provider.js";
 import {
   billPaymentOfRow,
   freshNif,
+  readerOfRow,
   seedBillPayment,
+  seedHeldReader,
   seedPaymentPolicy,
   seedSale,
   seedWorkingOrder,
@@ -86,6 +89,120 @@ describe("FakePaymentProvider.collect", () => {
     expect(recovered.state).toBe("captured");
     expect(recovered.settledAt).not.toBeNull();
   });
+});
+
+describe("FakePaymentProvider.collect with a card reader", () => {
+  it("names the reader on every row it writes: captured, failed, attempting and accepted offline", async () => {
+    const s = await seedTenant();
+    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
+    const readerId = await seedHeldReader(suite.db, s.deviceId);
+    const provider = new FakePaymentProvider(suite.db);
+    const pay = () =>
+      provider.collect({
+        origin: deviceOrigin(s.deviceId),
+        workingOrderId: brandWorkingOrderId(s.workingOrderId),
+        amount: decimal("10.00"),
+        allowOffline: true,
+        readerId,
+      });
+
+    const captured = await pay();
+    provider.failNextCollect();
+    const failed = await pay();
+    provider.stallNextCollect();
+    const stalled = await pay();
+    provider.offlineNextCollect();
+    const offline = await pay();
+
+    expect([captured.state, failed.state, stalled.state, offline.state]).toEqual([
+      "captured",
+      "failed",
+      "attempting",
+      "accepted_offline",
+    ]);
+    for (const result of [captured, failed, stalled, offline]) {
+      expect(await readerOfRow(suite.db, result.paymentRef)).toBe(readerId);
+    }
+  });
+  type Script = "captured" | "failed" | "attempting" | "offline" | "crash";
+  const scripts: Script[] = ["captured", "failed", "attempting", "offline", "crash"];
+  function arm(provider: FakePaymentProvider, script: Script): void {
+    if (script === "failed") provider.failNextCollect();
+    if (script === "attempting") provider.stallNextCollect();
+    if (script === "offline") provider.offlineNextCollect();
+    if (script === "crash") provider.crashNextCollect("captured");
+  }
+  async function rowCount(): Promise<number> {
+    const rows = await suite.db.execute<{ n: number }>(sql`select count(*) as n from payments`);
+    return Number(rows.rows[0]!.n);
+  }
+
+  it.each(scripts)(
+    "a collect scripted %s on a reader the device does not hold is refused reader.not_held, writing no row",
+    async (script) => {
+      const s = await seedTenant();
+      await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
+      const { deviceId: other } = await seedDevice(suite.db, { locationId: s.locationId });
+      const readerId = await seedHeldReader(suite.db, other);
+      const provider = new FakePaymentProvider(suite.db);
+      arm(provider, script);
+      const before = await rowCount();
+
+      const error = await captureError(() =>
+        provider.collect({
+          origin: deviceOrigin(s.deviceId),
+          workingOrderId: brandWorkingOrderId(s.workingOrderId),
+          amount: decimal("10.00"),
+          allowOffline: true,
+          readerId,
+        }),
+      );
+
+      expect(error).toBeInstanceOf(AppError);
+      expect((error as AppError).code).toBe("reader.not_held");
+      expect(await rowCount()).toBe(before);
+    },
+  );
+
+  it.each(scripts)(
+    "a collect scripted %s on a held reader another device has a payment in progress on is refused reader.payment_in_progress, writing no row",
+    async (script) => {
+      const s = await seedTenant();
+      await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
+      const { deviceId: other } = await seedDevice(suite.db, { locationId: s.locationId });
+      const readerId = await seedHeldReader(suite.db, other);
+      await suite.db.transaction((tx) =>
+        insertAttempting(tx, {
+          origin: deviceOrigin(other),
+          workingOrderId: s.workingOrderId,
+          provider: "fake",
+          paymentRef: `other-${script}`,
+          amount: decimal("5.00"),
+          readerId,
+        }),
+      );
+      await suite.db.execute(
+        sql`update card_reader_holders set device_id = ${s.deviceId} where reader_id = ${readerId}`,
+      );
+      const provider = new FakePaymentProvider(suite.db);
+      arm(provider, script);
+      const before = await rowCount();
+
+      const error = await captureError(() =>
+        provider.collect({
+          origin: deviceOrigin(s.deviceId),
+          workingOrderId: brandWorkingOrderId(s.workingOrderId),
+          amount: decimal("10.00"),
+          allowOffline: true,
+          readerId,
+        }),
+      );
+
+      expect(error).toBeInstanceOf(AppError);
+      expect((error as AppError).code).toBe("reader.payment_in_progress");
+      expect(await rowCount()).toBe(before);
+    },
+  );
 });
 
 describe("FakePaymentProvider.void", () => {

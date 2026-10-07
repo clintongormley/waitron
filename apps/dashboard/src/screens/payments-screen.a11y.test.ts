@@ -90,6 +90,7 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
     listPaymentProviders: vi.fn().mockResolvedValue(PROVIDERS),
     listReaders: vi.fn().mockResolvedValue(READERS),
+    listReaderHolders: vi.fn().mockResolvedValue([]),
     readerStatus: vi.fn().mockResolvedValue({ online: true }),
     disconnectPaymentProvider: vi.fn().mockResolvedValue(undefined),
     disableReader: vi.fn().mockResolvedValue(undefined),
@@ -151,6 +152,29 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
       await expectNoA11yViolations(host);
     },
   );
+
+  it("renders a reader's equipment label accessibly", async () => {
+    const { el, host } = await mountWidget<PaymentsScreen>(
+      "dashboard-payments-screen",
+      {
+        api: stubApi(),
+        request: vi.fn() as unknown as PaymentsScreen["request"],
+        panels: PANELS,
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=label-r-1]")!
+      .click();
+    await flush(el);
+    await vi.waitFor(() => {
+      const label = el.shadowRoot!.querySelector("dashboard-equipment-label");
+      if (!label?.shadowRoot?.querySelector("[data-test=equipment-label-qr]"))
+        throw new Error("label");
+    });
+    await expectNoA11yViolations(host);
+  });
 
   it("renders an open connect form accessibly", async () => {
     const { el, host } = await mountWidget<PaymentsScreen>(

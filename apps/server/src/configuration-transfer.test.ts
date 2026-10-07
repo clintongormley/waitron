@@ -63,6 +63,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   deleteDeviceProfile,
+  emptyPrinterLists,
   getPrintedReceipt,
   getReceipt,
   readProfilePrinterLists,
@@ -1625,6 +1626,7 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
       .values({ name: "Counter till", formFactor: "tablet-landscape" })
       .returning({ id: deviceProfiles.id });
     await setProfilePrinterLists(tx, profile!.id, {
+      ...emptyPrinterLists(),
       receiptPrinterIds: [added[1]!.id, added[0]!.id],
       paymentSlipPrinterIds: [added[2]!.id],
     });
@@ -2369,6 +2371,7 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
       .returning({ id: deviceProfiles.id });
     for (const profile of [live!, retired!]) {
       await setProfilePrinterLists(tx, profile.id, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [printer!.id],
         paymentSlipPrinterIds: [],
       });

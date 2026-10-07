@@ -749,10 +749,21 @@ declare module "@waitron/shared" {
     "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
     "receipt.not_printed": Record<string, never>;
     /**
-     * A request named a printer the device may not use (`chooseDevicePrinter`, `@waitron/layouts`).
-     * `field` carries the FIELD NAME only, never the id value.
+     * A request named equipment the device may not newly choose: unknown, not on its profile's list
+     * for the role, at another location, switched off, or a disabled or unpaired reader
+     * (`selectDeviceEquipment`). `field` carries the FIELD NAME only, never the id value.
      */
-    "device.binding_invalid": { field: "receiptPrinterId" | "paymentSlipPrinterId" };
+    "device.binding_invalid": { field: EquipmentField };
+    /**
+     * A list choice not confirmed as a takeover, or a manager's choice, named a portable item another
+     * device holds. Names that device and the person signed in on it, if anyone.
+     */
+    "device.equipment_held": {
+      field: EquipmentField;
+      holderDeviceId: string;
+      holderDeviceName: string;
+      holderPersonName: string | null;
+    };
     /**
      * A knock arrived at `POST /api/device/join` while pairing mode is shut, or after it shut during
      * the knock — the ordinary state, not an anomaly. NO params: nothing about the window is the
@@ -860,8 +871,9 @@ declare module "@waitron/shared" {
      */
     "setup.not_ready": Record<string, never>;
     /**
-     * A manual open-drawer request found no active receipt printer on the requesting device, so
-     * there is nothing to send the kick through. `deviceId` names the device.
+     * A manual open-drawer request found no active cash drawer choice on the requesting device (its
+     * own, else its profile's default), so there is nothing to send the kick through. `deviceId`
+     * names the device.
      */
     "drawer.no_printer": { deviceId: string };
     "drawer.not_attached": { printerId: string };
@@ -1247,3 +1259,7 @@ declare module "@waitron/shared" {
     };
   }
 }
+
+/** The request field naming each equipment role. */
+export type EquipmentField =
+  "receiptPrinterId" | "paymentSlipPrinterId" | "cashDrawerPrinterId" | "cardReaderId";

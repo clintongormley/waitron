@@ -93,5 +93,9 @@ declare module "@waitron/shared" {
     /** A card attempt refused before it is written because the device moved to another profile
      * after the route checked the request under the old one. */
     "device.profile_changed": Record<string, never>;
+    /** Paying on a card reader the starting device does not hold. */
+    "reader.not_held": { readerId: string };
+    /** Another device has a payment in progress on the card reader. */
+    "reader.payment_in_progress": { readerId: string };
   }
 }

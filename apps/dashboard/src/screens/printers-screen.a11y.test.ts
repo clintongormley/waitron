@@ -51,6 +51,8 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
+    portable: false,
+    holder: null,
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -68,6 +70,8 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
+    portable: false,
+    holder: null,
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -85,6 +89,8 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
+    portable: false,
+    holder: null,
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -348,6 +354,43 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         await flush(el);
         await expectNoA11yViolations(host);
       }
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it.each([390, 1280])(
+    "renders a portable printer's holder and its equipment label accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const printers = await stubApi().listPrinters();
+      const portable = {
+        ...printers[0]!,
+        portable: true,
+        holder: { deviceId: "d7", deviceName: "Móvil 2", personName: "Ana" },
+      };
+      const { el, host } = await mountWidget<PrintersScreen>(
+        "dashboard-printers-screen",
+        { api: stubApi(false, { listPrinters: vi.fn().mockResolvedValue([portable]) }) },
+        theme,
+      );
+      await flush(el);
+      q(el, "wt-tabs")!
+        .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
+        .click();
+      await flush(el);
+      await openPrinter(el, portable.id);
+      q(el, "[data-test=printer-section-calibration]")!
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+        .click();
+      await flush(el);
+      expect(q(el, "[data-test=printer-holder]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      q(el, "[data-test=open-equipment-label]")!.click();
+      await flush(el);
+      await vi.waitFor(() => expect(q(el, "[data-test=equipment-label-qr]")).not.toBeNull());
+      await flush(el);
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
       await page.viewport(1280, 900);
     },
   );

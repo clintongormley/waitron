@@ -22,6 +22,8 @@ const printer: Printer = {
   paperWidth: "80mm",
   resolution: "180dpi",
   hasCashDrawer: false,
+  portable: false,
+  holder: null,
   pendingJobs: 0,
   lastPrintAt: null,
   lastPrintAgentId: null,
@@ -180,6 +182,7 @@ for (const [name, changed, initial] of [
   ["printer-paper-width", "58mm", "80mm"],
   ["printer-resolution", "203dpi", "180dpi"],
   ["printer-cash-drawer", true, false],
+  ["printer-portable", true, false],
 ] as const) {
   it(`calibration unload tracks ${name} and its revert`, async () => {
     const { app, screen } = await mount();
@@ -376,6 +379,33 @@ it("a second calibration save sends only the still-unsaved settings", async () =
   q(screen, "[data-test=save-printer-p1]")!.click();
   await expect.poll(() => modal(screen)).toBeNull();
   expect(writes).toEqual([{ paperWidth: "58mm" }, { resolution: "203dpi" }]);
+  expect(unload()).toBe(false);
+});
+it("a saved portable setting is not sent again by the next calibration save", async () => {
+  let finish!: () => void;
+  const writes: unknown[] = [];
+  const { screen } = await mount({
+    updatePrinter: async (_id, patch) => {
+      writes.push(patch);
+      if (writes.length === 1)
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+    },
+  });
+  await lastStep(screen);
+  change(screen, "printer-portable", true);
+  q(screen, "[data-test=save-printer-p1]")!.click();
+  await expect.poll(() => typeof finish).toBe("function");
+  change(screen, "printer-resolution", "203dpi");
+  finish();
+  await expect
+    .poll(() => q(screen, "[data-test=save-printer-p1]")?.hasAttribute("loading"))
+    .toBe(false);
+  expect(unload()).toBe(true);
+  q(screen, "[data-test=save-printer-p1]")!.click();
+  await expect.poll(() => modal(screen)).toBeNull();
+  expect(writes).toEqual([{ portable: true }, { resolution: "203dpi" }]);
   expect(unload()).toBe(false);
 });
 for (const result of ["success", "refusal"] as const) {

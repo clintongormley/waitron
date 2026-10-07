@@ -27,6 +27,8 @@ import {
 } from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
+import { formatEquipmentCode } from "@waitron/shared";
+import { decodeQrImage } from "../testing/decode-qr.js";
 
 beforeEach(() => setLocale("en"));
 beforeEach(() => {
@@ -80,6 +82,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listPaymentProviders: vi.fn().mockResolvedValue(PROVIDERS),
     listReaders: vi.fn().mockResolvedValue(READERS),
+    listReaderHolders: vi.fn().mockResolvedValue([]),
     readerStatus: vi.fn().mockResolvedValue({ online: true } as ReaderStatusView),
     disconnectPaymentProvider: vi.fn().mockResolvedValue(undefined),
     disableReader: vi.fn().mockResolvedValue(undefined),
@@ -2119,5 +2122,58 @@ describe("the readers' status reads", () => {
     host.remove();
     document.body.appendChild(host);
     await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("who carries each card reader, and its equipment label", () => {
+  const READER_ID = "7d2c9a10-5b3e-4f61-8a2d-1c0e9b8a7f65";
+  const carried: ReaderRow = { ...READERS[0]!, id: READER_ID, name: "Terraza" };
+
+  it("names the device carrying each reader and who is signed in on it", async () => {
+    const { el } = await mount(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue([READERS[0], carried]),
+        listReaderHolders: vi.fn().mockResolvedValue([
+          {
+            readerId: READER_ID,
+            holder: { deviceId: "d2", deviceName: "Móvil 2", personName: "Ana" },
+            paymentInProgressDeviceIds: [],
+          },
+        ]),
+      }),
+    );
+    const holderOf = async (id: string) => {
+      qCell(el, `[data-test=details-${id}]`)!.click();
+      await flush(el);
+      const text = q(el, "[data-test=reader-holder]")!.textContent!.replace(/\s+/g, " ").trim();
+      q(el, "[data-test=close-reader-editor]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
+      return text;
+    };
+    expect(await holderOf(READER_ID)).toBe(
+      `${t("payments.reader_holder")}: ${t("equipment.holder_with_person")
+        .replace("{device}", "Móvil 2")
+        .replace("{person}", "Ana")}`,
+    );
+    expect(await holderOf("r-1")).toBe(
+      `${t("payments.reader_holder")}: ${t("equipment.holder_none")}`,
+    );
+  });
+
+  it("the label modal shows the exact code text formatEquipmentCode gives for this reader, and its QR image decodes to that text", async () => {
+    const { el } = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue([carried]) }));
+    qCell(el, `[data-test=label-${READER_ID}]`)!.click();
+    await flush(el);
+    const label = () =>
+      q(el, "dashboard-equipment-label")!.shadowRoot!.querySelector<HTMLElement>(
+        "[data-test=equipment-label-qr]",
+      );
+    await vi.waitFor(() => expect(label()).not.toBeNull());
+    const inLabel = (selector: string) =>
+      q(el, "dashboard-equipment-label")!.shadowRoot!.querySelector(selector)!.textContent!.trim();
+    const code = formatEquipmentCode("reader", READER_ID);
+    expect(inLabel("[data-test=equipment-label-code]")).toBe(code);
+    expect(inLabel("[data-test=equipment-label-name]")).toBe("Terraza");
+    expect(await decodeQrImage((label() as HTMLImageElement).src)).toBe(code);
   });
 });

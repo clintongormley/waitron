@@ -108,9 +108,10 @@ export interface TillInfo {
   courses: TillCourse[];
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
   /**
-   * The paying device's DEFAULT reader's row id, or absent when it has none. `cardProvider` only names a
-   * provider TYPE and a venue can have several readers on one provider, so this is what finds the
-   * default reader's NAME in {@link activeReaders}.
+   * The row id of the active reader the paying device resolves to (its chosen reader, else its
+   * profile's default) when the till can drive it; absent otherwise. `cardProvider` only names a
+   * provider TYPE and a venue can have several readers on one provider, so this is what finds that
+   * reader's NAME in {@link activeReaders}.
    */
   defaultReaderId?: string;
   /** The venue's ACTIVE card readers, `[]` when none; feeds the payment-time reader picker. */
@@ -1364,12 +1365,6 @@ export interface DeviceIdentity {
   name: string;
   stationId: string | null;
   watcherId?: string | null;
-  /** The device's current receipt printer; `null` when none. */
-  receiptPrinterId: string | null;
-  /** The device's current payment slip printer; `null` when none. */
-  paymentSlipPrinterId: string | null;
-  /** The switched-on printers the device's profile lists for each kind of printing, in list order. */
-  printerChoices: { receipt: PrinterChoice[]; paymentSlip: PrinterChoice[] };
   /** The device's active profile. A server too old to send it offers no switch. */
   profileId?: string;
   /** The profiles a signed-in person may switch the device to, the active one first. */
@@ -1381,28 +1376,61 @@ export interface ProfileChoice {
   name: string;
 }
 
-/** `POST /api/device/active-profile` success: the device's profile and printers as stored. */
+/** `POST /api/device/active-profile` success: the device's profile as stored. */
 export interface DeviceProfileSwitched {
   activeProfileId: string;
-  receiptPrinterId: string | null;
-  paymentSlipPrinterId: string | null;
 }
 
-export interface PrinterChoice {
+/** The four things a device prints, opens and pays on, in the order the server lists them. */
+export type EquipmentRole = "receipt" | "payment_slip" | "cash_drawer" | "card_terminal";
+
+/** Another device holding a portable item, and who is signed in on it, if anyone. */
+export interface EquipmentHolder {
+  deviceId: string;
+  deviceName: string;
+  personName: string | null;
+}
+
+export interface EquipmentItem {
   id: string;
   name: string;
+  portable: boolean;
+  /** Switched on; a reader also still paired. */
+  available: boolean;
+  /** A reader another device has a payment in progress on. */
+  busy: boolean;
+  /** Another device holding it; never this one. */
+  heldBy: EquipmentHolder | null;
+  /** A reader's provider as the venue stores it (`sumup`, `stripe`); a printer has none. */
+  provider?: string;
 }
 
-/** A device's printer switch: a field left out is left as it is. */
-export interface DevicePrintersChange {
-  receiptPrinterId?: string | null;
-  paymentSlipPrinterId?: string | null;
+/** One role of the device: what it chose, its profile's default, and what it resolves to now. */
+export interface RoleEquipment {
+  role: EquipmentRole;
+  /** `default`: the device follows its profile's default. */
+  selection: "default" | "item";
+  chosenId: string | null;
+  /** What the role prints, opens or pays on now; `null` for none. */
+  resolved: { id: string; name: string; available: boolean; provider?: string } | null;
+  chosen: EquipmentItem | null;
+  default: EquipmentItem | null;
+  /** What the device may newly choose for the role, in list order. */
+  choices: EquipmentItem[];
 }
 
-/** `PUT /api/device/printers` success: the device's current printers as stored. */
-export interface DevicePrinters {
-  receiptPrinterId: string | null;
-  paymentSlipPrinterId: string | null;
+/** `GET` and `PUT /api/device/equipment` success: always the four roles. */
+export interface DeviceEquipment {
+  roles: RoleEquipment[];
+}
+
+/** `PUT /api/device/equipment`'s body. A `scan`, or a `list` choice sent with `takeOver`, takes an
+ * item another device holds; a `list` choice without it is refused `device.equipment_held`. */
+export interface EquipmentChange {
+  role: EquipmentRole;
+  selection: "default" | { id: string };
+  via: "scan" | "list";
+  takeOver?: boolean;
 }
 
 /**
@@ -2140,13 +2168,13 @@ export class TillApi {
 
   /**
    * Open the cash drawer with no sale → `POST /api/drawer/open`. Authorized and audited server-side; the
-   * device's receipt printer is resolved there, so it takes no id.
+   * device's drawer is resolved there, so it takes no id.
    *
    * An operator whose role lacks `cash.drawer` is refused
    * `authorization.not_permitted` (403); the caller then fetches {@link listDrawerAuthorizers} and
    * retries with `override: { personId, pin }` for the authorizing supervisor. The override travels
    * ONLY in this request's body, never a URL, and only when supplied. A wrong PIN rejects `pin.invalid`
-   * (401); a device with no receipt printer `drawer.no_printer` (400).
+   * (401); a device with no drawer `drawer.no_printer` (400).
    */
   async openDrawer(override?: { personId: string; pin: string }): Promise<void> {
     await this.#request<void>("/api/drawer/open", "POST", override ? { override } : {});
@@ -2417,15 +2445,24 @@ export class TillApi {
     });
   }
 
+  /** The device's equipment → `GET /api/device/equipment`, as the device the cookie names. */
+  getDeviceEquipment(options: ReadOptions = {}): Promise<DeviceEquipment> {
+    return this.#request<DeviceEquipment>(
+      "/api/device/equipment",
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
   /**
-   * Switch the session's device's current printers → `PUT /api/device/printers`. Send only the field
-   * that changed: the server refuses a switched-off printer, which a device may still be on.
+   * Choose one of the session's device's equipment → `PUT /api/device/equipment`. Refused
+   * `device.binding_invalid` (naming the role's `field`) for an item the device may not newly choose,
+   * `device.equipment_held` for an unconfirmed list choice of an item another device holds, and
+   * `reader.payment_in_progress` for a reader another device is taking a payment on.
    */
-  setDevicePrinters(
-    change: DevicePrintersChange,
-    options: ReadOptions = {},
-  ): Promise<DevicePrinters> {
-    return this.#request<DevicePrinters>("/api/device/printers", "PUT", change, options.signal);
+  setDeviceEquipment(change: EquipmentChange, options: ReadOptions = {}): Promise<DeviceEquipment> {
+    return this.#request<DeviceEquipment>("/api/device/equipment", "PUT", change, options.signal);
   }
 
   /**

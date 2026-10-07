@@ -47,7 +47,7 @@ import {
   sessions,
 } from "@waitron/identity";
 import { payments } from "@waitron/payments";
-import { deleteDeviceProfile, setProfilePrinterLists } from "@waitron/layouts";
+import { deleteDeviceProfile, emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import "./errors.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
 import type { WatcherBoard } from "./watcher-board.js";
@@ -151,6 +151,14 @@ async function seedPrinter(cfg: TillConfig): Promise<string> {
     .returning({ id: printers.id });
   return row!.id;
 }
+
+/** The parts of `GET`/`PUT /api/device/equipment`'s roles these cases read. */
+type RoleShape = {
+  role: string;
+  selection: "default" | "item";
+  chosenId: string | null;
+  choices: { id: string; name: string }[];
+};
 
 async function deviceBindings(deviceId: string): Promise<{
   deviceProfileId: string;
@@ -1247,17 +1255,22 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     return row!.label;
   }
 
-  /** A till on a profile listing receipt [Bar, Counter] and slip [Bar, Counter]. */
+  /** A till on a profile listing receipt [Bar, Counter] and slip [Bar, Counter], choosing Bar for both. */
   async function tillOnListedProfile(venue: Venue, app: Hono, name = "Caja") {
     const [bar, counter] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter"]);
     const profileId = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [bar!, counter!],
         paymentSlipPrinterIds: [bar!, counter!],
       }),
     );
     const { deviceId } = await knockAndAccept(app, venue, { name, profileId });
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: bar!, paymentSlipPrinterId: bar! })
+      .where(eq(devices.id, deviceId));
     return { bar: bar!, counter: counter!, profileId, deviceId };
   }
 
@@ -1374,7 +1387,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     expect(await labelOf(deviceId)).toBe("Caja");
   });
 
-  it("changes the profile and moves the printers to the new profile's first in the same request", async () => {
+  it("changes the profile and sets the printers in the same request", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const [p1, p2, p3] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter", "Portable"]);
@@ -1382,18 +1395,20 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     const to = await seedProfile("till");
     await withTransaction(suite.db, async (tx) => {
       await setProfilePrinterLists(tx, from, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [p1!],
         paymentSlipPrinterIds: [p1!],
       });
       await setProfilePrinterLists(tx, to, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [p2!, p1!],
         paymentSlipPrinterIds: [p3!, p1!],
       });
     });
     const { deviceId } = await knockAndAccept(app, venue, { name: "Caja", profileId: from });
     expect(await deviceBindings(deviceId)).toMatchObject({
-      receiptPrinterId: p1,
-      paymentSlipPrinterId: p1,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
     });
 
     const res = await edit(app, venue.managerCookie, deviceId, {
@@ -1437,6 +1452,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     const other = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, other, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [elsewhere!],
         paymentSlipPrinterIds: [elsewhere!],
       }),
@@ -1890,7 +1906,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
     });
   });
 
-  it("echoes the printer stored on the device", async () => {
+  it("names the device without its printers, which its equipment carries", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
@@ -1913,13 +1929,16 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       name: "Caja hw",
       stationId: null,
       watcherId: null,
-      receiptPrinterId: printerId,
-      paymentSlipPrinterId: null,
-      // The printer is stored on the device but is on none of its profile's lists.
-      printerChoices: { receipt: [], paymentSlip: [] },
       profileId,
       approvedProfiles: [{ id: profileId, name: profileName }],
     });
+    const equipment = await send(app, "GET", "/api/device/equipment", { cookie: jar });
+    expect(equipment.status).toBe(200);
+    const receipt = ((await equipment.json()) as { roles: RoleShape[] }).roles.find(
+      (role) => role.role === "receipt",
+    )!;
+    // The printer is stored on the device but is on none of its profile's lists.
+    expect(receipt).toMatchObject({ selection: "item", chosenId: printerId, choices: [] });
   });
 
   it("GET /api/device/station 401s an enrolled handheld — it is bound to no station", async () => {
@@ -1942,7 +1961,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
 });
 
 describe("a device's current printers", () => {
-  /** A till on a profile listing receipt [Counter, Bar] and slip [Portable, Bar]. */
+  /** A till on a profile listing receipt [Counter, Bar] and slip [Portable, Bar], choosing the first of each. */
   async function listedTill(venue: Venue, app: Hono) {
     const [bar, counter, portable] = await seedNamedPrinters(venue.cfg, [
       "Bar",
@@ -1952,35 +1971,55 @@ describe("a device's current printers", () => {
     const profileId = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [counter!, bar!],
         paymentSlipPrinterIds: [portable!, bar!],
       }),
     );
     const { deviceId, jar } = await knockAndAccept(app, venue, { name: "Caja", profileId });
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: counter!, paymentSlipPrinterId: portable! })
+      .where(eq(devices.id, deviceId));
     const session = await openTillSession(deviceId);
     return { bar: bar!, counter: counter!, portable: portable!, deviceId, jar, session };
   }
+
+  /** `PUT /api/device/equipment` choosing `selection` for one printer role from the list. */
+  function choose(
+    app: Hono,
+    cookie: string,
+    role: "receipt" | "payment_slip",
+    selection: "default" | { id: string },
+  ) {
+    return send(app, "PUT", "/api/device/equipment", {
+      cookie,
+      body: { role, selection, via: "list" },
+    });
+  }
+
+  const chosenIds = async (res: Response) =>
+    Object.fromEntries(
+      ((await res.json()) as { roles: RoleShape[] }).roles.map((role) => [
+        role.role,
+        role.chosenId,
+      ]),
+    );
 
   it("switches the slip printer to another listed one", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await listedTill(venue, app);
-    const res = await send(app, "PUT", "/api/device/printers", {
-      cookie: `${t.jar}; ${t.session}`,
-      body: { paymentSlipPrinterId: t.bar },
-    });
+    const res = await choose(app, `${t.jar}; ${t.session}`, "payment_slip", { id: t.bar });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ receiptPrinterId: t.counter, paymentSlipPrinterId: t.bar });
+    expect(await chosenIds(res)).toMatchObject({ receipt: t.counter, payment_slip: t.bar });
     expect(await deviceBindings(t.deviceId)).toMatchObject({
       receiptPrinterId: t.counter,
       paymentSlipPrinterId: t.bar,
     });
 
-    const off = await send(app, "PUT", "/api/device/printers", {
-      cookie: `${t.jar}; ${t.session}`,
-      body: { receiptPrinterId: null },
-    });
-    expect(await off.json()).toEqual({ receiptPrinterId: null, paymentSlipPrinterId: t.bar });
+    const off = await choose(app, `${t.jar}; ${t.session}`, "receipt", "default");
+    expect(await chosenIds(off)).toMatchObject({ receipt: null, payment_slip: t.bar });
   });
 
   it("lists each device with its current receipt and slip printers", async () => {
@@ -1996,18 +2035,15 @@ describe("a device's current printers", () => {
     });
   });
 
-  it("refuses a printer not on the list, naming the field, and stores neither choice", async () => {
+  it("refuses a printer not on the list, naming the field, and stores nothing", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await listedTill(venue, app);
-    for (const [body, field] of [
-      [{ receiptPrinterId: t.portable }, "receiptPrinterId"],
-      [{ receiptPrinterId: t.bar, paymentSlipPrinterId: t.counter }, "paymentSlipPrinterId"],
+    for (const [role, id, field] of [
+      ["receipt", t.portable, "receiptPrinterId"],
+      ["payment_slip", t.counter, "paymentSlipPrinterId"],
     ] as const) {
-      const res = await send(app, "PUT", "/api/device/printers", {
-        cookie: `${t.jar}; ${t.session}`,
-        body,
-      });
+      const res = await choose(app, `${t.jar}; ${t.session}`, role, { id });
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
         error: { code: "device.binding_invalid", params: { field } },
@@ -2023,13 +2059,10 @@ describe("a device's current printers", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await listedTill(venue, app);
-    const res = await send(app, "PUT", "/api/device/printers", {
-      cookie: `${t.jar}; ${t.session}`,
-      body: { paymentSlipPrinterId: "not-a-uuid" },
-    });
+    const res = await choose(app, `${t.jar}; ${t.session}`, "payment_slip", { id: "not-a-uuid" });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "paymentSlipPrinterId" } },
+      error: { code: "management.request_invalid", params: { field: "selection" } },
     });
   });
 
@@ -2037,50 +2070,41 @@ describe("a device's current printers", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await listedTill(venue, app);
-    const noSession = await send(app, "PUT", "/api/device/printers", {
-      cookie: t.jar,
-      body: { paymentSlipPrinterId: t.bar },
-    });
+    const noSession = await choose(app, t.jar, "payment_slip", { id: t.bar });
     expect(noSession.status).toBe(401);
     expect(await noSession.json()).toMatchObject({ error: { code: "session.required" } });
     expect((await deviceBindings(t.deviceId)).paymentSlipPrinterId).toBe(t.portable);
 
     // No device cookie: the session names the device.
-    const sessionOnly = await send(app, "PUT", "/api/device/printers", {
-      cookie: t.session,
-      body: { paymentSlipPrinterId: t.bar },
-    });
+    const sessionOnly = await choose(app, t.session, "payment_slip", { id: t.bar });
     expect(sessionOnly.status).toBe(200);
     expect((await deviceBindings(t.deviceId)).paymentSlipPrinterId).toBe(t.bar);
 
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, t.deviceId));
-    const revoked = await send(app, "PUT", "/api/device/printers", {
-      cookie: t.session,
-      body: { paymentSlipPrinterId: t.portable },
-    });
+    const revoked = await choose(app, t.session, "payment_slip", { id: t.portable });
     expect(revoked.status).toBe(401);
     expect(await revoked.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     expect((await deviceBindings(t.deviceId)).paymentSlipPrinterId).toBe(t.bar);
   });
 
-  it("GET /api/device/me reports the current printers and the active usable choices in list order", async () => {
+  it("GET /api/device/equipment reports the current printers and the active usable choices in list order", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await listedTill(venue, app);
     await suite.db.update(printers).set({ active: false }).where(eq(printers.id, t.portable));
-    const res = await send(app, "GET", "/api/device/me", { cookie: t.jar });
+    const res = await send(app, "GET", "/api/device/equipment", { cookie: t.jar });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
-      receiptPrinterId: t.counter,
-      paymentSlipPrinterId: t.portable,
-      printerChoices: {
-        receipt: [
-          { id: t.counter, name: "Counter" },
-          { id: t.bar, name: "Bar" },
-        ],
-        paymentSlip: [{ id: t.bar, name: "Bar" }],
-      },
-    });
+    const roles = ((await res.json()) as { roles: RoleShape[] }).roles;
+    const role = (name: string) => roles.find((each) => each.role === name)!;
+    expect(role("receipt").chosenId).toBe(t.counter);
+    expect(role("payment_slip").chosenId).toBe(t.portable);
+    expect(role("receipt").choices.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: t.counter, name: "Counter" },
+      { id: t.bar, name: "Bar" },
+    ]);
+    expect(role("payment_slip").choices.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: t.bar, name: "Bar" },
+    ]);
   });
 });
 
@@ -2671,9 +2695,9 @@ describe("a device's approved profiles and switching its active one", () => {
       expect(moved.status).toBe(204);
       expect(await openSessionsOn(t.deviceId)).toEqual([]);
       expect(await openSessionsOn(other.deviceId)).toEqual([elsewhere.personId]);
-      const after = await send(app, "PUT", "/api/device/printers", {
+      const after = await send(app, "PUT", "/api/device/equipment", {
         cookie: staff.cookie,
-        body: { receiptPrinterId: null },
+        body: { role: "receipt", selection: "default", via: "list" },
       });
       expect(after.status).toBe(401);
       expect(await after.json()).toMatchObject({ error: { code: "session.required" } });
@@ -2792,11 +2816,13 @@ describe("a device's approved profiles and switching its active one", () => {
       const to = await seedProfile("till");
       await withTransaction(suite.db, async (tx) => {
         await setProfilePrinterLists(tx, from, {
+          ...emptyPrinterLists(),
           receiptPrinterIds: [bar!, counter!],
           paymentSlipPrinterIds: [bar!],
         });
         // Counter stays on the new profile's receipt list; Bar is not on its slip list.
         await setProfilePrinterLists(tx, to, {
+          ...emptyPrinterLists(),
           receiptPrinterIds: [kitchen!, counter!],
           paymentSlipPrinterIds: [kitchen!],
         });
@@ -2810,22 +2836,18 @@ describe("a device's approved profiles and switching its active one", () => {
       return { deviceId, jar, from, to, bar: bar!, counter: counter!, kitchen: kitchen! };
     }
 
-    it("switches to an approved profile, keeping a printer the new profile lists and moving the other to its first", async () => {
+    it("switches to an approved profile, keeping a printer the new profile lists and putting the other on Use default", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const s = await switchable(app, venue);
       const me = await signIn(s.deviceId);
       const res = await switchTo(app, me.cookie, s.to);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
-        activeProfileId: s.to,
-        receiptPrinterId: s.counter,
-        paymentSlipPrinterId: s.kitchen,
-      });
+      expect(await res.json()).toEqual({ activeProfileId: s.to });
       expect(await deviceBindings(s.deviceId)).toEqual({
         deviceProfileId: s.to,
         receiptPrinterId: s.counter,
-        paymentSlipPrinterId: s.kitchen,
+        paymentSlipPrinterId: null,
       });
       // The profile it left stays approved, so the device can switch back.
       expect(new Set(await approved(s.deviceId))).toEqual(new Set([s.from, s.to]));
@@ -2847,11 +2869,7 @@ describe("a device's approved profiles and switching its active one", () => {
       await admitOnly(s.from, "manager");
       const res = await switchTo(app, me.cookie, s.from);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
-        activeProfileId: s.from,
-        receiptPrinterId: s.kitchen,
-        paymentSlipPrinterId: s.bar,
-      });
+      expect(await res.json()).toEqual({ activeProfileId: s.from });
       expect(await deviceBindings(s.deviceId)).toEqual({
         deviceProfileId: s.from,
         receiptPrinterId: s.kitchen,
@@ -2871,9 +2889,9 @@ describe("a device's approved profiles and switching its active one", () => {
       expect((await switchTo(app, me.cookie, s.to)).status).toBe(200);
       expect(await openSessionsOn(s.deviceId)).toEqual([me.personId, otherManager.personId].sort());
       // The ended session can no longer act on the device.
-      const after = await send(app, "PUT", "/api/device/printers", {
+      const after = await send(app, "PUT", "/api/device/equipment", {
         cookie: staff.cookie,
-        body: { receiptPrinterId: null },
+        body: { role: "receipt", selection: "default", via: "list" },
       });
       expect(after.status).toBe(401);
       expect(await after.json()).toMatchObject({ error: { code: "session.required" } });

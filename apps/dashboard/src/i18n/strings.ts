@@ -987,16 +987,14 @@ export const en = {
   "devices.profile_deleted": "Profile deleted",
   "devices.receipt_printer_now": "Receipt printer",
   "devices.slip_printer_now": "Payment slip printer",
-  "devices.no_printer": "None",
   "devices.printer_not_on_profile_mark": "not on this profile",
-  "devices.default_reader": "Default card reader",
+  "devices.default_reader": "Card reader",
   "devices.approved_profiles": "Profiles staff can switch to",
   "devices.approved_profiles_hint":
     "Someone signed in on this device can switch it to a ticked profile they may sign in on. Its device profile above is always allowed.",
   "devices.made_here": "Made here, no ticket",
   "devices.made_here_hint":
     "When this device sends an item for a ticked station, the item gets no ticket and does not appear on kitchen screens. That station is still where it is made.",
-  "devices.default_reader_none": "— cash and manual card only —",
   "devices.label": "Label",
   "devices.add": "Add a device",
   "devices.add_title": "Add a device",
@@ -2340,6 +2338,40 @@ export const en = {
   "vat_return.period_refused": "Choose a monthly or quarterly period",
   "vat_return.type_refused": "Choose one of the declaration types offered",
   "vat_return.download": "Download file",
+  "device_profiles.cash_drawer_printers": "Cash drawers",
+  "device_profiles.receipt_default": "Default receipt printer",
+  "device_profiles.payment_slip_default": "Default payment slip printer",
+  "device_profiles.cash_drawer_default": "Default cash drawer",
+  "device_profiles.default_none": "No default",
+  "device_profiles.no_drawer_attached": "no drawer attached",
+  "device_profiles.err_default_not_listed": "Choose a default from this list, or No default",
+  "device_profiles.err_no_cash_drawer":
+    "A printer added to this list has no cash drawer attached. Say it has one on the Printers screen first",
+  "device_profiles.card_readers": "Card readers",
+  "device_profiles.reader_default": "Default card reader",
+  "devices.use_default": "Use profile default: {name}",
+  "devices.cash_drawer_now": "Cash drawer",
+  "devices.default_mark": "default",
+  "devices.err_equipment_held":
+    "{device} has it now. Choose another, or take it on the device itself",
+  "devices.err_reader_busy":
+    "A payment is in progress on this card reader. Choose another, or wait until it finishes",
+  "devices.err_reader_not_allowed":
+    "This profile cannot use that card reader, or it has been disabled. Choose another",
+  "equipment.none": "None",
+  "equipment.carried_by": "carried by {device}",
+  "equipment.busy": "payment in progress",
+  "equipment.holder_with_person": "{device} ({person})",
+  "equipment.holder_none": "Nobody has it",
+  "equipment.label": "Equipment label",
+  "equipment.label_title": "Equipment label: {name}",
+  "equipment.label_hint":
+    "Print this label and stick it on the equipment. Scanning it on a device gives the equipment to that device.",
+  "equipment.label_qr_alt": "QR code to scan with a device",
+  "equipment.print": "Print",
+  "printers.portable": "Carried by one device at a time",
+  "printers.holder": "Carried by",
+  "payments.reader_holder": "Carried by",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -3342,16 +3374,14 @@ export const es: Record<StringKey, string> = {
   "devices.profile_deleted": "Perfil eliminado",
   "devices.receipt_printer_now": "Impresora de tickets",
   "devices.slip_printer_now": "Impresora de justificantes de pago",
-  "devices.no_printer": "Ninguna",
   "devices.printer_not_on_profile_mark": "no está en este perfil",
-  "devices.default_reader": "Lector predeterminado",
+  "devices.default_reader": "Lector de tarjetas",
   "devices.approved_profiles": "Perfiles a los que el personal puede cambiar",
   "devices.approved_profiles_hint":
     "Quien haya iniciado sesión en este dispositivo puede cambiarlo a un perfil marcado en el que pueda iniciar sesión. Su perfil de dispositivo de arriba siempre está permitido.",
   "devices.made_here": "Se prepara aquí, sin comanda",
   "devices.made_here_hint":
     "Cuando este dispositivo envía un artículo de una estación marcada, el artículo no lleva comanda ni aparece en las pantallas de cocina. Esa estación sigue constando como donde se prepara.",
-  "devices.default_reader_none": "— solo efectivo y tarjeta manual —",
   "devices.label": "Etiqueta",
   "devices.add": "Añadir un dispositivo",
   "devices.add_title": "Añadir un dispositivo",
@@ -4704,6 +4734,41 @@ export const es: Record<StringKey, string> = {
   "vat_return.period_refused": "Elige un periodo mensual o trimestral",
   "vat_return.type_refused": "Elige uno de los tipos de declaración ofrecidos",
   "vat_return.download": "Descargar fichero",
+  "device_profiles.cash_drawer_printers": "Cajones portamonedas",
+  "device_profiles.receipt_default": "Impresora de tickets predeterminada",
+  "device_profiles.payment_slip_default": "Impresora de justificantes predeterminada",
+  "device_profiles.cash_drawer_default": "Cajón predeterminado",
+  "device_profiles.default_none": "Sin predeterminado",
+  "device_profiles.no_drawer_attached": "sin cajón conectado",
+  "device_profiles.err_default_not_listed":
+    "Elige un predeterminado de esta lista, o Sin predeterminado",
+  "device_profiles.err_no_cash_drawer":
+    "Una impresora añadida a esta lista no tiene cajón conectado. Indica primero que lo tiene en la pantalla de Impresoras",
+  "device_profiles.card_readers": "Lectores de tarjetas",
+  "device_profiles.reader_default": "Lector de tarjetas predeterminado",
+  "devices.use_default": "Usar el predeterminado del perfil: {name}",
+  "devices.cash_drawer_now": "Cajón portamonedas",
+  "devices.default_mark": "predeterminado",
+  "devices.err_equipment_held":
+    "Ahora lo tiene {device}. Elige otro, o cógelo desde el propio dispositivo",
+  "devices.err_reader_busy":
+    "Hay un cobro en curso en este lector de tarjetas. Elige otro, o espera a que termine",
+  "devices.err_reader_not_allowed":
+    "Este perfil no puede usar ese lector de tarjetas, o el lector se ha deshabilitado. Elige otro",
+  "equipment.none": "Ninguno",
+  "equipment.carried_by": "lo lleva {device}",
+  "equipment.busy": "cobro en curso",
+  "equipment.holder_with_person": "{device} ({person})",
+  "equipment.holder_none": "No lo lleva nadie",
+  "equipment.label": "Etiqueta del equipo",
+  "equipment.label_title": "Etiqueta del equipo: {name}",
+  "equipment.label_hint":
+    "Imprime esta etiqueta y pégala en el equipo. Al escanearla en un dispositivo, el equipo pasa a ese dispositivo.",
+  "equipment.label_qr_alt": "Código QR para escanear con un dispositivo",
+  "equipment.print": "Imprimir",
+  "printers.portable": "La lleva un solo dispositivo a la vez",
+  "printers.holder": "La lleva",
+  "payments.reader_holder": "Lo lleva",
 };
 
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {

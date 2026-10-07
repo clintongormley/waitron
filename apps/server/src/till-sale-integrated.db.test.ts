@@ -301,7 +301,9 @@ async function makeReceiptPrinter(cfg: DeviceRequestConfig): Promise<string> {
         hasCashDrawer: true,
       },
     );
-    tx.run(sql`update devices set receipt_printer_id = ${id} where id = ${cfg.origin.deviceId}`);
+    tx.run(
+      sql`update devices set receipt_printer_id = ${id}, cash_drawer_printer_id = ${id} where id = ${cfg.origin.deviceId}`,
+    );
     return id;
   });
 }

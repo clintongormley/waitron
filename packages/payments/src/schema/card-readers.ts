@@ -3,8 +3,9 @@ import { flag, id, label, newId, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * A reader is disabled (`active=false`, `disabled_at` set), never deleted, so historical payments
- * still resolve its name. Only the `on delete restrict` keys from `payments.reader_id` and
- * `device_card_readers.reader_id` refuse a delete, so a reader nothing references can be deleted.
+ * still resolve its name. Only the `on delete restrict` keys from `payments.reader_id`,
+ * `device_card_readers.reader_id` and `device_profile_card_readers.reader_id` refuse a delete, so a
+ * reader nothing references can be deleted; `card_reader_holders` cascades and refuses nothing.
  */
 export const cardReaders = table(
   "card_readers",

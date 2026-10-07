@@ -1,5 +1,13 @@
 import { afterEach, expect, it } from "vitest";
-import { clockTime, countText, currentLocale, setLocale, subscribeLocale, t } from "./t.js";
+import {
+  carriedText,
+  clockTime,
+  countText,
+  currentLocale,
+  setLocale,
+  subscribeLocale,
+  t,
+} from "./t.js";
 import { catalogues, en } from "./strings.js";
 
 afterEach(() => {
@@ -25,6 +33,25 @@ it("writes a time of day as two-digit hours and minutes in the active locale, fr
   expect(clockTime(fivePastNine.getTime())).toBe("09:05");
   setLocale("fi-FI");
   expect(clockTime(fivePastNine)).toBe("09.05");
+});
+
+it("names the item, the device carrying it and the person signed in there, or the device alone", () => {
+  const ana = { deviceName: "Bar till", personName: "Ana" };
+  expect(carriedText("Reader", ana, "equipment.held_by", "equipment.held_by_person")).toBe(
+    "Reader is carried by Bar till (Ana)",
+  );
+  expect(
+    carriedText(
+      "Reader",
+      { ...ana, personName: null },
+      "equipment.held_by",
+      "equipment.held_by_person",
+    ),
+  ).toBe("Reader is carried by Bar till");
+  // A name holding a placeholder or a replacement pattern is written as it is.
+  expect(carriedText("{device} $&", ana, "equipment.held_by", "equipment.held_by_person")).toBe(
+    "{device} $& is carried by Bar till (Ana)",
+  );
 });
 
 it("resolves an English base key to Spanish", () => {

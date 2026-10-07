@@ -16,6 +16,8 @@ export const PAYMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("payment_policy", "state", STATE),
   classify("card_readers", "state", STATE),
   classify("device_card_readers", "state", STATE),
+  classify("device_profile_card_readers", "state", STATE),
+  classify("card_reader_holders", "state", STATE),
 ];
 
 export const PAYMENTS_CHANGE_SOURCES: readonly ChangeSource[] = PAYMENTS_CLASSIFICATION.map(

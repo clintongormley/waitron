@@ -40,6 +40,10 @@ const profile: DeviceProfile = {
   inactivityTimeoutSeconds: null,
   receiptPrinterIds: [],
   paymentSlipPrinterIds: [],
+  cashDrawerPrinterIds: [],
+  receiptPrinterDefaultId: null,
+  paymentSlipPrinterDefaultId: null,
+  cashDrawerPrinterDefaultId: null,
 };
 const station: Station = {
   id: "s1",

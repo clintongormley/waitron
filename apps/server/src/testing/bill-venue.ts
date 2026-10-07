@@ -20,7 +20,7 @@ import {
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
-import { cardReaders, deviceCardReaders } from "@waitron/payments";
+import { cardReaderHolders, cardReaders, deviceCardReaders } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -49,7 +49,7 @@ import { BASIC_ACTIONS, deviceRequestCfg } from "./session-device.js";
 
 /**
  * A provisioned venue for the bill payment suites that take a card on a reader: real Veri*Factu
- * filing, two enrolled tills each with its own reader, and a {@link FakePaymentProvider} behind the
+ * filing, two enrolled tills each with its own reader, which it holds, and a {@link FakePaymentProvider} behind the
  * reader pool, so a suite can hold, stall, fail or crash a collect.
  */
 const LOCALE = "es-ES";
@@ -226,6 +226,9 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     await db
       .insert(deviceCardReaders)
       .values({ deviceId: device.deviceId, readerId: seeded.readerIds[index]! });
+    await db
+      .insert(cardReaderHolders)
+      .values({ deviceId: device.deviceId, readerId: seeded.readerIds[index]! });
     devices.push(device);
   }
   const cashOnlyDevice = await enrolDeviceForTest(db, cfg, {
@@ -233,7 +236,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     profileId: seeded.cashOnlyProfileId,
   });
   db.run(
-    sql`update devices set receipt_printer_id = ${seeded.printerId}, payment_slip_printer_id = ${seeded.printerId}`,
+    sql`update devices set receipt_printer_id = ${seeded.printerId}, payment_slip_printer_id = ${seeded.printerId}, cash_drawer_printer_id = ${seeded.printerId}`,
   );
 
   const card = new FakePaymentProvider(db);

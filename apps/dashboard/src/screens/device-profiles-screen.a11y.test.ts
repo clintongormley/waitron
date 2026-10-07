@@ -30,6 +30,10 @@ const profiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: ["pr2", "pr1"],
     paymentSlipPrinterIds: ["pr-old"],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
     startingScreen: null,
     departmentId: "d1",
     allowedZoneIds: null,
@@ -72,6 +76,8 @@ function printer(id: string, name: string, active = true): Printer {
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
+    portable: false,
+    holder: null,
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -104,6 +110,8 @@ function stubApi(
     listProfileKitchenLists: vi.fn().mockResolvedValue([]),
     getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
     listStaff: vi.fn().mockResolvedValue(staff),
+    listReaders: vi.fn().mockResolvedValue([]),
+    getProfileReaders: vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -144,6 +152,75 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     expect(el.shadowRoot!.querySelector("[data-test=payment-slip-printers-pr-old]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  it.each([390, 1280])(
+    "renders the drawer list, each list's default, the card readers and a refusal under a default accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const equipped: DeviceProfile = {
+        ...profiles[0]!,
+        cashDrawerPrinterIds: ["pr2"],
+        receiptPrinterDefaultId: "pr1",
+      };
+      const api = stubApi(
+        [...venuePrinters, { ...printer("pr-drawer", "Caja"), hasCashDrawer: true }],
+        {
+          getDeviceProfile: vi.fn().mockResolvedValue(equipped),
+          listReaders: vi.fn().mockResolvedValue([
+            {
+              id: "r1",
+              provider: "acme",
+              name: "Mostrador",
+              active: true,
+              canEnable: true,
+              deviceCount: 0,
+            },
+            {
+              id: "r2",
+              provider: "acme",
+              name: "Terraza",
+              active: true,
+              canEnable: true,
+              deviceCount: 0,
+            },
+          ]),
+          getProfileReaders: vi
+            .fn()
+            .mockResolvedValue({ readerIds: ["r1"], defaultReaderId: "r1" }),
+          updateDeviceProfile: vi.fn().mockRejectedValue({
+            code: "device_profile.invalid",
+            params: { reason: "default_not_listed", field: "receiptPrinterDefaultId" },
+          }),
+        },
+      );
+      const { el, host } = await mountWidget<DeviceProfilesScreen>(
+        "dashboard-device-profiles-screen",
+        { api },
+        theme,
+      );
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+      await flush(el);
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=profile-readers]")).not.toBeNull(),
+      );
+      expect(el.shadowRoot!.querySelector("[data-test=cash-drawer-printers-pr2]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+      await flush(el);
+      await flush(el);
+      expect(
+        (
+          el.shadowRoot!.querySelector("[data-test=receipt-printers-default]") as HTMLElement & {
+            error: string;
+          }
+        ).error,
+      ).not.toBe("");
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
 
   it.each([390, 1280])(
     "renders a kitchen display's station and watcher lists, and a refusal under them, accessibly at %ipx",

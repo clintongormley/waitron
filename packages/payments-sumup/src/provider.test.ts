@@ -4,7 +4,12 @@ import { CORE_MIGRATIONS, deviceProfiles, devices } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
-import { billPaymentOfRow, seedBillPayment } from "@waitron/payments/test/seed.js";
+import {
+  billPaymentOfRow,
+  readerOfRow,
+  seedBillPayment,
+  seedHeldReader,
+} from "@waitron/payments/test/seed.js";
 import { setup } from "./testing/setup.js";
 import type { FakeSumUp } from "./testing/fake-sumup.js";
 import { SumUpCloudProvider, cardFromTransaction, mapEntryMode } from "./provider.js";
@@ -185,6 +190,18 @@ describe("SumUpCloudProvider.collect", () => {
     expect(r.state).toBe("captured");
     expect(r.cardLast4).toBeNull();
     expect(r.cardScheme).toBeNull();
+  });
+});
+
+describe("SumUpCloudProvider.collect with Waitron's reader id", () => {
+  it("collect writes the reader on its attempting row", async () => {
+    const { t, provider, params, row } = await setup(suite, (f) => f.throwOnCreateNext());
+    const readerId = await seedHeldReader(suite.db, t.deviceId);
+
+    const result = await provider.collect({ ...params, readerId });
+
+    expect((await row(result.paymentRef)).state).toBe("attempting");
+    expect(await readerOfRow(suite.db, result.paymentRef)).toBe(readerId);
   });
 });
 

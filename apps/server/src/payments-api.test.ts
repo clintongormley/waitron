@@ -2,13 +2,28 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, devices, locations, nowIso, tenants, withTransaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  devices,
+  locations,
+  nowIso,
+  tenants,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
-import { DEMO_READER_ID, cardReaders, type CardProviderContribution } from "@waitron/payments";
+import {
+  DEMO_READER_ID,
+  cardReaderHolders,
+  cardReaders,
+  deviceProfileCardReaders,
+  payments,
+  type CardProviderContribution,
+} from "@waitron/payments";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -113,6 +128,17 @@ async function seedDevice(venue: Venue): Promise<string> {
     })
     .returning({ id: devices.id });
   return dev!.id;
+}
+
+/** Puts `readerId` on the list of the device's profile, so the device may choose it. */
+async function listOnProfile(deviceId: string, readerId: string): Promise<void> {
+  const [device] = await suite.db
+    .select({ profileId: devices.deviceProfileId })
+    .from(devices)
+    .where(eq(devices.id, deviceId));
+  await suite.db
+    .insert(deviceProfileCardReaders)
+    .values({ deviceProfileId: device!.profileId, readerId, position: 0 });
 }
 
 /** A fake Stripe SDK: a key carrying `bad` throws on the account read (a rejected credential). */
@@ -339,7 +365,7 @@ describe("providers list", () => {
   });
 });
 
-describe("device default reader", () => {
+describe("device and profile readers", () => {
   it("keeps the demo reader out of ordinary reader management", async () => {
     const venue = await seedVenue();
     const app = mountApp(venue);
@@ -375,7 +401,7 @@ describe("device default reader", () => {
       error: { code: "reader.not_found" },
     });
   });
-  it("sets, reads back and clears a device's default reader", async () => {
+  it("sets, reads back and clears a device's chosen reader", async () => {
     const venue = await seedVenue();
     const app = mountApp(venue);
     await connectStripe(app, venue);
@@ -385,6 +411,7 @@ describe("device default reader", () => {
       }
     ).id;
     const device = await seedDevice(venue);
+    await listOnProfile(device, readerId);
 
     const empty = await send(app, "GET", `/management-api/payments/devices/${device}/reader`, {
       cookie: venue.managerCookie,
@@ -410,6 +437,228 @@ describe("device default reader", () => {
       cookie: venue.managerCookie,
     });
     expect((await afterClear.json()) as { readerId: string | null }).toEqual({ readerId: null });
+  });
+
+  async function seedReaders(...names: string[]): Promise<string[]> {
+    const rows = await suite.db
+      .insert(cardReaders)
+      .values(names.map((name) => ({ provider: "stripe", providerRef: nextRef(), name })))
+      .returning({ id: cardReaders.id });
+    return rows.map((row) => row.id);
+  }
+
+  async function readerHolder(readerId: string): Promise<string | null> {
+    const [row] = await suite.db
+      .select({ deviceId: cardReaderHolders.deviceId })
+      .from(cardReaderHolders)
+      .where(eq(cardReaderHolders.readerId, readerId));
+    return row?.deviceId ?? null;
+  }
+
+  it("PUT a device's reader null puts it on Use default", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const [counter, terrace] = await seedReaders("Barra", "Terraza");
+    const device = await seedDevice(venue);
+    const [row] = await suite.db
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, device));
+    const opts = { cookie: venue.managerCookie };
+    const profilePath = `/management-api/payments/device-profiles/${row!.profileId}/readers`;
+    expect(
+      (
+        await send(app, "PUT", profilePath, {
+          ...opts,
+          body: { readerIds: [counter, terrace], defaultReaderId: counter },
+        })
+      ).status,
+    ).toBe(200);
+    const path = `/management-api/payments/devices/${device}/reader`;
+    expect((await send(app, "PUT", path, { ...opts, body: { readerId: terrace } })).status).toBe(
+      204,
+    );
+    expect([await readerHolder(counter), await readerHolder(terrace)]).toEqual([null, device]);
+
+    const cleared = await send(app, "PUT", path, { ...opts, body: { readerId: null } });
+
+    expect(cleared.status).toBe(204);
+    expect(await (await send(app, "GET", path, opts)).json()).toEqual({ readerId: null });
+    expect([await readerHolder(counter), await readerHolder(terrace)]).toEqual([device, null]);
+  });
+
+  it("a reader another device holds is device.equipment_held, and nothing moves", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const [reader] = await seedReaders("Barra");
+    const first = await seedDevice(venue);
+    const second = await seedDevice(venue);
+    await listOnProfile(first, reader!);
+    await listOnProfile(second, reader!);
+    const opts = { cookie: venue.managerCookie };
+    const put = (deviceId: string) =>
+      send(app, "PUT", `/management-api/payments/devices/${deviceId}/reader`, {
+        ...opts,
+        body: { readerId: reader },
+      });
+    expect((await put(first)).status).toBe(204);
+
+    const taken = await put(second);
+
+    expect(taken.status).toBe(409);
+    expect(await taken.json()).toMatchObject({
+      error: {
+        code: "device.equipment_held",
+        params: { field: "cardReaderId", holderDeviceId: first, holderPersonName: null },
+      },
+    });
+    expect(await readerHolder(reader!)).toBe(first);
+    expect(
+      await (
+        await send(app, "GET", `/management-api/payments/devices/${second}/reader`, opts)
+      ).json(),
+    ).toEqual({ readerId: null });
+  });
+
+  it("profile readers: stores the list and default, and refuses a default not in the list", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const [counter, terrace] = await seedReaders("Barra", "Terraza");
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: nextName("Perfil lectores"), formFactor: "till" })
+      .returning({ id: deviceProfiles.id });
+    const path = `/management-api/payments/device-profiles/${profile!.id}/readers`;
+    const opts = { cookie: venue.managerCookie };
+
+    const stored = await send(app, "PUT", path, {
+      ...opts,
+      body: { readerIds: [terrace, counter], defaultReaderId: counter },
+    });
+    expect(stored.status).toBe(200);
+    expect(await (await send(app, "GET", path, opts)).json()).toEqual({
+      readerIds: [terrace, counter],
+      defaultReaderId: counter,
+    });
+
+    const refused = await send(app, "PUT", path, {
+      ...opts,
+      body: { readerIds: [terrace], defaultReaderId: counter },
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({
+      error: {
+        code: "device_profile.invalid",
+        params: { reason: "default_not_listed", field: "defaultReaderId" },
+      },
+    });
+    expect(await (await send(app, "GET", path, opts)).json()).toEqual({
+      readerIds: [terrace, counter],
+      defaultReaderId: counter,
+    });
+  });
+
+  it("profile readers: refuses an unknown profile and an unknown reader", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: nextName("Perfil lectores"), formFactor: "till" })
+      .returning({ id: deviceProfiles.id });
+    const opts = { cookie: venue.managerCookie };
+    const unknownReader = randomUUID();
+
+    const noProfile = await send(
+      app,
+      "GET",
+      `/management-api/payments/device-profiles/${randomUUID()}/readers`,
+      opts,
+    );
+    const noReader = await send(
+      app,
+      "PUT",
+      `/management-api/payments/device-profiles/${profile!.id}/readers`,
+      { ...opts, body: { readerIds: [unknownReader], defaultReaderId: null } },
+    );
+
+    expect(noProfile.status).toBe(404);
+    expect(await noProfile.json()).toMatchObject({ error: { code: "device_profile.not_found" } });
+    expect(noReader.status).toBe(404);
+    expect(await noReader.json()).toEqual({
+      error: { code: "reader.not_found", params: { id: unknownReader } },
+    });
+  });
+});
+
+describe("reader holders", () => {
+  const path = "/management-api/payments/reader-holders";
+
+  it("names each held reader's device, and the devices with a payment in progress on a reader", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const [held, busy, idle] = (
+      await suite.db
+        .insert(cardReaders)
+        .values(
+          ["Barra", "Terraza", "Almacén"].map((name) => ({
+            provider: "stripe",
+            providerRef: nextRef(),
+            name,
+          })),
+        )
+        .returning({ id: cardReaders.id })
+    ).map((row) => row.id);
+    const holder = await seedDevice(venue);
+    const payer = await seedDevice(venue);
+    const [holderRow] = await suite.db
+      .select({ label: devices.label })
+      .from(devices)
+      .where(eq(devices.id, holder));
+    await suite.db.insert(cardReaderHolders).values({ readerId: held!, deviceId: holder });
+    let orderNumber = 0;
+    const order = async () => {
+      orderNumber += 1;
+      const [row] = await suite.db
+        .insert(workingOrders)
+        .values({ source: "dashboard", locationId: venue.locationId, orderNumber })
+        .returning({ id: workingOrders.id });
+      return row!.id;
+    };
+    const payment = async (state: "attempting" | "captured", readerId: string) => ({
+      workingOrderId: await order(),
+      source: "device" as const,
+      deviceId: payer,
+      readerId,
+      provider: "stripe",
+      paymentRef: randomUUID(),
+      amount: 500,
+      state,
+    });
+    await suite.db
+      .insert(payments)
+      .values([await payment("attempting", busy!), await payment("captured", idle!)]);
+
+    const response = await send(app, "GET", path, { cookie: venue.managerCookie });
+
+    expect(response.status).toBe(200);
+    const rows = (await response.json()) as { readerId: string }[];
+    expect(rows.sort((a, b) => a.readerId.localeCompare(b.readerId))).toEqual(
+      [
+        {
+          readerId: held,
+          holder: { deviceId: holder, deviceName: holderRow!.label, personName: null },
+          paymentInProgressDeviceIds: [],
+        },
+        { readerId: busy, holder: null, paymentInProgressDeviceIds: [payer] },
+      ].sort((a, b) => a.readerId!.localeCompare(b.readerId!)),
+    );
+  });
+
+  it("is refused without the payments permission", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    expect((await send(app, "GET", path, { cookie: venue.staffCookie })).status).toBe(403);
+    expect((await send(app, "GET", path)).status).toBe(401);
   });
 });
 
@@ -449,6 +698,7 @@ describe("readers — lifecycle and screens", () => {
 
     // Point a device at the reader, then the list's deviceCount reflects it.
     const device = await seedDevice(venue);
+    await listOnProfile(device, readerId);
     await send(app, "PUT", `/management-api/payments/devices/${device}/reader`, {
       cookie: venue.managerCookie,
       body: { readerId },
@@ -460,7 +710,7 @@ describe("readers — lifecycle and screens", () => {
   });
 });
 
-describe("device default reader — screens", () => {
+describe("device's chosen reader — screens", () => {
   it("400s management.request_invalid when the body omits readerId", async () => {
     const venue = await seedVenue();
     const app = mountApp(venue);
@@ -698,7 +948,7 @@ describe("reader adoption and local management", () => {
   };
   const adoption = { providerId: "stripe", providerRef: vendor.providerRef, name: "Counter" };
 
-  it("labels available, added and disabled and reuses the disabled id and device default", async () => {
+  it("labels available, added and disabled and reuses the disabled id and the device's chosen reader", async () => {
     const venue = await seedVenue();
     const removed: string[] = [];
     const app = mountApp(venue, [
@@ -719,6 +969,7 @@ describe("reader adoption and local management", () => {
     const { id } = (await first.json()) as { id: string };
     expect(await available()).toEqual([{ ...vendor, status: "added" }]);
     const device = await seedDevice(venue);
+    await listOnProfile(device, id);
     expect(
       (
         await send(app, "PUT", `${base}/devices/${device}/reader`, {
@@ -1172,12 +1423,13 @@ describe("screens and unknown ids", () => {
     expect(await suite.db.select({ id: cardReaders.id }).from(cardReaders)).toEqual([]);
   });
 
-  it("refuses a default reader for an unknown device, or naming an unknown or disabled reader", async () => {
+  it("refuses a chosen reader for an unknown device, or naming an unknown or disabled reader", async () => {
     const venue = await seedVenue();
     const app = mountApp(venue);
     await connectStripe(app, venue);
     const readerId = ((await (await addReader(app, venue, nextRef())).json()) as { id: string }).id;
     const device = await seedDevice(venue);
+    await listOnProfile(device, readerId);
     const put = (deviceId: string, body: unknown) =>
       send(app, "PUT", `/management-api/payments/devices/${deviceId}/reader`, {
         cookie: venue.managerCookie,
@@ -1206,9 +1458,9 @@ describe("screens and unknown ids", () => {
       ).status,
     ).toBe(204);
     const disabled = await put(device, { readerId });
-    expect(disabled.status).toBe(404);
+    expect(disabled.status).toBe(400);
     expect(await disabled.json()).toEqual({
-      error: { code: "reader.not_found", params: { id: readerId } },
+      error: { code: "device.binding_invalid", params: { field: "cardReaderId" } },
     });
 
     const read = await send(app, "GET", `/management-api/payments/devices/${device}/reader`, {

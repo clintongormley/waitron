@@ -482,13 +482,13 @@ describe("till-counter-screen", () => {
     expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
   });
 
-  it("offers Printers in its own header, emitting open-printers", async () => {
+  it("offers Equipment in its own header, emitting open-equipment", async () => {
     const { el } = await mount();
-    const printers = el.shadowRoot!.querySelector<HTMLElement>("wt-button.printers")!;
-    expect(printers.textContent).toContain(t("printers.open"));
+    const equipment = el.shadowRoot!.querySelector<HTMLElement>("wt-button.equipment")!;
+    expect(equipment.textContent).toContain(t("equipment.open"));
     let fired = 0;
-    el.addEventListener("open-printers", () => (fired += 1));
-    printers.click();
+    el.addEventListener("open-equipment", () => (fired += 1));
+    equipment.click();
     expect(fired).toBe(1);
   });
 

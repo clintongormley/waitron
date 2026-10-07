@@ -171,19 +171,28 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     const [other] = venue.db.all<{ id: string }>(
       sql`select id from card_readers where provider_ref = 'reader-2'`,
     );
+    // The paying till holds the reader it names; the second till gets it back afterwards.
+    const holdOther = (deviceId: string) =>
+      venue.db.run(
+        sql`update card_reader_holders set device_id = ${deviceId} where reader_id = ${other!.id}`,
+      );
+    holdOther(venue.deviceId);
+    try {
+      const paid = await pay(billId, {
+        kind: "contribution",
+        amount: "5.00",
+        method: "card",
+        entry: "reader",
+        readerId: other!.id,
+        applied: "5.00",
+        tip: "0.00",
+      });
 
-    const paid = await pay(billId, {
-      kind: "contribution",
-      amount: "5.00",
-      method: "card",
-      entry: "reader",
-      readerId: other!.id,
-      applied: "5.00",
-      tip: "0.00",
-    });
-
-    expect(paid.status).toBe(200);
-    expect(venue.card.collectCalls.at(-1)).toMatchObject({ readerRef: "reader-2" });
+      expect(paid.status).toBe(200);
+      expect(venue.card.collectCalls.at(-1)).toMatchObject({ readerRef: "reader-2" });
+    } finally {
+      holdOther(venue.device2Id);
+    }
   });
 
   it("marks a declined card failed and releases its reservation", async () => {

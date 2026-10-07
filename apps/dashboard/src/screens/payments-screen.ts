@@ -33,6 +33,7 @@ import type {
   BillRecoveryOutcome,
   DashboardApi,
   PaymentProviderRow,
+  ReaderHolderRow,
   ReaderRow,
   ReaderStatusView,
   StuckPaymentResolution,
@@ -44,6 +45,8 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { formatAlertTime, sourceLabel } from "../widgets/alert-format.js";
+import "../widgets/equipment-label.js";
+import { holderText } from "../i18n/equipment.js";
 
 /** The section's own wording for a refused check; any other code reads its shared message. */
 function stuckRefusalText(error: unknown): string {
@@ -309,6 +312,10 @@ export class PaymentsScreen extends LitElement {
 
   @state() private providers?: PaymentProviderRow[];
   @state() private readers?: ReaderRow[];
+  @state() private holders = new Map<string, ReaderHolderRow>();
+  /** The reader whose equipment label is open. */
+  @state() private labelReader: ReaderRow | null = null;
+  #labelOpener: HTMLElement | null = null;
   @state() private statuses = new Map<
     string,
     ReaderStatusView | "error" | "connection.timed_out"
@@ -514,6 +521,9 @@ export class PaymentsScreen extends LitElement {
         const armed = this.armedDisconnectId;
         if (!providers.some((p) => p.providerId === armed && p.state === "connected"))
           this.armedDisconnectId = null;
+      }),
+      this.#listQueries.watch("listReaderHolders", [], (rows) => {
+        this.holders = new Map(rows.map((row) => [row.readerId, row]));
       }),
       this.#listQueries
         .watch("listReaders", [], (readers) => {
@@ -1538,6 +1548,16 @@ export class PaymentsScreen extends LitElement {
             <wt-button
               variant="secondary"
               align="start"
+              data-test=${`label-${reader.id}`}
+              @click=${(event: Event) => {
+                this.#labelOpener = event.currentTarget as HTMLElement;
+                this.labelReader = reader;
+              }}
+              >${t("equipment.label")}</wt-button
+            >
+            <wt-button
+              variant="secondary"
+              align="start"
               data-test=${`details-${reader.id}`}
               ?disabled=${this.busy}
               @click=${(event: Event) => this.#openEditor(reader, "details", event)}
@@ -1737,6 +1757,10 @@ export class PaymentsScreen extends LitElement {
           : mode === "unpair"
             ? html`<p>${t("payments.unpair_warning")}</p>`
             : html`<p>${this.#statusText(reader)}</p>
+                <p data-test="reader-holder">
+                  ${t("payments.reader_holder")}:
+                  ${holderText(this.holders.get(reader.id)?.holder ?? null)}
+                </p>
                 ${
                   details.length
                     ? html`<dl class="reader-details">
@@ -1846,6 +1870,19 @@ export class PaymentsScreen extends LitElement {
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
       ${keyed(this.editor, this.#renderEditor())} ${this.#renderResolveDialog()}
       ${keyed(this.billAction, this.#renderBillDialog())}
+      ${
+        this.labelReader === null
+          ? nothing
+          : html`<dashboard-equipment-label
+              kind="reader"
+              .itemId=${this.labelReader.id}
+              .name=${this.labelReader.name}
+              .opener=${this.#labelOpener}
+              @wt-close=${() => {
+                this.labelReader = null;
+              }}
+            ></dashboard-equipment-label>`
+      }
     `;
   }
 }

@@ -131,7 +131,8 @@ listed, with no Edit and a row that does not open.
 - Everything except the card reader is saved by **one request in one transaction**. It replaces
   `POST /management-api/devices/:id/assign-device-profile` and `PUT
   /management-api/devices/:id/made-here`. Staff choosing printers on the device keep
-  `PUT /api/device/printers`.
+  `PUT /api/device/printers`. (2026-10-07: W100 replaced that route with
+  `GET/PUT /api/device/equipment`.)
 - The server checks a printer against the device's (new) profile, refusing one not listed with
   `device.binding_invalid` as the device route does today.
 - The card reader belongs to the payments module and its own permission, so it is saved second,

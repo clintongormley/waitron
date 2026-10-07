@@ -1,12 +1,15 @@
 // Side-effect only: loads this host's errors.ts augmentation for the codes these routes throw.
 import "./errors.js";
+// The registry of `device_profile.not_found` and `device_profile.invalid`, which these routes throw.
+import "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { AppError, centsToDecimal, isAppError } from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
+  deviceProfiles,
   devices,
   nowIso,
   withTransaction,
@@ -21,7 +24,10 @@ import {
   DEMO_READER_ID,
   deviceCardReaders,
   findPaymentByBillPayment,
+  IN_PROGRESS_PAYMENT_STATES,
   payments,
+  readProfileReaderList,
+  setProfileReaderList,
   type AbandonedAttemptOutcome,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
@@ -65,6 +71,7 @@ import {
   payWorkingOrderIntegrated,
 } from "./till-sale.js";
 import { storedDeviceOrigin } from "./request-config.js";
+import { readReaderHolders, selectDeviceEquipment } from "./device-equipment.js";
 
 /**
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
@@ -105,7 +112,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "reader.provider_disconnected": 409,
   "reader.not_found": 404,
   "reader.not_listed": 422,
+  "reader.payment_in_progress": 409,
   "device.not_found": 404,
+  "device.binding_invalid": 400,
+  "device.equipment_held": 409,
+  "device_profile.not_found": 404,
+  "device_profile.invalid": 400,
   "payment.not_stuck": 409,
   "payment.resolve_unsupported": 422,
   "payment.outcome_unknown": 409,
@@ -127,6 +139,25 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const DASHBOARD_PIN_SLOT = "management";
 
 const run = createErrorBoundary(STATUS, "payments.failed");
+
+/** Refuses an id naming no reader, or the demo reader, which no device or profile ever lists. */
+async function requireKnownReader(tx: Transaction, readerId: string): Promise<void> {
+  const [reader] = await tx
+    .select({ id: cardReaders.id })
+    .from(cardReaders)
+    .where(eq(cardReaders.id, readerId));
+  if (reader === undefined || readerId === DEMO_READER_ID) {
+    throw new AppError("reader.not_found", { id: readerId });
+  }
+}
+
+async function requireDeviceProfile(tx: Transaction, profileId: string): Promise<void> {
+  const [profile] = await tx
+    .select({ id: deviceProfiles.id })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, profileId));
+  if (profile === undefined) throw new AppError("device_profile.not_found", {});
+}
 
 /** `provider` with a `collect` that refuses, so a pay through it can file a payment already
  * captured but can never charge a card. */
@@ -611,6 +642,37 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
+  // Who holds each reader and which devices have a payment in progress on it: the readers that are
+  // held or busy, and no others.
+  app.get("/management-api/payments/reader-holders", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const { holders, busy } = await gated(sessionId, async (tx) => ({
+        holders: await readReaderHolders(tx),
+        busy: await tx
+          .selectDistinct({ readerId: payments.readerId, deviceId: payments.deviceId })
+          .from(payments)
+          .where(
+            and(
+              isNotNull(payments.readerId),
+              isNotNull(payments.deviceId),
+              inArray(payments.state, IN_PROGRESS_PAYMENT_STATES),
+            ),
+          ),
+      }));
+      const readerIds = new Set([...holders.keys(), ...busy.map((row) => row.readerId!)]);
+      return c.json(
+        [...readerIds].map((readerId) => ({
+          readerId,
+          holder: holders.get(readerId) ?? null,
+          paymentInProgressDeviceIds: busy
+            .filter((row) => row.readerId === readerId)
+            .map((row) => row.deviceId!),
+        })),
+      );
+    }),
+  );
+
   app.get("/management-api/payments/devices/:id/reader", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -625,12 +687,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
+  // A reader id is the device's explicit choice, never taking one another device holds; `null`
+  // puts the device on its profile's default.
   app.put("/management-api/payments/devices/:id/reader", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const deviceId = requireUuidParam(c.req.param("id"), "DeviceId");
       const body = await readJsonBody<{ readerId?: unknown }>(c);
-      // Required: a reader id sets the default, an explicit null clears it.
       if (!("readerId" in body)) {
         throw new AppError("management.request_invalid", { field: "readerId" });
       }
@@ -642,26 +705,68 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .from(devices)
           .where(eq(devices.id, deviceId));
         if (device === undefined) throw new AppError("device.not_found", { deviceId });
-        if (readerId === null) {
-          await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
-          return;
-        }
-        // A disabled reader is `reader.not_found` too: it is never assignable.
-        const [reader] = await tx
-          .select({ id: cardReaders.id })
-          .from(cardReaders)
-          .where(and(eq(cardReaders.id, readerId), eq(cardReaders.active, true)));
-        if (reader === undefined || readerId === DEMO_READER_ID)
-          throw new AppError("reader.not_found", { id: readerId });
-        await tx
-          .insert(deviceCardReaders)
-          .values({ deviceId, readerId })
-          .onConflictDoUpdate({
-            target: [deviceCardReaders.deviceId],
-            set: { readerId },
-          });
+        if (readerId !== null) await requireKnownReader(tx, readerId);
+        await selectDeviceEquipment(tx, {
+          deviceId,
+          role: "card_terminal",
+          selection: readerId === null ? "default" : { id: readerId },
+          via: "manage",
+        });
       });
       return c.body(null, 204);
+    }),
+  );
+
+  app.get("/management-api/payments/device-profiles/:id/readers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const profileId = requireUuidParam(c.req.param("id"), "DeviceProfileId");
+      const list = await gated(sessionId, async (tx) => {
+        await requireDeviceProfile(tx, profileId);
+        return readProfileReaderList(tx, profileId);
+      });
+      return c.json(list);
+    }),
+  );
+
+  // Replaces the profile's reader list and default; its devices' choices it no longer lists go
+  // back to Use default.
+  app.put("/management-api/payments/device-profiles/:id/readers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const profileId = requireUuidParam(c.req.param("id"), "DeviceProfileId");
+      const body = await readJsonBody<{ readerIds?: unknown; defaultReaderId?: unknown }>(c);
+      const readerIds = body.readerIds;
+      if (!Array.isArray(readerIds)) {
+        throw new AppError("management.request_invalid", { field: "readerIds" });
+      }
+      const ids = readerIds.map((id) => requireBodyUuid(id, "readerIds"));
+      if (new Set(ids).size !== ids.length) {
+        throw new AppError("management.request_invalid", { field: "readerIds" });
+      }
+      if (!("defaultReaderId" in body)) {
+        throw new AppError("management.request_invalid", { field: "defaultReaderId" });
+      }
+      const defaultReaderId =
+        body.defaultReaderId === null
+          ? null
+          : requireBodyUuid(body.defaultReaderId, "defaultReaderId");
+      const list = await gated(sessionId, async (tx) => {
+        await requireDeviceProfile(tx, profileId);
+        for (const id of ids) await requireKnownReader(tx, id);
+        const saved = await setProfileReaderList(tx, profileId, {
+          readerIds: ids,
+          defaultReaderId,
+        });
+        if (!saved.ok) {
+          throw new AppError("device_profile.invalid", {
+            reason: "default_not_listed",
+            field: "defaultReaderId",
+          });
+        }
+        return readProfileReaderList(tx, profileId);
+      });
+      return c.json(list);
     }),
   );
 

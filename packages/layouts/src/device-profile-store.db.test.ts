@@ -99,6 +99,13 @@ async function seedBoundDevice(profileId: string, active = true): Promise<string
   return device!.id;
 }
 
+const NO_DRAWERS_OR_DEFAULTS = {
+  cashDrawerPrinterIds: [],
+  receiptPrinterDefaultId: null,
+  paymentSlipPrinterDefaultId: null,
+  cashDrawerPrinterDefaultId: null,
+};
+
 describe("device-profile store against a real migrated database", () => {
   let managerSession: string;
 
@@ -129,6 +136,10 @@ describe("device-profile store against a real migrated database", () => {
         startingScreen: null,
         receiptPrinterIds: [],
         paymentSlipPrinterIds: [],
+        cashDrawerPrinterIds: [],
+        receiptPrinterDefaultId: null,
+        paymentSlipPrinterDefaultId: null,
+        cashDrawerPrinterDefaultId: null,
       });
       const fetched = await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id));
       expect(fetched).toEqual(created);
@@ -159,6 +170,10 @@ describe("device-profile store against a real migrated database", () => {
       startingScreen: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
+      cashDrawerPrinterIds: [],
+      receiptPrinterDefaultId: null,
+      paymentSlipPrinterDefaultId: null,
+      cashDrawerPrinterDefaultId: null,
     });
     expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(created);
     const listed = await inTx((tx) => listDeviceProfiles(tx));
@@ -217,6 +232,10 @@ describe("device-profile store against a real migrated database", () => {
       startingScreen: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
+      cashDrawerPrinterIds: [],
+      receiptPrinterDefaultId: null,
+      paymentSlipPrinterDefaultId: null,
+      cashDrawerPrinterDefaultId: null,
     });
   });
 
@@ -306,6 +325,10 @@ describe("device-profile store against a real migrated database", () => {
       startingScreen: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
+      cashDrawerPrinterIds: [],
+      receiptPrinterDefaultId: null,
+      paymentSlipPrinterDefaultId: null,
+      cashDrawerPrinterDefaultId: null,
     });
     expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(updated);
     expect(await rowCount()).toBe(1); // update, never insert a duplicate
@@ -510,7 +533,11 @@ describe("device-profile store against a real migrated database", () => {
         formFactor: "till",
         canvasId,
         capabilities: [],
-        printerLists: { receiptPrinterIds: [printer!.id], paymentSlipPrinterIds: [printer!.id] },
+        printerLists: {
+          receiptPrinterIds: [printer!.id],
+          paymentSlipPrinterIds: [printer!.id],
+          ...NO_DRAWERS_OR_DEFAULTS,
+        },
       }),
     );
     await seedBoundDevice(created.id, false);
@@ -613,7 +640,11 @@ describe("device-profile store against a real migrated database", () => {
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
         ...base,
-        printerLists: { receiptPrinterIds: [p2!.id, p1!.id], paymentSlipPrinterIds: [p1!.id] },
+        printerLists: {
+          receiptPrinterIds: [p2!.id, p1!.id],
+          paymentSlipPrinterIds: [p1!.id],
+          ...NO_DRAWERS_OR_DEFAULTS,
+        },
       }),
     );
     expect(created.receiptPrinterIds).toEqual([p2!.id, p1!.id]);
@@ -640,7 +671,11 @@ describe("device-profile store against a real migrated database", () => {
       updateDeviceProfile(tx, {
         ...base,
         id: created.id,
-        printerLists: { receiptPrinterIds: [], paymentSlipPrinterIds: [p2!.id] },
+        printerLists: {
+          receiptPrinterIds: [],
+          paymentSlipPrinterIds: [p2!.id],
+          ...NO_DRAWERS_OR_DEFAULTS,
+        },
       }),
     );
     expect(emptied.receiptPrinterIds).toEqual([]);

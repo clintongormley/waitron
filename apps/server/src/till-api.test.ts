@@ -918,8 +918,6 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
         stationId: null,
         watcherId: null,
         deviceProfileId: rows[0]!.device_profile_id,
-        receiptPrinterId: null,
-        paymentSlipPrinterId: null,
         capabilities: [...CAPABILITY_FLAGS],
       },
     };
@@ -1237,7 +1235,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded location has none, so `[]` reaches
       // the wire (the tab course picker offers nothing then).
       courses: [],
-      // Cookieless: no device → no default reader → `none`; the venue has no readers configured.
+      // Cookieless: no device → no reader to resolve → `none`; the venue has no readers configured.
       cardProvider: "none",
       activeReaders: [],
       tipsEnabled: false,

@@ -18,6 +18,7 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
+  isAppError,
   MONEY_SCALE,
   multiplyDecimal,
   stringToThousandths,
@@ -62,7 +63,9 @@ import {
   enqueueBillCardSlipDrawer,
   enqueueBillPaymentDrawer,
   enqueueSaleReceipt,
+  printerLookup,
 } from "./receipt-print.js";
+import type { PrinterLookup } from "./receipt-print.js";
 import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import {
@@ -629,7 +632,7 @@ async function issueWhenFullyPaid(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId: string | undefined,
-  options: { moneyMoved?: boolean; total?: Decimal },
+  options: { moneyMoved?: boolean; total?: Decimal; printers?: PrinterLookup },
 ): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
   const notYet = { invoice: null, total: options.total };
   const [order] = await tx
@@ -748,7 +751,7 @@ async function issueWhenFullyPaid(
     payments: await readBillTenderLines(tx, saleId),
     ...receiptQr(deps.backend, fiscal.verificationUrl),
   };
-  await enqueueSaleReceipt(tx, cfg, ticket, saleId);
+  await enqueueSaleReceipt(tx, cfg, ticket, saleId, options.printers);
   return { invoice: ticket, total };
 }
 
@@ -1083,6 +1086,7 @@ export async function takeBillPayment(
     );
     if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
     const { payment } = begun;
+    const printers = printerLookup(tx, cfg.origin);
     if (req.method === "card") {
       await recordManualCardPayment(tx, {
         origin: cfg.origin,
@@ -1092,12 +1096,13 @@ export async function takeBillPayment(
         externalRef: req.externalRef,
         billPaymentId: payment.id,
       });
-      await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operatorId);
+      await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operatorId, printers);
     } else {
-      await enqueueBillPaymentDrawer(tx, cfg, payment.id, operatorId);
+      await enqueueBillPaymentDrawer(tx, cfg, payment.id, operatorId, printers);
     }
     const { invoice, total } = await issueWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, {
       total: begun.total,
+      printers,
     });
     return resultOf(tx, deps, cfg, payment, invoice, total);
   });
@@ -1119,6 +1124,8 @@ export type ReaderBillPaymentDeps = TillSaleDeps & {
   readerRef?: string;
   /** The device profile the route checked the request under, passed to `collect`. */
   deviceProfileId?: string;
+  /** The chosen reader's `card_readers.id`, passed to `collect`; absent for the simulator. */
+  readerId?: string;
 };
 
 /** Who confirmed a payment's or a refund's outcome by hand, and their note. */
@@ -1198,12 +1205,22 @@ const NOT_CHARGED: ReadonlySet<PaymentResultState> = new Set([
   "network_unavailable",
 ]);
 
+/** `insertAttempting` (`@waitron/payments`) refuses these before the provider's first write: the
+ * SumUp and Stripe terminal providers call it before any write or network call, and the reader
+ * codes also come from `assertReaderStartable`, which the test provider calls first. So no money
+ * moved, and the reservation can go now rather than at the loop's next pass. */
+const REFUSED_START: ReadonlySet<string> = new Set([
+  "device.profile_changed",
+  "reader.not_held",
+  "reader.payment_in_progress",
+]);
+
 /**
  * Take a card on a reader against an open bill, in the three phases of design §5.3:
  *  - P1 (transaction): {@link beginBillPayment} inserts the payment `pending`, which reserves its
  *    applied amount, and registers it as live in this process;
  *  - P2 (no transaction): the provider's `collect` for `applied + tip`, naming the bill payment; a
- *    `device.profile_changed` refusal from it fails the payment and is passed on, and any other
+ *    refusal named in {@link REFUSED_START} fails the payment and is passed on, and any other
  *    throw leaves it pending for the loop;
  *  - P3 (transaction): a capture is {@link completeBillPayment}; a decline or a refusal to go
  *    offline fails it; any other answer leaves it pending, for the loop to settle from the
@@ -1251,15 +1268,13 @@ export async function takeReaderBillPayment(
         workingOrderId: brandWorkingOrderId(workingOrderId),
         amount: centsToDecimal(payment.applied + payment.tip),
         ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
+        ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
         ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
         simulationOutcome: req.simulationOutcome,
         billPaymentId: payment.id,
       });
     } catch (error) {
-      // `insertAttempting` raises this, and the SumUp and Stripe terminal providers call it before
-      // any write or network call (`collect` in each provider.ts), so nothing was charged and the
-      // reservation can go now rather than at the loop's next pass.
-      if (error instanceof AppError && error.code === "device.profile_changed") {
+      if (isAppError(error) && REFUSED_START.has(error.code)) {
         await withTransaction(deps.db, (tx) =>
           failBillPayment(tx, payment.id, deps.clock.now().instant),
         );

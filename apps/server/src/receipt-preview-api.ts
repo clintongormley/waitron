@@ -1,6 +1,6 @@
 import "./errors.js";
 import type { Hono } from "hono";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   devices,
   printPaperWidth,
@@ -8,11 +8,17 @@ import {
   readTenant,
   withTransaction,
   type Database,
+  type Transaction,
 } from "@waitron/db";
 import { readReceiptLanguage } from "@waitron/catalogue";
 import { departments, departmentSalePolicies } from "@waitron/venue-service";
 import { authorizeManager } from "@waitron/identity";
-import { getPrintedReceipt, validateReceiptConfig, type ReceiptConfig } from "@waitron/layouts";
+import {
+  getPrintedReceipt,
+  resolveDevicePrinterIds,
+  validateReceiptConfig,
+  type ReceiptConfig,
+} from "@waitron/layouts";
 import { imageExists, readImageBytes } from "@waitron/media";
 import { textGrid, type EscSetting, type MonoRaster, type PaperWidth } from "@waitron/printing";
 import {
@@ -122,6 +128,33 @@ function optionalLanguage(
   return given[0];
 }
 
+/** The paper setting of each active device's resolved, switched-on receipt printer, by device name. */
+async function activeReceiptSettings(tx: Transaction, locationId: string): Promise<EscSetting[]> {
+  const active = await tx
+    .select({ id: devices.id })
+    .from(devices)
+    .where(and(eq(devices.locationId, locationId), eq(devices.active, true)))
+    .orderBy(asc(devices.label), asc(devices.id));
+  const resolvedBy = await resolveDevicePrinterIds(
+    tx,
+    active.map((device) => device.id),
+    "receipt",
+  );
+  const resolved = active
+    .map((device) => resolvedBy.get(device.id) ?? null)
+    .filter((id): id is string => id !== null);
+  if (resolved.length === 0) return [];
+  const rows = await tx
+    .select({ id: printers.id, paperWidth: printers.paperWidth, resolution: printers.resolution })
+    .from(printers)
+    .where(and(inArray(printers.id, resolved), eq(printers.active, true)));
+  const byId = new Map(rows.map(({ id, ...setting }) => [id, setting]));
+  return resolved.flatMap((id) => {
+    const setting = byId.get(id);
+    return setting === undefined ? [] : [setting];
+  });
+}
+
 /**
  * The setting to draw at: the asked-for width when a receipt printer has it, else the width most
  * devices print on, a tie going to the device first by name. A width's resolution is that of the
@@ -202,15 +235,7 @@ export function mountReceiptPreviewApi(
         if (departmentId !== undefined && department === undefined) {
           throw new AppError("department.not_found", { departmentId });
         }
-        const settings = await tx
-          .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
-          .from(devices)
-          .innerJoin(
-            printers,
-            and(eq(printers.id, devices.receiptPrinterId), eq(printers.active, true)),
-          )
-          .where(and(eq(devices.locationId, deps.cfg.locationId), eq(devices.active, true)))
-          .orderBy(asc(devices.label), asc(devices.id));
+        const settings = await activeReceiptSettings(tx, deps.cfg.locationId);
         const printer = chooseSetting(settings, asked);
         let saved: MonoRaster | null = null;
         if (receipt.logo !== undefined) {

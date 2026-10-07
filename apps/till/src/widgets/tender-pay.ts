@@ -45,7 +45,7 @@ export interface CollectCardDetail {
   allowOffline?: boolean;
   simulationOutcome?: "captured" | "declined";
   /** Absent when the operator never picked one — the server then falls back to the paying
-   * device's own default reader. */
+   * device's chosen reader, else its profile's default. */
   readerId?: string;
 }
 

@@ -69,6 +69,7 @@ import {
   createDeviceProfile,
   deleteCanvas,
   deleteDeviceProfile,
+  emptyPrinterLists,
   getReceipt,
   getCanvas,
   getDeviceProfileWithPrinters,
@@ -138,7 +139,7 @@ import { withInUse } from "./in-use.js";
 import { queryFlag } from "./report-api.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
-import { requireBodyUuid, requireEnum } from "@waitron/server-kit";
+import { requireBodyUuid, requireEnum, requireNullableBodyUuid } from "@waitron/server-kit";
 import {
   clearManagementCookie,
   readManagementSessionToken,
@@ -491,11 +492,23 @@ function parseIdLists<F extends string>(
   return lists;
 }
 
-function parsePrinterLists(body: {
-  receiptPrinterIds?: unknown;
-  paymentSlipPrinterIds?: unknown;
-}): Partial<ProfilePrinterLists> {
-  return parseIdLists(body, ["receiptPrinterIds", "paymentSlipPrinterIds"]);
+const PRINTER_DEFAULT_FIELDS = [
+  "receiptPrinterDefaultId",
+  "paymentSlipPrinterDefaultId",
+  "cashDrawerPrinterDefaultId",
+] as const;
+
+/** The printer lists and defaults the body names; an absent one is left out, `null` is None. */
+function parsePrinterLists(body: ProfileBody): Partial<ProfilePrinterLists> {
+  const lists: Partial<ProfilePrinterLists> = parseIdLists(body, [
+    "receiptPrinterIds",
+    "paymentSlipPrinterIds",
+    "cashDrawerPrinterIds",
+  ]);
+  for (const field of PRINTER_DEFAULT_FIELDS) {
+    if (body[field] !== undefined) lists[field] = requireNullableBodyUuid(body[field], field);
+  }
+  return lists;
 }
 
 /** Writes the lists `lists` names; the venue-service keeps the one it omits. Call after the save
@@ -542,6 +555,10 @@ type ProfileBody = {
   startingScreen?: unknown;
   receiptPrinterIds?: unknown;
   paymentSlipPrinterIds?: unknown;
+  cashDrawerPrinterIds?: unknown;
+  receiptPrinterDefaultId?: unknown;
+  paymentSlipPrinterDefaultId?: unknown;
+  cashDrawerPrinterDefaultId?: unknown;
   stationIds?: unknown;
   watcherIds?: unknown;
   departmentId?: unknown;
@@ -634,7 +651,11 @@ async function requireListedPrinters(
   lists: Partial<ProfilePrinterLists>,
 ): Promise<void> {
   const ids = [
-    ...new Set([...(lists.receiptPrinterIds ?? []), ...(lists.paymentSlipPrinterIds ?? [])]),
+    ...new Set([
+      ...(lists.receiptPrinterIds ?? []),
+      ...(lists.paymentSlipPrinterIds ?? []),
+      ...(lists.cashDrawerPrinterIds ?? []),
+    ]),
   ];
   if (ids.length === 0) return;
   await authorizeManager(tx, { managementSessionId: sessionId, permission: "layout.configure" });
@@ -1453,10 +1474,7 @@ export function mountManagementApi(
           capabilities,
           inactivityTimeoutSeconds,
           startingScreen: body.startingScreen,
-          printerLists: {
-            receiptPrinterIds: lists.receiptPrinterIds ?? [],
-            paymentSlipPrinterIds: lists.paymentSlipPrinterIds ?? [],
-          },
+          printerLists: { ...emptyPrinterLists(), ...lists },
         });
         await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), created.id, scope);
         await saveKitchenLists(tx, deps, created.id, kitchenLists);

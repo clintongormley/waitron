@@ -35,6 +35,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
+  cardReaderHolders,
   cardReaders,
   insertCapturedPayment,
   payments,
@@ -291,7 +292,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       )
     ).token;
   const session = { token: await sessionOn(device.deviceId) };
-  // Its profile does not allow the drawer, though its receipt printer has one.
+  // Its profile does not allow the drawer, though its drawer printer has one.
   const handheld = await enrolDeviceForTest(db, cfg, {
     name: "Terraza",
     profileId: seeded.handheldProfileId,
@@ -303,7 +304,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
   // Every device prints receipts and slips here; its profile decides whether it opens the drawer.
   db.run(
-    sql`update devices set receipt_printer_id = ${seeded.printerId}, payment_slip_printer_id = ${seeded.printerId}`,
+    sql`update devices set receipt_printer_id = ${seeded.printerId}, payment_slip_printer_id = ${seeded.printerId}, cash_drawer_printer_id = ${seeded.printerId}`,
   );
   const app = new Hono();
   mountTillApi(
@@ -670,6 +671,68 @@ describe("a contribution (design §8 test 2)", () => {
     expect(opens).toMatchObject([
       { reason: "bill_payment", saleId: null, deviceId: venue.deviceId },
     ]);
+  });
+
+  it("opens the device's chosen drawer, not its receipt printer's, though both have a drawer", async () => {
+    const till = await withTransaction(suite.db, async (tx) => {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({
+          name: "Drawer till",
+          formFactor: "till",
+          capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
+        })
+        .returning({ id: deviceProfiles.id });
+      const printer = (name: string) =>
+        createPrinter(
+          tx,
+          { locationId: venue.cfg.locationId },
+          { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}`, hasCashDrawer: true },
+        );
+      const receipt = await printer("Recibos caja");
+      const drawer = await printer("Cajón caja");
+      return { profileId: profile!.id, receiptId: receipt.id, drawerId: drawer.id };
+    });
+    const device = await enrolDeviceForTest(suite.db, venue.cfg, {
+      name: "Caja",
+      profileId: till.profileId,
+    });
+    suite.db.run(
+      sql`update devices set receipt_printer_id = ${till.receiptId}, payment_slip_printer_id = ${till.receiptId}, cash_drawer_printer_id = ${till.drawerId} where id = ${device.deviceId}`,
+    );
+    const session = await inTx((tx) =>
+      loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),
+    );
+    const billId = await bill120();
+
+    const paid = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "10.00",
+        method: "cash",
+        tendered: "10.00",
+        applied: "10.00",
+        tip: "0.00",
+      },
+      `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+    );
+
+    expect(paid.status).toBe(200);
+    const paymentId = (paid.json.payment as { id: string }).id;
+    const opens = await inTx((tx) =>
+      tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
+    );
+    expect(opens).toMatchObject([
+      { reason: "bill_payment", deviceId: device.deviceId, printerId: till.drawerId },
+    ]);
+    expect(
+      suite.db.all<{ printerId: string }>(
+        sql`select printer_id as printerId from print_jobs where kind = 'drawer' and printer_id in (${till.receiptId}, ${till.drawerId})`,
+      ),
+    ).toEqual([{ printerId: till.drawerId }]);
   });
 
   it("opens no drawer for cash taken on a handheld whose profile does not allow the drawer", async () => {
@@ -3985,6 +4048,9 @@ describe("a reader payment on a device that changes profile while it is starting
         .values({ provider: "stripe", providerRef: `reader_${randomUUID()}`, name: "Barra" })
         .returning({ id: cardReaders.id }),
     );
+    await suite.db
+      .insert(cardReaderHolders)
+      .values({ readerId: reader!.id, deviceId: device.deviceId });
     const client = new FakeStripe();
     const moveTo = (profileId: string) =>
       suite.db
@@ -4175,7 +4241,7 @@ describe("abandoning a bill after a full refund (design §8 test 14, §4.5)", ()
 });
 
 // Owner decision 2026-10-01 (B30): card slips are kept in the cash drawer, so a hand-keyed card opens
-// the drawer of the till that took it, when that till's receipt printer has one attached.
+// the drawer of the till that took it, when that till's drawer printer has one attached.
 describe("a hand-keyed card bill payment and the cash drawer", () => {
   const manualCard = {
     kind: "contribution",
@@ -4250,7 +4316,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
     expect(drawerJobCount()).toBe(before);
   });
 
-  it("opens no drawer for a hand-keyed card at another till whose receipt printer has none", async () => {
+  it("opens no drawer for a hand-keyed card at another till whose drawer printer has none", async () => {
     const otherTill = await withTransaction(suite.db, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
@@ -4277,7 +4343,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
       profileId: otherTill.profileId,
     });
     suite.db.run(
-      sql`update devices set receipt_printer_id = ${otherTill.printerId} where id = ${device.deviceId}`,
+      sql`update devices set receipt_printer_id = ${otherTill.printerId}, cash_drawer_printer_id = ${otherTill.printerId} where id = ${device.deviceId}`,
     );
     const session = await inTx((tx) =>
       loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),

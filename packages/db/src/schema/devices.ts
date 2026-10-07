@@ -36,6 +36,7 @@ export const devices = table(
       /* v8 ignore start */
       .references(() => deviceProfiles.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
+    // The explicit receipt, slip and drawer choices; NULL means use the profile's default.
     /* v8 ignore start */
     receiptPrinterId: id("receipt_printer_id").references(() => printers.id, {
       onDelete: "restrict",
@@ -43,6 +44,11 @@ export const devices = table(
     /* v8 ignore stop */
     /* v8 ignore start */
     paymentSlipPrinterId: id("payment_slip_printer_id").references(() => printers.id, {
+      onDelete: "restrict",
+    }),
+    /* v8 ignore stop */
+    /* v8 ignore start */
+    cashDrawerPrinterId: id("cash_drawer_printer_id").references(() => printers.id, {
       onDelete: "restrict",
     }),
     /* v8 ignore stop */

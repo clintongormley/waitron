@@ -239,7 +239,7 @@ export function mountBillPaymentsApi(
           {
             ...fiscal,
             provider,
-            ...(reader === undefined ? {} : { readerRef: reader.providerRef }),
+            ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
             deviceProfileId: device.deviceProfileId,
           },
           saleCfg,

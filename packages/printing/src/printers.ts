@@ -41,6 +41,7 @@ export interface CreatePrinterInput {
   paperWidth?: PaperWidth;
   resolution?: Resolution;
   hasCashDrawer?: boolean;
+  portable?: boolean;
 }
 
 /**
@@ -81,6 +82,7 @@ export async function createPrinter(
         paperWidth: input.paperWidth,
         resolution: input.resolution,
         hasCashDrawer: input.hasCashDrawer,
+        portable: input.portable,
       })
       .returning({ id: printers.id });
     return { id: row!.id };
@@ -115,6 +117,7 @@ export interface PrinterRow {
   paperWidth: PaperWidth;
   resolution: Resolution;
   hasCashDrawer: boolean;
+  portable: boolean;
   active: boolean;
 }
 
@@ -185,6 +188,7 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
       hasCashDrawer: printers.hasCashDrawer,
+      portable: printers.portable,
       active: printers.active,
     })
     .from(printers)

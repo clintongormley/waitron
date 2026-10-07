@@ -187,6 +187,19 @@ describe("the submission id of a confirmation", () => {
     );
   });
 
+  it.each(["reader.not_held", "reader.payment_in_progress"])(
+    "is fresh after %s, whose refusal at the payment's start fails the payment recorded under the id",
+    (code) => {
+      const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+      const unanswered = unansweredAfter(first, { code, status: 409 });
+
+      expect(unanswered).toBeNull();
+      expect(submissionFor("wo-1", tenEuros, unanswered, ids("sub-2")).request.submissionId).toBe(
+        "sub-2",
+      );
+    },
+  );
+
   it("is fresh once the server says the id is taken by another request", () => {
     const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
     const unanswered = unansweredAfter(first, { code: "submission.id_reused", status: 409 });

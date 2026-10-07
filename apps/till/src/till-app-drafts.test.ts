@@ -1194,9 +1194,6 @@ describe("till-app: switching the device's profile with a table order open", () 
       name: "Till 1",
       formFactor: "till",
       stationId: null,
-      receiptPrinterId: null,
-      paymentSlipPrinterId: null,
-      printerChoices: { receipt: [], paymentSlip: [] },
       profileId: "pr-counter",
       approvedProfiles: [
         { id: "pr-counter", name: "Counter till" },
@@ -1217,8 +1214,6 @@ describe("till-app: switching the device's profile with a table order open", () 
   function switchStub() {
     return vi.fn().mockResolvedValue({
       activeProfileId: "pr-bar",
-      receiptPrinterId: null,
-      paymentSlipPrinterId: null,
     });
   }
 

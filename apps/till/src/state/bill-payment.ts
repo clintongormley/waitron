@@ -149,12 +149,15 @@ export function submissionFor(
   return sentAs(JSON.stringify([billId, confirmation]), confirmation, unanswered, mint);
 }
 
-/** `submission.id_reused`: the id belongs to another request. `device.profile_changed`: raised
- * after the payment is recorded under the id, which `takeReaderBillPayment` then fails, so sending
- * the id again would only answer that failure. */
+/** `submission.id_reused`: the id belongs to another request. The rest can be raised at the
+ * payment's start, after it is recorded under the id, which `takeReaderBillPayment` then fails
+ * (`REFUSED_START`, `apps/server/src/bill-payments.ts`), so sending the id again would only answer
+ * that failure. */
 const FRESH_ID_AFTER: ReadonlySet<string> = new Set([
   "submission.id_reused",
   "device.profile_changed",
+  "reader.not_held",
+  "reader.payment_in_progress",
 ]);
 
 /**
@@ -162,7 +165,8 @@ const FRESH_ID_AFTER: ReadonlySet<string> = new Set([
  * the submission otherwise. A refusal does not say what became of an earlier send of it: the server
  * refuses the session, device, reader or approver before it looks the id up (the payment and
  * refund routes, `apps/server/src/bill-payments-api.ts`; `refundBillPayment`,
- * `apps/server/src/bill-refunds.ts`), except `device.profile_changed`, which comes after.
+ * `apps/server/src/bill-refunds.ts`), except the start refusals {@link FRESH_ID_AFTER} names, which
+ * can also come after.
  * Sending the id again is safe, since the server answers an id it recorded with that record; only
  * the {@link FRESH_ID_AFTER} refusals start a fresh one.
  */

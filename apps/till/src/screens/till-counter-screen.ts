@@ -309,14 +309,14 @@ export class TillCounterScreen extends LitElement {
                 <span class="brand">${BRAND}</span>
                 <div class="session">
                   <wt-button
-                    class="printers"
+                    class="equipment"
                     variant="secondary"
                     @click=${() =>
                       this.dispatchEvent(
-                        new CustomEvent("open-printers", { bubbles: true, composed: true }),
+                        new CustomEvent("open-equipment", { bubbles: true, composed: true }),
                       )}
                   >
-                    ${t("printers.open")}
+                    ${t("equipment.open")}
                   </wt-button>
                   <wt-button
                     class="allergens"

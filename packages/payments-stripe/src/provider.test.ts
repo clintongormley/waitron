@@ -31,7 +31,9 @@ import type { StripeClient } from "./client.js";
 import {
   billPaymentOfRow,
   freshNif,
+  readerOfRow,
   seedBillPayment,
+  seedHeldReader,
   seedWorkingOrder,
 } from "@waitron/payments/test/seed.js";
 import type { DeviceOrigin } from "@waitron/shared";
@@ -963,6 +965,19 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
     await resolved({ paymentId: other, workingOrderId: p.workingOrderId }, true);
     await providerFor(fake).collect(p);
     expect(fake.lastCreateIntent?.idempotencyKey).toBe(`wo_${p.workingOrderId}`);
+  });
+});
+
+describe("StripeTerminalProvider.collect with Waitron's reader id", () => {
+  it("collect writes the reader on its attempting row", async () => {
+    const fake = new FakeStripe();
+    const p = await collectParams();
+    const readerId = await seedHeldReader(suite.db, p._seeded.deviceId);
+
+    const result = await providerFor(fake).collect({ ...p, readerId });
+
+    expect(result.state).toBe("captured");
+    expect(await readerOfRow(suite.db, result.paymentRef)).toBe(readerId);
   });
 });
 

@@ -11,6 +11,7 @@ import type {
   PersonRole,
   PersonSummary,
   Printer,
+  ProfileReaderList,
   ProfileScopeChoices,
   Station,
   Watcher,
@@ -45,6 +46,10 @@ const profiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
     ...OPEN_ACCESS,
     departmentId: "d1",
     startingZoneId: "z1",
@@ -58,6 +63,10 @@ const profiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
     ...OPEN_ACCESS,
     departmentId: null,
     startingZoneId: null,
@@ -108,6 +117,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listProfileKitchenLists: vi.fn().mockResolvedValue([]),
     getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
     listStaff: vi.fn().mockResolvedValue(staff),
+    listReaders: vi.fn().mockResolvedValue([]),
+    getProfileReaders: vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
+    setProfileReaders: vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -869,6 +881,8 @@ describe("device-profiles-screen printer lists", () => {
       paperWidth: "80mm",
       resolution: "180dpi",
       hasCashDrawer: false,
+      portable: false,
+      holder: null,
       pendingJobs: 0,
       lastPrintAt: null,
       lastPrintAgentId: null,
@@ -1929,5 +1943,464 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       personExceptions: [{ personId: "pe-ana", admitted: true }],
       startingScreen: "show-schedule",
     });
+  });
+});
+
+describe("device-profiles-screen equipment defaults, drawers and card readers", () => {
+  function printer(id: string, name: string, extra: Partial<Printer> = {}): Printer {
+    return {
+      id,
+      name,
+      transport: "network_tcp",
+      host: "10.0.0.9",
+      port: 9100,
+      localKey: null,
+      pollId: null,
+      watcherId: null,
+      paperWidth: "80mm",
+      resolution: "180dpi",
+      hasCashDrawer: false,
+      portable: false,
+      holder: null,
+      pendingJobs: 0,
+      lastPrintAt: null,
+      lastPrintAgentId: null,
+      active: true,
+      ...extra,
+    };
+  }
+
+  const venuePrinters = [
+    printer("pr1", "Barra", { hasCashDrawer: true }),
+    printer("pr2", "Cocina"),
+    printer("pr3", "Terraza"),
+  ];
+
+  const readers = [
+    {
+      id: "r1",
+      provider: "acme",
+      name: "Mostrador",
+      active: true,
+      canEnable: true,
+      deviceCount: 0,
+    },
+    { id: "r2", provider: "acme", name: "Terraza", active: true, canEnable: true, deviceCount: 0 },
+  ];
+
+  const listedProfile: DeviceProfile = {
+    ...profiles[0]!,
+    receiptPrinterIds: ["pr2", "pr1"],
+    paymentSlipPrinterIds: ["pr3"],
+    receiptPrinterDefaultId: "pr1",
+  };
+
+  type Field = HTMLElement & {
+    value: string;
+    error: string;
+    options: { value: string; label: string }[];
+  };
+
+  async function editListed(overrides: Partial<DashboardApi> = {}, profile = listedProfile) {
+    const api = stubApi({
+      listDeviceProfiles: vi.fn().mockResolvedValue([profile, profiles[1]]),
+      getDeviceProfile: vi.fn().mockResolvedValue(profile),
+      listPrinters: vi.fn().mockResolvedValue(venuePrinters),
+      listReaders: vi.fn().mockResolvedValue(readers),
+      getProfileReaders: vi.fn().mockResolvedValue({ readerIds: ["r1"], defaultReaderId: "r1" }),
+      setProfileReaders: vi.fn().mockImplementation((_id, list) => Promise.resolve(list)),
+      ...overrides,
+    });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    await flush(el);
+    return { api, el };
+  }
+
+  const field = (el: DeviceProfilesScreen, test: string) =>
+    el.shadowRoot!.querySelector(`[data-test=${test}]`) as Field;
+
+  async function save(el: DeviceProfilesScreen) {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    await flush(el);
+  }
+
+  function savedExtras(api: DashboardApi) {
+    return vi.mocked(api.updateDeviceProfile).mock.calls[0]![7];
+  }
+
+  it("offers each list's own printers as its default, None first, and shows the stored default", async () => {
+    const { el } = await editListed();
+    const receipt = field(el, "receipt-printers-default");
+    expect(receipt.getAttribute("name")).toBe("receiptPrinterDefaultId");
+    expect(receipt.value).toBe("pr1");
+    expect(receipt.options).toEqual([
+      { value: "", label: t("device_profiles.default_none") },
+      { value: "pr2", label: "Cocina" },
+      { value: "pr1", label: "Barra" },
+    ]);
+    expect(field(el, "payment-slip-printers-default").value).toBe("");
+  });
+
+  it("saves each list's default", async () => {
+    const { api, el } = await editListed();
+    await chooseOption(field(el, "receipt-printers-default"), "pr2");
+    await chooseOption(field(el, "payment-slip-printers-default"), "pr3");
+    await flush(el);
+    await save(el);
+    expect(savedExtras(api)).toMatchObject({
+      receiptPrinterDefaultId: "pr2",
+      paymentSlipPrinterDefaultId: "pr3",
+    });
+    expect(savedExtras(api)).not.toHaveProperty("cashDrawerPrinterDefaultId");
+  });
+
+  it("sends no default or drawer list a save leaves alone", async () => {
+    const { api, el } = await editListed();
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
+    const extras = savedExtras(api) ?? {};
+    for (const key of [
+      "cashDrawerPrinterIds",
+      "receiptPrinterDefaultId",
+      "paymentSlipPrinterDefaultId",
+      "cashDrawerPrinterDefaultId",
+    ])
+      expect(extras).not.toHaveProperty(key);
+  });
+
+  it("unlisting the default sets it to None", async () => {
+    const { api, el } = await editListed();
+    toggle(el, "receipt-printers-pr1", false);
+    await flush(el);
+    expect(field(el, "receipt-printers-default").value).toBe("");
+    await save(el);
+    expect(savedExtras(api)).toMatchObject({ receiptPrinterDefaultId: null });
+  });
+
+  it("the drawer list offers only printers with a drawer and marks a listed one without", async () => {
+    const { el } = await editListed({}, { ...listedProfile, cashDrawerPrinterIds: ["pr2"] });
+    const drawers = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement & { label: string; checked: boolean }>(
+        "[data-test=cash-drawer-printers] wt-switch[data-printer-id]",
+      ),
+    ];
+    expect(drawers.map((s) => [s.dataset.printerId, s.label, s.checked])).toEqual([
+      ["pr2", `Cocina (${t("device_profiles.no_drawer_attached")})`, true],
+      ["pr1", "Barra", false],
+    ]);
+  });
+
+  it("saves the drawer list and its default", async () => {
+    const { api, el } = await editListed();
+    toggle(el, "cash-drawer-printers-pr1", true);
+    await flush(el);
+    await chooseOption(field(el, "cash-drawer-printers-default"), "pr1");
+    await flush(el);
+    await save(el);
+    expect(savedExtras(api)).toMatchObject({
+      cashDrawerPrinterIds: ["pr1"],
+      cashDrawerPrinterDefaultId: "pr1",
+    });
+  });
+
+  it("a default_not_listed refusal shows under its field", async () => {
+    const { el } = await editListed({
+      updateDeviceProfile: vi.fn().mockRejectedValue({
+        code: "device_profile.invalid",
+        params: { reason: "default_not_listed", field: "receiptPrinterDefaultId" },
+      }),
+    });
+    await save(el);
+    expect(field(el, "receipt-printers-default").error).toBe(
+      t("device_profiles.err_default_not_listed"),
+    );
+    expect(field(el, "payment-slip-printers-default").error).toBe("");
+  });
+
+  it("a no_cash_drawer refusal shows under the drawer list", async () => {
+    const { el } = await editListed({
+      updateDeviceProfile: vi.fn().mockRejectedValue({
+        code: "device_profile.invalid",
+        params: { reason: "no_cash_drawer", field: "cashDrawerPrinterIds" },
+      }),
+    });
+    await save(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=cash-drawer-printers-error]")?.textContent?.trim(),
+    ).toBe(t("device_profiles.err_no_cash_drawer"));
+  });
+
+  it("lists the venue's card readers, the profile's switched on, with its default", async () => {
+    const { el } = await editListed();
+    const switches = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement & { checked: boolean; label: string }>(
+        "[data-test=profile-readers] wt-switch",
+      ),
+    ];
+    expect(switches.map((s) => [s.label, s.checked])).toEqual([
+      ["Mostrador", true],
+      ["Terraza", false],
+    ]);
+    const fallback = field(el, "profile-readers-default");
+    expect(fallback.getAttribute("name")).toBe("defaultReaderId");
+    expect(fallback.value).toBe("r1");
+  });
+
+  it("saves the reader list after the profile, and only when it changed", async () => {
+    const { api, el } = await editListed();
+    toggle(el, "profile-reader-r2", true);
+    await flush(el);
+    await chooseOption(field(el, "profile-readers-default"), "r2");
+    await flush(el);
+    await save(el);
+    expect(api.setProfileReaders).toHaveBeenCalledExactlyOnceWith("p1", {
+      readerIds: ["r1", "r2"],
+      defaultReaderId: "r2",
+    });
+    expect(vi.mocked(api.updateDeviceProfile).mock.invocationCallOrder[0]!).toBeLessThan(
+      vi.mocked(api.setProfileReaders).mock.invocationCallOrder[0]!,
+    );
+    cleanupWidgets();
+    const unchanged = await editListed();
+    await save(unchanged.el);
+    expect(unchanged.api.setProfileReaders).not.toHaveBeenCalled();
+  });
+
+  it("a failed reader save is said at the bottom, and the profile stays saved", async () => {
+    const { api, el } = await editListed({
+      setProfileReaders: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
+    });
+    toggle(el, "profile-reader-r2", true);
+    await flush(el);
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(codeMessage("reader.not_found"));
+  });
+
+  it("the reader section is absent without the payments permission", async () => {
+    const notPermitted = { code: "authorization.not_permitted" };
+    const { api, el } = await editListed({
+      getProfileReaders: vi.fn().mockRejectedValue(notPermitted),
+      listReaders: vi.fn().mockRejectedValue(notPermitted),
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=profile-readers]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(api.setProfileReaders).not.toHaveBeenCalled();
+  });
+
+  const bottom = (el: DeviceProfilesScreen) =>
+    el.shadowRoot!.querySelector(".form-message")?.textContent?.trim() ?? null;
+
+  function deferred<T>(): {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+    reject: (error: unknown) => void;
+  } {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("an invalid-profile refusal naming neither a field nor a reason is said at the bottom", async () => {
+    const { el } = await editListed({
+      updateDeviceProfile: vi
+        .fn()
+        .mockRejectedValue({ code: "device_profile.invalid", params: {} }),
+    });
+    await save(el);
+    expect(bottom(el)).toBe(codeMessage("device_profile.invalid"));
+    for (const test of [
+      "receipt-printers-default",
+      "payment-slip-printers-default",
+      "profile-readers-default",
+    ])
+      expect(field(el, test).error).toBe("");
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
+  });
+
+  it("card readers that cannot be read are said, draw no reader section, and the profile still saves", async () => {
+    const { api, el } = await editListed({
+      listReaders: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=profile-readers]")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(codeMessage("connection.failed"));
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(api.setProfileReaders).not.toHaveBeenCalled();
+  });
+
+  it("card readers that fail to read after the editor was cancelled say nothing on the list", async () => {
+    const readers = deferred<never>();
+    const { el } = await editListed({ listReaders: vi.fn().mockReturnValue(readers.promise) });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
+    readers.reject({ code: "connection.failed" });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(codeMessage("connection.failed"));
+  });
+
+  it("switching off the default reader sets the default to None", async () => {
+    const { api, el } = await editListed();
+    expect(field(el, "profile-readers-default").value).toBe("r1");
+    toggle(el, "profile-reader-r1", false);
+    await flush(el);
+    expect(field(el, "profile-readers-default").value).toBe("");
+    await save(el);
+    expect(api.setProfileReaders).toHaveBeenCalledExactlyOnceWith("p1", {
+      readerIds: [],
+      defaultReaderId: null,
+    });
+  });
+
+  it("a refused reader save that names the default shows under the default reader, keeping the editor", async () => {
+    const { api, el } = await editListed({
+      setProfileReaders: vi.fn().mockRejectedValue({
+        code: "device_profile.invalid",
+        params: { field: "defaultReaderId", reason: "default_not_listed" },
+      }),
+    });
+    toggle(el, "profile-reader-r2", true);
+    await flush(el);
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(field(el, "profile-readers-default").error).toBe(
+      t("device_profiles.err_default_not_listed"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
+  });
+
+  describe("a reader save answering after the screen was left", () => {
+    async function leaveWhileReadersSave(answer: Promise<unknown>) {
+      const { api, el } = await editListed({
+        setProfileReaders: vi.fn().mockReturnValue(answer),
+      });
+      toggle(el, "profile-reader-r2", true);
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+      await vi.waitFor(() => expect(api.setProfileReaders).toHaveBeenCalledTimes(1));
+      el.remove();
+      return { api, el, reads: vi.mocked(api.listDeviceProfiles).mock.calls.length };
+    }
+
+    it("reads no profiles once it is saved", async () => {
+      const answer = deferred<ProfileReaderList>();
+      const { api, el, reads } = await leaveWhileReadersSave(answer.promise);
+      answer.resolve({ readerIds: ["r1", "r2"], defaultReaderId: "r1" });
+      await flush(el);
+      await flush(el);
+      expect(vi.mocked(api.listDeviceProfiles).mock.calls.length).toBe(reads);
+    });
+
+    it("says nothing when it is refused", async () => {
+      const answer = deferred<ProfileReaderList>();
+      const { el } = await leaveWhileReadersSave(answer.promise);
+      answer.reject({ code: "reader.not_found" });
+      await flush(el);
+      await flush(el);
+      expect(el.shadowRoot!.textContent).not.toContain(codeMessage("reader.not_found"));
+    });
+  });
+
+  it("marks a listed reader that is switched off, and draws none the reader list did not deliver", async () => {
+    const { el } = await editListed({
+      listReaders: vi.fn().mockResolvedValue([{ ...readers[0]!, active: false }, readers[1]!]),
+      getProfileReaders: vi
+        .fn()
+        .mockResolvedValue({ readerIds: ["r9", "r1"], defaultReaderId: "r1" }),
+    });
+    const switches = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement & { checked: boolean; label: string }>(
+        "[data-test=profile-readers] wt-switch",
+      ),
+    ];
+    const off = `Mostrador (${t("devices.watcher_disabled_mark")})`;
+    expect(switches.map((s) => [s.dataset.test, s.label, s.checked])).toEqual([
+      ["profile-reader-r1", off, true],
+      ["profile-reader-r2", "Terraza", false],
+    ]);
+    expect(field(el, "profile-readers-default").options).toEqual([
+      { value: "", label: t("device_profiles.default_none") },
+      { value: "r1", label: off },
+    ]);
+  });
+
+  it("a duplicate copies the profile's cash drawer list", async () => {
+    const withDrawer: DeviceProfile = { ...listedProfile, cashDrawerPrinterIds: ["pr1"] };
+    const { api } = await duplicateListed({
+      listDeviceProfiles: vi.fn().mockResolvedValue([withDrawer, profiles[1]]),
+    });
+    expect(api.createDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toMatchObject({
+      cashDrawerPrinterIds: ["pr1"],
+    });
+  });
+
+  async function duplicateListed(overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi({
+      listDeviceProfiles: vi.fn().mockResolvedValue([listedProfile, profiles[1]]),
+      listPrinters: vi.fn().mockResolvedValue(venuePrinters),
+      listReaders: vi.fn().mockResolvedValue(readers),
+      getProfileReaders: vi
+        .fn()
+        .mockResolvedValue({ readerIds: ["r1", "r2"], defaultReaderId: "r2" }),
+      setProfileReaders: vi.fn().mockImplementation((_id, list) => Promise.resolve(list)),
+      ...overrides,
+    });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+    await flush(el);
+    await flush(el);
+    return { api, el };
+  }
+
+  it("a duplicate copies the reader list and its default onto the new profile", async () => {
+    const { api } = await duplicateListed();
+    expect(api.getProfileReaders).toHaveBeenCalledWith("p1");
+    expect(api.setProfileReaders).toHaveBeenCalledExactlyOnceWith("p9", {
+      readerIds: ["r1", "r2"],
+      defaultReaderId: "r2",
+    });
+    expect(vi.mocked(api.createDeviceProfile).mock.invocationCallOrder[0]!).toBeLessThan(
+      vi.mocked(api.setProfileReaders).mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("a duplicate whose reader copy fails says so at the bottom, and the copy stays", async () => {
+    const { api, el } = await duplicateListed({
+      setProfileReaders: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
+    });
+    expect(api.createDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(api.deleteDeviceProfile).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+      codeMessage("reader.not_found"),
+    );
+  });
+
+  it.each([
+    [
+      "without the payments permission",
+      vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    ],
+    [
+      "when the profile lists no reader",
+      vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
+    ],
+  ])("a duplicate copies no reader list %s, and says nothing", async (_when, getProfileReaders) => {
+    const { api, el } = await duplicateListed({ getProfileReaders });
+    expect(api.createDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(api.setProfileReaders).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 });

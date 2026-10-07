@@ -17,6 +17,7 @@ import type {
   DeviceRow,
   JoinRequestRow,
   Printer,
+  ProfileReaderList,
   ReaderRow,
   Station,
   Watcher,
@@ -103,6 +104,8 @@ const devices: DeviceRow[] = [
     profileRetired: false,
     receiptPrinterId: "pr1",
     paymentSlipPrinterId: null,
+    cashDrawerPrinterId: null,
+    equipment: [],
     batteryLevel: null,
     batteryCharging: null,
     batteryReportedAt: null,
@@ -123,6 +126,8 @@ const devices: DeviceRow[] = [
     profileRetired: false,
     receiptPrinterId: null,
     paymentSlipPrinterId: null,
+    cashDrawerPrinterId: null,
+    equipment: [],
     batteryLevel: null,
     batteryCharging: null,
     batteryReportedAt: null,
@@ -139,6 +144,10 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
     startingScreen: null,
     departmentId: "dep-1",
     allowedZoneIds: null,
@@ -155,6 +164,10 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
     startingScreen: null,
     departmentId: "dep-1",
     allowedZoneIds: null,
@@ -171,6 +184,10 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
     startingScreen: null,
     departmentId: null,
     allowedZoneIds: null,
@@ -222,6 +239,8 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
+    portable: false,
+    holder: null,
     active: true,
   },
 ];
@@ -275,7 +294,11 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     revokeDevice: vi.fn().mockResolvedValue(undefined),
     updateDevice: vi.fn().mockResolvedValue(undefined),
     listReaders: vi.fn().mockResolvedValue(readers),
-    // No device carries a default reader unless a test says otherwise.
+    listReaderHolders: vi.fn().mockResolvedValue([]),
+    getProfileReaders: vi
+      .fn()
+      .mockResolvedValue({ readerIds: ["r1", "r2", "r3"], defaultReaderId: null }),
+    // No device has chosen a reader (Use default) unless a test says otherwise.
     getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
     setDeviceReader: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -543,6 +566,10 @@ describe("the device table", () => {
       ["name", t("devices.name")],
       ["profile", t("devices.device_profile")],
       ["shows", t("devices.shows")],
+      ["receipt", t("devices.receipt_printer_now")],
+      ["slip", t("devices.slip_printer_now")],
+      ["drawer", t("devices.cash_drawer_now")],
+      ["reader", t("devices.default_reader")],
       ["battery", t("devices.column_battery")],
       ["status", t("devices.column_status")],
       ["lastSeen", t("devices.column_last_seen")],
@@ -942,6 +969,93 @@ describe("the device table", () => {
       await page.viewport(width, height);
     }
   });
+
+  it("shows each device's resolved receipt, slip, drawer and reader, marked when on Use default", async () => {
+    const equipped: DeviceRow = {
+      ...devices[0]!,
+      kind: "till",
+      equipment: [
+        {
+          role: "receipt",
+          selection: "default",
+          chosenId: null,
+          resolved: { id: "pr1", name: "Cocina", available: true },
+        },
+        {
+          role: "payment_slip",
+          selection: "item",
+          chosenId: "pr2",
+          resolved: { id: "pr2", name: "Terraza", available: true },
+        },
+        {
+          role: "cash_drawer",
+          selection: "default",
+          chosenId: null,
+          resolved: null,
+        },
+        {
+          role: "card_terminal",
+          selection: "default",
+          chosenId: null,
+          resolved: { id: "r1", name: "Front counter", available: true },
+        },
+      ],
+    };
+    const api = stubApi({ listDevices: vi.fn().mockResolvedValue([equipped]) });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    const mark = t("devices.default_mark");
+    expect(deepText(el, "[data-test=device-receipt-d1]")).toBe(`Cocina (${mark})`);
+    expect(deepText(el, "[data-test=device-slip-d1]")).toBe("Terraza");
+    expect(deepText(el, "[data-test=device-drawer-d1]")).toBe(`${t("equipment.none")} (${mark})`);
+    expect(deepText(el, "[data-test=device-reader-d1]")).toBe(`Front counter (${mark})`);
+  });
+
+  it("draws no card reader column for a session that cannot manage readers", async () => {
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api: stubApi(),
+      canManageReaders: false,
+    });
+    await flush(el);
+    expect(devicesTable(el).columns.map((c) => c.key)).not.toContain("reader");
+    expect(dq(el.shadowRoot!, "[data-test=device-receipt-d1]")).not.toBeNull();
+    expect(dq(el.shadowRoot!, "[data-test=device-reader-d1]")).toBeNull();
+  });
+
+  it("shows the equipment columns to someone whose remembered columns predate them, after Shows", async () => {
+    // Saved by the table before these columns existed: Battery hidden, Status moved first.
+    localStorage.setItem("devices:columns", JSON.stringify({ battery: false }));
+    localStorage.setItem(
+      "devices:column-order",
+      JSON.stringify(["status", "profile", "shows", "battery", "lastSeen"]),
+    );
+    try {
+      const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      const table = devicesTable(el);
+      await table.updateComplete;
+      const headers = [...table.shadowRoot!.querySelectorAll("thead th")].map((th) =>
+        th.textContent!.replace(/[▲▼]/g, "").trim(),
+      );
+      expect(headers).toEqual([
+        t("devices.name"),
+        t("devices.column_status"),
+        t("devices.device_profile"),
+        t("devices.shows"),
+        t("devices.receipt_printer_now"),
+        t("devices.slip_printer_now"),
+        t("devices.cash_drawer_now"),
+        t("devices.default_reader"),
+        t("devices.column_last_seen"),
+        t("devices.actions"),
+      ]);
+    } finally {
+      localStorage.removeItem("devices:columns");
+      localStorage.removeItem("devices:column-order");
+    }
+  });
 });
 
 describe("the Edit dialog", () => {
@@ -1017,6 +1131,8 @@ describe("the Edit dialog", () => {
   }
 
   const field = (el: DevicesScreen, id: string) => q(el, `[data-test=${id}]`) as Field;
+  /** Use default on a profile with no default for the role. */
+  const useDefaultNone = () => t("devices.use_default").replace("{name}", t("equipment.none"));
 
   async function openEdit(api: DashboardApi, id = "t1"): Promise<DevicesScreen> {
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
@@ -1089,7 +1205,7 @@ describe("the Edit dialog", () => {
     ]);
     // The device keeps the switched-off printer it holds; it cannot newly choose one.
     expect(receipt.options).toEqual([
-      { value: "", label: t("devices.no_printer") },
+      { value: "", label: useDefaultNone() },
       { value: "pr3", label: "Barra (Deshabilitada)" },
       { value: "pr1", label: "Cocina" },
       { value: "pr2", label: "Terraza" },
@@ -1101,7 +1217,7 @@ describe("the Edit dialog", () => {
       "pr2",
     ]);
     expect(slip.options).toEqual([
-      { value: "", label: t("devices.no_printer") },
+      { value: "", label: useDefaultNone() },
       { value: "pr2", label: "Terraza" },
     ]);
 
@@ -1123,7 +1239,7 @@ describe("the Edit dialog", () => {
     ]);
     // Only active readers, by name and a friendly provider label, after a leading none option.
     expect(reader.options).toEqual([
-      { value: "", label: t("devices.default_reader_none") },
+      { value: "", label: useDefaultNone() },
       { value: "r1", label: "Front counter (Acme Pay)" },
       { value: "r2", label: "Bar (Zeta Pay)" },
     ]);
@@ -1483,7 +1599,7 @@ describe("the Edit dialog", () => {
       q(el, `[data-test=${id}]`)!.shadowRoot!.querySelector("button.trigger .value")!;
     for (const id of ["edit-receipt-printer", "edit-slip-printer"]) {
       expect(field(el, id).value).toBe("");
-      expect(shown(id).textContent!.trim()).toBe(t("devices.no_printer"));
+      expect(shown(id).textContent!.trim()).toBe(useDefaultNone());
       expect(shown(id).classList.contains("placeholder")).toBe(false);
     }
   });
@@ -1495,17 +1611,17 @@ describe("the Edit dialog", () => {
       "button.trigger .value",
     )!;
     expect(field(el, "edit-reader").value).toBe("");
-    expect(shown.textContent!.trim()).toBe(t("devices.default_reader_none"));
+    expect(shown.textContent!.trim()).toBe(useDefaultNone());
     expect(shown.classList.contains("placeholder")).toBe(false);
   });
 
-  it("changing the profile resets both printers to the new profile's first switched-on printer, or none", async () => {
+  it("changing the profile puts both printers on Use default", async () => {
     const el = await openEdit(editApi());
     await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
     await flush(el);
 
     const receipt = field(el, "edit-receipt-printer");
-    expect(receipt.value).toBe("pr2");
+    expect(receipt.value).toBe("");
     // On a new profile a switched-off printer cannot be chosen.
     expect(receipt.options.map((o) => o.value)).toEqual(["", "pr2"]);
     const slip = field(el, "edit-slip-printer");
@@ -1539,7 +1655,7 @@ describe("the Edit dialog", () => {
           const receipt = field(el, "edit-receipt-printer");
           expect(receipt.value).toBe("pr4");
           expect(receipt.options).toEqual([
-            { value: "", label: t("devices.no_printer") },
+            { value: "", label: useDefaultNone() },
             { value: "pr1", label: "Cocina" },
             { value: "pr2", label: "Terraza" },
             { value: "pr4", label: receiptLabel },
@@ -1547,7 +1663,7 @@ describe("the Edit dialog", () => {
           const slip = field(el, "edit-slip-printer");
           expect(slip.value).toBe("pr3");
           expect(slip.options).toEqual([
-            { value: "", label: t("devices.no_printer") },
+            { value: "", label: useDefaultNone() },
             { value: "pr2", label: "Terraza" },
             { value: "pr3", label: slipLabel },
           ]);
@@ -1594,7 +1710,7 @@ describe("the Edit dialog", () => {
       await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
       await flush(el);
       const receipt = field(el, "edit-receipt-printer");
-      expect(receipt.value).toBe("pr2");
+      expect(receipt.value).toBe("");
       expect(receipt.options.map((o) => o.value)).toEqual(["", "pr2"]);
       const slip = field(el, "edit-slip-printer");
       expect(slip.value).toBe("");
@@ -2466,6 +2582,7 @@ describe("the Edit dialog", () => {
     const el = await openEdit(api);
     wtChange(el, "[data-test=edit-name]", "Caja 2");
     await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+    await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr2");
     await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
     await flush(el);
     await save(el);
@@ -2516,6 +2633,355 @@ describe("the Edit dialog", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(table.shadowRoot!.activeElement).toBe(menu);
+  });
+
+  describe("equipment: Use default, held and busy items, the drawer", () => {
+    const portableTerraza: Printer = {
+      ...editPrinters[1]!,
+      portable: true,
+      holder: { deviceId: "d7", deviceName: "Móvil 2", personName: "Ana" },
+    };
+    const withDefaults: DeviceProfile = {
+      ...editProfiles[0]!,
+      receiptPrinterDefaultId: "pr1",
+      paymentSlipPrinterDefaultId: "pr2",
+      cashDrawerPrinterIds: ["pr1"],
+    };
+    const onDefault: DeviceRow = { ...till, receiptPrinterId: null, paymentSlipPrinterId: null };
+    const useDefault = (name: string) => t("devices.use_default").replace("{name}", name);
+
+    function equipmentApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
+      return editApi({
+        listDevices: vi.fn().mockResolvedValue([onDefault, kitchen]),
+        listDeviceProfiles: vi.fn().mockResolvedValue([withDefaults, ...editProfiles.slice(1)]),
+        listPrinters: vi
+          .fn()
+          .mockResolvedValue([editPrinters[0], portableTerraza, editPrinters[2]]),
+        ...overrides,
+      });
+    }
+
+    it("a device on Use default shows the profile default it resolves to, and None", async () => {
+      const el = await openEdit(equipmentApi());
+      const receipt = field(el, "edit-receipt-printer");
+      expect(receipt.value).toBe("");
+      expect(receipt.options[0]).toEqual({ value: "", label: useDefault("Cocina") });
+      // The slip default is carried by another device, so Use default prints no slip here.
+      expect(field(el, "edit-slip-printer").options[0]).toEqual({
+        value: "",
+        label: useDefault(t("equipment.none")),
+      });
+      const drawer = field(el, "edit-cash-drawer");
+      expect([drawer.name, drawer.label, drawer.value]).toEqual([
+        "cashDrawerPrinterId",
+        t("devices.cash_drawer_now"),
+        "",
+      ]);
+      expect(drawer.options).toEqual([
+        { value: "", label: useDefault(t("equipment.none")) },
+        { value: "pr1", label: "Cocina" },
+      ]);
+    });
+
+    it("changing the profile puts each choice on Use default", async () => {
+      const chosen: DeviceRow = { ...till, cashDrawerPrinterId: "pr1" };
+      const api = equipmentApi({
+        listDevices: vi.fn().mockResolvedValue([chosen]),
+        getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r2" }),
+      });
+      const el = await openEdit(api);
+      expect(field(el, "edit-receipt-printer").value).toBe("pr3");
+      expect(field(el, "edit-cash-drawer").value).toBe("pr1");
+      expect(field(el, "edit-reader").value).toBe("r2");
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+      await flush(el);
+      for (const id of [
+        "edit-receipt-printer",
+        "edit-slip-printer",
+        "edit-cash-drawer",
+        "edit-reader",
+      ])
+        expect(field(el, id).value).toBe("");
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
+        profileId: "pb",
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        cashDrawerPrinterId: null,
+      });
+      await vi.waitFor(() => expect(api.setDeviceReader).toHaveBeenCalledWith("t1", null));
+    });
+
+    it("a held printer is labelled with its holder, and a refusal shows under its field naming the holder device", async () => {
+      const api = equipmentApi({
+        updateDevice: vi.fn().mockRejectedValue({
+          code: "device.equipment_held",
+          params: {
+            field: "receiptPrinterId",
+            holderDeviceId: "d7",
+            holderDeviceName: "Móvil 2",
+            holderPersonName: "Ana",
+          },
+        }),
+      });
+      const el = await openEdit(api);
+      const receipt = field(el, "edit-receipt-printer");
+      expect(receipt.options.find((option) => option.value === "pr2")).toEqual({
+        value: "pr2",
+        label: `Terraza (${t("equipment.carried_by").replace("{device}", "Móvil 2")})`,
+      });
+      await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr2");
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() =>
+        expect(field(el, "edit-receipt-printer").error).toBe(
+          t("devices.err_equipment_held").replace("{device}", "Móvil 2"),
+        ),
+      );
+      expect(field(el, "edit-slip-printer").error).toBe("");
+      expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+    });
+
+    it("a printer the device itself carries is not labelled as carried", async () => {
+      const mine: Printer = {
+        ...portableTerraza,
+        holder: { deviceId: "t1", deviceName: "Caja 1", personName: null },
+      };
+      const el = await openEdit(
+        equipmentApi({
+          listPrinters: vi.fn().mockResolvedValue([editPrinters[0], mine, editPrinters[2]]),
+        }),
+      );
+      expect(field(el, "edit-slip-printer").options).toEqual([
+        { value: "", label: useDefault("Terraza") },
+        { value: "pr2", label: "Terraza" },
+      ]);
+    });
+
+    it("offers the profile's card readers, a busy one labelled busy and a held one with its holder", async () => {
+      const el = await openEdit(
+        equipmentApi({
+          getProfileReaders: vi
+            .fn()
+            .mockResolvedValue({ readerIds: ["r2", "r1"], defaultReaderId: "r2" }),
+          listReaderHolders: vi.fn().mockResolvedValue([
+            { readerId: "r1", holder: null, paymentInProgressDeviceIds: ["d9"] },
+            {
+              readerId: "r2",
+              holder: { deviceId: "d7", deviceName: "Móvil 2", personName: null },
+              paymentInProgressDeviceIds: [],
+            },
+          ]),
+        }),
+      );
+      expect(field(el, "edit-reader").options).toEqual([
+        { value: "", label: useDefault(t("equipment.none")) },
+        {
+          value: "r2",
+          label: `Bar (Zeta Pay) (${t("equipment.carried_by").replace("{device}", "Móvil 2")})`,
+        },
+        { value: "r1", label: `Front counter (Acme Pay) (${t("equipment.busy")})` },
+      ]);
+    });
+
+    it("a reader refusal shows under the reader in its own words", async () => {
+      const api = equipmentApi({
+        setDeviceReader: vi.fn().mockRejectedValue({
+          code: "reader.payment_in_progress",
+          params: { readerId: "r1" },
+        }),
+      });
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() =>
+        expect(field(el, "edit-reader").error).toBe(t("devices.err_reader_busy")),
+      );
+    });
+
+    it("saves cashDrawerPrinterId", async () => {
+      const api = equipmentApi();
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-cash-drawer]")!, "pr1");
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
+        cashDrawerPrinterId: "pr1",
+      });
+    });
+
+    it("sends no drawer choice a save leaves alone", async () => {
+      const api = equipmentApi();
+      const el = await openEdit(api);
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
+        "cashDrawerPrinterId",
+      );
+    });
+
+    it("a reader the device's profile does not allow is refused under the reader as not allowed", async () => {
+      const api = equipmentApi({
+        setDeviceReader: vi.fn().mockRejectedValue({
+          code: "device.binding_invalid",
+          params: { field: "cardReaderId" },
+        }),
+      });
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() =>
+        expect(field(el, "edit-reader").error).toBe(t("devices.err_reader_not_allowed")),
+      );
+      expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+    });
+
+    it("a till with no profile offers only Use default, then the readers of the profile chosen for it", async () => {
+      const unprofiled: DeviceRow = { ...onDefault, deviceProfileId: null };
+      const api = equipmentApi({
+        listDevices: vi.fn().mockResolvedValue([unprofiled]),
+        getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
+        getProfileReaders: vi.fn().mockResolvedValue({ readerIds: ["r2"], defaultReaderId: "r2" }),
+      });
+      const el = await openEdit(api);
+      for (const id of [
+        "edit-receipt-printer",
+        "edit-slip-printer",
+        "edit-cash-drawer",
+        "edit-reader",
+      ])
+        expect(field(el, id).options).toEqual([
+          { value: "", label: useDefault(t("equipment.none")) },
+        ]);
+      expect(api.getProfileReaders).not.toHaveBeenCalled();
+
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pa");
+      await vi.waitFor(() =>
+        expect(field(el, "edit-reader").options).toEqual([
+          { value: "", label: useDefault("Bar (Zeta Pay)") },
+          { value: "r2", label: "Bar (Zeta Pay)" },
+        ]),
+      );
+      expect(api.getProfileReaders).toHaveBeenCalledExactlyOnceWith("pa");
+    });
+
+    function deferred<T>(): {
+      promise: Promise<T>;
+      resolve: (value: T) => void;
+      reject: (error: unknown) => void;
+    } {
+      let resolve!: (value: T) => void;
+      let reject!: (error: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    it("a profile changed and changed back while the reader loads leaves the reader on Use default, reading that profile's readers once", async () => {
+      const stored = deferred<{ readerId: string | null }>();
+      const api = equipmentApi({
+        getDeviceReader: vi.fn().mockReturnValue(stored.promise),
+        getProfileReaders: vi
+          .fn()
+          .mockResolvedValue({ readerIds: ["r1", "r2"], defaultReaderId: null }),
+      });
+      const el = await openEdit(api);
+      expect(field(el, "edit-reader").disabled).toBe(true);
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+      await flush(el);
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pa");
+      await flush(el);
+
+      stored.resolve({ readerId: "r2" });
+      await vi.waitFor(() => expect(field(el, "edit-reader").disabled).toBe(false));
+      expect(field(el, "edit-reader").value).toBe("");
+      expect(field(el, "edit-reader").options.map((option) => option.value)).toEqual([
+        "",
+        "r1",
+        "r2",
+      ]);
+      expect(api.getProfileReaders).toHaveBeenCalledExactlyOnceWith("pa");
+    });
+
+    it("a chosen profile's readers that cannot be read are said at the bottom of Edit", async () => {
+      const api = equipmentApi({
+        getProfileReaders: vi
+          .fn()
+          .mockImplementation((id: string) =>
+            id === "pb"
+              ? Promise.reject({ code: "connection.failed" })
+              : Promise.resolve({ readerIds: ["r1"], defaultReaderId: null }),
+          ),
+      });
+      const el = await openEdit(api);
+      expect(await bottom(el)).toBe("");
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+      await vi.waitFor(async () => expect(await bottom(el)).toBe(codeMessage("connection.failed")));
+      expect(field(el, "edit-reader").options).toEqual([
+        { value: "", label: useDefault(t("equipment.none")) },
+      ]);
+    });
+
+    describe("a chosen profile's readers answering after Edit was saved and opened again", () => {
+      const paReaders: ProfileReaderList = { readerIds: ["r2"], defaultReaderId: null };
+
+      async function saveWhilePbLoads(late: Promise<ProfileReaderList>, fresh: ProfileReaderList) {
+        const api = equipmentApi({
+          getProfileReaders: vi
+            .fn()
+            .mockResolvedValueOnce(paReaders)
+            .mockReturnValueOnce(late)
+            .mockResolvedValueOnce(paReaders)
+            .mockResolvedValueOnce(fresh),
+        });
+        const el = await openEdit(api);
+        await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+        await flush(el);
+        await save(el);
+        await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+        dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+        await vi.waitFor(() => expect(field(el, "edit-reader")?.disabled).toBe(false));
+        return { api, el };
+      }
+
+      it("are not used: choosing that profile again reads its readers afresh", async () => {
+        const late = deferred<ProfileReaderList>();
+        const { api, el } = await saveWhilePbLoads(late.promise, {
+          readerIds: ["r1"],
+          defaultReaderId: null,
+        });
+        late.resolve({ readerIds: ["r2"], defaultReaderId: "r2" });
+        await flush(el);
+        await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+        await vi.waitFor(() =>
+          expect(field(el, "edit-reader").options.map((option) => option.value)).toEqual([
+            "",
+            "r1",
+          ]),
+        );
+        expect(vi.mocked(api.getProfileReaders).mock.calls.map(([id]) => id)).toEqual([
+          "pa",
+          "pb",
+          "pa",
+          "pb",
+        ]);
+      });
+
+      it("say nothing at the bottom when they fail", async () => {
+        const late = deferred<ProfileReaderList>();
+        const { el } = await saveWhilePbLoads(late.promise, paReaders);
+        late.reject({ code: "connection.failed" });
+        await flush(el);
+        await flush(el);
+        expect(await bottom(el)).toBe("");
+      });
+    });
   });
 });
 
