@@ -782,11 +782,7 @@ export class MenuStructureTable extends LitElement {
     }
     const sectionId = node.ref.sectionId;
     const own = ownPresentation(node);
-    const chip = swatchChip(
-      node.includedMenuId
-        ? folderPresentation(own, node.folder ?? FOLLOWING_FOLDER).color
-        : own.color,
-    );
+    const chip = swatchChip(folderPresentation(own, node.folder ?? FOLLOWING_FOLDER).color);
     if (!this.#ownedSection(row))
       return html`<span part="swatch-box" data-test=${`color-${key}`} aria-hidden="true"
         >${chip}</span

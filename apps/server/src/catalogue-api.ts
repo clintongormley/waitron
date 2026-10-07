@@ -51,7 +51,6 @@ import {
   type SectionPatch,
   setIncludeFolder,
   type IncludeFolderInput,
-  type IncludeFolderOverrides,
   type CategoryInput,
   createProduct,
   listCatalogues,
@@ -158,7 +157,8 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
   return result;
 }
 
-/** A section body's fields, shape only: `createSectionIn`/`updateSection` check the values. */
+/** A section body's fields, or an include folder's overrides, shape only: `createSectionIn`,
+ * `updateSection` and `setIncludeFolder` check the values. */
 function sectionInput(body: Record<string, unknown>, creating: true): SectionInput;
 function sectionInput(body: Record<string, unknown>, creating: false): SectionPatch;
 function sectionInput(body: Record<string, unknown>, creating: boolean): SectionPatch {
@@ -199,17 +199,7 @@ function includeFolderInput(body: unknown): IncludeFolderInput {
     Object.keys(overrides).some((key) => !INCLUDE_FOLDER_OVERRIDES.includes(key))
   )
     throw invalid("overrides");
-  const { names } = overrides;
-  if (
-    names !== undefined &&
-    (!isPlainObject(names) || Object.values(names).some((text) => typeof text !== "string"))
-  )
-    throw invalid("names");
-  for (const field of ["image", "color"] as const) {
-    const value = overrides[field];
-    if (value !== undefined && value !== null && typeof value !== "string") throw invalid(field);
-  }
-  return { showAsFolder: body.showAsFolder, overrides: overrides as IncludeFolderOverrides };
+  return { showAsFolder: body.showAsFolder, overrides: sectionInput(overrides, false) };
 }
 
 function memberRef(value: unknown): MemberRef {

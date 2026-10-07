@@ -215,6 +215,10 @@ describe("PUT /management-api/sections/:id/members/:memberId/folder", () => {
       [{ showAsFolder: true, overrides: { names: { es: 5 } } }, "names"],
       [{ showAsFolder: true, overrides: { image: 3 } }, "image"],
       [{ showAsFolder: true, overrides: { color: false } }, "color"],
+      [{ showAsFolder: true, overrides: { internalName: "Bar" } }, "overrides"],
+      [{ showAsFolder: true, overrides: { names: null } }, "names"],
+      [{ showAsFolder: true, overrides: { names: 5, image: 3 } }, "names"],
+      [{ showAsFolder: true, overrides: { image: 3, color: false } }, "image"],
     ];
     for (const [body, field] of cases) {
       const response = await send(app, "PUT", folderPath(f), { body });

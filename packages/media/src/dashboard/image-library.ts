@@ -38,6 +38,25 @@ function usageHref(use: ImageUsage): string {
   return `/manage/catalogue/product/${encodeURIComponent(use.id)}`;
 }
 
+function usageName(use: ImageUsage): string {
+  switch (use.kind) {
+    case "receipt":
+      return t("image.receipt_logo");
+    case "section":
+      return use.internalName;
+    case "menu_include":
+      return t("image.included_menu_folder")
+        .replace("{included}", () => use.includedMenuName)
+        .replace("{menu}", () => use.menuName);
+    case "menu_version":
+      return `${use.menuName} (${t("image.published_menu")})`;
+    case "scheduled_menu_version":
+      return `${use.menuName} (${t("image.scheduled_menu")})`;
+    default:
+      return use.name;
+  }
+}
+
 const PHOTO_REFUSALS = new Set([
   "image.too_large",
   "image.invalid_file",
@@ -348,20 +367,7 @@ export class ImageLibrary extends LitElement {
     return resolveEnabledContentText(value, currentLocale(), currentContentLanguages());
   }
   #usage(use: ImageUsage) {
-    const name =
-      use.kind === "receipt"
-        ? t("image.receipt_logo")
-        : use.kind === "section"
-          ? use.internalName
-          : use.kind === "menu_include"
-            ? t("image.included_menu_folder")
-                .replace("{included}", () => use.includedMenuName)
-                .replace("{menu}", () => use.menuName)
-            : use.kind === "menu_version"
-              ? `${use.menuName} (${t("image.published_menu")})`
-              : use.kind === "scheduled_menu_version"
-                ? `${use.menuName} (${t("image.scheduled_menu")})`
-                : use.name;
+    const name = usageName(use);
     const inactive = "active" in use && !use.active ? ` (${t("image.disabled_product")})` : "";
     return html`<a href=${usageHref(use)}>${name}${inactive}</a>`;
   }
