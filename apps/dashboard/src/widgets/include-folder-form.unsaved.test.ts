@@ -117,6 +117,20 @@ it("switching the folder off is a change, and switching it back on is not", asyn
   await toggle(form);
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
+it("a refreshed included menu or stored folder does not make an untouched dialog count as changed", async () => {
+  const { app, form } = await mount();
+  form.own = {
+    names: { en: "Beverages", es: "Bebidas nuevas" },
+    image: "renamed",
+    color: "#123456",
+  };
+  form.value = { showAsFolder: true, overrides: { names: { en: "Bar", fr: "Boissons" } } };
+  await form.updateComplete;
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  cancel(form);
+  await expect.poll(() => app.cancelled).toBe(1);
+  expect((await question(app)).open).toBe(false);
+});
 it("after closeSaved it does not ask", async () => {
   const { app, form } = await mount();
   await edit(form, "names-es", "Barra");

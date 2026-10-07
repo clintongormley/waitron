@@ -136,34 +136,45 @@ it("hints a blank name with the default language's name, then the included menu'
   await type(el, "names-en", "Bar");
   expect(field(el, "names-es")!.placeholder).toBe("Bar");
 });
-it.each([
-  [{ "names-en": "Check the English name." }, "names-en"],
-  [{ color: "Choose another colour." }, "color"],
-  [{ image: "Choose another photo." }, "image"],
-])(
-  "shows a refusal beside the field it names and in one message at the bottom (%o)",
-  async (fieldErrors, key) => {
+const errorText = (el: Form, id: string) =>
+  el.shadowRoot!.querySelector(`#${id}`)!.textContent!.trim();
+/** What each refusable field shows beside itself: its message, and whether it is marked invalid. */
+const besideField: Record<string, (el: Form) => [string, boolean]> = {
+  "names-en": (el) => [field(el, "names-en")!.error, field(el, "names-en")!.invalid],
+  color: (el) => [
+    errorText(el, "include-color-error"),
+    colorInput(el)!.getAttribute("aria-invalid") === "true",
+  ],
+  image: (el) => [errorText(el, "include-image-error"), uploadOf(el)!.invalid],
+};
+it.each(Object.keys(besideField))(
+  "shows a refusal beside the field it names (%s) and in one message at the bottom",
+  async (key) => {
     const el = await includeForm();
-    el.fieldErrors = fieldErrors;
+    const message = `Refused: ${key}`;
+    expect(besideField[key]!(el)).toEqual(["", false]);
+    el.fieldErrors = { [key]: message };
     await el.updateComplete;
-    const message = Object.values(fieldErrors)[0]!;
-    if (key === "names-en") expect(field(el, "names-en")!.error).toBe(message);
-    if (key === "color")
-      expect(el.shadowRoot!.querySelector("#include-color-error")!.textContent!.trim()).toBe(
-        message,
-      );
-    if (key === "image") {
-      expect(el.shadowRoot!.querySelector("#include-image-error")!.textContent!.trim()).toBe(
-        message,
-      );
-      expect(uploadOf(el)!.invalid).toBe(true);
-    }
+    expect(besideField[key]!(el)).toEqual([message, true]);
     expect(bottomOf(el)).toBe(t("form.fix_fields"));
     const save =
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!;
     expect(save.disabled).toBe(false);
   },
 );
+it("decides what follows the included menu against its values as the dialog loaded them", async () => {
+  const el = await includeForm({ value: null });
+  el.own = {
+    names: { en: "Beverages", es: "Bebidas nuevas" },
+    image: "renamed-photo",
+    color: null,
+  };
+  await el.updateComplete;
+  expect(field(el, "names-en")!.value).toBe("Drinks");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+  await el.updateComplete;
+  expect(submitted(el)).toEqual({ showAsFolder: true, overrides: { color: "#256bb1" } });
+});
 it("clears a field's refusal when that field changes, and every refusal on the next submission", async () => {
   const el = await includeForm();
   el.fieldErrors = { "names-en": "Check the English name.", color: "Choose another colour." };

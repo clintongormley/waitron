@@ -108,12 +108,15 @@ export class IncludeFolderForm extends LitElement {
     super.disconnectedCallback();
   }
 
-  get #stored(): IncludeFolder {
-    return this.value ?? FOLLOWING_FOLDER;
-  }
+  /** The included menu's presentation and the stored folder as the dialog opened on them: what
+   * follows the menu and what is fixed is decided against these, not a later refresh. */
+  #loaded: { own: Presentation; stored: IncludeFolder } = {
+    own: { names: {}, image: null, color: null },
+    stored: FOLLOWING_FOLDER,
+  };
 
   #show(showAsFolder: boolean, overrides: IncludeFolderOverrides): void {
-    const shown = folderPresentation(this.own, { showAsFolder: true, overrides });
+    const shown = folderPresentation(this.#loaded.own, { showAsFolder: true, overrides });
     this.showAsFolder = showAsFolder;
     this.names = { ...shown.names };
     for (const locale of this.languages.languages) this.names[locale] ??= "";
@@ -125,7 +128,8 @@ export class IncludeFolderForm extends LitElement {
     if (changes.has("open") && this.open) {
       this.#scope?.dispose();
       this.#scope = undefined;
-      this.#show(this.#stored.showAsFolder, this.#stored.overrides);
+      this.#loaded = structuredClone({ own: this.own, stored: this.value ?? FOLLOWING_FOLDER });
+      this.#show(this.#loaded.stored.showAsFolder, this.#loaded.stored.overrides);
       this.dismissed = new Set();
     }
     if (changes.has("fieldErrors")) this.dismissed = new Set();
@@ -144,7 +148,7 @@ export class IncludeFolderForm extends LitElement {
         // A submission with the switch off carries no overrides; the stored ones fill the hidden
         // fields, so switching back on shows them.
         restore: (value) =>
-          this.#show(value.showAsFolder, value.overrides ?? this.#stored.overrides),
+          this.#show(value.showAsFolder, value.overrides ?? this.#loaded.stored.overrides),
       });
     }
   }
@@ -196,10 +200,10 @@ export class IncludeFolderForm extends LitElement {
     return {
       showAsFolder: true,
       overrides: folderOverridesFrom(
-        this.own,
+        this.#loaded.own,
         { names: this.names, image: this.image, color: this.color },
         this.languages.languages,
-        this.#stored.overrides,
+        this.#loaded.stored.overrides,
       ),
     };
   }
