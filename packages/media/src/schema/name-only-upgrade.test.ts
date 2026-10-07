@@ -411,6 +411,14 @@ describe("then upgrading to the end of media's folder", () => {
     );
   });
 
+  it("adds the four include-folder image triggers", () => {
+    for (const name of ADDED) {
+      const trigger = latest.find((each) => each.name === name);
+      expect(trigger?.sql).toContain("json_extract");
+      expect(trigger?.sql).toContain("folder_overrides");
+    }
+  });
+
   it("gives each of the two rewritten triggers the live join, the queued join and the queued-state filter", () => {
     for (const name of REWRITTEN) {
       const trigger = latest.find((each) => each.name === name);
