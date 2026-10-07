@@ -4630,13 +4630,15 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   [Step 2](superpowers/plans/2026-10-04-departments-and-zones.md) (#1233) puts departments and
   zones in one editable tree and keeps today's zone-menu and device-default-zone controls
   temporarily in that screen (W97 retired the device-default-zone control, 2026-10-06).
-  A301 — DONE (owner 2026-10-06): a department row now has the tree's arrow, named for the
+  A301 — DONE (#1335; owner 2026-10-06): a department row now has the tree's arrow, named for the
   department in English and Spanish, which hides and shows its zones; a department with no zones
   keeps the arrow's space so the names line up. Departments start open, unlike the Products, menu
   Structure and menu prices trees, which start closed, and a folded department is not remembered
   after a reload: the table remembers only the branches a person opens, only in a tree that starts
   closed and turns on `rememberExpanded`, which of those three only the Products tree does. A zone
-  with no department shows its "Not configured" note apart from its name, in the muted text colour.
+  with no department shows its "Not configured" note apart from its name, in the muted text colour. Left
+  open for the owner: the "Disabled" note a zone or department can show in the same place is
+  not muted (it was not before A301 either), so the two notes now look different.
   A261-2c — DONE (#1285). Non-fiscal
   placement accepts an over-limit order; collection refuses the over-limit invoice without taking
   money (owner decision, 2026-10-06). A261-2d — DONE (#1274); left open:
