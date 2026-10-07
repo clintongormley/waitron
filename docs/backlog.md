@@ -2227,6 +2227,8 @@ native-input EN/ES regressions to `wt-price-input.test.ts` and runs the menu-pri
 2026-10-05).**
 Left open:
 
+- In the Structure tree, closing the section form opened from a section's swatch puts focus on the
+  row's ⋮ menu rather than back on the swatch that opened it. No test pins it.
 - At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
   swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
   on the W92 branch, not on `main`) _(2026-10-06: W85e gives it 12 px more; it still clips)_

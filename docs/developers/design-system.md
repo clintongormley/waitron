@@ -742,9 +742,11 @@ inheritance. For a property whose token is a shared scale value it would be wron
 (its padding or weight), or one it reads no token for (an underline), put
 `exportparts="button: <name>"` on the `wt-button` and style `wt-data-table::part(<name>)`, as
 `apps/dashboard/src/screens/modifiers-screen.ts` does for its Used by count. The tree swatches
-follow this: the Products tree and the Structure tree mark them `part="swatch-button"` (or
-`part="swatch-box"` where the swatch opens nothing) around `part="color-swatch"`, and both take
-the rules from one shared block, `swatchPartStyles` (`apps/dashboard/src/widgets/swatch-styles.ts`).
+follow this: a category's or section's swatch is `part="swatch-button"` (or `part="swatch-box"`
+where it opens nothing) around `part="color-swatch"`, styled by `swatchPartStyles`
+(`apps/dashboard/src/widgets/swatch-styles.ts`); a product's is `part="product-media media-link"`,
+plus `media-link-busy` while the tree is busy (or `product-media swatch-box` where it opens
+nothing), styled by `productMediaStyles` (`apps/dashboard/src/widgets/product-media.ts`).
 Cost: the categories
 screen's colour swatches, thumbnail boxes and ancestor-row muting
 never rendered at all in the browser, through a full review and a green suite — DOM-presence tests

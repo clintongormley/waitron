@@ -1507,8 +1507,8 @@ export class DashboardApp extends LitElement {
   }
 
   /** Listening in the capture phase, this runs before an anchor's own click handler, so an anchor
-   * that handles a plain click itself says so with `data-own-click`. A disabled anchor is cancelled
-   * here whether or not it has a handler of its own. */
+   * that handles a plain click itself says so with `data-own-click`. A disabled anchor's navigation
+   * is cancelled here; its own click handler still runs. */
   readonly #onAppLink = (event: MouseEvent): void => {
     if (event.defaultPrevented) return;
     const anchor = event
