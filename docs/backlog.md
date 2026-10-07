@@ -4960,8 +4960,16 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     per coordinate in `routing_cells`; `station_claims` and `route_exceptions` are dropped
     (venue-service `0031_retire_routing_lists`), with no conversion, so a venue is reset and its
     routing set again. The No category row has cells of its own (owner, 2026-10-07).
-    The grid keeps the server's row order; moving it to the shared name comparison is a follow-up.
+    The grid orders sibling categories, and the products inside each, by the shared label
+    comparison the Products screen's table uses (`createLabelComparator`, `@waitron/shared`;
+    A323): `visibleRoutingRows` sorts them in the browser, and equal names keep the server's order.
     Left open:
+    - **Seen in A323's look at the demo (2026-10-07), in files A323 did not change.** On the
+      Routing tab, the label above the "Where is this made?" time choice is cut to "W…" ("Cuá…" in
+      Spanish) at 1280 and 390 px, in both themes, because the choice is too narrow for it. At
+      390 px the Prep stations tab row scrolls sideways with both ends cut ("Stations" on the left,
+      "New watcher" on the right) and nothing shows that it scrolls. Screenshots:
+      `~/waitron-campaign-c/a323-shots/`.
     - **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells.**
       `#saveSettingsCell`
       (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
