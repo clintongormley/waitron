@@ -1087,7 +1087,7 @@ Departments own the available-menu list and the only timetable; zones override d
 An all-day default covers gaps; normal weeks and special dates share A261's calendar. Staff may
 still order from breakfast after it stops being the default. Several future menu editions can be
 queued, always moving forwards; an immediate publication that overtakes queued editions is refused
-until the manager cancels or moves them.
+until the manager cancels them or their time comes.
 [Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md), §§2–3 and the approved details in §9;
 [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md);
 [publication plan](superpowers/plans/2026-10-04-forward-only-menu-publication.md).

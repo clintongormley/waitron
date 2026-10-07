@@ -14,7 +14,10 @@ import {
 } from "@waitron/db";
 import type { MenuDocument } from "../menu-document-types.js";
 
-/** One published version of a menu: the whole document, never changed once written. */
+/**
+ * One fixed version of a menu, published or queued: the whole document, never changed once
+ * written.
+ */
 export const menuVersions = table(
   "menu_versions",
   {
@@ -35,13 +38,17 @@ export const menuVersions = table(
       name: "menu_versions_menu_fk",
     }),
     uniqueIndex("menu_versions_menu_number_uq").on(t.menuId, t.number),
-    // The target of menu_publications_version_fk: a publication names a version of its own menu.
+    // The target of menu_publications_version_fk and menu_scheduled_publications_version_fk: each
+    // names a version of its own menu.
     unique("menu_versions_id_menu_key").on(t.id, t.menuId),
     check("menu_versions_number_ck", sql`${t.number} >= 1`),
   ],
 );
 
-/** Each published menu's live version. */
+/**
+ * Each published menu's last settled live version; a queued edition whose time has come is live
+ * before it lands here.
+ */
 export const menuPublications = table(
   "menu_publications",
   {
@@ -63,7 +70,9 @@ export const menuPublications = table(
   ],
 );
 
-/** Every photo a version's document names, which media keeps while the version is live. */
+/**
+ * Every photo a version's document names, which media keeps while the version is live or queued.
+ */
 export const menuVersionImages = table(
   "menu_version_images",
   {
