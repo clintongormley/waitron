@@ -149,7 +149,8 @@ export async function settleDue(
       .where(sql`${due.rank} = 1`);
   };
   // The instant and the state are bound beside the batch's ids.
-  const groups = menuIds === undefined ? [undefined] : batches(menuIds, BATCH_SIZE - 2);
+  const groups =
+    menuIds === undefined ? [undefined] : batches([...new Set(menuIds)], BATCH_SIZE - 2);
   const candidates = [];
   for (const batch of groups) candidates.push(...(await read(batch)));
   if (candidates.length === 0) return [];

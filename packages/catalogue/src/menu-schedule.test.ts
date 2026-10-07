@@ -15,10 +15,12 @@ import { menusFixture, offerOf, product, type MenusFixture } from "../test/menus
 import { documentImages, MENU_DOCUMENT_FORMAT } from "./menu-document.js";
 import {
   assertLiveVersions,
+  liveVersions,
   menuStatus,
   previewMenu,
   publishMenu,
   readLiveDocuments,
+  settleDue,
 } from "./menu-publication.js";
 import {
   activateDueMenuPublications,
@@ -702,6 +704,25 @@ describe("a due edition is live at once", () => {
       activatedAt: day(9),
     });
     expect(await pointer()).toMatchObject({ versionId: third.versionId, publishedAt: NOW });
+  });
+
+  it("settles a menu its list names in more than one batch once, and reads it live once", async () => {
+    await setSoup("5.50");
+    const second = await queue(day(8));
+    vi.setSystemTime(day(9));
+    const repeated = Array<string>(BATCH_SIZE).fill(f.lunch);
+
+    let settled: Awaited<ReturnType<typeof settleDue>> | undefined;
+    const written = await statements(async (tx) => {
+      settled = await settleDue(tx, day(9), repeated);
+    });
+    expect(settled).toEqual([{ menuId: f.lunch, versionId: second.versionId, number: 2 }]);
+    expect(writtenTables(written).filter((table) => table === "menu_publications")).toHaveLength(1);
+    expect(await pointer()).toMatchObject({ versionId: second.versionId, publishedAt: day(8) });
+
+    const live = await app((tx) => liveVersions(tx, repeated, "metadata"));
+    expect([...live.keys()]).toEqual([f.lunch]);
+    expect(live.get(f.lunch)).toMatchObject({ versionId: second.versionId, number: 2 });
   });
 
   it("settles a due edition before a write, and a refused write rolls the settle back too", async () => {
