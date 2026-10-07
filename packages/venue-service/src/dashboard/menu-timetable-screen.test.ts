@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import { page } from "vitest/browser";
-import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import type { WtFormActions } from "@waitron/ui";
 import type { MenuSlot, MenuTimetableModel } from "../menu-timetable-types.js";
 import { MenuTimetableApi } from "./menu-timetable-client.js";
@@ -383,10 +387,8 @@ describe("Menu timetable: what a department shows", () => {
     expect(override.value).toBe(m("Café"));
     const inherit = field(el, "zones.sala.periods.mananas.menuId")!;
     expect(inherit.value).toBe("");
-    expect(inherit.placeholder).toBe("Follow the department (Desayunos)");
-    expect(field(el, "zones.sala.allDayMenuId")!.placeholder).toBe(
-      "Follow the department (Bebidas)",
-    );
+    expect(inherit.placeholder).toBe("Desayunos (department's)");
+    expect(field(el, "zones.sala.allDayMenuId")!.placeholder).toBe("Bebidas (department's)");
     expect(field(el, "zones.terraza.allDayMenuId")!.value).toBe(m("Café"));
     expect(field(el, "department.allDayMenuId")!.value).toBe(m("Bebidas"));
     expect(field(el, "periods.mananas.menuId")!.value).toBe(m("Desayunos"));
@@ -508,12 +510,14 @@ describe("Menu timetable: the department's list", () => {
     await click(el, cafe.querySelector('[data-test="remove-menu"]'));
     await click(el, saveButton(el));
     const refused = byTest(el, "list-refusal")!;
-    expect(text(refused)).toContain("Café is still in use");
+    expect(text(refused)).toContain(
+      "Café cannot leave the list yet: change each of these first, or add it back.",
+    );
     expect(findAll(el, '[data-test="menu-use"]').map(text)).toEqual(["Barra · Mañanas"]);
     expect(draftList(el)).not.toContain("Café");
     expect(modal(el)).not.toBeNull();
     expect(await bottomMessage(el)).toBe(
-      "Keep that menu on the list, or change what still uses it, before saving.",
+      "Add that menu back, or change what still uses it, before saving.",
     );
     expect(saveButton(el).disabled).toBe(false);
   });
@@ -779,7 +783,7 @@ describe("Menu timetable: menus by zone", () => {
     const labels = () =>
       field(el, "zones.sala.periods.mananas.menuId")!.options.map((o) => o.label);
     expect(labels()).not.toContain("Deli para llevar");
-    expect(labels()[0]).toBe("Follow the department (Desayunos)");
+    expect(labels()[0]).toBe("Desayunos (department's)");
     expect(field(el, "zones.sala.periods.mananas.menuId")!.options[0]!.value).toBe("");
     state.model.departments[0]!.menuIds.push(m("Deli para llevar"));
     api.rereadWatches();
@@ -791,13 +795,13 @@ describe("Menu timetable: menus by zone", () => {
     const { api, writes } = server();
     const el = await mount(api);
     const options = field(el, "zones.barra.periods.mananas.menuId")!.options;
-    expect(options[0]).toEqual({ value: "", label: "Follow the department (Desayunos)" });
+    expect(options[0]).toEqual({ value: "", label: "Desayunos (department's)" });
     expect(options.filter((option) => option.label === "Desayunos")).toEqual([
       { value: m("Desayunos"), label: "Desayunos" },
     ]);
     expect(field(el, "zones.barra.allDayMenuId")!.options[0]).toEqual({
       value: "",
-      label: "Follow the department (Bebidas)",
+      label: "Bebidas (department's)",
     });
     await choose(el, "zones.barra.periods.mananas.menuId", "");
     expect(writes()).toEqual([
@@ -806,7 +810,7 @@ describe("Menu timetable: menus by zone", () => {
     setLocale("es");
     const spanish = await mount(server().api);
     expect(field(spanish, "zones.sala.periods.mananas.menuId")!.options[0]!.label).toBe(
-      "Seguir al departamento (Desayunos)",
+      "Desayunos (del departamento)",
     );
   });
 
@@ -827,6 +831,26 @@ describe("Menu timetable: menus by zone", () => {
     second.resolve(undefined);
     await settle(el);
     expect(field(el, "zones.sala.periods.mediodia.menuId")!.disabled).toBe(false);
+  });
+
+  it("scrolls the periods and special dates sideways at phone width, row menus in view", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(390, 844);
+      const { api } = server();
+      const el = await mount(api);
+      for (const [name, rows] of [
+        ["periods", 5],
+        ["menu-dates", 3],
+      ] as const) {
+        const table = el.shadowRoot!.querySelector(`wt-data-table[data-test="${name}"]`)!;
+        table.scrollIntoView({ block: "center" });
+        expectRowMenusOnScreen(table, rows);
+      }
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 
   it("keeps the period names in view while the zones scroll sideways at phone width", async () => {
