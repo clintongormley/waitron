@@ -435,8 +435,7 @@ it("stores image-library bytes in the database without a separate image volume",
 
 /**
  * sharp is a native addon with a shared library beside it, and esbuild does not refuse to bundle
- * it. Without `--external:sharp` the build exits 0 and the bundle cannot even be loaded: bundled
- * sharp declares `createRequire` a second time beside the banner `scripts/bundle-node.mjs` adds.
+ * it. Keep it external so its native library stays beside the server bundle.
  *
  * Every Node bundle is built by `scripts/bundle-node.mjs`, and the flag is taken from that
  * script's own argument builder. The rest reads package.json TEXT: it sees a workspace script that

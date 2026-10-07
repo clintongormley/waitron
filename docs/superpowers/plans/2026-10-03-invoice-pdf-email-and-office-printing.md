@@ -72,6 +72,16 @@
   - (d) With owner presence or arrangement, on the box itself in the built image, time one raster page at 300 and at 600 dots per inch and record the server's peak memory while drawing each. The historical design's Mac shapes-only measurement is not a box/text measurement. If drawing outlines through `sharp` does not work there, switch to the printing package's bitmap font drawn at twice its size (`packages/printing/src/raster-text.ts`), and say so in the PR. If box access is unavailable, record the measurement as pending for owner review.
 - **Coverage.** The renderers and encoders are ordinary source and hold the server's 98/98/98/95 coverage bar.
 
+**2026-10-07 bundle checkpoint:** the owner approved the `__waitronCreateRequire` alias and
+the two pinned banner expectation changes. A new real bundle-load case failed before the
+fix with the duplicate import and passed after it, exercising the entry's own import and
+the CommonJS shim. Focused bundler/image/scope/timeout guards passed 431 cases; all four
+shared-bundler consumers built, and Node syntax checks passed for their 12 output bundles.
+The standalone invoice renderer bundle generated a 12,353-byte PDF and 300/600 dpi PNGs
+byte-identical to the existing source-rendered fixtures, with both QRs decoded to the filed
+link. This closes the banner-name issue; bundled-server rendering inside the built image,
+box measurements and physical printer checks remain open.
+
 ## 2. Record delivery metadata, retaining no document bytes
 
 **Inspect/change:** new `packages/db/src/schema/invoice-deliveries.ts` and its generated core migration, `packages/db/src/index.ts` and `classification.ts`, the bill's staged delivery choice in `packages/db/src/schema/orders.ts`, and new server delivery/attempt helpers. Read `sales.ts` without changing the immutable invoice snapshot. The receipt adapter uses `receipt-print.ts`, `print-api.ts`, and the existing outbox/runtime.

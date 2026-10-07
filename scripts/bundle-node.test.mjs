@@ -17,7 +17,7 @@ import { BUNDLE_EXTERNALS, bundle, esbuildArgs, parsePairs } from "./bundle-node
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const BANNER =
-  "--banner:js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);";
+  "--banner:js=import { createRequire as __waitronCreateRequire } from 'node:module'; const require = __waitronCreateRequire(import.meta.url);";
 
 describe("the shared node bundle command", () => {
   it("leaves sharp out of every bundle", () => {
@@ -141,7 +141,47 @@ describe("the shared node bundle command", () => {
       expect(result.status, result.stderr).toBe(0);
       const output = readFileSync(join(dir, "dist/out.js"), "utf8");
       expect(output).toContain('import("sharp")');
-      expect(output.startsWith("import { createRequire } from 'node:module';")).toBe(true);
+      expect(
+        output.startsWith("import { createRequire as __waitronCreateRequire } from 'node:module';"),
+      ).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 40_000);
+
+  it("loads a real bundle whose entry imports createRequire and also uses the CommonJS shim", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-bundle-load-"));
+    try {
+      writeFileSync(
+        join(dir, "entry.ts"),
+        `import { createRequire } from "node:module";
+const ownRequire = createRequire(import.meta.url);
+console.log(JSON.stringify({
+  entry: ownRequire("node:path").basename("/invoice.pdf"),
+  shim: require("node:path").extname("/invoice.pdf"),
+}));
+`,
+      );
+      const built = spawnSync(
+        process.execPath,
+        [join(ROOT, "scripts/bundle-node.mjs"), "entry.ts=dist/out.mjs"],
+        {
+          cwd: dir,
+          encoding: "utf8",
+          timeout: 20_000,
+          env: {
+            ...process.env,
+            PATH: `${join(ROOT, "apps/server/node_modules/.bin")}${delimiter}${process.env.PATH}`,
+          },
+        },
+      );
+      expect(built.status, built.stderr).toBe(0);
+      const loaded = spawnSync(process.execPath, [join(dir, "dist/out.mjs")], {
+        encoding: "utf8",
+        timeout: 10_000,
+      });
+      expect(loaded.status, loaded.stderr).toBe(0);
+      expect(JSON.parse(loaded.stdout)).toEqual({ entry: "invoice.pdf", shim: ".pdf" });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

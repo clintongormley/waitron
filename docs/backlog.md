@@ -1834,9 +1834,12 @@ as PDF and glyph outlines. PDFKit's ESM import also collides with the shared bun
 `createRequire` name, and the notices collector requires upstream notices for brotli 1.3.3,
 dfa 1.2.0 and fontkit 2.0.4. Their upstream licence declarations and terms are now collected,
 including the Apache notice on brotli's Google decompressor. The normal renderer bundle writes
-its notices but still fails Node syntax checking on the duplicate import. Its banner guard
-change awaits the owner's answer recorded in Lane E. These are implementation findings,
-not built-image verification.
+its notices. The owner approved the banner alias on 2026-10-07. With that alias, a new real
+bundle-load regression passes with both the entry's own `createRequire` import and the
+CommonJS shim exercised. The standalone renderer bundle produces the same 12,353-byte PDF
+and byte-identical 300/600 dpi PNGs as the prior source-rendered fixtures; both raster QRs
+decode to the filed link. All four shared-bundler consumers build, and Node syntax checks
+pass for their 12 JavaScript bundles. Built-image rendering and box measurements remain open.
 
 Renderer receipt, 2026-10-07: the mixed-rate discounted F1 PDF is 12,353 bytes; the six-page
 35-line fixture is 17,421 bytes. The 600 dpi SVG QR initially had antialiased module seams and
