@@ -1709,22 +1709,22 @@ describe("menu offers nest a product's variants", () => {
 
   it("prices a variant with nothing set below its parent at the parent's own price", async () => {
     await run((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { grossPrice: null }));
     expect(await nested()).toEqual([
-      { name: "Wine 125", unitPrice: "4.00", menuPrice: null, available: true },
-      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, available: true },
+      { name: "125 ml", unitPrice: "4.00", menuPrice: null, available: true },
+      { name: "175 ml", unitPrice: "5.50", menuPrice: null, available: true },
     ]);
   });
 
   it("offers a variant added after its parent went on the menu, at once", async () => {
     await run((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     expect(await nested()).toEqual([
-      { name: "Wine 125", unitPrice: "4.50", menuPrice: null, available: true },
-      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, available: true },
+      { name: "125 ml", unitPrice: "4.50", menuPrice: null, available: true },
+      { name: "175 ml", unitPrice: "5.50", menuPrice: null, available: true },
     ]);
     // Variants are only ever nested: the menu lists the parent alone.
     expect((await offers()).map((offer) => offer.productId)).toEqual([f.parentId]);
@@ -1732,7 +1732,7 @@ describe("menu offers nest a product's variants", () => {
 
   it("never lists a variant as an offer of its own, even with a menu row naming it", async () => {
     const [w125] = await run((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null)], "en"),
     );
     // Written straight into the tables, as a member of the menu's root and a row of its own:
     // `addProductToMenu` and the member writes both refuse a variant.
@@ -1748,11 +1748,11 @@ describe("menu offers nest a product's variants", () => {
 
   it("charges a price set for the variant on this menu, and its own price once that is cleared", async () => {
     const [, w175] = await run((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     await run((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: "6.00" }]));
     expect((await nested())[1]).toEqual({
-      name: "Wine 175",
+      name: "175 ml",
       unitPrice: "6.00",
       menuPrice: "6.00",
       available: true,
@@ -1760,7 +1760,7 @@ describe("menu offers nest a product's variants", () => {
 
     await run((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: null }]));
     expect((await nested())[1]).toEqual({
-      name: "Wine 175",
+      name: "175 ml",
       unitPrice: "5.50",
       menuPrice: null,
       available: true,
@@ -1772,20 +1772,20 @@ describe("menu offers nest a product's variants", () => {
       setProductVariants(
         tx,
         f.parentId,
-        [wine("Wine 125", null), wine("Wine 175", "5.50", false), wine("Wine 250", "7.00")],
+        [wine("125 ml", null), wine("175 ml", "5.50", false), wine("250 ml", "7.00")],
         "en",
       ),
     );
-    // Wine 250 is left out of this save, so it becomes Inactive.
+    // 250 ml is left out of this save, so it becomes Inactive.
     await run((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en"));
     expect(await nested()).toEqual([
-      { name: "Wine 125", unitPrice: "4.50", menuPrice: null, available: true },
-      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, available: false },
+      { name: "125 ml", unitPrice: "4.50", menuPrice: null, available: true },
+      { name: "175 ml", unitPrice: "5.50", menuPrice: null, available: false },
     ]);
   });
 
   it("takes the offer and its variants away when the parent is Inactive", async () => {
-    await run((tx) => setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"));
+    await run((tx) => setProductVariants(tx, f.parentId, [wine("125 ml", null)], "en"));
     await run((tx) => updateProduct(tx, f.parentId, { active: false }));
     expect(await offers()).toEqual([]);
   });
@@ -1795,7 +1795,7 @@ describe("menu offers nest a product's variants", () => {
       setProductVariants(
         tx,
         f.parentId,
-        [wine("Wine 125", null, false), wine("Wine 175", "5.50", false)],
+        [wine("125 ml", null, false), wine("175 ml", "5.50", false)],
         "en",
       ),
     );
@@ -1808,7 +1808,7 @@ describe("menu offers nest a product's variants", () => {
       setProductVariants(
         tx,
         f.parentId,
-        [wine("Wine 125", null), wine("Wine 175", "5.50"), wine("Wine 250", "7.00")],
+        [wine("125 ml", null), wine("175 ml", "5.50"), wine("250 ml", "7.00")],
         "en",
       ),
     );
@@ -1818,9 +1818,9 @@ describe("menu offers nest a product's variants", () => {
     expect(
       listed[0]!.variants.map(({ name, unitPrice, active }) => ({ name, unitPrice, active })),
     ).toEqual([
-      { name: "Wine 175", unitPrice: "5.50", active: true },
-      { name: "Wine 125", unitPrice: null, active: true },
-      { name: "Wine 250", unitPrice: "7.00", active: false },
+      { name: "175 ml", unitPrice: "5.50", active: true },
+      { name: "125 ml", unitPrice: null, active: true },
+      { name: "250 ml", unitPrice: "7.00", active: false },
     ]);
   });
 });

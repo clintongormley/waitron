@@ -130,11 +130,11 @@ describe("setProductVariants stores each variant as a product under its parent",
   it("creates products rows that inherit every field they leave blank, in the order given", async () => {
     const f = await fixture();
     const saved = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     expect(saved.map(({ name, unitPrice, active }) => ({ name, unitPrice, active }))).toEqual([
-      { name: "Wine 125", unitPrice: null, active: true },
-      { name: "Wine 175", unitPrice: "5.50", active: true },
+      { name: "125 ml", unitPrice: null, active: true },
+      { name: "175 ml", unitPrice: "5.50", active: true },
     ]);
     const common = {
       parent_id: f.parentId,
@@ -170,7 +170,7 @@ describe("setProductVariants stores each variant as a product under its parent",
   it("stores an Unavailable variant as Active but not Available", async () => {
     const f = await fixture();
     await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null, { available: false })], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null, { available: false })], "en"),
     );
     expect(
       (await storedVariants(f.parentId)).map(({ active, available }) => ({ active, available })),
@@ -180,7 +180,7 @@ describe("setProductVariants stores each variant as a product under its parent",
   it("makes a variant left out of a save Inactive, keeping its row and what refers to it", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: "6.00" }]));
 
@@ -213,7 +213,7 @@ describe("setProductVariants stores each variant as a product under its parent",
       setProductVariants(
         tx,
         f.parentId,
-        [wine("Wine 125", null), wine("Wine 175", "5.50"), wine("Wine 250", "7.00")],
+        [wine("125 ml", null), wine("175 ml", "5.50"), wine("250 ml", "7.00")],
         "en",
       ),
     );
@@ -225,7 +225,7 @@ describe("setProductVariants stores each variant as a product under its parent",
         active,
       }));
 
-    // Wine 175 was removed; sent back Inactive it stays Inactive, at the place it was sent.
+    // 175 ml was removed; sent back Inactive it stays Inactive, at the place it was sent.
     const saved = await app((tx) =>
       setProductVariants(tx, f.parentId, [{ ...w175!, active: false }, w125!], "en"),
     );
@@ -258,7 +258,7 @@ describe("setProductVariants stores each variant as a product under its parent",
   it("creates a new variant sent Inactive as Inactive", async () => {
     const f = await fixture();
     await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null, { active: false })], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null, { active: false })], "en"),
     );
     expect(
       (await storedVariants(f.parentId)).map(({ active, available }) => ({ active, available })),
@@ -273,7 +273,7 @@ describe("setProductVariants stores each variant as a product under its parent",
         setProductVariants(
           tx,
           f.parentId,
-          [wine("Wine 125", null, { active: active as unknown as boolean })],
+          [wine("125 ml", null, { active: active as unknown as boolean })],
           "en",
         ),
       ),
@@ -288,7 +288,7 @@ describe("setProductVariants stores each variant as a product under its parent",
       setProductVariants(
         tx,
         f.parentId,
-        [wine("Wine 125", null, { active: false }), wine("Wine 175", "5.50")],
+        [wine("125 ml", null, { active: false }), wine("175 ml", "5.50")],
         "en",
       ),
     );
@@ -332,7 +332,7 @@ describe("setProductVariants stores each variant as a product under its parent",
         tx,
         f.parentId,
         [
-          wine("Wine 175", "5.50", {
+          wine("175 ml", "5.50", {
             customerName: { en: "Large glass of house wine" },
             kitchenName: "W175",
             image: "large.jpg",
@@ -344,7 +344,7 @@ describe("setProductVariants stores each variant as a product under its parent",
     expect(await app((tx) => listProductVariants(tx, f.parentId))).toEqual([
       {
         id: expect.any(String),
-        name: "Wine 175",
+        name: "175 ml",
         customerName: { en: "Large glass of house wine" },
         kitchenName: "W175",
         image: "large.jpg",
@@ -366,7 +366,7 @@ describe("setProductVariants stores each variant as a product under its parent",
         .where(eq(products.parentId, f.parentId)),
     ).toEqual([
       {
-        name: "Wine 175",
+        name: "175 ml",
         customerName: { en: "Large glass of house wine" },
         kitchenName: "W175",
         image: "large.jpg",
@@ -379,12 +379,7 @@ describe("the product editor", () => {
   it("reads a removed variant as Inactive, so saving the parent back cannot restore it", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
-      setProductVariants(
-        tx,
-        f.parentId,
-        [wine("Wine 125", "4.75"), wine("Wine 175", "5.50")],
-        "en",
-      ),
+      setProductVariants(tx, f.parentId, [wine("125 ml", "4.75"), wine("175 ml", "5.50")], "en"),
     );
     await app((tx) => setProductVariants(tx, f.parentId, [w125!], "en"));
 
@@ -406,7 +401,7 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
   async function variantOfParent() {
     const f = await fixture();
     const [w125] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", "4.75")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", "4.75")], "en"),
     );
     const category = await app((tx) => createCategory(tx, { name: "Wines" }));
     return { ...f, variantId: w125!.id, categoryId: category.id };
@@ -474,7 +469,7 @@ describe("addProductToMenu", () => {
   it("refuses a variant, which follows its parent onto a menu instead, and accepts the parent", async () => {
     const f = await fixture();
     const [w125] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null)], "en"),
     );
     await expect(
       app((tx) =>
@@ -526,13 +521,13 @@ describe("a variant's per-menu settings", () => {
   });
 
   it("lists every Active variant of the offer's product with the default settings", async () => {
-    // Wine 250 is saved and then removed, so it is Inactive and must not be listed.
+    // 250 ml is saved and then removed, so it is Inactive and must not be listed.
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
       setProductVariants(
         tx,
         f.parentId,
-        [wine("Wine 125", null), wine("Wine 175", "5.50"), wine("Wine 250", "7.00")],
+        [wine("125 ml", null), wine("175 ml", "5.50"), wine("250 ml", "7.00")],
         "en",
       ),
     );
@@ -547,7 +542,7 @@ describe("a variant's per-menu settings", () => {
     const f = await fixture();
     expect(await app((tx) => listMenuVariants(tx, f.offerId, f.catalogueId))).toEqual([]);
     const [w125] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null)], "en"),
     );
     await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: "6.00" }]));
     await app((tx) => setProductVariants(tx, f.parentId, [], "en"));
@@ -557,7 +552,7 @@ describe("a variant's per-menu settings", () => {
   it("stores a row only while it sets a price, and a null price deletes it", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     const stored = () =>
       suite.db
@@ -594,7 +589,7 @@ describe("a variant's per-menu settings", () => {
   it("treats an override of 0.00 as a price", async () => {
     const f = await fixture();
     const [w125] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", "5.00")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", "5.00")], "en"),
     );
     expect(
       await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: "0.00" }])),
@@ -608,7 +603,7 @@ describe("a variant's per-menu settings", () => {
   ])("refuses a malformed setting %j, naming %s, and writes nothing", async (setting, field) => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     await expect(
       app((tx) =>
@@ -624,7 +619,7 @@ describe("a variant's per-menu settings", () => {
   it("refuses an Inactive variant, a variant of another product and a repeated one", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     const [foreign] = await app((tx) =>
       setProductVariants(tx, f.otherId, [wine("Cider pint", "4.00")], "en"),
@@ -649,7 +644,7 @@ describe("a variant's per-menu settings", () => {
   it("leaves an Inactive variant's override alone when the Active ones are saved", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: "6.00" }]));
     await app((tx) => setProductVariants(tx, f.parentId, [w125!], "en"));
@@ -675,7 +670,7 @@ describe("a variant's per-menu settings", () => {
   it("sets or clears one variant's price and leaves its siblings' rows alone", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: "6.00" }]));
     await app((tx) => setMenuVariantPrice(tx, f.offerId, w125!.id, "4.20", f.catalogueId));
@@ -698,7 +693,7 @@ describe("a variant's per-menu settings", () => {
   it("sets an Inactive variant's price, kept for when it is Active again", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     await app((tx) => setProductVariants(tx, f.parentId, [w125!], "en"));
     await app((tx) => setMenuVariantPrice(tx, f.offerId, w175!.id, "6.50"));
@@ -716,7 +711,7 @@ describe("a variant's per-menu settings", () => {
     async (price) => {
       const f = await fixture();
       const [w125] = await app((tx) =>
-        setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"),
+        setProductVariants(tx, f.parentId, [wine("125 ml", null)], "en"),
       );
       await expect(
         app((tx) => setMenuVariantPrice(tx, f.offerId, w125!.id, price)),
@@ -731,7 +726,7 @@ describe("a variant's per-menu settings", () => {
       setProductVariants(tx, f.otherId, [wine("Cider pint", "4.00")], "en"),
     );
     const [w125] = await app((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"),
+      setProductVariants(tx, f.parentId, [wine("125 ml", null)], "en"),
     );
     await expect(
       app((tx) => setMenuVariantPrice(tx, f.offerId, foreign!.id, "1.00")),
@@ -749,7 +744,7 @@ describe("a variant's per-menu settings", () => {
 it("a variant removed while its override is being written ends Inactive, the override kept", async () => {
   const f = await fixture();
   const [w125] = await app((tx) =>
-    setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"),
+    setProductVariants(tx, f.parentId, [wine("125 ml", null)], "en"),
   );
 
   // One write transaction runs on the venue file at a time, so the removal runs second and sees
@@ -824,7 +819,7 @@ describe("selectMenuVariant resolves the chosen product and its parent's names",
       courseId: large.courseId,
     });
     // The selection is a ProductPresentation superset, so the resolvers there own the naming.
-    expect(staffPresentationName(selected)).toBe("Large");
+    expect(staffPresentationName(selected)).toBe("Coffee (Large)");
     expect(customerPresentationText(selected, "en")).toEqual({
       product: { en: "Fresh Coffee" },
       variant: { en: "Large cup" },

@@ -172,7 +172,7 @@ async function seedVariantDay(db: Database, invoiceNumber: number): Promise<void
       saleId: sale!.id,
       lineNo: 1,
       ...parent,
-      variantName: "Wine 125",
+      variantName: "125 ml",
       variantDescriptions: { "es-ES": "Copa pequeña" },
       variantKitchenName: "V125",
       quantity: stringToThousandths("2.000"),
@@ -184,7 +184,7 @@ async function seedVariantDay(db: Database, invoiceNumber: number): Promise<void
       saleId: sale!.id,
       lineNo: 2,
       ...parent,
-      variantName: "Wine 175",
+      variantName: "175 ml",
       variantDescriptions: { "es-ES": "Copa grande" },
       variantKitchenName: "V175",
       quantity: stringToThousandths("3.000"),
@@ -425,8 +425,8 @@ describe("mountReportApi — /reports/period", () => {
         quantity: "5.000",
         total: "24.50",
         variants: [
-          { name: "Wine 175", quantity: "3.000", total: "16.50" },
-          { name: "Wine 125", quantity: "2.000", total: "8.00" },
+          { name: "175 ml", quantity: "3.000", total: "16.50" },
+          { name: "125 ml", quantity: "2.000", total: "8.00" },
         ],
       },
     ]);

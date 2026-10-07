@@ -241,7 +241,7 @@ describe("needsModifierPicker", () => {
   const wine = (available: boolean) => ({
     ...sellingValuesOf(cafe),
     id: "wine-125",
-    name: "Wine 125",
+    name: "125 ml",
     unitPrice: "4.50",
     unitPriceDifference: "0.50",
     available,

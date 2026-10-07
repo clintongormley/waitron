@@ -8624,7 +8624,7 @@ describe("a variant is sold as the product it is", () => {
         [
           kept(wine.wine125, "125 ml", "4.50"),
           kept(wine.wine175, "175 ml", "5.50"),
-          fresh("Wine 250"),
+          fresh("250 ml"),
           fresh("Wine 500", false),
         ],
         LOCALE,
