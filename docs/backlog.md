@@ -961,6 +961,11 @@ unused `units` property is gone (it closes W75's leftover).
   is removed.
   A361 — DONE: the variant's own page names its product with "Edit variant of: …" / "Editar variante
   de: …", using the parent's saved staff name; reloading reads a renamed parent again.
+- **A355, owner 2026-10-07 — DONE:** saving or cancelling a variant returns focus to Add variant,
+  the edited row, or its menu, and keeps the product form's scroll offset. Chromium cases at 1280
+  and 390px cover Add, row Edit (including clicks that do not move focus) and menu Edit, Save
+  and Cancel, in EN/ES and both themes; Enter
+  from Add variant after Save opens the next variant.
 - **A330, owner 2026-10-07 — DONE (#1354; variant rows show their photo):** an opened variant's row
   in the Products list now draws a photo square in its product's column: the variant's own photo,
   else its product's, else the same square its product's row shows. The till draws no variant photo today,

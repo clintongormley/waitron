@@ -242,7 +242,7 @@ it("edits and removes the variant whose row the menu belongs to", async () => {
   const remove = listen(el, "wt-remove");
   await click(el, "edit-2");
   await click(el, "remove-0");
-  expect(edit.mock.calls[0]![0].detail).toEqual({ index: 2 });
+  expect(edit.mock.calls[0]![0].detail).toEqual({ index: 2, via: "menu" });
   expect(remove.mock.calls[0]![0].detail).toEqual({ index: 0 });
   expect(edit.mock.calls[0]![0].composed).toBe(true);
   expect(remove.mock.calls[0]![0].composed).toBe(true);
@@ -464,7 +464,7 @@ it("names each row by its place in the whole list, hidden rows included", async 
   // Doble is the second row on screen and the THIRD variant the host holds.
   await click(el, "edit-2");
   await click(el, "remove-2");
-  expect(edit.mock.calls[0]![0].detail).toEqual({ index: 2 });
+  expect(edit.mock.calls[0]![0].detail).toEqual({ index: 2, via: "menu" });
   expect(remove.mock.calls[0]![0].detail).toEqual({ index: 2 });
 });
 
@@ -737,7 +737,10 @@ it("opens a variant's edit window from a click anywhere on its row", async () =>
     expect(onPrice).toBe(activator(el, 0));
     (onName as HTMLElement).click();
     (onPrice as HTMLElement).click();
-    expect(edit.mock.calls.map(([event]) => event.detail)).toEqual([{ index: 2 }, { index: 0 }]);
+    expect(edit.mock.calls.map(([event]) => event.detail)).toEqual([
+      { index: 2, via: "row" },
+      { index: 0, via: "row" },
+    ]);
     expect(edit.mock.calls[0]![0].bubbles).toBe(true);
     expect(edit.mock.calls[0]![0].composed).toBe(true);
   });
@@ -751,7 +754,7 @@ it("opens a variant's edit window from Enter on its row, named for a screen read
   expect(row.getAttribute("aria-label")).toBe(`${t("action.edit")}: Entera`);
   row.focus();
   await userEvent.keyboard("{Enter}");
-  expect(edit.mock.calls.map(([event]) => event.detail)).toEqual([{ index: 1 }]);
+  expect(edit.mock.calls.map(([event]) => event.detail)).toEqual([{ index: 1, via: "row" }]);
 });
 
 it("leaves the drag handle, the Available switch and the row menu under the pointer", async () => {
@@ -796,9 +799,9 @@ it("opens a variant's edit window from the empty space beside the handle, the sw
       await userEvent.click(button, { position: { x: x - box.left, y: y - box.top } });
     }
     expect(edit.mock.calls.map(([event]) => event.detail)).toEqual([
-      { index: 1 },
-      { index: 1 },
-      { index: 1 },
+      { index: 1, via: "row" },
+      { index: 1, via: "row" },
+      { index: 1, via: "row" },
     ]);
   });
 });

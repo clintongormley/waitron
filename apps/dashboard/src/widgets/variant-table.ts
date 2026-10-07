@@ -344,7 +344,7 @@ export class VariantTable extends LitElement {
         event.stopPropagation();
         if (this.busy || blocked) return;
         if (name === "remove" || name === "restore") this.#refocus = index;
-        this.#emit(`wt-${name}`, { index });
+        this.#emit(`wt-${name}`, name === "edit" ? { index, via: "menu" } : { index });
       }}
       >${label}</wt-button
     >`;
@@ -373,7 +373,7 @@ export class VariantTable extends LitElement {
           .disabled=${this.busy}
           @click=${(event: Event) => {
             event.stopPropagation();
-            this.#emit("wt-edit", { index });
+            this.#emit("wt-edit", { index, via: "row" });
           }}
         ></button>
         ${label}
