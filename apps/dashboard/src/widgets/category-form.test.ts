@@ -62,6 +62,16 @@ it("keeps integer names in number order and text insensitive to case and accents
   expect(byLabel("Table 2", "")).toBeGreaterThan(0);
 });
 
+it("preserves punctuation order when one name's text run is a prefix of another", () => {
+  expect(["Menu 2", "Menu (old)", "Menu 10"].sort(byLabel)).toEqual([
+    "Menu (old)",
+    "Menu 2",
+    "Menu 10",
+  ]);
+  expect(byLabel("Pack 0.50 Menu 2", "Pack 0,5 Menu (old)")).toBeGreaterThan(0);
+  expect(byLabel("Pack 0,5 Menu (old)", "Pack 0.50 Menu 2")).toBeLessThan(0);
+});
+
 it("compares equal decimal values by the remaining text, including leading and trailing zeros", () => {
   expect(byLabel("Pack 00,50 A", "Pack 0.5 B")).toBeLessThan(0);
   expect(byLabel("Pack 00,50", "Pack 0.5")).toBe(0);
