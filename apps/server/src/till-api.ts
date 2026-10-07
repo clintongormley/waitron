@@ -65,7 +65,8 @@ import {
   resolveDeviceReaderId,
   SimulatorPaymentProvider,
 } from "@waitron/payments";
-import { resendPrintJob } from "@waitron/printing";
+import { resendInvoicePrintJob } from "./invoice-print.js";
+import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
@@ -2022,11 +2023,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .where(eq(sales.workingOrderId, id));
         if (sale === undefined)
           throw new AppError("working_order.not_found", { workingOrderId: id });
+        await expireInvoiceDeliveryClaims(tx);
         const original = await readOriginalReceiptPrint(tx, sale.id);
         if (original.status === "not_queued") throw new AppError("print_job.not_found", { id });
         if (!original.canRetry)
           throw new AppError("print_job.not_resendable", { id: original.jobId });
-        return resendPrintJob(tx, original.jobId);
+        return resendInvoicePrintJob(tx, original.jobId, session.personId);
       });
       return c.json(result);
     }),

@@ -1,10 +1,11 @@
 import "./errors.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { invoiceDeliveries, type Transaction } from "@waitron/db";
+import { invoiceDeliveries, printJobs, sales, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import {
   claimPrintJobs,
   reportPrintJob,
+  resendPrintJob,
   type ClaimedJob,
   type JobOutcome,
 } from "@waitron/printing";
@@ -13,9 +14,44 @@ import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
   reportInvoiceDelivery,
+  reserveInvoiceDelivery,
 } from "./invoice-delivery.js";
 
 export type InvoicePrintJob = ClaimedJob & { invoiceClaim?: InvoicePrintClaim };
+
+export async function resendInvoicePrintJob(
+  tx: Transaction,
+  jobId: string,
+  personId: string,
+  now = new Date(),
+): Promise<{ jobId: string }> {
+  const [invoice] = await tx
+    .select({ saleId: sales.id, recipient: sales.counterpartyTaxId })
+    .from(printJobs)
+    .innerJoin(sales, eq(sales.id, printJobs.saleId))
+    .where(eq(printJobs.id, jobId));
+  if (invoice === undefined || invoice.recipient === null) return resendPrintJob(tx, jobId);
+  await expireInvoiceDeliveryClaims(tx, now);
+  const retry = await resendPrintJob(tx, jobId);
+  try {
+    await reserveInvoiceDelivery(tx, invoice.saleId, {
+      requestKey: retry.jobId,
+      personId,
+      medium: "receipt",
+      printJobId: retry.jobId,
+    });
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      (error.code === "invoice_delivery.active" ||
+        error.code === "invoice_delivery.receipt_invalid")
+    ) {
+      throw new AppError("print_job.not_resendable", { id: jobId });
+    }
+    throw error;
+  }
+  return retry;
+}
 
 export async function claimInvoicePrintJobs(
   tx: Transaction,

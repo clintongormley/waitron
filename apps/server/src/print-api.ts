@@ -25,7 +25,6 @@ import {
 } from "@waitron/db";
 import {
   canResendPrintJob,
-  resendPrintJob,
   createPrinter,
   deactivatePrinter,
   endUnpairedPrinterJobs,
@@ -60,6 +59,7 @@ import {
   claimInvoicePrintJobs,
   reportInvoicePrintJob,
   endInvoicePrintDeliveries,
+  resendInvoicePrintJob,
 } from "./invoice-print.js";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { requireAgent } from "./print-agent-session.js";
@@ -400,15 +400,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
 
   const gated = <T>(
     sessionId: string,
-    fn: (tx: Transaction) => Promise<T>,
+    fn: (tx: Transaction, personId: string) => Promise<T>,
     permission: Permission = PRINTER_MANAGE_PERMISSION,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await authorizeManager(tx, {
+      const { authorizedBy } = await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission,
       });
-      return fn(tx);
+      return fn(tx, authorizedBy);
     });
 
   app.post("/print-api/agent/join", (c) =>
@@ -1223,7 +1223,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrintJobId");
-      const result = await gated(sessionId, (tx) => resendPrintJob(tx, id), "print.resend");
+      const result = await gated(
+        sessionId,
+        (tx, personId) => resendInvoicePrintJob(tx, id, personId, deps.now?.()),
+        "print.resend",
+      );
       return c.json(result, 202);
     }),
   );
