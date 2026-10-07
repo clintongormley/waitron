@@ -311,16 +311,14 @@ describe("formatCategorySalesPage", () => {
     const lines = page();
     expect(lineFor(lines, "No category")).toMatch(/^No category +€1\.21 +€1\.00$/);
     expect(lineFor(lines, "Not recorded")).toMatch(/^Not recorded +€0\.00 +€7\.00$/);
-    expect(lineFor(lines, "No category recorded")).toMatch(
-      /^ {2}No category recorded +€0\.00 +€4\.00$/,
-    );
+    expect(lineFor(lines, "Category unknown")).toMatch(/^ {2}Category unknown +€0\.00 +€4\.00$/);
     expect(lines.join("\n")).not.toContain("Directly in Not recorded");
     expect(lineFor(lines, "Cafés")).toMatch(/^ {2}Cafés +€0\.00 +€3\.00$/);
     const es = page({ locale: "es-ES" });
     expect(lineFor(es, "Sin categoría")).toMatch(/^Sin categoría +1,21 € +1,00 €$/);
     expect(lineFor(es, "No registrada")).toMatch(/^No registrada +0,00 € +7,00 €$/);
-    expect(lineFor(es, "Sin categoría registrada")).toMatch(
-      /^ {2}Sin categoría registrada +0,00 € +4,00 €$/,
+    expect(lineFor(es, "Categoría desconocida")).toMatch(
+      /^ {2}Categoría desconocida +0,00 € +4,00 €$/,
     );
     expect(es.join("\n")).not.toContain("Directamente en No registrada");
   });
