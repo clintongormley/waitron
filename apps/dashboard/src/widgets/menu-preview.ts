@@ -932,6 +932,7 @@ export class MenuPreviewPanel extends LitElement {
   override render() {
     return html`${this.#renderLive()} ${this.#renderResult()} ${this.#renderWarnings()}
       ${this.#renderClashes()} ${this.#renderPublish()}
+      <slot name="schedule"></slot>
       <div class="panes">
         <div
           class="pane"

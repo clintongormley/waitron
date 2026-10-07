@@ -98,9 +98,10 @@ import {
  * `products.image` and `sections.image`
  * (`packages/media/drizzle/0001_image_references.sql` carries the reasoning, and
  * `packages/media/drizzle/0002_section_image_references.sql` adds the four on `sections.image`),
- * and for `menu_version_images.filename`, keeping a photo a live menu version names
- * (`packages/media/drizzle/0003_published_image_references.sql`). Media's
- * `0005_photo_name_only.sql` drops and re-creates all eleven around its rebuild of `media_images`.
+ * and for `menu_version_images.filename`, keeping a photo a live menu version or a queued edition
+ * names (`packages/media/drizzle/0003_published_image_references.sql`, and `0008` for a queued
+ * edition). Media's `0005_photo_name_only.sql` drops and re-creates all eleven around its rebuild
+ * of `media_images`.
  * Named here only because the assertion below is an EQUALITY over every non-append-only trigger.
  */
 const IMAGE_REFERENCE_TRIGGERS = [

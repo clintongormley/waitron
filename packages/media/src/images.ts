@@ -1,5 +1,6 @@
 import {
   menuPublications,
+  menuScheduledPublications,
   menuVersionImages,
   menuVersions,
   parentJoin,
@@ -16,7 +17,7 @@ import {
   FALLBACK_LOCALE,
   resolveContentText,
 } from "@waitron/shared";
-import { count, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { mediaImageData, mediaImages } from "./schema/images.js";
 import { IMAGE_LIST_COLUMNS, datedImagePageQuery } from "./image-page-query.js";
 import type { PreparedImage } from "./prepare.js";
@@ -30,8 +31,8 @@ export interface ImageRecord extends ImageMetadataInput {
   filename: string;
   createdAt: Date;
   updatedAt: Date;
-  /** How many products (variants among them), sections, live menu versions and receipt logos
-   * reference this photo. `readImage` uses `listImageUsagesForFilename` and `listImages` uses
+  /** How many products (variants among them), sections, live or queued menu versions and receipt
+   * logos reference this photo. `readImage` uses `listImageUsagesForFilename` and `listImages` uses
    * `countUsages`; the counters must stay in step or the library shows a free photo that then
    * refuses to delete. */
   usageCount: number;
@@ -60,6 +61,18 @@ export type ImageUsage =
     }
   /** A menu's LIVE version; a version another has replaced holds no use. */
   | { kind: "menu_version"; id: string; menuId: string; menuName: string; number: number }
+  /**
+   * A menu edition whose schedule row is still queued to go live at `activatesAt`; it may already
+   * be due, until `settleDue` marks it activated.
+   */
+  | {
+      kind: "scheduled_menu_version";
+      id: string;
+      menuId: string;
+      menuName: string;
+      number: number;
+      activatesAt: string;
+    }
   /** The receipt prints it as its logo. */
   | { kind: "receipt" };
 const receiptLogo = sql<string | null>`json_extract(${tenantReceipts.receipt}, '$.logo')`;
@@ -161,13 +174,27 @@ async function listImageUsagesForFilename(
       menuId: menuVersions.menuId,
       menuName: catalogues.name,
       number: menuVersions.number,
+      livePointer: menuPublications.versionId,
+      activatesAt: menuScheduledPublications.activatesAt,
     })
     .from(menuVersionImages)
-    .innerJoin(menuPublications, eq(menuPublications.versionId, menuVersionImages.versionId))
     .innerJoin(menuVersions, eq(menuVersions.id, menuVersionImages.versionId))
     .innerJoin(catalogues, eq(catalogues.id, menuVersions.menuId))
-    .where(eq(menuVersionImages.filename, filename))
-    .orderBy(catalogues.name, menuVersions.id);
+    .leftJoin(menuPublications, eq(menuPublications.versionId, menuVersionImages.versionId))
+    .leftJoin(
+      menuScheduledPublications,
+      and(
+        eq(menuScheduledPublications.versionId, menuVersionImages.versionId),
+        eq(menuScheduledPublications.state, "queued"),
+      ),
+    )
+    .where(
+      and(
+        eq(menuVersionImages.filename, filename),
+        or(isNotNull(menuPublications.versionId), isNotNull(menuScheduledPublications.versionId)),
+      ),
+    )
+    .orderBy(catalogues.name, menuVersions.menuId, menuVersions.number);
   const receiptRows = await tx
     .select({ id: tenantReceipts.id })
     .from(tenantReceipts)
@@ -192,7 +219,18 @@ async function listImageUsagesForFilename(
   return [
     ...productRows.map(usage),
     ...sectionRows.map((row): ImageUsage => ({ kind: "section", ...row })),
-    ...versionRows.map((row): ImageUsage => ({ kind: "menu_version", ...row })),
+    ...versionRows.flatMap(({ livePointer, activatesAt, ...row }): ImageUsage[] => [
+      ...(livePointer === null ? [] : [{ kind: "menu_version" as const, ...row }]),
+      ...(activatesAt === null
+        ? []
+        : [
+            {
+              kind: "scheduled_menu_version" as const,
+              ...row,
+              activatesAt: activatesAt.toISOString(),
+            },
+          ]),
+    ]),
     ...receiptRows.map((): ImageUsage => ({ kind: "receipt" })),
   ];
 }
@@ -299,8 +337,8 @@ export async function deleteImage(
   // `packages/catalogue/src/extras.ts`).
   //
   // The triggers in `packages/media/drizzle/` refuse the delete at the database as well for a
-  // product, section or live menu version, but not for the receipt's logo, so for that use this
-  // check is the only refusal. It returns the uses, which is what the library screen shows.
+  // product, section or live or queued menu version, but not for the receipt's logo, so for that
+  // use this check is the only refusal. It returns the uses, which is what the library screen shows.
   const [image] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
@@ -529,10 +567,10 @@ export async function listImages(
 }
 
 /**
- * How many products (variants among them), sections, live menu versions and receipt logos name
- * each of `filenames`.
+ * How many products (variants among them), sections, live or queued menu versions and receipt
+ * logos name each of `filenames`.
  *
- * The reads are the same scans `listImageUsages` makes, and a source added there is added here too
+ * The reads count the sources `listImageUsages` lists, and a source added there is added here too
  * — or the library shows a free photo that then refuses to delete. They are separate statements on
  * one transaction and are awaited in turn, never `Promise.all` (`CLAUDE.md` §3).
  */
@@ -563,6 +601,21 @@ async function countUsages(
     .from(menuVersionImages)
     .innerJoin(menuPublications, eq(menuPublications.versionId, menuVersionImages.versionId))
     .where(inArray(menuVersionImages.filename, wanted))) {
+    tally(row.image);
+  }
+  for (const row of await tx
+    .select({ image: menuVersionImages.filename })
+    .from(menuVersionImages)
+    .innerJoin(
+      menuScheduledPublications,
+      eq(menuScheduledPublications.versionId, menuVersionImages.versionId),
+    )
+    .where(
+      and(
+        inArray(menuVersionImages.filename, wanted),
+        eq(menuScheduledPublications.state, "queued"),
+      ),
+    )) {
     tally(row.image);
   }
   for (const row of await tx

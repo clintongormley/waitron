@@ -33,6 +33,7 @@ import { HOME_KEY, ROOT_KEY, type StructureAddAction } from "../widgets/menu-str
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
+import { overtakeSentence } from "../widgets/menu-publications.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
@@ -1245,7 +1246,7 @@ export class MenusScreen extends LitElement {
       result =
         code === "menu.changed_since_preview"
           ? { kind: "stale" }
-          : { kind: "failed", reason: codeMessage(code) };
+          : { kind: "failed", reason: await this.#publishRefusal(menuId, code, error) };
     }
     this.publishing = new Set([...this.publishing].filter((id) => id !== menuId));
     if (this.menuId !== menuId) {
@@ -1264,6 +1265,21 @@ export class MenusScreen extends LitElement {
       this.status = publishedStatus(result.number, hash, live);
       this.#followStatus(true);
     } else if (this.view === "preview") void this.#watchPreview(menuId);
+  }
+
+  /** An overtake refusal names the scheduled versions in the way, read from the menu's list. */
+  async #publishRefusal(menuId: string, code: string, error: unknown): Promise<string> {
+    if (code !== "menu_publication.overtakes_queued") return codeMessage(code);
+    const overtaken = (error as { params?: { overtaken?: unknown } }).params?.overtaken;
+    if (!Array.isArray(overtaken)) return codeMessage(code);
+    try {
+      const answer = await this.api.getMenuPublications(menuId);
+      return (
+        overtakeSentence(overtaken as { versionId: string }[], null, answer) ?? codeMessage(code)
+      );
+    } catch {
+      return codeMessage(code);
+    }
   }
 
   // ── The list being edited ────────────────────────────────────────────────────────────────────
@@ -2229,6 +2245,13 @@ export class MenusScreen extends LitElement {
         event.stopPropagation();
         void this.#watchPreview(this.menuId!);
       }}
+      ><dashboard-menu-publications
+        slot="schedule"
+        .api=${this.api}
+        menuId=${this.menuId!}
+        menuName=${this.#menuName()}
+        .preview=${this.previewError ? null : this.preview}
+      ></dashboard-menu-publications
     ></dashboard-menu-preview>`;
   }
 

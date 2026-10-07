@@ -96,6 +96,14 @@ timetable to cycle back to an older edition. Reusing old contents requires a new
 If an immediate publication would overtake queued editions, you must explicitly cancel or replace
 the overtaken publications. They cannot silently activate later and send the menu backwards.
 
+> **Note (2026-10-07, owner):** overtaking is refused. Publishing now, queuing or rescheduling an
+> edition so that a newer version would go live before an older queued one is refused, naming the
+> edition in the way; the manager cancels or reschedules the older edition first, then tries
+> again. There is no cancel-or-replace choice inside the request. The owner's words: "perhaps we
+> just refuse to schedule a newer version before an older version, which leaves the user the option
+> of deleting or rescheduling the older version". Plan:
+> [forward-only menu publication](../plans/2026-10-04-forward-only-menu-publication.md), Decision 1.
+
 The snapshot and rescheduling details proposed in section 9 keep scheduled content independent of
 subsequent draft edits. This work defines what a future public menu surface resolves; it does not
 by itself commission that whole surface.
@@ -241,6 +249,8 @@ The implementation plans must require failing behavioural tests before each chan
   restoring that manual choice; a new operator receiving the profile's starting zone and default.
 - Several queued editions activating in order, refusing backwards activation, and requiring an
   explicit decision when immediate publication overtakes queued editions.
+  (2026-10-07, owner: an overtaking publication, queue or reschedule is refused instead; see the
+  note in §3.)
 - A restaurant ordering from the deli menu while direct access to deli orders and zones is refused;
   profile switches checked against both device approval and login eligibility.
 - Action refusals checked independently of screen visibility, and shared kitchen work spanning

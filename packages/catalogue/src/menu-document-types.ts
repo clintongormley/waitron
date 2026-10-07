@@ -302,6 +302,49 @@ export interface PublishedMenuVersion {
   number: number;
 }
 
+export interface OvertakenEdition {
+  versionId: string;
+  number: number;
+  activatesAt: string;
+}
+
+export interface QueuedEdition {
+  versionId: string;
+  number: number;
+  activatesAt: string;
+}
+
+export interface MenuEdition {
+  versionId: string;
+  number: number;
+  state: "queued" | "activated" | "cancelled";
+  activatesAt: string;
+  queuedAt: string;
+  cancelledAt: string | null;
+  contentHash: string;
+}
+
+export interface MenuPublications {
+  live: { versionId: string; number: number; since: string } | null;
+  /** Every queued edition, soonest first, then the ten most recently numbered settled ones. */
+  editions: MenuEdition[];
+}
+
+/** An instant as the venue clock shows it; `repeated` when the clock shows that minute twice. */
+export interface LocalTime {
+  date: string;
+  time: string;
+  offset: string;
+  repeated: boolean;
+}
+
+/** `GET /management-api/catalogues/:id/publications`. */
+export interface MenuPublicationsAnswer {
+  timeZone: string;
+  live: (NonNullable<MenuPublications["live"]> & { local: LocalTime }) | null;
+  editions: (MenuEdition & { local: LocalTime })[];
+}
+
 /** What a zone's live menus hold that cannot be sold now — `GET /api/menu-state`'s `unavailable`. */
 export interface MenuUnavailable {
   /** Every product or variant that is Inactive or Unavailable, extras items' products included. */

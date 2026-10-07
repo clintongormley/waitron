@@ -31,7 +31,8 @@ function usageHref(use: ImageUsage): string {
   if (use.kind === "receipt") return "/manage/venue-settings/view/receipts";
   if (use.kind === "section")
     return `/manage/menus/menu/${encodeURIComponent(use.ownerMenuId)}/view/structure`;
-  if (use.kind === "menu_version") return `/manage/menus/menu/${encodeURIComponent(use.menuId)}`;
+  if (use.kind === "menu_version" || use.kind === "scheduled_menu_version")
+    return `/manage/menus/menu/${encodeURIComponent(use.menuId)}`;
   return `/manage/catalogue/product/${encodeURIComponent(use.id)}`;
 }
 
@@ -352,7 +353,9 @@ export class ImageLibrary extends LitElement {
           ? use.internalName
           : use.kind === "menu_version"
             ? `${use.menuName} (${t("image.published_menu")})`
-            : use.name;
+            : use.kind === "scheduled_menu_version"
+              ? `${use.menuName} (${t("image.scheduled_menu")})`
+              : use.name;
     const inactive = "active" in use && !use.active ? ` (${t("image.disabled_product")})` : "";
     return html`<a href=${usageHref(use)}>${name}${inactive}</a>`;
   }

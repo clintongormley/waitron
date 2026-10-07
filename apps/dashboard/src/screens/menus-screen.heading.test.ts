@@ -98,6 +98,9 @@ function api(
     getMenuStatuses: vi.fn().mockResolvedValue({ "menu-lunch": CHANGED }),
     getMenuStatus: vi.fn(status),
     getMenuPreview: vi.fn().mockResolvedValue(preview),
+    getMenuPublications: vi
+      .fn()
+      .mockResolvedValue({ timeZone: "Europe/Madrid", live: null, editions: [] }),
   } as unknown as DashboardApi;
 }
 

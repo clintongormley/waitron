@@ -183,8 +183,8 @@ it("refreshes image ordering passively after content-language settings change", 
   ).toBe("Brouillon");
 });
 
-// `countUsages` (packages/media/src/images.ts) counts a live version's photos from these two.
-it.each(["menu_publications", "menu_version_images"])(
+// `countUsages` (packages/media/src/images.ts) counts a live or queued version's photos from these.
+it.each(["menu_publications", "menu_version_images", "menu_scheduled_publications"])(
   "refreshes the library passively when %s changes",
   async (type) => {
     const liveData = new LiveData();
@@ -901,6 +901,38 @@ it("links a live menu version using the image to its menu, and blocks the delete
   );
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
+
+for (const [locale, label] of [
+  ["en-GB", "Lunch Menu (Scheduled menu)"],
+  ["es-ES", "Lunch Menu (Carta programada)"],
+]) {
+  it(`links a queued menu edition using the image to its menu, and blocks the delete (${locale})`, async () => {
+    setLocale(locale);
+    const client = api();
+    client.getImage.mockResolvedValue({
+      image,
+      uses: [
+        {
+          kind: "scheduled_menu_version",
+          id: "version-2",
+          menuId: "lunch",
+          menuName: "Lunch Menu",
+          number: 2,
+          activatesAt: "2026-10-08T07:00:00.000Z",
+        },
+      ],
+    });
+    await mount(client);
+    click("[data-test=delete-one]");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe(label),
+    );
+    expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
+      "/manage/menus/menu/lunch",
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+  });
+}
 
 function openDialog(): HTMLDialogElement {
   return el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;

@@ -715,6 +715,131 @@ it("protects an image only a live menu version names, and releases it once anoth
   });
 });
 
+it("protects an image only a queued menu edition names, counts it as a use, and frees it once cancelled", async () => {
+  const {
+    addMember,
+    cancelMenuPublication,
+    createCatalogue,
+    createProduct,
+    previewMenu,
+    publishMenu,
+    queueMenuPublication,
+    readMenuStructure,
+    updateProduct,
+  } = await import("@waitron/catalogue");
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
+    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const lemonade = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Lemonade",
+      pricingUnit: "each",
+      unitPrice: "3.00",
+      vatClass: "reduced",
+    });
+    const { rootSectionId } = await readMenuStructure(tx, menu.id);
+    await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
+    await publishMenu(tx, menu.id, (await previewMenu(tx, menu.id)).hash, "person-1");
+    await updateProduct(tx, lemonade.id, { image: image.filename });
+    const activatesAt = new Date(Date.now() + 60 * 60 * 1000);
+    const queued = await queueMenuPublication(
+      tx,
+      menu.id,
+      (await previewMenu(tx, menu.id)).hash,
+      activatesAt,
+      "manager-ana",
+    );
+    // The working state lets go; the queued edition still shows the photo.
+    await updateProduct(tx, lemonade.id, { image: null });
+    const uses = [
+      {
+        kind: "scheduled_menu_version" as const,
+        id: queued.versionId,
+        menuId: menu.id,
+        menuName: "Lunch Menu",
+        number: 2,
+        activatesAt: activatesAt.toISOString(),
+      },
+    ];
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await readImage(tx, image.id)).usageCount).toBe(1);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    await cancelMenuPublication(tx, menu.id, queued.versionId, "manager-luis");
+    expect(await listImageUsages(tx, image.id)).toEqual([]);
+    expect((await readImage(tx, image.id)).usageCount).toBe(0);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+  });
+});
+
+it("lists a live version and a queued edition of one menu in number order, then only the activated one", async () => {
+  const {
+    activateDueMenuPublications,
+    addMember,
+    createCatalogue,
+    createProduct,
+    previewMenu,
+    publishMenu,
+    queueMenuPublication,
+    readMenuStructure,
+    updateProduct,
+  } = await import("@waitron/catalogue");
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
+    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const lemonade = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Lemonade",
+      pricingUnit: "each",
+      unitPrice: "3.00",
+      vatClass: "reduced",
+      image: image.filename,
+    });
+    const { rootSectionId } = await readMenuStructure(tx, menu.id);
+    await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
+    const first = await publishMenu(tx, menu.id, (await previewMenu(tx, menu.id)).hash, "person-1");
+    // A price change makes the queued edition differ from the live version; both show the photo.
+    await updateProduct(tx, lemonade.id, { unitPrice: "3.50" });
+    const activatesAt = new Date(Date.now() + 60 * 60 * 1000);
+    const queued = await queueMenuPublication(
+      tx,
+      menu.id,
+      (await previewMenu(tx, menu.id)).hash,
+      activatesAt,
+      "manager-ana",
+    );
+    await updateProduct(tx, lemonade.id, { image: null });
+    const live = { id: first.versionId, menuId: menu.id, menuName: "Lunch Menu" };
+    const next = { id: queued.versionId, menuId: menu.id, menuName: "Lunch Menu" };
+    expect(await listImageUsages(tx, image.id)).toEqual([
+      { kind: "menu_version", ...live, number: 1 },
+      {
+        kind: "scheduled_menu_version",
+        ...next,
+        number: 2,
+        activatesAt: activatesAt.toISOString(),
+      },
+    ]);
+    expect((await readImage(tx, image.id)).usageCount).toBe(2);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(2);
+    const { activated } = await activateDueMenuPublications(
+      tx,
+      new Date(activatesAt.getTime() + 60 * 1000),
+    );
+    expect(activated).toHaveLength(1);
+    expect(await listImageUsages(tx, image.id)).toEqual([
+      { kind: "menu_version", ...next, number: 2 },
+    ]);
+    expect((await readImage(tx, image.id)).usageCount).toBe(1);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
+  });
+});
+
 it("protects the photo of a product a live menu version offers only as an extra", async () => {
   const {
     addMember,

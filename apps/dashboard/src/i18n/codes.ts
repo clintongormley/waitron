@@ -123,6 +123,38 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",
     es: "Esta carta ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarla.",
   },
+  "menu_publication.overtakes_queued": {
+    en: "A version that is already scheduled would go live in the wrong order. Cancel it or change its time, then try again.",
+    es: "Una versión ya programada se publicaría en el orden equivocado. Cancélala o cambia su hora y vuelve a intentarlo.",
+  },
+  "menu_publication.not_found": {
+    en: "That scheduled version no longer exists. Refresh the list and try again.",
+    es: "Esa versión programada ya no existe. Actualiza la lista y vuelve a intentarlo.",
+  },
+  "menu_publication.not_queued": {
+    en: "That version is no longer scheduled: it has already gone live or been cancelled.",
+    es: "Esa versión ya no está programada: ya se ha publicado o se ha cancelado.",
+  },
+  "menu_publication.time_past": {
+    en: "Choose a time later than now.",
+    es: "Elige una hora posterior a la actual.",
+  },
+  "menu_publication.unchanged": {
+    en: "Nothing to schedule: this menu is the same as the version it would follow.",
+    es: "No hay nada que programar: esta carta es igual que la versión a la que seguiría.",
+  },
+  "menu_publication.time_skipped": {
+    en: "The venue's clock never shows that time, because the clocks go forward past it. Choose another time.",
+    es: "El reloj del local nunca marca esa hora, porque se adelanta al cambiar la hora. Elige otra hora.",
+  },
+  "menu_publication.time_repeated": {
+    en: "The venue's clock shows that time twice, because the clocks go back. Choose which one.",
+    es: "El reloj del local marca esa hora dos veces, porque se atrasa al cambiar la hora. Elige cuál.",
+  },
+  "time_zone.unreadable": {
+    en: "The venue's time zone or day cutover cannot be read. Check them in Venue details.",
+    es: "No se puede leer la zona horaria o el corte del día del local. Revísalos en Datos del local.",
+  },
   "sale_classification.invalid": {
     en: "Today's categories could not be read: a product's category setup is inconsistent. The report at time of sale still works.",
     es: "No se pudieron leer las categorías actuales: la configuración de categorías de un producto no es coherente. El informe en el momento de la venta sigue funcionando.",

@@ -22,14 +22,15 @@ export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly(
     "menu_versions",
     "state",
-    "published menu versions, never changed once written; copied to a standby, never drained back",
+    "menu versions, published or queued, never changed once written; copied to a standby, never drained back",
   ),
   appendOnly(
     "menu_version_images",
     "state",
-    "the photos each published menu version names; copied to a standby, never drained back",
+    "the photos each menu version names, published or queued; copied to a standby, never drained back",
   ),
   classify("menu_publications", "state", STATE),
+  classify("menu_scheduled_publications", "state", STATE),
 ];
 
 export const CATALOGUE_CHANGE_SOURCES: readonly ChangeSource[] = CATALOGUE_CLASSIFICATION.map(

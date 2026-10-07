@@ -341,6 +341,9 @@ const WRITES = [
   "removeHomeShortcut",
   "moveHomeShortcut",
   "setHomeDisplay",
+  "scheduleMenuPublication",
+  "rescheduleMenuPublication",
+  "cancelMenuPublication",
 ] as const;
 
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
@@ -546,6 +549,14 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       id === "menu-lunch" ? lunchPreview() : dinnerPreview(),
     ),
     publishMenu: vi.fn().mockResolvedValue({ versionId: "v-lunch-3", number: 3 }),
+    getMenuPublications: vi.fn(async () => ({
+      timeZone: "Europe/Madrid",
+      live: null,
+      editions: [],
+    })),
+    scheduleMenuPublication: vi.fn(),
+    rescheduleMenuPublication: vi.fn(),
+    cancelMenuPublication: vi.fn(),
     getMenuHome: vi.fn(async (id: string) => (id === "menu-lunch" ? menuHome() : emptyHome())),
     addHomeShortcut: vi.fn().mockResolvedValue(productMember("t-new", 3, "p-lager")),
     removeHomeShortcut: vi.fn().mockResolvedValue(undefined),
@@ -5042,6 +5053,42 @@ describe("publishing", () => {
     await el.updateComplete;
   }
 
+  it("renders the publications widget for the open menu with the preview it read", async () => {
+    const client = api();
+    const el = await mountPreview(client);
+    const schedule = panel(el).querySelector<HTMLElementTagNameMap["dashboard-menu-publications"]>(
+      "dashboard-menu-publications",
+    )!;
+    expect(schedule.slot).toBe("schedule");
+    expect(schedule.menuId).toBe("menu-lunch");
+    expect(schedule.menuName).toBe("Lunch Menu");
+    expect(schedule.api).toBe(client);
+    expect(schedule.preview).toBe(panel(el).preview);
+    expect(schedule.preview?.hash).toBe(LUNCH_HASH);
+    const slot = panel(el).shadowRoot!.querySelector('slot[name="schedule"]');
+    expect(slot).not.toBeNull();
+    expect(schedule.assignedSlot).toBe(slot);
+    await vi.waitFor(() => expect(client.getMenuPublications).toHaveBeenCalledWith("menu-lunch"));
+  });
+
+  it("hands the publications widget no preview once a background preview read fails", async () => {
+    const live = new LiveData();
+    const client = api({
+      liveData: live,
+      getMenuPreview: vi.fn().mockResolvedValue(lunchPreview()),
+    });
+    const el = await mountPreview(client);
+    const schedule = panel(el).querySelector<HTMLElementTagNameMap["dashboard-menu-publications"]>(
+      "dashboard-menu-publications",
+    )!;
+    expect(schedule.preview?.hash).toBe(LUNCH_HASH);
+    client.getMenuPreview.mockRejectedValue({ code: "server.internal" });
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
+    expect(panel(el).preview).not.toBeNull();
+    expect(schedule.preview).toBeNull();
+  });
+
   function navigablePreview(): MenuPreview {
     const snapshot = lunchPreview();
     const live = lunchDocument();
@@ -5954,6 +6001,155 @@ describe("publishing", () => {
     expect(text(inPanel(el, "publish"))).toBe("Publish Lunch Menu");
   });
 
+  describe("a publish refused because a scheduled version would go live out of order", () => {
+    const OVERTAKEN = {
+      code: "menu_publication.overtakes_queued",
+      status: 409,
+      params: {
+        menuId: "menu-lunch",
+        overtaken: [{ versionId: "v-lunch-2", number: 2, activatesAt: "2026-10-08T06:00:00.000Z" }],
+      },
+    };
+    const QUEUED = {
+      timeZone: "Europe/Madrid",
+      live: null,
+      editions: [
+        {
+          versionId: "v-lunch-2",
+          number: 2,
+          state: "queued" as const,
+          activatesAt: "2026-10-08T06:00:00.000Z",
+          queuedAt: "2026-10-07T08:00:00.000Z",
+          cancelledAt: null,
+          contentHash: "2".repeat(64),
+          local: { date: "2026-10-08", time: "08:00", offset: "+02:00", repeated: false },
+        },
+      ],
+    };
+
+    /** Lunch with version 1 live, so the scheduled version 2 is the one in the way. */
+    function refusedClient(warnings: MenuPreview["warnings"], refusal: unknown = OVERTAKEN) {
+      return api({
+        getMenuPreview: vi.fn(async () => ({
+          ...lunchPreview(),
+          warnings,
+          status: { ...statuses()["menu-lunch"]!, version: 1 },
+        })),
+        publishMenu: vi.fn().mockRejectedValue(refusal),
+        getMenuPublications: vi.fn().mockResolvedValue(QUEUED),
+      });
+    }
+
+    function expectPublishOfferedAgain(el: MenusScreen): void {
+      const button = inPanel(el, "publish") as HTMLElementTagNameMap["wt-button"];
+      expect(text(button)).toBe(t("menu_preview.publish").replace("{menu}", "Lunch Menu"));
+      expect(button.disabled).toBe(false);
+      expect(button.loading).toBe(false);
+    }
+
+    it.each([
+      [
+        "en",
+        "Lunch Menu was not published: version 1 is still live. Your changes are still saved. Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
+      ],
+      [
+        "es-ES",
+        "No se ha publicado Lunch Menu: la versión 1 sigue publicada. Tus cambios siguen guardados. La versión 2, programada para el 8 oct 2026, 08:00, debe publicarse antes. Cancélala o adelántala y vuelve a intentarlo.",
+      ],
+    ])("names the scheduled version in the way, in %s", async (locale, expected) => {
+      const before = currentLocale();
+      onTestFinished(() => setLocale(before));
+      setLocale(locale);
+      const client = refusedClient([]);
+      const el = await mountPreview(client);
+      await publish(el);
+      await vi.waitFor(() => expect(text(inPanel(el, "result"))).toBe(expected));
+      expect(client.publishMenu.mock.calls).toEqual([["menu-lunch", LUNCH_HASH]]);
+      expect(client.getMenuPublications).toHaveBeenLastCalledWith("menu-lunch");
+      expect(writeCalls(client)).toEqual(["publishMenu"]);
+      expectPublishOfferedAgain(el);
+    });
+
+    it("names it the same way after the warnings are confirmed", async () => {
+      const client = refusedClient(lunchPreview().warnings);
+      const el = await mountPreview(client);
+      inPanel(el, "publish")!.click();
+      await panel(el).updateComplete;
+      expect(inPanel(el, "publish-confirmation")).not.toBeNull();
+      inPanel(el, "publish-confirm")!.click();
+      await el.updateComplete;
+      await vi.waitFor(() =>
+        expect(text(inPanel(el, "result"))).toBe(
+          "Lunch Menu was not published: version 1 is still live. Your changes are still saved. Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
+        ),
+      );
+      expect(inPanel(el, "publish-confirmation")).toBeNull();
+      expect(client.publishMenu.mock.calls).toEqual([["menu-lunch", LUNCH_HASH]]);
+      expect(writeCalls(client)).toEqual(["publishMenu"]);
+      expectPublishOfferedAgain(el);
+    });
+
+    it("falls back to the general refusal when the scheduled versions cannot be read", async () => {
+      const client = refusedClient([]);
+      const el = await mountPreview(client);
+      await vi.waitFor(() => expect(client.getMenuPublications).toHaveBeenCalled());
+      client.getMenuPublications.mockRejectedValue(new Error("offline"));
+      await publish(el);
+      await vi.waitFor(() =>
+        expect(text(inPanel(el, "result"))).toBe(
+          `Lunch Menu was not published: version 1 is still live. Your changes are still saved. ${codeMessage("menu_publication.overtakes_queued")}`,
+        ),
+      );
+      expect(client.publishMenu.mock.calls).toEqual([["menu-lunch", LUNCH_HASH]]);
+      expect(writeCalls(client)).toEqual(["publishMenu"]);
+    });
+
+    it("gives the general refusal without reading the list when the refusal names no versions", async () => {
+      const client = refusedClient([], { ...OVERTAKEN, params: { menuId: "menu-lunch" } });
+      const el = await mountPreview(client);
+      await vi.waitFor(() => expect(client.getMenuPublications).toHaveBeenCalled());
+      const reads = client.getMenuPublications.mock.calls.length;
+      await publish(el);
+      await vi.waitFor(() =>
+        expect(text(inPanel(el, "result"))).toBe(
+          `Lunch Menu was not published: version 1 is still live. Your changes are still saved. ${codeMessage("menu_publication.overtakes_queued")}`,
+        ),
+      );
+      expect(client.getMenuPublications.mock.calls.length).toBe(reads);
+    });
+
+    it("gives the general failure, and offers Publish again, when the refusal carries nothing", async () => {
+      const client = refusedClient([]);
+      client.publishMenu.mockRejectedValue(undefined);
+      const el = await mountPreview(client);
+      await vi.waitFor(() => expect(client.getMenuPublications).toHaveBeenCalled());
+      const reads = client.getMenuPublications.mock.calls.length;
+      await publish(el);
+      await vi.waitFor(() =>
+        expect(text(inPanel(el, "result"))).toBe(
+          `Lunch Menu was not published: version 1 is still live. Your changes are still saved. ${codeMessage("server.internal")}`,
+        ),
+      );
+      expectPublishOfferedAgain(el);
+      expect(client.getMenuPublications.mock.calls.length).toBe(reads);
+    });
+
+    it("names the scheduled version beside the list when the refusal lands after the person left", async () => {
+      const out = deferred<never>();
+      const client = refusedClient([]);
+      client.publishMenu.mockImplementation(() => out.promise);
+      const el = await mountPreview(client);
+      await publish(el);
+      await click(el, "back");
+      out.reject(OVERTAKEN);
+      await vi.waitFor(() =>
+        expect(text(q(el, '[data-test="member-error"]'))).toBe(
+          "Lunch Menu was not published: version 1 is still live. Your changes are still saved. Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
+        ),
+      );
+    });
+  });
+
   it("names the menu beside the list when its publish fails after the person has left it", async () => {
     const out = deferred<never>();
     const client = api({ publishMenu: vi.fn(() => out.promise) });
@@ -6046,6 +6242,7 @@ describe("publishing", () => {
   it("says there is nothing to publish when the menu matches its live version", async () => {
     const client = api({
       getMenuPreview: vi.fn().mockResolvedValue({
+        clashes: [],
         hash: LUNCH_HASH,
         changes: [],
         warnings: [],

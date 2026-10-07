@@ -172,6 +172,9 @@ function api(state: State): DashboardApi {
         { "p-lager": "Lager" },
       ),
     } satisfies MenuPreview),
+    getMenuPublications: vi
+      .fn()
+      .mockResolvedValue({ timeZone: "Europe/Madrid", live: null, editions: [] }),
     getMenuHome: vi.fn().mockResolvedValue({
       homeSectionId: "home-lunch",
       shortcuts: [

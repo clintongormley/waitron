@@ -260,6 +260,29 @@ it.each(["en", "es"])(
   },
 );
 
+it("has English and Spanish copy for each menu publication code", () => {
+  for (const code of [
+    "menu_publication.overtakes_queued",
+    "menu_publication.not_found",
+    "menu_publication.not_queued",
+    "menu_publication.time_past",
+    "menu_publication.unchanged",
+    "menu_publication.time_skipped",
+    "menu_publication.time_repeated",
+    "time_zone.unreadable",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+  expect(codeMessage("menu_publication.overtakes_queued", "en")).toBe(
+    "A version that is already scheduled would go live in the wrong order. Cancel it or change its time, then try again.",
+  );
+  expect(codeMessage("menu_publication.overtakes_queued", "es")).toBe(
+    "Una versión ya programada se publicaría en el orden equivocado. Cancélala o cambia su hora y vuelve a intentarlo.",
+  );
+});
+
 it("has English and Spanish copy for a publish refused because the menu changed", () => {
   const code = "menu.changed_since_preview";
   expect(codeMessage(code, "en")).toBe(
