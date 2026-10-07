@@ -3397,13 +3397,23 @@ it("pressing Select again leaves Select mode and clears the selection, as Done d
 });
 
 it("opens the Products table's Filters from the toolbar's start", async () => {
-  const el = await mountBrowser();
-  const table = await tableOf(el);
-  const trigger = table.shadowRoot!.querySelector(".filters-trigger")!;
-  expect(table.shadowRoot!.querySelector(".table-toolbar")!.firstElementChild).toBe(trigger);
-  expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
-    el.shadowRoot!.querySelector('wt-input[name="catalogue-search"]')!.getBoundingClientRect().left,
-  );
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 720);
+  try {
+    expect(window.innerWidth).toBe(1280);
+    const el = await mountBrowser();
+    const table = await tableOf(el);
+    const trigger = table.shadowRoot!.querySelector(".filters-trigger")!;
+    expect(table.shadowRoot!.querySelector(".table-toolbar")!.firstElementChild).toBe(trigger);
+    expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
+      el.shadowRoot!.querySelector('wt-input[name="catalogue-search"]')!.getBoundingClientRect()
+        .left,
+    );
+  } finally {
+    await page.viewport(width, height);
+  }
 });
 
 it("opens the Products table's Filters over the whole screen at phone width", async () => {
