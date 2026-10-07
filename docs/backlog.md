@@ -1010,6 +1010,10 @@ unused `units` property is gone (it closes W75's leftover).
   - DONE (A367): the Printers screen's Add action reads "Add an agent" / "Añadir un agente".
     Chromium checks at 390 px in English and Spanish keep it inside the viewport and clear of
     every tab, including after resizing from desktop; at 640 px or less its action sits under the tabs.
+    A367's final Claude review measured a remaining Spanish tab clipping case in its harness at
+    641 and 660 px; it also saw one at 800 px with an assumed 560 px content width. The real app at
+    those widths and whether this predates A367 are unverified. Next: reproduce with the full
+    dashboard and decide whether this layout should follow content width rather than viewport width.
     A menu's prices table showing only a sliver of the price box at 390 px — DONE (A344):
     the Resolve column is gone and a name wraps under a phone-width cap, so each price box is whole
     on screen in English and Spanish.
