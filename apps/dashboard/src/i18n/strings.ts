@@ -132,7 +132,6 @@ export const en = {
   "folders.made_at_own": "set on this category",
   "folders.made_at_inherited": "from {name}",
   "folders.made_at_default": "default station",
-  "folders.made_at_exception": "by an exception",
   "folders.made_at_some_elsewhere": "some items made elsewhere",
   "folders.made_at_unavailable": "Kitchen routing unavailable",
   "folders.summary_error":
@@ -2566,7 +2565,6 @@ export const es: Record<StringKey, string> = {
   "folders.made_at_own": "asignada a esta categoría",
   "folders.made_at_inherited": "heredada de {name}",
   "folders.made_at_default": "estación predeterminada",
-  "folders.made_at_exception": "por una excepción",
   "folders.made_at_some_elsewhere": "algunos productos se preparan en otro sitio",
   "folders.made_at_unavailable": "Envío a cocina no disponible",
   "folders.summary_error":

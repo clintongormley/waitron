@@ -2278,8 +2278,12 @@ export class DashboardApi {
     return this.#request<Record<string, MadeAt>>("/management-api/products/made-at", "GET");
   }
 
-  getFolderRouting(): Promise<RoutingModel> {
-    return this.#request<RoutingModel>("/management-api/venue-service/routing", "GET");
+  /** `canMakeDefault`: the session may use Make default (`venue.configure`). */
+  getFolderRouting(): Promise<RoutingModel & { canMakeDefault: boolean }> {
+    return this.#request<RoutingModel & { canMakeDefault: boolean }>(
+      "/management-api/venue-service/routing",
+      "GET",
+    );
   }
 
   getProductEditor(id: string): Promise<ProductEditorValue> {

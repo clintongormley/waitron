@@ -3541,9 +3541,11 @@ describe("dashboard URL navigation", () => {
               stationTimes: [],
               todayEnds: { timeOfDay: "06:00", tomorrow: true },
               clockReadable: true,
-              claims: [],
-              exceptions: [],
-              unassigned: { folders: [], products: [] },
+              zones: [],
+              categories: [],
+              products: [],
+              cells: [],
+              canMakeDefault: false,
             } as never;
           if (path === "/management-api/stations/health")
             return {
@@ -3652,11 +3654,16 @@ describe("dashboard URL navigation", () => {
       request: async (path, method, body, options) =>
         path === "/management-api/venue-service/routing"
           ? ({
-              claims: [],
-              exceptions: [],
-              unassigned: { folders: [], products: [] },
+              stationTimes: [],
+              todayEnds: null,
+              clockReadable: true,
+              zones: [],
+              categories: [],
+              products: [],
+              cells: [],
               defaultStationId: null,
               stations: [],
+              canMakeDefault: false,
             } as never)
           : path === "/management-api/stations/health"
             ? ({

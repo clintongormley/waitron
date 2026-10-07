@@ -52,30 +52,21 @@ function routing(overrides: Partial<RoutingModel> = {}): RoutingModel {
     stationTimes: [],
     todayEnds: null,
     clockReadable: true,
-    claims: [],
-    exceptions: [],
-    unassigned: { folders: [], products: [] },
+    zones: [{ id: "terrace-zone", name: "Terrace" }],
+    categories: CATEGORIES.map(({ id, name, parentId }) => ({ id, name, parentId })),
+    products: [],
+    cells: [],
     defaultStationId: null,
     stations: STATIONS,
     ...overrides,
   };
 }
-const claim = (categoryId: string, target: Target) => ({ categoryId, target, stationOff: false });
-let nextId = 0;
-const exception = (
-  fields: { zoneId?: string | null; categoryId?: string | null; productId?: string | null },
-  target: Target,
-) => ({
-  id: `e${nextId++}`,
-  position: nextId,
-  zoneId: null,
-  categoryId: null,
-  productId: null,
-  ...fields,
-  target,
-  neverMatches: false,
-  stationOff: false,
-});
+type Row = RoutingModel["cells"][number]["row"];
+const category = (categoryId: string): Row => ({ kind: "category", categoryId });
+const productRow = (productId: string): Row => ({ kind: "product", productId });
+const cell = (row: Row, target: Target, zoneId: string | null = null) => ({ row, zoneId, target });
+/** The category's Every zone cell. */
+const onCategory = (categoryId: string, target: Target) => cell(category(categoryId), target);
 const times = (
   stationId: string,
   fields: Partial<RoutingModel["stationTimes"][number]> = {},
@@ -94,8 +85,8 @@ const madeAt = (model: RoutingModel, products: Product[] = []) =>
   folderMadeAt(model, CATEGORIES, products);
 
 describe("folderMadeAt — the category's own baseline", () => {
-  it("names the station a claim on the category sends its dishes to, as set on that category", () => {
-    const result = madeAt(routing({ claims: [claim("drinks", station("bar"))] }));
+  it("names the station the category's Every zone cell sends its dishes to, as set on that category", () => {
+    const result = madeAt(routing({ cells: [onCategory("drinks", station("bar"))] }));
     expect(result.get("drinks")).toEqual({
       maker: { kind: "station", stationName: "Bar" },
       source: { kind: "own" },
@@ -103,8 +94,8 @@ describe("folderMadeAt — the category's own baseline", () => {
     });
   });
 
-  it("inherits a claim from a category two levels up and names that category", () => {
-    const result = madeAt(routing({ claims: [claim("drinks", station("bar"))] }));
+  it("inherits a cell from a category two levels up and names that category", () => {
+    const result = madeAt(routing({ cells: [onCategory("drinks", station("bar"))] }));
     expect(result.get("craft")).toEqual({
       maker: { kind: "station", stationName: "Bar" },
       source: { kind: "inherited", name: "Drinks" },
@@ -113,9 +104,11 @@ describe("folderMadeAt — the category's own baseline", () => {
     expect(result.get("beer")?.source).toEqual({ kind: "inherited", name: "Drinks" });
   });
 
-  it("prefers the nearest claim: a claim on the middle category wins over the top one", () => {
+  it("prefers the nearest cell: a cell on the middle category wins over the top one", () => {
     const result = madeAt(
-      routing({ claims: [claim("drinks", station("bar")), claim("beer", station("kitchen"))] }),
+      routing({
+        cells: [onCategory("drinks", station("bar")), onCategory("beer", station("kitchen"))],
+      }),
     );
     expect(result.get("craft")).toMatchObject({
       maker: { kind: "station", stationName: "Kitchen" },
@@ -123,7 +116,7 @@ describe("folderMadeAt — the category's own baseline", () => {
     });
   });
 
-  it("falls to the venue's default station when nothing claims the category", () => {
+  it("falls to the venue's default station when no cell covers the category", () => {
     const result = madeAt(routing({ defaultStationId: "kitchen" }));
     expect(result.get("food")).toEqual({
       maker: { kind: "station", stationName: "Kitchen" },
@@ -132,8 +125,8 @@ describe("folderMadeAt — the category's own baseline", () => {
     });
   });
 
-  it("reports no preparation from a no-preparation claim", () => {
-    const result = madeAt(routing({ claims: [claim("drinks", { kind: "no_preparation" })] }));
+  it("reports no preparation from a No preparation cell", () => {
+    const result = madeAt(routing({ cells: [onCategory("drinks", { kind: "no_preparation" })] }));
     expect(result.get("drinks")).toEqual({
       maker: { kind: "no_preparation" },
       source: { kind: "own" },
@@ -142,7 +135,7 @@ describe("folderMadeAt — the category's own baseline", () => {
     expect(result.get("beer")?.maker).toEqual({ kind: "no_preparation" });
   });
 
-  it("reports nowhere, with no source, when no claim, exception or default covers the category", () => {
+  it("reports nowhere, with no source, when no cell or default covers the category", () => {
     const result = madeAt(routing());
     expect(result.get("food")).toEqual({
       maker: { kind: "nowhere" },
@@ -151,8 +144,8 @@ describe("folderMadeAt — the category's own baseline", () => {
     });
   });
 
-  it("names the switched-off station when the claimed station has no replacement", () => {
-    const result = madeAt(routing({ claims: [claim("drinks", station("cocktail"))] }));
+  it("names the disabled station when the cell's station has no replacement", () => {
+    const result = madeAt(routing({ cells: [onCategory("drinks", station("cocktail"))] }));
     expect(result.get("drinks")).toEqual({
       maker: { kind: "no_replacement", stationName: "Cocktail bar" },
       source: { kind: "own" },
@@ -163,39 +156,57 @@ describe("folderMadeAt — the category's own baseline", () => {
   it("follows a switched-off station's fallback, as product rows do", () => {
     const result = madeAt(
       routing({
-        claims: [claim("drinks", station("cocktail"))],
+        cells: [onCategory("drinks", station("cocktail"))],
         stationTimes: [times("cocktail", { fallbackStationId: "bar" })],
       }),
     );
     expect(result.get("drinks")?.maker).toEqual({ kind: "station", stationName: "Bar" });
   });
 
-  it("is decided by an exception that covers the category for every dish in every zone", () => {
+  it("is decided by the category's Every zone cell", () => {
     const result = madeAt(
       routing({
-        claims: [claim("drinks", station("bar"))],
-        exceptions: [exception({ categoryId: "beer" }, station("kitchen"))],
+        cells: [onCategory("drinks", station("bar")), onCategory("beer", station("kitchen"))],
       }),
     );
-    expect(result.get("craft")).toMatchObject({
+    expect(result.get("beer")).toMatchObject({
       maker: { kind: "station", stationName: "Kitchen" },
-      source: { kind: "exception" },
+      source: { kind: "own" },
     });
     expect(result.get("drinks")?.source).toEqual({ kind: "own" });
   });
 
-  it("does not let a zone's or a product's exception decide the baseline", () => {
+  it("does not let a zone's or a product's cell decide the baseline", () => {
     const result = madeAt(
       routing({
-        claims: [claim("drinks", station("bar"))],
-        exceptions: [
-          exception({ zoneId: "terrace-zone", categoryId: "drinks" }, station("terrace")),
-          exception({ productId: "cola" }, station("kitchen")),
+        cells: [
+          onCategory("drinks", station("bar")),
+          cell(category("drinks"), station("terrace"), "terrace-zone"),
+          cell({ kind: "all" }, station("terrace"), "terrace-zone"),
+          cell(productRow("cola"), station("kitchen")),
         ],
       }),
     );
     expect(result.get("drinks")?.maker).toEqual({ kind: "station", stationName: "Bar" });
     expect(result.get("drinks")?.source).toEqual({ kind: "own" });
+  });
+
+  it("a No category cell changes no category's Made at", () => {
+    const result = madeAt(
+      routing({
+        cells: [
+          cell({ kind: "no_category" }, station("kitchen")),
+          cell({ kind: "no_category" }, station("terrace"), "terrace-zone"),
+        ],
+      }),
+      [product("loose", null)],
+    );
+    for (const id of ["drinks", "beer", "craft", "food"])
+      expect(result.get(id)).toEqual({
+        maker: { kind: "nowhere" },
+        source: null,
+        someElsewhere: false,
+      });
   });
 
   it("gives every category an entry, and none to an unknown one", () => {
@@ -205,13 +216,12 @@ describe("folderMadeAt — the category's own baseline", () => {
 });
 
 describe("folderMadeAt — whether the baseline holds for everything inside", () => {
-  const barOnDrinks = { claims: [claim("drinks", station("bar"))] };
+  const barOnDrinks = { cells: [onCategory("drinks", station("bar"))] };
 
-  it("says some items are made elsewhere when a product exception sends a contained dish elsewhere", () => {
+  it("says some items are made elsewhere when a product's cell sends a contained dish elsewhere", () => {
     const result = madeAt(
       routing({
-        ...barOnDrinks,
-        exceptions: [exception({ productId: "ipa" }, station("kitchen"))],
+        cells: [...barOnDrinks.cells, cell(productRow("ipa"), station("kitchen"))],
       }),
       [product("ipa", "craft"), product("cola", "drinks")],
     );
@@ -221,9 +231,9 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("food")?.someElsewhere).toBe(false);
   });
 
-  it("does not qualify the baseline for an exception that sends the dish to the same station", () => {
+  it("does not qualify the baseline for a cell that sends the dish to the same station", () => {
     const result = madeAt(
-      routing({ ...barOnDrinks, exceptions: [exception({ productId: "ipa" }, station("bar"))] }),
+      routing({ cells: [...barOnDrinks.cells, cell(productRow("ipa"), station("bar"))] }),
       [product("ipa", "craft")],
     );
     expect(result.get("drinks")?.someElsewhere).toBe(false);
@@ -232,19 +242,17 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
   it("ignores inactive products, as product rows' routing does", () => {
     const result = madeAt(
       routing({
-        ...barOnDrinks,
-        exceptions: [exception({ productId: "ipa" }, station("kitchen"))],
+        cells: [...barOnDrinks.cells, cell(productRow("ipa"), station("kitchen"))],
       }),
       [product("ipa", "craft", false)],
     );
     expect(result.get("drinks")?.someElsewhere).toBe(false);
   });
 
-  it("qualifies the baseline when a zone exception sends the category's dishes elsewhere in one zone", () => {
+  it("qualifies the baseline when a zone cell sends the category's dishes elsewhere in one zone", () => {
     const result = madeAt(
       routing({
-        ...barOnDrinks,
-        exceptions: [exception({ zoneId: "terrace-zone", categoryId: "beer" }, station("terrace"))],
+        cells: [...barOnDrinks.cells, cell(category("beer"), station("terrace"), "terrace-zone")],
       }),
       [product("cola", "drinks")],
     );
@@ -254,11 +262,10 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("food")?.someElsewhere).toBe(false);
   });
 
-  it("qualifies the baseline when a zone exception sends one contained product elsewhere", () => {
+  it("qualifies the baseline when a zone cell sends one contained product elsewhere", () => {
     const result = madeAt(
       routing({
-        ...barOnDrinks,
-        exceptions: [exception({ zoneId: "terrace-zone", productId: "cola" }, station("terrace"))],
+        cells: [...barOnDrinks.cells, cell(productRow("cola"), station("terrace"), "terrace-zone")],
       }),
       [product("cola", "drinks"), product("ipa", "craft")],
     );
@@ -266,18 +273,45 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("beer")?.someElsewhere).toBe(false);
   });
 
-  it("qualifies a parent whose subcategory claims another station, but not the subcategory", () => {
+  it("qualifies a category that an All categories zone cell sends elsewhere in one zone", () => {
     const result = madeAt(
-      routing({ claims: [claim("drinks", station("bar")), claim("craft", station("kitchen"))] }),
+      routing({
+        ...barOnDrinks,
+        defaultStationId: "kitchen",
+        cells: [...barOnDrinks.cells, cell({ kind: "all" }, station("terrace"), "terrace-zone")],
+      }),
+    );
+    expect(result.get("food")?.someElsewhere).toBe(true);
+    // Drinks' own Every zone cell comes before All categories in the row order.
+    expect(result.get("drinks")?.someElsewhere).toBe(false);
+  });
+
+  it("ignores a cell on a zone that is not an active zone", () => {
+    const result = madeAt(
+      routing({
+        cells: [...barOnDrinks.cells, cell(category("beer"), station("terrace"), "closed-zone")],
+      }),
+    );
+    expect(result.get("beer")?.someElsewhere).toBe(false);
+    expect(result.get("drinks")?.someElsewhere).toBe(false);
+  });
+
+  it("qualifies a parent whose subcategory's cell names another station, but not the subcategory", () => {
+    const result = madeAt(
+      routing({
+        cells: [onCategory("drinks", station("bar")), onCategory("craft", station("kitchen"))],
+      }),
     );
     expect(result.get("drinks")?.someElsewhere).toBe(true);
     expect(result.get("beer")?.someElsewhere).toBe(true);
     expect(result.get("craft")?.someElsewhere).toBe(false);
   });
 
-  it("does not qualify a parent whose subcategory claims the same station", () => {
+  it("does not qualify a parent whose subcategory's cell names the same station", () => {
     const result = madeAt(
-      routing({ claims: [claim("drinks", station("bar")), claim("craft", station("bar"))] }),
+      routing({
+        cells: [onCategory("drinks", station("bar")), onCategory("craft", station("bar"))],
+      }),
     );
     expect(result.get("drinks")?.someElsewhere).toBe(false);
   });
@@ -336,7 +370,7 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     const hours = [{ weekday: 1, opensAt: "18:00", closesAt: "23:00" }];
     const result = madeAt(
       routing({
-        claims: [claim("food", station("bar"))],
+        cells: [onCategory("food", station("bar"))],
         defaultStationId: "kitchen",
         stationTimes: [times("kitchen", { hours }), times("bar")],
       }),
@@ -346,7 +380,7 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
   });
 
   it("does not qualify a no-preparation or nowhere baseline for timing", () => {
-    const result = madeAt(routing({ claims: [claim("drinks", { kind: "no_preparation" })] }));
+    const result = madeAt(routing({ cells: [onCategory("drinks", { kind: "no_preparation" })] }));
     expect(result.get("drinks")?.someElsewhere).toBe(false);
     expect(result.get("food")?.someElsewhere).toBe(false);
   });
@@ -354,13 +388,13 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
 
 describe("folderMadeAt — names it cannot find", () => {
   it("names no switched-off station when the routing model does not list it", () => {
-    const result = madeAt(routing({ claims: [claim("drinks", station("ghost"))] }));
+    const result = madeAt(routing({ cells: [onCategory("drinks", station("ghost"))] }));
     expect(result.get("drinks")?.maker).toEqual({ kind: "no_replacement", stationName: null });
   });
 
-  it("names no category for a claim on a parent the category list does not hold", () => {
+  it("names no category for a cell on a parent the category list does not hold", () => {
     const result = folderMadeAt(
-      routing({ claims: [claim("missing", station("bar"))] }),
+      routing({ cells: [onCategory("missing", station("bar"))] }),
       [folder("orphan", "Orphan", "missing")],
       [product("cola", "elsewhere")],
     );
@@ -383,9 +417,11 @@ describe("isRouted — what the category tree's asterisk reads", () => {
   it("counts a route that reaches a station or no preparation, whatever decided it", () => {
     expect(isRouted(made(bar, { kind: "own" }))).toBe(true);
     expect(isRouted(made(bar, { kind: "inherited", name: "Drinks" }))).toBe(true);
-    expect(isRouted(made(bar, { kind: "exception" }))).toBe(true);
+    expect(isRouted(made(bar, { kind: "inherited", name: null }))).toBe(true);
     expect(isRouted(made(bar, { kind: "default" }))).toBe(true);
-    expect(isRouted(made({ kind: "no_preparation" }, { kind: "exception" }))).toBe(true);
+    expect(isRouted(made({ kind: "no_preparation" }, { kind: "inherited", name: "Drinks" }))).toBe(
+      true,
+    );
   });
 
   it("does not count no rule, or a rule whose station has no replacement", () => {
@@ -398,6 +434,6 @@ describe("isRouted — what the category tree's asterisk reads", () => {
   it("does not count a maker that reaches nowhere, whatever the source", () => {
     expect(isRouted(made({ kind: "nowhere" }, { kind: "own" }))).toBe(false);
     expect(isRouted(made({ kind: "nowhere" }, { kind: "inherited", name: "Drinks" }))).toBe(false);
-    expect(isRouted(made({ kind: "nowhere" }, { kind: "exception" }))).toBe(false);
+    expect(isRouted(made({ kind: "nowhere" }, { kind: "default" }))).toBe(false);
   });
 });

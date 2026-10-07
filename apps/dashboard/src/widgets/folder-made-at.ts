@@ -1,6 +1,9 @@
 import {
   chooseMaker,
   folderAncestors,
+  followFallbacks,
+  selectionRulesFromModel,
+  selectRoutingCell,
   type MakerChoice,
   type RoutingModel,
   type RoutingRules,
@@ -14,10 +17,7 @@ export type FolderMaker =
   | { kind: "nowhere" };
 
 export type FolderMakerSource =
-  | { kind: "own" }
-  | { kind: "inherited"; name: string | null }
-  | { kind: "default" }
-  | { kind: "exception" };
+  { kind: "own" } | { kind: "inherited"; name: string | null } | { kind: "default" };
 
 export interface FolderMadeAt {
   maker: FolderMaker;
@@ -41,10 +41,29 @@ function outcomeOf(choice: MakerChoice): string {
   return "nowhere";
 }
 
+/** A category row's route in one zone (`null`: Every zone), its station's fallbacks followed the
+ * way `chooseMaker` follows a product's. */
+function categoryChoice(
+  rules: RoutingRules,
+  categoryId: string,
+  zoneId: string | null,
+): MakerChoice {
+  const { target, decidedBy } = selectRoutingCell(rules, { kind: "category", categoryId }, zoneId);
+  if (target?.kind !== "station" || decidedBy?.kind !== "cell")
+    return { route: target, decidedBy, fallbacks: [], noReplacement: false };
+  const { stationId, steps } = followFallbacks(rules, target.stationId, null);
+  return {
+    route: stationId === null ? null : { kind: "station", stationId },
+    decidedBy,
+    fallbacks: steps,
+    noReplacement: stationId === null,
+  };
+}
+
 /** Each category's baseline route, worked out with the shared routing rules the way the server
- * works out a product row's (`describeMakers`): no service zone, and the time of day not applied,
- * though a switched-off station's fallback is followed. Only rules that apply to every dish in every
- * zone decide the baseline. */
+ * works out a product row's (`describeMakers`): Every zone, and the time of day not applied, though
+ * a switched-off station's fallback is followed. The baseline varies when an active zone's outcome,
+ * or an active product's inside, differs from it. */
 export function folderMadeAt(
   routing: RoutingModel,
   categories: readonly CategorySummary[],
@@ -52,12 +71,10 @@ export function folderMadeAt(
 ): Map<string, FolderMadeAt> {
   const stationNames = new Map(routing.stations.map(({ id, name }) => [id, name]));
   const categoryNames = new Map(categories.map(({ id, name }) => [id, name]));
+  // The tree is the catalogue's live category list, which the routing read can lag behind.
   const rules: RoutingRules = {
-    exceptions: routing.exceptions,
-    claims: new Map(routing.claims.map(({ categoryId, target }) => [categoryId, target])),
+    ...selectionRulesFromModel(routing),
     parentOf: new Map(categories.map(({ id, parentId }) => [id, parentId])),
-    activeStationIds: new Set(routing.stations.filter(({ active }) => active).map(({ id }) => id)),
-    defaultStationId: routing.defaultStationId,
     timing: new Map(
       routing.stationTimes.map(({ stationId, fallbackStationId, hours, weekSet, today }) => [
         stationId,
@@ -65,21 +82,9 @@ export function folderMadeAt(
       ]),
     ),
   };
-  const baselineRules: RoutingRules = {
-    ...rules,
-    exceptions: routing.exceptions.filter(
-      ({ zoneId, productId }) => zoneId === null && productId === null,
-    ),
-  };
-  const zones = [
-    null,
-    ...new Set(routing.exceptions.flatMap(({ zoneId }) => (zoneId === null ? [] : [zoneId]))),
-  ];
-  const asFolder = (categoryId: string) => ({ productId: "", routedProductId: "", categoryId });
+  const zones = [null, ...routing.zones.map(({ id }) => id)];
 
-  const baselines = new Map(
-    categories.map(({ id }) => [id, chooseMaker(baselineRules, asFolder(id), null, null)]),
-  );
+  const baselines = new Map(categories.map(({ id }) => [id, categoryChoice(rules, id, null)]));
   const elsewhere = new Set<string>();
   /** Marks every known category at or above `categoryId` whose baseline `outcome` differs from. */
   const compare = (categoryId: string | null, outcome: string): void => {
@@ -100,8 +105,7 @@ export function folderMadeAt(
       compare(facts.categoryId, outcomeOf(chooseMaker(rules, facts, zone, null)));
   }
   for (const { id } of categories)
-    for (const zone of zones) compare(id, outcomeOf(chooseMaker(rules, asFolder(id), zone, null)));
-
+    for (const zone of zones) compare(id, outcomeOf(categoryChoice(rules, id, zone)));
   const restrictedByDate = new Set(
     routing.stationTimes
       .filter(({ specialDateRestricts }) => specialDateRestricts === true)
@@ -133,16 +137,18 @@ export function folderMadeAt(
                 stationName: stationNames.get(choice.fallbacks[0]!.stationId) ?? null,
               }
             : { kind: "nowhere" };
+    const row = decidedBy?.kind === "cell" ? decidedBy.address.row : null;
     const source: FolderMakerSource | null =
       decidedBy === null
         ? null
-        : decidedBy.kind === "claim"
-          ? decidedBy.categoryId === id
+        : decidedBy.kind === "default"
+          ? { kind: "default" }
+          : row?.kind === "category" && row.categoryId === id
             ? { kind: "own" }
-            : { kind: "inherited", name: categoryNames.get(decidedBy.categoryId) ?? null }
-          : decidedBy.kind === "default"
-            ? { kind: "default" }
-            : { kind: "exception" };
+            : {
+                kind: "inherited",
+                name: row?.kind === "category" ? (categoryNames.get(row.categoryId) ?? null) : null,
+              };
     result.set(id, {
       maker,
       source,
