@@ -1530,8 +1530,10 @@ anchors use the dispatched click's composed path; modified clicks, new-tab targe
 keep browser handling. Fragment-only form links keep their target's click handler, which owns
 any leave request; the dashboard shell does not turn them into page navigation. The profile shell
 tests cover Keep/Discard through sidebar, links and
-indexed Back/Forward. Other application shells, direct history writers and individual page/tab
-owners remain part of the rollout.
+indexed Back/Forward. Changing the Receipts preview department, including same-page Back,
+retains its staged receipt inputs because the preview does not save or replace them. Leaving
+Receipts through a tab or its department-management link still requests a leave decision.
+Other application shells, direct history writers and individual page/tab owners remain part of the rollout.
 
 #### A value saved from its own table row
 

@@ -1173,6 +1173,12 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Receipt preview department selection and same-page Back now retain your edited appearance without
+asking to discard it. The real department-management link and switching to Kitchen still ask.
+The actual dashboard tests cover EN/ES, both themes and phone/desktop widths; the dated audit
+records the failing case, installed deletion controls and inspected captures. The remaining
+link/owner audit and branch review keep W69 incomplete.
+
 Unassigned table orders now register their memory-only draft separately from automatically saved
 party drafts. Tabs retain those lines without asking; opening another table or signing out asks
 first. Keep retains the draft, and an approved but refused table read keeps it unload-protected.

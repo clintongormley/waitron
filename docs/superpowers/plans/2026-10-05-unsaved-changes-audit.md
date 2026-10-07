@@ -3885,3 +3885,38 @@ Finish that route/context matrix and the final full owner/exemption audit agains
 retire current rollout wording in the shared contract/backlog where the evidence supports it,
 then perform the one whole-branch run-it review, normal hook and current-head CI. W69 remains
 in progress and is not ready to finish or land.
+
+## Receipt preview navigation and real management link, 2026-10-07
+
+Changing only the receipt preview's department on the actual dashboard first failed:
+`departmentId` stayed `bar` instead of becoming `deli`. Its failure capture showed the shared
+discard warning over the edited Receipts form. `ReceiptsScreen.#choosePreviewDepartment`
+writes through the shared navigation guard; the shell selected all draft owners even though
+this context change retained the Receipts form. The shell now excludes that owner and its
+children only when both URLs identify the same receipt page and become identical after removing
+`departmentId`. Other owners remain selected. No receipt submit or fiscal code changed.
+
+The new actual-shell case changes the heading, selects Deli, traverses Back to Bar and checks
+both preview requests still carry `Edited heading`. It then leaves through the Kitchen tab:
+Keep retains that heading and Discard restores the baseline. Eight variants cover EN/ES,
+light/dark and 390/1280 widths, with a scoped confirmation axe check and two captures each.
+The additional real department-management link case keeps the heading, then discards before
+leaving; its fixture enables no venue-service module, so the existing permission fallback
+lands on Overview. This does not establish that contributed module's destination rendering.
+
+Observed commands and local receipts under `receipts/w69-link-context-20261007/` in Lane E:
+
+- `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.venue-settings-unsaved.test.ts -t 'receipt preview department navigation'`: initial one assertion failure, then one pass (`receipt-red.log`, `receipt-green.log`).
+- The receipt/shell/profile family across eight files passed 221 before expansion to the eight visual variants (`receipt-family.log`).
+- `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.venue-settings-unsaved.test.ts -t 'receipt preview department navigation|the real Receipts'`: nine pass, including eight scoped axe checks (`receipt-matrix.log`). Sixteen captures inspected in four contact sheets. Synthetic API only; no full-shell accessibility or real-venue claim.
+- In a detached measuring checkout with `pnpm install --frozen-lockfile`, removing the preview exemption gives one failure/two controls passing; widening it to receipt departures gives two failures/one control passing. Restored selection gives three passes (`drop-preview-exclusion.log`, `widen-preview-exclusion.log`, `candidate-restored.log`). The application file matches the feature bytes; the final matrix test was copied to the measuring checkout after these controls.
+- `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`: 20 pass, both files unedited (`fiscal.log`).
+- Final eight-file receipt/shell/profile family: 228 pass (`final-family.log`). Root style/native-field/document-pointer/subscription guards: 42 pass (`root.log`). Dashboard types, changed-source lint and formatting, and `git diff --check` pass.
+- Final restored measuring checkout: ten pass (`candidate-final-restored.log`); application and test bytes match the feature, then the owned worktree and empty parent were removed (`candidate-comparison.txt`, `candidate-cleanup.txt`).
+
+Existing behavioral assertions remain unchanged. The new captures write under the ignored
+package `node_modules/.cache/` folder. This checkpoint covers receipt preview context and its
+actual management link. Contributed image-usage/routing links, menu/product links, demo-bar
+links, setup help/cloud/done and till enrolment approval links still need the remaining actual
+route matrix, followed by the advancing-owner audit, whole-branch review and current-head CI.
+W69 remains incomplete; Tasks 1/4/5/6 stay partial and Tasks 2/3 complete.

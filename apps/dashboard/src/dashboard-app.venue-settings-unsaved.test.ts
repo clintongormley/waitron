@@ -398,3 +398,115 @@ for (const locale of ["en-GB", "es-ES"]) {
     }
   }
 }
+
+for (const locale of ["en-GB", "es-ES"]) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      it(`receipt preview department navigation retains edited appearance in ${locale}/${theme}/${width}`, async () => {
+        await page.viewport(width, 900);
+        const previews: { heading: string | undefined; department: string | undefined }[] = [];
+        const { app } = await mount("/manage/venue-settings/view/receipts", locale, theme, {
+          getVenueDepartments: async () => [
+            { id: "bar", name: "Bar", active: true },
+            { id: "deli", name: "Deli", active: true },
+          ],
+          previewReceipt: async (config, _width, _language, department) => {
+            previews.push({ heading: config.headerSubtitle, department });
+            return {
+              preview: {
+                widthDots: 512,
+                columns: 42,
+                text: "Venue",
+                blocks: [{ kind: "text", text: "Venue" }],
+                qrData: [],
+                omittedGraphics: false,
+                truncated: false,
+                unsupported: false,
+              },
+              marks: {
+                headerSubtitle: null,
+                footerMessage: null,
+                phone: null,
+                email: null,
+                address: null,
+                logo: null,
+              },
+              paperWidth: "80mm",
+              paperWidths: ["80mm"],
+            };
+          },
+        });
+        const receipt = settings(app).shadowRoot!.querySelector("dashboard-receipts-screen")!;
+        await expect
+          .poll(() => new URL(location.href).searchParams.get("departmentId"))
+          .toBe("bar");
+        const input = receipt.shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
+        await input.updateComplete;
+        await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Edited heading");
+        const preview = receipt.shadowRoot!.querySelector("[name=previewDepartment]")!;
+        preview.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "deli" } }));
+        await expect
+          .poll(() => new URL(location.href).searchParams.get("departmentId"))
+          .toBe("deli");
+        expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+        expect(input.value).toBe("Edited heading");
+        await expect
+          .poll(() => previews.at(-1))
+          .toEqual({ heading: "Edited heading", department: "deli" });
+        history.back();
+        await expect
+          .poll(() => new URL(location.href).searchParams.get("departmentId"))
+          .toBe("bar");
+        expect(input.value).toBe("Edited heading");
+        expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+        const event = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+        await expect
+          .poll(() => previews.at(-1))
+          .toEqual({ heading: "Edited heading", department: "bar" });
+        await select(app, "kitchen");
+        const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+        await expect.poll(() => warning.open).toBe(true);
+        await warning.updateComplete;
+        await commands.parkPointer();
+        await expectNoA11yViolations(warning);
+        await page.screenshot({
+          path: `../node_modules/.cache/w69-receipt-look/${locale}-${theme}-${width}-warning.png`,
+        });
+        await choose(app, "keep");
+        expect(selected(app)).toBe("receipts");
+        expect(input.value).toBe("Edited heading");
+        await input.updateComplete;
+        await userEvent.click(input.shadowRoot!.querySelector("input")!);
+        await page.screenshot({
+          path: `../node_modules/.cache/w69-receipt-look/${locale}-${theme}-${width}-kept.png`,
+        });
+        await select(app, "kitchen");
+        await choose(app, "discard");
+        await expect.poll(() => selected(app)).toBe("kitchen");
+        expect(input.value).toBe("");
+      });
+    }
+  }
+}
+
+it("the real Receipts department-management link protects the appearance before leaving", async () => {
+  const { app } = await mount("/manage/venue-settings/view/receipts");
+  const receipt = settings(app).shadowRoot!.querySelector("dashboard-receipts-screen")!;
+  const input = receipt.shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
+  await input.updateComplete;
+  await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Edited heading");
+  const link = receipt.shadowRoot!.querySelector<HTMLAnchorElement>(
+    'a[href="/manage/venue-operations"]',
+  )!;
+  await userEvent.click(link);
+  await choose(app, "keep");
+  expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
+  expect(input.value).toBe("Edited heading");
+  await userEvent.click(link);
+  await choose(app, "discard");
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  expect(input.value).toBe("");
+  expect(receipt.isConnected).toBe(false);
+});
