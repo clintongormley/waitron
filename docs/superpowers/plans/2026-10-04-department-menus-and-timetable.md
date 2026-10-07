@@ -583,7 +583,8 @@ calendar" section beside "Opening hours store 'no claim' as no row").
       (not in Restaurant's list) → `department_menu.not_found`; a slot naming a Deli period →
       `menu_timetable.invalid` `field: "days.N.slots.M.periodId"`; an unknown period id on the
       override route → `menu_period.not_found`; a second period named Mañanas →
-      `menu_timetable.invalid` `field: "name"`; removing Café from the list while Barra's Mañanas
+      `menu_timetable.invalid` `field: "name"` (2026-10-07 review: now `menu_period.name_taken`
+      `{ departmentId, name }`, 409; a blank name stays `menu_timetable.invalid`); removing Café from the list while Barra's Mañanas
       override names it → `department_menu.in_use` with `uses: [{ kind: "zone_period", zoneId:
       <Barra>, periodId: <Mañanas> }]`; a week whose Friday tail would overlap a special Saturday's
       own early slot is refused `menu_timetable.invalid` `{ field: "date", date, departmentId }`
@@ -623,7 +624,8 @@ calendar" section beside "Opening hours store 'no claim' as no row").
       `menu_day_timetables`, `zone_period_menus` or `zone_all_day_menus`.
   `menu-timetable-routes.test.ts`: `GET /management-api/venue-service/menu-timetable` (`venue.view`)
   returns the model; `POST …/departments/:departmentId/menu-periods` `{ name, menuId }` → 201;
-  `PUT …/menu-periods/:periodId` `{ name, menuId }` → 200 with the period; `DELETE
+  `PUT …/menu-periods/:periodId` `{ name, menuId }` → 200 with the period (2026-10-07 review: each
+  field optional, at least one, and a missing one keeps its stored value); `DELETE
   …/menu-periods/:periodId` → 204; `PUT …/departments/:departmentId/menu-week` `{ days }` → 204;
   `PUT …/special-dates/:id/menu-timetables/:departmentId` `{ slots }` → 204; `DELETE` the same path
   → 204; `PUT …/zones/:zoneId/period-menus/:periodId` `{ menuId | null }` → 204 (writes behind
@@ -779,7 +781,8 @@ caller remains; remove the `zoneMenus` fixture keys listed at the end; `docs/bac
   themes.
 - [ ] Departments and zones: remove the zone-menu section, tree action, "default" column and
   assignment editor; the `zone.menu_missing` line under a zone links to
-  `/manage/menu-timetable?departmentId=…` instead of opening the old editor. Remove
+  `/manage/menu-timetable?departmentId=…` instead of opening the old editor (2026-10-07 review: the
+  address is now `/manage/menu-timetable/department/…`, written through the navigation guard). Remove
   `PUT …/zones/:zoneId/menus/:menuId`, `listZoneMenuAssignments` and `zoneMenus` from the model and
   its type, and remove the `zoneMenus` fixture keys; `allowMenuInZone` moves to `src/testing/`
   with its refusal cases unchanged (import paths change in its callers).
