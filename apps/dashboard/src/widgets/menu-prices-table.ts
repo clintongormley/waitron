@@ -977,10 +977,18 @@ export class MenuPricesTable extends LitElement {
         .open=${this.outcome !== null}
         .message=${this.#outcomeText()}
         .duration=${this.outcome?.kind === "saved" ? 5000 : 0}
+        @wt-close=${this.#onOutcomeClose}
         >${this.#undoButton()}</wt-toast
       >
       <div class="outcome-room"></div>`;
   }
+
+  /** A closed message says nothing any longer, so the host clears the outcome, which puts a field
+   * whose refusal it alone said back to the stored price. */
+  readonly #onOutcomeClose = (event: Event): void => {
+    event.stopPropagation();
+    this.#emit("wt-price-outcome-close", {});
+  };
 
   #outcomeText(): string {
     const outcome = this.outcome;

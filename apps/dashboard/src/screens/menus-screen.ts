@@ -2211,6 +2211,10 @@ export class MenusScreen extends LitElement {
           event.stopPropagation();
           this.#savePrice(event.detail);
         }}
+        @wt-price-outcome-close=${(event: Event) => {
+          event.stopPropagation();
+          this.priceOutcome = null;
+        }}
       ></dashboard-menu-prices-table>
       ${
         this.pricesError

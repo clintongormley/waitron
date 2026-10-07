@@ -1410,6 +1410,19 @@ it("sends Undo as the save with its price and previous swapped, its click stoppe
   expect(override(el, "mi-burger").value).toBe("");
 });
 
+it("asks the host to clear the outcome once its message is closed, the toast's own close stopped at the widget", async () => {
+  const el = await mount();
+  const asked = vi.fn();
+  el.addEventListener("wt-price-outcome-close", asked);
+  const closes: Event[] = [];
+  el.parentElement!.addEventListener("wt-close", (event) => closes.push(event));
+  el.outcome = { kind: "refused", save: burgerSaved, reason: "No connection" };
+  await el.updateComplete;
+  outcomeToast(el).shadowRoot!.querySelector<HTMLButtonElement>("button.close")!.click();
+  expect(asked).toHaveBeenCalledOnce();
+  expect(closes).toEqual([]);
+});
+
 it("undoes on a click while another field holds a price typed and not yet saved, leaving that price typed and unsent", async () => {
   const el = await mount({ rows: [{ ...burger, override: "11.00" }, lemonade, lager] });
   const heard = priceSaves(el);

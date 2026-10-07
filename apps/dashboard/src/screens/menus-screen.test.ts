@@ -4522,6 +4522,43 @@ it("says a connection failure in the outcome message, under no field", async () 
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 });
 
+function closeOutcome(el: MenusScreen): void {
+  prices(el)
+    .shadowRoot!.querySelector('[data-test="price-outcome"]')!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button.close")!
+    .click();
+}
+
+it("shows the stored price again once a refusal said under no field is closed, and leaving the field writes nothing", async () => {
+  const client = api({ updateMenuItem: vi.fn().mockRejectedValue({ code: "connection.failed" }) });
+  const el = await mountPrices(client);
+  await commitPrice(el, "mi-burger", "11.00");
+  await vi.waitFor(() => expect(prices(el).outcome).toMatchObject({ kind: "refused" }));
+  await prices(el).updateComplete;
+  expect(priceField(el, "mi-burger").value).toBe("11.00");
+  closeOutcome(el);
+  await vi.waitFor(() => expect(priceField(el, "mi-burger").value).toBe(""));
+  expect(prices(el).outcome).toBeNull();
+  priceField(el, "mi-burger").dispatchEvent(
+    new FocusEvent("focusout", { bubbles: true, composed: true }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(client.updateMenuItem).toHaveBeenCalledOnce();
+});
+
+it("keeps a price typed since a refusal when that refusal's message is closed", async () => {
+  const client = api({ updateMenuItem: vi.fn().mockRejectedValue({ code: "connection.failed" }) });
+  const el = await mountPrices(client);
+  await commitPrice(el, "mi-burger", "11.00");
+  await vi.waitFor(() => expect(prices(el).outcome).toMatchObject({ kind: "refused" }));
+  type(priceField(el, "mi-burger"), "12.00");
+  await el.updateComplete;
+  closeOutcome(el);
+  await vi.waitFor(() => expect(prices(el).outcome).toBeNull());
+  await prices(el).updateComplete;
+  expect(priceField(el, "mi-burger").value).toBe("12.00");
+});
+
 it("shows the stored price again after a refused save once the tab is left and opened again, and leaving the field writes nothing", async () => {
   const client = api({ updateMenuItem: vi.fn().mockRejectedValue({ code: "connection.failed" }) });
   const el = await mountPrices(client);
