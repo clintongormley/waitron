@@ -156,8 +156,22 @@ status on each iteration, contains pass failures and waits for a pending send's 
 returning after a stop signal. Database cases cover an idle stop, an already-stopped worker,
 secondary-to-primary gating, a held send and recovery after a pass failure. Independent
 deletions of the primary/stop/error guards, credential refresh and unconfigured refusal fail
-their intended cases beside passing controls. Production invoice projection and boot's
-start/stop composition remain pending. This does not complete Tasks 2 or 4.
+their intended cases beside passing controls. Boot's start/stop composition remains pending.
+This does not complete Tasks 2 or 4.
+
+**2026-10-07 stored-document checkpoint.** `readInvoiceDocument` reads the sale,
+line snapshots, saved receipt grouping/header, payments and adjustments through the
+caller's transaction. It opens no transaction itself and performs no rendering or
+transport. Synthetic tests exercise a no-regime invoice without a working order or
+filed receipt, weighted parent/extra lines, a paid discounted bill, the saved operation
+date, current optional receipt trim, and filed issuer facts after taxpayer edits.
+The no-regime case uses the existing current-taxpayer fallback and the stored VAT
+breakdown; the filed case retains its recorded issuer and QR. Cash/card settlements
+without an order, missing gross-line snapshots, a missing fallback taxpayer, simplified
+invoices and unknown sale ids have focused cases. The projection's eight tests pass;
+focused coverage of that file is 100% statements/functions/lines and 97.05% branches.
+The pending boot composition must call this reader after the worker's claim commits,
+then close its projection transaction before sending. This does not complete Tasks 2 or 4.
 
 ## 3. Set up email for a live venue, without a terminal
 

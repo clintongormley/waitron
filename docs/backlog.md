@@ -2198,8 +2198,12 @@ and sender address between two sends, then removes it and observes a certain fai
 no further message. The standalone loop checks primary status on each iteration, contains
 pass failures and finishes the pending send's report before returning after a stop signal.
 Database cases cover idle and in-flight stops, an already-stopped worker, secondary-to-primary
-gating and recovery after a pass failure. Production invoice projection and boot's start/stop
-composition remain pending; no email issuance or Task 4 completion claim.
+gating and recovery after a pass failure. The stored-document reader now projects sale and
+line snapshots, saved receipt grouping/header, adjustments and payments. Eight synthetic
+cases cover no-regime and filed invoices, weighted extras, a paid discounted bill and its
+operation date, current optional trim, taxpayer changes, no-order settlements, absent line
+gross and refused lookups. Boot's start/stop composition remains pending; no email issuance
+or Task 4 completion claim.
 For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain
