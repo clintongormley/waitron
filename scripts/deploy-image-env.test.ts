@@ -811,3 +811,17 @@ describe("the invoice renderer's bundled font", () => {
     expect(noticeSection("Noto Sans")).toContain("noto-sans/OFL.txt");
   });
 });
+
+describe("the invoice raster encoder's CUPS attribution", () => {
+  it("ships the adapted raster source notices with the Apache licence", () => {
+    const notices = read("deploy/third-party/cups-raster/NOTICES.txt");
+    expect(notices).toContain("Copyright © 2020-2024 by OpenPrinting.");
+    expect(notices).toContain("Copyright 2007-2019 by Apple Inc.");
+    expect(notices).toContain("Copyright 1997-2006 by Easy Software Products.");
+    expect(notices).toContain("Apache License");
+    expect(read("deploy/third-party/licenses/Apache-2.0.txt")).toContain("Version 2.0");
+    expect(noticeSection("CUPS raster encoding")).toContain("cups-raster/NOTICES.txt");
+    expect(IMAGE_SMOKE).toContain("test -s /app/third-party/cups-raster/NOTICES.txt");
+    expect(DOCKERFILE).toContain("/src/deploy/third-party/ /app/third-party/");
+  });
+});

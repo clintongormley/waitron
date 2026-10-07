@@ -1791,8 +1791,12 @@ arrangement. The build is in progress: the shared document content has been extr
 with captured mixed-rate discounted F1 bytes preserved on 58/80 mm paper. The A4 PDF and
 300/600 dpi glyph-outline page renderers now share a paginated layout. Tests extract the saved
 figures, decode the drawn QR, compare raster text with the PDF rendered at 300 dpi, and check
-repeatable PDF bytes. PWG/Apple encoders, delivery metadata, SMTP, office transport and the delivery
-UI remain to be built; it settles A3's
+repeatable PDF bytes. The PWG and Apple Raster encoders now match native CUPS reference files
+at 300/600 dpi. Native readback compared every decoded pixel and header size, resolution and
+colour space for the invoice page and two-page pattern fixtures. A synthetic `ippeveprinter`
+completed all four format/resolution jobs; its command decoded both pattern pages unchanged.
+Those are codec checks: the production delivery path, receipt-language matrix, image/box checks,
+delivery metadata, SMTP, office transport and delivery UI remain. It settles A3's
 open "Printing A4 invoices on an office printer" work when complete.
 Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe
 throws when embedding the current Google Sans WOFF2 for “í”; Noto Sans rendered the same probe
