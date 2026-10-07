@@ -80,13 +80,13 @@ async function mediaImageExists(tx: Transaction, filename: string): Promise<bool
   return image.rows.length > 0;
 }
 
-function colorOf(value: unknown): string | null {
+export function sectionColorOf(value: unknown): string | null {
   return colorOrNull(value, () => {
     throw new AppError("menu_section.invalid", { field: "color" });
   });
 }
 
-async function imageOf(tx: Transaction, value: unknown): Promise<string | null> {
+export async function sectionImageOf(tx: Transaction, value: unknown): Promise<string | null> {
   if (value === null) return null;
   if (typeof value !== "string" || !(await mediaImageExists(tx, value)))
     throw new AppError("menu_section.invalid", { field: "image" });
@@ -101,7 +101,11 @@ function requireWritableList(graph: SectionGraph, sectionId: string): void {
   if (role === "home_layout") throw new AppError("menu_section.wrong_role", { sectionId, role });
 }
 
-function writableMember(graph: SectionGraph, sectionId: string, memberId: string): SectionMember {
+export function writableMember(
+  graph: SectionGraph,
+  sectionId: string,
+  memberId: string,
+): SectionMember {
   requireWritableList(graph, sectionId);
   return heldMember(graph.children(sectionId), sectionId, memberId);
 }
@@ -157,8 +161,8 @@ export async function createSectionIn(
   requirePosition(position);
   const internalName = internalNameOf(input.internalName);
   const names = input.names === undefined ? {} : await namesOf(tx, input.names, fallbackLanguage);
-  const color = input.color === undefined ? null : colorOf(input.color);
-  const image = input.image === undefined ? null : await imageOf(tx, input.image);
+  const color = input.color === undefined ? null : sectionColorOf(input.color);
+  const image = input.image === undefined ? null : await sectionImageOf(tx, input.image);
   const [created] = await tx
     .insert(sections)
     .values({
@@ -342,7 +346,7 @@ export async function sectionPatchValues(
   const values: SectionPatch = {};
   if (patch.internalName !== undefined) values.internalName = internalNameOf(patch.internalName);
   if (patch.names !== undefined) values.names = await namesOf(tx, patch.names, fallbackLanguage);
-  if (patch.color !== undefined) values.color = colorOf(patch.color);
-  if (patch.image !== undefined) values.image = await imageOf(tx, patch.image);
+  if (patch.color !== undefined) values.color = sectionColorOf(patch.color);
+  if (patch.image !== undefined) values.image = await sectionImageOf(tx, patch.image);
   return values;
 }

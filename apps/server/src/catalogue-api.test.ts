@@ -3896,6 +3896,7 @@ describe("a menu's structure", () => {
         color: null,
         ownerMenuId: drinksMenu,
         includedMenuId: drinksMenu,
+        folder: { showAsFolder: true, overrides: {} },
         children: [],
       },
       { memberId: ((await item.json()) as { id: string }).id, ref: { kind: "product", productId } },

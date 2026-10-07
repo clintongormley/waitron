@@ -2,6 +2,7 @@ import { VAT_CLASSES, type VatClass } from "./vat-rates.js";
 import { AppError } from "@waitron/shared";
 import { colorOrNull } from "./color-inheritance.js";
 import { HOME_DEVICES, homeDisplayProblem } from "./device-home.js";
+import { checkIncludeFolderRows } from "./include-folder.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { storeProductNameKeys } from "./product-names.js";
 import "./errors.js";
@@ -61,7 +62,8 @@ function sharedName(names: readonly string[]): string | undefined {
  * A category with no `category_details` row is top-level, as it is to the save's check.
  * Also refuses (`setup.request_invalid`) a product whose `active` is not 0 or 1, a category or
  * product whose name is not text, a product, category or section colour other than lowercase
- * `#rrggbb` or null, or a menu display setting a save would refuse.
+ * `#rrggbb` or null, a menu display setting a save would refuse, or an include folder setting
+ * `checkIncludeFolderRows` refuses.
  */
 export function validateCatalogueConfiguration(tables: Readonly<Record<string, Rows>>): void {
   for (const row of tables.catalogue_settings ?? []) {
@@ -75,6 +77,7 @@ export function validateCatalogueConfiguration(tables: Readonly<Record<string, R
   checkColors(tables.products, "products");
   checkColors(tables.category_details, "category_details");
   checkColors(tables.sections, "sections");
+  checkIncludeFolderRows(tables.section_members, tables.sections);
   const parentOf = new Map(
     (tables.category_details ?? []).map((row) => [row.category_id, row.parent_id ?? null]),
   );

@@ -38,6 +38,12 @@ export interface IncludeFolder {
   overrides: IncludeFolderOverrides;
 }
 
+/** The body that sets one include's folder; the dashboard imports it, so it lives in this leaf. */
+export interface IncludeFolderInput {
+  showAsFolder: boolean;
+  overrides?: IncludeFolderOverrides;
+}
+
 /** A section's customer-facing presentation. */
 export interface Presentation {
   names: Record<string, string>;
