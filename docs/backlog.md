@@ -2430,7 +2430,11 @@ values, integer order and differences below floating-point precision. This chang
 pickers in the product editor and catalogue browser, the section's Add products list and category
 filter, menu price section/category filters, and the member-list editor's product/section choices
 until that unused editor is retired by A299. `wt-data-table` uses its own comparison and is outside
-this item's scope. Since W85a, product variants retain the product's own order.
+this item's scope. A rendered Chromium probe confirms that table still lists "0,5 kg" before
+"0,25 kg", so its order differs from these pickers. To align table name sorting, queue a shared
+comparator change separately. Names such as "1.10 Postres" are read as decimals (1.1), so they
+precede "1.2 Sopas"; this change does not infer outline or version numbering from names. Since
+W85a, product variants retain the product's own order.
 
 **Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
 DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**

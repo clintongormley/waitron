@@ -33,13 +33,22 @@ it.each([",", "."])("orders decimal weights by value with a %s separator", (sepa
   ]);
 });
 
-it("compares both decimal separators in names containing several numbers", () => {
-  expect(["Pack 10 / 0,25 kg", "Pack 2 / 0.5 kg", "Pack 2 / 0,25 kg"].sort(byLabel)).toEqual([
-    "Pack 2 / 0,25 kg",
-    "Pack 2 / 0.5 kg",
-    "Pack 10 / 0,25 kg",
-  ]);
-});
+it.each([",", "."])(
+  "compares mixed names containing several numbers with %s decimals",
+  (separator) => {
+    expect(
+      [
+        `Pack 10 / 0${separator}25 kg`,
+        `Pack 2 / 0${separator}5 kg`,
+        `Pack 2 / 0${separator}25 kg`,
+      ].sort(byLabel),
+    ).toEqual([
+      `Pack 2 / 0${separator}25 kg`,
+      `Pack 2 / 0${separator}5 kg`,
+      `Pack 10 / 0${separator}25 kg`,
+    ]);
+  },
+);
 
 it("keeps integer names in number order and text insensitive to case and accents", () => {
   expect(["Table 10", "Table 2", "Table 1"].sort(byLabel)).toEqual([
