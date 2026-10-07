@@ -1019,6 +1019,12 @@ unused `units` property is gone (it closes W75's leftover).
   - Open (decided as built, not tested with a user): the message comes after the whole table in tab
     order, so a keyboard user cannot reach Undo from a field within its 5 seconds. Options: a
     keyboard shortcut for Undo, or a message that waits while focus stays in the field it saved.
+  - Open, seen in #TBD's screenshots on code this branch does not change (`wt-price-input`,
+    `#focusField` and the placeholder line are untouched): in Spanish a range's placeholder reads
+    "8.00 – 12.00" with full stops (the field's hint is written as typed, from W89, 53a76dce9a);
+    a refused field is drawn about 14 px wider than the others, pushing its "?" to the right; and at
+    390 wide a refusal's focus scrolls the table only part way sideways, leaving Spanish prices
+    half-hidden behind the pinned Resolve column.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
