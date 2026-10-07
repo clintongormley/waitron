@@ -184,7 +184,6 @@ export class PrintersScreen extends LitElement {
         wt-tabs::part(tab-actions) {
           max-width: 100%;
           margin-inline-start: auto;
-          padding-block: var(--wt-space-1);
         }
       }
       wt-data-table::part(printer-meta) {

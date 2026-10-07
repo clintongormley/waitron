@@ -9490,6 +9490,9 @@ describe.each(["en", "es-ES"] as const)("printer agent action layout (%s)", (loc
           bounds.bottom > box.top;
         expect(overlaps, tab.textContent!.trim()).toBe(false);
       }
+      await selectTab(el, "queue");
+      const emptyArea = q(el, "wt-tabs")!.shadowRoot!.querySelector('[part="tab-actions"]')!;
+      expect(emptyArea.getBoundingClientRect().height).toBe(0);
     } finally {
       setLocale(before);
       await page.viewport(1280, 900);
