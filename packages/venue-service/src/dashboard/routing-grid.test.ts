@@ -655,6 +655,29 @@ describe("venue-routing-grid", () => {
     }
   });
 
+  it("a saved No category cell keeps its row with no product under it, and its editor clears it", async () => {
+    const filed = routing().products.filter((product) => product.categoryId !== null);
+    const without = await mount(routing({ products: filed }));
+    expect(rowLabels(without.el)).not.toContain("No category");
+    expect(root(without.el).querySelector('td[data-row="no_category"]')).toBeNull();
+
+    const { el, emitted } = await mount(
+      routing({
+        products: filed,
+        cells: [
+          ...routing().cells,
+          { row: { kind: "no_category" }, zoneId: "inside", target: station("bar") },
+        ],
+      }),
+    );
+    expect(rowLabels(el).slice(-1)).toEqual(["No category"]);
+    expect(shown(combo(el, "no_category", "inside")!)).toEqual({ text: "Bar", muted: false });
+    await choose(combo(el, "no_category", "inside")!, "Clear setting");
+    expect(emitted.changes).toEqual([
+      { address: { row: { kind: "no_category" }, zoneId: "inside" }, target: null },
+    ]);
+  });
+
   it.each([
     ["en", "No category, Inside: Refused."],
     ["es", "Sin categoría, Inside: Refused."],

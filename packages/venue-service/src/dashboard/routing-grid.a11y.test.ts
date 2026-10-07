@@ -67,6 +67,18 @@ const disabledTarget = routing({
   ],
 });
 
+const storedOnlyNoCategory = routing({
+  products: [{ id: "mojito", name: "Mojito", categoryId: "cocktails" }],
+  cells: [
+    ...routing().cells,
+    {
+      row: { kind: "no_category" },
+      zoneId: "inside",
+      target: { kind: "station", stationId: "bar" },
+    },
+  ],
+});
+
 const states: Record<
   string,
   { model: RoutingView; expand?: boolean; open?: string; refusal?: RoutingGrid["refusal"] }
@@ -77,6 +89,11 @@ const states: Record<
   "no category editor open": {
     model: routing(),
     open: 'td[data-row="no_category"][data-zone="every"]',
+  },
+  "saved no category cell, no uncategorised product": { model: storedOnlyNoCategory },
+  "saved no category cell, no uncategorised product, editor open": {
+    model: storedOnlyNoCategory,
+    open: 'td[data-row="no_category"][data-zone="inside"]',
   },
   "read-only default": { model: routing({ canMakeDefault: false }) },
   repair: { model: routing({ defaultStationId: null }) },

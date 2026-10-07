@@ -5026,12 +5026,14 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       its dish's station, yet the preview lists no move, so the screen saves without asking; clearing
       that cell is missed the same way. Both run-it reviews of the A261-4 branch reproduced it against
       the real migrations. What the preview should say about an extra is for the owner.
-    - **The No category row is hidden while no active product is uncategorised, and so are its
-      saved cells.** They cannot be seen or cleared then; they apply again, and the row comes back,
-      when an active product next has no category (`visibleRoutingRows`,
-      `packages/venue-service/src/dashboard/routing-grid-model.ts`). This matches how an inactive
-      product's cells are kept out of sight until it is active again; whether the row should stay
-      visible while it holds cells is for the owner.
+    - **Done by A372 (owner answer, 2026-10-07): the No category row shows while it holds a saved
+      cell.** It used to be hidden, with its saved cells, while no active product was uncategorised,
+      so those cells could not be seen or cleared. The row now shows whenever it holds a saved cell,
+      in any zone, with no products under it when none is uncategorised, and its cells can be
+      cleared there; it hides only when it holds no cell and no active product is uncategorised
+      (`visibleRoutingRows` and `rowInModel`,
+      `packages/venue-service/src/dashboard/routing-grid-model.ts`). An inactive product's cells
+      stay out of sight until it is active again, as before.
     - **A routing preview works out every active product in every active zone twice**, whatever the
       change; only products under the changed row can move, and a change to one zone's cell moves
       products in that zone only. The preview before A261-4 looped the same way.
