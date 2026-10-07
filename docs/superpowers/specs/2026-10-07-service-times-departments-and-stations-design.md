@@ -159,9 +159,12 @@ periods offered are grouped by department and limited to those whose menus inclu
 products; a zone column offers only its department's periods. Deleting a period that a cell names
 warns first.
 
-> The owner approved this as a "When" on an ordered exception, on a mockup drawn before #1363
-> replaced exceptions with the grid. This section moves the same rule onto the grid; confirm at
-> review.
+In the grid a cell with period choices shows its station with a line beneath, such as
+"Breakfast–Afternoon: Downstairs bar". A zone cell that sets nothing inherits the whole Every zone
+cell, period line included, as it inherits a station today. Clicking a cell opens its editor: one
+line per choice (periods → station, removable), "Any other time" → the cell's station, and "+
+Different station during some periods". A period can be in one line only (owner, 2026-10-07, on
+the grid mockup).
 
 **"Close for today" asks where the work goes** at the moment of closing, offering the default
 station first. There is no fallback to configure in advance; the "If closed, work goes to" setting
@@ -221,7 +224,10 @@ Watchers tabs go.
   show it, a read-out), and a link to Opening hours for when it gets orders. Edit, Make default and
   Disable are in the ⋮ menu. Editing a station sets its name, its printers and "Show the rest of
   the order".
-- **Routing:** the grid of #1363, with section 8's period choices in a cell.
+- **Routing:** the grid of #1363, with section 8's period choices in a cell. The "Where is this
+  made?" tester opens from a button as a panel you close again; it no longer sits at the top of
+  the page over the grid (owner, 2026-10-07). It already takes a weekday and time; it also names
+  the period that decided, as in "Cocktails, in every zone, during Lunch".
 
 ### 9.4 Device profiles and devices
 
@@ -293,10 +299,9 @@ Each slice is its own plan and pull request, in this order:
 
 ## 15. To confirm at review
 
-1. Routing period choices sit in grid cells (section 8), not on exceptions.
-2. Live controls go to the till and kitchen display only (section 10).
-3. A watcher printer that followed one zone (a "Terrace runner" printer) has no replacement:
+1. Live controls go to the till and kitchen display only (section 10).
+2. A watcher printer that followed one zone (a "Terrace runner" printer) has no replacement:
    combined tickets are set on stations, which have no zone filter. Monitors keep the zone filter
    for screens.
-4. Today a watcher keeps its own "Done" marks (`watcher_item_marks`); a pass monitor keeps that
+3. Today a watcher keeps its own "Done" marks (`watcher_item_marks`); a pass monitor keeps that
    behaviour, per device.
