@@ -1094,6 +1094,24 @@ a Publish that would put a newer version live before an older one is refused wit
 each version in the way; nothing offers to cancel it from there. The menus list still shows
 "Unpublished" for a menu whose only version is scheduled, until that version goes live (Decision 11
 of the publication plan).
+**Left open after W99 (#1358), each an owner question asked in the PR:**
+
+- A refused Publish advises "Cancel it or move it earlier, then try again", but moving a version
+  can never let an immediate publish through (a move must land after now); only cancelling it, or
+  waiting until it is live, clears the refusal. Reviewers suggested a Publish-only sentence such as
+  "Cancel it, or publish once it is live." (`apps/dashboard/src/screens/menus-screen.ts`,
+  `#publishRefusal`).
+- A due version is served as live before anything records it (publication plan Decision 5), so if
+  the box's clock is stepped backwards past its time before the activation duty records it, reads
+  serve the previous version again until the clock catches up. A Codex review reproduced it against
+  the real migrations. Closing it means reads recording what they serve, or a never-decreasing
+  clock in the process.
+- The schedule and Change time forms close with "Cancel" / "Cancelar" directly under a sentence
+  that says "Cancel it…" / "Cancélala…"; in Spanish it can read as cancelling the version in the
+  way. A label such as "Close" / "Cerrar" would remove the doubt.
+- `WAITRON_MAX_TICK_MS` has no upper bound (`apps/server/src/config.ts`); a value above 2^31−1 ms
+  makes Node fire the main loop's timer at once. The menu activation duty caps its own sleep; the
+  main loop does not.
 
 **The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
