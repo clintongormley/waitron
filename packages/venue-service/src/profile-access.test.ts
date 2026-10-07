@@ -471,10 +471,11 @@ describe("a profile's service access", () => {
       allowedZoneIds: [],
       startingZoneId: null,
     });
-    // `configureZone` does not check that the department is active, so an active zone can sit
-    // under a disabled one; it still is not offered.
     await scoped((tx) =>
-      configureZone(tx, venue.cfg, { zoneId: venue.counter, departmentId: venue.restaurant }),
+      tx
+        .update(zoneServicePolicies)
+        .set({ departmentId: venue.restaurant })
+        .where(eq(zoneServicePolicies.zoneId, venue.counter)),
     );
     await expect(read(venue)).resolves.toMatchObject({ allowedZoneIds: [], startingZoneId: null });
   });
