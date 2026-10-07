@@ -1825,7 +1825,13 @@ cross-medium attempt, and refuse resending original bytes after completion. The 
 an old claim before checking whether the original can be retried. Synthetic F1 HTTP cases
 cover failed and expired retries, concurrent requests, late results, copy resends and rollback
 when metadata cannot be written; existing F2 and drawer assertions remain unchanged.
-Original issuance and newly rendered copies still need enrollment. For enrolled receipts, the real pull now projects
+The till's explicit original/copy actions and dashboard copy helper now enroll newly rendered
+F1 paper jobs with the requesting staff member, in the same transaction as the job and
+copy audit. Synthetic tests cover replayed original requests, paper copies after completed
+email, active-email refusal with no job/audit left behind, expiry before a paper original,
+and the F2/no-printer controls. Eight independent deletions fail the intended case beside
+a valid passing control. Automatic issuance still needs enrollment; no whole-Task-2 claim.
+For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain
 their token hash for authenticated late results. Six API cases cover cross-medium original

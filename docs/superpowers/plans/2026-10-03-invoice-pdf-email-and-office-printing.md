@@ -116,9 +116,14 @@ and management resend routes now enroll F1 retry jobs with the authenticated sta
 preserving the existing bytes, printer and resend chain. Synthetic HTTP tests cover failed
 and expired original retries, current/historical claim fencing, a conflicting email attempt,
 completed-original refusal, copy resends and transactional rollback. Existing F2 retry and
-drawer assertions are retained. Original issuance and new-copy enrollment, bill staging,
-A4 references and restart/retry workers remain. No Task 2 completion
-claim.
+drawer assertions are retained. The explicit till original/copy actions and dashboard copy
+helper now enroll newly rendered F1 jobs with the requesting staff member; the job, delivery
+and dashboard copy audit share the caller's transaction. Synthetic cases cover replayed
+original requests, a paper duplicate after completed email, active-email refusal with no
+job/audit left behind, expired-email original retry and the F2/no-printer controls. Eight
+independent deletions fail the intended case beside a valid passing control. Automatic
+issuance enrollment, bill staging, A4 references and restart/retry workers remain. No Task 2
+completion claim.
 
 ## 3. Set up email for a live venue, without a terminal
 
