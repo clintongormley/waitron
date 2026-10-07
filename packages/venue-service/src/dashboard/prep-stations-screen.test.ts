@@ -6,7 +6,7 @@ import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@wait
 import type { PrepStationsApi, PrepStationsView, StationHealthSnapshot } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { WatcherView } from "./watchers-seen.js";
-import type { RouteExplanation } from "../routing-types.js";
+import type { RouteExplanation, RoutingDecision } from "../routing-types.js";
 import "./prep-stations-screen.js";
 
 registerIcons({
@@ -281,7 +281,10 @@ it("names no watcher for a routed dish and says nothing for no preparation", asy
       })
       .mockResolvedValueOnce({
         route: { kind: "no_preparation" },
-        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+        } satisfies RoutingDecision,
         fallbacks: [],
         noReplacement: false,
         stations: [],
@@ -295,6 +298,9 @@ it("names no watcher for a routed dish and says nothing for no preparation", asy
   select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
   await settle(el);
   expect(q(el, '[data-test="test-answer"]')?.textContent).not.toContain("watcher follows");
+  expect(q(el, '[data-test="test-answer"]')?.textContent).toContain(
+    "Because: No preparation: Drinks › Cocktails, in every zone",
+  );
   window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
 });
 async function mount(a: PrepStationsApi, theme?: "light" | "dark"): Promise<PrepStationsScreen> {
@@ -2326,7 +2332,10 @@ it("explains each fallback and the final dead end without saying no rule matched
     api({
       explain: vi.fn().mockResolvedValue({
         route: null,
-        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+        } satisfies RoutingDecision,
         fallbacks: [
           { stationId: "upstairs", why: "out_of_hours" },
           { stationId: "bar", why: "closed_by_hand" },
@@ -2352,6 +2361,7 @@ it("explains each fallback and the final dead end without saying no rule matched
     "Downstairs bar is closed by hand today, and it has no replacement, so the till asks the waiter where to make this.",
   );
   expect(answer).not.toContain("no rule matched");
+  expect(answer).toContain("Because: Upstairs bar: Drinks › Cocktails, in every zone");
   expect(answer).not.toContain("Made at:");
 });
 it("keeps the no-default explanation and reports unreadable opening hours", async () => {

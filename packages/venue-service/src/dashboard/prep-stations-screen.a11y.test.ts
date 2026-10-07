@@ -4,6 +4,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { PrepStationsApi } from "./routing-client.js";
+import type { RouteExplanation } from "../routing-types.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
 afterEach(cleanup);
@@ -530,10 +531,14 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
               { id: "mojito", name: "Mojito" },
               { id: "chips", name: "Chips" },
             ],
+            categories: [{ id: "sides", name: "Sides", parentId: null }],
           }),
           explain: vi.fn().mockResolvedValue({
             route: { kind: "station", stationId: "downstairs" },
-            decidedBy: { kind: "exception", exceptionId: "rule" },
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "product", productId: "mojito" }, zoneId: null },
+            },
             fallbacks: [{ stationId: "upstairs", why: "out_of_hours" }],
             noReplacement: false,
             clockReadable: true,
@@ -546,11 +551,14 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
               {
                 productId: "chips",
                 outcome: { kind: "made", stationId: "upstairs" },
-                decidedBy: { kind: "claim", categoryId: "sides" },
+                decidedBy: {
+                  kind: "cell",
+                  address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
+                },
                 fallbacks: [],
               },
             ],
-          }),
+          } satisfies RouteExplanation),
         } as unknown as PrepStationsApi;
         host.append(el);
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -591,6 +599,16 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
         const answer = root.querySelector('[data-test="test-answer"]')!.textContent!;
         expect(answer).toContain(
           locale === "en" ? "so its work goes to Downstairs bar" : "su trabajo va a Downstairs bar",
+        );
+        expect(answer).toContain(
+          locale === "en"
+            ? "Because: Upstairs bar: Mojito, in every zone"
+            : "Porque: Upstairs bar: Mojito, en todas las zonas",
+        );
+        expect(answer).toContain(
+          locale === "en"
+            ? "Chips: made separately at Upstairs bar, as set for Sides, in every zone"
+            : "Chips: se prepara aparte en Upstairs bar, como está indicado para Sides, en todas las zonas",
         );
         await expectNoA11yViolations(host);
         const time = root.querySelector('[data-test="test-time"]')!;
