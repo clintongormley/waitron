@@ -38,6 +38,7 @@ import {
   listZoneOffers,
 } from "./operations.js";
 import {
+  addDepartmentMenu,
   listDepartmentMenus,
   setDepartmentAllDayMenu,
   setDepartmentMenus,
@@ -251,6 +252,42 @@ describe("a department's menu list", () => {
     expect(await scoped((tx) => listDepartmentMenus(tx, other.cfg))).toEqual(
       expect.arrayContaining([{ departmentId: other.restaurant, menuIds: [], allDayMenuId: null }]),
     );
+  });
+
+  it("refuses another venue's department or zone as the subject of a default, clearing included", async () => {
+    const v = await venue();
+    const other = await venue();
+    await restaurantWithDefault(other);
+    await scoped((tx) => setZoneAllDayMenu(tx, other.cfg, other.barra, other.desayunos.id));
+    for (const menuId of [other.bebidas.id, null]) {
+      await expect(
+        scoped((tx) => setDepartmentAllDayMenu(tx, v.cfg, other.restaurant, menuId)),
+      ).rejects.toMatchObject({
+        code: "department.not_found",
+        params: { departmentId: other.restaurant },
+      });
+      await expect(
+        scoped((tx) => setZoneAllDayMenu(tx, v.cfg, other.barra, menuId)),
+      ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId: other.barra } });
+    }
+    expect(await defaultOf(other, other.sala)).toBe(other.bebidas.id);
+    expect(await defaultOf(other, other.barra)).toBe(other.desayunos.id);
+  });
+
+  it("appends a menu added without a position, and leaves a listed menu where it is", async () => {
+    const v = await venue();
+    await scoped((tx) =>
+      setDepartmentMenus(tx, v.cfg, v.restaurant, [v.bebidas.id, v.desayunos.id]),
+    );
+    await scoped((tx) => addDepartmentMenu(tx, v.cfg, v.restaurant, v.almuerzo.id));
+    const appended = [v.bebidas.id, v.desayunos.id, v.almuerzo.id];
+    expect(await servedIds(v, v.sala)).toEqual(appended);
+    await scoped((tx) => addDepartmentMenu(tx, v.cfg, v.restaurant, v.bebidas.id));
+    expect(await servedIds(v, v.sala)).toEqual(appended);
+    await scoped((tx) =>
+      addDepartmentMenu(tx, v.cfg, v.restaurant, v.bebidas.id, { displayOrder: 9 }),
+    );
+    expect(await servedIds(v, v.sala)).toEqual([v.desayunos.id, v.almuerzo.id, v.bebidas.id]);
   });
 
   it("keeps the defaults when the list is reordered", async () => {

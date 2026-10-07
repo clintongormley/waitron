@@ -105,7 +105,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
       const menuId = location[0]!.catalogueId;
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;
-        await addDepartmentMenu(tx, node, counterDepartmentId, menuId, { displayOrder: 0 });
+        await addDepartmentMenu(tx, node, counterDepartmentId, menuId);
         await tx
           .insert(departmentAllDayMenus)
           .values({ departmentId: counterDepartmentId, menuId })

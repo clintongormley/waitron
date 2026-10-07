@@ -152,7 +152,10 @@ export async function setDepartmentMenus(
     });
 }
 
-/** Appends one menu to the department's list, or moves it to `displayOrder` when that is given. */
+/**
+ * Appends one menu after the department's last, or puts it at `displayOrder` when that is given. A
+ * menu already listed stays where it is unless `displayOrder` is given.
+ */
 export async function addDepartmentMenu(
   tx: Transaction,
   cfg: VenueScope,
@@ -163,9 +166,11 @@ export async function addDepartmentMenu(
   await assertDepartment(tx, cfg, departmentId);
   await assertMenus(tx, [menuId]);
   const target = [departmentMenus.departmentId, departmentMenus.menuId];
+  const last = sql`(select coalesce(max(display_order) + 1, 0) from department_menus
+    where department_id = ${departmentId})`;
   const insert = tx
     .insert(departmentMenus)
-    .values({ departmentId, menuId, displayOrder: options.displayOrder ?? 0 });
+    .values({ departmentId, menuId, displayOrder: options.displayOrder ?? last });
   await (options.displayOrder === undefined
     ? insert.onConflictDoNothing({ target })
     : insert.onConflictDoUpdate({ target, set: { displayOrder: options.displayOrder } }));

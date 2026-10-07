@@ -151,6 +151,43 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     expect(allDay.rows).toEqual([{ menu_id: menus[1]!.id }]);
   });
 
+  it("lists the location's menu on the counter department, makes it the default, and keeps a manager's order on a re-run", async () => {
+    await seedTenant(db);
+    const [menu] = await db
+      .insert(catalogues)
+      .values({ name: "Carta" })
+      .returning({ id: catalogues.id });
+    const [location] = await db
+      .insert(locations)
+      .values({
+        name: "Venue",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+        catalogueId: menu!.id,
+      })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(location!.id);
+    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+    const listed = async () =>
+      (
+        await db.execute<{ menu_id: string; display_order: number; all_day: string | null }>(sql`
+          select m.menu_id, m.display_order, a.menu_id as all_day
+          from department_menus m
+          join departments d on d.id = m.department_id
+          left join department_all_day_menus a on a.department_id = m.department_id
+          where d.location_id = ${locationId}`)
+      ).rows;
+
+    await runSeed();
+    expect(await listed()).toEqual([{ menu_id: menu!.id, display_order: 0, all_day: menu!.id }]);
+    await db.execute(
+      sql`update department_menus set display_order = 5 where menu_id = ${menu!.id}`,
+    );
+    await runSeed();
+    expect(await listed()).toEqual([{ menu_id: menu!.id, display_order: 5, all_day: menu!.id }]);
+  });
+
   it("seeds the service settings row with changes to sent items allowed, and keeps a later choice", async () => {
     await seedTenant(db);
     const [location] = await db

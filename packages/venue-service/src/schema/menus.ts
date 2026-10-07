@@ -22,8 +22,8 @@ export const departmentMenus = table(
       foreignColumns: [catalogues.id],
       name: "department_menus_menu_fk",
     }),
-    // Not unique: a list write upserts each row where it stands, so two rows share a position
-    // midway through a reorder.
+    // Not unique: two of a department's rows may hold one position (`allowMenuInZone` writes 0
+    // unless given one); readers order a tie by menu id.
     index("department_menus_order_idx").on(t.departmentId, t.displayOrder),
   ],
 );
