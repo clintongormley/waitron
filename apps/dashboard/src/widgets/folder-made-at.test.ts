@@ -125,6 +125,22 @@ describe("folderMadeAt — the category's own baseline", () => {
     });
   });
 
+  it("reads a category's own cell naming the default station as its own, not as the default", () => {
+    const result = madeAt(
+      routing({ cells: [onCategory("food", station("kitchen"))], defaultStationId: "kitchen" }),
+    );
+    expect(result.get("food")).toEqual({
+      maker: { kind: "station", stationName: "Kitchen" },
+      source: { kind: "own" },
+      someElsewhere: false,
+    });
+    expect(result.get("drinks")).toEqual({
+      maker: { kind: "station", stationName: "Kitchen" },
+      source: { kind: "default" },
+      someElsewhere: false,
+    });
+  });
+
   it("reports no preparation from a No preparation cell", () => {
     const result = madeAt(routing({ cells: [onCategory("drinks", { kind: "no_preparation" })] }));
     expect(result.get("drinks")).toEqual({

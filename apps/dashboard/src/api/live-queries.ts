@@ -223,7 +223,6 @@ export const QUERY_DEPENDENCIES = {
     "kitchen_stations",
     "floor_zones",
     "station_fallbacks",
-    "station_day_states",
   ],
   getFolderRouting: [
     "categories",
