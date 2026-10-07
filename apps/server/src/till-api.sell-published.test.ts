@@ -245,7 +245,7 @@ async function setupLunch(): Promise<Lunch> {
       insert into zone_all_day_menus (zone_id, department_id, menu_id)
       select zone_id, department_id, ${lunch.id} from zone_service_policies where zone_id = ${zoneId}`);
     await tx.execute(sql`
-      insert into station_claims (id, location_id, category_id, station_id)
+      insert into routing_cells (id, location_id, category_id, station_id)
       values (${randomUUID()}, ${cfg.locationId}, ${category.id},
         (select id from kitchen_stations where location_id = ${cfg.locationId} and is_default))`);
     const [person] = await tx

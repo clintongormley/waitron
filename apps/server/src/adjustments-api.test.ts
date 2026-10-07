@@ -6,7 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceProfiles, printJobs, products, withTransaction, workingOrders } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
-import { createException, deleteException, writePrintHeldWork } from "@waitron/venue-service";
+import { clearRoutingCell, setRoutingCell, writePrintHeldWork } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { createWatcher, removeWatcher, setPrinterWatcher } from "./watchers.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -170,18 +170,18 @@ describe("watcher corrections through order actions", () => {
     }
   });
   it("routes beer VOID only to its watcher, and steak VOID to the Grill-only watcher", async () => {
-    const { routeId, printerIds, watcherIds } = await inTx(venue, async (tx) => {
+    const { beerId, printerIds, watcherIds } = await inTx(venue, async (tx) => {
       const bar = await createStation(tx, venue.cfg, { name: `Bar ${randomUUID()}` });
       const [beer] = await tx
         .select({ id: products.id })
         .from(products)
         .where(eq(products.name, "Cana"));
-      const routeId = await createException(tx, venue.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: beer!.id,
-        target: { kind: "station", stationId: bar.id },
-      });
+      await setRoutingCell(
+        tx,
+        venue.cfg,
+        { row: { kind: "product", productId: beer!.id }, zoneId: null },
+        { kind: "station", stationId: bar.id },
+      );
       const ids: string[] = [];
       const watcherIds: string[] = [];
       for (const [label, stationIds] of [
@@ -209,7 +209,7 @@ describe("watcher corrections through order actions", () => {
         ids.push(printer.id);
         watcherIds.push(watcher.id);
       }
-      return { routeId, printerIds: ids, watcherIds };
+      return { beerId: beer!.id, printerIds: ids, watcherIds };
     });
     try {
       const { billId } = await billWith(venue, [{ name: "Steak" }, { name: "Cana" }]);
@@ -262,7 +262,10 @@ describe("watcher corrections through order actions", () => {
         for (const watcherId of watcherIds) {
           await removeWatcher(tx, venue.cfg, watcherId);
         }
-        await deleteException(tx, venue.cfg, routeId);
+        await clearRoutingCell(tx, venue.cfg, {
+          row: { kind: "product", productId: beerId },
+          zoneId: null,
+        });
       });
     }
   });

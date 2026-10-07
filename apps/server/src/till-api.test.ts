@@ -24,8 +24,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   addDepartmentMenu,
   departments,
-  routeExceptions,
   setProfileServiceAccess,
+  setRoutingCell,
   setZoneAllDayMenu,
   zoneServicePolicies,
 } from "@waitron/venue-service";
@@ -241,12 +241,12 @@ const suite = useVenueDb({
           productId: p.id,
           grossPrice: "1.75",
         });
-        await tx.insert(routeExceptions).values({
-          locationId: loc!.id,
-          position: 0,
-          productId: p.id,
-          stationId: defaultStationId,
-        });
+        await setRoutingCell(
+          tx,
+          venueScope,
+          { row: { kind: "product", productId: p.id }, zoneId: null },
+          { kind: "station", stationId: defaultStationId },
+        );
 
         const hiddenMenu = await createCatalogue(tx, { name: "Staff" });
         const hiddenOffer = await addProductToMenu(tx, {

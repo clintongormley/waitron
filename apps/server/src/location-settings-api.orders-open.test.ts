@@ -9,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { createException } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
@@ -101,7 +101,7 @@ function reset(): void {
   venue.db.run(sql`update working_order_lines set sent_at = '2026-01-01T00:00:00.000Z'
                    where sent_at is null and working_order_id in
                      (select id from working_orders where status = 'settled')`);
-  venue.db.run(sql`delete from route_exceptions`);
+  venue.db.run(sql`delete from routing_cells`);
   venue.db.run(sql`update kitchen_stations set active = 1 where is_default = 1`);
 }
 
@@ -345,12 +345,12 @@ describe("a receipt-language change while orders are open", () => {
     reset();
     await withTransaction(venue.db, async (tx) => {
       const grill = await createStation(tx, venue.cfg, { name: "Plancha" });
-      await createException(tx, venue.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: productId("Paella"),
-        target: { kind: "station", stationId: grill.id },
-      });
+      await setRoutingCell(
+        tx,
+        venue.cfg,
+        { row: { kind: "product", productId: productId("Paella") }, zoneId: null },
+        { kind: "station", stationId: grill.id },
+      );
     });
     const id = randomUUID();
     venue.db.run(sql`update kitchen_stations set active = 0 where is_default = 1`);
