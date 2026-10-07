@@ -2045,10 +2045,12 @@ English default, `en`, `ca` and `es` enabled, every customer name in all three, 
 translations; the per-task review's earlier run found `ca` and `es` text written and no missing
 translations. The finish review also removed the Catalan text from the
 set: the Catalan texts were listed as missing translations, and the seed still completed.
-Left open (raised by #1324's finish review, not taken because it changes an existing test): the
-`data-set.test.ts` case that checks a demo carries every language its area can enable skips a pack
-with no data set of its own, so a fallback pack offered at setup is never checked there; a gap
-would show only under Missing translations, not break the seed. No real pack is such a pack.
+**Fallback demo language guard (A315), DONE.** The `data-set.test.ts` case checks every pack
+setup offers against `demoDataSetFor` and `demoLanguagesFor`, including a pack with no named data
+set or administrative areas. It checks the declared languages and each customer-facing text the
+suite enumerates. In a disposable clone, removing Spain's named data set and the drinks menu's
+Catalan text passed the old case and failed the widened case; restoring the text passed. No real
+pack offered at setup uses the fallback today.
 
 Seen during W109-5's look at a Barcelona demo set up in Spanish (2026-10-07), OPEN, unqueued:
 (1) practice-sale invoice numbers do not follow time order — `seedSales` fills days from today

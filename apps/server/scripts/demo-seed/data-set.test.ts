@@ -156,15 +156,29 @@ describe("demo data sets", () => {
   });
 
   it("carries every language the demo can enable where a venue can be set up", () => {
-    for (const pack of COUNTRY_PACKS) {
-      const id = pack.demo?.dataSet;
-      if (id === undefined) continue;
-      const set = demoDataSet(id);
-      for (const area of pack.administrativeAreas) {
+    expect(VENUE_SETUP_COUNTRY_PACKS.length).toBeGreaterThan(0);
+    for (const pack of VENUE_SETUP_COUNTRY_PACKS) {
+      expect(pack.demo, `${pack.countryCode} demo identity`).toBeDefined();
+      const set = demoDataSetFor(pack.demo!);
+      const areas =
+        pack.administrativeAreas.length === 0
+          ? [{ code: null, name: "no administrative area" }]
+          : pack.administrativeAreas;
+      for (const area of areas) {
         if (resolveFiscalJurisdiction(pack, area.code)?.supported !== true) continue;
-        const { languages } = demoContentLanguages({ country: pack.countryCode, area: area.code });
+        const { languages } = demoLanguagesFor(set, { country: pack.countryCode, area: area.code });
         const missing = languages.filter((language) => !set.contentLanguages.includes(language));
         expect.soft(missing, `${pack.countryCode} ${area.name}`).toEqual([]);
+        for (const [where, text] of customerTexts(set)) {
+          for (const language of languages) {
+            expect
+              .soft(
+                text[language]?.trim(),
+                `${pack.countryCode} ${area.name}: ${where} in ${language}`,
+              )
+              .toBeTruthy();
+          }
+        }
       }
     }
   });
