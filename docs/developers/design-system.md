@@ -1179,10 +1179,12 @@ its buttons:
   <wt-input name="printer-name" label="Printer name"></wt-input>
   <wt-form-actions slot="footer">
     <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
-    <wt-button variant="primary">Save</wt-button>
+    <wt-button variant="secondary" disabled>Save</wt-button>
   </wt-form-actions>
 </wt-modal>
 ```
+
+Save opens quiet and disabled; bind it with `saveActionState` as shown under Forms.
 
 The setup wizard is not a modal: its screens sit in a raised column centred on the page, with the
 Waitron logo at the top of every screen (owner decision 2026-09-28, C39).
@@ -1468,14 +1470,15 @@ format. Keep the conversion in the browser so a Spanish keyboard does not change
 
 A form says nothing about errors until the operator first presses its primary action (owner rule,
 2026-09-28). There is no error summary at the top of a form: it makes the page jump when it clears.
-Besides an unchanged draft (below), only the form's own checks disable the action; an error that
-comes back from a request never does (owner rule, 2026-09-29).
+Besides an unchanged draft, a save already in progress or a nested window open (below), only the
+form's own checks disable the action; an error that comes back from a request never does (owner rule, 2026-09-29).
 
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
   the native constraint. A field with `hide-label` draws no asterisk, so where one sits in a table
   column with a visible heading, that heading carries the `*` while any row's field is required (the
   Extras list's Portion column);
-- once the draft has changed, the primary action works until the first submission. If that
+- the primary action works until the first submission (for a form that saves, once its draft has
+  changed — below). If that
   submission is invalid, pass a plain-language sentence to each invalid field's `error` property,
   pass ONE localized sentence to `wt-form-actions`'s `error` property (it shows on its own line at
   the bottom of the form, above the buttons — in a dialog, at the end of the dialog's body — and is
@@ -1504,8 +1507,9 @@ comes back from a request never does (owner rule, 2026-09-29).
   and a marked field together show both, one after the other;
 - a folded section (`wt-disclosure`) holding an invalid field opens on a failed submission, so the
   focus lands on the field;
-- reopening or resetting a form starts it again: no messages, and the action quiet and disabled
-  until something changes (enabled at once for a form that opens already savable).
+- reopening or resetting a form starts it again: no messages; a form that saves (below) has its
+  action quiet and disabled until something changes (enabled at once if it opens already savable),
+  and any other form has it enabled.
 
 A form that saves opens with its primary action (Save, Create, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
@@ -1534,9 +1538,10 @@ written per screen:
   the form's primary action and is not gated: pressing it is the change. The setup wizard's step
   navigation is not a save, and neither is a sign-in.
 
-Forms are brought under this rule batch by batch
-(`docs/superpowers/plans/2026-10-07-a331-save-follows-changes.md`); a form not yet brought under it
-does not follow it.
+Only the product editor and the variant form follow this rule so far; the other forms are being
+brought under it batch by batch ([backlog](../backlog.md) A331,
+[plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md)), and nothing guards it across
+screens.
 
 The switch in the include dialog on a menu's Structure tab
 (`apps/dashboard/src/widgets/include-folder-form.ts`) keeps the values of the fields it hides.
@@ -1618,9 +1623,10 @@ added on a line that already has one passes.
 
 #### Protect an edited dialog before closing it
 
-When a dialog holds staged edits, give its owner a draft scope from
-the shared coordinator. Resolve it through `@waitron/ui`; that package also exports the
-`DraftScope`, `LeaveCoordinator` and `LeaveReason` types for form owners. Compare the values your
+When a dialog holds staged edits, give its owner a draft scope with `draftScopeFor(this, owner)`
+from `@waitron/ui`, which registers it with the shared coordinator when one is above the form; that
+package also exports the `DraftOwner`, `DraftScope`, `LeaveCoordinator` and `LeaveReason` types for
+form owners. Compare the values your
 form would submit with its detached
 starting snapshot. Call `changed()` after edits and reverts, and `commit(submitted)` as soon as
 that write succeeds, before refreshing. Saving a child form commits its child scope; the
