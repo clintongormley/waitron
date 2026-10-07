@@ -38,7 +38,7 @@ import {
   type RoutingSelectionRules,
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
-import { formatDate } from "./hours-view.js";
+import { format, formatDate } from "./hours-view.js";
 import {
   decisionSentence,
   extraSentence,
@@ -66,10 +66,6 @@ type StationAction =
   | { kind: "today"; stationId: string; state: "open" | "closed" | null }
   | { kind: "fallback" | "switch_off"; stationId: string; choice: string; confirming: boolean }
   | { kind: "switch_on"; stationId: string };
-const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {}) =>
-  (t(key) as string).replace(/\{(\w+)\}/g, (whole, name: string) =>
-    Object.hasOwn(values, name) ? values[name]! : whole,
-  );
 
 type Editor = { kind: "station" };
 const PREP_TABS = ["stations", "routing", "tickets", "watchers", "settings"] as const;

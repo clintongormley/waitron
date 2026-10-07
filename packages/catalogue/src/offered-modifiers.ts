@@ -30,8 +30,8 @@ export interface ModifierHolder {
 
 /**
  * Every extras and options definition a set of dishes attaches, read together, with each product's
- * ordered attachment list keyed by the LOWER-CASED product id, which {@link readOfferedModifiers}
- * walks to interleave extras and options. A bounded number of queries whatever the number of
+ * ordered attachment list keyed by the LOWER-CASED product id, which `walkOfferedLists` walks to
+ * interleave extras and options. A bounded number of queries whatever the number of
  * dishes, and never one per dish (CLAUDE.md §3). INACTIVE lists come back too; the walk filters
  * them.
  */
