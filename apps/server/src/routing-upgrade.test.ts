@@ -31,21 +31,42 @@ import { billlessSale, parked, provisionOrderVenue } from "./testing/order-venue
 const BASE = "3158e038d6a06a55a41d3971144e9e62328a7849";
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const RETIRED = ["station_claims", "route_exceptions"];
+const SEEDED = [
+  "print_jobs",
+  "kitchen_print_jobs",
+  "kitchen_print_job_lines",
+  "ticket_items",
+  "kitchen_notices",
+  "dining_tables",
+  "station_day_states",
+  "station_printers",
+  "hours_week_cells",
+];
 
 let scratch: string | undefined;
 let store: VenueDatabase | undefined;
 afterAll(async () => {
-  if (store !== undefined) await store.close();
-  if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
+  try {
+    if (store !== undefined) await store.close();
+  } finally {
+    if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 function archivedSets(root: string): { sets: MigrationSet[]; folders: string } {
   const archive = join(root, "archive");
   const tarball = join(root, "base.tar");
   const env = { ...process.env };
-  delete env.GIT_DIR;
-  delete env.GIT_WORK_TREE;
-  delete env.GIT_INDEX_FILE;
+  for (const name of [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_NAMESPACE",
+  ])
+    delete env[name];
   // BASE must be reachable: CI's server shards check out with `fetch-depth: 0`.
   execFileSync(
     "git",
@@ -135,7 +156,7 @@ it("upgrades a populated base venue: old routing is gone, cells start empty, eve
   expect(tableNames(db)).not.toContain("routing_cells");
 
   const venue = await provisionOrderVenue(db);
-  await parked(venue, "Paella", "Caña");
+  const orderId = await parked(venue, "Paella", "Caña");
   await billlessSale(venue);
   const seeded = await inTx(venue, async (tx) => {
     const grill = (await createStation(tx, venue.cfg, { name: "Grill" })).id;
@@ -169,11 +190,40 @@ it("upgrades a populated base venue: old routing is gone, cells start empty, eve
   db.run(sql`insert into route_exceptions
       (id, location_id, position, zone_id, category_id, product_id, station_id, no_preparation)
       values (${randomUUID()}, ${location}, 0, ${venue.zoneId}, null, ${seeded.paella}, null, 1)`);
+  // Today's send path reads `routing_cells`, which the base schema lacks, so a sent ticket and the
+  // service state around it are written in the base's own column shape.
+  const [line] = db.all<{ id: string }>(
+    sql`select id from working_order_lines where working_order_id = ${orderId} limit 1`,
+  );
+  const printJob = randomUUID();
+  const now = new Date().toISOString();
+  db.run(sql`insert into print_jobs (id, location_id, printer_id, payload, created_at)
+      values (${printJob}, ${location}, ${venue.printerId}, x'1b40', ${now})`);
+  db.run(sql`insert into kitchen_print_jobs
+      (id, print_job_id, working_order_id, station_id, reprint, created_at)
+      values (${randomUUID()}, ${printJob}, ${orderId}, ${seeded.grill}, 0, ${now})`);
+  db.run(sql`insert into kitchen_print_job_lines (id, print_job_id, working_order_line_id)
+      values (${randomUUID()}, ${printJob}, ${line!.id})`);
+  db.run(sql`insert into ticket_items
+      (id, node_id, working_order_id, working_order_line_id, station_id, queued_at)
+      values (${randomUUID()}, ${venue.cfg.nodeId}, ${orderId}, ${line!.id}, ${seeded.grill}, ${now})`);
+  db.run(sql`insert into kitchen_notices
+      (id, station_id, working_order_id, order_label, kind, line_name, quantity, created_at)
+      values (${randomUUID()}, ${seeded.grill}, ${orderId}, 'Mesa 1', 'void', 'PAELLA', 1, ${now})`);
+  db.run(sql`insert into dining_tables (id, location_id, label, created_at, zone_id)
+      values (${randomUUID()}, ${location}, 'T1', ${now}, ${venue.zoneId})`);
+  db.run(sql`insert into station_day_states (id, station_id, business_day, open)
+      values (${randomUUID()}, ${seeded.grill}, '2026-10-07', 0)`);
+  db.run(sql`insert into station_printers (station_id, printer_id)
+      values (${seeded.grill}, ${venue.printerId})`);
+  db.run(sql`insert into hours_week_cells (id, weekday, mode, station_id)
+      values (${randomUUID()}, 1, 'closed', ${seeded.grill})`);
   await installChangeFeed(db, changeSources(db, true));
 
   const before = rowsOf(db);
   const migratedBefore = migrationsApplied(db);
   const triggersBefore = productTriggers(db);
+  for (const table of SEEDED) expect(before[table]?.length, table).toBeGreaterThan(0);
   expect(before.station_fallbacks).toHaveLength(1);
   expect(before.kitchen_station_timing?.length).toBeGreaterThan(0);
   expect(before.products).toContainEqual(expect.objectContaining({ name: "Media ración" }));
