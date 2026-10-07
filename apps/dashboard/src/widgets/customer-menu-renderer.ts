@@ -140,6 +140,9 @@ export const customerMenuStyles: CSSResult = css`
   .image [hidden] {
     display: none;
   }
+  .image[data-painted] .note {
+    color: inherit;
+  }
   .note,
   .empty {
     font-size: var(--wt-font-size-sm);

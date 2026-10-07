@@ -418,6 +418,22 @@ it("uses a validated colour only when a thumbnail is absent", async () => {
     q(el, "button[data-product-open] .image").style.getPropertyValue("--menu-image-fill"),
   ).toBe("");
 });
+it("writes the missing-photo note on a colour in the colour's readable ink", async () => {
+  const doc = fixture();
+  doc.offers.mi!.image = null;
+  doc.offers.mi!.color = "#2e7d6b";
+  const { el } = await mount(doc);
+  await el.reveal({ kind: "section", sectionIds: ["drinks"], field: { kind: "summary" } });
+  const swatch = q(el, "button[data-product-open] .image");
+  const ink = swatch.style.getPropertyValue("--menu-image-ink");
+  expect(ink).not.toBe("");
+  const probe = document.createElement("span");
+  probe.style.color = ink;
+  document.body.append(probe);
+  const expected = getComputedStyle(probe).color;
+  probe.remove();
+  expect(getComputedStyle(swatch.querySelector(".note")!).color).toBe(expected);
+});
 it("keeps source data unchanged through all local inspection selections", async () => {
   const doc = fixture();
   const before = structuredClone(doc);
