@@ -15,11 +15,8 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { formatMoney } from "@waitron/shared";
 import type {
-  DocumentMember,
   MenuChange,
-  MenuDocument,
   MenuPreview,
-  MenuStructureNode,
   MenuStatus,
   ProductChangeField,
   SectionChangeField,
@@ -89,44 +86,6 @@ export function statusWords(status: MenuStatus): {
         label: t("menu_status.changed"),
         live: { version: fill("menu_status.changed_version", number), time },
       };
-}
-
-/**
- * A published-menu document in the structure tree's shape, with the names the tree shows: a product
- * by its offer's staff name, a section by its internal name. A list holds a product or a section at
- * most once (`section_members_product_uq`, `section_members_child_uq`), so what a member names keys
- * it within its list.
- */
-export function documentTree(document: MenuDocument): {
-  nodes: MenuStructureNode[];
-  products: { id: string; name: string }[];
-  sections: { id: string; internalName: string }[];
-} {
-  const products = new Map<string, string>();
-  const sections = new Map<string, string>();
-  const nodes = (members: DocumentMember[]): MenuStructureNode[] =>
-    members.map((member) => {
-      if (member.kind === "product") {
-        const offer = document.offers[member.menuItemId];
-        if (offer !== undefined) products.set(member.productId, offer.name);
-        return {
-          memberId: `p:${member.productId}`,
-          ref: { kind: "product", productId: member.productId },
-        };
-      }
-      sections.set(member.sectionId, member.internalName);
-      return {
-        memberId: `s:${member.sectionId}`,
-        ref: { kind: "section", sectionId: member.sectionId },
-        children: nodes(member.members),
-      };
-    });
-  const root = nodes(document.root.members);
-  return {
-    nodes: root,
-    products: [...products].map(([id, name]) => ({ id, name })),
-    sections: [...sections].map(([id, internalName]) => ({ id, internalName })),
-  };
 }
 
 /** Says a publish did not happen, what is still live, and that the working edits are kept. */

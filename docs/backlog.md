@@ -2319,12 +2319,13 @@ answers to it is not checked.
 `dashboard-menu-structure-tree` (no longer drawn by Preview since W95) are deleted with their tests;
 the name helpers the Menus screen and `menu-structure-table.ts` still use moved to
 `apps/dashboard/src/widgets/member-names.ts`, and the strings only the deleted widgets read were
-retired. Left open, outside the two widgets A299 deleted: `documentTree` in
-`apps/dashboard/src/widgets/menu-preview.ts` is called only by its own test case in
-`menu-preview.test.ts`; and the `apps/dashboard/src/screens/menus-screen.test.ts` case "puts nothing
-beside the tabs and draws no Add a product picker" still asserts that no
-`dashboard-member-list-editor` and no `[name="member-ref"]` field is drawn, though no non-test file
-under `apps/` or `packages/` names either any more.
+retired. A314 then deleted `documentTree` from `apps/dashboard/src/widgets/menu-preview.ts`, along
+with its test; nothing else called it. It also deleted three checks in
+`apps/dashboard/src/screens/menus-screen.test.ts`: one that no `dashboard-member-list-editor` is
+drawn, and two that no `[name="member-ref"]` field is drawn, the first looking across the whole
+screen and the second inside the structure tree's table. Nothing under `apps/` or `packages/` names
+`documentTree`, `dashboard-member-list-editor` or `member-ref` any more. The test keeps its check
+that nothing sits beside the tabs.
 
 **Two copies of the tree pointer drag — OPEN (W88).** W88 moved what Products and the Menus tree
 draw during a drag into `apps/dashboard/src/widgets/tree-drag.ts` (the ghost, the row and gap marks,
