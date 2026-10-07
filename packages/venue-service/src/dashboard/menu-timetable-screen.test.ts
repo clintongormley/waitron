@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
+import { page } from "vitest/browser";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { WtFormActions } from "@waitron/ui";
 import type { MenuSlot, MenuTimetableModel } from "../menu-timetable-types.js";
@@ -197,6 +198,14 @@ function server() {
   return { state, request, api, writes };
 }
 
+function deferred() {
+  let resolve!: (value: unknown) => void;
+  const promise = new Promise<unknown>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 const refusal = (code: string, params: Record<string, unknown> = {}) => ({
   reject: Object.assign(new Error(code), { code, params }),
 });
@@ -374,8 +383,10 @@ describe("Menu timetable: what a department shows", () => {
     expect(override.value).toBe(m("Café"));
     const inherit = field(el, "zones.sala.periods.mananas.menuId")!;
     expect(inherit.value).toBe("");
-    expect(inherit.placeholder).toBe("Desayunos");
-    expect(field(el, "zones.sala.allDayMenuId")!.placeholder).toBe("Bebidas");
+    expect(inherit.placeholder).toBe("Follow the department (Desayunos)");
+    expect(field(el, "zones.sala.allDayMenuId")!.placeholder).toBe(
+      "Follow the department (Bebidas)",
+    );
     expect(field(el, "zones.terraza.allDayMenuId")!.value).toBe(m("Café"));
     expect(field(el, "department.allDayMenuId")!.value).toBe(m("Bebidas"));
     expect(field(el, "periods.mananas.menuId")!.value).toBe(m("Desayunos"));
@@ -501,7 +512,9 @@ describe("Menu timetable: the department's list", () => {
     expect(findAll(el, '[data-test="menu-use"]').map(text)).toEqual(["Barra · Mañanas"]);
     expect(draftList(el)).not.toContain("Café");
     expect(modal(el)).not.toBeNull();
-    expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
+    expect(await bottomMessage(el)).toBe(
+      "Keep that menu on the list, or change what still uses it, before saving.",
+    );
     expect(saveButton(el).disabled).toBe(false);
   });
 
@@ -534,6 +547,31 @@ describe("Menu timetable: the department's list", () => {
       "/management-api/venue-service/special-dates/navidad/menu-timetables/restaurant",
       undefined,
     ]);
+    expect(modal(el)!.getAttribute("heading")).toBe("Menus for Restaurant");
+    expect(draftList(el)).not.toContain("Brunch de Navidad");
+    expect(draftList(el)).toHaveLength(7);
+  });
+
+  it("goes back to the list draft when the normal week is not chosen after all", async () => {
+    const { api, state } = server();
+    state.writes.push(
+      refusal("department_menu.in_use", {
+        departmentId: "restaurant",
+        menuId: m("Brunch de Navidad"),
+        uses: [{ kind: "period", periodId: "brunch" }],
+      }),
+    );
+    const el = await mount(api);
+    await click(el, byTest(el, "edit-menus"));
+    const rows = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement>('wt-modal [data-test="menu-row"]'),
+    ];
+    await click(el, rows.at(-1)!.querySelector('[data-test="remove-menu"]'));
+    await click(el, saveButton(el));
+    await click(el, byTest(el, "use-normal-week"));
+    await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
+    expect(modal(el)!.getAttribute("heading")).toBe("Menus for Restaurant");
+    expect(draftList(el)).not.toContain("Brunch de Navidad");
   });
 });
 
@@ -625,6 +663,21 @@ describe("Menu timetable: the week and special dates", () => {
     expect(body.days[0]).toEqual({ weekday: 0, slots: [slot("mediodia", "13:00", "17:00")] });
     expect(body.days[1]).toEqual({ weekday: 1, slots: weekday });
     expect(body.days).toHaveLength(7);
+  });
+
+  it("says a day can be changed, and draws each day as something to press", async () => {
+    const { api } = server();
+    const el = await mount(api);
+    expect(text(byTest(el, "week-note"))).toBe(
+      "A day with no periods offers the all-day menu all day. Choose a day to change it.",
+    );
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-primary-text)";
+    el.parentElement!.append(probe);
+    const button = weekRow(el, 1).querySelector<HTMLElement>("button.cell")!;
+    expect(getComputedStyle(button).color).toBe(getComputedStyle(probe).color);
+    expect(getComputedStyle(button).textDecorationLine).toBe("underline");
+    probe.remove();
   });
 
   it("marks an overlapping slot's field and the line above the buttons, and sends nothing", async () => {
@@ -726,12 +779,79 @@ describe("Menu timetable: menus by zone", () => {
     const labels = () =>
       field(el, "zones.sala.periods.mananas.menuId")!.options.map((o) => o.label);
     expect(labels()).not.toContain("Deli para llevar");
-    expect(labels()[0]).toBe("Desayunos");
+    expect(labels()[0]).toBe("Follow the department (Desayunos)");
     expect(field(el, "zones.sala.periods.mananas.menuId")!.options[0]!.value).toBe("");
     state.model.departments[0]!.menuIds.push(m("Deli para llevar"));
     api.rereadWatches();
     await settle(el);
     expect(labels()).toContain("Deli para llevar");
+  });
+
+  it("tells following the department apart from choosing the same menu, and clears a zone's choice with it", async () => {
+    const { api, writes } = server();
+    const el = await mount(api);
+    const options = field(el, "zones.barra.periods.mananas.menuId")!.options;
+    expect(options[0]).toEqual({ value: "", label: "Follow the department (Desayunos)" });
+    expect(options.filter((option) => option.label === "Desayunos")).toEqual([
+      { value: m("Desayunos"), label: "Desayunos" },
+    ]);
+    expect(field(el, "zones.barra.allDayMenuId")!.options[0]).toEqual({
+      value: "",
+      label: "Follow the department (Bebidas)",
+    });
+    await choose(el, "zones.barra.periods.mananas.menuId", "");
+    expect(writes()).toEqual([
+      ["PUT", "/management-api/venue-service/zones/barra/period-menus/mananas", { menuId: null }],
+    ]);
+    setLocale("es");
+    const spanish = await mount(server().api);
+    expect(field(spanish, "zones.sala.periods.mananas.menuId")!.options[0]!.label).toBe(
+      "Seguir al departamento (Desayunos)",
+    );
+  });
+
+  it("keeps each zone choice disabled until its own save is answered", async () => {
+    const { api, state } = server();
+    const first = deferred();
+    const second = deferred();
+    state.writes.push(first.promise, second.promise);
+    const el = await mount(api);
+    await choose(el, "zones.sala.periods.mananas.menuId", m("Café"));
+    await choose(el, "zones.sala.periods.mediodia.menuId", m("Café"));
+    expect(field(el, "zones.sala.periods.mananas.menuId")!.disabled).toBe(true);
+    expect(field(el, "zones.sala.periods.mediodia.menuId")!.disabled).toBe(true);
+    first.resolve(undefined);
+    await settle(el);
+    expect(field(el, "zones.sala.periods.mananas.menuId")!.disabled).toBe(false);
+    expect(field(el, "zones.sala.periods.mediodia.menuId")!.disabled).toBe(true);
+    second.resolve(undefined);
+    await settle(el);
+    expect(field(el, "zones.sala.periods.mediodia.menuId")!.disabled).toBe(false);
+  });
+
+  it("keeps the period names in view while the zones scroll sideways at phone width", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(390, 844);
+      const { api } = server();
+      const el = await mount(api);
+      const table = el.shadowRoot!.querySelector<HTMLElement>('table[data-test="zone-menus"]')!;
+      const box = table.parentElement!;
+      expect(box.scrollWidth).toBeGreaterThan(box.clientWidth);
+      box.scrollLeft = 300;
+      await settle(el);
+      expect(box.scrollLeft).toBeGreaterThan(0);
+      const left = box.getBoundingClientRect().left;
+      for (const header of table.querySelectorAll<HTMLElement>(
+        'th[scope="row"], thead th:first-child',
+      ))
+        expect(Math.round(header.getBoundingClientRect().left)).toBe(Math.round(left));
+      const row = table.querySelector<HTMLElement>('tbody th[scope="row"]')!;
+      expect(getComputedStyle(row).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 
   it("saves a zone's choice as it is made, and a blank choice as following the department", async () => {

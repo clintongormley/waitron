@@ -63,7 +63,12 @@ type Editor = { departmentId: string } & (
   | { kind: "delete-period"; period: MenuPeriod; uses?: MenuPeriodUse[] }
   | { kind: "day"; weekday: number; draft: SlotDraft }
   | { kind: "date"; special: MenuTimetableSpecialDate; draft: SlotDraft; hadOwn: boolean }
-  | { kind: "normal-week"; special: { id: string; date: string } }
+  | {
+      kind: "normal-week";
+      special: { id: string; date: string };
+      /** The editor whose refusal offered this, opened again, draft kept, once this is done. */
+      resume?: Editor;
+    }
 );
 
 const dayName = (weekday: number) => t(`hours.day.${weekday}` as Key);
@@ -184,7 +189,8 @@ export class MenuTimetableScreen extends LitElement {
         border: 0;
         border-radius: var(--wt-radius-md);
         background: transparent;
-        color: inherit;
+        color: var(--wt-color-primary-text);
+        text-decoration: underline;
         font: inherit;
         text-align: start;
         cursor: pointer;
@@ -201,6 +207,14 @@ export class MenuTimetableScreen extends LitElement {
       }
       .choice {
         white-space: nowrap;
+      }
+      table[data-test="zone-menus"] th:first-child {
+        position: sticky;
+        inset-inline-start: 0;
+        z-index: 1;
+      }
+      table[data-test="zone-menus"] tbody th {
+        background: var(--wt-color-bg);
       }
       td wt-combobox {
         display: block;
@@ -272,8 +286,8 @@ export class MenuTimetableScreen extends LitElement {
   @state() private busy = false;
   /** A refused zone-table choice's sentence, by its field name, until that choice is made again. */
   @state() private cellErrors: Record<string, string> = {};
-  /** The zone-table choice whose save is out. */
-  @state() private cellBusy = "";
+  /** The zone-table choices whose saves are out. */
+  @state() private cellsBusy: ReadonlySet<string> = new Set();
 
   #detach?: () => void;
   /** Each editor opened or closed is a new generation, drawn as a modal of its own. */
@@ -476,7 +490,7 @@ export class MenuTimetableScreen extends LitElement {
       this.#refuse(editor, error);
       return;
     }
-    this.#close();
+    this.#finish(editor);
     this.api.rereadWatches();
   }
 
@@ -605,7 +619,22 @@ export class MenuTimetableScreen extends LitElement {
   }
 
   #normalWeek(special: { id: string; date: string }, departmentId: string): void {
-    this.#open({ kind: "normal-week", departmentId, special }, this.#returnTo ?? (() => null));
+    const editor = this.editor;
+    const resume =
+      editor?.kind === "list"
+        ? { ...editor, inUse: undefined }
+        : editor?.kind === "delete-period"
+          ? { ...editor, uses: undefined }
+          : undefined;
+    const returnTo = this.#returnTo ?? (() => null);
+    this.#open({ kind: "normal-week", departmentId, special, resume }, returnTo);
+  }
+
+  /** Closes the editor, or goes back to the one a "Use normal week" was offered from. */
+  #finish(editor: Editor): void {
+    if (editor.kind === "normal-week" && editor.resume !== undefined)
+      this.#open(editor.resume, this.#returnTo ?? (() => null));
+    else this.#close();
   }
 
   /**
@@ -903,7 +932,7 @@ export class MenuTimetableScreen extends LitElement {
     const own = this.attempted ? this.#check(editor) : {};
     const errors = { ...this.refused, ...own };
     const content = this.#content(editor, department, errors);
-    const marked = Object.keys(errors).length > 0;
+    const fieldsMarked = Object.keys(errors).some((field) => field !== "list");
     return keyed(
       this.#generation,
       html`<wt-modal
@@ -911,7 +940,7 @@ export class MenuTimetableScreen extends LitElement {
         size=${"compact" in content && content.compact ? "compact" : "standard"}
         heading=${content.heading}
         .dismissible=${!this.busy}
-        @wt-close=${() => this.#close()}
+        @wt-close=${() => this.#finish(editor)}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'))}
         @menu-slot-change=${this.#slotChanged}
@@ -919,7 +948,11 @@ export class MenuTimetableScreen extends LitElement {
         <div class="form">${content.body}</div>
         <wt-form-actions
           slot="footer"
-          .error=${[this.bottomRefusal, marked ? t("menu.fix_fields") : ""]
+          .error=${[
+            this.bottomRefusal,
+            errors.list === undefined ? "" : t("menu.list_refused"),
+            fieldsMarked ? t("menu.fix_fields") : "",
+          ]
             .filter((message) => message !== "")
             .join(" ")}
         >
@@ -929,7 +962,7 @@ export class MenuTimetableScreen extends LitElement {
             data-test="cancel-editor"
             ?disabled=${this.busy}
             @click=${() => {
-              if (!this.busy) this.#close();
+              if (!this.busy) this.#finish(editor);
             }}
             >${t("menu.cancel")}</wt-button
           >
@@ -1085,7 +1118,9 @@ export class MenuTimetableScreen extends LitElement {
     const today = civilDate === null ? null : weekdayOf(civilDate);
     return html`<section data-test="week-section">
       <h2>${t("menu.week_heading")}</h2>
-      <p class="note">${t("menu.week_note")}</p>
+      <p class="note" data-test="week-note">
+        ${t("menu.week_note")}${this.readOnly ? nothing : ` ${t("menu.week_choose")}`}
+      </p>
       ${this.#gridBox(
         t("menu.week_heading"),
         html`<table data-test="menu-week">
@@ -1226,7 +1261,7 @@ export class MenuTimetableScreen extends LitElement {
     this.cellErrors = Object.fromEntries(
       Object.entries(this.cellErrors).filter(([field]) => field !== name),
     );
-    this.cellBusy = name;
+    this.cellsBusy = new Set([...this.cellsBusy, name]);
     try {
       await save();
       this.api.rereadWatches();
@@ -1240,27 +1275,29 @@ export class MenuTimetableScreen extends LitElement {
       };
       this.cellErrors = { ...this.cellErrors, [name]: t(key[codeOf(error)] ?? "menu.save_error") };
     } finally {
-      this.cellBusy = "";
+      this.cellsBusy = new Set([...this.cellsBusy].filter((busy) => busy !== name));
     }
   }
 
   /**
-   * One choice in the zone table. `fallback` is what a blank choice means, offered first and shown
-   * in grey; with none the choice is required.
+   * One choice in the zone table. `fallback` is what a blank choice means: `option` is the blank
+   * choice's own words, offered first, and `shown` the value it falls back to, in grey when read.
+   * With no fallback the choice is required.
    */
   #choice(
     department: Department,
     name: string,
     label: string,
     stored: string | null,
-    fallback: string | null,
+    fallback: { option: string; shown: string } | null,
     save: (menuId: string | null) => Promise<void>,
   ) {
     const own = stored === null ? "" : this.#menuName(stored);
     if (this.readOnly)
       return stored === null && fallback !== null
         ? html`<span class="value choice inherited"
-            ><span class="visually-hidden">${t("menu.inherited_prefix")} </span>${fallback}</span
+            ><span class="visually-hidden">${t("menu.inherited_prefix")} </span
+            >${fallback.shown}</span
           >`
         : html`<span class="value choice">${own}</span>`;
     const options = department.menuIds.map((id) => ({ value: id, label: this.#menuName(id) }));
@@ -1270,11 +1307,11 @@ export class MenuTimetableScreen extends LitElement {
       hide-label
       search="never"
       ?required=${fallback === null}
-      .options=${fallback === null ? options : [{ value: "", label: fallback }, ...options]}
+      .options=${fallback === null ? options : [{ value: "", label: fallback.option }, ...options]}
       .value=${stored ?? ""}
-      placeholder=${fallback ?? ""}
+      placeholder=${fallback?.option ?? ""}
       error=${this.cellErrors[name] ?? ""}
-      ?disabled=${this.cellBusy === name}
+      ?disabled=${this.cellsBusy.has(name)}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         const value = event.detail.value === "" ? null : event.detail.value;
@@ -1335,7 +1372,7 @@ export class MenuTimetableScreen extends LitElement {
                             period: row.name,
                           }),
                           allDay,
-                          t("menu.no_all_day"),
+                          { option: t("menu.no_all_day"), shown: t("menu.no_all_day") },
                           (menuId) => this.api.setDepartmentAllDayMenu(department.id, menuId),
                         )
                       : this.#choice(
@@ -1358,6 +1395,10 @@ export class MenuTimetableScreen extends LitElement {
                     ? zone.allDayMenuId
                     : (zone.periodMenus.find((entry) => entry.periodId === row.id)?.menuId ?? null);
                   const label = format("menu.zone_cell", { zone: zone.name, period: row.name });
+                  const following = {
+                    option: format("menu.follow_department", { menu: inherited }),
+                    shown: inherited,
+                  };
                   return html`<td data-zone=${zone.id}>
                     ${
                       isAllDay
@@ -1366,7 +1407,7 @@ export class MenuTimetableScreen extends LitElement {
                             `zones.${zone.id}.allDayMenuId`,
                             label,
                             stored,
-                            inherited,
+                            following,
                             (menuId) => this.api.setZoneAllDayMenu(zone.id, menuId),
                           )
                         : this.#choice(
@@ -1374,7 +1415,7 @@ export class MenuTimetableScreen extends LitElement {
                             `zones.${zone.id}.periods.${row.id}.menuId`,
                             label,
                             stored,
-                            inherited,
+                            following,
                             (menuId) => this.api.setZonePeriodMenu(zone.id, row.id, menuId),
                           )
                     }

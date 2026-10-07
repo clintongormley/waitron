@@ -83,7 +83,6 @@ export type VenueServiceSettingsView = Pick<
 >;
 export type KitchenTicketGrouping = "combined" | "separate";
 export interface VenueServiceChoices {
-  menus: (NamedRow & { active: boolean })[];
   floorZones: FloorZone[];
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
@@ -104,16 +103,11 @@ export class VenueServiceApi {
   }
 
   async load(): Promise<VenueServiceView> {
-    const [model, menus, floorZones] = await Promise.all([
+    const [model, floorZones] = await Promise.all([
       this.#read<VenueServiceModel>("/management-api/venue-service"),
-      this.#read<VenueServiceChoices["menus"]>("/management-api/catalogues"),
       this.#read<FloorZone[]>("/management-api/zones?includeInactive=true"),
     ]);
-    return {
-      ...model,
-      menus,
-      floorZones,
-    };
+    return { ...model, floorZones };
   }
 
   async loadSettings(): Promise<VenueServiceSettingsView> {
