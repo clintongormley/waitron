@@ -27,7 +27,7 @@ import type { OrderLineIdentity } from "./working-order.js";
  */
 export async function receiptLines(
   tx: Transaction,
-  workingOrderId: string,
+  workingOrderId: string | null,
   priced: { lines: readonly ReceiptSource[] },
   identities: readonly Pick<OrderLineIdentity, "id" | "listUnitGross">[],
   saleId?: string,
@@ -80,7 +80,7 @@ export async function receiptLines(
     }
   }
   if (!lines.some((line) => line.listGross !== undefined)) return { lines };
-  const records = await readBillAdjustments(tx, workingOrderId);
+  const records = workingOrderId === null ? [] : await readBillAdjustments(tx, workingOrderId);
 
   const rowIndex = new Map<string | undefined, number>(
     identities.map((identity, i) => [identity.id, i]),

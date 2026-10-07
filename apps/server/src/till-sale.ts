@@ -242,7 +242,7 @@ export async function readTenderBlock(
   tx: Transaction,
   cfg: TillConfig,
   saleId: SaleId,
-  workingOrderId: string,
+  workingOrderId: string | null,
 ): Promise<TenderBlock> {
   void cfg;
   const [row] = await tx
@@ -278,7 +278,9 @@ export async function readTenderBlock(
     .where(
       and(
         eq(payments.saleId, saleId),
-        eq(payments.workingOrderId, workingOrderId),
+        workingOrderId === null
+          ? isNull(payments.workingOrderId)
+          : eq(payments.workingOrderId, workingOrderId),
         eq(payments.provider, "manual"),
       ),
     )
