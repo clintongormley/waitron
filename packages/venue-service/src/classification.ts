@@ -28,6 +28,7 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("station_fallbacks", "state", STATE),
   classify("station_day_states", "state", STATE),
   classify("route_exceptions", "state", STATE),
+  classify("routing_cells", "state", STATE),
   classify("order_service_contexts", "state", STATE),
   classify("working_line_contexts", "state", STATE),
   classify("service_settings", "state", STATE),

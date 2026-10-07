@@ -39,6 +39,13 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
       ["route_exceptions", "state"],
     ]);
   });
+  it("classifies routing_cells as replicated state", () => {
+    expect(
+      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "routing_cells").map(
+        (entry) => [entry.table, entry.class],
+      ),
+    ).toEqual([["routing_cells", "state"]]);
+  });
   it("classifies the service settings and kitchen notices as replicated state", () => {
     expect(
       VENUE_SERVICE_CLASSIFICATION.filter((entry) =>

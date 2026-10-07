@@ -500,6 +500,7 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "station_claims", locationColumns: ["location_id"] },
     { name: "station_fallbacks" },
     { name: "route_exceptions", locationColumns: ["location_id"] },
+    { name: "routing_cells", locationColumns: ["location_id"] },
     { name: "service_settings" },
     { name: "hours_week_cells" },
     { name: "hours_week_periods" },

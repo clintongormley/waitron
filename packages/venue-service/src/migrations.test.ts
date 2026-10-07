@@ -44,6 +44,7 @@ const TABLES = [
   "station_fallbacks",
   "station_day_states",
   "route_exceptions",
+  "routing_cells",
   "order_service_contexts",
   "working_line_contexts",
   "service_settings",
@@ -235,6 +236,16 @@ describe("the venue-service migration set carries no tenant column", () => {
         foreignKeys: ["(station_id) -> kitchen_stations(id)"],
       },
       route_exceptions: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(category_id) -> categories(id) on delete cascade",
+          "(location_id) -> locations(id)",
+          "(product_id) -> products(id)",
+          "(station_id) -> kitchen_stations(id)",
+          "(zone_id) -> floor_zones(id)",
+        ],
+      },
+      routing_cells: {
         primaryKey: ["id"],
         foreignKeys: [
           "(category_id) -> categories(id) on delete cascade",

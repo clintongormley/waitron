@@ -35,13 +35,14 @@ import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { stationDayStates, stationFallbacks } from "./schema/station-times.js";
 import type {
+  CellAddress,
   ExceptionInput,
   RouteExplanation,
   RoutingChange,
   RoutingModel,
   RoutingMove,
 } from "./routing-types.js";
-import { routeExceptions, stationClaims } from "./schema/routing.js";
+import { routeExceptions, routingCells, stationClaims } from "./schema/routing.js";
 import "./errors.js";
 import type { ExtraMakerOutcome, MakerOutcome, MakerResolver } from "@waitron/module";
 export type { ExceptionInput, RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
@@ -97,6 +98,111 @@ const readTarget = (row: { stationId: string | null }): RouteTarget =>
   row.stationId === null
     ? { kind: "no_preparation" }
     : { kind: "station", stationId: row.stationId };
+
+/** Refuses an address or target no ordinary write may store; returns the canonical spelling. */
+export async function validateRoutingCell(
+  tx: Transaction,
+  cfg: VenueScope,
+  address: CellAddress,
+  target: RouteTarget | null,
+): Promise<{ address: CellAddress; target: RouteTarget | null }> {
+  const { row } = address;
+  if (row.kind === "all" && address.zoneId === null)
+    throw new AppError("management.request_invalid", { field: "address" });
+  const zoneId = address.zoneId === null ? null : normaliseUuid(address.zoneId, "ZoneId");
+  if (zoneId !== null) {
+    await resolveZoneContext(tx, cfg, zoneId);
+    // resolveZoneContext still answers for a zone deactivateServiceZone switched off.
+    const [zone] = await tx
+      .select({ id: floorZones.id })
+      .from(floorZones)
+      .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
+    if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
+  }
+  let canonicalRow = row;
+  if (row.kind === "category") {
+    const categoryId = normaliseUuid(row.categoryId, "CategoryId");
+    const [category] = await tx
+      .select({ id: categories.id })
+      .from(categories)
+      .where(eq(categories.id, categoryId));
+    if (category === undefined)
+      throw new AppError("route.subject_not_found", { subject: "category", id: categoryId });
+    canonicalRow = { kind: "category", categoryId };
+  } else if (row.kind === "product") {
+    const productId = normaliseUuid(row.productId, "ProductId");
+    const [product] = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(productWithId(productId, "top-level"));
+    if (product === undefined)
+      throw new AppError("route.subject_not_found", { subject: "product", id: productId });
+    canonicalRow = { kind: "product", productId };
+  }
+  let canonicalTarget = target;
+  if (target?.kind === "station") {
+    const stationId = normaliseUuid(target.stationId, "StationId");
+    const [station] = await tx
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(
+        and(
+          eq(kitchenStations.locationId, cfg.locationId),
+          eq(kitchenStations.id, stationId),
+          eq(kitchenStations.active, true),
+        ),
+      );
+    if (station === undefined) throw new AppError("route.station_inactive", { stationId });
+    canonicalTarget = { kind: "station", stationId };
+  }
+  return { address: { row: canonicalRow, zoneId }, target: canonicalTarget };
+}
+
+function cellAt(cfg: VenueScope, { row, zoneId }: CellAddress) {
+  return and(
+    eq(routingCells.locationId, cfg.locationId),
+    row.kind === "category"
+      ? eq(routingCells.categoryId, row.categoryId)
+      : isNull(routingCells.categoryId),
+    row.kind === "product"
+      ? eq(routingCells.productId, row.productId)
+      : isNull(routingCells.productId),
+    zoneId === null ? isNull(routingCells.zoneId) : eq(routingCells.zoneId, zoneId),
+  );
+}
+
+export async function setRoutingCell(
+  tx: Transaction,
+  cfg: VenueScope,
+  address: CellAddress,
+  target: RouteTarget,
+): Promise<void> {
+  const valid = await validateRoutingCell(tx, cfg, address, target);
+  const stored = storedTarget(valid.target!);
+  const updated = await tx
+    .update(routingCells)
+    .set(stored)
+    .where(cellAt(cfg, valid.address))
+    .returning({ id: routingCells.id });
+  if (updated.length > 0) return;
+  const { row, zoneId } = valid.address;
+  await tx.insert(routingCells).values({
+    locationId: cfg.locationId,
+    categoryId: row.kind === "category" ? row.categoryId : null,
+    productId: row.kind === "product" ? row.productId : null,
+    zoneId,
+    ...stored,
+  });
+}
+
+export async function clearRoutingCell(
+  tx: Transaction,
+  cfg: VenueScope,
+  address: CellAddress,
+): Promise<void> {
+  const valid = await validateRoutingCell(tx, cfg, address, null);
+  await tx.delete(routingCells).where(cellAt(cfg, valid.address));
+}
 
 export async function setClaim(
   tx: Transaction,
