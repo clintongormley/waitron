@@ -4873,7 +4873,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
   working assumption, to confirm before go-live. Hours moved to A254.
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; slice 1 plan written, awaiting the owner's review**
+  APPROVED 2026-10-07; slice 1 plan approved and queued in campaign lane D (A366-1, then
+  A366-2: slice 2's plan, stopping for the owner)**
   ([slice 1 plan](superpowers/plans/2026-10-07-a366-slice-1-service-periods.md)). Opening hours and the menu timetable become one idea: a period is
   a name with one customer menu plus staff-only menus, a department's day is time ranges each given
   a period, and the till sells only the current period's menus. Zones can be closed for part of
