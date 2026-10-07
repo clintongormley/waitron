@@ -1173,6 +1173,18 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Till schedule requests now use the shared warning on the branch. Back keeps your shift-cover and
+time-off drafts until you choose Discard. Each accepted request clears only its own submitted
+values before refresh; later input stays protected. Accepting an offered swap leaves an unrelated
+time-off question open. The real till app test checks the retained screen and URL through Keep,
+then the return to the counter on Discard.
+
+Device enrolment protects your typed name until the join request succeeds. The submitted name
+becomes its saved starting value; the waiting number is output, and Discard sends no join command.
+Both owners clear departed inputs and reject replies from an earlier visit in the focused tests.
+The dated audit records native confirmation, focus, accessibility, visual and deletion checks.
+Till-wide navigation, retained orders and the final advancing-owner audit remain unfinished.
+
 Login forms now protect your typed email, password, factor code, account-link credentials and
 optional passkey name on the branch. Change account, method switches, the reset link and Cancel
 keep those inputs until you choose Discard. Accepted credential writes commit their submitted
@@ -1199,7 +1211,7 @@ scoped accessibility scans are recorded in the dated audit.
 
 The service setting switches/dropdowns, bump mode and fire control remain immediate writes.
 Their pending and refused writes do not acquire discard protection or clear a different draft's
-question in the new tests. Till schedule/enrolment and the till shell/order-state acceptance
+question in the new tests. The till shell/order-state acceptance and final advancing-owner
 audit still need work. W69 is not ready for finishing or landing.
 
 W97 (#1311) is integrated on the branch. Device Edit now protects its approved-profile choices,

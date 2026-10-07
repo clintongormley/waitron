@@ -1,6 +1,12 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  leaveCoordinatorFor,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -79,19 +85,47 @@ export class TillEnrolScreen extends LitElement {
   @state() private busy = false;
   @state() private attempted = false;
   #poll?: ReturnType<typeof setInterval>;
+  #scope?: DraftScope<string>;
+  #connection = 0;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#scope = leaveCoordinatorFor(this)?.register<string>({
+      id: this,
+      current: () => this.name,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.name = value;
+      },
+    });
+  }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#connection++;
     if (this.#poll !== undefined) clearInterval(this.#poll);
+    this.#poll = undefined;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.phase = "name";
+    this.name = "";
+    this.verificationNumber = "";
+    this.joinId = "";
+    this.errorCode = "";
+    this.busy = false;
+    this.attempted = false;
   }
 
   #onName(event: Event): void {
+    if (!this.isConnected) return;
     this.name = (event as CustomEvent<{ value: string }>).detail.value;
+    this.#scope?.changed();
   }
 
   /** A refused knock returns to the `name` phase: the name is the only thing the operator can change. */
   async #join(): Promise<void> {
-    if (this.busy) return;
+    if (!this.isConnected || this.busy) return;
     this.attempted = true;
     this.errorCode = "";
     if (this.name === "") {
@@ -101,32 +135,36 @@ export class TillEnrolScreen extends LitElement {
       return;
     }
     this.busy = true;
+    const connection = this.#connection;
+    const submitted = this.name;
     try {
-      const { joinId, verificationNumber } = await this.api.join(this.name);
-      if (!this.isConnected) return;
+      const { joinId, verificationNumber } = await this.api.join(submitted);
+      if (!this.isConnected || connection !== this.#connection) return;
+      this.#scope?.commit(submitted);
       this.joinId = joinId;
       this.verificationNumber = verificationNumber;
       this.phase = "waiting";
       this.#poll = setInterval(() => void this.#tick(), POLL_MS);
     } catch (cause) {
-      if (!this.isConnected) return;
+      if (!this.isConnected || connection !== this.#connection) return;
       this.errorCode = (cause as { code?: string }).code ?? "server.internal";
       this.phase = "name";
     } finally {
-      this.busy = false;
+      if (this.isConnected && connection === this.#connection) this.busy = false;
     }
   }
 
   /** A transient failure keeps waiting: a knock the device abandons on a network blip cannot be
    * resumed. */
   async #tick(): Promise<void> {
+    const connection = this.#connection;
     let status: string;
     try {
       ({ status } = await this.api.joinStatus());
     } catch {
       return;
     }
-    if (!this.isConnected) return;
+    if (!this.isConnected || connection !== this.#connection) return;
     if (status === "approved") {
       clearInterval(this.#poll);
       this.#poll = undefined;

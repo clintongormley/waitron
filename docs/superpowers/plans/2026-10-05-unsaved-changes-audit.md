@@ -3400,3 +3400,64 @@ workspace's installed sharp after the host Python had no Pillow. No repository d
 
 Tasks 1/4/5/6 remain partial. Till schedule/enrolment, till shell and retained-order behavior,
 and the final advancing-owner inventory still need work. W69 is not ready for finish/land.
+
+
+## Till schedule and enrolment checkpoint, 2026-10-07
+
+Till Schedule registers independent cover and absence request scopes. All six edited fields notify
+immediately, including a revert. Back asks through the application's shared coordinator before
+emitting its existing return event. Keep retains both drafts; Discard restores their local starting
+values without submitting either request. The actual till-app case checks that the schedule owner
+and URL remain mounted through Keep and return to the counter after Discard.
+
+Accepted writes commit only their captured request, before the following read. Unchanged submitted
+fields keep their existing clear-after-success behavior. Later delivered input remains compared
+with the accepted snapshot. A refusal stays dirty; a failed refresh does not undo the acceptance.
+Accepting an offered swap has no staged form scope and does not cancel a time-off leave question.
+Notifications for dropped choices run only when a nonempty choice actually disappears.
+
+Enrolment registers the name exactly as its existing join call sends it. An accepted join commits
+the captured name; later delivered input stays protected. The verification number, waiting and
+refused messages are output, with no editable proof field in this owner. Discard restores local
+input without starting or cancelling a join. Disconnect disposes both owners' scopes and clears
+their inputs. Connection generations reject old schedule reads, submitted writes, join replies
+and approval polls after reconnect; retained departed controls issue no request in the new cases.
+
+Failing-first receipts: `schedule-red.log` has 15 failures and one clean control; `enrol-red.log`
+has eight failures and one clean/submitted control. `names-red.log` catches the missing semantic
+date-field name. `unrelated-refresh-red.log` catches an unchanged cover choice cancelling the
+absence question. Their final implementation uses semantic date/reason names and notifies only
+actual choice changes. Existing behavioral assertions were preserved; one actual till-app Back
+case was added to its existing suite.
+
+Focused family command:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/screens/till-schedule-screen.unsaved.test.ts src/screens/till-enrol-screen.unsaved.test.ts src/screens/till-schedule-screen.test.ts src/screens/till-enrol-screen.test.ts src/screens/till-schedule-screen.a11y.test.ts src/screens/till-enrol-screen.a11y.test.ts src/till-app.test.ts
+```
+
+`final-family.log` reports 813 passing cases in seven files. Its printer-choice TypeError is the
+existing `does not leave the dialog busy when a step after the switch throws` case, which supplies
+an undefined `printerChoices` and asserts one rejection. `baseline-switch.log` reproduces that
+output and its passing assertion on untouched `b9d732c10870865036a5c6e8e3782d9482c2973e`
+in the installed measuring checkout. No printer production code or assertion was changed.
+
+The four root native-field, token-name, module-seam and English-only suites report 3404 passing
+cases. Till typecheck, scoped ESLint, source formatting and diff checks are retained with the
+checkpoint. Fifteen independent installed deletions each fail their intended assertion beside a
+passing control; restored owner suites report 48 passes, with all five candidate files byte-equal
+to the feature checkout before the baseline experiment. The measuring checkout is then removed.
+All logs and the deletion ledger are local in `receipts/w69-till-pages-20261007`.
+
+Sixteen native flows cover EN/ES, light/dark and 390/1280 widths. Each checks initial Keep focus,
+Escape, Keep, Discard, returned focus and retained native values. Sixteen scoped warning axe scans
+pass. Thirty-two warning/kept captures were inspected in eight contact sheets. These flows use
+minimal hosts and synthetic API boundaries; the enrolment Back action is supplied by its test
+host. The first visual run had a missing test-host button, and its dark theme was not actually
+passed to the mount helper; that run is excluded. The corrected final matrix supplies both.
+These receipts do not verify a live join, full-shell accessibility, till history interception,
+voluntary logout, or an activated native reload prompt.
+
+Tasks 1/4/5/6 remain partial. Next: till shell and UrlState navigation, voluntary sign-out and
+retained-order acceptance, then the complete advancing-owner inventory. W69 remains in progress
+and is not ready for finish-branch or land-branch.

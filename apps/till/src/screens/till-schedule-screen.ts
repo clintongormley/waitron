@@ -1,7 +1,14 @@
 import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { type ComboboxOption, submitOnEnter, baseStyles } from "@waitron/ui";
+import {
+  type ComboboxOption,
+  type DraftScope,
+  type LeaveCoordinator,
+  leaveCoordinatorFor,
+  submitOnEnter,
+  baseStyles,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -18,6 +25,12 @@ import type {
 const ABSENCE_KINDS: readonly AbsenceKind[] = ["holiday", "sick_leave", "leave", "unpaid"];
 
 const WINDOW_DAYS = 14;
+type CoverDraft = Parameters<TillApi["requestSwap"]>[0];
+type AbsenceDraft = Parameters<TillApi["requestAbsence"]>[0];
+const sameCover = (a: CoverDraft, b: CoverDraft) =>
+  a.fromShiftId === b.fromShiftId && a.toPersonId === b.toPersonId && a.toShiftId === b.toShiftId;
+const sameAbsence = (a: AbsenceDraft, b: AbsenceDraft) =>
+  a.kind === b.kind && a.startsOn === b.startsOn && a.endsOn === b.endsOn && a.note === b.note;
 
 const NONE: ComboboxOption = { value: "", label: "—" };
 
@@ -163,17 +176,79 @@ export class TillScheduleScreen extends LitElement {
   @state() private absTo = "";
   @state() private absNote = "";
 
+  #coverScope?: DraftScope<CoverDraft>;
+  #absenceScope?: DraftScope<AbsenceDraft>;
+  #leave?: LeaveCoordinator;
+  #connection = 0;
+
+  #coverDraft(): CoverDraft {
+    return { fromShiftId: this.coverShiftId, toPersonId: this.coverColleagueId, toShiftId: null };
+  }
+
+  #absenceDraft(): AbsenceDraft {
+    return {
+      kind: this.absKind,
+      startsOn: this.absFrom,
+      endsOn: this.absTo,
+      note: this.absNote === "" ? null : this.absNote,
+    };
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#leave = leaveCoordinatorFor(this);
+    this.#coverScope = this.#leave?.register<CoverDraft>({
+      id: {},
+      parent: this,
+      current: () => this.#coverDraft(),
+      snapshot: (value) => ({ ...value }),
+      equal: sameCover,
+      restore: (value) => {
+        this.coverShiftId = value.fromShiftId;
+        this.coverColleagueId = value.toPersonId;
+      },
+    });
+    this.#absenceScope = this.#leave?.register<AbsenceDraft>({
+      id: {},
+      parent: this,
+      current: () => this.#absenceDraft(),
+      snapshot: (value) => ({ ...value }),
+      equal: sameAbsence,
+      restore: (value) => {
+        this.absKind = value.kind;
+        this.absFrom = value.startsOn;
+        this.absTo = value.endsOn;
+        this.absNote = value.note ?? "";
+      },
+    });
     void this.#reload();
+  }
+
+  override disconnectedCallback(): void {
+    this.#connection++;
+    this.#coverScope?.dispose();
+    this.#absenceScope?.dispose();
+    this.#coverScope = undefined;
+    this.#absenceScope = undefined;
+    this.#leave = undefined;
+    this.coverShiftId = "";
+    this.coverColleagueId = "";
+    this.absKind = "holiday";
+    this.absFrom = "";
+    this.absTo = "";
+    this.absNote = "";
+    this.busy = false;
+    super.disconnectedCallback();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (
+      this.coverColleagueId !== "" &&
       (changed.has("staff") || changed.has("operatorPersonId")) &&
       !this.#colleagues().some((person) => person.personId === this.coverColleagueId)
     ) {
       this.coverColleagueId = "";
+      this.#coverScope?.changed();
     }
   }
 
@@ -185,8 +260,8 @@ export class TillScheduleScreen extends LitElement {
     return scheduleWindow(new Date(), WINDOW_DAYS);
   }
 
-  /** State written after a mid-load disconnect is harmless, so no `isConnected` guard is needed. */
   async #reload(): Promise<void> {
+    const connection = this.#connection;
     const { from, to } = this.#window();
     try {
       const [shifts, swaps, absences] = await Promise.all([
@@ -194,27 +269,35 @@ export class TillScheduleScreen extends LitElement {
         this.api.listMySwaps(),
         this.api.listMyAbsences(),
       ]);
+      if (!this.isConnected || connection !== this.#connection) return;
       this.shifts = shifts;
       this.swaps = swaps;
       this.absences = absences;
       this.loadFailed = false;
-      if (!shifts.some((shift) => shift.id === this.coverShiftId)) this.coverShiftId = "";
+      if (this.coverShiftId !== "" && !shifts.some((shift) => shift.id === this.coverShiftId)) {
+        this.coverShiftId = "";
+        this.#coverScope?.changed();
+      }
     } catch {
+      if (!this.isConnected || connection !== this.#connection) return;
       this.loadFailed = true;
     }
   }
 
   async #act(fn: () => Promise<void>): Promise<void> {
-    if (this.busy) return;
+    if (!this.isConnected || this.busy) return;
+    const connection = this.#connection;
     this.busy = true;
     this.noticeCode = undefined;
     try {
       await fn();
+      if (!this.isConnected || connection !== this.#connection) return;
       await this.#reload();
     } catch (error) {
+      if (!this.isConnected || connection !== this.#connection) return;
       this.noticeCode = (error as { code?: string }).code ?? "server.internal";
     } finally {
-      this.busy = false;
+      if (this.isConnected && connection === this.#connection) this.busy = false;
     }
   }
 
@@ -223,35 +306,51 @@ export class TillScheduleScreen extends LitElement {
   }
 
   #submitCover(): void {
-    if (this.coverShiftId === "" || this.coverColleagueId === "") return;
+    if (!this.isConnected || this.coverShiftId === "" || this.coverColleagueId === "") return;
+    const submitted = this.#coverDraft();
+    const connection = this.#connection;
     void this.#act(async () => {
-      await this.api.requestSwap({
-        fromShiftId: this.coverShiftId,
-        toPersonId: this.coverColleagueId,
-        toShiftId: null,
-      });
-      this.coverShiftId = "";
-      this.coverColleagueId = "";
+      await this.api.requestSwap(submitted);
+      if (!this.isConnected || connection !== this.#connection) return;
+      if (sameCover(this.#coverDraft(), submitted)) {
+        this.coverShiftId = "";
+        this.coverColleagueId = "";
+        this.#coverScope?.commit(this.#coverDraft());
+      } else this.#coverScope?.commit(submitted);
     });
   }
 
   #submitAbsence(): void {
-    if (this.absFrom === "" || this.absTo === "") return;
+    if (!this.isConnected || this.absFrom === "" || this.absTo === "") return;
+    const submitted = this.#absenceDraft();
+    const connection = this.#connection;
     void this.#act(async () => {
-      await this.api.requestAbsence({
-        kind: this.absKind,
-        startsOn: this.absFrom,
-        endsOn: this.absTo,
-        note: this.absNote === "" ? null : this.absNote,
-      });
-      this.absFrom = "";
-      this.absTo = "";
-      this.absNote = "";
+      await this.api.requestAbsence(submitted);
+      if (!this.isConnected || connection !== this.#connection) return;
+      if (sameAbsence(this.#absenceDraft(), submitted)) {
+        this.absFrom = "";
+        this.absTo = "";
+        this.absNote = "";
+        this.#absenceScope?.commit(this.#absenceDraft());
+      } else this.#absenceScope?.commit(submitted);
     });
   }
 
   #back(): void {
-    this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
+    if (!this.isConnected || this.busy) return;
+    const proceed = () =>
+      this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
+    if (!this.#leave) {
+      proceed();
+      return;
+    }
+    void this.#leave.request({
+      scopes: [this],
+      reason: "navigation",
+      proceed: () => {
+        proceed();
+      },
+    });
   }
 
   #personName(personId: string): string {
@@ -362,7 +461,10 @@ export class TillScheduleScreen extends LitElement {
           t("schedule.cover_shift"),
           [NONE, ...shifts.map((shift) => ({ value: shift.id, label: this.#shiftLabel(shift) }))],
           this.coverShiftId,
-          (value) => (this.coverShiftId = value),
+          (value) => {
+            this.coverShiftId = value;
+            this.#coverScope?.changed();
+          },
         )}
         ${this.#dropdown(
           "cover-colleague",
@@ -375,7 +477,10 @@ export class TillScheduleScreen extends LitElement {
             })),
           ],
           this.coverColleagueId,
-          (value) => (this.coverColleagueId = value),
+          (value) => {
+            this.coverColleagueId = value;
+            this.#coverScope?.changed();
+          },
         )}
         <wt-button
           class="cover-submit"
@@ -408,6 +513,7 @@ export class TillScheduleScreen extends LitElement {
       .value=${value}
       @wt-change=${(e: CustomEvent<{ value: string }>) => {
         e.stopPropagation();
+        if (!this.isConnected) return;
         onPick(e.detail.value);
       }}
     ></wt-combobox>`;
@@ -447,38 +553,50 @@ export class TillScheduleScreen extends LitElement {
           t("schedule.absence_kind"),
           ABSENCE_KINDS.map((kind) => ({ value: kind, label: t(`schedule.kind.${kind}`) })),
           this.absKind,
-          (value) => (this.absKind = value as AbsenceKind),
+          (value) => {
+            this.absKind = value as AbsenceKind;
+            this.#absenceScope?.changed();
+          },
         )}
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".abs-submit"))}
           class="abs-from"
+          name="abs-from"
           type="date"
           .label=${t("schedule.absence_from")}
           .value=${this.absFrom}
           @wt-change=${(e: Event) => {
             e.stopPropagation();
+            if (!this.isConnected) return;
             this.absFrom = (e as CustomEvent<{ value: string }>).detail.value;
+            this.#absenceScope?.changed();
           }}
         ></wt-input>
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".abs-submit"))}
           class="abs-to"
+          name="abs-to"
           type="date"
           .label=${t("schedule.absence_to")}
           .value=${this.absTo}
           @wt-change=${(e: Event) => {
             e.stopPropagation();
+            if (!this.isConnected) return;
             this.absTo = (e as CustomEvent<{ value: string }>).detail.value;
+            this.#absenceScope?.changed();
           }}
         ></wt-input>
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".abs-submit"))}
           class="abs-note"
+          name="abs-note"
           .label=${t("schedule.absence_note")}
           .value=${this.absNote}
           @wt-change=${(e: Event) => {
             e.stopPropagation();
+            if (!this.isConnected) return;
             this.absNote = (e as CustomEvent<{ value: string }>).detail.value;
+            this.#absenceScope?.changed();
           }}
         ></wt-input>
         <wt-button

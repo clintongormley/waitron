@@ -10199,6 +10199,42 @@ describe("till-app", () => {
       expect(schedule(el)!.getAttribute("slot")).toBe("drill");
     });
 
+    it("W69 schedule Back keeps the real drill and URL until its staged request is discarded", async () => {
+      const el = await toShellCounter();
+      currentApi.listMyShifts = vi.fn().mockResolvedValue([]);
+      currentApi.listMySwaps = vi.fn().mockResolvedValue([]);
+      currentApi.listMyAbsences = vi.fn().mockResolvedValue([]);
+      emit(shell(el)!, "show-schedule");
+      await flush(el);
+      const owner = schedule(el)!;
+      const input = owner.shadowRoot!.querySelector<WtInput>(".abs-note")!;
+      await input.updateComplete;
+      await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Family visit");
+      const originalUrl = window.location.href;
+      const back = owner.shadowRoot!.querySelector<HTMLElement>(".back")!;
+      back.click();
+      await flush(el);
+      const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      await question.updateComplete;
+      expect(question.open).toBe(true);
+      expect(schedule(el)).toBe(owner);
+      expect(window.location.href).toBe(originalUrl);
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+      await expect.poll(() => question.open).toBe(false);
+      expect(input.value).toBe("Family visit");
+      expect(schedule(el)).toBe(owner);
+      expect(window.location.href).toBe(originalUrl);
+      back.click();
+      await expect.poll(() => question.open).toBe(true);
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await expect.poll(() => schedule(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(window.location.href).not.toBe(originalUrl);
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(false);
+    });
+
     it("pushes the station drill-in from the shell's Station affordance", async () => {
       const el = await toShellCounter();
       emit(shell(el)!, "show-station");
