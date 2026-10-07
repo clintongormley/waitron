@@ -848,9 +848,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   });
   #scrollWidth = 0;
   #narrowFrame: number | null = null;
-  /** Watched while column widths are held or a column has a filter. Its effects wait a frame:
-   * run inside the callback, they make Chromium report "ResizeObserver loop completed with
-   * undelivered notifications". */
+  /** Watched while column widths are held, a column has a filter or the table is searchable. Its
+   * effects wait a frame: run inside the callback, they make Chromium report "ResizeObserver loop
+   * completed with undelivered notifications". */
   readonly #hostObserver = new ResizeObserver(([entry]) => {
     this.#hostWidth = entry!.borderBoxSize[0]!.inlineSize;
     if (
@@ -866,21 +866,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
       this.#resizeFrame = null;
       if (!this.isConnected) return;
       this.sideFilters = this.#hostWidth >= SIDE_FILTERS_WIDTH;
+      // A hidden table measures 0 wide and is not stacked, so it is not drawn stacked for a frame
+      // when shown in a wide window.
+      this.toggleAttribute(
+        "stacked-search",
+        this.searchable && this.#hostWidth > 0 && this.#hostWidth <= STACKED_SEARCH_WIDTH,
+      );
       if (this.#widthsReleased) this.requestUpdate();
       this.#widthsReleased = false;
     });
   });
   #hostWidth = 0;
   #widthsReleased = false;
-  /** Its effect waits a frame for the same reason as the host observer's. A hidden table measures
-   * 0 wide and is not stacked, so it is not drawn stacked for a frame when shown in a wide window. */
-  readonly #searchObserver = new ResizeObserver(([entry]) => {
-    const width = entry!.borderBoxSize[0]!.inlineSize;
-    this.#searchFrame = requestAnimationFrame(() => {
-      this.toggleAttribute("stacked-search", width > 0 && width <= STACKED_SEARCH_WIDTH);
-    });
-  });
-  #searchFrame = 0;
   #observedScroll: Element | null = null;
   /** Keeps a revealed or focused row clear of the headings held over the top of the box. */
   readonly #headObserver = new ResizeObserver(() => this.#padScroll());
@@ -941,8 +938,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return this.columns.some((column) => column.filter);
   }
 
+  #watchesHost(): boolean {
+    return this.#hasFilters() || this.searchable;
+  }
+
   #observeHost(): void {
-    if (this.#hasFilters() || this.filterColumnWidths) this.#hostObserver.observe(this);
+    if (this.#watchesHost() || this.filterColumnWidths) this.#hostObserver.observe(this);
     else this.#hostObserver.disconnect();
   }
 
@@ -958,7 +959,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#observeHost();
-    this.#searchObserver.observe(this);
     if (this.hasUpdated) {
       this.#observeScroll();
       this.#observeHead();
@@ -973,8 +973,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#hostObserver.disconnect();
     if (this.#resizeFrame !== null) cancelAnimationFrame(this.#resizeFrame);
     this.#resizeFrame = null;
-    this.#searchObserver.disconnect();
-    cancelAnimationFrame(this.#searchFrame);
     this.#scrollObserver.disconnect();
     this.#cancelNarrowFrame();
     this.#observedScroll = null;
@@ -986,7 +984,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     super.updated(changed);
     this.#observeScroll();
     this.#observeHead();
-    if (changed.has("columns")) this.#observeHost();
+    if (changed.has("searchable") && !this.searchable) this.removeAttribute("stacked-search");
+    if (changed.has("columns") || changed.has("searchable")) this.#observeHost();
     if (changed.has("filtersOpen") || changed.has("sideFilters") || changed.has("columns"))
       this.#placeLeadingFilters();
   }
@@ -1407,7 +1406,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #releaseColumnWidths(): void {
     this.filterColumnWidths = null;
     this.filterHostWidth = null;
-    if (!this.#hasFilters()) this.#hostObserver.disconnect();
+    if (!this.#watchesHost()) this.#hostObserver.disconnect();
   }
 
   async #toggleLeadingFilters(event: MouseEvent): Promise<void> {

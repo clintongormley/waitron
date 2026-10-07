@@ -2929,6 +2929,24 @@ test.each([641, 1280])(
   },
 );
 
+test.each([
+  ["with", withStatus],
+  ["without", [withStatus[0]!]],
+])(
+  "a 390 px table %s a filter stacks its search only while it is searchable",
+  async (_, columns) => {
+    const el = await tableS({ columns });
+    el.style.width = "390px";
+    await settle();
+    await settle();
+    expect(el.hasAttribute("stacked-search")).toBe(false);
+    el.searchable = true;
+    await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(true));
+    el.searchable = false;
+    await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(false));
+  },
+);
+
 test("a table hidden after it stacked its search shows Filters, the search and the chooser on one line as soon as it is shown wide", async () => {
   const el = await tableS({ searchable: true, columns: withStatusAndChooser });
   el.style.width = "390px";

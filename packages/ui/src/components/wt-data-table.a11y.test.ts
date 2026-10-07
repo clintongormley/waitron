@@ -330,6 +330,34 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("a phone-width searchable table with its search under its buttons", async () => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users" style="width: 390px"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      {
+        key: "status",
+        label: "Status",
+        cell: (row) => row.status,
+        filter: {
+          label: "Filter by status",
+          allLabel: "Any status",
+          value: (row) => row.status,
+          options: [{ value: "Active", label: "Active" }],
+        },
+      },
+    ] satisfies DataTableColumn<Row>[];
+    el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+    el.rowKey = (row) => row.id;
+    el.searchable = true;
+    el.searchLabel = "Search users";
+    await el.updateComplete;
+    await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(true));
+    await expectNoA11yViolations(host);
+  });
+
   test("an open full-screen Filters panel with a chosen filter", async () => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users" style="width: 500px"></wt-data-table>',
