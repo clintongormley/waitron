@@ -145,3 +145,38 @@ describe("setup wizard email test", () => {
     expect(JSON.stringify(logs)).not.toContain("secret-smtp-password");
   });
 });
+
+it("refuses overlapping email and fiscal tests and releases the setup latch after timeout", async () => {
+  const rig = await smtpRig("silent", true);
+  let first: Promise<Response> | undefined;
+  try {
+    const { app } = mount((config, recipient) =>
+      sendSmtpTestMessage(config, recipient, { ca: smtpTestTls.caCertPem, timeoutMs: 1500 }),
+    );
+    const payload = body({ ...email, port: Number(new URL(rig.config.url).port) });
+    first = Promise.resolve(request(app, payload));
+    await rig.dataReceived;
+    const overlapping = await request(app, payload);
+    expect(overlapping.status).toBe(409);
+    expect(await overlapping.json()).toEqual({
+      error: { code: "setup.already_provisioning", params: {} },
+    });
+    const fiscal = await app.request("/setup-api/fiscal-test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(fiscal.status).toBe(409);
+    expect(await fiscal.json()).toEqual({
+      error: { code: "setup.already_provisioning", params: {} },
+    });
+    expect((await first).status).toBe(200);
+    const after = await request(app, payload);
+    expect(after.status).toBe(200);
+    expect(await after.json()).toEqual({ accepted: false, code: "email.test_timeout" });
+    expect(rig.messages).toHaveLength(2);
+  } finally {
+    if (first !== undefined) await first;
+    await rig.close();
+  }
+});

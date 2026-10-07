@@ -1,4 +1,4 @@
-import { and, asc, eq, lte } from "drizzle-orm";
+import { and, asc, eq, lte, or } from "drizzle-orm";
 import { invoiceDeliveries, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   claimInvoiceDelivery,
@@ -43,6 +43,25 @@ export async function runInvoiceEmailLoop(
 export async function runInvoiceEmailPass(
   deps: InvoiceEmailPassDeps,
 ): Promise<{ processed: false } | { processed: true; deliveryId: string }> {
+  const now = deps.now();
+  const [pending] = await deps.db
+    .select({ id: invoiceDeliveries.id })
+    .from(invoiceDeliveries)
+    .where(
+      or(
+        and(
+          eq(invoiceDeliveries.medium, "email"),
+          eq(invoiceDeliveries.status, "queued"),
+          lte(invoiceDeliveries.nextAttemptAt, now.toISOString()),
+        ),
+        and(
+          eq(invoiceDeliveries.status, "sending"),
+          lte(invoiceDeliveries.claimedAt, new Date(now.getTime() - 60_000).toISOString()),
+        ),
+      ),
+    )
+    .limit(1);
+  if (pending === undefined) return { processed: false };
   const claimed = await withTransaction(deps.db, async (tx) => {
     const now = deps.now();
     await expireInvoiceDeliveryClaims(tx, now);

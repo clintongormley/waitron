@@ -54,8 +54,8 @@ export function parseEmailSettings(body: Record<string, unknown>): { url: string
   if (typeof password !== "string") invalid("password");
   if (user === "" && password !== "") invalid("user");
   if (user !== "" && password === "") invalid("password");
-  url!.username = user as string;
-  url!.password = password as string;
+  url!.username = encodeURIComponent(user as string);
+  url!.password = encodeURIComponent(password as string);
   if (body.encryption === "starttls") url!.searchParams.set("requireTLS", "true");
   if (typeof body.from !== "string") invalid("from");
   let from: string;
@@ -115,10 +115,12 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
   );
   app.put("/management-api/email/settings", (c) =>
     run(c, log, async () => {
+      requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
       await withTransaction(deps.db, async (tx) => {
         await authorize(tx, c);
         if (!editable) throw new AppError("email.settings_not_allowed", {});
-        const value = parseEmailSettings(await readJsonBody<Record<string, unknown>>(c));
+        const value = parseEmailSettings(body);
         await putCredential(tx, deps.ring, { purpose: "email.smtp", value });
       });
       return c.json({ saved: true });

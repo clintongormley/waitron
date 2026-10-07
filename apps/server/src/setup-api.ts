@@ -535,7 +535,6 @@ function directError(
  * nothing else claimed.
  */
 export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
-  mountSetupEmailTest(app, log, deps.sendEmailTest);
   // Once at mount, not per request: the box's mode is not otherwise visible in the request log.
   log("info", "setup.mode_active", { environment: deps.environment });
 
@@ -597,9 +596,15 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   let provisioning = false;
   let fiscalTesting = false;
   let configurationStaging = false;
+  const emailTesting = mountSetupEmailTest(
+    app,
+    log,
+    deps.sendEmailTest,
+    () => provisioning || fiscalTesting || configurationStaging,
+  );
 
   app.post("/setup-api/fiscal-test", async (c) => {
-    if (provisioning || fiscalTesting || configurationStaging) {
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     fiscalTesting = true;
@@ -658,7 +663,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     // POST's handler begins. Reset whenever the request does not end in a success answer (below),
     // so the lock does not refuse a retry; left set after a success answer, which schedules a
     // restart unless it is the replay of a completed operation.
-    if (provisioning || fiscalTesting || configurationStaging) {
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
@@ -777,7 +782,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
 
     // SYNCHRONOUS before ANY `await`, as in provision.
-    if (provisioning || fiscalTesting || configurationStaging) {
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
@@ -862,7 +867,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     if (stageReset === undefined || requestRestart === undefined || operations === undefined) {
       return directError(c, log, "setup.not_ready", 503);
     }
-    if (provisioning || fiscalTesting || configurationStaging) {
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
@@ -921,7 +926,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   app.post("/setup-api/cloud-recovery/restore", async (c) => {
     if (!deps.cloudRecovery || !deps.stageRestore || !deps.requestRestart)
       return directError(c, log, "setup.not_ready", 503);
-    if (provisioning || fiscalTesting || configurationStaging)
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting())
       return directError(c, log, "setup.already_provisioning", 409);
     provisioning = true;
     return runRestore(c, log, async () => {
@@ -978,7 +983,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     if (stageRestore === undefined || requestRestart === undefined) {
       return directError(c, log, "setup.not_ready", 503);
     }
-    if (provisioning || fiscalTesting || configurationStaging) {
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
@@ -1041,7 +1046,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     if (stage === undefined || requestRestart === undefined) {
       return directError(c, log, "setup.not_ready", 503);
     }
-    if (provisioning || fiscalTesting || configurationStaging) {
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
@@ -1102,7 +1107,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   app.post("/setup-api/configuration", async (c) => {
     const stage = deps.stageConfiguration;
     if (stage === undefined) return directError(c, log, "setup.not_ready", 503);
-    if (provisioning || fiscalTesting || configurationStaging) {
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     configurationStaging = true;

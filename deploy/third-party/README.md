@@ -18,9 +18,9 @@ their emitted JavaScript chunks. The generator (`scripts/npm-bundle-notices.mjs`
 installed package's licence and notice files into the generated text, grouped by name and version.
 The image build fails when a bundled package has no local notice and no pinned fallback.
 
-The published tarballs of the QR generator, Nodable entities, Drizzle ORM and three internal AWS
-SDK packages lack a root licence file. Their exact
-name-and-version fallback files live in `npm-fallback/`. The QR generator text comes from its
+For packages without local licence files, exact name-and-version fallback files live in
+`npm-fallback/`. These include the invoice renderer's brotli, dfa and fontkit dependencies,
+beside the QR generator, Nodable entities, Drizzle ORM and internal AWS SDK packages. The QR generator text comes from its
 upstream tag at commit `83b7e8fe3fddd3b0368dbafd6ce56995bd25e3c8`.
 The Nodable text comes from its matching upstream `val-parsers` tag. The AWS SDK and Drizzle package
 manifests state Apache-2.0; their fallback files reproduce `licenses/Apache-2.0.txt`.

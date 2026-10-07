@@ -1995,3 +1995,48 @@ describe("invoice email worker pass", () => {
     ]);
   });
 });
+
+it("does not join the write queue while invoice email has no due work", async () => {
+  await issue();
+  let entered!: () => void;
+  let release!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const writer = withTransaction(suite.db, async (tx) => {
+    await tx.update(tenants).set({ legalName: "Writing beside idle email" });
+    entered();
+    await gate;
+  });
+  await started;
+  const pass = runInvoiceEmailPass({
+    db: suite.db,
+    holder: "server-idle",
+    now: () => start,
+    readDocument: async () => {
+      throw new Error("Idle cannot read a document");
+    },
+    send: async () => {
+      throw new Error("Idle cannot send");
+    },
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    expect(
+      await Promise.race([
+        pass,
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), 500);
+        }),
+      ]),
+    ).toEqual({ processed: false });
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    release();
+    await writer;
+    await pass;
+  }
+});

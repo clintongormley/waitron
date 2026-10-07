@@ -474,3 +474,18 @@ it("tells staff a card payment refused by a profile switch charged nothing, in b
     "Este dispositivo ha cambiado a otro perfil mientras se iniciaba el pago. No se ha cobrado ninguna tarjeta. Inténtalo de nuevo.",
   );
 });
+
+it("explains a pending invoice delivery and a refused original instead of the generic error", () => {
+  expect(codeMessage("invoice_delivery.active", "en")).toBe(
+    "This invoice is already waiting for delivery. Check its status before trying again",
+  );
+  expect(codeMessage("invoice_delivery.active", "es")).toBe(
+    "Esta factura ya está pendiente de entrega. Comprueba su estado antes de intentarlo de nuevo",
+  );
+  expect(codeMessage("invoice_delivery.receipt_invalid", "en")).toBe(
+    "That original receipt cannot be printed. Check the invoice's delivery status or ask a manager",
+  );
+  expect(codeMessage("invoice_delivery.receipt_invalid", "es")).toBe(
+    "No se puede imprimir ese recibo original. Comprueba el estado de entrega de la factura o avisa a un responsable",
+  );
+});

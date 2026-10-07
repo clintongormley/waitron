@@ -1045,3 +1045,89 @@ describe("invoice receipt terminal Bluetooth endings", () => {
     expect(await ctx.jobRow()).toMatchObject({ status: "failed", lastError: "printer.unpaired" });
   });
 });
+
+describe("invoice receipt printer deactivation", () => {
+  it.each([
+    ["queued", "POST"],
+    ["sending", "POST"],
+    ["queued", "PATCH"],
+    ["sending", "PATCH"],
+  ] as const)(
+    "ends a %s invoice attempt through %s without resuming it or ending ordinary jobs on reactivation",
+    async (status, method) => {
+      const ctx = await setup();
+      if (status === "sending") await ctx.pull();
+      const ordinary = await withTransaction(suite.db, (tx) =>
+        enqueuePrintJob(
+          tx,
+          { locationId: ctx.locationId },
+          ctx.printer.id,
+          new Uint8Array([1]),
+          "document",
+        ),
+      );
+      const command = await manager(ctx);
+      expect(
+        (
+          await command(
+            `/management-api/printers/${ctx.printer.id}${method === "POST" ? "/deactivate" : ""}`,
+            method === "POST" ? {} : { active: false },
+            method,
+          )
+        ).status,
+      ).toBe(204);
+      expect(await ctx.row()).toMatchObject({
+        status: status === "sending" ? "unknown" : "failed",
+        failureCode: "transport_failed",
+      });
+      expect(await ctx.jobRow()).toMatchObject({
+        status: "failed",
+        attempts: MAX_DELIVERY_ATTEMPTS,
+      });
+      expect(
+        (await suite.db.select().from(printJobs).where(eq(printJobs.id, ordinary.jobId)))[0],
+      ).toMatchObject({ status: "queued", attempts: 0 });
+      const retry = await emailRetry(ctx);
+      expect(retry).toMatchObject({ designation: "original", status: "queued" });
+      expect(
+        (await command(`/management-api/printers/${ctx.printer.id}`, { active: true }, "PATCH"))
+          .status,
+      ).toBe(204);
+      expect((await ctx.pull()).map((job) => job.id)).toEqual([ordinary.jobId]);
+      expect(await ctx.row()).toMatchObject({
+        status: status === "sending" ? "unknown" : "failed",
+      });
+    },
+  );
+
+  it("accepts the disabled printer's authenticated late completion before retry", async () => {
+    const ctx = await setup();
+    const claim = (await ctx.pull())[0]!.invoiceClaim!;
+    const command = await manager(ctx);
+    expect(
+      (await command(`/management-api/printers/${ctx.printer.id}/deactivate`, {})).status,
+    ).toBe(204);
+    expect(await ctx.row()).toMatchObject({
+      status: "unknown",
+      expiredAt: ctx.now().toISOString(),
+    });
+    expect((await ctx.result({ status: "done", invoiceClaim: claim })).status).toBe(204);
+    expect(await ctx.row()).toMatchObject({ status: "sent", reportedOutcome: "sent" });
+    expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
+  });
+
+  it("leaves a completed invoice unchanged when its printer is deactivated", async () => {
+    const ctx = await setup();
+    const claim = (await ctx.pull())[0]!.invoiceClaim!;
+    expect((await ctx.result({ status: "done", invoiceClaim: claim })).status).toBe(204);
+    const completed = await ctx.row();
+    const job = await ctx.jobRow();
+    const command = await manager(ctx);
+    expect(
+      (await command(`/management-api/printers/${ctx.printer.id}/deactivate`, {})).status,
+    ).toBe(204);
+    expect(await ctx.row()).toEqual(completed);
+    expect(await ctx.jobRow()).toEqual(job);
+    expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
+  });
+});

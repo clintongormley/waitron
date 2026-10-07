@@ -17,7 +17,14 @@ import {
 } from "@waitron/credentials";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 
-type Reply = "accepted" | "recipient-refused" | "data-refused" | "lost-ack" | "silent";
+type Reply =
+  | "accepted"
+  | "recipient-refused"
+  | "data-refused"
+  | "lost-ack"
+  | "silent"
+  | "temporary-recipient-refused"
+  | "temporary-data-refused";
 
 const tls = mintSelfSignedServerCert({
   hostnames: ["localhost"],
@@ -69,6 +76,8 @@ async function smtpRig(reply: Reply, secure = false) {
           received();
           if (reply === "lost-ack") socket.destroy();
           else if (reply === "data-refused") socket.write("550 secret-smtp-password rejected\r\n");
+          else if (reply === "temporary-data-refused")
+            socket.write("451 secret-smtp-password temporarily refused\r\n");
           else if (reply === "accepted") socket.write("250 accepted\r\n");
         } else if (line.startsWith("EHLO") || line.startsWith("HELO")) {
           socket.write("250 invoice-test\r\n");
@@ -76,7 +85,9 @@ async function smtpRig(reply: Reply, secure = false) {
           socket.write(
             reply === "recipient-refused"
               ? "550 secret-smtp-password unknown recipient\r\n"
-              : "250 recipient ok\r\n",
+              : reply === "temporary-recipient-refused"
+                ? "450 secret-smtp-password temporarily refused\r\n"
+                : "250 recipient ok\r\n",
           );
         } else if (line === "DATA") {
           data = [];
@@ -309,3 +320,22 @@ describe("invoice SMTP transport", () => {
     }
   });
 });
+
+it.each(["temporary-recipient-refused", "temporary-data-refused"] as const)(
+  "classifies a real SMTP %s as failed so the worker can retry it",
+  async (reply) => {
+    const rig = await smtpRig(reply);
+    try {
+      const outcome = await createInvoiceEmailSender(rig.config)({
+        recipient: "customer@example.test",
+        document: fixture,
+      });
+      expect(outcome).toEqual({ status: "failed", failureCode: "transport_failed" });
+      expect(rig.messages).toHaveLength(reply === "temporary-data-refused" ? 1 : 0);
+      await rig.connectionClosed;
+      expect(rig.sockets.size).toBe(0);
+    } finally {
+      await rig.close();
+    }
+  },
+);
