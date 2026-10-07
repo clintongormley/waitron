@@ -5132,7 +5132,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       dish both before and after lists nothing. A dish offers an extra when the catalogue attaches
       it (in every zone) or when a published menu a zone serves offers it with the dish (in that
       zone) (`extraMoves`, `packages/venue-service/src/routing-store.ts`;
-      `publishedOffersByZone`, `packages/venue-service/src/operations.ts`). Like a dish's own
+      `liveDocumentsByZone`, `packages/venue-service/src/operations.ts`). Like a dish's own
       move, an extra's move ignores opening hours and stations opened or closed by hand.
     - **Done by A372 (owner answer, 2026-10-07): the No category row shows while it holds a saved
       cell.** It used to be hidden, with its saved cells, while no active product was uncategorised,
