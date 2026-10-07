@@ -234,7 +234,7 @@ describe("recordKitchenNotices", () => {
     ]);
   });
 
-  it("names a variant line by the variant's kitchen name", async () => {
+  it("names a variant line by the parent and variant kitchen pair", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 8, null);
     await inTx((tx) =>
@@ -255,7 +255,7 @@ describe("recordKitchenNotices", () => {
     );
     expect(
       (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((n) => n.lineName),
-    ).toEqual(["LRG PZ"]);
+    ).toEqual(["PZ (LRG PZ)"]);
   });
 
   it("copies a weighed line's unit, in every language it was recorded in", async () => {

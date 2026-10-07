@@ -707,7 +707,7 @@ describe("till-modifier-picker", () => {
       dietaryDeclarations: ["vegan"],
       courseId: `${id} course`,
     });
-    // The parent's price is 4.00: "Wine 125" is dearer, "Wine 100" cheaper, "Wine 150" the same.
+    // The parent's price is 4.00: "125 ml" is dearer, "Wine 100" cheaper, "Wine 150" the same.
     const wineProduct: TillProduct = {
       ...cafe,
       name: "Vino",
@@ -715,7 +715,7 @@ describe("till-modifier-picker", () => {
       menuItemId: "offer-wine",
       variants: [
         wine("Wine 100", "3.50", "-0.50", false),
-        wine("Wine 125", "5.50", "1.50"),
+        wine("125 ml", "5.50", "1.50"),
         wine("Wine 150", "4.00", null),
       ],
     };
@@ -728,12 +728,12 @@ describe("till-modifier-picker", () => {
       const { picker } = await openPicker(wineProduct, "Vino", new WorkingOrderStore());
       expect(radios(picker).map((radio) => radio.value)).toEqual([
         "Wine 100",
-        "Wine 125",
+        "125 ml",
         "Wine 150",
       ]);
       const text = picker.shadowRoot!.querySelector("fieldset")!.textContent!;
-      expect(text).toContain("Wine 125 staff");
-      expect(text).not.toContain("Wine 125 carta");
+      expect(text).toContain("125 ml staff");
+      expect(text).not.toContain("125 ml carta");
       expect(text).not.toContain("Vino");
     });
 
@@ -746,10 +746,10 @@ describe("till-modifier-picker", () => {
       await el.updateComplete;
       expect(store.lines[0]!.product).toMatchObject({
         name: "Vino",
-        variantId: "Wine 125",
-        variantName: "Wine 125 staff",
-        variantCustomerName: { en: "Wine 125 menu", es: "Wine 125 carta" },
-        variantKitchenName: "Wine 125 KDS",
+        variantId: "125 ml",
+        variantName: "125 ml staff",
+        variantCustomerName: { en: "125 ml menu", es: "125 ml carta" },
+        variantKitchenName: "125 ml KDS",
         unitPrice: "5.50",
       });
     });
@@ -789,17 +789,17 @@ describe("till-modifier-picker", () => {
       const chosen = wineProduct.variants![1]!;
       expect(store.lines[0]!.product).toMatchObject({
         id: "cafe",
-        variantId: "Wine 125",
+        variantId: "125 ml",
         unit: chosen.unit,
         pricingUnit: "weight",
         vatClass: "reduced",
-        category: "Wine 125 category",
+        category: "125 ml category",
         allergens: { sulphites: { presence: "contains" } },
         diet: chosen.diet,
         dietDerivation: chosen.dietDerivation,
         dietOverride: chosen.dietOverride,
         dietaryDeclarations: ["vegan"],
-        courseId: "Wine 125 course",
+        courseId: "125 ml course",
       });
     });
   });

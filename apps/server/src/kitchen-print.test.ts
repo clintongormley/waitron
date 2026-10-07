@@ -1839,14 +1839,13 @@ async function ticketWithNames(frozen: {
   return decodeTicket(jobs[0]!.payload);
 }
 
-it("prints the selected variant's frozen kitchen name alone", async () => {
+it("prints the frozen product and relative variant kitchen names", async () => {
   const paper = await ticketWithNames({
     kitchenName: "COF",
     variantName: "Large",
     variantKitchenName: "LG",
   });
-  expect(paper).toContain("LG");
-  expect(paper).not.toContain("COF");
+  expect(paper).toContain("COF (LG)");
   expect(paper).not.toContain("Coffee");
 });
 
@@ -1856,8 +1855,7 @@ it("falls back to the variant's staff name when it has no kitchen name", async (
     variantName: "Large",
     variantKitchenName: null,
   });
-  expect(paper).toContain("Large");
-  expect(paper).not.toContain("COF");
+  expect(paper).toContain("COF (Large)");
 });
 
 it("falls back to the product's staff name when it has no kitchen name", async () => {

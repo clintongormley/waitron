@@ -1,3 +1,4 @@
+import { kitchenPresentationName } from "@waitron/catalogue";
 import { describe, expect, it } from "vitest";
 
 import { FEED_BEFORE_CUT, columnsFor, type EscSetting } from "@waitron/printing";
@@ -1220,4 +1221,31 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
     expect(lines.slice(-3)).toEqual(["  QUITAR: Jalapeños en vinagre", "          con eneldo", ""]);
   });
+});
+
+it.each([KITCHEN_58, KITCHEN_80])("wraps a complete kitchen pair on $paperWidth", (printer) => {
+  const name = kitchenPresentationName({
+    name: "Staff gin",
+    kitchenName: "SEAGRAMS GIN RESERVA ESPECIAL DE LA CASA",
+    variantName: "Single",
+    variantKitchenName: "SINGLE CON HIELO Y RODAJA DE LIMA",
+  });
+  const lines = printedLines(
+    formatKitchenTicket(
+      {
+        scope: "station",
+        stationName: "BAR",
+        tableLabel: "Mesa 4",
+        orderNumber: "17",
+        firedAt: new Date(2026, 9, 7, 12, 0),
+        items: [{ qty: 1, name }],
+      },
+      printer,
+    ),
+  );
+  for (const line of lines)
+    expect(line.length, line).toBeLessThanOrEqual(columnsFor(printer.paperWidth));
+  expect(lines.map((line) => line.trim()).join(" ")).toContain(
+    "SEAGRAMS GIN RESERVA ESPECIAL DE LA CASA (SINGLE CON HIELO Y RODAJA DE LIMA)",
+  );
 });

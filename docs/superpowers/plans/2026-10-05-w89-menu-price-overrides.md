@@ -1,5 +1,7 @@
 # One editable price override per menu row (W89) — implementation plan
 
+> 2026-10-07, A357: the full variant names in this historical plan are superseded by relative names. Standalone lines pair the product and variant; see [Products](../../developers/products.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:subagent-driven-development`
 > (recommended) or `superpowers:executing-plans`. Each task is test-first: write the failing test,
 > run it and watch it fail for the reason you expect, then write the least code that passes. Steps

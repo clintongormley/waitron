@@ -3320,7 +3320,7 @@ describe("till-table-order-screen", () => {
       const variantLine: TabLine = {
         ...pendingLine,
         productId: "wine-125",
-        name: "Wine 125",
+        name: "125 ml",
         quantity: "2.000",
         unitPrecision: 0,
       };

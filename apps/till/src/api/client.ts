@@ -258,7 +258,6 @@ export interface TillProduct {
   /** The offer's photo; absent on a retrieved held line. */
   image?: string | null;
   variantId?: string;
-  /** The selected variant's staff-facing name; a line naming a variant is shown under it alone. */
   variantName?: string;
   /** The selected variant's customer-facing text, locale -> text; null when it has none. */
   variantCustomerName?: Record<string, string> | null;

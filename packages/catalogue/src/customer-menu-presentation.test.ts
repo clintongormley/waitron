@@ -104,9 +104,12 @@ describe("resolveMenuText", () => {
     expect(resolveMenuText(map, staff, { kind: "customer", language }, config)).toEqual(want);
   });
   it("uses the variant's own staff fallback without borrowing its parent's customer name", () => {
-    expect(resolveMenuText(null, "Wine 175", { kind: "customer", language: "es" }, config)).toEqual(
-      { text: "Wine 175", origin: "staff", language: null, missingRequested: true },
-    );
+    expect(resolveMenuText(null, "175 ml", { kind: "customer", language: "es" }, config)).toEqual({
+      text: "175 ml",
+      origin: "staff",
+      language: null,
+      missingRequested: true,
+    });
   });
   it("keeps a description missing when its stored text is only in another language", () => {
     expect(

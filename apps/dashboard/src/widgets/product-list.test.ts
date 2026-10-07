@@ -479,8 +479,8 @@ describe("product-list", () => {
           id: "wine",
           unitPrice: "4.00",
           variants: [
-            { ...bunVariant, id: "w125", name: "Wine 125", unitPrice: null },
-            { ...bunVariant, id: "w175", name: "Wine 175", unitPrice: "5.50" },
+            { ...bunVariant, id: "w125", name: "125 ml", unitPrice: null },
+            { ...bunVariant, id: "w175", name: "175 ml", unitPrice: "5.50" },
           ],
         }),
       ],
@@ -896,9 +896,9 @@ describe("product-list", () => {
           id: "wine",
           unitPrice: "4.00",
           variants: [
-            { ...bunVariant, id: "w125", name: "Wine 125", unitPrice: "4.50" },
-            { ...bunVariant, id: "w175", name: "Wine 175", unitPrice: "5.50" },
-            { ...bunVariant, id: "w250", name: "Wine 250", unitPrice: "9.00", active: false },
+            { ...bunVariant, id: "w125", name: "125 ml", unitPrice: "4.50" },
+            { ...bunVariant, id: "w175", name: "175 ml", unitPrice: "5.50" },
+            { ...bunVariant, id: "w250", name: "250 ml", unitPrice: "9.00", active: false },
           ],
         }),
         product({
@@ -936,7 +936,7 @@ describe("product-list", () => {
             {
               ...bunVariant,
               id: "w175",
-              name: "Wine 175",
+              name: "175 ml",
               customerName: { en: "Large glass of wine", es: "Copa grande de vino" },
               kitchenName: "VINO 175",
               unitPrice: "4.75",
@@ -960,7 +960,7 @@ describe("product-list", () => {
     root.querySelector<HTMLElement>('tr[data-row-key="wine"] .tree-toggle')!.click();
     await table.updateComplete;
     const cell = (header: string) => cellUnder(root, "wine:w175", header);
-    expect(cell(t("product.name")).textContent!.trim()).toBe("Wine 175");
+    expect(cell(t("product.name")).textContent!.trim()).toBe("175 ml");
     expect(cell(t("product.price")).querySelector('[data-test="price"]')!.textContent!.trim()).toBe(
       euros("4,75"),
     );
@@ -977,7 +977,7 @@ describe("product-list", () => {
             {
               ...bunVariant,
               id: "w175",
-              name: "Wine 175",
+              name: "175 ml",
               customerName: { en: "Large glass of wine", es: "Copa grande de vino" },
               kitchenName: "VINO 175",
               unitPrice: "4.75",
@@ -990,7 +990,7 @@ describe("product-list", () => {
             {
               ...bunVariant,
               id: "w125",
-              name: "Wine 125",
+              name: "125 ml",
               customerName: { en: "Small glass of wine", es: "Copa pequeña de vino" },
               kitchenName: "VINO 125",
               unitPrice: null,
@@ -1013,8 +1013,8 @@ describe("product-list", () => {
     expect(note("wine:w125")).toBeNull();
     expect(note("wine")).toBeNull();
     for (const [rowKey, name] of [
-      ["wine:w175", "Wine 175"],
-      ["wine:w125", "Wine 125"],
+      ["wine:w175", "175 ml"],
+      ["wine:w125", "125 ml"],
     ] as const)
       expect(cellUnder(root, rowKey, t("product.name")).textContent!.trim()).toBe(name);
     expect(
@@ -4828,7 +4828,7 @@ describe("variant media slot", () => {
       image: "pollo.webp",
       color: "#256bb1",
       variants: [
-        { ...bunVariant, id: "half", name: "1/2 Pollo", image: "half.webp" },
+        { ...bunVariant, id: "half", name: "1/2", image: "half.webp" },
         {
           ...bunVariant,
           id: "quarter",

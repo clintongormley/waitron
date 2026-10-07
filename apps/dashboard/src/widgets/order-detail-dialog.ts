@@ -1,3 +1,4 @@
+import { staffPresentationName } from "@waitron/catalogue/src/product-presentation.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, formatDecimalInput } from "@waitron/ui";
@@ -114,7 +115,7 @@ export class OrderDetailDialog extends LitElement {
               <section>
                 <h3>${t("orders.detail.lines")}</h3>
                 <ul>
-                  ${detail.lines.map((line) => html`<li>${line.name} ${line.variantName ?? ""} × ${quantity(line.quantity)} — ${money(line.total)}${differsFromListPrice(line) ? html` (${fill(t("orders.detail.was"), { price: money(line.listUnitPrice!) })})` : nothing}${line.creditedTo === null ? nothing : html` · ${fill(t("orders.detail.served_by"), { name: line.creditedTo })}`}</li>`)}
+                  ${detail.lines.map((line) => html`<li>${staffPresentationName(line)} × ${quantity(line.quantity)} — ${money(line.total)}${differsFromListPrice(line) ? html` (${fill(t("orders.detail.was"), { price: money(line.listUnitPrice!) })})` : nothing}${line.creditedTo === null ? nothing : html` · ${fill(t("orders.detail.served_by"), { name: line.creditedTo })}`}</li>`)}
                 </ul>
               </section>
               <section>

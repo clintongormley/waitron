@@ -351,8 +351,8 @@ describe("seedCatalogues", () => {
       },
     ]);
     expect(res.coffeeVariants).toEqual([
-      { name: "Café solo", customer_en: "Espresso", kitchen_name: "ESPRESSO" },
-      { name: "Café doble", customer_en: "Double espresso", kitchen_name: null },
+      { name: "Solo", customer_en: "Single", kitchen_name: "SOLO" },
+      { name: "Doble", customer_en: "Double", kitchen_name: null },
     ]);
     expect(res.customUnit).toEqual([
       {

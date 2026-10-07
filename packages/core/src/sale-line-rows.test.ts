@@ -200,7 +200,7 @@ describe("saleLineRows", () => {
     };
     const line: RecordSaleLine = {
       lineNo: 1,
-      name: "Wine 175",
+      name: "175 ml",
       descriptions: { "en-GB": "Wine" },
       quantity: "2",
       unitPrice: "3.72",

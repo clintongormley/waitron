@@ -409,7 +409,7 @@ describe("recordTillSale", () => {
     expect(result.total).toBe("2.25");
   });
 
-  it("prints the variant on the receipt line that identifies the goods (art. 7.1.e)", async () => {
+  it("prints the parent and variant customer names on the receipt line", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       zoneId,
@@ -417,8 +417,6 @@ describe("recordTillSale", () => {
       tender: { method: "cash", amount: "4.10" },
     });
 
-    // The real receipt formatter, so this is the paper a customer is handed. The goods must be
-    // identified (RD 1619/2012 art. 7.1.e): "Agua mineral" alone does not say which size was sold.
     const paper = printedLines(
       formatReceipt({
         result,
@@ -431,9 +429,9 @@ describe("recordTillSale", () => {
         },
       }),
     ).join("\n");
-    expect(result.lines[0]!.descriptions).toEqual({ [LOCALE]: "Doble ración" });
+    expect(result.lines[0]!.descriptions).toEqual({ [LOCALE]: "Agua mineral (Doble ración)" });
     expect(paper).toContain("Doble ración");
-    expect(paper).not.toContain("Agua mineral");
+    expect(paper).toContain("Agua mineral");
   });
 
   it("keeps distinct variants and their parked facts after live catalogue edits", async () => {
@@ -1464,9 +1462,7 @@ describe("ordering extras and options — parent + child lines", () => {
     return { total: result.total, child };
   }
 
-  // A variant picked as an extra that leaves its VAT and price blank is taxed and priced at its
-  // PARENT's, and carries its OWN three names, never Bacon's.
-  it("a variant picked as an extra files its parent's VAT and price under its own name", async () => {
+  it("a variant picked as an extra files its parent's VAT and price under paired audience names", async () => {
     const { total, child } = await sellVariantAsExtra({
       stem: "Bacon doble",
       unitPrice: null,
@@ -1476,9 +1472,9 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(total).toBe("7.00");
     // 3.00 gross at 10% is 2.73 net: 273 in cents, and the rate 1000 in basis points.
     expect(child).toMatchObject({
-      name: "Bacon doble staff",
-      descriptions: { [LOCALE]: "Bacon doble customer" },
-      kitchenName: "Bacon doble kitchen",
+      name: "Bacon staff (Bacon doble staff)",
+      descriptions: { [LOCALE]: "Bacon customer (Bacon doble customer)" },
+      kitchenName: "Bacon kitchen (Bacon doble kitchen)",
       unitPrice: 273,
       vatRate: 1000,
     });
@@ -1494,7 +1490,11 @@ describe("ordering extras and options — parent + child lines", () => {
     // 4.00 dish + 3.50 of its own = 7.50 gross.
     expect(total).toBe("7.50");
     // 3.50 gross at 21% is 2.89 net (3.50 / 1.21 = 2.8926): 289 in cents, the rate 2100.
-    expect(child).toMatchObject({ name: "Bacon triple staff", unitPrice: 289, vatRate: 2100 });
+    expect(child).toMatchObject({
+      name: "Bacon staff (Bacon triple staff)",
+      unitPrice: 289,
+      vatRate: 2100,
+    });
   });
 
   it("a WALK-UP files the dish's options answers onto the dish's own sale_line", async () => {

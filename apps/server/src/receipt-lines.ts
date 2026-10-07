@@ -44,7 +44,6 @@ export function ticketLinesFrom(
   identities: readonly Pick<OrderLineIdentity, "listUnitGross">[],
 ): TillSaleLine[] {
   return priced.lines.map((line, i) => ({
-    // The goods identification (art. 7.1.e): a variant line prints the variant's own customer text.
     descriptions: joinCustomerPresentationText(
       line.descriptions,
       line.variantDescriptions ?? null,

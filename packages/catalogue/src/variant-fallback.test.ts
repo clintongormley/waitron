@@ -42,7 +42,7 @@ import { plantStoredUnit, seedVenue } from "../test/fixtures.js";
  * the other inherited fields set too.
  *
  * The parent and the two variants carry DIFFERENT values on every field a case reads, and the
- * parent and Wine 175 each carry three different names (Wine 125 has only its staff name), so a
+ * parent and 175 ml each carry three different names (125 ml has only its staff name), so a
  * reader that takes the wrong row or the wrong name fails rather than passing on a shared value.
  */
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
@@ -51,7 +51,7 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 const PARENT_ALLERGENS = { sulphites: { presence: "contains" as const } };
 const PARENT_DIET_DERIVATION = { origins: ["plant"], pending: false };
 const PARENT_RECIPE_DERIVATION = { allergens: PARENT_ALLERGENS, pending: false };
-// Wine 175's own value for every inherited field, each different from the parent's, so a read that
+// 175 ml's own value for every inherited field, each different from the parent's, so a read that
 // takes the parent's where the variant has its own fails.
 const W175_PUBLISHED_ALLERGENS = { milk: { presence: "contains" as const } };
 const W175_MANUAL_ALLERGENS = { eggs: { presence: "may_contain" as const } };
@@ -133,7 +133,7 @@ beforeEach(async () => {
       .values({
         catalogueId: catalogue.id,
         parentId: parent.id,
-        name: "Wine 125",
+        name: "125 ml",
         pricingUnit: null,
         unitPrice: null,
         vatClass: null,
@@ -149,7 +149,7 @@ beforeEach(async () => {
         catalogueId: catalogue.id,
         parentId: parent.id,
         categoryId: bottles.id,
-        name: "Wine 175",
+        name: "175 ml",
         customerName: { en: "Large glass of house wine" },
         kitchenName: "W175",
         description: { en: "A sweet red from Toro" },
@@ -209,7 +209,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
     expect(all[0]!.variants).toEqual([
       {
         id: f.wine125,
-        name: "Wine 125",
+        name: "125 ml",
         customerName: null,
         kitchenName: null,
         image: null,
@@ -224,7 +224,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
       },
       {
         id: f.wine175,
-        name: "Wine 175",
+        name: "175 ml",
         customerName: { en: "Large glass of house wine" },
         kitchenName: "W175",
         image: "large.jpg",
@@ -321,7 +321,7 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
     const { variants } = offers[0]!;
     expect(variants.map((v) => v.id)).toEqual([f.wine125, f.wine175]);
     expect(variants[0]).toMatchObject({
-      name: "Wine 125",
+      name: "125 ml",
       customerName: null,
       kitchenName: null,
       unitPrice: "4.50",
@@ -339,7 +339,7 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
       courseId: f.courseId,
     });
     expect(variants[1]).toMatchObject({
-      name: "Wine 175",
+      name: "175 ml",
       customerName: { en: "Large glass of house wine" },
       kitchenName: "W175",
       unitPrice: "5.50",
@@ -366,7 +366,7 @@ describe("a variant's main category is always its parent's", () => {
         .values({
           catalogueId: f.catalogueId,
           parentId: f.parentId,
-          name: "Wine 250",
+          name: "250 ml",
           categoryId: null,
           pricingUnit: null,
           unitPrice: null,
@@ -461,9 +461,9 @@ describe("readOfferedModifiers", () => {
     expect(entry!.kind === "extras" && entry!.items).toEqual([
       expect.objectContaining({
         productId: f.wine125,
-        name: "Wine 125",
-        customerName: null,
-        kitchenName: null,
+        name: "Wine by the glass (125 ml)",
+        customerName: { en: "House wine (125 ml)" },
+        kitchenName: "WINE (125 ml)",
         vatClass: "reduced",
         price: "4.00",
         addAllergens: PARENT_ALLERGENS,
@@ -474,7 +474,7 @@ describe("readOfferedModifiers", () => {
 
 describe("readProductEditor", () => {
   // The editor shows a variant's OWN values, a blank field blank, and its parent's value for every
-  // inherited field beside them. Neither reads a category or unit of its own: Wine 175's stored
+  // inherited field beside them. Neither reads a category or unit of its own: 175 ml's stored
   // ones are never shown.
   const parentValues = () => ({
     description: { en: "A dry white from Rueda" },
@@ -491,7 +491,7 @@ describe("readProductEditor", () => {
   it("reads a variant that inherits every field as blank, its parent's values beside them", async () => {
     expect(await run((tx) => readProductEditor(tx, f.wine125))).toMatchObject({
       parentId: f.parentId,
-      name: "Wine 125",
+      name: "125 ml",
       customerName: null,
       kitchenName: null,
       description: null,
@@ -510,7 +510,7 @@ describe("readProductEditor", () => {
   it("reads a variant's own value for every field it sets, never its parent's, and no category or unit of its own", async () => {
     expect(await run((tx) => readProductEditor(tx, f.wine175))).toMatchObject({
       parentId: f.parentId,
-      name: "Wine 175",
+      name: "175 ml",
       customerName: { en: "Large glass of house wine" },
       kitchenName: "W175",
       description: { en: "A sweet red from Toro" },
@@ -538,8 +538,8 @@ describe("readProductEditor", () => {
 });
 
 describe("effectiveProductColumns, entry by entry", () => {
-  // Every entry read straight, for the parent and both variants: Wine 125 has every field blank and
-  // Wine 175 every field set, each different from the parent's. An entry with its two sides swapped
+  // Every entry read straight, for the parent and both variants: 125 ml has every field blank and
+  // 175 ml every field set, each different from the parent's. An entry with its two sides swapped
   // fails one of the two.
   it("reads the parent's value for a blank field and the variant's own for a set one, except the category, pricing unit and colour, always the parent's", async () => {
     const raw = await run((tx) =>
@@ -625,7 +625,7 @@ describe("what the products table refuses", () => {
     await expect(
       fx.db
         .insert(products)
-        .values({ catalogueId: f.catalogueId, parentId: f.parentId, name: "Wine 250" }),
+        .values({ catalogueId: f.catalogueId, parentId: f.parentId, name: "250 ml" }),
     ).resolves.toBeDefined();
   });
 
@@ -680,7 +680,7 @@ describe("dietary declarations on a variant", () => {
   it("stores the column default when the field is omitted, and reads it as the variant's own", async () => {
     const [row] = await fx.db
       .insert(products)
-      .values({ catalogueId: f.catalogueId, parentId: f.parentId, name: "Wine 250" })
+      .values({ catalogueId: f.catalogueId, parentId: f.parentId, name: "250 ml" })
       .returning({ id: products.id, dietaryDeclarations: products.dietaryDeclarations });
     expect(row!.dietaryDeclarations).toEqual([]);
     expect(await effectiveDeclarations(row!.id)).toEqual([]);

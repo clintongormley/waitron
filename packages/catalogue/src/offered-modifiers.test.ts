@@ -546,3 +546,43 @@ describe("one shared resolution for a set of dishes", () => {
     expect(productExtras).toHaveBeenCalledTimes(1);
   });
 });
+
+it("identifies relative variants offered as extras by both audience names", async () => {
+  const offered = await run(async (tx) => {
+    const [variant] = await setProductVariants(
+      tx,
+      ids.bacon,
+      [
+        {
+          name: "Single",
+          image: null,
+          customerName: { en: "Customer single" },
+          kitchenName: "SGL",
+          unitPrice: null,
+          available: true,
+          active: true,
+        },
+      ],
+      "en",
+    );
+    const list = await createExtraList(
+      tx,
+      { name: "Variant extras", items: [{ productId: variant!.id }] },
+      "en",
+    );
+    await writeProductModifiers(tx, ids.burger, [{ kind: "extras", id: list.id }]);
+    return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: offerId }]);
+  });
+  expect(offered.get(offerId)).toMatchObject([
+    {
+      kind: "extras",
+      items: [
+        {
+          name: "bacon staff (Single)",
+          customerName: { en: "Smoked streaky bacon (Customer single)" },
+          kitchenName: "BCN (SGL)",
+        },
+      ],
+    },
+  ]);
+});

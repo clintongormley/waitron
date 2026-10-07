@@ -9,29 +9,13 @@ export interface ProductPresentation {
   variantKitchenName: string | null;
 }
 
-// A variant is named in full, so a line naming one is shown under the VARIANT's names
-// alone, and a blank one falls back to the variant's own staff name, never to the parent's. A line
-// naming no variant is shown under the product's names.
-
 export function staffPresentationName(
   p: Pick<ProductPresentation, "name" | "variantName">,
 ): string {
-  return p.variantName || p.name;
+  return p.variantName ? `${p.name} (${p.variantName})` : p.name;
 }
 
-/**
- * The ONE customer-facing label for a sold line — the printed receipt's line, where the goods are
- * identified for the diner. It is NOT what AEAT is sent. It takes the two SNAPSHOT maps a sold line
- * froze (`descriptions` and `variant_descriptions`) and the variant's frozen staff name, not a live
- * catalogue row, because the caller is rendering something already sold.
- *
- * For a line naming a variant, each locale is the variant's text: a locale missing from its map
- * resolves through `resolveSnapshotText`, which takes any stored language, then falls back to the
- * variant's staff name. The product's text is used only when neither exists.
- *
- * `variant` is `null` for a line that names no variant, and the result is then the product map
- * unchanged.
- */
+// Receipt names come from the separate frozen maps, so a live rename cannot alter a reprint.
 export function joinCustomerPresentationText(
   product: Readonly<Record<string, string>>,
   variant: Readonly<Record<string, string>> | null,
@@ -40,12 +24,14 @@ export function joinCustomerPresentationText(
   if (variant === null) return { ...product };
   const locales = new Set([...Object.keys(product), ...Object.keys(variant)]);
   return Object.fromEntries(
-    [...locales].map((locale) => [
-      locale,
-      resolveSnapshotText(variant, locale, locale) ||
-        variantName ||
-        resolveSnapshotText(product, locale, locale),
-    ]),
+    [...locales].map((locale) => {
+      const parentText = resolveSnapshotText(product, locale, locale);
+      const variantText = resolveSnapshotText(variant, locale, locale) || variantName;
+      return [
+        locale,
+        variantText ? (parentText ? `${parentText} (${variantText})` : variantText) : parentText,
+      ];
+    }),
   );
 }
 
@@ -90,6 +76,8 @@ export function customerPresentationText(
 export function kitchenPresentationName(
   p: Pick<ProductPresentation, "name" | "kitchenName" | "variantName" | "variantKitchenName">,
 ): string {
-  if (p.variantName) return p.variantKitchenName?.trim() || p.variantName;
-  return p.kitchenName?.trim() || p.name;
+  const parentName = p.kitchenName?.trim() || p.name;
+  return p.variantName
+    ? `${parentName} (${p.variantKitchenName?.trim() || p.variantName})`
+    : parentName;
 }

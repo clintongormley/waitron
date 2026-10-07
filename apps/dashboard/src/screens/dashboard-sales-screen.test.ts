@@ -44,8 +44,8 @@ const close: DailyCloseDto = {
       quantity: "5",
       total: "10.00",
       variants: [
-        { name: "Café doble", quantity: "3", total: "7.50" },
-        { name: "Café solo", quantity: "2", total: "2.50" },
+        { name: "Doble", quantity: "3", total: "7.50" },
+        { name: "Solo", quantity: "2", total: "2.50" },
       ],
     },
   ],
@@ -268,10 +268,10 @@ describe("dashboard-sales-screen", () => {
     expect(root.querySelector("[data-test=seller-name]")!.textContent).toContain("Café");
     // Its variants follow as their own rows, each under its own name and figures.
     const variant0 = root.querySelector('[data-test="seller-row-0-variant-0"]')!;
-    expect(variant0.querySelector("[data-test=variant-name]")!.textContent).toBe("Café doble");
+    expect(variant0.querySelector("[data-test=variant-name]")!.textContent).toBe("Doble");
     expect(variant0.textContent).toContain("7,50\u00a0€");
     const variant1 = root.querySelector('[data-test="seller-row-0-variant-1"]')!;
-    expect(variant1.querySelector("[data-test=variant-name]")!.textContent).toBe("Café solo");
+    expect(variant1.querySelector("[data-test=variant-name]")!.textContent).toBe("Solo");
     // Painted by this screen's styles: the variant's name is indented past its product's, and the
     // product name repeated for screen readers takes no room on screen.
     const parentIndent = parseFloat(
@@ -311,11 +311,7 @@ describe("dashboard-sales-screen", () => {
       "Gross total",
       "€176.00",
     ]);
-    expect(cells('[data-test="seller-row-0-variant-0"]')).toEqual([
-      "Café, Café doble",
-      "3",
-      "€7.50",
-    ]);
+    expect(cells('[data-test="seller-row-0-variant-0"]')).toEqual(["Café, Doble", "3", "€7.50"]);
   });
 
   it("heads each device's rows with its name, and a job's rows with the job's name", async () => {

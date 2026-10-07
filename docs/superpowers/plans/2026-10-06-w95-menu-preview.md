@@ -1,5 +1,7 @@
 # W95 Menu Preview Implementation Plan
 
+> 2026-10-07, A357: the full variant names in this historical plan are superseded by relative names. Standalone lines pair the product and variant; see [Products](../../developers/products.md).
+
 > **For agentic workers:** Use `superpowers:executing-plans` for native inline execution, as Lane D selected. No automatic per-task subagents. Read `superpowers:test-driven-development` before writing implementation or tests. The separately invoked writer only writes these documents; the parent reviews them and owns implementation and workflow.
 
 **Goal:** Inspect the proposed format-3 menu and follow every unpublished change to its exact before/after occurrence and field.

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
@@ -60,19 +60,11 @@ function nameChanged(
   return before === undefined || !before.counted || foldName(before.name) !== foldName(name);
 }
 
-/**
- * Refuses a write that would leave two counting rows — Active products, and Active variants of
- * Active products — sharing a staff name across the whole venue, catalogue and category aside.
- * `family` is the set of rows the write decides, as it leaves them; `familyIds` every stored row in
- * that set, which are judged by `family` rather than by what they store now, so a save that swaps
- * names within the set passes. Only a clash involving a changed row is refused (`firstNewClash`).
- * Other rows are found by their stored `name_key`, so one whose name has not been written since that
- * column was added holds a null key and is not seen.
- */
 async function assertProductNamesFree(
   tx: Transaction,
   family: readonly FamilyName[],
   familyIds: readonly string[],
+  parentId: string | null,
 ): Promise<void> {
   const entries = family.filter((row) => row.counted);
   if (!entries.some((row) => row.changed)) return;
@@ -80,17 +72,25 @@ async function assertProductNamesFree(
   const holders = await tx
     .select({ name: products.name })
     .from(products)
-    .leftJoin(parentProducts, parentJoin)
     .where(
       and(
         inArray(products.nameKey, keys),
         eq(products.active, true),
-        or(isNull(products.parentId), eq(parentProducts.active, true)),
+        parentId === null ? isNull(products.parentId) : eq(products.parentId, parentId),
         familyIds.length === 0 ? undefined : notInArray(products.id, [...familyIds]),
       ),
     );
-  const others = holders.map((row) => ({ name: row.name, field: "", changed: false }));
-  const clash = firstNewClash([...others, ...entries]);
+  const others = holders.map((row) => ({
+    name: row.name,
+    field: "",
+    changed: false,
+    counted: true,
+  }));
+  refuseNameClash([...others, ...entries]);
+}
+
+function refuseNameClash(entries: readonly FamilyName[]): void {
+  const clash = firstNewClash(entries);
   if (clash)
     throw new AppError("product.name_taken", { field: clash.field, name: clash.name.trim() });
 }
@@ -141,10 +141,8 @@ export async function assertFamilyNamesFree(
       };
     }),
   ];
-  await assertProductNamesFree(tx, family, [
-    ...(was === undefined ? [] : [was.id]),
-    ...storedVariants.map((row) => row.id),
-  ]);
+  await assertProductNamesFree(tx, [family[0]!], was === undefined ? [] : [was.id], null);
+  refuseNameClash(family.slice(1).filter((row) => row.counted));
 }
 
 /** A row `updateProduct` writes, with whether its parent, if it has one, is Active. */
@@ -194,5 +192,6 @@ export async function assertUpdatedNamesFree(
       },
     ],
     [row.id],
+    row.parentId,
   );
 }

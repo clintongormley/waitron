@@ -12,7 +12,6 @@ import { createCatalogue, createProduct, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { listProductVariants, setProductVariants, type VariantWrite } from "./variants.js";
 
-/** An Active product's or Active variant's staff name is unique across the whole venue. */
 const suite = useCatalogueDb();
 const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);
 const taken = (field: string, name: string) => ({
@@ -63,6 +62,42 @@ const variant = (name: string, extra: Partial<VariantWrite> = {}): VariantWrite 
 const variants = (productId: string, inputs: VariantWrite[]) =>
   app((tx) => setProductVariants(tx, productId, inputs, "en"));
 
+describe("relative variant names", () => {
+  it("saves Single and Double under both Seagrams Gin and London Gin", async () => {
+    const seagrams = await make("Seagrams Gin");
+    const london = await make("London Gin");
+    await variants(seagrams, [variant("Single"), variant("Double")]);
+    await variants(london, [variant("Single"), variant("Double")]);
+    expect((await app((tx) => listProductVariants(tx, seagrams))).map((v) => v.name)).toEqual([
+      "Single",
+      "Double",
+    ]);
+    expect((await app((tx) => listProductVariants(tx, london))).map((v) => v.name)).toEqual([
+      "Single",
+      "Double",
+    ]);
+  });
+  it("still refuses two Single variants under Seagrams Gin", async () => {
+    const seagrams = await make("Seagrams Gin");
+    await expect(
+      variants(seagrams, [variant("Single"), variant(" single ")]),
+    ).rejects.toMatchObject(taken("variants.1.name", "single"));
+  });
+  it("allows an active product named Single beside a variant named Single", async () => {
+    const seagrams = await make("Seagrams Gin");
+    await variants(seagrams, [variant("Single")]);
+    const single = await make("Single");
+    expect((await app((tx) => readProductEditor(tx, single))).name).toBe("Single");
+  });
+  it("refuses a single-row variant rename onto a sibling's name", async () => {
+    const seagrams = await make("Seagrams Gin");
+    const [, double] = await variants(seagrams, [variant("Single"), variant("Double")]);
+    await expect(
+      app((tx) => updateProduct(tx, double!.id, { name: "SINGLE" })),
+    ).rejects.toMatchObject(taken("name", "SINGLE"));
+  });
+});
+
 describe("create", () => {
   it.each(["Cola", "cola", "  COLA\t"])(
     "refuses an Active product named %j in another menu and category",
@@ -107,29 +142,28 @@ describe("update", () => {
       taken("name", "Cola"),
     );
   });
-  it("refuses reactivating a product whose Active variant's name became taken", async () => {
-    const lemonade = await make("Lemonade");
-    await variants(lemonade, [variant("Small")]);
-    await app((tx) => updateProduct(tx, lemonade, { active: false }));
-    await make("small");
+  it("refuses reactivating a product whose active variants share a name", async () => {
+    const lemonade = await make("Lemonade", { active: false });
+    await variants(lemonade, [variant("Small"), variant(" small ")]);
     await expect(app((tx) => updateProduct(tx, lemonade, { active: true }))).rejects.toMatchObject(
-      taken("variants.0.name", "Small"),
+      taken("variants.1.name", "small"),
     );
   });
-  it("refuses reactivating a variant whose name became taken while it was Inactive", async () => {
+  it("refuses reactivating a variant whose sibling took its name while it was inactive", async () => {
     const lemonade = await make("Lemonade");
-    const [small] = await variants(lemonade, [variant("Small", { active: false })]);
-    await make("small");
+    const [small] = await variants(lemonade, [
+      variant("Small", { active: false }),
+      variant("small"),
+    ]);
     await expect(app((tx) => updateProduct(tx, small!.id, { active: true }))).rejects.toMatchObject(
       taken("name", "Small"),
     );
   });
-  it("refuses a variant renamed onto its own parent's name", async () => {
+  it("allows a variant renamed onto its own parent's name", async () => {
     const lemonade = await make("Lemonade");
     const [small] = await variants(lemonade, [variant("Small")]);
-    await expect(
-      app((tx) => updateProduct(tx, small!.id, { name: "lemonade" })),
-    ).rejects.toMatchObject(taken("name", "lemonade"));
+    await app((tx) => updateProduct(tx, small!.id, { name: "lemonade" }));
+    expect((await app((tx) => readProductEditor(tx, small!.id))).name).toBe("lemonade");
   });
 });
 
@@ -152,17 +186,20 @@ describe("rows the rule leaves to the write", () => {
 });
 
 describe("variant save", () => {
-  it("refuses a new variant named like another product", async () => {
+  it("allows a new variant named like another product", async () => {
     const lemonade = await make("Lemonade");
-    await expect(variants(lemonade, [variant("cola")])).rejects.toMatchObject(
-      taken("variants.0.name", "cola"),
-    );
+    await variants(lemonade, [variant("cola")]);
+    expect((await app((tx) => listProductVariants(tx, lemonade))).map((v) => v.name)).toEqual([
+      "cola",
+    ]);
   });
-  it("refuses a variant named like its own parent", async () => {
+  it("allows a variant named like its own parent", async () => {
     const lemonade = await make("Lemonade");
-    await expect(
-      variants(lemonade, [variant("Small"), variant(" LEMONADE ")]),
-    ).rejects.toMatchObject(taken("variants.1.name", "LEMONADE"));
+    await variants(lemonade, [variant("Small"), variant(" LEMONADE ")]);
+    expect((await app((tx) => listProductVariants(tx, lemonade))).map((v) => v.name)).toEqual([
+      "Small",
+      " LEMONADE ",
+    ]);
   });
   it("refuses two variants in one save sharing a name, naming the later", async () => {
     const lemonade = await make("Lemonade");
@@ -170,12 +207,13 @@ describe("variant save", () => {
       taken("variants.1.name", "small"),
     );
   });
-  it("refuses a renamed variant onto another product's name", async () => {
+  it("allows a renamed variant onto another product's name", async () => {
     const lemonade = await make("Lemonade");
     const [small] = await variants(lemonade, [variant("Small")]);
-    await expect(variants(lemonade, [variant("Cola", { id: small!.id })])).rejects.toMatchObject(
-      taken("variants.0.name", "Cola"),
-    );
+    await variants(lemonade, [variant("Cola", { id: small!.id })]);
+    expect((await app((tx) => listProductVariants(tx, lemonade))).map((v) => v.name)).toEqual([
+      "Cola",
+    ]);
   });
   it("allows an Inactive variant to keep a duplicate", async () => {
     const lemonade = await make("Lemonade");
@@ -245,15 +283,20 @@ describe("product editor save", () => {
   it("refuses a new product named like another, beside its Name", async () => {
     await expect(save(null, body("cola"))).rejects.toMatchObject(taken("name", "cola"));
   });
-  it("refuses a variant named like another product, beside that variant's Name", async () => {
-    await expect(
-      save(null, body("Lemonade", [editorVariant("Small"), editorVariant("Cola")])),
-    ).rejects.toMatchObject(taken("variants.1.name", "Cola"));
-  });
-  it("refuses a variant named like its own product", async () => {
-    await expect(save(null, body("Lemonade", [editorVariant("lemonade")]))).rejects.toMatchObject(
-      taken("variants.0.name", "lemonade"),
+  it("saves an editor variant named like another product", async () => {
+    const saved = await save(
+      null,
+      body("Lemonade", [editorVariant("Small"), editorVariant("Cola")]),
     );
+    expect(
+      (await app((tx) => readProductEditor(tx, saved.id))).variants.map((v) => v.name),
+    ).toEqual(["Small", "Cola"]);
+  });
+  it("saves an editor variant named like its own product", async () => {
+    const saved = await save(null, body("Lemonade", [editorVariant("lemonade")]));
+    expect(
+      (await app((tx) => readProductEditor(tx, saved.id))).variants.map((v) => v.name),
+    ).toEqual(["lemonade"]);
   });
   it("refuses two variants sharing a name, naming the later", async () => {
     await expect(
@@ -307,42 +350,74 @@ describe("product editor save", () => {
       ["Small", false],
     ]);
   });
-  it("refuses saving a variant's own editor onto another product's name", async () => {
+  it("saves a variant's own editor onto another product's name", async () => {
     const saved = await save(null, body("Lemonade", [editorVariant("Small")]));
     const small = saved.variants[0]!.id;
     const own = await app((tx) => readProductEditor(tx, small));
-    await expect(
-      app((tx) =>
-        saveProductEditor(
-          tx,
-          small,
-          lunch,
-          {
-            name: "cola",
-            customerName: own.customerName,
-            ordering: own.ordering,
-            description: own.description,
-            kitchenName: own.kitchenName,
-            unitId: null,
-            unitPrice: null,
-            active: true,
-            available: true,
-            vatClass: null,
-            image: null,
-            variants: [],
-            primaryCategoryId: null,
-            modifiers: [],
-            allergens: null,
-            dietaryDeclarations: null,
-          },
-          "en",
-        ),
+    await app((tx) =>
+      saveProductEditor(
+        tx,
+        small,
+        lunch,
+        {
+          name: "cola",
+          customerName: own.customerName,
+          ordering: own.ordering,
+          description: own.description,
+          kitchenName: own.kitchenName,
+          unitId: null,
+          unitPrice: null,
+          active: true,
+          available: true,
+          vatClass: null,
+          image: null,
+          variants: [],
+          primaryCategoryId: null,
+          modifiers: [],
+          allergens: null,
+          dietaryDeclarations: null,
+        },
+        "en",
       ),
-    ).rejects.toMatchObject(taken("name", "cola"));
+    );
+    expect((await app((tx) => readProductEditor(tx, small))).name).toBe("cola");
   });
 });
 
 describe("two writes started together", () => {
+  it("refuses the second of two sibling renames to Single", async () => {
+    const seagrams = await make("Seagrams Gin");
+    const [firstVariant, secondVariant] = await variants(seagrams, [
+      variant("One"),
+      variant("Two"),
+    ]);
+    const [first, second] = await racePair(
+      suite.db,
+      (tx) => updateProduct(tx, firstVariant!.id, { name: "Single" }),
+      (tx) => updateProduct(tx, secondVariant!.id, { name: "single" }),
+    );
+    expect(first.status).toBe("fulfilled");
+    expect(second).toMatchObject({ status: "rejected", reason: taken("name", "single") });
+    expect((await app((tx) => listProductVariants(tx, seagrams))).map((v) => v.name)).toEqual([
+      "Single",
+      "Two",
+    ]);
+  });
+  it("saves concurrent Single renames under distinct parents", async () => {
+    const seagrams = await make("Seagrams Gin");
+    const london = await make("London Gin");
+    const [s] = await variants(seagrams, [variant("One")]);
+    const [l] = await variants(london, [variant("One")]);
+    const [first, second] = await racePair(
+      suite.db,
+      (tx) => updateProduct(tx, s!.id, { name: "Single" }),
+      (tx) => updateProduct(tx, l!.id, { name: "Single" }),
+    );
+    expect([first.status, second.status]).toEqual(["fulfilled", "fulfilled"]);
+    expect((await app((tx) => readProductEditor(tx, s!.id))).name).toBe("Single");
+    expect((await app((tx) => readProductEditor(tx, l!.id))).name).toBe("Single");
+  });
+
   it("lets one of two creates of one staff name through, and refuses the other", async () => {
     const create = (name: string) => (tx: Transaction) =>
       createProduct(tx, {

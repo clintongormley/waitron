@@ -54,6 +54,38 @@ function run(overrides: Partial<TopSellersInput> = {}): Promise<TopSeller[]> {
 }
 
 describe("computeTopSellers", () => {
+  it("keeps two products with the same relative variant separate under their frozen parent names", async () => {
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "20.00",
+      lines: ["Seagrams Gin", "London Gin"].map((name) => ({
+        name,
+        descriptions: { es: `Cliente ${name}` },
+        kitchenName: `COCINA ${name}`,
+        variantName: "Single",
+        variantDescriptions: { es: "Copa" },
+        variantKitchenName: "SGL",
+        vatRate: "10.00",
+        lineTotal: "10.00",
+        quantity: "1.000",
+      })),
+    });
+    expect(await run()).toEqual([
+      {
+        name: "London Gin",
+        quantity: "1.000",
+        total: "10.00",
+        variants: [{ name: "Single", quantity: "1.000", total: "10.00" }],
+      },
+      {
+        name: "Seagrams Gin",
+        quantity: "1.000",
+        total: "10.00",
+        variants: [{ name: "Single", quantity: "1.000", total: "10.00" }],
+      },
+    ]);
+  });
   it("validates inputs before touching the database", async () => {
     await expect(run({ timeZone: "Nowhere/Nope" })).rejects.toThrow(/time zone/i);
     await expect(run({ dayCutover: "5:00" })).rejects.toThrow(/cutover/i);
@@ -307,9 +339,9 @@ describe("computeTopSellers", () => {
   describe("the wine-by-the-glass fixture", () => {
     const wineName = "Wine by the glass";
     const wineText = { es: "Vino por copas" };
-    const wine125Name = "Wine 125";
+    const wine125Name = "125 ml";
     const wine125Text = { es: "Copa pequeña" };
-    const wine175Name = "Wine 175";
+    const wine175Name = "175 ml";
     const wine175Text = { es: "Copa grande" };
     const teaName = "Tea";
     const teaText = { es: "Té" };
@@ -416,7 +448,7 @@ describe("computeTopSellers", () => {
           },
         ],
       });
-      // One more Wine 175 sold and then returned: every figure is back where it was.
+      // One more 175 ml sold and then returned: every figure is back where it was.
       const rows = await run({ limit: 1 });
       expect(rows[0]!.quantity).toBe("5.000");
       expect(rows[0]!.total).toBe("24.50");

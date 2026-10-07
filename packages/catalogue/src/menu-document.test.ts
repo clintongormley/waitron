@@ -1499,7 +1499,7 @@ describe("diffMenuDocuments", () => {
       {
         kind: "product_changed",
         productId: f.large,
-        name: "Large",
+        name: "Lemonade (Large)",
         fields: ["image"],
         source: "shared_product",
       },

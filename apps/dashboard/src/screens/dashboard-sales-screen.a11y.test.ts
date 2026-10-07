@@ -41,8 +41,8 @@ const close: DailyCloseDto = {
       quantity: "5",
       total: "10.00",
       variants: [
-        { name: "Café doble", quantity: "3", total: "7.50" },
-        { name: "Café solo", quantity: "2", total: "2.50" },
+        { name: "Doble", quantity: "3", total: "7.50" },
+        { name: "Solo", quantity: "2", total: "2.50" },
       ],
     },
   ],
