@@ -4073,12 +4073,6 @@ export class TillApp extends LitElement {
     this.profileOpen = true;
   }
 
-  /**
-   * The counter basket and an order with no party are this browser's alone, and a table draft's
-   * last change may not have reached the server, so the server cannot refuse the switch for them:
-   * re-entering after it starts a new draft and drops the old one unsaved. The dialog stays open
-   * over the screen until that new draft is started, so no edit lands in the one being dropped.
-   */
   async #onProfileSwitch(event: CustomEvent<{ profileId: string }>): Promise<void> {
     if (this.profileBusy) return;
     const { profileId } = event.detail;
@@ -4086,6 +4080,33 @@ export class TillApp extends LitElement {
       this.profileOpen = false;
       return;
     }
+    if (this.#store.lines.length > 0 || this.#partylessDraft.lines.length > 0) {
+      this.profileNotice = "order_open";
+      return;
+    }
+    if (this.leave.coordinator.isDirty(undefined, [this.#basketOwner])) {
+      const session = this.#operatorSession;
+      const chooser = this.renderRoot.querySelector("till-profile-dialog");
+      await this.leave.coordinator.request({
+        scopes: "all",
+        except: [this.#basketOwner],
+        reason: "navigation",
+        proceed: () => {
+          if (
+            session !== this.#operatorSession ||
+            !this.isConnected ||
+            !chooser?.isConnected ||
+            chooser !== this.renderRoot.querySelector("till-profile-dialog")
+          )
+            return;
+          return this.#switchProfile(profileId);
+        },
+      });
+    } else await this.#switchProfile(profileId);
+  }
+
+  async #switchProfile(profileId: string): Promise<void> {
+    if (this.profileBusy) return;
     if (this.#store.lines.length > 0 || this.#partylessDraft.lines.length > 0) {
       this.profileNotice = "order_open";
       return;

@@ -1173,6 +1173,13 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+The till's profile switch now protects an edited Schedule request before changing context.
+Keep retains its note and chooser; Discard switches once without submitting. An order filled
+while the question is open still refuses the switch. Clean/reverted requests switch directly,
+and a label-only counter basket survives with its unload protection. Activated desktop Chromium
+cases also cover cross-origin navigation and tab closing, with native Keep/Discard and clean,
+reverted and saved controls. The dated audit records the failing-first cases, installed deletion
+controls and inspected profile flows. The final owner/context/link audit still keeps W69 incomplete.
 Till schedule requests now use the shared warning on the branch. Back keeps your shift-cover and
 time-off drafts until you choose Discard. Each accepted request clears only its own submitted
 values before refresh; later input stays protected. Accepting an offered swap leaves an unrelated
@@ -1539,6 +1546,12 @@ passed that probe. Button hover opacity and danger colours were unchanged agains
 hover against modal surfaces in both themes. Normal-state warning scans pass with the pointer
 over the heading; that result does not cover hover. Receipts: Lane E `w69-setup-mode-20261006`,
 `visual.log`, `baseline-modal-hover.log`, `main-dialog-hover.log` and the blame readouts.
+
+The 2026-10-07 till profile warning's initial pointer-sensitive scans also reported Discard at
+4.21:1 in light and 4.49:1 in dark (`receipts/w69-leave-paths-20261007/profile-family.log` in
+Lane E). The cause of the new light reading and its main reproduction are unverified.
+Eight neutral-pointer warning scans passed; they establish neither hover nor full-shell contrast.
+Keep that light reading beside the existing danger-button investigation. No shared style changed.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
 redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue

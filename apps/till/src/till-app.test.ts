@@ -1,5 +1,5 @@
 import { leaveCoordinatorFor } from "@waitron/ui";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { type WtInput, type WtCombobox, applyTokens, currentContentLanguages } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import indexHtml from "../index.html?raw";
@@ -14888,21 +14888,257 @@ describe("switching the device's profile from the header", () => {
   const profileButton = (el: TillApp) =>
     shell(el)!.shadowRoot!.querySelector<HTMLElement>("wt-button.profile");
 
-  async function openProfile(overrides: Record<string, unknown> = {}) {
-    const { el } = await mountApp({
-      getDeviceIdentity: vi.fn().mockResolvedValue(identity),
-      switchDeviceProfile: vi.fn().mockResolvedValue({
-        activeProfileId: BAR.id,
-        receiptPrinterId: null,
-        paymentSlipPrinterId: null,
-      }),
-      ...overrides,
-    });
+  async function openProfile(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
+    const { el } = await mountApp(
+      {
+        getDeviceIdentity: vi.fn().mockResolvedValue(identity),
+        switchDeviceProfile: vi.fn().mockResolvedValue({
+          activeProfileId: BAR.id,
+          receiptPrinterId: null,
+          paymentSlipPrinterId: null,
+        }),
+        ...overrides,
+      },
+      theme,
+    );
     const c = await toCounter(el);
     profileButton(el)!.click();
     await flush(el);
     return { el, c };
   }
+
+  async function scheduleWithProfile(
+    note: string,
+    overrides: Record<string, unknown> = {},
+    theme?: "light" | "dark",
+    reverted = false,
+  ) {
+    const { el, c } = await openProfile(
+      {
+        listMyShifts: vi.fn().mockResolvedValue([]),
+        listMySwaps: vi.fn().mockResolvedValue([]),
+        listMyAbsences: vi.fn().mockResolvedValue([]),
+        requestAbsence: vi.fn().mockResolvedValue(undefined),
+        ...overrides,
+      },
+      theme,
+    );
+    emit(profileDialog(el)!, "close");
+    await flush(el);
+    emit(shell(el)!, "show-schedule");
+    await flush(el);
+    const owner = schedule(el)!;
+    const input = owner.shadowRoot!.querySelector<WtInput>(".abs-note")!;
+    await input.updateComplete;
+    if (note !== "") await userEvent.fill(input.shadowRoot!.querySelector("input")!, note);
+    if (reverted) await userEvent.fill(input.shadowRoot!.querySelector("input")!, "");
+    profileButton(el)!.click();
+    await flush(el);
+    return { el, c, owner, input, href: location.href };
+  }
+
+  it("a profile switch protects a staged Schedule request before changing context", async () => {
+    const { el, owner, input, href } = await scheduleWithProfile("Family visit");
+    const dialog = profileDialog(el)!;
+    emit(dialog, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    expect(question.open).toBe(true);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+    expect(schedule(el)).toBe(owner);
+    expect(location.href).toBe(href);
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question.open).toBe(false);
+    expect(profileDialog(el)).toBe(dialog);
+    expect(input.value).toBe("Family visit");
+    expect(schedule(el)).toBe(owner);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+
+    emit(dialog, "profile-switch", { profileId: BAR.id });
+    await expect.poll(() => question.open).toBe(true);
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => schedule(el)).toBeNull();
+    await expect.poll(() => profileDialog(el)).toBeNull();
+    expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+    expect(currentApi.requestAbsence).not.toHaveBeenCalled();
+    expect(currentApi.logout).not.toHaveBeenCalled();
+    expect(counter(el)).not.toBeNull();
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+  });
+
+  it.each(["clean", "reverted"])(
+    "a %s Schedule allows the profile switch without asking",
+    async (state) => {
+      const { el } = await scheduleWithProfile(
+        state === "clean" ? "" : "Family visit",
+        {},
+        undefined,
+        state === "reverted",
+      );
+      emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+      await expect.poll(() => profileDialog(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+      expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+      expect(currentApi.requestAbsence).not.toHaveBeenCalled();
+      expect(counter(el)).not.toBeNull();
+    },
+  );
+
+  it("keeping the active profile retains the edited Schedule without asking", async () => {
+    const { el, owner, input, href } = await scheduleWithProfile("Family visit");
+    emit(profileDialog(el)!, "profile-switch", { profileId: COUNTER.id });
+    await flush(el);
+    expect(profileDialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(schedule(el)).toBe(owner);
+    expect(input.value).toBe("Family visit");
+    expect(location.href).toBe(href);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+  });
+
+  it("profile refusal for an active basket keeps the Schedule draft without another question", async () => {
+    const { el, c, owner, input } = await scheduleWithProfile("Family visit");
+    c.store.addProduct(cafe, "2");
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    expect(profileDialog(el)!.notice).toBe("order_open");
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(schedule(el)).toBe(owner);
+    expect(input.value).toBe("Family visit");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+  });
+
+  it("a profile switch retains a label-only counter basket and its unload protection", async () => {
+    const { el, c } = await openProfile();
+    const id = c.store.id;
+    c.store.label = "Lunch";
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await expect.poll(() => profileDialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+    expect(counter(el)!.store.id).toBe(id);
+    expect(counter(el)!.store.label).toBe("Lunch");
+    expect(counter(el)!.store.lines).toEqual([]);
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    expect(currentApi.parkOrder).not.toHaveBeenCalled();
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+  });
+
+  it("a profile switch rechecks a basket filled while its leave question was open", async () => {
+    const { el, c } = await scheduleWithProfile("Family visit");
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    c.store.addProduct(cafe, "2");
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await flush(el);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+    expect(profileDialog(el)!.notice).toBe("order_open");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+  });
+
+  it("disconnect aborts a pending profile leave and cannot send the old switch", async () => {
+    const { el } = await scheduleWithProfile("Family visit");
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    el.remove();
+    await flush(el);
+    question.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+  });
+
+  for (const locale of ["en-GB", "es-ES"])
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`native profile context Keep/Escape/Discard, ${locale}, ${theme}, ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const { el, owner, input, href } = await scheduleWithProfile(
+              "Family visit",
+              { getTill: vi.fn().mockResolvedValue({ ...till, locale }) },
+              theme,
+            );
+            expect(currentLocale()).toBe(locale);
+            const dialog = profileDialog(el)!;
+            await dialog.updateComplete;
+            const picker = dialog.shadowRoot!.querySelector<WtCombobox>("wt-combobox")!;
+            await chooseOption(picker, BAR.id);
+            await dialog.updateComplete;
+            const switchHost = dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+              "[data-test=profile-switch]",
+            )!;
+            await switchHost.updateComplete;
+            const button = switchHost.shadowRoot!.querySelector("button")!;
+            await userEvent.click(button);
+            const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+            await expect.poll(() => question.open).toBe(true);
+            const keep = question
+              .shadowRoot!.querySelector("[data-choice=keep]")!
+              .shadowRoot!.querySelector("button")!;
+            await expect.poll(() => keep.matches(":focus")).toBe(true);
+            await commands.parkPointer();
+            await expectNoA11yViolations(question);
+            await page.screenshot({
+              path: `__screenshots__/w69-profile-context/${locale}-${theme}-${width}-warning.png`,
+            });
+            await userEvent.keyboard("{Escape}");
+            await expect.poll(() => question.open).toBe(false);
+            expect(schedule(el)).toBe(owner);
+            expect(input.value).toBe("Family visit");
+            expect(location.href).toBe(href);
+            await expect.poll(() => button.matches(":focus")).toBe(true);
+            await page.screenshot({
+              path: `__screenshots__/w69-profile-context/${locale}-${theme}-${width}-kept.png`,
+            });
+            await userEvent.click(button);
+            await expect.poll(() => question.open).toBe(true);
+            await question.updateComplete;
+            await userEvent.click(
+              question
+                .shadowRoot!.querySelector("[data-choice=keep]")!
+                .shadowRoot!.querySelector("button")!,
+            );
+            await expect.poll(() => question.open).toBe(false);
+            expect(input.value).toBe("Family visit");
+            expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+            await userEvent.click(button);
+            await expect.poll(() => question.open).toBe(true);
+            await question.updateComplete;
+            await userEvent.click(
+              question
+                .shadowRoot!.querySelector("[data-choice=discard]")!
+                .shadowRoot!.querySelector("button")!,
+            );
+            await expect.poll(() => profileDialog(el)).toBeNull();
+            expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+            expect(currentApi.requestAbsence).not.toHaveBeenCalled();
+          } finally {
+            await page.viewport(size.width, size.height);
+          }
+        });
 
   it("offers no Profile button on a device approved for one profile", async () => {
     const { el } = await mountApp({

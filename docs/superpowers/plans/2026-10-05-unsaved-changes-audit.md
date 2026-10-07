@@ -3703,3 +3703,72 @@ passed. No new visual styling or application code changed, and no existing asser
 The remaining basket/context and link routes, other native leave paths and advancing-source
 owner audit remain open. Tasks 2/3 remain complete; Tasks 1/4/5/6 remain partial. W69 is not
 ready for finish-branch or landing.
+
+## Till profile context and native document leaving, 2026-10-07
+
+Switching to another device profile can replace the Schedule screen. The new real-shell case
+first failed because no warning opened before that replacement. The profile switch now requests
+the shared coordinator before sending its existing command. Keep retains the Schedule note,
+URL and chooser; Discard continues the switch once without submitting the
+absence request or signing out. The retained counter basket is excluded from that request.
+Choosing the already active profile closes only its chooser and retains the Schedule input.
+
+The existing refusal for an order in progress remains before the warning. A separate failing
+case added a basket line while the warning was open and observed the profile request being sent.
+The accepted continuation now rechecks that refusal. Clean and reverted Schedule controls switch
+directly; a label-only basket survives a successful profile switch and remains unload-protected.
+Disconnect aborts the pending leave and a late Discard sends no profile command. Existing test
+assertions are unchanged. The new Schedule fixture adds the absence request method so the test
+can also check that the command was not sent.
+
+The independent Playwright page now measures cross-origin navigation and tab closing, as well
+as reload. Each route has Keep/Discard cases for the actual Schedule input and clean/revert/save
+controls. The requested destination is locally intercepted, so no outside website or live venue
+is involved. Accepting native leave does not submit the request. The initial ten failures came
+from the browser command not yet implementing those two routes; a later URL expectation used the
+fixture's starting URL instead of Schedule's accepted route. Those are test-support failures,
+not product defect receipts. All fifteen native cases pass with the existing unload registration.
+These measurements use activated desktop Chromium. Mobile process termination, other browsers
+and no-activation behavior remain unverified.
+
+Commands retained in Lane E `receipts/w69-leave-paths-20261007/`:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t "switching the device's profile from the header"
+# 27 passed, including eight native profile flows after fixture corrections
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts src/till-app.unsaved-changes.test.ts src/till-app-drafts.test.ts src/screens/till-schedule-screen.test.ts src/screens/till-schedule-screen.unsaved.test.ts src/widgets/profile-dialog.test.ts src/widgets/profile-dialog.a11y.test.ts
+# 1043 passed across seven files after the continuation refactor
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+# 20 passed, both suites unedited
+```
+
+The family prints the deliberately incomplete printer-choice fixture's rejection at
+`printerChoices.receipt`; the earlier installed baseline receipt is
+`receipts/w69-till-pages-20261007/baseline-switch.log`. No printer logic changed here.
+Source typechecking, the explicit browser-command/config TypeScript check, ESLint, source
+formatting and `git diff --check` pass. The related family is not package-wide coverage or CI.
+
+Three independent mutations ran in an installed disposable candidate. Removing unload
+registration failed all six dirty native cases while nine clean/revert/save cases passed.
+Removing the profile gate failed the edited-Schedule case with three passing controls.
+Removing its continuation's basket recheck failed the later-line case with its clean control
+passing. Restoring the candidate passed twenty selected cases. Five final source/support files
+matched the feature tree byte for byte; the owned measuring worktree and empty parent were
+removed. Logs: `listener-deletion.log`, `profile-gate-final-deletion.log`,
+`profile-recheck-deletion.log`, `restored-controls.log` and `candidate-byte-comparison.txt`.
+
+Eight actual profile-picker/Switch flows cover EN/ES, light/dark and 390/1280 widths. They check
+initial Keep focus, Escape, focus return to Switch, explicit Keep and Discard. Eight warning-only
+axe scans pass with a neutral pointer, and sixteen captures were inspected in four sheets.
+Initial pointer-sensitive scans reported Discard at 4.21:1 in light and 4.49:1 in dark. The dark
+reading is also recorded in the existing danger-button follow-up; the cause of the new light
+reading and its reproduction on main remain unverified. These neutral-pointer scans do not
+establish hover accessibility or full-shell accessibility. No shared colour was changed.
+The new revert fixture initially tried to change an input behind the open native chooser; it
+now reverts before opening it, as the real user route requires.
+
+This checkpoint closes the measured profile-context and native document-leave cases. The final
+advancing-owner inventory and remaining context/link acceptance still keep W69 incomplete.
+In particular, inspect the separate unassigned table store and its replacement paths during that
+inventory; no runtime defect or exemption is established here for that store. Tasks 2/3 remain
+complete; Tasks 1/4/5/6 remain partial. No external review, push, PR, CI or landing is claimed.

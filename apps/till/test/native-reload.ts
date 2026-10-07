@@ -1,9 +1,15 @@
 import type { Page } from "playwright";
 import type { BrowserCommand } from "vitest/node";
 
+type Leave = "reload" | "navigation" | "close";
+
 type Scenario = "dirty-keep" | "dirty-discard" | "clean" | "reverted" | "saved";
 
-export const probeTillReload: BrowserCommand<[scenario: Scenario]> = async (context, scenario) => {
+export const probeTillReload: BrowserCommand<[scenario: Scenario, leave?: Leave]> = async (
+  context,
+  scenario,
+  leave = "reload",
+) => {
   const runner = (context as unknown as { page: Page }).page;
   const subject = await runner.context().newPage();
   subject.setDefaultTimeout(8_000);
@@ -11,14 +17,14 @@ export const probeTillReload: BrowserCommand<[scenario: Scenario]> = async (cont
   const dialogs: string[] = [];
   const savedNotes: string[] = [];
   const errors: string[] = [];
-  let finishReload: (() => void) | undefined;
+  let finishLeave: (() => void) | undefined;
   const fixtureUrl = new URL("/__w69_native_reload__", runner.url()).href;
   subject.on("pageerror", (error) => errors.push(error.message));
   subject.on("dialog", async (dialog) => {
     dialogs.push(dialog.type());
     if (scenario === "dirty-keep") {
       await dialog.dismiss();
-      finishReload?.();
+      finishLeave?.();
     } else await dialog.accept();
   });
   try {
@@ -146,27 +152,37 @@ export const probeTillReload: BrowserCommand<[scenario: Scenario]> = async (cont
     const session = await subject.context().newCDPSession(subject);
     let deadline: ReturnType<typeof setTimeout> | undefined;
     const settled = new Promise<void>((resolve, reject) => {
-      finishReload = resolve;
+      finishLeave = resolve;
       deadline = setTimeout(
-        () => reject(new Error("Reload neither navigated nor was dismissed")),
+        () => reject(new Error(`${leave} neither departed nor was dismissed`)),
         8_000,
       );
     });
     const arrived = (frame: ReturnType<Page["mainFrame"]>) => {
-      if (frame === subject.mainFrame()) finishReload?.();
+      if (frame === subject.mainFrame()) finishLeave?.();
     };
     subject.on("framenavigated", arrived);
+    const closed = () => finishLeave?.();
+    subject.on("close", closed);
     try {
-      // page.reload waits for a navigation that a rejected unload deliberately prevents.
-      await session.send("Page.reload");
+      // Resolve on dismissal too, since keeping this document produces no arrival event.
+      if (leave === "reload") await session.send("Page.reload");
+      else if (leave === "navigation")
+        await session.send("Page.navigate", { url: "https://w69-destination.invalid/left" });
+      else await subject.close({ runBeforeUnload: true });
       await settled;
-      if (scenario !== "dirty-keep") await subject.waitForLoadState("domcontentloaded");
+      if (scenario !== "dirty-keep" && !subject.isClosed())
+        await subject.waitForLoadState("domcontentloaded");
     } finally {
       clearTimeout(deadline);
       subject.off("framenavigated", arrived);
-      finishReload = undefined;
-      await session.detach();
+      subject.off("close", closed);
+      finishLeave = undefined;
+      if (!subject.isClosed()) await session.detach();
     }
+    if (errors.length > 0) throw new Error(errors.join("\n"));
+    if (subject.isClosed())
+      return { dialogs, reloaded: true, closed: true, href: null, note: null, savedNotes };
     const retained = await subject.evaluate(() => {
       const app = document.querySelector("till-app");
       const owner = app?.shadowRoot?.querySelector("till-schedule-screen");
@@ -179,10 +195,12 @@ export const probeTillReload: BrowserCommand<[scenario: Scenario]> = async (cont
     return {
       dialogs,
       reloaded: retained.documentId !== documentId,
+      closed: false,
+      href: subject.url(),
       note: retained.note,
       savedNotes,
     };
   } finally {
-    await subject.close({ runBeforeUnload: false });
+    if (!subject.isClosed()) await subject.close({ runBeforeUnload: false });
   }
 };
