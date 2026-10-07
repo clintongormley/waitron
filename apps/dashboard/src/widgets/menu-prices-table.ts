@@ -121,6 +121,10 @@ export class MenuPricesTable extends LitElement {
     css`
       :host {
         display: block;
+        container-type: inline-size;
+      }
+      wt-data-table::part(name-box) {
+        display: contents;
       }
       wt-data-table::part(name) {
         overflow-wrap: anywhere;
@@ -194,6 +198,26 @@ export class MenuPricesTable extends LitElement {
       /* Room for the open message after the table, so the page can scroll the last row clear of it. */
       wt-toast[open] + .outcome-room {
         block-size: calc(var(--outcome-height, 0px) + var(--wt-space-3));
+      }
+      /* The table is never narrower than its cells' unwrapped text, so at phone width a name, and
+         the note under it, is capped at the room the price column leaves beside the cell's padding
+         and the tree's toggle. A size's name is indented one tree step further. */
+      @container (max-width: 30rem) {
+        wt-data-table {
+          --price-column: calc(
+            var(--wt-price-range-field-width) + var(--wt-space-4) + 2 * var(--wt-space-3)
+          );
+          --name-room: calc(
+            100cqi - var(--price-column) - 2 * var(--wt-space-3) - var(--wt-tap-min)
+          );
+        }
+        wt-data-table::part(name-box) {
+          display: block;
+          max-inline-size: max(var(--wt-tap-min), var(--name-room));
+        }
+        wt-data-table::part(variant-name) {
+          max-inline-size: max(var(--wt-tap-min), var(--name-room) - var(--wt-space-2));
+        }
       }
       @media (max-width: 48rem) {
         wt-toast {
@@ -763,11 +787,13 @@ export class MenuPricesTable extends LitElement {
         cell: ({ item, variant }) =>
           variant
             ? html`<span part="variant-name">${this.#variantName(variant.variantId)}</span>`
-            : html`<span part="name">${item.name}</span> ${
+            : html`<span part="name-box"
+                ><span part="name">${item.name}</span> ${
                   item.variants.length
                     ? html`<span part="note">${t("menu_prices.has_variants")}</span>`
                     : nothing
-                }`,
+                }</span
+              >`,
       },
       {
         key: "override",

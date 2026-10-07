@@ -2381,6 +2381,51 @@ function variantClashRow(): MenuPriceRow {
     },
   } as MenuPriceRow;
 }
+it.each(["en-GB", "es-ES"])(
+  "shows a product's and a size's price field whole inside the table's visible box at phone width, and the page does not scroll sideways (%s)",
+  async (locale) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    setLocale(locale);
+    try {
+      await page.viewport(390, 800);
+      await vi.waitFor(() => expect(window.innerWidth).toBe(390));
+      const long = "Cerveza artesana de trigo sin filtrar";
+      const longSize = "Media pinta de limonada natural";
+      const el = await mount({
+        rows: [clashRow({ ...lager, name: long }), variantClashRow()],
+        products: [
+          {
+            ...lemonadeProduct,
+            variants: [variant("v-small", longSize, null), variant("v-large", "Large", "3.40")],
+          } as unknown as Product,
+        ],
+      });
+      toggleOf(el, "mi-lemonade")!.click();
+      await table(el).updateComplete;
+      expect(text(row(el, "mi-lager")!.querySelector('[part="name"]'))).toBe(long);
+      expect(text(row(el, "mi-lemonade:v-small")!.querySelector('[part="variant-name"]'))).toBe(
+        longSize,
+      );
+      const scroller = table(el)
+        .shadowRoot.querySelector<HTMLElement>(".scroll")!
+        .getBoundingClientRect();
+      for (const key of ["mi-lager", "mi-lemonade:v-small"]) {
+        const field = override(el, key).getBoundingClientRect();
+        // A column pinned to the end paints over whatever scrolls beneath it.
+        const pinned = row(el, key)!.querySelector<HTMLElement>('td[data-pinned="end"]');
+        const right = Math.min(scroller.right, pinned?.getBoundingClientRect().left ?? Infinity);
+        expect(field.left, key).toBeGreaterThanOrEqual(scroller.left - 0.5);
+        expect(field.right, key).toBeLessThanOrEqual(right + 0.5);
+      }
+      const root = document.documentElement;
+      expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+    } finally {
+      setLocale("es-ES");
+      await page.viewport(width, height);
+    }
+  },
+);
 it.each(["product", "size"])(
   "drops the Clash while a valid unsaved price fills a clashing %s row, and shows it again for text that is no price and on Escape",
   async (kind) => {
