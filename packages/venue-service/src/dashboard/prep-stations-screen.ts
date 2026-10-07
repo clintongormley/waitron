@@ -53,6 +53,7 @@ import type {
 } from "./routing-client.js";
 import { watchersOfStation, watchersSeeing, type WatcherView } from "./watchers-seen.js";
 import "./routing-grid.js";
+import { expandAll, visibleRoutingRows } from "./routing-grid-model.js";
 import type { RoutingCellChange, RoutingPending, RoutingRefusal } from "./routing-grid.js";
 import { t } from "./strings.js";
 import "./station-health-table.js";
@@ -736,6 +737,14 @@ export class PrepStationsScreen extends LitElement {
     if (this.error === "" || this.#readErrorShown) this.#showError(message, true);
   }
   protected override willUpdate(changed: PropertyValues<this>) {
+    if (
+      this.pending?.change.address.row.kind === "no_category" &&
+      !this.busy &&
+      !this.#addressShown(this.pending.change.address)
+    ) {
+      this.pending = undefined;
+      this.cellChoice = null;
+    }
     this.#syncStationDrafts();
     this.#syncWatcherInlineDrafts();
     this.#syncSettingsDraft();
@@ -863,7 +872,7 @@ export class PrepStationsScreen extends LitElement {
           ) {
             this.watcherPrinterEditor = { ...editor, fieldError: "", conflictPrinterId: undefined };
           }
-          if (this.testProduct) void this.#explain();
+          if (this.testProduct) void this.#explain(true);
         },
       );
     } catch {
@@ -932,6 +941,14 @@ export class PrepStationsScreen extends LitElement {
       (error) => this.#defaultRefusal(error),
     );
     if (saved && this.isConnected) this.cellRefusal = null;
+  }
+  /** Whether the grid still draws this coordinate: a refresh can remove its zone or its row. */
+  #addressShown({ row, zoneId }: CellAddress): boolean {
+    const model = this.view?.routing;
+    if (!model) return false;
+    if (zoneId !== null && !model.zones.some((zone) => zone.id === zoneId)) return false;
+    const key = rowKey(row);
+    return visibleRoutingRows(model, expandAll(model)).some((entry) => rowKey(entry.row) === key);
   }
   #savedCell(address: CellAddress): RouteTarget | null {
     return this.view?.routing.cells.find((cell) => sameAddress(cell, address))?.target ?? null;
@@ -1005,7 +1022,7 @@ export class PrepStationsScreen extends LitElement {
   }
   async #confirmRouting() {
     const pending = this.pending;
-    if (pending) await this.#saveCell(pending);
+    if (pending && this.#addressShown(pending.change.address)) await this.#saveCell(pending);
   }
   #cancelRouting() {
     if (this.busy) return;
@@ -1309,7 +1326,9 @@ export class PrepStationsScreen extends LitElement {
         this.busy = false;
     }
   }
-  async #explain() {
+  /** `passive` when a read, not the person, asked: an unattended tester must not keep a session. */
+  async #explain(passive = false) {
+    const api = passive ? (this.api.background ?? this.api) : this.api;
     const request = ++this.#testRequest;
     this.explanation = undefined;
     this.testError = "";
@@ -1332,10 +1351,10 @@ export class PrepStationsScreen extends LitElement {
           : { weekday: this.testWeekday, timeOfDay: this.testTime };
     try {
       const explanation = this.testExtras.length
-        ? await this.api.explain(this.testProduct, this.testZone || null, moment, this.testExtras)
+        ? await api.explain(this.testProduct, this.testZone || null, moment, this.testExtras)
         : moment
-          ? await this.api.explain(this.testProduct, this.testZone || null, moment)
-          : await this.api.explain(this.testProduct, this.testZone || null);
+          ? await api.explain(this.testProduct, this.testZone || null, moment)
+          : await api.explain(this.testProduct, this.testZone || null);
       if (request === this.#testRequest) this.explanation = explanation;
     } catch (error) {
       if (request !== this.#testRequest) return;
@@ -3112,6 +3131,7 @@ export class PrepStationsScreen extends LitElement {
   #previewDialog() {
     const pending = this.pending;
     if (!pending) return nothing;
+    const unavailable = !this.#addressShown(pending.change.address);
     return html`<wt-modal
       size="wide"
       open
@@ -3151,6 +3171,7 @@ export class PrepStationsScreen extends LitElement {
               </div>`
           : html`<p>${t("prep.preview_none")}</p>`
       }
+      ${unavailable ? html`<p class="error" role="alert" data-test="routing-unavailable">${t("routing.target_unavailable")}</p>` : nothing}
       <wt-form-actions slot="footer"
         ><wt-button
           slot="cancel"
@@ -3161,7 +3182,7 @@ export class PrepStationsScreen extends LitElement {
           >${t("prep.cancel")}</wt-button
         ><wt-button
           data-test="confirm-routing"
-          ?disabled=${this.busy}
+          ?disabled=${this.busy || unavailable}
           @click=${() => void this.#confirmRouting()}
           >${t("prep.confirm")}</wt-button
         ></wt-form-actions

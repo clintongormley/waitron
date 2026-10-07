@@ -6,6 +6,7 @@ import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@wait
 import type { PrepStationsApi, PrepStationsView, StationHealthSnapshot } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { WatcherView } from "./watchers-seen.js";
+import type { RouteExplanation } from "../routing-types.js";
 import "./prep-stations-screen.js";
 
 registerIcons({
@@ -5941,5 +5942,350 @@ describe("Routing grid", () => {
         "Bar would go back to its saved hours, which overlap a day next to the special date on Sun, 10 Jun 2096. Move or delete that special date on the Hours page first.",
       ),
     );
+  });
+
+  const foodTerrace = { row: { kind: "category", categoryId: "food" }, zoneId: "terrace" };
+  const deferred = <T>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+  const answer = (stationId: string): RouteExplanation => ({
+    route: { kind: "station", stationId },
+    decidedBy: null,
+    fallbacks: [],
+    noReplacement: false,
+    clockReadable: true,
+    stations: [],
+    extras: [],
+    extrasWaitOnDish: false,
+  });
+  /** Mounted from a tester link, so Routing opens with Bread under test. */
+  async function mountTester(overrides: Partial<PrepStationsApi> = {}) {
+    const before = location.href;
+    history.replaceState(null, "", "/manage/prep-stations/test/bread");
+    try {
+      const a = api({
+        load: vi.fn().mockResolvedValue(gridView()),
+        setCell: vi.fn().mockResolvedValue(undefined),
+        ...overrides,
+      });
+      const el = await mount(a);
+      await settle(el);
+      await gridOf(el).updateComplete;
+      return { a, el };
+    } finally {
+      history.replaceState(null, "", before);
+    }
+  }
+  const testAnswer = (el: PrepStationsScreen) =>
+    q(el, '[data-test="test-answer"]')?.textContent?.replace(/\s+/g, " ") ?? "";
+  const withCell = (target: { kind: string; stationId?: string }) => {
+    const next = gridView();
+    next.routing.cells = [
+      ...next.routing.cells,
+      { row: drinksTerrace.row, zoneId: "terrace", target },
+    ] as typeof next.routing.cells;
+    return next;
+  };
+
+  it.each([
+    "routing_cells",
+    "kitchen_stations",
+    "station_fallbacks",
+    "floor_zones",
+    "categories",
+    "products",
+  ])(
+    "a cell, default, station-active, fallback, zone, category-parent or product-category change refreshes the grid and tester (%s)",
+    async (type) => {
+      setLocale("en");
+      const liveData = new LiveData();
+      let made = "bar";
+      const explain = vi.fn(async () => answer(made));
+      const load = vi
+        .fn()
+        .mockResolvedValueOnce(gridView())
+        .mockResolvedValue(withCell(kitchenTarget));
+      const { el } = await mountTester({ liveData, load, explain });
+      await vi.waitFor(() => expect(testAnswer(el)).toContain("Made at: Bar"));
+      expect(cellCombo(el, "c:drinks", "terrace").value).toBe("");
+      made = "kitchen";
+      liveData.invalidate([{ type }]);
+      await vi.waitFor(async () => {
+        await gridOf(el).updateComplete;
+        expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+      });
+      await vi.waitFor(() => expect(testAnswer(el)).toContain("Made at: Kitchen"));
+    },
+  );
+
+  it("a passive refresh during a pending save keeps the coordinate and draft", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const write = deferred<void>();
+    const setCell = vi.fn(() => write.promise);
+    // A fresh object per read, so each refresh really replaces the screen's view.
+    const background = { load: vi.fn(async () => gridView()), explain: vi.fn() };
+    const { a, el } = await mountGrid({
+      liveData,
+      setCell,
+      preview: vi.fn().mockResolvedValue([breadMove]),
+      background: background as unknown as PrepStationsApi,
+    });
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    liveData.invalidate([{ type: "routing_cells" }]);
+    await vi.waitFor(() => expect(background.load).toHaveBeenCalledTimes(1));
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain(
+      "Drinks, Terrace: this changes Bar to Kitchen.",
+    );
+    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    liveData.invalidate([{ type: "routing_cells" }]);
+    await vi.waitFor(() => expect(background.load).toHaveBeenCalledTimes(2));
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+    expect(cellCombo(el, "c:drinks", "every").value).toBe("station:bar");
+    write.resolve();
+    await vi.waitFor(() => expect(background.load).toHaveBeenCalledTimes(3));
+    expect(setCell).toHaveBeenCalledExactlyOnceWith(drinksTerrace, kitchenTarget);
+    expect(a.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("a successful read clears only a read error and never an action failure", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const load = vi.fn().mockResolvedValue(gridView());
+    const { el } = await mountGrid({
+      liveData,
+      load,
+      preview: vi.fn().mockResolvedValue([breadMove]),
+      setCell: vi.fn().mockRejectedValue({ code: "service_zone.not_found" }),
+      setDefaultStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const pageAlert = () => q(el, '[role="alert"]')?.textContent?.trim() ?? "";
+    const reread = async (outcome: "fails" | "succeeds") => {
+      const calls = load.mock.calls.length;
+      if (outcome === "fails") load.mockRejectedValueOnce({ code: "connection.failed" });
+      liveData.refresh();
+      await vi.waitFor(() => expect(load.mock.calls.length).toBeGreaterThan(calls));
+      await settle(el);
+      await gridOf(el).updateComplete;
+    };
+    await reread("fails");
+    expect(pageAlert()).toContain("could not be loaded");
+    await reread("succeeds");
+    expect(pageAlert()).toBe("");
+
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    await vi.waitFor(() =>
+      expect(cellCombo(el, "c:drinks", "terrace").error).toBe("The change could not be saved."),
+    );
+    await chooseCell(el, "all", "every", "Kitchen");
+    await vi.waitFor(() => expect(pageAlert()).toBe("The change could not be saved."));
+    await reread("fails");
+    expect(pageAlert()).toBe("The change could not be saved.");
+    await reread("succeeds");
+    expect(pageAlert()).toBe("The change could not be saved.");
+    expect(cellCombo(el, "c:drinks", "terrace").error).toBe("The change could not be saved.");
+    expect(formActions(el).error).toBe("Drinks, Terrace: The change could not be saved.");
+  });
+
+  it("a late read cannot reopen a closed editor or reorder the selection", async () => {
+    const answerLate = deferred<unknown[]>();
+    const preview = vi.fn().mockReturnValueOnce(answerLate.promise).mockResolvedValue([]);
+    const liveData = new LiveData();
+    const stale = deferred<PrepStationsView>();
+    const load = vi.fn().mockResolvedValue(gridView());
+    const { a, el } = await mountGrid({ liveData, load, preview });
+
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    const host = el.parentElement!;
+    el.remove();
+    host.append(el);
+    await settle(el);
+    answerLate.resolve([breadMove]);
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("");
+
+    load.mockReturnValueOnce(stale.promise).mockResolvedValue(withCell(kitchenTarget));
+    const calls = load.mock.calls.length;
+    liveData.invalidate([{ type: "routing_cells" }]);
+    await vi.waitFor(() => expect(load.mock.calls.length).toBe(calls + 1));
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    await vi.waitFor(() =>
+      expect(a.setCell).toHaveBeenCalledExactlyOnceWith(drinksTerrace, kitchenTarget),
+    );
+    await vi.waitFor(async () => {
+      await gridOf(el).updateComplete;
+      expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+    });
+    stale.resolve(gridView());
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+  });
+
+  it("reopening an editor owns a new request generation", async () => {
+    setLocale("en");
+    const first = deferred<unknown[]>();
+    const second = deferred<unknown[]>();
+    const preview = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { a, el } = await mountGrid({ preview });
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    const host = el.parentElement!;
+    el.remove();
+    host.append(el);
+    await settle(el);
+    await gridOf(el).updateComplete;
+    await chooseCell(el, "c:food", "terrace", "Kitchen");
+    second.resolve([breadMove]);
+    await vi.waitFor(() => expect(q(el, '[data-test="routing-preview"]')).not.toBeNull());
+    first.resolve([breadMove]);
+    await settle(el);
+    expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain("Food, Terrace:");
+    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(a.setCell).toHaveBeenCalledExactlyOnceWith(foodTerrace, kitchenTarget);
+  });
+
+  it.each([
+    [
+      "zone",
+      (next: PrepStationsView) => {
+        next.routing.zones = [];
+        next.zones = [];
+      },
+    ],
+    [
+      "category",
+      (next: PrepStationsView) => {
+        next.routing.categories = next.routing.categories.filter((c) => c.id !== "drinks");
+        next.routing.cells = [];
+        next.categories = next.categories.filter((c) => c.id !== "drinks");
+      },
+    ],
+  ])(
+    "removing a %s while its editor is open shows the target unavailable and requires cancel or reselection, never saving to a neighbour",
+    async (_what, remove) => {
+      setLocale("en");
+      const liveData = new LiveData();
+      const removed = gridView();
+      remove(removed);
+      const load = vi.fn().mockResolvedValue(gridView());
+      const { a, el } = await mountGrid({
+        liveData,
+        load,
+        preview: vi.fn().mockResolvedValue([breadMove]),
+      });
+      await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+      load.mockResolvedValue(removed);
+      liveData.invalidate([{ type: "floor_zones" }, { type: "categories" }]);
+      await vi.waitFor(() =>
+        expect(q(el, '[data-test="routing-unavailable"]')?.textContent?.trim()).toBe(
+          "This row or zone is no longer in the grid. Cancel, then choose again.",
+        ),
+      );
+      const confirm = q(el, '[data-test="confirm-routing"]') as HTMLElement & { disabled: boolean };
+      expect(confirm.disabled).toBe(true);
+      confirm.click();
+      await settle(el);
+      expect(a.setCell).not.toHaveBeenCalled();
+      expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+
+      q(el, '[data-test="cancel-routing"]')!.click();
+      await settle(el);
+      expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+      await chooseCell(el, "c:food", "every", "Kitchen");
+      expect(q(el, '[data-test="routing-unavailable"]')).toBeNull();
+      q(el, '[data-test="confirm-routing"]')!.click();
+      await settle(el);
+      expect(a.setCell).toHaveBeenCalledExactlyOnceWith(
+        { row: { kind: "category", categoryId: "food" }, zoneId: null },
+        kitchenTarget,
+      );
+    },
+  );
+
+  it("a refresh that gives the last uncategorised product a category removes the No category row while a No category choice is pending: the screen cancels that draft, and nothing is saved to All categories or any other row", async () => {
+    const liveData = new LiveData();
+    const categorised = gridView();
+    categorised.routing.products = categorised.routing.products.map((product) => ({
+      ...product,
+      categoryId: "food",
+    }));
+    const load = vi.fn().mockResolvedValue(gridView());
+    const { a, el } = await mountGrid({
+      liveData,
+      load,
+      preview: vi.fn().mockResolvedValue([breadMove]),
+    });
+    await chooseCell(el, "no_category", "terrace", "Kitchen");
+    expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+    load.mockResolvedValue(categorised);
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(async () => {
+      await gridOf(el).updateComplete;
+      expect(gridOf(el).shadowRoot!.querySelector('td[data-row="no_category"]')).toBeNull();
+    });
+    await settle(el);
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(cellCombo(el, "all", "terrace").value).toBe("");
+    expect(a.setCell).not.toHaveBeenCalled();
+    await chooseCell(el, "c:food", "terrace", "Kitchen");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(a.setCell).toHaveBeenCalledExactlyOnceWith(foodTerrace, kitchenTarget);
+  });
+
+  it("detach stops observers and timers; elapsed-time refresh stays passive", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const liveData = new LiveData();
+      const background = {
+        load: vi.fn().mockResolvedValue(gridView()),
+        explain: vi.fn().mockResolvedValue(answer("bar")),
+      };
+      const { a, el } = await mountTester({
+        liveData,
+        explain: vi.fn().mockResolvedValue(answer("bar")),
+        background: background as unknown as PrepStationsApi,
+      });
+      const active = {
+        load: vi.mocked(a.load).mock.calls.length,
+        explain: vi.mocked(a.explain).mock.calls.length,
+      };
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle(el);
+      expect(background.load).toHaveBeenCalledTimes(1);
+      expect(background.explain).toHaveBeenCalled();
+      expect(vi.mocked(a.load).mock.calls.length).toBe(active.load);
+      expect(vi.mocked(a.explain).mock.calls.length).toBe(active.explain);
+      el.remove();
+      expect(liveData.interests).toEqual([]);
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(background.load).toHaveBeenCalledTimes(1);
+
+      const timed = api({ load: vi.fn().mockResolvedValue(gridView()) });
+      const unwatched = await mount(timed);
+      expect(timed.load).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(timed.load).toHaveBeenCalledTimes(2);
+      unwatched.remove();
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(timed.load).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
