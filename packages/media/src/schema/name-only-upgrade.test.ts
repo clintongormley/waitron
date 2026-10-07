@@ -24,14 +24,15 @@ import { MEDIA_MIGRATIONS } from "../migrations.js";
 import { MEDIA_CHANGE_SOURCES } from "../module.js";
 
 /**
- * A venue migrated to media's `0004` and holding photos, upgraded through `applyMigrations` to the
- * migration that drops `alt_text` and `labels`. The rows are written BEFORE that migration runs,
- * because the table rebuild it carries is what could lose them.
+ * A venue migrated to media's `0004` and holding photos, upgraded through `applyMigrations` to
+ * `0007`, past the migration that drops `alt_text` and `labels`. The rows are written BEFORE that
+ * migration runs, because the table rebuild it carries is what could lose them.
  *
  * Only core, catalogue and media are applied: the sets media requires, not every module a box runs.
  */
 
 const BEFORE = "0004_drop_category_image_triggers";
+const UPGRADED = "0007_recreate_product_image_triggers";
 
 const photo = (digit: string) => `${digit.repeat(64)}.jpg`;
 const PRODUCT_PHOTO = photo("1");
@@ -63,16 +64,16 @@ function setsUpTo(mediaFolder: string): VenueMigrationOptions[] {
   ];
 }
 
-/** Media's folder as it stood at {@link BEFORE}: the same files, with the journal cut there. */
-function stageMediaBefore(into: string): string {
-  const folder = join(into, "media");
+/** Media's folder as it stood at `tag`: the same files, with the journal cut there. */
+function stageMediaAt(into: string, tag: string): string {
+  const folder = join(into, `media-${tag}`);
   cpSync(MEDIA_MIGRATIONS.migrationsFolder, folder, { recursive: true });
   const journalPath = join(folder, "meta", "_journal.json");
   const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
     entries: { idx: number; tag: string }[];
   };
-  const cut = journal.entries.findIndex((entry) => entry.tag === BEFORE);
-  if (cut === -1) throw new Error(`media's journal has no ${BEFORE}`);
+  const cut = journal.entries.findIndex((entry) => entry.tag === tag);
+  if (cut === -1) throw new Error(`media's journal has no ${tag}`);
   writeFileSync(
     journalPath,
     JSON.stringify({ ...journal, entries: journal.entries.slice(0, cut + 1) }),
@@ -142,7 +143,7 @@ async function seed(database: Database): Promise<void> {
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "wt-media-name-only-"));
   const venueDir = join(root, "venue");
-  await applyMigrations(venueDir, setsUpTo(stageMediaBefore(root)));
+  await applyMigrations(venueDir, setsUpTo(stageMediaAt(root, BEFORE)));
   const old = await openVenueDatabase(venueDir);
   try {
     await seed(old.venue);
@@ -152,7 +153,7 @@ beforeAll(async () => {
   } finally {
     await old.close();
   }
-  await applyMigrations(venueDir, setsUpTo(MEDIA_MIGRATIONS.migrationsFolder));
+  await applyMigrations(venueDir, setsUpTo(stageMediaAt(root, UPGRADED)));
   store = await openVenueDatabase(venueDir);
   after = await snapshot(store.venue);
 });
