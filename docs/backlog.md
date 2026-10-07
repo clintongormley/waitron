@@ -948,6 +948,14 @@ unused `units` property is gone (it closes W75's leftover).
   there, and `apps/dashboard/src/widgets/menu-structure-table.test.ts` deliberately centres the
   included-menu name and note.
 
+**A menu's prices table puts the Price column straight after the product's name (A302, owner
+2026-10-06) — DONE:** the columns read Product, Price override, Appears under, Main category,
+Status, and the Filters panel, which lists filters in the order the table defines its columns, now
+lists the price filter first. The table keeps its column choices under a new key,
+`waitron.menus.menu-prices.table`, so an order saved before (the old order, with Price override
+last, as the person rearranged it) is not read; hidden columns and the remembered sort and filters
+start again too, as when the Menus list changed key (W87).
+
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE (#1066).**
 
 **Empty extras and options tables keep their Preselected and Default headings readable (A262, owner
