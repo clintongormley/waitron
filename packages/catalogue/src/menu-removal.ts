@@ -4,7 +4,7 @@ import { batches } from "./batches.js";
 import { syncMenuOffers } from "./menu-structure.js";
 import { sectionMembers } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
-import { loadSectionGraph, menusContaining } from "./section-graph.js";
+import { loadSectionGraph, menusContaining, reachableProducts } from "./section-graph.js";
 import { renumber } from "./section-members.js";
 
 /**
@@ -69,4 +69,27 @@ export async function takeOffMenus(tx: Transaction, productIds: readonly string[
   }
   // A Device Home Page writes no `menu_items` rows, so only the menus reaching a list are synced.
   await syncMenuOffers(tx, [...menus].sort(), before);
+}
+
+/** How many Active menus' structures reach any of the products; a variant counts by its product. */
+export async function menusHolding(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<number> {
+  const wanted = new Set<string>();
+  for (const batch of batches(productIds))
+    for (const row of await tx
+      .select({ id: products.id, parentId: products.parentId })
+      .from(products)
+      .where(inArray(products.id, batch)))
+      wanted.add(row.parentId ?? row.id);
+  if (wanted.size === 0) return 0;
+  const graph = await loadSectionGraph(tx);
+  return graph
+    .roots()
+    .filter(
+      ({ menuId, sectionId }) =>
+        graph.menu(menuId)?.active === true &&
+        reachableProducts(graph, sectionId).some((productId) => wanted.has(productId)),
+    ).length;
 }

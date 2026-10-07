@@ -493,6 +493,56 @@ describe("folder selection routes", () => {
   );
 });
 
+describe("GET /management-api/products/menus", () => {
+  it("counts the menus the products are on, each once", async () => {
+    const app = mountApp();
+    const first = await createCatalogueVia(app, `Menus count A ${crypto.randomUUID()}`);
+    const second = await createCatalogueVia(app, `Menus count B ${crypto.randomUUID()}`);
+    const onBoth = await createNamedProductVia(app, `On both ${crypto.randomUUID()}`);
+    const onOne = await createNamedProductVia(app, `On one ${crypto.randomUUID()}`);
+    const onNone = await createNamedProductVia(app, `On none ${crypto.randomUUID()}`);
+    await offerVia(app, first, onBoth);
+    await offerVia(app, second, onBoth);
+    await offerVia(app, first, onOne);
+    const count = async (ids: string[]) => {
+      const response = await send(
+        app,
+        "GET",
+        `/management-api/products/menus?${ids.map((id) => `id=${id}`).join("&")}`,
+      );
+      expect(response.status).toBe(200);
+      return response.json();
+    };
+    expect(await count([onBoth])).toEqual({ menus: 2 });
+    expect(await count([onOne, onBoth])).toEqual({ menus: 2 });
+    expect(await count([onOne])).toEqual({ menus: 1 });
+    expect(await count([onNone])).toEqual({ menus: 0 });
+    expect(await count([])).toEqual({ menus: 0 });
+  });
+
+  it("refuses an id that is not a uuid", async () => {
+    const response = await send(mountApp(), "GET", "/management-api/products/menus?id=invalid");
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+  });
+
+  it("is refused without a manager session", async () => {
+    for (const [cookie, status, code] of [
+      [null, 401, "management_session.required"],
+      [staffCookie, 403, "authorization.not_permitted"],
+    ] as const) {
+      const response = await send(
+        mountApp(),
+        "GET",
+        `/management-api/products/menus?id=${crypto.randomUUID()}`,
+        { cookie },
+      );
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+  });
+});
+
 let locationId: string;
 let managerCookie: string;
 let managerPersonId: string;

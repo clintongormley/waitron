@@ -7,11 +7,12 @@ import { createCategory } from "./categories.js";
 import { deleteCatalogueItems } from "./catalogue-items.js";
 import { addShortcut, readMenuHome } from "./menu-home.js";
 import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
-import { takeOffMenus } from "./menu-removal.js";
+import { menusHolding, takeOffMenus } from "./menu-removal.js";
 import { readMenuStructure } from "./menu-structure.js";
 import {
   createCatalogue,
   createProduct,
+  deactivateCatalogue,
   deactivateProduct,
   listMenuOffers,
   menuPrices,
@@ -513,5 +514,50 @@ describe("a variant made Inactive loses its price on every menu", () => {
       ),
     ).toBe("product.variant_not_found");
     expect(await menusPricing(r.tortillaHalf)).toEqual([]);
+  });
+});
+
+describe("menusHolding", () => {
+  it("counts each active menu whose structure reaches the products once, an including menu too, and a variant by its product", async () => {
+    const f = await menusFixture(fx.db);
+    const count = (ids: string[]) => app((tx) => menusHolding(tx, ids));
+    // Lemonade sits in the Drinks menu's root, which Lunch and Dinner both include.
+    expect(await count([f.lemonade])).toBe(3);
+    expect(await count([f.large])).toBe(3);
+    expect(await count([f.lemonade, f.lager, f.large])).toBe(3);
+    expect(await count([f.burger])).toBe(1);
+    expect(await count([f.soup, f.burger])).toBe(2);
+    expect(await count([f.extraLemon])).toBe(0);
+    expect(await count([])).toBe(0);
+
+    await app((tx) => deactivateCatalogue(tx, f.dinner));
+    expect(await count([f.lemonade])).toBe(2);
+    expect(await count([f.burger])).toBe(0);
+  });
+
+  it("does not count a menu whose Device Home Page alone holds the product", async () => {
+    const r = await removalFixture();
+    const gazpacho = await app(async (tx) => {
+      const id = (
+        await createProduct(tx, {
+          catalogueId: r.tapas,
+          categoryId: null,
+          name: "Gazpacho",
+          pricingUnit: "each",
+          unitPrice: "4.00",
+          vatClass: "reduced",
+          allergens: {},
+        })
+      ).id;
+      await tx.insert(sectionMembers).values({
+        id: crypto.randomUUID(),
+        sectionId: (await readMenuHome(tx, r.tapas)).homeSectionId,
+        position: 9,
+        productId: id,
+      });
+      return id;
+    });
+    expect(await app((tx) => menusHolding(tx, [gazpacho]))).toBe(0);
+    expect(await app((tx) => menusHolding(tx, [r.tortilla, gazpacho]))).toBe(2);
   });
 });

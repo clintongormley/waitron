@@ -148,5 +148,6 @@ export * from "./option-snapshot-labels.js";
 export type { ProductRouting, ProductEditorBody } from "./product-types.js";
 
 export * from "./catalogue-items.js";
+export { menusHolding } from "./menu-removal.js";
 
 export * from "./settings.js";
