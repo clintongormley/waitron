@@ -1866,6 +1866,9 @@ Left open:
   identity; there is no form path for a pack without one. The demo-data plan's Task 2 (W109-2,
   `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`) enforces it with a test that
   every pack offered at setup carries one, not with a route refusal, so that test stays as it is.
+  **Closed by W109-2:** the guard in `apps/server/scripts/demo-seed/data-set.test.ts` fails when a
+  pack in `VENUE_SETUP_COUNTRY_PACKS` has no demo identity, or files with a module that has no
+  default operation description; the setup route only finds those packs.
 
 **The demo seed's data is one data set the country pack names (W109 step 1, Task 1 of
 `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`) — DONE (W109-1, #1315,
@@ -1884,7 +1887,27 @@ staff-facing names and Catalan practice sales. Where a dish has no text in the r
 practice sale falls back to the venue's main content language, which `seedSales` reads with
 `readContentLanguages`, as a till sale does (`apps/server/src/working-order.ts`): a Madrid demo with
 Catalan receipts stores the dish's Spanish customer-facing text under the Catalan receipt key rather
-than an empty description. The plan's last step, Task 2 (W109-2, a country with no demo data), is still to come.
+than an empty description.
+
+**A country with no demo data of its own gets the existing demo data in English, and every demo's
+practice sales go through the venue's own fiscal module (W109-2, Task 2 of the same plan) —
+DONE.** A pack's `demo.dataSet` is optional; a pack whose identity names none seeds
+`casa-delgado-es` under its own identity, with English the default content language and English
+staff names (`demoDataSetFor`, `demoLanguagesFor`, `apps/server/scripts/demo-seed/data-set.ts`).
+`seedSales` takes its backend from the composition's fiscal seat (`fiscalSlot(...).makeBackend`)
+instead of building `VerifactuBackend` itself; a Spanish demo's practice sales are pinned row for
+row by `apps/server/scripts/demo-seed/seed-sales.golden.test.ts`, and a United Kingdom venue's
+are ordinary sales with no fiscal record. No real pack reaches the fallback today. Known limits,
+not built: practice sales sit at fixed hours chosen for a Madrid business day, stamped with the
+host's offset; they carry Spain's VAT rates, as every till sale does whatever the country
+(`packages/catalogue/src/vat-rates.ts`); and the guard holds a pack offered for Prepare or Live to
+a demo identity too, because the venue screen has one country list for every mode (the plan's
+reading of the owner's answer A — the alternative is hiding only the Demo choice). Correction to
+the plan's prediction: a fallback demo in an area that requires languages does NOT list them as
+missing when the data set carries text in them — the seed writes the set's own text for every
+enabled language (measured by the per-task review on a Barcelona venue with a set that was not
+Spain's: `ca` and `es` text written, no missing translations); only a required language the set
+lacks would be listed.
 
 Seen during W109-5's look at a Barcelona demo set up in Spanish (2026-10-07), OPEN, unqueued:
 (1) practice-sale invoice numbers do not follow time order — `seedSales` fills days from today
