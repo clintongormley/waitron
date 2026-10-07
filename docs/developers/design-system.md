@@ -1769,8 +1769,8 @@ shows a product description today (the reader check in A220, `docs/backlog.md`).
   its own, is the product's price in the same grey italic. An image shows the fallback picture itself
   (`dashboard-image-upload`'s `inheritedImage`). In the variant form it has no visible caption, and
   its alt text names the main product's photo (`editor.inherited_image_alt`); Remove sits beside
-  Choose image where it would for a photo of the variant's own, disabled, and a screen reader reads
-  "Uses the product's image" (`image.remove_inherited_hint`, hidden from sight) straight after it.
+  Choose image where it would for a photo of the variant's own, disabled, with the accessible
+  description "Uses the main product's photo" (`image.remove_inherited_hint`). `wt-button` forwards `aria-description` to its inner button.
   With no photo at all, own or inherited, there is no Remove. In the
   product editor, where the photo is a thumbnail beside Name, it has a dashed border, and "The main product's photo"
   (`editor.inherited_image_alt`), hidden from sight, describes the photo button to a screen reader. A control whose empty state could also mean "none" (an allergen set,

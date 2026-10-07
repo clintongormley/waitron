@@ -956,8 +956,9 @@ unused `units` property is gone (it closes W75's leftover).
   product editor, the variant window heads "Add variant to: Coffee" or "Edit variant of: Coffee"
   ("Añadir variante a: …", "Editar variante de: …"), with the name as typed, saved or not; a dialog
   heading now wraps a long unbroken name; a variant showing the product's photo shows Remove image
-  greyed out beside Choose image. Open: the hidden "Uses the product's image" hint is not tied to that
-  button by `aria-describedby`, which `wt-button` does not pass to its inner button (A362).
+  greyed out beside Choose image. A362 — DONE: its inner button's accessible description reads
+  "Uses the main product's photo" / "Usa la foto del producto principal"; the separate hidden hint
+  is removed.
   A361 — DONE: the variant's own page names its product with "Edit variant of: …" / "Editar variante
   de: …", using the parent's saved staff name; reloading reads a renamed parent again.
 - **A330, owner 2026-10-07 — DONE (#1354; variant rows show their photo):** an opened variant's row

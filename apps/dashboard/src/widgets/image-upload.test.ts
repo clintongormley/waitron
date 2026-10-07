@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ImageUpload, type ImageUploader } from "./image-upload.js";
 import { focusFirstInvalid, setContentLanguages } from "@waitron/ui";
@@ -183,14 +184,14 @@ describe("image-upload", () => {
       expect(remove.textContent!.trim()).toBe(t("image.remove"));
       expect(remove.disabled).toBe(true);
       expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(true);
-      const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-image-hint]")!;
-      expect(hint.textContent!.trim()).toBe(t("image.remove_inherited_hint"));
-      expect(hint.textContent!.trim()).toBe(
-        locale === "en-GB" ? "Uses the product's image" : "Usa la imagen del producto",
-      );
-      // Read straight after the button, and drawn nowhere: the inherited photo carries no caption.
-      expect(remove.nextElementSibling).toBe(hint);
-      expect(hint.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+      await expect
+        .element(page.elementLocator(remove.shadowRoot!.querySelector("button")!))
+        .toHaveAccessibleDescription(
+          locale === "en-GB"
+            ? "Uses the main product's photo"
+            : "Usa la foto del producto principal",
+        );
+      expect(el.shadowRoot!.querySelector("[data-test=remove-image-hint]")).toBeNull();
       remove.click();
       remove.shadowRoot!.querySelector("button")!.click();
       await el.updateComplete;

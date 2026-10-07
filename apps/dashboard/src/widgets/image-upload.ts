@@ -218,11 +218,13 @@ export class ImageUpload extends LitElement {
                 >${t("image.remove")}</wt-button
               >`
             : this.inheritedImage
-              ? html`<wt-button data-test="remove-image" variant="secondary" disabled
-                    >${t("image.remove")}</wt-button
-                  ><span class="caption" data-test="remove-image-hint"
-                    >${t("image.remove_inherited_hint")}</span
-                  >`
+              ? html`<wt-button
+                  data-test="remove-image"
+                  variant="secondary"
+                  disabled
+                  aria-description=${t("image.remove_inherited_hint")}
+                  >${t("image.remove")}</wt-button
+                >`
               : nothing
         }
       </div>
