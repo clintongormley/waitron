@@ -107,17 +107,20 @@ export class TillBasket extends LitElement {
         border-bottom: 1px solid var(--wt-color-border);
       }
 
-      /* The name, or what is slotted in its place, on a row of its own above the line's controls. */
+      /* The name, or what is slotted in its place, on a row of its own above the line's controls,
+         which wrap rather than run past the basket's edge when they do not fit on one row. */
       :host([stacked]) .line {
-        grid-template-columns: auto 1fr auto auto;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
       }
 
       :host([stacked]) .line .name {
-        grid-column: 1 / -1;
+        flex-basis: 100%;
       }
 
-      :host([stacked]) .line-total {
-        justify-self: end;
+      :host([stacked]) .line .qty {
+        margin-inline-end: auto;
       }
 
       .line-after {
