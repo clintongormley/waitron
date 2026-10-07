@@ -2662,7 +2662,8 @@ Prep stations uses `stations`, `routing`, `tickets`, `watchers` and `settings` a
 `/manage/prep-stations/view/<key>`. Stations shows live health and opens read-only dish drilldowns;
 Routing shows the route tester above the routing grid
 (`packages/venue-service/src/dashboard/routing-grid.ts`): a row for All categories, each category,
-each top-level product and, while any product has no category, No category; a column for Every
+each top-level product and, while a product has no category or the row holds a saved choice, No
+category; a column for Every
 zone and each active service zone. A choice that moves products opens a preview listing each one
 with its old and new destination before anything is saved; a choice that moves nothing saves at
 once. Tickets and Watchers own their printer selections. Settings edits each station value in its own

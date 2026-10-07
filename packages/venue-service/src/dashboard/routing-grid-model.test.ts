@@ -227,7 +227,7 @@ describe("visibleRoutingRows", () => {
     ]);
   });
 
-  it("the No category row lists every active uncategorised product at the bottom, carries the no_category address and counts nothing", () => {
+  it("the No category row lists every active uncategorised product at the bottom, carries the no_category address and counts nothing, and a saved No category cell keeps it with no products", () => {
     const venue = model(
       [folder("food")],
       [item("bread", "food"), item("menu-card", null), item("water", null)],
@@ -260,7 +260,7 @@ describe("visibleRoutingRows", () => {
     expect(visibleRoutingRows(filed, none).some((entry) => entry.row.kind === "no_category")).toBe(
       false,
     );
-    // A stored No category cell keeps the row, with no products under it, so the cell can be cleared.
+    // A stored No category cell keeps the row, with no products under it.
     const storedOnly = model(
       [folder("food")],
       [item("bread", "food")],
