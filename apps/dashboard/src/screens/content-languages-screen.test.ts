@@ -1027,7 +1027,7 @@ describe("missing translations", () => {
     expect([kind.searchPlaceholder, kind.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
   });
 
-  it("narrows the gaps to any kind chosen, naming two kinds by their count, and lets Why take several too", async () => {
+  it("narrows the gaps to any kind chosen, naming two kinds by their count, while Why stays a single choice", async () => {
     const gaps: TranslationGap[] = [
       PAN,
       { kind: "extra_list", id: "extras-1", name: "STAFF Sides", reason: "partial" },
@@ -1042,7 +1042,7 @@ describe("missing translations", () => {
       table(el, "ca")!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
         `wt-combobox[data-filter="${key}"]`,
       )!;
-    expect([filter("kind").multiple, filter("reason").multiple]).toEqual([true, true]);
+    expect([filter("kind").multiple, filter("reason").multiple]).toEqual([true, false]);
     await chooseOptions(filter("kind"), ["product", "unit"]);
     const names = (await links(el, "ca")).map((link) => link.getAttribute("aria-label"));
     const open = (label: string) => t("content_gaps.open_named").replace("{name}", label);

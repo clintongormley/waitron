@@ -450,9 +450,6 @@ export class ContentLanguagesScreen extends LitElement {
         filter: {
           label: t("content_gaps.reason"),
           allLabel: t("content_gaps.reason_all"),
-          multiple: {
-            countLabel: (count) => t("content_gaps.reason_count").replace("{count}", String(count)),
-          },
           value: (gap) => gap.reason,
           options: reasons.map((reason) => ({ value: reason, label: t(`content_gaps.${reason}`) })),
         },
