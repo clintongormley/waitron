@@ -427,13 +427,13 @@ describe("venue operations screen", () => {
     const action = zone.querySelector<HTMLAnchorElement>('[data-test="zone-readiness-action"]');
     expect(action).not.toBeNull();
     expect(action!.textContent).toContain("Set one up in Menu timetable");
-    expect(action!.getAttribute("href")).toBe("/manage/menu-timetable?departmentId=d1");
+    expect(action!.getAttribute("href")).toBe("/manage/menu-timetable/department/d1");
     const followed = vi.fn();
     addEventListener("popstate", followed);
     action!.click();
     removeEventListener("popstate", followed);
     await settle(el);
-    expect(location.pathname + location.search).toBe("/manage/menu-timetable?departmentId=d1");
+    expect(location.pathname + location.search).toBe("/manage/menu-timetable/department/d1");
     expect(followed).toHaveBeenCalledTimes(1);
     expect(modal(el)).toBeNull();
   });

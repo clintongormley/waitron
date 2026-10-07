@@ -396,14 +396,14 @@ describe("Menu timetable: what a department shows", () => {
 
   it("follows the department chosen, and the one a link names", async () => {
     const { api } = server();
-    history.replaceState(null, "", "/manage/menu-timetable?departmentId=deli");
+    history.replaceState(null, "", "/manage/menu-timetable/department/deli");
     const el = await mount(api);
     expect(field(el, "departmentId")!.value).toBe("deli");
     expect(listed(el)).toEqual(["Deli para llevar"]);
     expect(text(byTest(el, "no-periods"))).toBe("No periods yet.");
     await choose(el, "departmentId", "restaurant");
     expect(listed(el)[0]).toBe("Desayunos");
-    expect(new URL(location.href).searchParams.get("departmentId")).toBe("restaurant");
+    expect(location.pathname).toBe("/manage/menu-timetable/department/restaurant");
   });
 
   it("writes a department picked by hand through the navigation guard, as a new history entry", async () => {
