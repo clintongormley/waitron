@@ -122,10 +122,12 @@ const ENGLISH = "en";
 export function resolveInstalledStartingContentLanguages(
   input: VenueGeography,
 ): StartingContentLanguages {
-  const { required } = resolveInstalledContentLanguageRules(input);
-  const defaultLanguage =
-    resolveInstalledDefaultContentLanguage(input) ??
-    contentLanguageCode(packFor(input)?.defaultLocale ?? FALLBACK_LOCALE);
+  const pack = packFor(input);
+  const rules = pack === undefined ? undefined : contentLanguageRules(pack, input.area);
+  const required = rules === undefined ? [] : codes(rules.required);
+  const defaultLanguage = contentLanguageCode(
+    rules?.defaultContentLocale ?? pack?.defaultLocale ?? FALLBACK_LOCALE,
+  );
   return {
     defaultLanguage,
     languages: [...new Set([defaultLanguage, ...required, ENGLISH])],
