@@ -1,6 +1,8 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
+import { sameValue } from "./product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -14,6 +16,7 @@ import { t } from "../i18n/t.js";
 
 type UnitField = "name" | "precision" | "abbreviation";
 type TranslatedField = `${"name" | "abbreviation"}-${string}`;
+type UnitDraft = Omit<UnitInput, "precision"> & { precision: number | string };
 /** `name` and `abbreviation` mark the first locale's input; `_form`, and a translated field whose
  * language the form does not show, are shown in the bottom message alone. */
 export type UnitFormErrors = Partial<Record<UnitField | TranslatedField | "_form", string>>;
@@ -55,6 +58,7 @@ export class UnitForm extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) locales: string[] = [];
   @property({ attribute: false }) value: Unit | null = null;
+  @property({ attribute: false }) draftParent?: object;
   @property({ attribute: false }) fieldErrors: UnitFormErrors = {};
   @property({ attribute: false }) api?: Pick<DashboardApi, "getUnitExtraUsage">;
 
@@ -67,6 +71,18 @@ export class UnitForm extends LitElement {
   @state() private precisionUsage: ExtraOfferUsage[] = [];
   @state() private precisionUsageUnavailable = false;
   #usageGeneration = 0;
+  #scope?: DraftScope<UnitDraft>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
     const needsDraft =
@@ -91,8 +107,29 @@ export class UnitForm extends LitElement {
       };
       this.precision = String(this.value?.precision ?? 0);
       this.attempted = false;
+      this.#scope?.dispose();
+      this.#scope = undefined;
     }
     if (changed.has("fieldErrors") || (this.open && needsDraft)) this.dismissed = new Set();
+    if (!this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<UnitDraft>({
+        id: this,
+        parent: this.draftParent,
+        current: () => this.#comparisonValue(),
+        snapshot: (value) => structuredClone(value),
+        equal: sameValue,
+        restore: (value) => {
+          this.names = { ...value.name };
+          this.abbreviations = { ...value.abbreviation };
+          this.precision = String(value.precision);
+        },
+      });
+    }
   }
 
   protected override updated(changed: Map<PropertyKey, unknown>): void {
@@ -148,18 +185,21 @@ export class UnitForm extends LitElement {
   #changeName(locale: string, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.names = { ...this.names, [locale]: event.detail.value };
+    this.#scope?.changed();
     this.#dismiss("name", `name-${locale}`);
   }
 
   #changeAbbreviation(locale: string, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.abbreviations = { ...this.abbreviations, [locale]: event.detail.value };
+    this.#scope?.changed();
     this.#dismiss("abbreviation", `abbreviation-${locale}`);
   }
 
   #changePrecision(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.precision = event.detail.value;
+    this.#scope?.changed();
     this.#dismiss("precision");
     void this.#readPrecisionUsage();
   }
@@ -189,8 +229,13 @@ export class UnitForm extends LitElement {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    const precision = Number(this.precision);
+    const value = this.#submissionValue();
+    this.dispatchEvent(
+      new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
+    );
+  }
 
+  #submissionValue(): UnitInput {
     const name = { ...this.names };
     for (const locale of this.locales) {
       const translation = this.names[locale]?.trim() ?? "";
@@ -203,16 +248,35 @@ export class UnitForm extends LitElement {
       if (translation === "") delete abbreviation[locale];
       else abbreviation[locale] = translation;
     }
-    const value: UnitInput = { name, abbreviation, precision };
-    this.dispatchEvent(
-      new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
-    );
+    return { name, abbreviation, precision: Number(this.precision) };
+  }
+
+  #comparisonValue(): UnitDraft {
+    const value = this.#submissionValue();
+    return {
+      ...value,
+      precision: this.#validate().precision ? this.precision : value.precision,
+    };
+  }
+
+  commitSaved(submitted: UnitInput): void {
+    this.#scope?.commit(submitted);
+  }
+
+  closeSaved(submitted: UnitInput): void {
+    this.commitSaved(submitted);
+    this.open = false;
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
   }
 
   #cancel(event: Event): void {
     event.stopPropagation();
-    // The dialog also reports a close it was told to make, a task later; by then the screen has
-    // closed this form and a second cancel would be about nothing.
+    if (this.busy || !this.open) return;
+    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.#reportCancel();
+  }
+
+  #reportCancel(): void {
     if (this.busy || !this.open) return;
     this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
@@ -232,7 +296,11 @@ export class UnitForm extends LitElement {
         size="standard"
         heading=${this.value ? t("units.edit") : t("units.create")}
         .open=${this.open}
-        @wt-close=${(event: Event) => this.#cancel(event)}
+        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.#reportCancel();
+        }}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]"))}
       >

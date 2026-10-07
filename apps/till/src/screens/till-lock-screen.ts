@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -166,22 +166,46 @@ export class TillLockScreen extends LitElement {
   @state() private throttleRemaining = 0;
 
   #throttleTimer?: ReturnType<typeof setInterval>;
+  #scope?: DraftScope<string>;
+  #connection = 0;
+  #loginPending: string[] = [];
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#scope = leaveCoordinatorFor(this)?.register<string>({
+      id: this,
+      current: () => (this.#loginPending.includes(this.pin) ? "" : this.pin),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.pin = value;
+      },
+    });
     void this.#loadStaff();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#connection++;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.pin = "";
+    this.selected = undefined;
+    this.staff = undefined;
+    this.errorKey = undefined;
+    this.throttleRemaining = 0;
+    this.#loginPending = [];
     this.#clearThrottle();
   }
 
-  /** State written after a mid-fetch disconnect is harmless, so no `isConnected` guard is needed. */
   async #loadStaff(): Promise<void> {
+    const connection = this.#connection;
     try {
-      this.staff = await this.api.listStaff();
+      const staff = await this.api.listStaff();
+      if (!this.isConnected || connection !== this.#connection) return;
+      this.staff = staff;
     } catch {
+      if (!this.isConnected || connection !== this.#connection) return;
       this.staff = [];
       this.errorKey = "login.load_failed";
       return;
@@ -206,12 +230,21 @@ export class TillLockScreen extends LitElement {
   #select(person: StaffMember): void {
     this.selected = person;
     this.pin = "";
+    this.#scope?.changed();
     this.errorKey = undefined;
+  }
+
+  #requestCancel(): void {
+    const coordinator = leaveCoordinatorFor(this);
+    if (coordinator && this.#scope) {
+      void coordinator.request({ scopes: [this], reason: "cancel", proceed: () => this.#cancel() });
+    } else this.#cancel();
   }
 
   #cancel(): void {
     this.selected = undefined;
     this.pin = "";
+    this.#scope?.changed();
     this.errorKey = undefined;
     this.#clearThrottle();
     this.throttleRemaining = 0;
@@ -220,6 +253,7 @@ export class TillLockScreen extends LitElement {
   #onPadChange(event: Event): void {
     event.stopPropagation();
     this.pin = (event as CustomEvent<{ value: string }>).detail.value;
+    this.#scope?.changed();
     this.errorKey = undefined;
   }
 
@@ -229,9 +263,15 @@ export class TillLockScreen extends LitElement {
   async #submit(): Promise<void> {
     const person = this.selected;
     if (person === undefined || this.pin === "" || this.throttleRemaining > 0) return;
+    const connection = this.#connection;
+    const submitted = this.pin;
+    this.#loginPending.push(submitted);
+    this.#scope?.changed();
     try {
-      const { personId, permissions, locale } = await this.api.login(person.personId, this.pin);
-      if (!this.isConnected) return;
+      const { personId, permissions, locale } = await this.api.login(person.personId, submitted);
+      if (!this.isConnected || connection !== this.#connection) return;
+      this.pin = "";
+      this.#scope?.commit("");
       this.#remember(personId);
       this.dispatchEvent(
         new CustomEvent<LoggedInDetail>("logged-in", {
@@ -241,6 +281,7 @@ export class TillLockScreen extends LitElement {
         }),
       );
     } catch (error) {
+      if (!this.isConnected || connection !== this.#connection) return;
       const code = (error as { code?: string }).code ?? "server.internal";
       if (code === "pin.throttled") {
         this.#startThrottle((error as { retryAfterSeconds?: number }).retryAfterSeconds);
@@ -248,6 +289,11 @@ export class TillLockScreen extends LitElement {
       }
       this.errorKey = loginErrorKey(code);
       this.pin = "";
+    } finally {
+      if (this.isConnected && connection === this.#connection) {
+        this.#loginPending.splice(this.#loginPending.indexOf(submitted), 1);
+        this.#scope?.changed();
+      }
     }
   }
 
@@ -401,7 +447,7 @@ export class TillLockScreen extends LitElement {
         ></till-numeric-pad>
       </div>
       <div class="actions">
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#requestCancel()}>
           ${t("action.cancel")}
         </wt-button>
         <wt-button

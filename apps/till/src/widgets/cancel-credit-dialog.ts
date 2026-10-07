@@ -1,7 +1,9 @@
 import { LitElement, css, html, type PropertyValues } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { formatMoney } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
@@ -23,12 +25,6 @@ const REFUSALS: Record<string, StringKey> = {
   "authorization.not_permitted": "cancel_credit.refused_not_permitted",
 };
 
-/**
- * Cancels an invoiced bill nothing was paid on: its invoice is credited in full by a credit note
- * and the bill is cancelled. It holds no request of its own: `cancel-credit-continue` carries the
- * reason, which the app sends in the operator's name, or with the PIN of someone who may issue
- * credit notes. `done` turns it into the result.
- */
 @customElement("till-cancel-credit-dialog")
 export class TillCancelCreditDialog extends LitElement {
   static override styles = [
@@ -60,12 +56,49 @@ export class TillCancelCreditDialog extends LitElement {
 
   @state() private reason = "";
   @state() private attempted = false;
-  /** The refusal still shown: it goes when the reason changes, if it named the reason, or at the
-   * next request. */
   @state() private shownRefusal: DialogRefusal | null = null;
+
+  @state() private active = true;
+  #scope?: DraftScope<string>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
+    if (this.done !== null) {
+      this.showResult(this.done);
+      return;
+    }
+    if (!this.active || this.#scope) return;
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<string>({
+      id: this,
+      current: () => this.reason,
+      snapshot: (value) => value,
+      equal: (a, b) => a.trim() === b.trim(),
+      restore: (value) => (this.reason = value),
+    });
+    this.#scope?.commit("");
+  }
+
+  showResult(done: CancelCreditDone): void {
+    this.done = done;
+    this.#scope?.commit(this.reason);
+    this.#scope?.dispose();
+    this.#scope = undefined;
   }
 
   #ownError(): string | null {
@@ -106,6 +139,7 @@ export class TillCancelCreditDialog extends LitElement {
   }
 
   async #continue(): Promise<void> {
+    if (!this.isConnected || !this.active || this.busy || this.done !== null) return;
     this.attempted = true;
     this.shownRefusal = null;
     if (this.#ownError() !== null) {
@@ -116,7 +150,34 @@ export class TillCancelCreditDialog extends LitElement {
     this.#emit("cancel-credit-continue", { reason: this.reason.trim() });
   }
 
-  #scope(): string {
+  #onInput(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    if (!this.isConnected || !this.active || this.busy || this.done !== null) return;
+    this.reason = event.detail.value;
+    this.#scope?.changed();
+    if (this.#refusalOnReason()) this.shownRefusal = null;
+  }
+
+  #cancel(): void {
+    if (!this.isConnected || !this.active || this.busy) return;
+    if (this.#scope) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+      return;
+    }
+    this.#closed();
+  }
+
+  #closed(event?: Event): void {
+    event?.stopPropagation();
+    if (event && event.target !== event.currentTarget) return;
+    if (!this.isConnected || !this.active) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#emit("cancel-credit-close");
+  }
+
+  #scopeText(): string {
     const amount = formatMoney(this.amount, currentLocale());
     return this.invoiceNumber === null
       ? t("cancel_credit.scope_unnumbered").replace("{amount}", () => amount)
@@ -135,11 +196,7 @@ export class TillCancelCreditDialog extends LitElement {
         }
       </p>
       <wt-form-actions>
-        <wt-button
-          variant="primary"
-          data-cancel-credit-finished
-          @click=${() => this.#emit("cancel-credit-close")}
-        >
+        <wt-button variant="primary" data-cancel-credit-finished @click=${() => this.#cancel()}>
           ${t("cancel_credit.done_action")}
         </wt-button>
       </wt-form-actions>
@@ -150,20 +207,16 @@ export class TillCancelCreditDialog extends LitElement {
     const own = this.attempted ? this.#ownError() : null;
     const fieldError = this.#reasonError(own);
     return html`<div class="body">
-      <p data-cancel-credit-scope>${this.#scope()}</p>
+      <p data-cancel-credit-scope>${this.#scopeText()}</p>
       <wt-input
         name="reason"
         autocomplete="off"
         .disabled=${this.busy}
         .label=${t("cancel_credit.reason")}
-        .value=${this.reason}
+        .value=${live(this.reason)}
         .required=${true}
         .error=${fieldError ?? ""}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.reason = event.detail.value;
-          if (this.#refusalOnReason()) this.shownRefusal = null;
-        }}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(
             event,
@@ -177,7 +230,7 @@ export class TillCancelCreditDialog extends LitElement {
           variant="secondary"
           data-cancel-credit-close
           .disabled=${this.busy}
-          @click=${() => this.#emit("cancel-credit-close")}
+          @click=${() => this.#cancel()}
         >
           ${t("cancel_credit.keep")}
         </wt-button>
@@ -197,10 +250,11 @@ export class TillCancelCreditDialog extends LitElement {
   override render() {
     return html`<wt-dialog
       ${trackDialog()}
-      .open=${true}
+      .open=${this.active}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       .heading=${t("cancel_credit.title")}
       .dismissible=${!this.busy}
-      @wt-close=${() => this.#emit("cancel-credit-close")}
+      @wt-close=${(event: Event) => this.#closed(event)}
     >
       ${this.done === null ? this.#formBody() : this.#doneBody(this.done)}
     </wt-dialog>`;

@@ -2,6 +2,10 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "unsaved.heading": "Discard unsaved changes?",
+  "unsaved.message": "Your changes have not been saved.",
+  "unsaved.keep": "Keep editing",
+  "unsaved.discard": "Discard changes",
   // Primary actions
   "action.pay": "Pay",
   "action.confirm_payment": "Confirm payment",
@@ -1036,6 +1040,10 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "unsaved.heading": "¿Descartar los cambios sin guardar?",
+  "unsaved.message": "Tus cambios no se han guardado.",
+  "unsaved.keep": "Seguir editando",
+  "unsaved.discard": "Descartar cambios",
   "action.pay": "Cobrar",
   "action.confirm_payment": "Confirmar cobro",
   "action.new_sale": "Nueva venta",

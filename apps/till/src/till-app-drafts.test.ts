@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { WtCombobox } from "@waitron/ui";
+import { leaveCoordinatorFor, type WtCombobox } from "@waitron/ui";
+import type { TillDeadEndsSection } from "./widgets/dead-ends-section.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
+  expectNoA11yViolations,
   draftServer,
   mountWidget,
   type DraftServer,
@@ -273,9 +275,20 @@ function stubApi(overrides: Record<string, unknown> = {}) {
   } as Record<string, ReturnType<typeof vi.fn>>;
 }
 
-async function mountApp(overrides: Record<string, unknown> = {}) {
+async function mountApp(
+  overrides: Record<string, unknown> = {},
+  sessionActivity?: TillApp["sessionActivity"],
+  theme?: "light" | "dark",
+) {
   api = stubApi(overrides);
-  return mountWidget<TillApp>("till-app", { api: api as unknown as TillApi });
+  return mountWidget<TillApp>(
+    "till-app",
+    {
+      api: api as unknown as TillApi,
+      ...(sessionActivity ? { sessionActivity } : {}),
+    },
+    theme,
+  );
 }
 
 async function flush(el: TillApp, rounds = 3): Promise<void> {
@@ -357,6 +370,270 @@ const savedLines = () =>
   server.drafts.flatMap((each) =>
     each.lines.map((line) => `${line.menuItemId} ×${Number(line.quantity)}`),
   );
+
+describe("W69 unassigned table draft", () => {
+  async function opening(
+    overrides: Record<string, unknown> = {},
+    activity?: TillApp["sessionActivity"],
+    theme?: "light" | "dark",
+  ) {
+    const mounted = await mountApp(
+      {
+        getTablesState: vi.fn().mockResolvedValue([mesa4, table("t9", "9", null)]),
+        ...overrides,
+      },
+      activity,
+      theme,
+    );
+    await openMesa(mounted.el, "t9");
+    return mounted;
+  }
+  function unloadCancelled() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  async function question(el: TillApp) {
+    await flush(el);
+    const warning =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+        "wt-unsaved-changes",
+      )!;
+    await warning.updateComplete;
+    return warning;
+  }
+  async function decide(el: TillApp, decision: "keep" | "discard") {
+    emit(await question(el), "wt-unsaved-choice", { decision });
+    await flush(el, 6);
+  }
+
+  it("protects memory-only lines and clears unload protection when the edit is reverted", async () => {
+    const { el } = await opening();
+    expect(unloadCancelled()).toBe(false);
+    await tap(el, "Beer");
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(unloadCancelled()).toBe(true);
+    draft(el).removeLine(0);
+    await flush(el);
+    expect(unloadCancelled()).toBe(false);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("retains its memory-only lines through tabs, but asks before another table replaces them", async () => {
+    const { el } = await opening();
+    await tap(el, "Beer");
+    const original = draft(el);
+    await back(el);
+    expect((await question(el)).open).toBe(false);
+    expect(original.lines.map((line) => line.quantity)).toEqual(["1"]);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    expect((await question(el)).open).toBe(true);
+    expect(unloadCancelled()).toBe(true);
+    await decide(el, "keep");
+    expect(original.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(tableOrder(el)).toBeNull();
+    expect(server.listDrafts).not.toHaveBeenCalled();
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await decide(el, "discard");
+    expect(rows(el)).toEqual([]);
+    expect(server.listDrafts).toHaveBeenCalledTimes(1);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(unloadCancelled()).toBe(false);
+  });
+
+  it("asks before voluntary signout; Keep retains lines and Discard sends only logout", async () => {
+    const { el } = await opening();
+    await tap(el, "Beer");
+    const original = draft(el);
+    emit(shell(el), "logout");
+    expect((await question(el)).open).toBe(true);
+    await decide(el, "keep");
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(api.logout).not.toHaveBeenCalled();
+    emit(shell(el), "logout");
+    await decide(el, "discard");
+    expect(api.logout).toHaveBeenCalledTimes(1);
+    expect(lock(el)).not.toBeNull();
+    expect(original.lines).toEqual([]);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(server.submitDraft).not.toHaveBeenCalled();
+    expect(unloadCancelled()).toBe(false);
+  });
+
+  it.each(["clean", "reverted"])("%s draft opens another table directly", async (state) => {
+    const { el } = await opening();
+    if (state === "reverted") {
+      await tap(el, "Beer");
+      draft(el).removeLine(0);
+      await flush(el);
+    }
+    await back(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el, 6);
+    expect((await question(el)).open).toBe(false);
+    expect(rows(el)).toEqual([]);
+    expect(server.listDrafts).toHaveBeenCalledTimes(1);
+    expect(unloadCancelled()).toBe(false);
+  });
+
+  it("a refused table read after Discard keeps the memory-only draft unload-protected", async () => {
+    const { el } = await opening();
+    await tap(el, "Beer");
+    const original = draft(el);
+    await back(el);
+    api.listZoneOffers!.mockRejectedValueOnce({ code: "connection.failed" });
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await decide(el, "discard");
+    expect(tableOrder(el)).toBeNull();
+    expect(original.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(unloadCancelled()).toBe(true);
+    expect(server.listDrafts).not.toHaveBeenCalled();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("a changed course invalidates an old replacement answer, while a display notification does not", async () => {
+    const { el } = await opening();
+    await tap(el, "Beer");
+    const original = draft(el);
+    await back(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    const q = await question(el);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    original.emit("changed");
+    await flush(el);
+    expect(q.open).toBe(true);
+    original.setLineCourse(0, "desserts");
+    await flush(el);
+    expect(q.open).toBe(false);
+    oldDiscard.click();
+    await flush(el);
+    expect(original.lines[0]!.courseId).toBe("desserts");
+    expect(server.listDrafts).not.toHaveBeenCalled();
+    expect(tableOrder(el)).toBeNull();
+    expect(unloadCancelled()).toBe(true);
+  });
+
+  it("disconnect cancels a pending table replacement and removes unload protection", async () => {
+    const { el } = await opening();
+    await tap(el, "Beer");
+    await back(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    el.remove();
+    await flush(el);
+    expect(q.open).toBe(false);
+    expect(unloadCancelled()).toBe(false);
+    oldDiscard.click();
+    await flush(el);
+    expect(server.listDrafts).not.toHaveBeenCalled();
+  });
+
+  it("inactivity lock clears the unassigned draft and cancels its question without waiting", async () => {
+    const activity = {
+      configure: vi.fn(),
+      noteInteraction: vi.fn(),
+      reacquire: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+    const { el } = await opening({}, activity as never);
+    await tap(el, "Beer");
+    const original = draft(el);
+    emit(shell(el), "logout");
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    const config = activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void };
+    config.onIdle();
+    await flush(el);
+    expect(q.open).toBe(false);
+    expect(lock(el)).not.toBeNull();
+    expect(original.lines).toEqual([]);
+    expect(unloadCancelled()).toBe(false);
+    oldDiscard.click();
+    await flush(el);
+    expect(api.logout).toHaveBeenCalledTimes(1);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(server.submitDraft).not.toHaveBeenCalled();
+  });
+
+  it("party drafts still save automatically and leave without a form warning", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    expect(unloadCancelled()).toBe(false);
+    await back(el);
+    expect((await question(el)).open).toBe(false);
+    await expect.poll(savedLines).toEqual(["offer-beer ×1"]);
+    expect(unloadCancelled()).toBe(false);
+  });
+
+  for (const locale of ["en-GB", "es-ES"])
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`native table replacement Escape/Keep/Discard, ${locale}, ${theme}, ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const { el } = await opening(
+              { getTill: vi.fn().mockResolvedValue({ ...till(drillCanvas), locale }) },
+              undefined,
+              theme,
+            );
+            await tap(el, "Beer");
+            const original = draft(el);
+            await back(el);
+            const target =
+              floor(el)!.shadowRoot!.querySelector<HTMLButtonElement>("[data-table=t4]")!;
+            await userEvent.click(target);
+            const q = await question(el);
+            expect(q.open).toBe(true);
+            const keep = q
+              .shadowRoot!.querySelector("[data-choice=keep]")!
+              .shadowRoot!.querySelector("button")!;
+            await expect.poll(() => keep.matches(":focus")).toBe(true);
+            expect(q.heading).toBe(
+              locale === "en-GB"
+                ? "Discard unsaved changes?"
+                : "¿Descartar los cambios sin guardar?",
+            );
+            await commands.parkPointer();
+            await expectNoA11yViolations(q);
+            await page.screenshot({
+              path: `__screenshots__/w69-partyless-look/${locale}-${theme}-${width}-warning.png`,
+            });
+            await userEvent.keyboard("{Escape}");
+            await expect.poll(() => q.open).toBe(false);
+            expect(original.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+            await expect.poll(() => target.matches(":focus")).toBe(true);
+            await userEvent.click(target);
+            await expect.poll(() => q.open).toBe(true);
+            await userEvent.click(keep);
+            await expect.poll(() => q.open).toBe(false);
+            expect(server.listDrafts).not.toHaveBeenCalled();
+            await page.screenshot({
+              path: `__screenshots__/w69-partyless-look/${locale}-${theme}-${width}-kept.png`,
+            });
+            await userEvent.click(target);
+            await expect.poll(() => q.open).toBe(true);
+            await userEvent.click(
+              q
+                .shadowRoot!.querySelector("[data-choice=discard]")!
+                .shadowRoot!.querySelector("button")!,
+            );
+            await expect.poll(() => tableOrder(el)).not.toBeNull();
+            expect(rows(el)).toEqual([]);
+            expect(server.listDrafts).toHaveBeenCalledTimes(1);
+            expect(server.saveDraft).not.toHaveBeenCalled();
+            expect(unloadCancelled()).toBe(false);
+          } finally {
+            cleanupWidgets();
+            await page.viewport(size.width, size.height);
+          }
+        });
+});
 
 it("asks where a refused line edit should be made and retries with the chosen station", async () => {
   const updateOrderLine = vi
@@ -4416,5 +4693,247 @@ describe("till-app: a draft line that cannot be sold now", () => {
       expect(await pressAndRead(el, "fire-all")).toContain(t("table.nothing_sent"));
       expect(api.submitDraft).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("line-edit unsaved station choice", () => {
+  async function opening(sessionActivity?: TillApp["sessionActivity"]) {
+    const updateOrderLine = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockResolvedValue({ revision: 1, party: { id: "v1", revision: 4 } });
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Beer",
+          quantity: "2",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const mounted = await mountApp({ updateOrderLine, askSaleDeadEnds }, sessionActivity);
+    const { el } = mounted;
+    const order = await openMesa(el);
+    const change = () =>
+      emit(order, "change-line", {
+        lineNo: 1,
+        lineName: "Beer",
+        patch: { quantity: "2" },
+        revision: 0,
+        saleLine: { menuItemId: "offer-beer", quantity: "2" },
+      });
+    change();
+    await flush(el);
+    const dialog =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>("[data-edit-dead-ends]")!;
+    const section = dialog.querySelector<TillDeadEndsSection>("till-dead-ends-section")!;
+    const choose = async (value = "kitchen") => {
+      await section.updateComplete;
+      const field = section.shadowRoot!.querySelector<WtCombobox>("wt-combobox")!;
+      await chooseOption(field, value);
+      await flush(el);
+      return field;
+    };
+    const cancel = () => dialog.querySelector<HTMLElement>("wt-button[variant=secondary]")!.click();
+    return { ...mounted, dialog, section, choose, cancel, change, updateOrderLine };
+  }
+  function unload() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  async function question(el: TillApp) {
+    await flush(el);
+    const q =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+        "wt-unsaved-changes",
+      )!;
+    await q.updateComplete;
+    return q;
+  }
+  for (const route of ["Cancel", "Escape"]) {
+    it(`${route} retains station choice until explicit discard without retrying`, async () => {
+      const { el, dialog, section, choose, cancel, updateOrderLine } = await opening();
+      const field = await choose();
+      field.focus();
+      if (route === "Cancel") cancel();
+      else await userEvent.keyboard("{Escape}");
+      const q = await question(el);
+      expect(q.open).toBe(true);
+      expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+      expect(section.choices.get("0")).toBe("kitchen");
+      expect(updateOrderLine).toHaveBeenCalledTimes(1);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+      await expect.poll(() => q.open).toBe(false);
+      expect(section.choices.get("0")).toBe("kitchen");
+      expect(unload()).toBe(true);
+      cancel();
+      await question(el);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await expect.poll(() => el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+      expect(updateOrderLine).toHaveBeenCalledTimes(1);
+      expect(unload()).toBe(false);
+    });
+  }
+  it("untouched and reverted choices close directly without retrying", async () => {
+    const { el, choose, cancel, updateOrderLine } = await opening();
+    await choose();
+    expect(unload()).toBe(true);
+    await choose("");
+    expect(unload()).toBe(false);
+    cancel();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+    expect((await question(el)).open).toBe(false);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("untouched choice closes directly", async () => {
+    const { el, cancel, updateOrderLine } = await opening();
+    expect(unload()).toBe(false);
+    cancel();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+    expect((await question(el)).open).toBe(false);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("Confirm accepts the existing exact retry and invalidates pending discard", async () => {
+    const { el, dialog, choose, cancel, updateOrderLine } = await opening();
+    await choose();
+    cancel();
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    dialog.querySelector<HTMLElement>("[data-edit-dead-ends-retry]")!.click();
+    await flush(el);
+    expect(q.open).toBe(false);
+    expect(unload()).toBe(false);
+    expect(updateOrderLine).toHaveBeenCalledTimes(2);
+    expect(updateOrderLine).toHaveBeenLastCalledWith(
+      "wo-4",
+      1,
+      { quantity: "2", makeAt: "kitchen" },
+      0,
+    );
+    oldDiscard.click();
+    await flush(el);
+    expect(updateOrderLine).toHaveBeenCalledTimes(2);
+  });
+  it("a child close report cannot clear the selected station", async () => {
+    const { el, dialog, section, choose, updateOrderLine } = await opening();
+    await choose();
+    section.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBe(dialog);
+    expect(section.choices.get("0")).toBe("kitchen");
+    expect(unload()).toBe(true);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("disconnect invalidates a pending answer and unregisters unload", async () => {
+    const { el, choose, cancel, updateOrderLine } = await opening();
+    await choose();
+    cancel();
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    el.remove();
+    await expect.poll(() => q.open).toBe(false);
+    expect(unload()).toBe(false);
+    oldDiscard.click();
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("ancestor leave includes the choice but Keep does not run the continuation", async () => {
+    const { el, section, choose, updateOrderLine } = await opening();
+    await choose();
+    const proceed = vi.fn();
+    const result = leaveCoordinatorFor(el)!.request({
+      scopes: [el],
+      reason: "navigation",
+      proceed,
+    });
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    expect(await result).toBe("kept");
+    expect(proceed).not.toHaveBeenCalled();
+    expect(section.choices.get("0")).toBe("kitchen");
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("replacement entry rejects departed choices, close reports and Confirm", async () => {
+    const { el, dialog, section, choose, cancel, change, updateOrderLine } = await opening();
+    await choose();
+    cancel();
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    const oldCancel = dialog.querySelector<HTMLElement>("wt-button[variant=secondary]")!;
+    const oldConfirm = dialog.querySelector<HTMLElement>("[data-edit-dead-ends-retry]")!;
+    updateOrderLine.mockRejectedValueOnce({ code: "station.no_replacement" });
+    change();
+    await flush(el);
+    const replacement =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>("[data-edit-dead-ends]")!;
+    expect(replacement).not.toBe(dialog);
+    expect(q.open).toBe(false);
+    expect(unload()).toBe(false);
+    oldDiscard.click();
+    oldCancel.click();
+    oldConfirm.click();
+    section.dispatchEvent(
+      new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }),
+    );
+    dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBe(replacement);
+    expect(
+      replacement.querySelector<TillDeadEndsSection>("till-dead-ends-section")!.choices.size,
+    ).toBe(0);
+    expect(updateOrderLine).toHaveBeenCalledTimes(2);
+    expect(unload()).toBe(false);
+  });
+  it("reconnect retires the choice when history restores a route outside its order", async () => {
+    const { el, host, dialog, section, choose, updateOrderLine } = await opening();
+    await choose();
+    const oldConfirm = dialog.querySelector<HTMLElement>("[data-edit-dead-ends-retry]")!;
+    el.remove();
+    expect(unload()).toBe(false);
+    host.append(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+    expect(unload()).toBe(false);
+    section.dispatchEvent(
+      new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }),
+    );
+    oldConfirm.click();
+    await flush(el);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("operator lock cancels the warning and immediately discards only the local station choice", async () => {
+    const activity = {
+      configure: vi.fn(),
+      noteInteraction: vi.fn(),
+      reacquire: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+    const { el, choose, cancel, updateOrderLine } = await opening(activity as never);
+    await choose();
+    cancel();
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    const config = activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void };
+    config.onIdle();
+    await flush(el);
+    expect(q.open).toBe(false);
+    expect(lock(el)).not.toBeNull();
+    expect(unload()).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+    oldDiscard.click();
+    await flush(el);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+    expect(api.logout).toHaveBeenCalledOnce();
   });
 });

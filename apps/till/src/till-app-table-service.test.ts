@@ -1307,7 +1307,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
     await flush(el);
     await closeCancel(el);
-    expect(cancelDialog(el)).toBeNull();
+    await expect.poll(() => cancelDialog(el)).toBeNull();
 
     emit(tableOrder(el)!, "change-line", change);
     await flush(el);

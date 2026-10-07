@@ -10,6 +10,10 @@ import {
   baseStyles,
   type DataTableColumn,
   type WtModal,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -144,6 +148,8 @@ interface EditablePrinter {
   };
   active: boolean;
 }
+
+type CalibrationSettings = Pick<EditablePrinter, "paperWidth" | "resolution" | "hasCashDrawer">;
 
 /** Discovery reports arrive on later agent polls, so a scan listens beyond its initial read. */
 export const SCAN_LISTEN_MS = 30_000;
@@ -456,34 +462,13 @@ export class PrintersScreen extends LitElement {
   @state() private selectedPrinterId: string | null = null;
   readonly #url = new UrlStateController(
     this,
-    (event?: Event) => {
+    () => {
       if (this.#url.read("dashboard") !== "printers") return;
-      if (event && this.selectedPrinterId) {
-        const printer = this.printers.find(({ id }) => id === this.selectedPrinterId);
-        if (
-          printer &&
-          this.#connectionIsDirty(printer) &&
-          !this.discardDetailConnectionNavigationArmed
-        ) {
-          this.discardDetailConnectionNavigationArmed = true;
-          this.#url.write({ dashboard: "printers", view: this.view, printer: printer.id });
-          return;
-        }
-        if (
-          printer &&
-          this.detailName?.id === printer.id &&
-          this.detailName.value !== printer.name &&
-          !this.discardDetailNameNavigationArmed
-        ) {
-          this.discardDetailNameNavigationArmed = true;
-          this.#url.write({ dashboard: "printers", view: this.view, printer: printer.id });
-          return;
-        }
-      }
       const printerId = this.#url.read("printer");
       if (printerId !== this.selectedPrinterId) {
         const editing = this.editingPrinter;
         if (editing && editing.id !== printerId) {
+          this.#disposeCalibrationDraft();
           this.editingPrinter = null;
           this.#closeTest();
           if (this.#readdingId === editing.id) {
@@ -520,7 +505,87 @@ export class PrintersScreen extends LitElement {
   @state() private loading = true;
   @state() private addingAgent = false;
   @state() private addingPrinter = false;
+  #addPrinterOpening = 0;
+  #addressScope?: DraftScope<{ host: string; port: string }>;
+  #addressLeave?: LeaveCoordinator;
+  readonly #beforeAddPrinterClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.submitting ||
+    (this.pairSubmitting && !this.#addressScope?.isDirty() && !this.#printerNameScope?.isDirty()) ||
+    !this.#addressScope ||
+    (await this.#addressLeave!.request({
+      scopes: [this.#addressScope.id],
+      reason,
+      proceed() {},
+    })) === "proceeded";
+
+  #addressValues(): { host: string; port: string } {
+    const port = Number(this.probePort);
+    return {
+      host: this.probeHost.trim(),
+      port:
+        /^\d+$/.test(this.probePort) && Number.isInteger(port) && port >= 1 && port <= 65535
+          ? String(port)
+          : this.probePort,
+    };
+  }
+
+  #disposeAddressDraft(): void {
+    this.#addressScope?.dispose();
+    this.#addressScope = undefined;
+    this.#addressLeave = undefined;
+  }
   @state() private namingPrinter: DiscoveredPrinter | null = null;
+  #printerNameScope?: DraftScope<string>;
+  #printerNameLeave?: LeaveCoordinator;
+  #printerNameOpening = 0;
+  readonly #beforePrinterNameClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.submitting ||
+    !this.#printerNameScope ||
+    (await this.#printerNameLeave!.request({
+      scopes: [this.#printerNameScope.id],
+      reason,
+      proceed() {},
+    })) === "proceeded";
+
+  #namePrinter(device: DiscoveredPrinter): void {
+    this.#disposePrinterNameDraft();
+    this.namingPrinter = device;
+    this.formAttempted = false;
+    this.errorKey = null;
+    const key = this.#deviceKey(device);
+    const name =
+      this.discoveredNames[key] ??
+      this.#disabledPrinter(device)?.name ??
+      this.#discoveredLabel(device);
+    this.discoveredNames = { ...this.discoveredNames, [key]: name };
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=name-printer-modal]");
+    if (modal) modal.open = true;
+    this.#printerNameLeave = leaveCoordinatorFor(this);
+    this.#printerNameScope = this.#printerNameLeave?.register<string>({
+      id: {},
+      parent: this.#addressScope?.id,
+      current: () => this.discoveredNames[key]!.trim(),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.discoveredNames = { ...this.discoveredNames, [key]: value };
+      },
+    });
+  }
+
+  #finishPrinterName(opening: number): void {
+    if (opening !== this.#printerNameOpening) return;
+    this.#disposePrinterNameDraft();
+    this.namingPrinter = null;
+    this.formAttempted = false;
+  }
+
+  #disposePrinterNameDraft(): void {
+    this.#printerNameOpening++;
+    this.#printerNameScope?.dispose();
+    this.#printerNameScope = undefined;
+    this.#printerNameLeave = undefined;
+  }
   @state() private discoveredNames: Record<string, string> = {};
   @state() private calibrationStep = 1;
   @state() private statusOpen = true;
@@ -532,8 +597,8 @@ export class PrintersScreen extends LitElement {
     saving: boolean;
     error: string | null;
   } | null = null;
-  @state() private discardDetailNameArmed = false;
-  @state() private discardDetailNameNavigationArmed = false;
+  #detailNameScope?: DraftScope<string>;
+  #detailConnectionScope?: DraftScope<{ host: string; port: string }>;
   @state() private detailConnection: {
     id: string;
     host: string;
@@ -541,8 +606,6 @@ export class PrintersScreen extends LitElement {
     saving: boolean;
     error: string | null;
   } | null = null;
-  @state() private discardDetailConnectionArmed = false;
-  @state() private discardDetailConnectionNavigationArmed = false;
   @state() private connectionOpen = false;
   @state() private calibrationOpen = false;
   @state() private testingDrawer = false;
@@ -556,7 +619,83 @@ export class PrintersScreen extends LitElement {
   #calibrationShownEpoch = 0;
   @state() private testError: string | null = null;
   @state() private editingPrinter: EditablePrinter | null = null;
+  #calibrationScope?: DraftScope<CalibrationSettings>;
+  #calibrationLeave?: LeaveCoordinator;
+  #calibrationOpening = 0;
+  readonly #beforeCalibrationClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.submitting ||
+    this.printingTest ||
+    this.printingSample ||
+    this.testingDrawer ||
+    !this.#calibrationScope ||
+    (await this.#calibrationLeave!.request({
+      scopes: [this.#calibrationScope.id],
+      reason,
+      proceed() {},
+    })) === "proceeded";
+
+  #calibrationValues(): CalibrationSettings {
+    const { paperWidth, resolution, hasCashDrawer } = this.editingPrinter!;
+    return { paperWidth, resolution, hasCashDrawer };
+  }
+
+  #disposeCalibrationDraft(): void {
+    this.#calibrationOpening++;
+    this.#calibrationScope?.dispose();
+    this.#calibrationScope = undefined;
+    this.#calibrationLeave = undefined;
+  }
+
+  #finishCalibration(opening: number, id: string): void {
+    if (opening !== this.#calibrationOpening) return;
+    this.#disposeCalibrationDraft();
+    this.editingPrinter = null;
+    this.#closeTest();
+    this.#restoreEditFocus();
+    if (this.#readdingId === id) {
+      this.#readdingId = undefined;
+      void this.#deactivatePrinter(id);
+    }
+  }
   @state() private editingAgent: PrintAgentRow | null = null;
+  #agentScope?: DraftScope<string>;
+  #agentLeave?: LeaveCoordinator;
+  #agentOpening = 0;
+  readonly #beforeAgentClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.submitting &&
+    (await this.#agentLeave!.request({ scopes: [this.#agentScope!.id], reason, proceed() {} })) ===
+      "proceeded";
+
+  #editAgent(agent: PrintAgentRow): void {
+    this.#disposeAgentDraft();
+    this.editingAgent = { ...agent };
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-agent-modal]");
+    if (modal) modal.open = true;
+    this.#agentLeave = leaveCoordinatorFor(this);
+    this.#agentScope = this.#agentLeave?.register<string>({
+      id: {},
+      current: () => this.editingAgent!.name.trim(),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (name) => {
+        this.editingAgent = { ...this.editingAgent!, name };
+      },
+    });
+  }
+
+  #finishAgentEdit(opening: number): void {
+    if (opening !== this.#agentOpening) return;
+    this.#disposeAgentDraft();
+    this.editingAgent = null;
+    this.#restoreEditFocus();
+  }
+
+  #disposeAgentDraft(): void {
+    this.#agentOpening++;
+    this.#agentScope?.dispose();
+    this.#agentScope = undefined;
+    this.#agentLeave = undefined;
+  }
   /** Whether the open agent, printer or printer-name form has been submitted since it opened. */
   @state() private formAttempted = false;
   @state() private preview: PrintJobPreview | null = null;
@@ -591,6 +730,16 @@ export class PrintersScreen extends LitElement {
   @state() private pairErrorKey: string | null = null;
   @state() private pairSubmitting = false;
   #pairEpoch = 0;
+  #pairScope?: DraftScope<string>;
+  #pairLeave?: LeaveCoordinator;
+  readonly #beforePairClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.pairSubmitting ||
+    !this.#pairScope ||
+    (await this.#pairLeave!.request({
+      scopes: [this.#pairScope.id],
+      reason,
+      proceed() {},
+    })) === "proceeded";
   @state() private commands: Record<string, TrackedCommand> = {};
   /** Command key to answerBy for each pairing that succeeded while Add a printer is open. */
   @state() private pairedDevices: Record<string, number> = {};
@@ -698,6 +847,13 @@ export class PrintersScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#disposeDetailDrafts();
+    this.#disposeCalibrationDraft();
+    this.editingPrinter = null;
+    this.#disposeAgentDraft();
+    this.#disposePrinterNameDraft();
+    this.#disposeAddressDraft();
+    this.editingAgent = null;
     const readding = this.#readdingId;
     this.#readdingId = undefined;
     // Not #deactivatePrinter, whose reload would read the lists again for a screen that is gone, and
@@ -765,17 +921,6 @@ export class PrintersScreen extends LitElement {
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
-    }
-  }
-
-  /** Form submissions share a gate; immediate printer actions keep their own dispatch. */
-  async #submit(action: () => Promise<unknown>): Promise<void> {
-    if (this.submitting) return;
-    this.submitting = true;
-    try {
-      await this.#mutate(action);
-    } finally {
-      this.submitting = false;
     }
   }
 
@@ -1127,6 +1272,16 @@ export class PrintersScreen extends LitElement {
       this.#focusFirstInvalid("[data-test=name-printer-modal]");
       return;
     }
+    const opening = this.#printerNameOpening;
+    const addOpening = this.#addPrinterOpening;
+    const scope = this.#printerNameScope;
+    const addressScope = this.#addressScope;
+    const address = this.#addressValues();
+    const registersAddress =
+      device.transport === "network_tcp" &&
+      device.host === address.host &&
+      String(device.port ?? 9100) === address.port;
+    const active = () => this.isConnected && opening === this.#printerNameOpening;
     this.submitting = true;
     this.errorKey = null;
     try {
@@ -1152,6 +1307,18 @@ export class PrintersScreen extends LitElement {
           localKey: device.localKey,
         }));
       }
+      if (!this.isConnected) return;
+      if (addOpening === this.#addPrinterOpening && registersAddress) addressScope?.commit(address);
+      if (active()) scope?.commit(name);
+      else if (
+        scope &&
+        (this.namingPrinter !== null ||
+          addOpening !== this.#addPrinterOpening ||
+          !this.addingPrinter)
+      ) {
+        await this.#load();
+        return;
+      }
       this.addedPrinterName = name;
       this.#registeredDevices.add(this.#deviceKey(device));
       if (
@@ -1165,8 +1332,25 @@ export class PrintersScreen extends LitElement {
           ? { ...candidate, alreadyRegistered: true }
           : candidate,
       );
-      await this.#closeModal("name-printer-modal");
-      await this.#closeModal("new-printer-modal");
+      if (scope?.isDirty()) {
+        await this.#load();
+        return;
+      }
+      if (scope) {
+        const nameModal = this.renderRoot.querySelector<WtModal>("[data-test=name-printer-modal]");
+        nameModal?.closeAfter("saved");
+        if (nameModal) await nameModal.updateComplete;
+        this.#finishPrinterName(opening);
+        if (!addressScope?.isDirty()) {
+          const addModal = this.renderRoot.querySelector<WtModal>("[data-test=new-printer-modal]");
+          addModal?.closeAfter("saved");
+          if (addModal) await addModal.updateComplete;
+          this.#finishAddPrinter(addOpening);
+        }
+      } else {
+        await this.#closeModal("name-printer-modal");
+        await this.#closeModal("new-printer-modal");
+      }
       this.#openPrinter(
         disabled
           ? { ...disabled, name, active: true }
@@ -1191,7 +1375,7 @@ export class PrintersScreen extends LitElement {
       if (disabled) this.#readdingId = disabled.id;
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (active()) this.errorKey = codeOf(error);
     } finally {
       this.submitting = false;
     }
@@ -1296,7 +1480,7 @@ export class PrintersScreen extends LitElement {
       return false;
     this.formAttempted = false;
     this.errorKey = null;
-    this.namingPrinter = device;
+    this.#namePrinter(device);
     return true;
   }
 
@@ -1370,12 +1554,33 @@ export class PrintersScreen extends LitElement {
 
   #resetPair(): void {
     this.#pairEpoch++;
+    this.#pairScope?.dispose();
+    this.#pairScope = undefined;
+    this.#pairLeave = undefined;
     this.pairingDevice = null;
     this.pairPin = "";
     this.pairAttempted = false;
     this.pairRefused = false;
     this.pairErrorKey = null;
     this.pairSubmitting = false;
+  }
+
+  #openPair(device: DiscoveredPrinter): void {
+    this.#resetPair();
+    this.pairingDevice = device;
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=pair-printer-modal]");
+    if (modal) modal.open = true;
+    this.#pairLeave = leaveCoordinatorFor(this);
+    this.#pairScope = this.#pairLeave?.register<string>({
+      id: {},
+      parent: this.#addressScope?.id,
+      current: () => this.pairPin,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.pairPin = value;
+      },
+    });
   }
 
   async #pair(device: DiscoveredPrinter): Promise<void> {
@@ -1388,15 +1593,22 @@ export class PrintersScreen extends LitElement {
       return;
     }
     const epoch = this.#pairEpoch;
+    const scope = this.#pairScope;
+    const pin = this.pairPin;
     this.pairSubmitting = true;
     try {
-      const { command } = await this.api.pairBluetooth(
-        device.agentId,
-        device.localKey!,
-        this.pairPin,
-      );
+      const { command } = await this.api.pairBluetooth(device.agentId, device.localKey!, pin);
       if (this.addingPrinter) this.#trackCommand(device.agentId, command, device);
-      if (epoch === this.#pairEpoch) await this.#closeModal("pair-printer-modal");
+      if (epoch === this.#pairEpoch && this.isConnected) {
+        scope?.commit(pin);
+        if (scope?.isDirty()) return;
+        const modal = this.renderRoot.querySelector<WtModal>("[data-test=pair-printer-modal]");
+        if (scope && modal) {
+          modal.closeAfter("saved");
+          await modal.updateComplete;
+          if (epoch === this.#pairEpoch) this.#resetPair();
+        } else await this.#closeModal("pair-printer-modal");
+      }
     } catch (error) {
       if (epoch !== this.#pairEpoch) return;
       if (codeOf(error) === "management.request_invalid" && refusedField(error) === "pin") {
@@ -1445,32 +1657,56 @@ export class PrintersScreen extends LitElement {
   }
 
   #editPrinter(id: string, patch: Partial<EditablePrinter>): void {
-    if (this.editingPrinter?.id === id) this.editingPrinter = { ...this.editingPrinter, ...patch };
+    if (this.editingPrinter?.id === id) {
+      this.editingPrinter = { ...this.editingPrinter, ...patch };
+      this.#calibrationScope?.changed();
+    }
   }
 
   /** Calibration only writes settings changed during this wizard. */
   async #savePrinter(id: string): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const row = this.editingPrinter;
-    if (row?.id !== id) return;
-    if (!this.#validatePrinter(row)) return;
+    if (row?.id !== id || !this.#validatePrinter(row)) return;
+    const opening = this.#calibrationOpening;
+    const scope = this.#calibrationScope;
+    const submitted = this.#calibrationValues();
+    const active = () => opening === this.#calibrationOpening && this.isConnected;
     const patch: PrinterPatch = {};
     if (row.paperWidth !== row.saved.paperWidth) patch.paperWidth = row.paperWidth;
     if (row.resolution !== row.saved.resolution) patch.resolution = row.resolution;
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
-    await this.#submit(async () => {
-      // Cleared before the request, so leaving the screen while it is in flight does not switch
-      // off a printer being saved; a failed save puts it back for the wizard's close.
-      const readding = this.#readdingId === id;
-      if (readding) this.#readdingId = undefined;
+    const readding = this.#readdingId === id;
+    // An in-flight save owns reactivation; closing its wizard must not disable the printer.
+    if (readding) this.#readdingId = undefined;
+    this.submitting = true;
+    try {
       try {
         if (Object.keys(patch).length) await this.api.updatePrinter(id, patch);
       } catch (error) {
-        if (readding) this.#readdingId = id;
-        throw error;
+        if (active()) {
+          if (readding) this.#readdingId = id;
+          this.errorKey = codeOf(error);
+        }
+        return;
       }
-      await this.#closeModal("edit-printer-modal");
-    });
+      if (active()) {
+        scope?.commit(submitted);
+        this.editingPrinter = { ...this.editingPrinter!, saved: submitted };
+        if (!scope?.isDirty()) {
+          const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-printer-modal]");
+          if (modal) {
+            modal.closeAfter("saved");
+            await modal.updateComplete;
+          }
+          this.#finishCalibration(opening, id);
+        }
+      }
+      if (this.isConnected) await this.#load();
+    } finally {
+      this.submitting = false;
+    }
   }
 
   async #deactivatePrinter(id: string): Promise<void> {
@@ -1597,7 +1833,7 @@ export class PrintersScreen extends LitElement {
           this.#rememberEditTrigger(event);
           this.formAttempted = false;
           this.errorKey = null;
-          this.editingAgent = { ...agent };
+          this.#editAgent(agent);
         }}
         >${t("action.edit")}</wt-button
       >
@@ -1863,15 +2099,18 @@ export class PrintersScreen extends LitElement {
   #renderEditAgent(): TemplateResult | typeof nothing {
     const agent = this.editingAgent;
     if (!agent) return nothing;
+    const opening = this.#agentOpening;
     const nameError = this.formAttempted && !agent.name.trim() ? t("form.name_required") : "";
     return html`<wt-modal
       size="compact"
       heading=${t("printers.edit_agent")}
       data-test="edit-agent-modal"
       .open=${true}
-      @wt-close=${() => {
-        this.editingAgent = null;
-        this.#restoreEditFocus();
+      .dismissible=${!this.submitting}
+      .beforeClose=${this.#agentScope ? this.#beforeAgentClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.#finishAgentEdit(opening);
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector("[data-test=save-agent]"))}
     >
@@ -1883,10 +2122,12 @@ export class PrintersScreen extends LitElement {
         .value=${agent.name}
         .invalid=${nameError !== ""}
         .error=${nameError}
+        .disabled=${this.submitting}
         data-test="edit-agent-name"
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
           this.editingAgent = { ...agent, name: e.detail.value };
+          this.#agentScope?.changed();
         }}
       ></wt-input>
       <p>${t("printers.agent_host")}: ${agent.host ?? t("printers.not_reported")}</p>
@@ -1897,6 +2138,7 @@ export class PrintersScreen extends LitElement {
       >
         <wt-button
           slot="cancel"
+          .disabled=${this.submitting}
           data-test="cancel-edit-agent"
           @click=${() => void this.#closeModal("edit-agent-modal")}
           >${t("action.cancel")}</wt-button
@@ -1905,7 +2147,7 @@ export class PrintersScreen extends LitElement {
           variant="primary"
           data-test="save-agent"
           ?loading=${this.submitting}
-          ?disabled=${nameError !== ""}
+          ?disabled=${this.submitting || nameError !== ""}
           @click=${() => void this.#saveAgent()}
           >${t("action.save")}</wt-button
         >
@@ -1921,13 +2163,36 @@ export class PrintersScreen extends LitElement {
       this.#focusFirstInvalid("[data-test=edit-agent-modal]");
       return;
     }
-    await this.#submit(async () => {
-      await this.api.updateAgent(agent.id, { name: agent.name.trim() });
-      await this.#closeModal("edit-agent-modal");
-    });
+    if (this.submitting) return;
+    const opening = this.#agentOpening;
+    const scope = this.#agentScope;
+    const submitted = agent.name.trim();
+    const active = () => this.isConnected && opening === this.#agentOpening;
+    this.submitting = true;
+    this.errorKey = null;
+    try {
+      await this.api.updateAgent(agent.id, { name: submitted });
+      if (active()) {
+        scope?.commit(submitted);
+        if (!scope?.isDirty()) {
+          const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-agent-modal]");
+          if (modal?.open) {
+            modal.closeAfter("saved");
+            await modal.updateComplete;
+            this.#finishAgentEdit(opening);
+          }
+        }
+      }
+      if (this.isConnected) await this.#load();
+    } catch (error) {
+      if (active()) this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
+    }
   }
 
   #openPrinter(p: Printer, event?: Event): void {
+    this.#disposeCalibrationDraft();
     if (event) this.#rememberEditTrigger(event);
     this.#closeTest();
     this.calibrationStep = 1;
@@ -1954,6 +2219,21 @@ export class PrintersScreen extends LitElement {
         hasCashDrawer: p.hasCashDrawer,
       },
     };
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-printer-modal]");
+    if (modal) modal.open = true;
+    this.#calibrationLeave = leaveCoordinatorFor(this);
+    this.#calibrationScope = this.#calibrationLeave?.register<CalibrationSettings>({
+      id: {},
+      current: () => this.#calibrationValues(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) =>
+        a.paperWidth === b.paperWidth &&
+        a.resolution === b.resolution &&
+        a.hasCashDrawer === b.hasCashDrawer,
+      restore: (value) => {
+        this.editingPrinter = { ...this.editingPrinter!, ...value };
+      },
+    });
   }
 
   #renderTestPageSent(): TemplateResult | typeof nothing {
@@ -1978,7 +2258,7 @@ export class PrintersScreen extends LitElement {
         data-test=${`edit-printer-${p.id}`}
         @click=${() => {
           this.#showPrinterStatus(p.id);
-          this.detailName = { id: p.id, value: p.name, saving: false, error: null };
+          this.#openDetailName(p);
           void this.updateComplete.then(() => {
             if (this.detailName?.id === p.id)
               this.renderRoot.querySelector<HTMLElement>('[name="printer-detail-name"]')?.focus();
@@ -2040,25 +2320,81 @@ export class PrintersScreen extends LitElement {
   }
 
   #resetPrinterSections(): void {
+    this.#disposeDetailDrafts();
     this.statusOpen = true;
     this.connectionOpen = false;
     this.calibrationOpen = false;
     this.detailActiveError = null;
     this.detailName = null;
     this.detailConnection = null;
-    this.discardDetailConnectionArmed = false;
-    this.discardDetailConnectionNavigationArmed = false;
-    this.discardDetailNameArmed = false;
-    this.discardDetailNameNavigationArmed = false;
   }
 
-  #connectionIsDirty(printer: Printer): boolean {
-    const draft = this.detailConnection;
-    return (
-      draft?.id === printer.id &&
-      (draft.host !== (printer.host ?? "") ||
-        draft.port !== (printer.port === null ? "" : String(printer.port)))
-    );
+  #disposeDetailDrafts(): void {
+    this.#detailNameScope?.dispose();
+    this.#detailNameScope = undefined;
+    this.#detailConnectionScope?.dispose();
+    this.#detailConnectionScope = undefined;
+  }
+
+  #openDetailName(printer: Printer): void {
+    this.#detailNameScope?.dispose();
+    this.detailName = { id: printer.id, value: printer.name, saving: false, error: null };
+    this.#detailNameScope = leaveCoordinatorFor(this)?.register<string>({
+      id: {},
+      current: () => this.detailName!.value.trim(),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.detailName = { ...this.detailName!, value, error: null };
+      },
+    });
+  }
+
+  #detailConnectionValues(): { host: string; port: string } {
+    const draft = this.detailConnection!;
+    const port = draft.port.trim();
+    return { host: draft.host.trim(), port: /^\d+$/.test(port) ? String(Number(port)) : port };
+  }
+
+  #openDetailConnection(printer: Printer): void {
+    this.#detailConnectionScope?.dispose();
+    this.detailConnection = {
+      id: printer.id,
+      host: printer.host ?? "",
+      port: printer.port === null ? "" : String(printer.port),
+      saving: false,
+      error: null,
+    };
+    this.#detailConnectionScope = leaveCoordinatorFor(this)?.register({
+      id: {},
+      current: () => this.#detailConnectionValues(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => a.host === b.host && a.port === b.port,
+      restore: (value) => {
+        this.detailConnection = { ...this.detailConnection!, ...value, error: null };
+      },
+    });
+  }
+
+  async #cancelDetail(owner: "name" | "connection"): Promise<void> {
+    const scope = owner === "name" ? this.#detailNameScope : this.#detailConnectionScope;
+    const proceed = () => {
+      scope?.dispose();
+      if (owner === "name") {
+        this.#detailNameScope = undefined;
+        this.detailName = null;
+      } else {
+        this.#detailConnectionScope = undefined;
+        this.detailConnection = null;
+      }
+      void this.updateComplete.then(() => {
+        this.renderRoot.querySelector<HTMLElement>(`[data-test=edit-printer-${owner}]`)?.focus();
+      });
+    };
+    const coordinator = leaveCoordinatorFor(this);
+    if (coordinator && scope)
+      await coordinator.request({ scopes: [scope.id], reason: "cancel", proceed });
+    else proceed();
   }
 
   async #saveDetailConnection(printer: Printer): Promise<void> {
@@ -2073,19 +2409,35 @@ export class PrintersScreen extends LitElement {
       };
       return;
     }
+    const scope = this.#detailConnectionScope;
     const savingDraft = { ...draft, saving: true, error: null };
     this.detailConnection = savingDraft;
     try {
       await this.api.updatePrinter(printer.id, { host, port: port ? Number(port) : null });
     } catch (error) {
-      if (this.detailConnection === savingDraft)
+      if (!this.isConnected || scope !== this.#detailConnectionScope) return;
+      if (scope && this.detailConnection?.id === printer.id)
+        this.detailConnection = {
+          ...this.detailConnection,
+          saving: false,
+          error: codeMessage(codeOf(error)),
+        };
+      else if (this.detailConnection === savingDraft)
         this.detailConnection = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
       return;
     }
-    if (this.detailConnection === savingDraft) {
+    if (!this.isConnected || scope !== this.#detailConnectionScope) return;
+    if (scope) {
+      scope.commit({ host, port: port ? String(Number(port)) : "" });
+      if (scope.isDirty())
+        this.detailConnection = { ...this.detailConnection!, saving: false, error: null };
+      else {
+        scope.dispose();
+        this.#detailConnectionScope = undefined;
+        this.detailConnection = null;
+      }
+    } else if (this.detailConnection === savingDraft) {
       this.detailConnection = null;
-      this.discardDetailConnectionArmed = false;
-      this.discardDetailConnectionNavigationArmed = false;
     }
     await this.#load();
   }
@@ -2111,18 +2463,30 @@ export class PrintersScreen extends LitElement {
       this.detailName = { ...draft, error: t("form.name_required") };
       return;
     }
+    const scope = this.#detailNameScope;
     const savingDraft = { ...draft, saving: true, error: null };
     this.detailName = savingDraft;
     try {
       await this.api.updatePrinter(printer.id, { name });
     } catch (error) {
-      if (this.detailName === savingDraft)
+      if (!this.isConnected || scope !== this.#detailNameScope) return;
+      if (scope && this.detailName?.id === printer.id)
+        this.detailName = { ...this.detailName, saving: false, error: codeMessage(codeOf(error)) };
+      else if (this.detailName === savingDraft)
         this.detailName = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
       return;
     }
-    if (this.detailName === savingDraft) {
+    if (!this.isConnected || scope !== this.#detailNameScope) return;
+    if (scope) {
+      scope.commit(name);
+      if (scope.isDirty()) this.detailName = { ...this.detailName!, saving: false, error: null };
+      else {
+        scope.dispose();
+        this.#detailNameScope = undefined;
+        this.detailName = null;
+      }
+    } else if (this.detailName === savingDraft) {
       this.detailName = null;
-      this.discardDetailNameArmed = false;
     }
     await this.#load();
   }
@@ -2155,36 +2519,24 @@ export class PrintersScreen extends LitElement {
     const listUrl = new URL(location.href);
     listUrl.pathname = listUrl.pathname.replace(/\/printer\/[^/]+$/, "");
     const back = html`<nav aria-label=${t("printers.filter_all")} data-test="printer-breadcrumb">
-        <a
-          data-test="all-printers-link"
-          href=${`${listUrl.pathname}${listUrl.search}`}
-          @click=${(event: MouseEvent) => {
-            if (leftToBrowser(event)) return;
-            event.preventDefault();
-            if (this.detailName?.saving) return;
-            if (this.detailConnection?.saving) return;
-            if (p && this.#connectionIsDirty(p) && !this.discardDetailConnectionNavigationArmed) {
-              this.discardDetailConnectionNavigationArmed = true;
-              return;
-            }
-            if (
-              p &&
-              this.detailName &&
-              this.detailName.id === p.id &&
-              this.detailName.value !== p.name &&
-              !this.discardDetailNameNavigationArmed
-            ) {
-              this.discardDetailNameNavigationArmed = true;
-              return;
-            }
+      <a
+        data-test="all-printers-link"
+        href=${`${listUrl.pathname}${listUrl.search}`}
+        @click=${(event: MouseEvent) => {
+          if (leftToBrowser(event)) return;
+          event.preventDefault();
+          if (this.detailName?.saving) return;
+          if (this.detailConnection?.saving) return;
+          const leaving = this.#url.write({ printer: null });
+          if (!leaving) {
+            this.#resetPrinterSections();
             this.selectedPrinterId = null;
-            this.#url.write({ printer: null });
-          }}
-          >${t("printers.filter_all")}</a
-        >
-        ${p ? html`<span aria-hidden="true"> › </span><span>${p.name}</span>` : nothing}
-      </nav>
-      ${this.discardDetailConnectionNavigationArmed ? html`<p data-test="discard-printer-connection-navigation" role="status">${t("printers.discard_connection_prompt")}</p>` : nothing}`;
+          }
+        }}
+        >${t("printers.filter_all")}</a
+      >
+      ${p ? html`<span aria-hidden="true"> › </span><span>${p.name}</span>` : nothing}
+    </nav>`;
     if (!p)
       return html`${back}
         <p role="status">
@@ -2220,6 +2572,7 @@ export class PrintersScreen extends LitElement {
                   .invalid=${this.detailName.error === t("form.name_required")}
                   .error=${this.detailName.error === t("form.name_required") ? this.detailName.error : ""}
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    if (!(event.currentTarget as HTMLElement).isConnected) return;
                     event.stopPropagation();
                     if (this.detailName?.id === p.id)
                       this.detailName = {
@@ -2227,8 +2580,7 @@ export class PrintersScreen extends LitElement {
                         value: event.detail.value,
                         error: event.detail.value.trim() ? null : t("form.name_required"),
                       };
-                    this.discardDetailNameArmed = false;
-                    this.discardDetailNameNavigationArmed = false;
+                    this.#detailNameScope?.changed();
                   }}
                 ></wt-input>
                 ${
@@ -2248,17 +2600,9 @@ export class PrintersScreen extends LitElement {
                   <wt-button
                     data-test="cancel-printer-name"
                     ?disabled=${this.detailName.saving}
-                    @click=${() => {
-                      if (this.detailName?.value !== p.name && !this.discardDetailNameArmed) {
-                        this.discardDetailNameArmed = true;
-                      } else {
-                        this.detailName = null;
-                        this.discardDetailNameArmed = false;
-                      }
-                    }}
-                    >${this.discardDetailNameArmed ? t("printers.discard") : t("action.cancel")}</wt-button
+                    @click=${() => void this.#cancelDetail("name")}
+                    >${t("action.cancel")}</wt-button
                   >
-                  ${this.discardDetailNameArmed || this.discardDetailNameNavigationArmed ? html`<span data-test="discard-printer-name" role="status">${t("printers.discard_name_prompt")}</span>` : nothing}
                   <wt-button
                     variant="primary"
                     data-test="save-printer-name"
@@ -2271,8 +2615,7 @@ export class PrintersScreen extends LitElement {
             : html`<wt-button
                 data-test="edit-printer-name"
                 @click=${() => {
-                  this.detailName = { id: p.id, value: p.name, saving: false, error: null };
-                  this.discardDetailNameArmed = false;
+                  this.#openDetailName(p);
                   void this.updateComplete.then(() => {
                     if (this.detailName?.id === p.id)
                       this.renderRoot
@@ -2353,14 +2696,14 @@ export class PrintersScreen extends LitElement {
                       .error=${this.#detailConnectionErrors().host}
                       required
                       @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        if (!(event.currentTarget as HTMLElement).isConnected) return;
                         if (this.detailConnection?.id === p.id)
                           this.detailConnection = {
                             ...this.detailConnection,
                             host: event.detail.value,
                             error: null,
                           };
-                        this.discardDetailConnectionArmed = false;
-                        this.discardDetailConnectionNavigationArmed = false;
+                        this.#detailConnectionScope?.changed();
                       }}
                     ></wt-input>
                     <wt-input
@@ -2372,14 +2715,14 @@ export class PrintersScreen extends LitElement {
                       .invalid=${!!this.#detailConnectionErrors().port}
                       .error=${this.#detailConnectionErrors().port}
                       @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        if (!(event.currentTarget as HTMLElement).isConnected) return;
                         if (this.detailConnection?.id === p.id)
                           this.detailConnection = {
                             ...this.detailConnection,
                             port: event.detail.value,
                             error: null,
                           };
-                        this.discardDetailConnectionArmed = false;
-                        this.discardDetailConnectionNavigationArmed = false;
+                        this.#detailConnectionScope?.changed();
                       }}
                     ></wt-input>
                     ${this.detailConnection.error ? html`<p role="alert">${this.detailConnection.error}</p>` : nothing}
@@ -2392,18 +2735,9 @@ export class PrintersScreen extends LitElement {
                       <wt-button
                         data-test="cancel-printer-connection"
                         ?disabled=${this.detailConnection.saving}
-                        @click=${() => {
-                          if (this.#connectionIsDirty(p) && !this.discardDetailConnectionArmed) {
-                            this.discardDetailConnectionArmed = true;
-                          } else {
-                            this.detailConnection = null;
-                            this.discardDetailConnectionArmed = false;
-                            this.discardDetailConnectionNavigationArmed = false;
-                          }
-                        }}
-                        >${this.discardDetailConnectionArmed ? t("printers.discard") : t("action.cancel")}</wt-button
+                        @click=${() => void this.#cancelDetail("connection")}
+                        >${t("action.cancel")}</wt-button
                       >
-                      ${this.discardDetailConnectionArmed ? html`<span data-test="discard-printer-connection" role="status">${t("printers.discard_connection_prompt")}</span>` : nothing}
                       <wt-button
                         variant="primary"
                         data-test="save-printer-connection"
@@ -2416,15 +2750,7 @@ export class PrintersScreen extends LitElement {
                 : html`<wt-button
                     data-test="edit-printer-connection"
                     @click=${() => {
-                      this.detailConnection = {
-                        id: p.id,
-                        host: p.host ?? "",
-                        port: p.port === null ? "" : String(p.port),
-                        saving: false,
-                        error: null,
-                      };
-                      this.discardDetailConnectionArmed = false;
-                      this.discardDetailConnectionNavigationArmed = false;
+                      this.#openDetailConnection(p);
                     }}
                     >${t("action.edit")}</wt-button
                   >`
@@ -2598,6 +2924,12 @@ export class PrintersScreen extends LitElement {
   }
 
   #openAddPrinter(): void {
+    this.#addPrinterOpening++;
+    this.#resetPair();
+    this.#finishPrinterName(this.#printerNameOpening);
+    this.#disposeAddressDraft();
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=new-printer-modal]");
+    if (modal) modal.open = true;
     this.formAttempted = false;
     this.errorKey = null;
     this.addingPrinter = true;
@@ -2610,6 +2942,17 @@ export class PrintersScreen extends LitElement {
     this.discoveredNames = {};
     this.addedPrinterName = null;
     this.showAllBluetooth = false;
+    this.#addressLeave = leaveCoordinatorFor(this);
+    this.#addressScope = this.#addressLeave?.register({
+      id: {},
+      current: () => this.#addressValues(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => a.host === b.host && a.port === b.port,
+      restore: (value) => {
+        this.probeHost = value.host;
+        this.probePort = value.port;
+      },
+    });
     void this.#scan();
   }
 
@@ -2763,6 +3106,27 @@ export class PrintersScreen extends LitElement {
   async #closeModal(id: string): Promise<void> {
     const modal = this.renderRoot.querySelector<WtModal>(`[data-test="${id}"]`);
     if (!modal?.open) return;
+    if (id === "edit-agent-modal") {
+      if (this.submitting) return;
+      if (this.#agentScope) {
+        await modal.requestClose("cancel");
+        return;
+      }
+    }
+    if (id === "name-printer-modal" || id === "new-printer-modal") {
+      if (id === "new-printer-modal" ? this.#addressScope : this.#printerNameScope) {
+        await modal.requestClose("cancel");
+        return;
+      }
+    }
+    if (id === "pair-printer-modal" && this.#pairScope) {
+      await modal.requestClose("cancel");
+      return;
+    }
+    if (id === "edit-printer-modal" && this.#calibrationScope) {
+      await modal.requestClose("cancel");
+      return;
+    }
     if (id === "new-printer-modal") this.#endScan();
     // Native close restores focus before wt-close removes the draft and modal from the template.
     const closed = new Promise<void>((resolve) =>
@@ -2820,6 +3184,7 @@ export class PrintersScreen extends LitElement {
   #renderEditPrinter(): TemplateResult | typeof nothing {
     const p = this.editingPrinter;
     if (!p) return nothing;
+    const opening = this.#calibrationOpening;
     const errors = this.formAttempted ? this.#printerErrors(p) : {};
     const settingDots = textGrid(p.paperWidth, p.resolution).widthDots;
     const bottom = bottomMessage(
@@ -2833,14 +3198,9 @@ export class PrintersScreen extends LitElement {
       heading=${`${t("printers.calibrate")}: ${p.name}`}
       .open=${true}
       .opener=${this.#tabAction("open-add-printer")}
+      .beforeClose=${this.#calibrationScope ? this.#beforeCalibrationClose : undefined}
       @wt-close=${() => {
-        this.editingPrinter = null;
-        this.#closeTest();
-        this.#restoreEditFocus();
-        if (this.#readdingId === p.id) {
-          this.#readdingId = undefined;
-          void this.#deactivatePrinter(p.id);
-        }
+        this.#finishCalibration(opening, p.id);
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
@@ -3048,6 +3408,7 @@ export class PrintersScreen extends LitElement {
   #renderPrinterName(): TemplateResult | typeof nothing {
     const d = this.namingPrinter;
     if (!d) return nothing;
+    const opening = this.#printerNameOpening;
     const key = this.#deviceKey(d);
     const name =
       this.discoveredNames[key] ?? this.#disabledPrinter(d)?.name ?? this.#discoveredLabel(d);
@@ -3057,9 +3418,9 @@ export class PrintersScreen extends LitElement {
       data-test="name-printer-modal"
       heading=${t("printers.add_printer")}
       .open=${true}
+      .beforeClose=${this.#printerNameScope ? this.#beforePrinterNameClose : undefined}
       @wt-close=${() => {
-        this.namingPrinter = null;
-        this.formAttempted = false;
+        this.#finishPrinterName(opening);
       }}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=confirm-add-printer]"))}
     >
@@ -3079,7 +3440,9 @@ export class PrintersScreen extends LitElement {
           ?disabled=${this.submitting}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
+            if (opening !== this.#printerNameOpening) return;
             this.discoveredNames = { ...this.discoveredNames, [key]: event.detail.value };
+            this.#printerNameScope?.changed();
           }}
         ></wt-input>
       </div>
@@ -3097,7 +3460,7 @@ export class PrintersScreen extends LitElement {
           variant="primary"
           data-test="confirm-add-printer"
           ?loading=${this.submitting}
-          ?disabled=${nameError !== ""}
+          ?disabled=${this.submitting || nameError !== ""}
           @click=${() => void this.#registerDiscovered(d)}
           >${this.#disabledPrinter(d) ? t("printers.enable") : t("action.add")}</wt-button
         >
@@ -3108,6 +3471,7 @@ export class PrintersScreen extends LitElement {
   #renderPairDialog(): TemplateResult | typeof nothing {
     const d = this.pairingDevice;
     if (!d) return nothing;
+    const epoch = this.#pairEpoch;
     const pinInvalid = this.pairAttempted && !BLUETOOTH_PIN.test(this.pairPin);
     const pinError = pinInvalid || this.pairRefused ? t("printers.bluetooth_pin_invalid") : "";
     return html`<wt-modal
@@ -3115,7 +3479,11 @@ export class PrintersScreen extends LitElement {
       data-test="pair-printer-modal"
       heading=${t("printers.bluetooth_pair_title")}
       .open=${true}
-      @wt-close=${() => this.#resetPair()}
+      .beforeClose=${this.#pairScope ? this.#beforePairClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (epoch === this.#pairEpoch) this.#resetPair();
+      }}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=confirm-pair]"))}
     >
       <div class="form-fields">
@@ -3133,8 +3501,10 @@ export class PrintersScreen extends LitElement {
           ?disabled=${this.pairSubmitting}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
+            if (epoch !== this.#pairEpoch) return;
             this.pairPin = event.detail.value;
             this.pairRefused = false;
+            this.#pairScope?.changed();
           }}
         ></wt-input>
       </div>
@@ -3177,8 +3547,31 @@ export class PrintersScreen extends LitElement {
     >`;
   }
 
+  #finishAddPrinter(opening: number): void {
+    if (opening !== this.#addPrinterOpening) return;
+    this.#addPrinterOpening++;
+    this.addingPrinter = false;
+    this.#finishPrinterName(this.#printerNameOpening);
+    if (!this.pairSubmitting) this.#resetPair();
+    this.#disposeAddressDraft();
+    this.#endScan();
+    this.#stopRenewing();
+    // An unpairing's failure goes unless a printer row shows it; a success stays, to keep Unpair
+    // hidden while the agent's report lags.
+    const onPrinterRow = new Set([...this.#printerCommands.values()].map(([key]) => key));
+    this.commands = Object.fromEntries(
+      Object.entries(this.commands).filter(
+        ([key, command]) =>
+          command.kind === "forget" && (onPrinterRow.has(key) || !isProblem(command)),
+      ),
+    );
+    this.pairedDevices = {};
+    this.#settleCommandPoll();
+  }
+
   #renderNewPrinter(): TemplateResult | typeof nothing {
     if (!this.addingPrinter) return nothing;
+    const opening = this.#addPrinterOpening;
     const pairOnly = new Set(this.discovered.filter((d) => this.#canPairOnly(d)));
     const addable = this.discovered.filter((d) => pairOnly.has(d) || this.#canAdd(d));
     // A device registered to a switched-on printer is a printer, whatever the scan decoded.
@@ -3241,9 +3634,7 @@ export class PrintersScreen extends LitElement {
             ?disabled=${this.submitting}
             @click=${() => {
               if (this.submitting) return;
-              this.formAttempted = false;
-              this.errorKey = null;
-              this.namingPrinter = d;
+              this.#namePrinter(d);
             }}
             >${this.#disabledPrinter(d) ? t("printers.enable") : t("action.add")}</wt-button
           >`;
@@ -3267,9 +3658,7 @@ export class PrintersScreen extends LitElement {
                     variant="primary"
                     data-test=${`pair-${this.#deviceKey(d)}`}
                     ?disabled=${command?.state === "pending"}
-                    @click=${() => {
-                      this.pairingDevice = d;
-                    }}
+                    @click=${() => this.#openPair(d)}
                     >${pairOnly.has(d) ? t("printers.bluetooth_pair_only") : t("printers.bluetooth_pair")}</wt-button
                   >`
             }
@@ -3292,22 +3681,10 @@ export class PrintersScreen extends LitElement {
       data-test="new-printer-modal"
       heading=${t("printers.add_printer")}
       .open=${true}
-      @wt-close=${() => {
-        this.addingPrinter = false;
-        this.namingPrinter = null;
-        this.#endScan();
-        this.#stopRenewing();
-        // An unpairing's failure goes unless a printer row shows it; a success stays, to keep Unpair
-        // hidden while the agent's report lags.
-        const onPrinterRow = new Set([...this.#printerCommands.values()].map(([key]) => key));
-        this.commands = Object.fromEntries(
-          Object.entries(this.commands).filter(
-            ([key, command]) =>
-              command.kind === "forget" && (onPrinterRow.has(key) || !isProblem(command)),
-          ),
-        );
-        this.pairedDevices = {};
-        this.#settleCommandPoll();
+      .beforeClose=${this.#addressScope ? this.#beforeAddPrinterClose : this.#printerNameScope ? this.#beforePrinterNameClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.#finishAddPrinter(opening);
       }}
     >
       ${this.addedPrinterName ? html`<p role="status" data-test="printer-added">${t("printers.added").replace("{name}", this.addedPrinterName)}</p>` : nothing}
@@ -3331,7 +3708,10 @@ export class PrintersScreen extends LitElement {
             .error=${probeErrors.host ?? ""}
             ?disabled=${this.probeStatus === "pending"}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              if (opening !== this.#addPrinterOpening) return;
               this.probeHost = event.detail.value;
+              this.#addressScope?.changed();
               const refused = { ...this.probeRefused };
               delete refused.host;
               this.probeRefused = refused;
@@ -3347,7 +3727,10 @@ export class PrintersScreen extends LitElement {
             .error=${probeErrors.port ?? ""}
             ?disabled=${this.probeStatus === "pending"}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              if (opening !== this.#addPrinterOpening) return;
               this.probePort = event.detail.value;
+              this.#addressScope?.changed();
               const refused = { ...this.probeRefused };
               delete refused.port;
               this.probeRefused = refused;

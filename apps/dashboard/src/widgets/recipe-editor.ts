@@ -1,6 +1,7 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -47,25 +48,75 @@ export class RecipeEditor extends LitElement {
   @property({ type: Boolean }) busy = false;
   @state() private checked = new Set<string>();
 
-  /**
-   * Reseed `checked` from the product's recipe on a `product` OR `recipe` change — never on a plain
-   * `checked` change, which would discard the operator's toggles.
-   */
-  override willUpdate(changed: PropertyValues): void {
-    if (!changed.has("product") && !changed.has("recipe")) return;
-    this.checked = new Set(this.recipe.map((line) => line.id));
+  #scope?: DraftScope<string[]>;
+  #leave?: LeaveCoordinator;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
   }
 
-  /**
-   * The update is IMMUTABLE — a fresh Set — so Lit sees a new reference and re-renders; an in-place
-   * add/delete would leave the reference unchanged and paint nothing.
-   */
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    this.checked = new Set();
+    super.disconnectedCallback();
+  }
+
+  #equal(a: readonly string[], b: readonly string[]): boolean {
+    return a.length === b.length && a.every((id) => b.includes(id));
+  }
+
+  isDirty(): boolean {
+    return this.#scope?.isDirty() ?? false;
+  }
+
+  commitSaved(submitted: SaveRecipeDetail): void {
+    if (this.product?.id === submitted.productId) this.#scope?.commit(submitted.ingredientIds);
+  }
+
+  requestLeave(reason: LeaveReason, proceed: () => void): void {
+    if (!this.#leave) proceed();
+    else void this.#leave.request({ scopes: [this], reason, proceed });
+  }
+
+  override willUpdate(changed: PropertyValues): void {
+    const previous = changed.get("product") as Product | null | undefined;
+    const replaced = changed.has("product") && previous?.id !== this.product?.id;
+    if (replaced || this.product === null) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+      this.checked = new Set(this.recipe.map((line) => line.id));
+    } else if (changed.has("recipe") && !this.isDirty()) {
+      const fetched = this.recipe.map((line) => line.id);
+      if (!this.#equal(fetched, [...this.checked])) {
+        this.checked = new Set(fetched);
+        this.#scope?.commit(fetched);
+      }
+    }
+    if (this.product && !this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<string[]>({
+        id: this,
+        current: () => [...this.checked],
+        snapshot: (value) => [...value],
+        equal: (a, b) => this.#equal(a, b),
+        restore: (value) => {
+          this.checked = new Set(value);
+        },
+      });
+    }
+  }
+
   #toggle(event: CustomEvent<{ checked: boolean }>, id: string): void {
     event.stopPropagation();
     const next = new Set(this.checked);
     if (event.detail.checked) next.add(id);
     else next.delete(id);
     this.checked = next;
+    this.#scope?.changed();
   }
 
   #confirm(event: Event): void {
@@ -80,11 +131,11 @@ export class RecipeEditor extends LitElement {
     );
   }
 
-  /** The same event a `wt-dialog` close emits, so the screen hears one `wt-close` whichever
-   * primitive an editor happens to use. */
   #cancel(event: Event): void {
     event.stopPropagation();
-    this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    this.requestLeave("cancel", () => {
+      this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    });
   }
 
   override render() {

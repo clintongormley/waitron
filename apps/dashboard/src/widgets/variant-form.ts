@@ -1,6 +1,8 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
+import { comparablePrice, sameValue } from "./product-editor-model.js";
+import { baseStyles, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -40,6 +42,7 @@ export class VariantForm extends LitElement {
   ];
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
+  @property({ attribute: false }) draftParent?: object;
   @property({ attribute: false }) locales: string[] = [];
   @property({ attribute: false }) value: ProductEditorVariant | null = null;
   @property() unitLabel = "";
@@ -64,6 +67,19 @@ export class VariantForm extends LitElement {
    * screen by the time the keyboard lands there. */
   #focusField: string | null = null;
 
+  #scope?: DraftScope<ProductEditorVariant>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
   override updated(): void {
     const name = this.#focusField;
     if (name === null) return;
@@ -72,18 +88,47 @@ export class VariantForm extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (!(changed.has("open") && this.open) && !changed.has("value")) return;
-    const value = this.value;
-    this.#variantId = value?.id;
-    this.#active = value?.active ?? true;
-    this.name = value?.name ?? "";
-    this.unitPrice = value?.unitPrice ?? "";
-    this.available = value?.available ?? true;
-    this.kitchenName = value?.kitchenName ?? "";
-    this.customerName = { ...value?.customerName };
-    this.image = value?.image ?? null;
-    this.attempted = false;
-    this.#focusField = null;
+    if ((changed.has("open") && this.open) || changed.has("value")) {
+      const value = this.value;
+      this.#variantId = value?.id;
+      this.#active = value?.active ?? true;
+      this.name = value?.name ?? "";
+      this.unitPrice = value?.unitPrice ?? "";
+      this.available = value?.available ?? true;
+      this.kitchenName = value?.kitchenName ?? "";
+      this.customerName = { ...value?.customerName };
+      this.image = value?.image ?? null;
+      this.attempted = false;
+      this.#focusField = null;
+      this.#scope?.dispose();
+      this.#scope = undefined;
+    }
+    if (!this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<ProductEditorVariant>({
+        id: this,
+        parent: this.draftParent,
+        current: () => this.#currentValue(),
+        snapshot: (value) => structuredClone(value),
+        equal: (a, b) =>
+          sameValue(
+            { ...a, unitPrice: comparablePrice(a.unitPrice) },
+            { ...b, unitPrice: comparablePrice(b.unitPrice) },
+          ),
+        restore: (value) => {
+          this.name = value.name;
+          this.unitPrice = value.unitPrice ?? "";
+          this.customerName = { ...value.customerName };
+          this.kitchenName = value.kitchenName ?? "";
+          this.available = value.available;
+          this.image = value.image;
+        },
+      });
+    }
   }
 
   /** Keyed in render order, so the first key is the field focus lands in. */
@@ -105,9 +150,13 @@ export class VariantForm extends LitElement {
 
   #cancel(event: Event): void {
     event.stopPropagation();
-    // The dialog also reports a close it was told to make, a task later; by then the product editor
-    // has closed this form and a cancel would be about nothing.
     if (this.busy || !this.open) return;
+    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.#reportCancel();
+  }
+
+  #reportCancel(): void {
+    if (!this.open || this.busy) return;
     this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
 
@@ -116,7 +165,6 @@ export class VariantForm extends LitElement {
     if (this.busy) return;
     this.attempted = true;
     const errors = this.#validate();
-    const unitPrice = this.unitPrice.trim() === "" ? null : this.unitPrice;
     // A refused submit leaves every field as it was, so one bad value is corrected on its own rather
     // than retyped with the rest — and focus MOVES to the first one reported, in render order,
     // because a refusal that leaves the keyboard on Save says nothing a keyboard user can act on.
@@ -125,6 +173,20 @@ export class VariantForm extends LitElement {
       this.#focusField = first;
       return;
     }
+    const value = this.#currentValue();
+    this.dispatchEvent(
+      new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
+    );
+  }
+
+  closeSaved(submitted: ProductEditorVariant): void {
+    this.#scope?.commit(submitted);
+    this.open = false;
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
+  }
+
+  #currentValue(): ProductEditorVariant {
+    const unitPrice = this.unitPrice.trim() === "" ? null : this.unitPrice;
     const customerName = nonBlankNames(this.customerName);
     const value: ProductEditorVariant = {
       ...(this.#variantId === undefined ? {} : { id: this.#variantId }),
@@ -136,9 +198,7 @@ export class VariantForm extends LitElement {
       available: this.available,
       active: this.#active,
     };
-    this.dispatchEvent(
-      new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
-    );
+    return value;
   }
 
   #imageField() {
@@ -150,6 +210,7 @@ export class VariantForm extends LitElement {
       @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
         event.stopPropagation();
         this.image = event.detail.image;
+        this.#scope?.changed();
       }}
       @image-picker-state=${(event: Event) => {
         // The library picker opens over THIS window, so its open state stops here: the product
@@ -166,8 +227,14 @@ export class VariantForm extends LitElement {
     return html`<wt-modal
       size="standard"
       .open=${this.open}
+      .dismissible=${!this.busy}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       heading=${this.value ? t("editor.edit_variant") : t("editor.add_variant")}
-      @wt-close=${(event: Event) => this.#cancel(event)}
+      @wt-close=${(event: Event) => {
+        if (event.target !== event.currentTarget) return;
+        event.stopPropagation();
+        this.#reportCancel();
+      }}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
         submitOnEnter(
@@ -184,6 +251,7 @@ export class VariantForm extends LitElement {
           this.name,
           (name) => {
             this.name = name;
+            this.#scope?.changed();
           },
           true,
         )}
@@ -194,12 +262,14 @@ export class VariantForm extends LitElement {
           this.unitPrice,
           (unitPrice) => {
             this.unitPrice = unitPrice;
+            this.#scope?.changed();
           },
           false,
           this.basePrice,
         )}
         ${switchField(fields, "available", t("editor.available"), this.available, (available) => {
           this.available = available;
+          this.#scope?.changed();
         })}
         ${textField(
           fields,
@@ -208,6 +278,7 @@ export class VariantForm extends LitElement {
           this.kitchenName,
           (name) => {
             this.kitchenName = name;
+            this.#scope?.changed();
           },
           false,
           this.name,
@@ -219,6 +290,7 @@ export class VariantForm extends LitElement {
           this.customerName,
           (customerName) => {
             this.customerName = customerName;
+            this.#scope?.changed();
           },
           this.name,
           this.locales[0],

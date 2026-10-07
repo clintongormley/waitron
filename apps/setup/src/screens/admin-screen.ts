@@ -1,6 +1,12 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
+import {
+  focusFirstInvalid,
+  submitOnEnter,
+  baseStyles,
+  leaveCoordinatorFor,
+  type DraftScope,
+} from "@waitron/ui";
 import { deriveDisplayName } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -93,6 +99,38 @@ export class SetupAdminScreen extends LitElement {
   @state() private attempted = false;
 
   #seeded = false;
+  #baseline?: Record<AdminField, string>;
+  #scope?: DraftScope<Record<AdminField, string>>;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#registerScope();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    super.disconnectedCallback();
+  }
+
+  override updated(): void {
+    this.#registerScope();
+  }
+
+  #registerScope(): void {
+    if (!this.isConnected || !this.#baseline || this.#scope) return;
+    this.#scope = leaveCoordinatorFor(this)?.register({
+      id: this,
+      current: () => this.values,
+      snapshot: (values) => ({ ...values }),
+      equal: (a, b) => FIELDS.every((field) => a[field] === b[field]),
+      restore: (values) => {
+        this.values = values;
+        this.attempted = false;
+      },
+    });
+    this.#scope?.commit(this.#baseline);
+  }
 
   constructor() {
     super();
@@ -103,6 +141,7 @@ export class SetupAdminScreen extends LitElement {
     if (this.#seeded) return;
     this.#seeded = true;
     this.#seedFromDraft();
+    this.#baseline = { ...this.values };
   }
 
   #seedFromDraft(): void {
@@ -119,6 +158,7 @@ export class SetupAdminScreen extends LitElement {
 
   #onField(key: AdminField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    if (!this.isConnected) return;
     const prev = this.values;
     const values = { ...prev, [key]: event.detail.value };
     if (key === "firstNames" || key === "lastNames") {
@@ -131,6 +171,7 @@ export class SetupAdminScreen extends LitElement {
       );
     }
     this.values = values;
+    this.#scope?.changed();
   }
 
   #errors(): Set<AdminField> {
@@ -146,6 +187,7 @@ export class SetupAdminScreen extends LitElement {
       });
       return;
     }
+    const submitted = { ...this.values };
     dispatchSetupPatch(this, {
       venue: {
         admin: {
@@ -158,6 +200,8 @@ export class SetupAdminScreen extends LitElement {
         },
       },
     });
+    this.#baseline = submitted;
+    this.#scope?.commit(submitted);
     dispatchSetupGoto(this, "venue");
   }
 

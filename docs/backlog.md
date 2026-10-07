@@ -1180,14 +1180,100 @@ read opens the confirmation. Follow-up: complete that accessibility fixture and 
 dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
+
+The branch implements one shared warning for staged forms, modal close requests, page navigation
+and browser leaving across the dashboard, setup wizard, till and contributed screens. Keep
+retains the affected draft; Discard resets only that local draft before the requested leave.
+Successful writes commit independently before refresh. Forced security exits cancel pending
+questions and clear sensitive inputs; automatically saved party drafts keep their existing lifecycle.
+
+The final audit found PIN sign-in missing from the implementation: its keypad was outside the
+field-tag discovery search. Cancel, locale replacement and unload now use the same registry;
+explicit login submission remains direct. Later digits during an in-flight login stay protected. The [dated owner audit](superpowers/plans/2026-10-05-unsaved-changes-audit.md)
+records the original failing tests, deliberate fixture changes, deletion controls and native
+language/theme/width checks for each rollout checkpoint. Earlier rollout-status paragraphs are
+superseded by its dated receipts. The whole-branch Claude review found stale URL query writes, a copied Hours history position,
+a reused history epoch and a retained PIN owner after a forced server switch. Those findings
+have focused regression tests and installed deletion controls. PR #1325 remains a draft until its required current-head CI passes. The normal hook passed
+on `c940a9a26a69088ff51f5c79c6b6ecd484c6a7f4`; CI run `37568443521` passed every package
+test but refused dashboard branch coverage at 94.79%. Additional stale-operation, independent-write
+and busy-input cases now pass the full dashboard run: 8,371 tests, branch coverage 95%.
+The next pushed head still needs its normal hook and required CI.
+
+The printer detail's inline name and network connection now register independent drafts with
+the shared leave controller. Focused browser cases cover Cancel, breadcrumb and Back decisions,
+normalized reverts, browser-leaving registration, successful and refused writes, newer input and
+independent saves. The old local discard prompts have been replaced by the shared question.
+Removed inputs from an earlier opening cannot change a reopened editor. Actual dashboard tests
+cover both editors through sidebar navigation, language change, sign-out, Forward, printer
+switching and forced session expiry. Sixteen EN/ES, light/dark, phone/desktop cases cover native
+focus, scoped accessibility and activated Chromium reload; 32 captures were inspected. The APIs
+in these checks are synthetic. The dated audit records the commands and fixture corrections.
+The remaining delivery steps are the normal push hook and current-head CI.
+
+Activated desktop Chromium checks cover reload, external navigation and closing with the
+Schedule owner; the implementation does not promise prompts on every browser or after mobile
+process termination. Rendered-link tests use actual dispatched elements with synthetic APIs;
+they do not establish physical reachability beneath an unrelated modal or live server writes.
+
+Synthetic phone captures also showed a clipped Counter total and padded-looking Spanish
+quantities. Cause and real-venue reproduction remain unverified. Inspect the real till before
+attributing them to W69 or changing quantity/money handling. Service-status labels, sidebar
+and warning hover contrast investigations remain separate below.
+
+**Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
+The native status colour fields show an ellipsis instead of the full label in the inspected
+EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell receipts are
+`~/waitron-campaign-e/receipts/w69-status-rows-20261006/look/`; runtime reproduction on main is
+unverified. W69 changes no field sizing. Next action: reproduce in Venue settings → Tables and
+adjust the colour-field width using the shared field contract without changing status colour data.
+
+**Sidebar contrast (found during W69, 2026-10-06) — OPEN.** At desktop width in the light theme,
+axe reports the selected My schedule navigation button at 4.32:1 against the required 4.5:1.
+A disposable-copy probe using `dashboard-app.ts` from main `fd836ea05f46b03f23803a243b98ba075b4ea22b`
+reproduced it with the profile closed (`baseline-sidebar-contrast.log` in this checkpoint’s local
+receipts). W69 leaves the sidebar palette unchanged. Adjust the selected navigation’s token use,
+then check the real desktop sidebar in both themes. The profile warning/editor scans passed when
+restricted to those visible modal surfaces; the whole-shell scan still reports this separate issue. Full DashboardApp scans of this branch's Venue details warning also flag the light
+sidebar's group headings at 4.32:1 in EN/ES at 1280 px. The scoped warning scan passes; no full-shell
+accessibility pass is claimed. Include these headings in A306's sidebar investigation. Receipt:
+`~/waitron-campaign-e/receipts/w69-venue-container-20261006/visual.log`; main runtime reproduction
+remains unverified.
+
+**Dark modal danger-button hover contrast (found during W69, 2026-10-06) — OPEN.**
+Axe reports the hovered Discard button at 4.49:1 against the required 4.5:1. A separate probe
+with a standard `wt-modal` danger footer reproduced the same reading after replacing its
+dialog implementation with main `880ccd113bdb8f69300228123910061a7b6f3c43`'s version in the
+installed disposable copy. The standalone Live confirmation card's hovered danger button
+passed that probe. Button hover opacity and danger colours were unchanged against main;
+`git blame` attributes them to `0a93f4d355` and `b20c267095`. Check the shared danger-button
+hover against modal surfaces in both themes. Normal-state warning scans pass with the pointer
+over the heading; that result does not cover hover. Receipts: Lane E `w69-setup-mode-20261006`,
+`visual.log`, `baseline-modal-hover.log`, `main-dialog-hover.log` and the blame readouts.
+
+The 2026-10-07 till profile warning's initial pointer-sensitive scans also reported Discard at
+4.21:1 in light and 4.49:1 in dark (`receipts/w69-leave-paths-20261007/profile-family.log` in
+Lane E). The cause of the new light reading and its main reproduction are unverified.
+Eight neutral-pointer warning scans passed; they establish neither hover nor full-shell contrast.
+Keep that light reading beside the existing danger-button investigation. No shared style changed.
+
+The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
+redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue
+receipt settings and printer calibration remain in W69's inventory.
+
+A separate finding remains: entering `05,50` for an amount discount and pressing Continue raises
+`shared.invalid_decimal` from the existing amount check. The W69 adjustment checkpoint reproduced
+it before implementation (`red.log`, campaign receipts `w69-adjustment-20261006`);
+`git show 26b67286a:apps/till/src/widgets/adjustment-dialog.ts` lines 287–289 shows the same call.
+W69 leaves the amount validation and request conversion unchanged.
+
 The [design](superpowers/specs/2026-10-05-unsaved-changes-warning-design.md),
 [owner audit](superpowers/plans/2026-10-05-unsaved-changes-audit.md) and
-[implementation plan](superpowers/plans/2026-10-05-unsaved-changes-warning.md) cover editable
-modals and pages across the dashboard, till, setup and contributed screens. Build the shared
-mechanism and modal rollout, then page/navigation coverage; neither rollout is implemented yet.
-Keep automatic saves and forced session exits on their existing paths.
-2026-10-06: Hours (A261 step 5) deleted `station-hours-form`, which the audit lists, and added
-the Hours page's editors, which it does not.
+[implementation plan](superpowers/plans/2026-10-05-unsaved-changes-warning.md) retain the rollout
+inventory and dated behavioral receipts. The audit's later checkpoints supersede the earlier
+partial-rollout notes. The implementation and acceptance checks are complete on PR #1325;
+required current-head CI and landing remain. Immediate writes, read-only confirmations and
+submitted command phases keep the exemptions recorded in the design and audit.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
@@ -7679,3 +7765,13 @@ Update it in the change that makes it stale (CLAUDE.md §7). In particular:
 - When a question is closed on primary source, say so and stop calling it blocked.
 - Delete finished items. If an entry is growing proof-of-work (test counts, grep receipts, "proven by
   deletion", what a review seat caught), that belongs in the PR thread, not here.
+
+
+**Setup Import button hover contrast (found during W69, 2026-10-06) — OPEN.**
+The temporary `light Import button hover contrast probe` mounted `setup-live-source-screen`
+at 390px, asserted the native primary button matched `:hover`, and ran axe. It failed with white
+text on `#4185ee`, 3.61:1 against 4.5:1 (`primary-hover.log` in Lane E's
+`receipts/w69-setup-empty-20261006`). The ordinary warning and retained-form scans passed with
+the pointer over their heading; they do not cover hover. Follow-up: check the primary button's
+hover opacity against each surface and theme, then correct the shared treatment separately.
+W69 does not change those styles. This probe was not repeated on main.

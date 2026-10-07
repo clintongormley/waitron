@@ -1,6 +1,12 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
+import {
+  focusFirstInvalid,
+  submitOnEnter,
+  baseStyles,
+  leaveCoordinatorFor,
+  type DraftScope,
+} from "@waitron/ui";
 import {
   findAdministrativeArea,
   findAdministrativeAreaByPostalCode,
@@ -75,6 +81,13 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
 };
 
 type FieldKey = TextField | "invoiceLocales";
+
+interface VenueForm {
+  values: Record<TextField, string>;
+  invoiceLocales: string[];
+  descriptionEdited: boolean;
+  invoiceLocalesFollowAreaDefault: boolean;
+}
 
 /** Demo fills these itself, so its form does not show them. */
 const DEMO_HIDDEN: ReadonlySet<FieldKey> = new Set<FieldKey>([
@@ -285,6 +298,78 @@ export class SetupVenueScreen extends LitElement {
   #seeded = false;
   #invoiceLocalesFollowAreaDefault = true;
   #errors = new Map<FieldKey, string>();
+  #baseline?: VenueForm;
+  #scope?: DraftScope<VenueForm>;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#registerScope();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    super.disconnectedCallback();
+  }
+
+  #current(): VenueForm {
+    return {
+      values: this.values,
+      invoiceLocales: this.invoiceLocales,
+      descriptionEdited: this.#descriptionEdited,
+      invoiceLocalesFollowAreaDefault: this.#invoiceLocalesFollowAreaDefault,
+    };
+  }
+
+  #snapshot(form: VenueForm): VenueForm {
+    return { ...form, values: { ...form.values }, invoiceLocales: [...form.invoiceLocales] };
+  }
+
+  #comparable(form: VenueForm): Record<TextField | "invoiceLocales", string | null> {
+    const pack = getVenueSetupCountryPack(form.values.country);
+    const area = pack && findAdministrativeArea(pack, form.values.province);
+    const tax = pack?.taxIdentifier?.validate(form.values.taxId);
+    const postal = pack?.postalCode?.validate(form.values.postalCode);
+    const rules = pack && receiptLanguageRules(pack, area?.code);
+    const values: Record<TextField | "invoiceLocales", string | null> = {
+      ...form.values,
+      taxId: tax?.valid ? tax.normalized : form.values.taxId,
+      postalCode: postal?.valid ? postal.normalized : form.values.postalCode,
+      province: area?.name ?? form.values.province,
+      addressLine2: form.values.addressLine2.trim() === "" ? null : form.values.addressLine2,
+      invoiceLocales: JSON.stringify(
+        rules?.fixed ? [rules.fixed.locale] : [...form.invoiceLocales].sort(),
+      ),
+    };
+    if (this.#demo) {
+      for (const key of DEMO_HIDDEN) values[key] = null;
+    }
+    return values;
+  }
+
+  #registerScope(): void {
+    if (!this.isConnected || !this.#baseline || this.#scope) return;
+    this.#scope = leaveCoordinatorFor(this)?.register({
+      id: this,
+      current: () => this.#current(),
+      snapshot: (form) => this.#snapshot(form),
+      equal: (a, b) => {
+        const left = this.#comparable(a);
+        const right = this.#comparable(b);
+        return (Object.keys(left) as (TextField | "invoiceLocales")[]).every(
+          (key) => left[key] === right[key],
+        );
+      },
+      restore: (form) => {
+        this.values = form.values;
+        this.invoiceLocales = form.invoiceLocales;
+        this.#descriptionEdited = form.descriptionEdited;
+        this.#invoiceLocalesFollowAreaDefault = form.invoiceLocalesFollowAreaDefault;
+        this.attempted = false;
+      },
+    });
+    this.#scope?.commit(this.#baseline);
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (!this.#seeded) {
@@ -300,7 +385,18 @@ export class SetupVenueScreen extends LitElement {
       this.draft.venue?.location?.operationDescription === undefined
     ) {
       this.values = { ...this.values, operationDescription: this.#descriptionDefault() };
+      if (changed.has("defaults") && this.#baseline?.values.country === this.values.country) {
+        this.#baseline = {
+          ...this.#baseline,
+          values: {
+            ...this.#baseline.values,
+            operationDescription: this.values.operationDescription,
+          },
+        };
+        this.#scope?.commit(this.#baseline);
+      }
     }
+    this.#baseline ??= this.#snapshot(this.#current());
     // Only when the shell hands down a NEW value: re-deriving on every update would put back a mark
     // the operator has already cleared by editing the field.
     if (changed.has("invalidField")) {
@@ -317,6 +413,7 @@ export class SetupVenueScreen extends LitElement {
    * focus is what tells the operator where they landed.
    */
   override updated(changed: PropertyValues<this>): void {
+    this.#registerScope();
     if (!changed.has("invalidField") || this.serverInvalid === undefined) return;
     // By its `name`, not its `data-test` hook, which is for tests.
     const field = this.shadowRoot!.querySelector<
@@ -330,7 +427,6 @@ export class SetupVenueScreen extends LitElement {
     });
   }
 
-  /** So Back-then-forward restores every value the operator entered. */
   #seedFromDraft(): void {
     const venue = this.draft.venue ?? {};
     const loc = venue.location ?? {};
@@ -382,9 +478,11 @@ export class SetupVenueScreen extends LitElement {
       if (pack !== undefined && area !== undefined && this.#invoiceLocalesFollowAreaDefault) {
         this.invoiceLocales = defaultInvoiceLocales(pack, area);
       }
+      this.#scope?.changed();
       return;
     }
     this.values = { ...this.values, [key]: value };
+    this.#scope?.changed();
   }
 
   #onCountry(event: CustomEvent<{ value: string }>): void {
@@ -396,6 +494,7 @@ export class SetupVenueScreen extends LitElement {
       this.invoiceLocales = defaultInvoiceLocales(pack, undefined);
       this.#invoiceLocalesFollowAreaDefault = true;
     }
+    this.#scope?.changed();
   }
 
   #onProvince(event: CustomEvent<{ value: string }>): void {
@@ -404,9 +503,11 @@ export class SetupVenueScreen extends LitElement {
     if (pack === undefined) return;
     const area = findAdministrativeArea(pack, event.detail.value);
     this.values = { ...this.values, province: area?.name ?? "" };
+    this.#scope?.changed();
     if (area === undefined) return;
     if (this.#invoiceLocalesFollowAreaDefault) {
       this.invoiceLocales = defaultInvoiceLocales(pack, area);
+      this.#scope?.changed();
     }
   }
 
@@ -436,6 +537,7 @@ export class SetupVenueScreen extends LitElement {
     event.stopPropagation();
     this.#invoiceLocalesFollowAreaDefault = false;
     this.invoiceLocales = (event.target as HTMLInputElement).checked ? [locale] : [];
+    this.#scope?.changed();
   }
 
   #shows(key: FieldKey): boolean {
@@ -563,6 +665,8 @@ export class SetupVenueScreen extends LitElement {
       },
     };
     dispatchSetupPatch(this, patch);
+    this.#baseline = this.#snapshot(this.#current());
+    this.#scope?.commit(this.#baseline);
 
     // The shell decides the next screen: it holds the merged draft.
     dispatchSetupAdvance(this);

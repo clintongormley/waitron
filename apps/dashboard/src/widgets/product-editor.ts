@@ -1,4 +1,5 @@
-import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
+import { ReorderController, reorder, leaveCoordinatorFor, type ReorderModel } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -55,6 +56,7 @@ import type {
   ProductRoutingChoice,
 } from "./product-editor-model.js";
 import {
+  comparablePrice,
   modifierKey,
   modifierListName,
   modifierListNames,
@@ -431,6 +433,20 @@ export class ProductEditor extends LitElement {
   #listNames: ReadonlyMap<string, string> = new Map();
   #categoryNodes: ReadonlyMap<string, CategorySummary> = new Map();
 
+  #draftScope?: DraftScope<ProductEditorDraft>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.suspended) return false;
+    return (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+  };
+
+  override disconnectedCallback(): void {
+    this.#draftScope?.dispose();
+    this.#draftScope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
   readonly #reorder = new ReorderController(
     this,
     {
@@ -476,6 +492,24 @@ export class ProductEditor extends LitElement {
       this.#pricingStartsOpen = !this.value?.id;
       this.#variantProblems = new Map();
       if (this.open && this.initialField === "image") this.#focusField = this.initialField;
+      this.#draftScope?.dispose();
+      this.#draftScope = undefined;
+    }
+    if (!this.open) {
+      this.#draftScope?.dispose();
+      this.#draftScope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#draftScope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#draftScope = this.#leave?.register({
+        id: this,
+        current: () => this.currentValue,
+        snapshot: (value) => structuredClone(value),
+        equal: (a, b) => sameValue(this.comparisonValue(a), this.comparisonValue(b)),
+        restore: (value) => {
+          this.draft = value;
+        },
+      });
     }
     if ((changed.has("busy") && !this.busy) || changed.has("fieldErrors")) this.submitted = false;
     // A field error the SERVER reported is surfaced the same way a local one is: its section opens
@@ -722,6 +756,7 @@ export class ProductEditor extends LitElement {
       );
     } else if (errorKey !== undefined) this.dismiss(errorKey);
     this.draft = { ...this.draft, [key]: value };
+    this.#draftScope?.changed();
     if (key === "unitId") void this.readUnitUsage();
   }
 
@@ -826,9 +861,15 @@ export class ProductEditor extends LitElement {
       return;
     }
     this.submitted = true;
-    const value = this.currentValue;
+    const value = this.submissionValue(this.currentValue, restore);
+    this.dispatchEvent(
+      new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
+    );
+  }
+  private submissionValue(draft: ProductEditorDraft, restore = false): ProductEditorDraft {
+    const value = structuredClone(draft);
     delete value.inherited;
-    if (this.inherited !== null) {
+    if (draft.inherited != null) {
       if (!(value.unitPrice ?? "").trim()) value.unitPrice = null;
       // A variant always has its product's category, unit and colour; the server refuses its own.
       value.primaryCategoryId = null;
@@ -840,10 +881,31 @@ export class ProductEditor extends LitElement {
     value.kitchenName = value.kitchenName?.trim() || null;
     value.customerName = blankToNull(value.customerName);
     value.description = blankToNull(value.description);
-    this.dispatchEvent(
-      new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
-    );
+    return value;
   }
+
+  private comparisonValue(draft: ProductEditorDraft): ProductEditorDraft {
+    const value = this.submissionValue(draft);
+    value.unitPrice = comparablePrice(value.unitPrice);
+    value.variants = value.variants.map((variant) => ({
+      ...variant,
+      unitPrice: comparablePrice(variant.unitPrice),
+    }));
+    value.dietaryDeclarations =
+      value.dietaryDeclarations === null ? null : [...value.dietaryDeclarations].sort();
+    return value;
+  }
+
+  commitSaved(submitted: ProductEditorDraft): void {
+    this.#draftScope?.commit(submitted);
+  }
+
+  closeSaved(submitted: ProductEditorDraft): void {
+    this.commitSaved(submitted);
+    this.open = false;
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
+  }
+
   /** The form's own checks, keyed in the order the fields are rendered, so the first key is the
    * field focus lands in. */
   private validate(): Record<string, string> {
@@ -870,6 +932,11 @@ export class ProductEditor extends LitElement {
   private cancel(event: Event) {
     event.stopPropagation();
     if (this.suspended) return;
+    if (this.#draftScope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.reportCancel();
+  }
+
+  private reportCancel(): void {
     this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
 
@@ -908,6 +975,7 @@ export class ProductEditor extends LitElement {
     this.variantOpen = false;
     this.variantIndex = null;
     this.change("variants", variants);
+    this.shadowRoot!.querySelector("dashboard-variant-form")!.closeSaved(event.detail.value);
   }
 
   /** The product's category as a path, with Change; a variant's page shows its product's path,
@@ -1045,6 +1113,7 @@ export class ProductEditor extends LitElement {
     if (!this.api) return html`<div class="group" data-section="name">${name}</div>`;
     return html`<div class="group" data-section="name">
       <dashboard-image-upload
+        .draftParent=${this}
         thumbnail
         .api=${this.api}
         .image=${this.draft.image}
@@ -1234,6 +1303,7 @@ export class ProductEditor extends LitElement {
             allergens: variantPage && !codes.length ? null : allergens,
             dietaryDeclarations: variantPage && !dietary.length ? null : dietary,
           };
+          this.#draftScope?.changed();
         }}
       ></dashboard-allergen-dietary-picker>
       ${this.nutritionHints()}
@@ -1748,14 +1818,18 @@ export class ProductEditor extends LitElement {
     return html`<wt-modal
         size="standard"
         .open=${this.open}
+        .dismissible=${!this.suspended}
+        .beforeClose=${this.#draftScope ? this.#beforeClose : undefined}
         heading=${t(
           this.inherited ? "editor.edit_variant" : this.value?.id ? "product.edit" : "product.new",
         )}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         @wt-close=${(event: Event) => {
-          // A close while `open` is false is the screen shutting the window, not the person.
-          if (event.target === event.currentTarget && this.open) this.cancel(event);
+          if (event.target === event.currentTarget && this.open) {
+            event.stopPropagation();
+            this.reportCancel();
+          }
         }}
       >
         <div class="form">
@@ -1816,6 +1890,7 @@ export class ProductEditor extends LitElement {
       </wt-modal>
       ${this.inherited === null ? this.renderUnitChooser() : nothing}
       <dashboard-variant-form
+        .draftParent=${this}
         .open=${this.variantOpen}
         .locales=${this.locales}
         .value=${

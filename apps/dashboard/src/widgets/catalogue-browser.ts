@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, iconButtonStyles, trackIconTooltip } from "@waitron/ui";
+import { baseStyles, iconButtonStyles, trackIconTooltip, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import type { RoutingModel } from "@waitron/venue-service/routing";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -28,6 +29,11 @@ import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "
 import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
+
+interface OperationDraft {
+  destination: string;
+  contents: FolderContents;
+}
 
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
@@ -133,6 +139,47 @@ export class CatalogueBrowser extends LitElement {
   @state() private operationBusy = false;
   @state() private operationError = "";
   @state() private dropError = "";
+  readonly #operationOwner = {};
+  #operationScope?: DraftScope<OperationDraft>;
+  #operationLeave?: LeaveCoordinator;
+  readonly #operationBaseline: OperationDraft = { destination: "", contents: "move_up" };
+  readonly #beforeOperationClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.isConnected &&
+    !this.operationBusy &&
+    !this.summaryLoading &&
+    (await this.#operationLeave!.request({
+      scopes: [this.#operationOwner],
+      reason,
+      proceed() {},
+    })) === "proceeded";
+
+  #operationDraft(): OperationDraft {
+    return {
+      destination: this.operation === "move" ? this.destination : "",
+      contents: this.operation === "delete" ? this.#contentsChoice() : "move_up",
+    };
+  }
+  #releaseOperation(): void {
+    this.#operationScope?.dispose();
+    this.#operationScope = undefined;
+    this.#operationLeave = undefined;
+  }
+  override disconnectedCallback(): void {
+    this.#releaseOperation();
+    super.disconnectedCallback();
+  }
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+  #requestOperationClose(): void {
+    if (!this.isConnected || this.operationBusy || this.summaryLoading) return;
+    if (this.#operationScope)
+      void this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+        "wt-modal",
+      )!.requestClose("cancel");
+    else this.operation = null;
+  }
   #revealed: string | null = null;
   #folderMadeAt: ReadonlyMap<string, FolderMadeAt> = new Map();
 
@@ -155,6 +202,23 @@ export class CatalogueBrowser extends LitElement {
     }
   }
   override willUpdate(changed: PropertyValues): void {
+    if (this.operation === null) this.#releaseOperation();
+    else if (!this.#operationScope) {
+      this.#operationLeave = leaveCoordinatorFor(this);
+      this.#operationScope = this.#operationLeave?.register<OperationDraft>({
+        id: this.#operationOwner,
+        parent: this,
+        current: () => this.#operationDraft(),
+        snapshot: (value) => ({ ...value }),
+        equal: (a, b) => a.destination === b.destination && a.contents === b.contents,
+        restore: (value) => {
+          this.destination = value.destination;
+          this.contents = value.contents;
+        },
+      });
+      this.#operationScope?.commit(this.#operationBaseline);
+    }
+    if (changed.has("summaries")) this.#operationScope?.changed();
     if (changed.has("search")) this.selected = [];
     if (changed.has("nameDraft")) this.nameColor = undefined;
     // Worked out once per change of its inputs, not on every redraw of the browser.
@@ -286,6 +350,7 @@ export class CatalogueBrowser extends LitElement {
     )
       return;
     this.operationBusy = true;
+    this.#operationScope?.commit(this.#operationBaseline);
     this.operationError = "";
     try {
       if (operation === "move")
@@ -320,6 +385,7 @@ export class CatalogueBrowser extends LitElement {
           return;
         }
       }
+      this.#releaseOperation();
       this.operation = null;
       this.selected = [];
     } catch (error) {
@@ -504,14 +570,21 @@ export class CatalogueBrowser extends LitElement {
       .open=${true}
       .heading=${heading}
       .dismissible=${!this.operationBusy && !this.summaryLoading}
+      .beforeClose=${this.#operationScope ? this.#beforeOperationClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
+        if (
+          event.target !== event.currentTarget ||
+          !(event.currentTarget as HTMLElement).isConnected
+        )
+          return;
         if (!this.operationBusy && !this.summaryLoading) this.operation = null;
       }}
     >
       <form
         @submit=${(event: Event) => {
           event.preventDefault();
+          if (!(event.currentTarget as HTMLElement).isConnected) return;
           void this.#confirm(this.operation, true);
         }}
       >
@@ -528,7 +601,14 @@ export class CatalogueBrowser extends LitElement {
                 .disabled=${this.operationBusy}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => {
                   event.stopPropagation();
+                  if (
+                    !(event.currentTarget as HTMLElement).isConnected ||
+                    this.operationBusy ||
+                    !this.operation
+                  )
+                    return;
                   this.destination = event.detail.value;
+                  this.#operationScope?.changed();
                 }}
               ></wt-combobox>`
             : html`
@@ -555,7 +635,16 @@ export class CatalogueBrowser extends LitElement {
                                   required
                                   value="move_up"
                                   .checked=${this.contents === "move_up"}
-                                  @change=${() => (this.contents = "move_up")}
+                                  @change=${(event: Event) => {
+                                    if (
+                                      !(event.currentTarget as HTMLElement).isConnected ||
+                                      this.operationBusy ||
+                                      !this.operation
+                                    )
+                                      return;
+                                    this.contents = "move_up";
+                                    this.#operationScope?.changed();
+                                  }}
                                 />${keepLabel}</label
                               >
                               <label class="radio"
@@ -565,7 +654,16 @@ export class CatalogueBrowser extends LitElement {
                                   required
                                   value="delete"
                                   .checked=${this.contents === "delete"}
-                                  @change=${() => (this.contents = "delete")}
+                                  @change=${(event: Event) => {
+                                    if (
+                                      !(event.currentTarget as HTMLElement).isConnected ||
+                                      this.operationBusy ||
+                                      !this.operation
+                                    )
+                                      return;
+                                    this.contents = "delete";
+                                    this.#operationScope?.changed();
+                                  }}
                                 />${deleteLabel}</label
                               >
                             </fieldset>`
@@ -583,7 +681,10 @@ export class CatalogueBrowser extends LitElement {
           slot="cancel"
           variant="secondary"
           .disabled=${this.operationBusy || this.summaryLoading}
-          @click=${() => (this.operation = null)}
+          @click=${(event: Event) => {
+            if (!(event.currentTarget as HTMLElement).isConnected) return;
+            this.#requestOperationClose();
+          }}
           >${t("folders.cancel_selection")}</wt-button
         >
         <wt-button
@@ -591,7 +692,10 @@ export class CatalogueBrowser extends LitElement {
           variant=${this.operation === "delete" ? "danger" : "primary"}
           .loading=${this.operationBusy}
           .disabled=${this.operationBusy || this.summaryLoading || this.summaryFailed || (this.operation === "move" && !this.destination)}
-          @click=${() => void this.#confirm(this.operation, true)}
+          @click=${(event: Event) => {
+            if (!(event.currentTarget as HTMLElement).isConnected) return;
+            void this.#confirm(this.operation, true);
+          }}
           >${this.operation === "delete" ? this.#deleteLabel(selection) : t("folders.move")}</wt-button
         >
       </wt-form-actions>

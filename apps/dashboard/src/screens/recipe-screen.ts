@@ -16,7 +16,7 @@ import {
   type IngredientFormErrors,
   type UpdateIngredientDetail,
 } from "../widgets/ingredient-form.js";
-import type { SaveRecipeDetail } from "../widgets/recipe-editor.js";
+import type { RecipeEditor, SaveRecipeDetail } from "../widgets/recipe-editor.js";
 import type {
   CatalogueSummary,
   DashboardApi,
@@ -103,6 +103,31 @@ export class RecipeScreen extends LitElement {
   // While the recipe loads it reads as empty, so a Save then would wipe the product's recipe.
   @state() private recipeLoading = false;
 
+  #generation = 0;
+  #recipeGeneration = 0;
+  #retainedProduct: Product | null = null;
+
+  #editor(): RecipeEditor | null {
+    return this.shadowRoot?.querySelector("dashboard-recipe-editor") ?? null;
+  }
+
+  override disconnectedCallback(): void {
+    this.#generation++;
+    this.#recipeGeneration++;
+    this.selectedCatalogueId = "";
+    this.selectedProductId = "";
+    this.#retainedProduct = null;
+    this.recipe = [];
+    this.products = [];
+    this.busy = false;
+    this.recipeLoading = false;
+    this.formOpen = false;
+    this.editingIngredient = null;
+    this.formErrors = {};
+    this.#showError(null);
+    super.disconnectedCallback();
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -135,7 +160,9 @@ export class RecipeScreen extends LitElement {
   }
 
   async #reloadIngredients(): Promise<void> {
-    this.ingredients = await this.api.listIngredients();
+    const generation = this.#generation;
+    const ingredients = await this.api.listIngredients();
+    if (this.isConnected && this.#generation === generation) this.ingredients = ingredients;
   }
 
   #openForm(): void {
@@ -160,28 +187,32 @@ export class RecipeScreen extends LitElement {
     if (this.busy) return;
     this.busy = true;
     this.formErrors = {};
+    const generation = this.#generation;
+    const current = () => this.isConnected && this.#generation === generation;
     try {
       try {
         await this.api.createIngredient(event.detail);
       } catch (error) {
+        if (!current()) return;
         this.formErrors = ingredientRefusalErrors(error);
         return;
       }
+      if (!current()) return;
+      this.shadowRoot!.querySelector("dashboard-ingredient-form")!.closeSaved(event.detail);
       await this.#afterWrite();
     } finally {
-      this.busy = false;
+      if (current()) this.busy = false;
     }
   }
 
-  /** The write succeeded, so the form closes whatever the refresh does; a failed refresh is a load
-   * failure. */
   async #afterWrite(): Promise<void> {
+    const generation = this.#generation;
     this.formOpen = false;
     this.#showError(null);
     try {
       await this.#reloadIngredients();
     } catch (error) {
-      this.#showReadError(error);
+      if (this.isConnected && this.#generation === generation) this.#showReadError(error);
     }
   }
 
@@ -190,37 +221,51 @@ export class RecipeScreen extends LitElement {
     if (this.busy) return;
     this.busy = true;
     this.formErrors = {};
+    const generation = this.#generation;
+    const current = () => this.isConnected && this.#generation === generation;
     try {
       try {
         await this.api.updateIngredient(event.detail.id, event.detail.patch);
       } catch (error) {
+        if (!current()) return;
         this.formErrors = ingredientRefusalErrors(error);
         return;
       }
+      if (!current()) return;
+      this.shadowRoot!.querySelector("dashboard-ingredient-form")!.closeSaved(event.detail.patch);
       await this.#afterWrite();
     } finally {
-      this.busy = false;
+      if (current()) this.busy = false;
     }
   }
 
   #onSelectCatalogue(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.selectedCatalogueId = event.detail.value;
-    this.selectedProductId = "";
-    this.recipe = [];
-    this.recipeLoading = false;
-    this.products = [];
-    if (this.selectedCatalogueId === "") {
-      this.#queries.release("listProducts");
-      return;
-    }
-    void this.#loadProducts();
+    const catalogueId = event.detail.value;
+    if (catalogueId === this.selectedCatalogueId) return;
+    (event.currentTarget as HTMLElementTagNameMap["wt-combobox"]).value = this.selectedCatalogueId;
+    const select = () => {
+      this.#recipeGeneration++;
+      this.selectedCatalogueId = catalogueId;
+      this.selectedProductId = "";
+      this.#retainedProduct = null;
+      this.recipe = [];
+      this.recipeLoading = false;
+      this.products = [];
+      if (catalogueId === "") this.#queries.release("listProducts");
+      else void this.#loadProducts();
+    };
+    const editor = this.#editor();
+    if (editor) editor.requestLeave("navigation", select);
+    else select();
   }
 
   async #loadProducts(): Promise<void> {
     this.#showError(null);
     try {
       await this.#queries.watch("listProducts", [this.selectedCatalogueId], (value) => {
+        const current = this.#selectedProduct();
+        this.#retainedProduct = this.#editor()?.isDirty() ? current : null;
         this.products = value;
       });
     } catch (error) {
@@ -230,27 +275,35 @@ export class RecipeScreen extends LitElement {
 
   #onSelectProduct(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.selectedProductId = event.detail.value;
-    this.recipe = [];
-    this.recipeLoading = this.selectedProductId !== "";
-    if (this.selectedProductId === "") return;
-    void this.#loadRecipe();
+    const productId = event.detail.value;
+    if (productId === this.selectedProductId) return;
+    (event.currentTarget as HTMLElementTagNameMap["wt-combobox"]).value = this.selectedProductId;
+    const select = () => {
+      this.#recipeGeneration++;
+      this.selectedProductId = productId;
+      this.#retainedProduct = null;
+      this.recipe = [];
+      this.recipeLoading = productId !== "";
+      if (productId !== "") void this.#loadRecipe();
+    };
+    const editor = this.#editor();
+    if (editor) editor.requestLeave("navigation", select);
+    else select();
   }
 
-  /** A load whose product is no longer the selected one is dropped, result and error alike;
-   * reselecting the same product is not told apart. */
   async #loadRecipe(): Promise<void> {
     const productId = this.selectedProductId;
+    const generation = this.#recipeGeneration;
     this.#showError(null);
     try {
       const recipe = await this.api.getProductRecipe(productId);
-      if (this.selectedProductId !== productId) return;
+      if (this.#recipeGeneration !== generation || !this.isConnected) return;
       this.recipe = recipe;
     } catch (error) {
-      if (this.selectedProductId !== productId) return;
+      if (this.#recipeGeneration !== generation || !this.isConnected) return;
       this.#showReadError(error);
     } finally {
-      if (this.selectedProductId === productId) this.recipeLoading = false;
+      if (this.#recipeGeneration === generation && this.isConnected) this.recipeLoading = false;
     }
   }
 
@@ -259,27 +312,44 @@ export class RecipeScreen extends LitElement {
     if (this.busy || this.recipeLoading) return;
     this.busy = true;
     this.#showError(null);
+    const generation = this.#generation;
+    const recipeGeneration = this.#recipeGeneration;
+    const editor = this.#editor();
+    const submitted = {
+      productId: event.detail.productId,
+      ingredientIds: [...event.detail.ingredientIds],
+    };
+    const current = () =>
+      this.isConnected &&
+      this.#generation === generation &&
+      this.#recipeGeneration === recipeGeneration;
     let written = false;
     try {
-      await this.api.setProductRecipe(event.detail.productId, event.detail.ingredientIds);
+      await this.api.setProductRecipe(submitted.productId, submitted.ingredientIds);
+      if (!current()) return;
+      editor?.commitSaved(submitted);
       written = true;
-      this.recipe = await this.api.getProductRecipe(event.detail.productId);
+      const recipe = await this.api.getProductRecipe(submitted.productId);
+      if (current()) this.recipe = recipe;
     } catch (error) {
+      if (!current()) return;
       if (written) this.#showReadError(error);
       else this.#showError(codeOf(error));
     } finally {
-      this.busy = false;
+      if (this.isConnected && this.#generation === generation) this.busy = false;
     }
   }
 
   #closeEditor(): void {
+    this.#recipeGeneration++;
+    this.#retainedProduct = null;
     this.selectedProductId = "";
     this.recipe = [];
     this.recipeLoading = false;
   }
 
   #selectedProduct(): Product | null {
-    return this.products.find((p) => p.id === this.selectedProductId) ?? null;
+    return this.products.find((p) => p.id === this.selectedProductId) ?? this.#retainedProduct;
   }
 
   override render(): TemplateResult {

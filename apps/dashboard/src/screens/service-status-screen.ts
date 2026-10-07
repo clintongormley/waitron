@@ -2,7 +2,7 @@ import { DraftRows } from "@waitron/dashboard-kit";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -19,8 +19,20 @@ interface EditableStatus {
   active: boolean;
 }
 
-/** A row's save reads its values from state at click time, not from a render closure, so an edit made
- * just before the click is the one that persists. */
+interface NewStatusDraft {
+  label: string;
+  color: string;
+}
+
+function sameRow(a: EditableStatus, b: EditableStatus): boolean {
+  return (
+    a.label === b.label &&
+    a.color === b.color &&
+    a.displayOrder === b.displayOrder &&
+    a.active === b.active
+  );
+}
+
 @customElement("dashboard-service-status-screen")
 export class ServiceStatusScreen extends LitElement {
   static override styles = [
@@ -62,7 +74,80 @@ export class ServiceStatusScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) readOnly = false;
-  readonly #statusesDrafts = new DraftRows<EditableStatus>();
+  #statusesDrafts = new DraftRows<EditableStatus>();
+  readonly #rowScopes = new Map<
+    string,
+    { scope: DraftScope<EditableStatus>; saved: EditableStatus }
+  >();
+  #newScope?: DraftScope<NewStatusDraft>;
+  #connection = 0;
+  #listedStatusCount = 0;
+
+  #newDraft(): NewStatusDraft {
+    return { label: this.newLabel, color: this.newColor };
+  }
+
+  #registerNew(): void {
+    if (this.readOnly || this.#newScope) return;
+    this.#newScope = leaveCoordinatorFor(this)?.register({
+      id: {},
+      parent: this,
+      current: () => this.#newDraft(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => a.label.trim() === b.label.trim() && a.color === b.color,
+      restore: (value) => {
+        this.newLabel = value.label;
+        this.newColor = value.color;
+      },
+    });
+  }
+
+  #acceptRows(rows: EditableStatus[]): void {
+    this.#listedStatusCount = rows.length;
+    const current = new Map(this.statuses.map((row) => [row.id, row]));
+    const dirty = new Set(
+      [...this.#rowScopes].filter(([, entry]) => entry.scope.isDirty()).map(([id]) => id),
+    );
+    const merged = this.#statusesDrafts.merge(this.statuses, rows);
+    for (const [id, entry] of this.#rowScopes) {
+      if (!rows.some((row) => row.id === id) && !dirty.has(id)) {
+        entry.scope.dispose();
+        this.#rowScopes.delete(id);
+      }
+    }
+    this.statuses = rows.map((row, index) =>
+      dirty.has(row.id) ? current.get(row.id)! : this.#rowScopes.has(row.id) ? row : merged[index]!,
+    );
+    for (const id of dirty) {
+      if (!rows.some((row) => row.id === id)) this.statuses = [...this.statuses, current.get(id)!];
+    }
+    if (this.readOnly) return;
+    const coordinator = leaveCoordinatorFor(this);
+    if (!coordinator) return;
+    for (const row of this.statuses) {
+      const entry = this.#rowScopes.get(row.id);
+      if (entry) {
+        if (!dirty.has(row.id) && !sameRow(entry.saved, row)) {
+          entry.saved = { ...row };
+          entry.scope.commit(row);
+        }
+      } else {
+        const scope = coordinator.register({
+          id: {},
+          parent: this,
+          current: () => this.statuses.find((value) => value.id === row.id)!,
+          snapshot: (value) => ({ ...value }),
+          equal: sameRow,
+          restore: (value) => {
+            this.statuses = this.statuses.map((draft) =>
+              draft.id === row.id ? { ...value } : draft,
+            );
+          },
+        });
+        this.#rowScopes.set(row.id, { scope, saved: { ...row } });
+      }
+    }
+  }
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -93,15 +178,31 @@ export class ServiceStatusScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#showError(null);
+    this.#registerNew();
     void this.#load();
   }
 
+  override disconnectedCallback(): void {
+    this.#connection++;
+    this.#newScope?.dispose();
+    this.#newScope = undefined;
+    for (const entry of this.#rowScopes.values()) entry.scope.dispose();
+    this.#rowScopes.clear();
+    this.statuses = [];
+    this.#listedStatusCount = 0;
+    this.#statusesDrafts = new DraftRows<EditableStatus>();
+    this.newLabel = "";
+    this.newColor = "#ef4444";
+    this.submitting = false;
+    super.disconnectedCallback();
+  }
+
   async #load(): Promise<void> {
+    const connection = this.#connection;
     if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listStatuses", [], (rows) => {
-        this.statuses = this.#statusesDrafts.merge(
-          this.statuses,
+        this.#acceptRows(
           rows.map((s: ServiceStatus) => ({
             id: s.id,
             label: s.label,
@@ -112,18 +213,20 @@ export class ServiceStatusScreen extends LitElement {
         );
       });
     } catch (error) {
-      this.#showReadError(error);
+      if (connection === this.#connection) this.#showReadError(error);
     }
   }
 
   #onNewLabel(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.newLabel = event.detail.value;
+    this.#newScope?.changed();
   }
 
   #onNewColor(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.newColor = event.detail.value;
+    this.#newScope?.changed();
   }
 
   async #create(): Promise<void> {
@@ -131,24 +234,33 @@ export class ServiceStatusScreen extends LitElement {
     this.#showError(null);
     const label = this.newLabel.trim();
     if (label === "") return;
+    const submitted = this.#newDraft();
+    const scope = this.#newScope;
+    const connection = this.#connection;
     this.submitting = true;
     try {
       await this.api.createStatus({
         label,
-        color: this.newColor,
-        displayOrder: this.statuses.length,
+        color: submitted.color,
+        displayOrder: this.#listedStatusCount,
       });
-      this.newLabel = "";
+      if (connection !== this.#connection) return;
+      scope?.commit(submitted);
+      if (this.newLabel.trim() === label) {
+        this.newLabel = "";
+        scope?.commit({ ...submitted, label: "" });
+      }
       await this.#load();
     } catch (error) {
-      this.#showError(codeOf(error));
+      if (connection === this.#connection) this.#showError(codeOf(error));
     } finally {
-      this.submitting = false;
+      if (connection === this.#connection) this.submitting = false;
     }
   }
 
   #edit(id: string, patch: Partial<EditableStatus>): void {
     this.statuses = this.statuses.map((s) => (s.id === id ? { ...s, ...patch } : s));
+    this.#rowScopes.get(id)?.scope.changed();
   }
 
   async #saveRow(id: string): Promise<void> {
@@ -156,6 +268,9 @@ export class ServiceStatusScreen extends LitElement {
     this.#showError(null);
     const row = this.statuses.find((s) => s.id === id);
     if (row === undefined) return;
+    const submitted = { ...row };
+    const entry = this.#rowScopes.get(id);
+    const connection = this.#connection;
     this.submitting = true;
     try {
       await this.api.updateStatus(row.id, {
@@ -164,21 +279,36 @@ export class ServiceStatusScreen extends LitElement {
         displayOrder: row.displayOrder,
         active: row.active,
       });
+      if (connection !== this.#connection) return;
+      if (entry) {
+        entry.saved = submitted;
+        entry.scope.commit(submitted);
+      }
       await this.#load();
     } catch (error) {
-      this.#showError(codeOf(error));
+      if (connection === this.#connection) this.#showError(codeOf(error));
     } finally {
-      this.submitting = false;
+      if (connection === this.#connection) this.submitting = false;
     }
   }
 
   async #deactivate(id: string): Promise<void> {
+    const connection = this.#connection;
+    const entry = this.#rowScopes.get(id);
     this.#showError(null);
     try {
       await this.api.deactivateStatus(id);
+      if (connection !== this.#connection) return;
+      if (entry && entry === this.#rowScopes.get(id)) {
+        this.statuses = this.statuses.map((row) =>
+          row.id === id ? { ...row, active: false } : row,
+        );
+        entry.saved = { ...entry.saved, active: false };
+        entry.scope.commit(entry.saved);
+      }
       await this.#load();
     } catch (error) {
-      this.#showError(codeOf(error));
+      if (connection === this.#connection) this.#showError(codeOf(error));
     }
   }
 
@@ -201,6 +331,7 @@ export class ServiceStatusScreen extends LitElement {
           <wt-input
             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-${s.id}"]`))}
             label=${t("status.label")}
+            name=${`status-label-${s.id}`}
             data-test="label-${s.id}"
             .value=${s.label}
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
@@ -212,6 +343,7 @@ export class ServiceStatusScreen extends LitElement {
             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-${s.id}"]`))}
             type="color"
             label=${t("status.color")}
+            name=${`status-color-${s.id}`}
             data-test="color-${s.id}"
             .value=${s.color}
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
@@ -223,6 +355,7 @@ export class ServiceStatusScreen extends LitElement {
             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-${s.id}"]`))}
             type="number"
             label=${t("status.display_order")}
+            name=${`status-order-${s.id}`}
             data-test="order-${s.id}"
             .value=${String(s.displayOrder)}
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
@@ -273,6 +406,7 @@ export class ServiceStatusScreen extends LitElement {
               <wt-input
                 @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add]"))}
                 label=${t("status.new_label")}
+                name="new-status-label"
                 data-test="new-label"
                 .value=${this.newLabel}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewLabel(e)}
@@ -281,6 +415,7 @@ export class ServiceStatusScreen extends LitElement {
                 @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add]"))}
                 type="color"
                 label=${t("status.new_color")}
+                name="new-status-color"
                 data-test="new-color"
                 .value=${this.newColor}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewColor(e)}

@@ -663,3 +663,140 @@ sale descriptions contain receipt-language keys, so that filter can hide every r
 receipt and content languages differ. Snapshot displays may fall back to a stored nonblank value;
 they never rewrite the record. Regression: `packages/shared/src/content-languages.test.ts`,
 “keeps a receipt-only name visible when the content default is absent”.
+
+## Unsaved changes: shared close interception, owner-provided draft comparisons
+
+Use the shared registry for staged modal, page and credential input, including keypad PIN
+entry. The application shells share one confirmation and accepted-history adapter. The
+[dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md) records behavioral
+checks and their limits; the [backlog](../backlog.md) tracks delivery. Use `beforeClose`
+with a scoped ui-core coordinator request and `requestClose(reason)`
+for voluntary dismissal. Commit the exact submitted snapshot after a successful write, before
+refreshing. Use `closeAfter("saved" | "security")` for success or forced teardown; forced exits
+also invalidate the coordinator's pending decision and clear sensitive owner values.
+
+Keep `beforeClose` stable for each editor identity. A Discard restore rerenders the form;
+`WtDialog.requestClose` rejects an approval if its guard changed while awaiting the answer.
+The adjustment-reason modal's Keep/Discard browser cases first failed at retained editors with
+an inline guard, then passed with one guard captured per editor (2026-10-06).
+
+The dialog tests exercise real Escape, repeated requests, reopening, disconnect/reconnect and
+late native close reports. Closing and reopening twice before queued reports were delivered
+produced two `wt-close` events in the new consecutive-opening test before the report-generation
+check. The confirmation tests cover Keep/Discard, silent abort, keyboard focus, tokens and axe in
+both themes; the integration suite exercises a retained edited field at phone and desktop widths
+with EN/ES copy. Those shared-component checks do not establish protection in an unwired app form.
+
+Each connected application shell owns one `LeaveController`; resolve its coordinator from a
+contributed form with `leaveCoordinatorFor(element)` (`@waitron/ui`). A disconnected shell
+releases its drafts and pending confirmation. A forced session exit calls `forceReset()` before
+tearing down the session's forms; an asynchronous logout may call it after disconnect as well.
+A renderer answer is tied to the question it rendered, so a removed renderer cannot answer a
+later question. Behavioral cases: `packages/ui/src/leave-controller.test.ts`, and the application
+renderer/security cases in each shell's suite.
+
+The Unit form compares its trimmed translated request body, preserving translations it does not
+show and invalid precision input. A Related Unit registers under its Product, and its successful
+write commits the child before the Product accepts the new unit id. The Units screen commits
+before its lookup refresh. Product colour compares its explicit override, including null for
+inheritance; an answer for an earlier opening cannot commit a replacement Product. Behavioral
+cases: `catalogue-forms.unsaved.test.ts`, `unit-owners.unsaved.test.ts` and
+`menu-colour.unsaved.test.ts` under `apps/dashboard/src/`. Category colour selection submits
+immediately and remains exempt.
+
+_Historical implementation checkpoints, 2026-10-06: the modal receipts below describe the
+tree when measured. Their pending-rollout wording is superseded by the dated owner audit;
+whole-branch review and current-head CI still decide delivery._
+
+On the W69 implementation branch, extras/options list forms register their normalized submitted
+values and ordered rows. Their Product-related forms name the Product as their parent; the option
+label names its list. List writes commit before a refresh or attaching a new list to the Product.
+A label save commits that child before updating the list draft. Focused cases are in
+`apps/dashboard/src/widgets/modifier-forms.unsaved.test.ts` and
+`apps/dashboard/src/screens/modifier-owners.unsaved.test.ts`; other audited owners remain pending.
+
+Menu and section metadata forms use that registry on the W69 branch. Their snapshots contain the
+trimmed internal name and translations, image id and colour. Refusals retain the draft; successful
+menu and section writes commit before closing and refreshing. The Section owns the image picker's
+ancestry so a scoped leave can see staged image-name edits. Focused browser cases:
+`apps/dashboard/src/widgets/section-details-form.unsaved.test.ts` and
+`apps/dashboard/src/screens/menu-details.unsaved.test.ts`. Other modal owners and page navigation
+remain part of the rollout.
+
+On the W69 branch, Add-to-menus and section Add products register their selected ID sets.
+Search/category filters do not author a write and stay exempt. Section additions commit before
+closing and refreshing; each accepted placement is removed from its pending destinations, so a
+partial refusal retains only the failed choices. Keep the placement dialog's own close event
+available to its screen's focus return; nested close events cannot dismiss that owner. Cases:
+`apps/dashboard/src/widgets/menu-selections.unsaved.test.ts` and the existing Catalogue/Menu
+screen suites. Other audited owners remain pending.
+
+
+_2026-10-06: W93 #1287 retired named layout dialogs and their screen-level W69 hooks.
+The following receipt describes the earlier tree. The retained member-list widget has no production
+screen consumer after W93; Device Home Page display writes remain exempt, with success/refusal
+cases in `apps/dashboard/src/screens/menu-details.unsaved.test.ts`._
+
+Member replacement and layout names also use the registry on the W69 branch. A replacement's
+Cancel requests leave for its pending choice; a layout name's Cancel/native Escape requests leave
+for its trimmed name. Successful acceptance commits the submitted value; newer input remains
+compared with that value. Include menu still writes on selection and is exempt. Focused receipts
+(2026-10-06): `pnpm --filter @waitron/dashboard exec vitest run
+src/widgets/member-replacement.unsaved.test.ts src/screens/menu-layout.unsaved.test.ts` ran
+21 cases in Chromium, including immediate Include menu success/refusal and late layout results. Deleting the
+replacement Cancel request, either change notification, either submitted-value commit, replacement
+identity disposal or the layout dialog gate in an installed disposable candidate made its selected
+assertion fail; restoring the candidate ran all 19 cases successfully.
+
+A completion belonging to a departed layout still releases its write's busy state before ignoring
+the stale form result. The two departed-layout cases reproduced a stuck busy flag when that
+release followed the identity check; each failed at the new view's disabled editor. Moving only
+that release before the check made both pass, and each installed-candidate deletion failed again.
+
+### Staff drafts commit independently of invitation commands
+
+On the W69 branch, Add/Edit staff register their normalized submitted details. Edit additionally
+compares role and status. A same-person summary refresh leaves the draft in place; replacement
+with another person disposes its scope and pending question. Cancel/native Escape use the shared
+leave request, and a pending write disables dismissal. A successful details write commits its
+submitted snapshot before refresh; newer input remains compared against that snapshot. An
+invitation resend does not save the details and leaves an edited form open.
+
+Focused receipt (2026-10-06): `pnpm --filter @waitron/dashboard exec vitest run
+src/widgets/person-edit.unsaved.test.ts src/screens/staff-edit.unsaved.test.ts` ran 20 cases in
+Chromium, including staff reset/suspend command exemptions. The full staff family ran 163 cases
+across 10 files. In an installed disposable candidate, deleting the Cancel route, Escape gate,
+change notifications, submitted commit, newer-input check, host busy binding, save identity check,
+refusal identity check or resend identity check made its selected assertion fail. Restoring the
+candidate ran the 20 cases successfully. Late successful/refused save or resend results for a
+different person do not mark or commit the currently edited person's form in these cases.
+
+The current Staff screen's reset/suspend dialogs contain no credential-entry fields. The audit's
+earlier staff credential-subform description is superseded; Profile owns its password/PIN/TOTP
+inputs. Its modal forms are wired on W69; the page/navigation rollout remains pending.
+
+Profile registers each detail/credential editor after its defaults. It commits the submitted
+snapshot before refresh and retains later delivered input. Authenticator proof/code stages commit
+independently; recovery-code output needs no scope. A successful Google proof disposes its scope
+before redirect, and disconnect clears sensitive input/output and invalidates in-flight replies.
+Focused command: `pnpm --filter @waitron/dashboard exec vitest run
+src/screens/profile-screen.unsaved.test.ts src/screens/profile-screen.test.ts`. Outer Profile
+navigation remains separate Task 5 work.
+
+
+### Guarded history writes and forced draft teardown (W69, 2026-10-07)
+
+Every app-owned history write uses the shared navigation guard when one exists. A direct
+`replaceState` changes the browser URL without changing the guard's accepted URL; a later
+`UrlStateController.write` can restore a query parameter that the direct write removed.
+Query removal travels with the controller's path replacement in one guarded write. A direct
+`pushState` copying the current state also copies its position tag; route links therefore use
+`navigationGuardFor(window)?.write(...)` and reserve direct history writes for their unguarded
+fallback. Unknown positions start a new epoch before old indices can imply a traversal distance.
+
+`forceReset()` retires draft handles. A sensitive form retained across that boundary must rebuild
+or register a new scope before accepting fresh input. The till lock screen is keyed by locale
+and operator-session generation so a server switch rebuilds its credential form. Regression
+receipts are in the dated W69 audit; `navigation-guard.test.ts`, `url-state.unsaved.test.ts`, the
+catalogue/login shell cases, the venue-operations Hours case and till-app server-switch cases
+exercise these behaviors.

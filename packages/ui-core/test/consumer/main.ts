@@ -2,6 +2,46 @@ import * as core from "@waitron/ui-core";
 import { WtInput } from "@waitron/ui-core/components/wt-input";
 import { applyTokens } from "@waitron/ui-core/tokens";
 import { submitOnEnter } from "@waitron/ui-core/submit-on-enter";
+import { createLeaveCoordinator, type DraftScope } from "@waitron/ui-core/unsaved-changes";
+
+if (createLeaveCoordinator !== core.createLeaveCoordinator) {
+  throw new Error("Entry points have distinct leave coordinators");
+}
+const coordinator = createLeaveCoordinator(async () => "keep", window);
+let name = "initial";
+const id = {};
+const scope: DraftScope<string> = coordinator.register({
+  id,
+  current: () => name,
+  snapshot: (value) => value,
+  equal: (a, b) => a === b,
+  restore: (value) => {
+    name = value;
+  },
+});
+name = "edited";
+scope.changed();
+let leaves = 0;
+const kept = await coordinator.request({
+  scopes: [id],
+  reason: "cancel",
+  proceed: () => {
+    leaves++;
+  },
+});
+if (kept !== "kept" || leaves !== 0 || name !== "edited") {
+  throw new Error("The packed coordinator lost an unsaved draft");
+}
+scope.commit(name);
+const saved = await coordinator.request({
+  scopes: [id],
+  reason: "navigation",
+  proceed: () => {
+    leaves++;
+  },
+});
+document.body.dataset.leaveOutcomes = `${kept}/${saved}/${leaves}`;
+coordinator.dispose();
 
 if (WtInput !== core.WtInput || customElements.get("wt-input") !== WtInput) {
   throw new Error("Entry points have distinct component implementations");

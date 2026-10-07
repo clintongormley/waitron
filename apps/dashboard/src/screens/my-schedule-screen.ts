@@ -1,7 +1,8 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
+import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -28,6 +29,8 @@ const ABSENCE_KINDS: readonly AbsenceKind[] = ["holiday", "sick_leave", "leave",
 const WINDOW_DAYS = 14;
 
 type ScheduleRead = "roster" | "shifts" | "swaps" | "absences";
+type CoverDraft = Parameters<DashboardApi["requestSwap"]>[0];
+type AbsenceDraft = Parameters<DashboardApi["requestAbsence"]>[0];
 
 /** A half-open `[from, to)` window, computed in UTC, so a shift is placed by its UTC day. */
 export function scheduleWindow(now: Date, days: number): { from: string; to: string } {
@@ -144,10 +147,67 @@ export class MyScheduleScreen extends LitElement {
   @state() private absFrom = "";
   @state() private absTo = "";
   @state() private absNote = "";
+  #coverScope?: DraftScope<CoverDraft>;
+  #absenceScope?: DraftScope<AbsenceDraft>;
+  #connection = 0;
+
+  #coverDraft(): CoverDraft {
+    return { fromShiftId: this.coverShiftId, toPersonId: this.coverColleagueId, toShiftId: null };
+  }
+
+  #absenceDraft(): AbsenceDraft {
+    return {
+      kind: this.absKind,
+      startsOn: this.absFrom,
+      endsOn: this.absTo,
+      note: this.absNote === "" ? null : this.absNote,
+    };
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
+    const leave = leaveCoordinatorFor(this);
+    this.#coverScope = leave?.register<CoverDraft>({
+      id: {},
+      parent: this,
+      current: () => this.#coverDraft(),
+      snapshot: (value) => ({ ...value }),
+      equal: sameValue,
+      restore: (value) => {
+        this.coverShiftId = value.fromShiftId;
+        this.coverColleagueId = value.toPersonId;
+      },
+    });
+    this.#absenceScope = leave?.register<AbsenceDraft>({
+      id: {},
+      parent: this,
+      current: () => this.#absenceDraft(),
+      snapshot: (value) => ({ ...value }),
+      equal: sameValue,
+      restore: (value) => {
+        this.absKind = value.kind;
+        this.absFrom = value.startsOn;
+        this.absTo = value.endsOn;
+        this.absNote = value.note ?? "";
+      },
+    });
     void this.#load();
+  }
+
+  override disconnectedCallback(): void {
+    this.#connection++;
+    this.#coverScope?.dispose();
+    this.#absenceScope?.dispose();
+    this.#coverScope = undefined;
+    this.#absenceScope = undefined;
+    this.coverShiftId = "";
+    this.coverColleagueId = "";
+    this.absKind = "holiday";
+    this.absFrom = "";
+    this.absTo = "";
+    this.absNote = "";
+    this.busy = false;
+    super.disconnectedCallback();
   }
 
   #reads(read: ScheduleRead): DashboardQueries {
@@ -186,8 +246,12 @@ export class MyScheduleScreen extends LitElement {
       await this.#roster.watch("getStaffRoster", [], (value) => {
         this.#loaded("roster");
         this.roster = value;
-        if (!this.#colleagues().some((person) => person.personId === this.coverColleagueId)) {
+        if (
+          this.coverColleagueId !== "" &&
+          !this.#colleagues().some((person) => person.personId === this.coverColleagueId)
+        ) {
           this.coverColleagueId = "";
+          this.#coverScope?.changed();
         }
         if (!this.#listsStarted) {
           this.#loadLists().catch(() => {
@@ -211,7 +275,10 @@ export class MyScheduleScreen extends LitElement {
       this.#shifts.watch("listMyShifts", [from, to], (value) => {
         this.#loaded("shifts");
         this.shifts = value;
-        if (!value.some((shift) => shift.id === this.coverShiftId)) this.coverShiftId = "";
+        if (this.coverShiftId !== "" && !value.some((shift) => shift.id === this.coverShiftId)) {
+          this.coverShiftId = "";
+          this.#coverScope?.changed();
+        }
       }),
       this.#swaps.watch("listMySwaps", [], (value) => {
         this.#loaded("swaps");
@@ -226,15 +293,17 @@ export class MyScheduleScreen extends LitElement {
 
   async #act(fn: () => Promise<void>): Promise<void> {
     if (this.busy) return;
+    const connection = this.#connection;
     this.busy = true;
     this.noticeCode = undefined;
     try {
       await fn();
+      if (!this.isConnected || connection !== this.#connection) return;
       await this.#loadLists();
     } catch (error) {
-      this.noticeCode = codeOf(error);
+      if (this.isConnected && connection === this.#connection) this.noticeCode = codeOf(error);
     } finally {
-      this.busy = false;
+      if (connection === this.#connection) this.busy = false;
     }
   }
 
@@ -244,29 +313,32 @@ export class MyScheduleScreen extends LitElement {
 
   #submitCover(): void {
     if (this.coverShiftId === "" || this.coverColleagueId === "") return;
+    const submitted = this.#coverDraft();
+    const connection = this.#connection;
     void this.#act(async () => {
-      await this.api.requestSwap({
-        fromShiftId: this.coverShiftId,
-        toPersonId: this.coverColleagueId,
-        toShiftId: null,
-      });
-      this.coverShiftId = "";
-      this.coverColleagueId = "";
+      await this.api.requestSwap(submitted);
+      if (!this.isConnected || connection !== this.#connection) return;
+      if (sameValue(this.#coverDraft(), submitted)) {
+        this.coverShiftId = "";
+        this.coverColleagueId = "";
+        this.#coverScope?.commit(this.#coverDraft());
+      } else this.#coverScope?.commit(submitted);
     });
   }
 
   #submitAbsence(): void {
     if (this.absFrom === "" || this.absTo === "") return;
+    const submitted = this.#absenceDraft();
+    const connection = this.#connection;
     void this.#act(async () => {
-      await this.api.requestAbsence({
-        kind: this.absKind,
-        startsOn: this.absFrom,
-        endsOn: this.absTo,
-        note: this.absNote === "" ? null : this.absNote,
-      });
-      this.absFrom = "";
-      this.absTo = "";
-      this.absNote = "";
+      await this.api.requestAbsence(submitted);
+      if (!this.isConnected || connection !== this.#connection) return;
+      if (sameValue(this.#absenceDraft(), submitted)) {
+        this.absFrom = "";
+        this.absTo = "";
+        this.absNote = "";
+        this.#absenceScope?.commit(this.#absenceDraft());
+      } else this.#absenceScope?.commit(submitted);
     });
   }
 
@@ -416,7 +488,10 @@ export class MyScheduleScreen extends LitElement {
             ...shifts.map((shift) => ({ value: shift.id, label: this.#shiftLabel(shift) })),
           ]}
           .value=${this.coverShiftId}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => (this.coverShiftId = e.detail.value)}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => {
+            this.coverShiftId = e.detail.value;
+            this.#coverScope?.changed();
+          }}
         ></wt-combobox>
         <wt-combobox
           name="cover-colleague"
@@ -431,8 +506,10 @@ export class MyScheduleScreen extends LitElement {
             ...colleagues.map((person) => ({ value: person.personId, label: person.displayName })),
           ]}
           .value=${this.coverColleagueId}
-          @wt-change=${(e: CustomEvent<{ value: string }>) =>
-            (this.coverColleagueId = e.detail.value)}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => {
+            this.coverColleagueId = e.detail.value;
+            this.#coverScope?.changed();
+          }}
         ></wt-combobox>
         <wt-button
           variant="primary"
@@ -488,8 +565,10 @@ export class MyScheduleScreen extends LitElement {
           search="auto"
           .options=${ABSENCE_KINDS.map((kind) => ({ value: kind, label: absenceKindName(kind) }))}
           .value=${this.absKind}
-          @wt-change=${(e: CustomEvent<{ value: string }>) =>
-            (this.absKind = e.detail.value as AbsenceKind)}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => {
+            this.absKind = e.detail.value as AbsenceKind;
+            this.#absenceScope?.changed();
+          }}
         ></wt-combobox>
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]"))}
@@ -501,6 +580,7 @@ export class MyScheduleScreen extends LitElement {
           @wt-change=${(e: Event) => {
             e.stopPropagation();
             this.absFrom = (e as CustomEvent<{ value: string }>).detail.value;
+            this.#absenceScope?.changed();
           }}
         ></wt-input>
         <wt-input
@@ -513,6 +593,7 @@ export class MyScheduleScreen extends LitElement {
           @wt-change=${(e: Event) => {
             e.stopPropagation();
             this.absTo = (e as CustomEvent<{ value: string }>).detail.value;
+            this.#absenceScope?.changed();
           }}
         ></wt-input>
         <wt-input
@@ -524,6 +605,7 @@ export class MyScheduleScreen extends LitElement {
           @wt-change=${(e: Event) => {
             e.stopPropagation();
             this.absNote = (e as CustomEvent<{ value: string }>).detail.value;
+            this.#absenceScope?.changed();
           }}
         ></wt-input>
         <wt-button

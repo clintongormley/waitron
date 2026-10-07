@@ -1,6 +1,12 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
+import {
+  focusFirstInvalid,
+  submitOnEnter,
+  baseStyles,
+  leaveCoordinatorFor,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
@@ -13,6 +19,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 
 export type ConnectField = "primaryUrl" | "personId" | "password" | "totp";
+type ConnectForm = Record<ConnectField, string>;
 
 const REQUIRED_FIELDS: readonly ConnectField[] = ["primaryUrl", "personId", "password"];
 
@@ -80,7 +87,7 @@ export class SetupConnectScreen extends LitElement {
    */
   @property({ attribute: false }) request?: AdoptBody;
 
-  @state() private values: Record<ConnectField, string> = {
+  @state() private values: ConnectForm = {
     primaryUrl: "",
     personId: "",
     password: "",
@@ -94,12 +101,47 @@ export class SetupConnectScreen extends LitElement {
 
   @state() private fieldRefusalDismissed = false;
 
+  #baseline?: ConnectForm;
+  #scope?: DraftScope<ConnectForm>;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#registerScope();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    super.disconnectedCallback();
+  }
+
+  #registerScope(): void {
+    if (!this.isConnected || !this.#baseline || this.#scope) return;
+    this.#scope = leaveCoordinatorFor(this)?.register({
+      id: this,
+      current: () => this.values,
+      snapshot: (form) => ({ ...form }),
+      equal: (a, b) =>
+        a.primaryUrl.trim() === b.primaryUrl.trim() &&
+        a.personId.trim() === b.personId.trim() &&
+        a.password === b.password &&
+        a.totp.trim() === b.totp.trim(),
+      restore: (form) => {
+        this.values = { ...form };
+        this.attempted = false;
+      },
+    });
+    this.#scope?.commit(this.#baseline);
+  }
+
   constructor() {
     super();
     new LocaleChangeController(this);
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    // A returned request is a refused submission, not a saved baseline.
+    this.#baseline ??= { ...this.values };
     if (changed.has("errorMessage")) this.refusalDismissed = false;
     if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     if (changed.has("request") && this.request !== undefined) {
@@ -110,10 +152,12 @@ export class SetupConnectScreen extends LitElement {
         password: credential.password,
         totp: "",
       };
+      this.#scope?.changed();
     }
   }
 
   protected override updated(changed: PropertyValues<this>): void {
+    this.#registerScope();
     if (changed.has("invalidField") && this.#refusedField() !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
@@ -131,6 +175,7 @@ export class SetupConnectScreen extends LitElement {
   #onField(key: ConnectField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.values = { ...this.values, [key]: event.detail.value };
+    this.#scope?.changed();
     if (key === this.invalidField) this.fieldRefusalDismissed = true;
   }
 

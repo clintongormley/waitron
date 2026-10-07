@@ -33,6 +33,7 @@ export { WtHelpTooltip } from "./components/wt-help-tooltip.js";
 export { WtRelativeTime } from "./components/wt-relative-time.js";
 export { WtDialog } from "./components/wt-dialog.js";
 export { WtModal } from "./components/wt-modal.js";
+export { WtUnsavedChanges } from "./components/wt-unsaved-changes.js";
 export { WtSwitch } from "./components/wt-switch.js";
 export { WtSlider } from "./components/wt-slider.js";
 export { WtTableToken } from "./components/wt-table-token.js";
@@ -78,6 +79,7 @@ export {
 } from "./content-languages.js";
 
 export { UrlStateController, type UrlPathConfig } from "./url-state.js";
+export { NavigationGuard, navigationGuardFor, type NavigationLeave } from "./navigation-guard.js";
 
 export { WtRowActions } from "./components/wt-row-actions.js";
 export { WtTabs, type TabItem } from "./components/wt-tabs.js";
@@ -99,3 +101,7 @@ export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language
 
 export { ReorderController, type ReorderModel } from "./reorder-table.js";
 export { reorder } from "./reorder.js";
+
+export { LeaveController, leaveCoordinatorFor, type LeaveCopy } from "./leave-controller.js";
+
+export type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui-core/unsaved-changes";

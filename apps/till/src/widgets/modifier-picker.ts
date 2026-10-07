@@ -2,7 +2,8 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { decimal, formatMoney, toScale } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
@@ -18,6 +19,13 @@ import type {
   OfferedOptionsList,
   TillProduct,
 } from "../api/client.js";
+
+interface ModifierDraft {
+  variantId: string;
+  picks: Record<string, number>;
+  answers: Record<string, string>;
+  note: string;
+}
 
 export interface ModifierConfirmDetail extends LineSelection {
   product: TillProduct;
@@ -177,9 +185,62 @@ export class TillModifierPicker extends LitElement {
 
   #seeded = false;
 
+  @state() private active = true;
+  #scope?: DraftScope<ModifierDraft>;
+  #leave?: LeaveCoordinator;
+  #baseline?: ModifierDraft;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  #draft(): ModifierDraft {
+    return {
+      variantId: this.variantId,
+      picks: { ...this.picks },
+      answers: { ...this.answers },
+      note: this.note.trim(),
+    };
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override willUpdate(): void {
-    // Defaults apply once, and never over an explicit reopened selection.
-    if (this.#seeded || !this.product) return;
+    if (!this.product || !this.active) return;
+    if (!this.#seeded) this.#seedSelections();
+    if (this.#scope) return;
+    this.#baseline ??= this.#draft();
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<ModifierDraft>({
+      id: this,
+      current: () => this.#draft(),
+      snapshot: (value) => ({ ...value, picks: { ...value.picks }, answers: { ...value.answers } }),
+      equal: (a, b) =>
+        a.variantId === b.variantId &&
+        a.note === b.note &&
+        Object.keys(a.picks).length === Object.keys(b.picks).length &&
+        Object.entries(a.picks).every(([key, count]) => b.picks[key] === count) &&
+        Object.keys(a.answers).length === Object.keys(b.answers).length &&
+        Object.entries(a.answers).every(([key, label]) => b.answers[key] === label),
+      restore: (value) => {
+        this.variantId = value.variantId;
+        this.picks = { ...value.picks };
+        this.answers = { ...value.answers };
+        this.note = value.note;
+      },
+    });
+    this.#scope?.commit(this.#baseline);
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #seedSelections(): void {
     this.#seeded = true;
     if (this.initialSelections !== undefined) {
       if (this.withNote) this.note = this.initialSelections.note ?? "";
@@ -336,6 +397,7 @@ export class TillModifierPicker extends LitElement {
   }
 
   #setCount(listId: string, productId: string, quantity: number): void {
+    if (!this.isConnected || !this.active) return;
     const next = { ...this.picks };
     if (quantity >= 1) {
       next[pickKey(listId, productId)] = quantity;
@@ -343,6 +405,7 @@ export class TillModifierPicker extends LitElement {
       delete next[pickKey(listId, productId)];
     }
     this.picks = next;
+    this.#scope?.changed();
   }
 
   /**
@@ -370,9 +433,12 @@ export class TillModifierPicker extends LitElement {
   }
 
   #confirm(e?: Event): void {
-    // A single click, so recomputing both is cheaper than holding them across renders.
-    if (!this.#satisfied(this.#stalePicks(), this.#listTotals())) return;
     e?.stopPropagation();
+    if (!this.isConnected || !this.active) return;
+    if (!this.#satisfied(this.#stalePicks(), this.#listTotals())) return;
+    const submitted = this.#draft();
+    this.#baseline = submitted;
+    this.#scope?.commit(submitted);
     const extras = this.#selectedExtras();
     const options = this.#selectedOptions();
     const detail: ModifierConfirmDetail = {
@@ -395,6 +461,24 @@ export class TillModifierPicker extends LitElement {
 
   #cancel(event: Event): void {
     event.stopPropagation();
+    if (!this.isConnected || !this.active) return;
+    if (this.#scope) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-modal")!.requestClose("cancel");
+      return;
+    }
+    this.#reportCancel();
+  }
+
+  #closed(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#reportCancel();
+  }
+
+  #reportCancel(): void {
     this.dispatchEvent(
       new CustomEvent("wt-modifier-cancel", { detail: {}, bubbles: true, composed: true }),
     );
@@ -403,14 +487,13 @@ export class TillModifierPicker extends LitElement {
   override render() {
     const stale = this.#stalePicks();
     const totals = this.#listTotals();
-    // wt-MODAL, not wt-dialog: the body scrolls inside the frame and the footer keeps its own row, so
-    // Add and Cancel stay on screen however many lists a dish offers.
     return html`<wt-modal
       ${trackDialog()}
       size="standard"
-      .open=${true}
+      .open=${this.active}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       .heading=${productName(this.product)}
-      @wt-close=${(event: Event) => this.#cancel(event)}
+      @wt-close=${(event: Event) => this.#closed(event)}
     >
       ${
         this.#variants.length === 0
@@ -428,7 +511,9 @@ export class TillModifierPicker extends LitElement {
                       ?disabled=${!variant.available}
                       @change=${(event: Event) => {
                         event.stopPropagation();
+                        if (!this.isConnected || !this.active) return;
                         this.variantId = variant.id;
+                        this.#scope?.changed();
                       }}
                     />
                     <span class="option-name">${variant.name}</span>
@@ -463,7 +548,9 @@ export class TillModifierPicker extends LitElement {
           : renderLineExtrasEditor({
               note: this.note,
               onNoteChange: (note) => {
+                if (!this.isConnected || !this.active) return;
                 this.note = note;
+                this.#scope?.changed();
               },
             })
       }
@@ -591,7 +678,9 @@ export class TillModifierPicker extends LitElement {
                 .checked=${this.answers[list.id] === label.id}
                 @change=${(event: Event) => {
                   event.stopPropagation();
+                  if (!this.isConnected || !this.active) return;
                   this.answers = { ...this.answers, [list.id]: label.id };
+                  this.#scope?.changed();
                 }}
               />
               <span class="option-name">${label.name}</span>

@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -146,15 +147,47 @@ export class AddToMenus extends LitElement {
   #placeIds: string[] = [];
   #places = new Map<string, { name: string; topLevel: boolean }>();
   #hasShared = false;
+  #scope?: DraftScope<string[]>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("menus")) this.#flatten();
     if (changed.has("open") && this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
       this.selected = new Set();
       this.attempted = false;
     }
-    if (changed.has("failures") && this.failures.length)
+    if (changed.has("failures") && this.failures.length) {
       this.selected = new Set(this.failures.map(({ sectionId }) => sectionId));
+      this.#scope?.changed();
+    }
+    if (!this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<string[]>({
+        id: this,
+        current: () => [...this.selected].sort(),
+        snapshot: (value) => [...value],
+        equal: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]),
+        restore: (value) => {
+          this.selected = new Set(value);
+        },
+      });
+    }
   }
 
   #flatten(): void {
@@ -197,6 +230,7 @@ export class AddToMenus extends LitElement {
     const selected = new Set(this.selected);
     if (!selected.delete(sectionId)) selected.add(sectionId);
     this.selected = selected;
+    this.#scope?.changed();
   }
 
   #confirm(event: Event): void {
@@ -216,6 +250,17 @@ export class AddToMenus extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.#emitCancel();
+  }
+
+  commitAdded(sectionIds: readonly string[]): void {
+    const accepted = new Set(sectionIds);
+    this.selected = new Set([...this.selected].filter((id) => !accepted.has(id)));
+    this.#scope?.commit([]);
+  }
+
+  #emitCancel(): void {
     this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
 
@@ -303,12 +348,14 @@ export class AddToMenus extends LitElement {
     return html`<wt-modal
       size="standard"
       .open=${this.open}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       heading=${t("add_to_menus.heading").replace("{name}", this.productName)}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
       }}
       @wt-close=${(event: Event) => {
-        if (event.target === event.currentTarget && this.open) this.#cancel(event);
+        if (event.target !== event.currentTarget) event.stopPropagation();
+        else if (this.open && !this.busy) this.#emitCancel();
       }}
     >
       ${this.open ? this.#body() : nothing}

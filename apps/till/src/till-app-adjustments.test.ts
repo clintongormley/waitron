@@ -232,9 +232,32 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   } as unknown as TillApi;
 }
 
-async function mountApp(overrides: Record<string, unknown> = {}) {
+function sessionActivityStub() {
+  return {
+    configure: vi.fn(),
+    noteInteraction: vi.fn(),
+    reacquire: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  };
+}
+async function mountApp(
+  overrides: Record<string, unknown> = {},
+  activity?: ReturnType<typeof sessionActivityStub>,
+) {
   api = stubApi(overrides);
-  return mountWidget<TillApp>("till-app", { api });
+  return mountWidget<TillApp>("till-app", {
+    api,
+    ...(activity ? { sessionActivity: activity as never } : {}),
+  });
+}
+async function discardLeave(el: TillApp) {
+  const warning = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await expect.poll(() => warning.open).toBe(true);
+  await warning.updateComplete;
+  warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await expect.poll(() => warning.open).toBe(false);
+  await flush(el);
 }
 
 async function flush(el: TillApp, rounds = 3): Promise<void> {
@@ -377,7 +400,19 @@ describe("till-app: giving away a dish", () => {
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-back]"));
     await press(el, inDialog(el, "[data-adjust-close]"));
-    expect(dialog(el)).toBeNull();
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    expect(question.open).toBe(true);
+    expect(dialog(el)).not.toBeNull();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question.open).toBe(false);
+    expect(
+      dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="reason"]')!.checked,
+    ).toBe(true);
+    await press(el, inDialog(el, "[data-adjust-close]"));
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => dialog(el)).toBeNull();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });
 
@@ -505,7 +540,7 @@ describe("till-app: an adjustment someone must approve", () => {
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     await press(el, approval(el)!.shadowRoot!.querySelector<HTMLElement>(".cancel")!);
-    expect(approval(el)).toBeNull();
+    await expect.poll(() => approval(el)).toBeNull();
     expect(inDialog(el, "[data-adjust-confirm]")).not.toBeNull();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });
@@ -735,11 +770,14 @@ describe("till-app: a refused adjustment", () => {
 
 describe("till-app: the adjustment flow and the operator's session", () => {
   it("closes the dialog when the till locks", async () => {
-    const { el } = await mountApp();
+    const activity = sessionActivityStub();
+    const { el } = await mountApp({}, activity);
     const order = await openMesa4(el);
     await previewComp(el, order);
-    emit(tableOrder(el), "logout");
+    (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
     await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     expect(dialog(el)).toBeNull();
   });
 });
@@ -849,12 +887,15 @@ describe("till-app: answers that arrive after the flow moved on", () => {
   it("changes nothing on screen when an apply is answered after the till locked", async () => {
     for (const outcome of ["applied", "refused"] as const) {
       const answer = deferred<unknown>();
-      const { el } = await mountApp({ applyAdjustment: vi.fn(() => answer.promise) });
+      const activity = sessionActivityStub();
+      const { el } = await mountApp({ applyAdjustment: vi.fn(() => answer.promise) }, activity);
       const order = await openMesa4(el);
       await previewComp(el, order);
       await press(el, inDialog(el, "[data-adjust-confirm]"));
-      emit(tableOrder(el), "logout");
+      (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
       await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
       const reads = vi.mocked(api.getTabLines).mock.calls.length;
       if (outcome === "applied")
         answer.resolve({ adjustmentIds: ["a-1"], revision: 7, party: null });
@@ -934,7 +975,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
       await previewComp(el, order);
       await press(el, inDialog(el, "[data-adjust-confirm]"));
       emit(order, "back-to-floor");
-      await flush(el);
+      await discardLeave(el);
       expect(dialog(el)).toBeNull();
 
       answer.reject(new TypeError("Failed to fetch"));
@@ -1090,7 +1131,8 @@ describe("till-app: cancelling a dish", () => {
     const order = await openMesa4(el);
     await press(el, cancelButton(order, 1));
     await press(el, inDialog(el, "[data-adjust-close]"));
-    expect(dialog(el)).toBeNull();
+    await expect.poll(() => dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     expect(api.previewAdjustment).not.toHaveBeenCalled();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });

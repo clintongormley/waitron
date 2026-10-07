@@ -43,7 +43,8 @@
     "./base-styles": "./src/base-styles.ts",
     "./field-styles": "./src/field-styles.ts",
     "./tokens/colors.css": "./src/tokens/colors.css",
-    "./tokens/structure.css": "./src/tokens/structure.css"
+    "./tokens/structure.css": "./src/tokens/structure.css",
+    "./unsaved-changes": "./src/unsaved-changes.ts"
   },
   "peerDependencies": {
     "lit": "^3.2.0"
@@ -113,7 +114,11 @@
         "import": "./dist/field-styles.js"
       },
       "./tokens/colors.css": "./dist/tokens/colors.css",
-      "./tokens/structure.css": "./dist/tokens/structure.css"
+      "./tokens/structure.css": "./dist/tokens/structure.css",
+      "./unsaved-changes": {
+        "types": "./dist/types/unsaved-changes.d.ts",
+        "import": "./dist/unsaved-changes.js"
+      }
     }
   }
 }

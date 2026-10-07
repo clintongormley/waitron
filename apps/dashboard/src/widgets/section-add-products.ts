@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -134,8 +134,30 @@ export class SectionAddProducts extends LitElement {
   #options: { id: string; path: string }[] = [];
   /** Null when no category is chosen. */
   #within: ReadonlySet<string> | null = null;
+  #scope?: DraftScope<string[]>;
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    super.disconnectedCallback();
+  }
+
+  commitSaved(productIds: readonly string[]): void {
+    this.#scope?.commit([...productIds].sort());
+  }
 
   override willUpdate(changed: PropertyValues): void {
+    if (!this.#scope) {
+      this.#scope = leaveCoordinatorFor(this)?.register<string[]>({
+        id: this,
+        current: () => [...this.selected].sort(),
+        snapshot: (value) => [...value],
+        equal: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]),
+        restore: (value) => {
+          this.selected = new Set(value);
+        },
+      });
+    }
     if (changed.has("products") || changed.has("inSection")) {
       const held = new Set(this.inSection);
       this.#offered = this.products
@@ -179,6 +201,7 @@ export class SectionAddProducts extends LitElement {
     const selected = new Set(this.selected);
     if (!selected.delete(productId)) selected.add(productId);
     this.selected = selected;
+    this.#scope?.changed();
     this.error = false;
   }
 
@@ -189,6 +212,7 @@ export class SectionAddProducts extends LitElement {
       for (const { id } of listed) selected.delete(id);
     else for (const { id } of listed) selected.add(id);
     this.selected = selected;
+    this.#scope?.changed();
     this.error = false;
   }
 

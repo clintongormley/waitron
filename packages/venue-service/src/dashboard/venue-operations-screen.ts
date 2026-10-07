@@ -9,6 +9,11 @@ import { codeOf, tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
   focusFirstInvalid,
+  leaveCoordinatorFor,
+  navigationGuardFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
   submitOnEnter,
   UrlStateController,
   type DataTableColumn,
@@ -32,14 +37,14 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
     t(key) as string,
   );
 
-/** The dashboard shell changes page on `popstate`, not on a pushed address alone. */
 function openHoursPage(departmentId: string): void {
-  history.pushState(
-    history.state,
-    "",
-    `/manage/hours/department/${encodeURIComponent(departmentId)}`,
-  );
-  dispatchEvent(new PopStateEvent("popstate"));
+  const url = `/manage/hours/department/${encodeURIComponent(departmentId)}`;
+  const guard = navigationGuardFor(window);
+  if (guard) void guard.write(url);
+  else {
+    history.pushState(history.state, "", url);
+    dispatchEvent(new PopStateEvent("popstate"));
+  }
 }
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "ticket_then_pay"];
@@ -55,6 +60,15 @@ type Editor =
       action: () => Promise<unknown>;
       impact?: DepartmentRemovalImpact;
     };
+type NameCell = "department" | "zone" | "trading";
+type NameDraft = {
+  id: object;
+  rowId: string;
+  baseline: string;
+  row?: Department | FloorZone;
+  scope?: DraftScope<string>;
+};
+type EditorValues = Record<string, string | boolean>;
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
 type PolicyRow =
   | { kind: "department"; department: Department }
@@ -201,6 +215,151 @@ export class VenueOperationsScreen extends LitElement {
   @state() private view: View = "departments";
   @state() private editor?: Editor;
   @state() private zoneId = "";
+  #editorScope?: DraftScope<EditorValues>;
+  #editorIdentity?: Editor;
+  #editorBaseline?: EditorValues;
+  #editorModel?: VenueServiceView;
+  #leave?: LeaveCoordinator;
+  readonly #nameDrafts = new Map<NameCell, NameDraft>();
+  #nameValue(kind: NameCell): string {
+    return kind === "department"
+      ? this.departmentNameDraft
+      : kind === "zone"
+        ? this.zoneNameDraft
+        : this.tradingNameDraft;
+  }
+  #setNameValue(kind: NameCell, value: string): void {
+    if (kind === "department") this.departmentNameDraft = value;
+    else if (kind === "zone") this.zoneNameDraft = value;
+    else this.tradingNameDraft = value;
+  }
+  #setNameEditor(kind: NameCell, rowId?: string): void {
+    if (kind === "department") this.departmentNameEditor = rowId;
+    else if (kind === "zone") this.zoneNameEditor = rowId;
+    else this.tradingNameEditor = rowId;
+  }
+  #clearNameError(kind: NameCell, message = ""): void {
+    if (kind === "department") this.departmentNameError = message;
+    else if (kind === "zone") this.zoneNameError = message;
+    else this.tradingNameError = message;
+  }
+  #registerName(kind: NameCell, draft: NameDraft): void {
+    this.#leave ??= leaveCoordinatorFor(this);
+    let registering = true;
+    draft.scope = this.#leave?.register({
+      id: draft.id,
+      current: () => (registering ? draft.baseline : this.#nameValue(kind).trim()),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => this.#setNameValue(kind, value),
+    });
+    registering = false;
+    draft.scope?.changed();
+  }
+  #currentName(kind: NameCell, draft?: NameDraft): boolean {
+    return this.isConnected && draft !== undefined && this.#nameDrafts.get(kind) === draft;
+  }
+  #leaveName(
+    kind: NameCell,
+    draft: NameDraft | undefined,
+    reason: LeaveReason,
+    proceed: () => void,
+  ): void {
+    if (!this.#currentName(kind, draft) || this.busy) return;
+    if (!draft!.scope) proceed();
+    else
+      void this.#leave!.request({
+        scopes: [draft!.id],
+        reason,
+        proceed: () => {
+          if (this.#currentName(kind, draft) && !this.busy) proceed();
+        },
+      });
+  }
+  #openName(kind: NameCell, rowId: string, value: string): void {
+    if (this.busy) return;
+    const open = () => {
+      this.#nameDrafts.get(kind)?.scope?.dispose();
+      const draft: NameDraft = {
+        id: {},
+        rowId,
+        baseline: value.trim(),
+        row:
+          kind === "zone"
+            ? this.model?.floorZones.find((row) => row.id === rowId)
+            : this.model?.departments.find((row) => row.id === rowId),
+      };
+      this.#nameDrafts.set(kind, draft);
+      this.#setNameValue(kind, value);
+      this.#clearNameError(kind);
+      this.#setNameEditor(kind, rowId);
+      this.#registerName(kind, draft);
+    };
+    const previous = this.#nameDrafts.get(kind);
+    if (previous) this.#leaveName(kind, previous, "navigation", open);
+    else open();
+  }
+  #closeName(kind: NameCell, draft: NameDraft): void {
+    if (!this.#currentName(kind, draft)) return;
+    draft.scope?.dispose();
+    this.#nameDrafts.delete(kind);
+    this.#setNameEditor(kind);
+    this.#clearNameError(kind);
+    void this.updateComplete.then(async () => {
+      const table = this.renderRoot.querySelector<LitElement>(
+        "wt-data-table[data-test=policy-tree]",
+      );
+      await table?.updateComplete;
+      if (!this.isConnected || this.#nameDrafts.has(kind)) return;
+      const row = `${kind === "zone" ? "zone" : "department"}-${draft.rowId}`;
+      const action = kind === "trading" ? "trading-name" : `${kind}-name`;
+      table?.shadowRoot
+        ?.querySelector<HTMLElement>(
+          `[data-row-key="${CSS.escape(row)}"] [data-test="edit-${action}"]`,
+        )
+        ?.focus();
+    });
+  }
+  #changeName(kind: NameCell, draft: NameDraft | undefined, value: string): void {
+    if (!this.#currentName(kind, draft)) return;
+    this.#setNameValue(kind, value);
+    this.#clearNameError(kind);
+    draft!.scope?.changed();
+  }
+  #nameKey(event: KeyboardEvent, kind: NameCell, draft: NameDraft | undefined): void {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#leaveName(kind, draft, "escape", () => this.#closeName(kind, draft!));
+  }
+  async #saveName(
+    kind: NameCell,
+    draft: NameDraft | undefined,
+    write: (value: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.#currentName(kind, draft) || this.busy) return;
+    const submitted = this.#nameValue(kind).trim();
+    if (!submitted) {
+      this.#clearNameError(kind, t("venue.field_required"));
+      return;
+    }
+    this.busy = true;
+    this.actionError = undefined;
+    try {
+      await write(submitted);
+      if (this.#currentName(kind, draft)) {
+        draft!.baseline = submitted;
+        draft!.scope?.commit(submitted);
+        if (this.#nameValue(kind).trim() === submitted) this.#closeName(kind, draft!);
+      }
+      if (this.isConnected) await this.#load();
+    } catch (error) {
+      if (this.#currentName(kind, draft))
+        this.actionError = this.#refusal(codeOf(error ?? {}), error);
+    } finally {
+      this.busy = false;
+    }
+  }
   #opener?: HTMLElement;
   #openerAction?: { element: HTMLElement; key: string };
 
@@ -215,6 +374,12 @@ export class VenueOperationsScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    for (const [kind, previous] of this.#nameDrafts) {
+      const draft = { ...previous, id: {}, scope: undefined };
+      this.#nameDrafts.set(kind, draft);
+      this.#registerName(kind, draft);
+    }
+    this.requestUpdate();
     void this.#load();
   }
   async #load(): Promise<void> {
@@ -249,14 +414,99 @@ export class VenueOperationsScreen extends LitElement {
     );
   }
   #open(editor: Editor): void {
+    this.#editorBaseline = undefined;
+    this.#editorModel = this.model;
     this.editor = editor;
     this.actionError = undefined;
     this.#restart();
   }
   #close(): void {
+    this.#editorBaseline = undefined;
+    this.#editorScope?.dispose();
+    this.#editorScope = undefined;
+    this.#editorIdentity = undefined;
+    this.#editorModel = undefined;
     this.editor = undefined;
     this.#restart();
     this.#returnFocus();
+  }
+  #editorValues(modal: HTMLElement): EditorValues {
+    return Object.fromEntries(
+      [...modal.querySelectorAll<HTMLInputElement>("[name]")].map((field) => [
+        field.name,
+        field.type === "checkbox" ? field.checked : field.value,
+      ]),
+    );
+  }
+  #sameEditorValues(a: EditorValues, b: EditorValues): boolean {
+    const normalized = (name: string, value: string | boolean) => {
+      if (typeof value !== "string") return value;
+      if (["department-name", "trading-name", "new-zone-name"].includes(name)) return value.trim();
+      if (
+        name === "assignment-order" &&
+        value.trim() !== "" &&
+        Number.isInteger(Number(value)) &&
+        Number(value) >= 0
+      )
+        return Number(value);
+      return value;
+    };
+    return (
+      Object.keys(a).length === Object.keys(b).length &&
+      Object.keys(a).every((name) =>
+        Object.is(normalized(name, a[name]!), normalized(name, b[name]!)),
+      )
+    );
+  }
+  protected override updated(): void {
+    if (this.#editorIdentity !== this.editor) {
+      this.#editorScope?.dispose();
+      this.#editorScope = undefined;
+      this.#editorIdentity = this.editor;
+      if (this.editor && this.editor.kind !== "disable") {
+        const modal = this.renderRoot.querySelector("wt-modal")!;
+        this.#leave ??= leaveCoordinatorFor(this);
+        const baseline = (this.#editorBaseline ??= this.#editorValues(modal));
+        let registering = true;
+        this.#editorScope = this.#leave?.register({
+          id: this.editor,
+          current: () => (registering ? baseline : this.#editorValues(modal)),
+          snapshot: (value) => ({ ...value }),
+          equal: (a, b) => this.#sameEditorValues(a, b),
+          restore: (value) => {
+            for (const field of modal.querySelectorAll<HTMLInputElement>("[name]")) {
+              const saved = value[field.name];
+              if (typeof saved === "boolean") field.checked = saved;
+              else if (saved !== undefined) field.value = saved;
+            }
+          },
+        });
+        registering = false;
+        this.#editorScope?.changed();
+      }
+    }
+  }
+  readonly #beforeEditorClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.busy || !this.isConnected) return false;
+    const editor = this.editor;
+    if (!this.#editorScope) return true;
+    const outcome = await this.#leave!.request({
+      scopes: [this.#editorScope.id],
+      reason,
+      proceed() {},
+    });
+    return this.isConnected && this.editor === editor && outcome === "proceeded";
+  };
+  override disconnectedCallback(): void {
+    this.#editorScope?.dispose();
+    this.#editorScope = undefined;
+    this.#editorIdentity = undefined;
+    for (const draft of this.#nameDrafts.values()) {
+      draft.scope?.dispose();
+      draft.scope = undefined;
+    }
+    this.#leave = undefined;
+    super.disconnectedCallback();
   }
   /** Once an empty table gains a row, focus returns to its persistent Add button. */
   #returnFocus(): void {
@@ -296,19 +546,35 @@ export class VenueOperationsScreen extends LitElement {
     if (this.busy) return;
     this.busy = true;
     const editor = this.editor;
+    const scope = this.#editorScope;
+    const submitted =
+      scope && this.renderRoot.querySelector("wt-modal")
+        ? this.#editorValues(this.renderRoot.querySelector("wt-modal")!)
+        : undefined;
     if (editor === undefined) this.actionError = undefined;
     let closed = false;
     try {
       await action();
-      if (this.editor === editor) {
-        this.editor = undefined;
-        this.#restart();
-        closed = editor !== undefined;
+      if (this.isConnected && this.editor === editor) {
+        if (submitted) {
+          this.#editorBaseline = { ...submitted };
+          scope?.commit(submitted);
+        }
+        if (!scope?.isDirty()) {
+          this.editor = undefined;
+          scope?.dispose();
+          this.#editorScope = undefined;
+          this.#editorIdentity = undefined;
+          this.#editorModel = undefined;
+          this.#editorBaseline = undefined;
+          this.#restart();
+          closed = editor !== undefined;
+        }
       }
       await this.#load();
     } catch (error) {
       if (editor === undefined) this.actionError = this.#refusal(codeOf(error ?? {}), error);
-      else this.#refused(error, fields);
+      else if (this.isConnected && this.editor === editor) this.#refused(error, fields);
     } finally {
       this.busy = false;
     }
@@ -587,24 +853,43 @@ export class VenueOperationsScreen extends LitElement {
 
   #policyTree() {
     const model = this.model!;
-    const departments = model.departments;
-    const activeDepartmentCount = departments.filter((department) => department.active).length;
+    const departments = [...model.departments];
+    const floorZones = [...model.floorZones];
+    for (const [kind, draft] of this.#nameDrafts) {
+      if (!draft.row || this.#nameValue(kind).trim() === draft.baseline) continue;
+      if (kind === "zone") {
+        if (!floorZones.some((row) => row.id === draft.rowId))
+          floorZones.push(draft.row as FloorZone);
+      } else if (!departments.some((row) => row.id === draft.rowId))
+        departments.push(draft.row as Department);
+    }
+    const activeDepartmentCount = model.departments.filter(
+      (department) => department.active,
+    ).length;
     const rows: PolicyRow[] = departments.flatMap((department) => [
       { kind: "department" as const, department },
       ...model.zones
         .filter((zone) => zone.departmentId === department.id)
         .flatMap((zone) => {
-          const floorZone = model.floorZones.find((row) => row.id === zone.id);
+          const floorZone = floorZones.find((row) => row.id === zone.id);
           return floorZone
             ? [{ kind: "zone" as const, zone: floorZone, departmentId: department.id }]
             : [];
         }),
     ]);
     rows.push(
-      ...model.floorZones
+      ...floorZones
         .filter((zone) => !model.zones.some((configured) => configured.id === zone.id))
         .map((zone) => ({ kind: "zone" as const, zone, departmentId: null })),
     );
+    const zoneDraft = this.#nameDrafts.get("zone");
+    if (
+      zoneDraft?.row &&
+      this.zoneNameDraft.trim() !== zoneDraft.baseline &&
+      !rows.some((row) => row.kind === "zone" && row.zone.id === zoneDraft.rowId)
+    ) {
+      rows.push({ kind: "zone", zone: zoneDraft.row as FloorZone, departmentId: null });
+    }
     const policyFor = (row: PolicyRow) =>
       row.kind === "department"
         ? model.salePolicies.departments.find((policy) => policy.departmentId === row.department.id)
@@ -614,11 +899,14 @@ export class VenueOperationsScreen extends LitElement {
         key: "name",
         label: t("venue.name"),
         cell: (row) => {
+          const zoneDraft = this.#nameDrafts.get("zone");
+          const departmentDraft = this.#nameDrafts.get("department");
           if (row.kind !== "department")
             return html`${
               this.zoneNameEditor === row.zone.id
                 ? html`<wt-input
                       name="zoneName"
+                      @keydown=${(event: KeyboardEvent) => this.#nameKey(event, "zone", zoneDraft)}
                       label=${t("venue.name")}
                       hide-label
                       required
@@ -626,32 +914,21 @@ export class VenueOperationsScreen extends LitElement {
                       error=${this.zoneNameError}
                       @wt-change=${(event: CustomEvent<{ value: string }>) => {
                         event.stopPropagation();
-                        this.zoneNameDraft = event.detail.value;
-                        this.zoneNameError = "";
+                        this.#changeName("zone", zoneDraft, event.detail.value);
                       }}
                     ></wt-input>
                     <button
                       type="button"
                       data-test="save-zone-name"
                       ?disabled=${this.busy}
-                      @click=${() => {
-                        const name = this.zoneNameDraft.trim();
-                        if (!name) {
-                          this.zoneNameError = t("venue.field_required");
-                          return;
-                        }
-                        void this.#save(async () => {
-                          await this.api.updateZone(row.zone.id, { name });
-                          if (this.zoneNameEditor === row.zone.id) this.zoneNameEditor = undefined;
-                        });
-                      }}
+                      @click=${() => void this.#saveName("zone", zoneDraft, (value) => this.api.updateZone(row.zone.id, { name: value }))}
                     >
                       ${t("venue.save")}
                     </button>
                     <button
                       type="button"
                       data-test="cancel-zone-name"
-                      @click=${() => (this.zoneNameEditor = undefined)}
+                      @click=${() => this.#leaveName("zone", zoneDraft, "cancel", () => this.#closeName("zone", zoneDraft!))}
                     >
                       ${t("venue.cancel")}
                     </button>`
@@ -661,9 +938,7 @@ export class VenueOperationsScreen extends LitElement {
                     data-test="edit-zone-name"
                     aria-label=${`${row.zone.name}: ${t("venue.name")}`}
                     @click=${() => {
-                      this.zoneNameDraft = row.zone.name;
-                      this.zoneNameError = "";
-                      this.zoneNameEditor = row.zone.id;
+                      this.#openName("zone", row.zone.id, row.zone.name);
                     }}
                   >
                     ${row.zone.name}
@@ -700,9 +975,7 @@ export class VenueOperationsScreen extends LitElement {
                 data-test="edit-department-name"
                 aria-label=${`${row.department.name}: ${t("venue.name")}`}
                 @click=${() => {
-                  this.departmentNameDraft = row.department.name;
-                  this.departmentNameError = "";
-                  this.departmentNameEditor = row.department.id;
+                  this.#openName("department", row.department.id, row.department.name);
                 }}
               >
                 ${displayName}</button
@@ -715,6 +988,7 @@ export class VenueOperationsScreen extends LitElement {
               }`;
           return html`<wt-input
               name="departmentName"
+              @keydown=${(event: KeyboardEvent) => this.#nameKey(event, "department", departmentDraft)}
               label=${t("venue.name")}
               hide-label
               required
@@ -722,37 +996,21 @@ export class VenueOperationsScreen extends LitElement {
               error=${this.departmentNameError}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
-                this.departmentNameDraft = event.detail.value;
-                this.departmentNameError = "";
+                this.#changeName("department", departmentDraft, event.detail.value);
               }}
             ></wt-input>
             <button
               type="button"
               data-test="save-department-name"
               ?disabled=${this.busy}
-              @click=${() => {
-                const name = this.departmentNameDraft.trim();
-                if (!name) {
-                  this.departmentNameError = t("venue.field_required");
-                  return;
-                }
-                void this.#save(async () => {
-                  await this.api.updateDepartment(row.department.id, {
-                    name,
-                    tradingName: row.department.tradingName,
-                    defaultServiceMode: row.department.defaultServiceMode,
-                  });
-                  if (this.departmentNameEditor === row.department.id)
-                    this.departmentNameEditor = undefined;
-                });
-              }}
+              @click=${() => void this.#saveName("department", departmentDraft, (value) => this.api.updateDepartment(row.department.id, { name: value, tradingName: row.department.tradingName, defaultServiceMode: row.department.defaultServiceMode }))}
             >
               ${t("venue.save")}
             </button>
             <button
               type="button"
               data-test="cancel-department-name"
-              @click=${() => (this.departmentNameEditor = undefined)}
+              @click=${() => this.#leaveName("department", departmentDraft, "cancel", () => this.#closeName("department", departmentDraft!))}
             >
               ${t("venue.cancel")}
             </button>`;
@@ -763,6 +1021,7 @@ export class VenueOperationsScreen extends LitElement {
         label: t("venue.trading_name"),
         group: t("venue.on_receipt"),
         cell: (row) => {
+          const tradingDraft = this.#nameDrafts.get("trading");
           if (row.kind !== "department") return nothing;
           if (this.tradingNameEditor !== row.department.id)
             return html`<span part="trading-name-cell"
@@ -772,9 +1031,7 @@ export class VenueOperationsScreen extends LitElement {
                 data-test="edit-trading-name"
                 aria-label=${`${row.department.name}: ${t("venue.trading_name")}, ${row.department.tradingName}`}
                 @click=${() => {
-                  this.tradingNameDraft = row.department.tradingName;
-                  this.tradingNameError = "";
-                  this.tradingNameEditor = row.department.id;
+                  this.#openName("trading", row.department.id, row.department.tradingName);
                 }}
               >
                 ${row.department.tradingName}
@@ -786,6 +1043,7 @@ export class VenueOperationsScreen extends LitElement {
             >`;
           return html`<wt-input
               name="tradingName"
+              @keydown=${(event: KeyboardEvent) => this.#nameKey(event, "trading", tradingDraft)}
               label=${`${row.department.name}: ${t("venue.trading_name")}`}
               hide-label
               required
@@ -793,37 +1051,21 @@ export class VenueOperationsScreen extends LitElement {
               error=${this.tradingNameError}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
-                this.tradingNameDraft = event.detail.value;
-                this.tradingNameError = "";
+                this.#changeName("trading", tradingDraft, event.detail.value);
               }}
             ></wt-input>
             <button
               type="button"
               data-test="save-trading-name"
               ?disabled=${this.busy}
-              @click=${() => {
-                const tradingName = this.tradingNameDraft.trim();
-                if (!tradingName) {
-                  this.tradingNameError = t("venue.field_required");
-                  return;
-                }
-                void this.#save(async () => {
-                  await this.api.updateDepartment(row.department.id, {
-                    name: row.department.name,
-                    tradingName,
-                    defaultServiceMode: row.department.defaultServiceMode,
-                  });
-                  if (this.tradingNameEditor === row.department.id)
-                    this.tradingNameEditor = undefined;
-                });
-              }}
+              @click=${() => void this.#saveName("trading", tradingDraft, (value) => this.api.updateDepartment(row.department.id, { name: row.department.name, tradingName: value, defaultServiceMode: row.department.defaultServiceMode }))}
             >
               ${t("venue.save")}
             </button>
             <button
               type="button"
               data-test="cancel-trading-name"
-              @click=${() => (this.tradingNameEditor = undefined)}
+              @click=${() => this.#leaveName("trading", tradingDraft, "cancel", () => this.#closeName("trading", tradingDraft!))}
             >
               ${t("venue.cancel")}
             </button>`;
@@ -1129,9 +1371,7 @@ export class VenueOperationsScreen extends LitElement {
                   key: `rename-tree-department-${row.department.id}`,
                   label: t("venue.rename"),
                   run: () => {
-                    this.departmentNameDraft = row.department.name;
-                    this.departmentNameError = "";
-                    this.departmentNameEditor = row.department.id;
+                    this.#openName("department", row.department.id, row.department.name);
                   },
                 },
                 {
@@ -1155,9 +1395,7 @@ export class VenueOperationsScreen extends LitElement {
                   key: `rename-tree-zone-${row.zone.id}`,
                   label: t("venue.rename"),
                   run: () => {
-                    this.zoneNameDraft = row.zone.name;
-                    this.zoneNameError = "";
-                    this.zoneNameEditor = row.zone.id;
+                    this.#openName("zone", row.zone.id, row.zone.name);
                   },
                 },
                 ...(row.departmentId === null || activeDepartmentCount > 1
@@ -1432,7 +1670,7 @@ export class VenueOperationsScreen extends LitElement {
     </section>`;
   }
   #editorContent(editor: Editor): EditorContent {
-    const model = this.model!;
+    const model = this.#editorModel ?? this.model!;
     switch (editor.kind) {
       case "new-zone":
         return {
@@ -1607,6 +1845,8 @@ export class VenueOperationsScreen extends LitElement {
     const marked = Object.keys(this.#errors()).length > 0;
     const invalid = Object.keys(this.fieldErrors).length > 0;
     const recheck = (event: Event) => {
+      if (!this.isConnected || this.editor !== editor) return;
+      this.#editorScope?.changed();
       const name = (event.target as HTMLInputElement).name;
       if (Object.hasOwn(this.refusedFields, name)) {
         const refused = { ...this.refusedFields };
@@ -1622,10 +1862,12 @@ export class VenueOperationsScreen extends LitElement {
         size=${confirming ? "compact" : "standard"}
         open
         heading=${content.heading}
+        .beforeClose=${this.#beforeEditorClose}
         @wt-close=${() => {
           if (this.editor === editor) this.#close();
         }}
         @keydown=${(event: KeyboardEvent) => {
+          if (!this.isConnected || this.editor !== editor) return;
           if (event.key === "Escape" && this.busy) {
             event.preventDefault();
             event.stopPropagation();
@@ -1633,7 +1875,7 @@ export class VenueOperationsScreen extends LitElement {
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'));
         }}
       >
-        <div class="form" @wt-change=${recheck}>${content.body}</div>
+        <div class="form" @wt-change=${recheck} @change=${recheck}>${content.body}</div>
         <wt-form-actions
           slot="footer"
           .error=${[...(this.editorError ? [this.editorError] : []), ...(marked ? [t("venue.fix_fields")] : [])].join(" ")}
@@ -1642,13 +1884,20 @@ export class VenueOperationsScreen extends LitElement {
             variant="secondary"
             data-test="cancel-editor"
             ?disabled=${this.busy}
-            @click=${() => this.#close()}
+            @click=${(event: Event) => {
+              if (this.editor === editor && this.isConnected)
+                void (event.currentTarget as HTMLElement)
+                  .closest("wt-modal")!
+                  .requestClose("cancel");
+            }}
             >${t("venue.cancel")}</wt-button
           ><wt-button
             data-test="save-editor"
             variant=${confirming ? "danger" : "primary"}
             ?disabled=${this.busy || invalid}
-            @click=${() => this.#submit(content)}
+            @click=${() => {
+              if (this.editor === editor && this.isConnected) this.#submit(content);
+            }}
             >${t(confirming ? "venue.confirm" : "venue.save")}</wt-button
           ></wt-form-actions
         >

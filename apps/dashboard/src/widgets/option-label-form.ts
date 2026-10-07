@@ -1,3 +1,9 @@
+import {
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
@@ -55,6 +61,7 @@ export class OptionLabelForm extends LitElement {
   ];
 
   @property({ type: Boolean }) open = false;
+  @property({ attribute: false }) draftParent?: object;
   @property({ type: Boolean }) busy = false;
   /** The option to edit; null adds a new one. */
   @property({ attribute: false }) value: DraftLabel | null = null;
@@ -79,6 +86,37 @@ export class OptionLabelForm extends LitElement {
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
 
+  #scope?: DraftScope<Omit<DraftLabel, "id">>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #registerDraft(): void {
+    if (!this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<Omit<DraftLabel, "id">>({
+        id: this,
+        parent: this.draftParent,
+        current: () => this.#comparisonValue(),
+        snapshot: (value) => structuredClone(value),
+        equal: sameValue,
+        restore: (value) => this.#restoreDraft(value),
+      });
+    }
+  }
+
   /** Also waits for the dialog, whose native close moves focus, so a caller can place focus after it. */
   protected override async getUpdateComplete(): Promise<boolean> {
     const result = await super.getUpdateComplete();
@@ -87,8 +125,17 @@ export class OptionLabelForm extends LitElement {
   }
 
   protected override willUpdate(changes: PropertyValues<this>): void {
-    if ((changes.has("open") && this.open) || changes.has("value")) this.#reseed();
+    if (
+      (changes.has("open") && this.open) ||
+      (changes.has("value") &&
+        this.value?.id !== (changes.get("value") as DraftLabel | null | undefined)?.id)
+    ) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#reseed();
+    }
     if (changes.has("errors")) this.dismissed = new Set();
+    this.#registerDraft();
   }
 
   protected override updated(changes: PropertyValues<this>): void {
@@ -111,6 +158,7 @@ export class OptionLabelForm extends LitElement {
 
   #edit(change: () => void, ...keys: string[]): void {
     change();
+    this.#scope?.changed();
     this.dismissed = new Set([...this.dismissed, ...keys]);
   }
 
@@ -159,14 +207,37 @@ export class OptionLabelForm extends LitElement {
     });
   }
 
+  #comparisonValue(): Omit<DraftLabel, "id"> {
+    return {
+      name: this.name,
+      customerName: { ...this.customerName },
+      kitchenName: this.kitchenName,
+      available: this.available,
+    };
+  }
+  #restoreDraft(value: Omit<DraftLabel, "id">): void {
+    this.name = value.name;
+    this.customerName = { ...value.customerName };
+    this.kitchenName = value.kitchenName;
+    this.available = value.available;
+  }
+  closeSaved(submitted: DraftLabel): void {
+    const { name, customerName, kitchenName, available } = submitted;
+    this.#scope?.commit({ name, customerName, kitchenName, available });
+    this.open = false;
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
+  }
+
   #cancel(event: Event): void {
-    // The dialog also reports a close it was told to make, a task later; by then the list form has
-    // already closed this editor and a second cancel would be about nothing.
-    if (this.busy || !this.open) {
-      event.stopPropagation();
-      return;
-    }
-    this.#emit(event, "wt-cancel", {});
+    event.stopPropagation();
+    if (this.busy || !this.open) return;
+    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.#reportCancel();
+  }
+
+  #reportCancel(): void {
+    if (this.busy || !this.open) return;
+    this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
 
   #errors(): Record<string, string> {
@@ -222,11 +293,15 @@ export class OptionLabelForm extends LitElement {
     return html`<wt-modal
       size="standard"
       .open=${this.open}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       heading=${t(this.value ? "options.edit_option" : "options.add_option")}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
       }}
-      @wt-close=${(event: Event) => this.#cancel(event)}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.#reportCancel();
+      }}
     >
       <div
         ?inert=${this.busy}

@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -14,6 +14,7 @@ import {
   dispatchConfigurationRequested,
   dispatchSetupGoto,
   dispatchSetupPatch,
+  type ConfigurationRequestDetail,
 } from "../events.js";
 
 @customElement("setup-live-source-screen")
@@ -35,6 +36,42 @@ export class SetupLiveSourceScreen extends LitElement {
   ];
 
   @property() errorMessage?: string;
+  @property({ attribute: false }) beforeEmpty?: (proceed: () => void, signal: AbortSignal) => void;
+
+  #baseline?: { artifact?: File; passphrase: string };
+  #scope?: DraftScope<{ artifact?: File; passphrase: string }>;
+  #choiceAbort = new AbortController();
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.#choiceAbort.signal.aborted) this.#choiceAbort = new AbortController();
+    this.#baseline ??= { artifact: this.artifact, passphrase: this.passphrase };
+    this.#scope = leaveCoordinatorFor(this)?.register({
+      id: this,
+      current: () => ({ artifact: this.artifact, passphrase: this.passphrase }),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => a.artifact === b.artifact && a.passphrase === b.passphrase,
+      restore: (value) => {
+        this.artifact = value.artifact;
+        this.passphrase = value.passphrase;
+        this.attempted = false;
+        const input = this.shadowRoot?.querySelector<HTMLInputElement>("input[type=file]");
+        if (input) {
+          const selection = new DataTransfer();
+          if (value.artifact) selection.items.add(value.artifact);
+          input.files = selection.files;
+        }
+      },
+    });
+    this.#scope?.commit(this.#baseline);
+  }
+
+  override disconnectedCallback(): void {
+    this.#choiceAbort.abort();
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    super.disconnectedCallback();
+  }
   @state() private artifact?: File;
   @state() private passphrase = "";
   @state() private importing = false;
@@ -65,8 +102,20 @@ export class SetupLiveSourceScreen extends LitElement {
   }
 
   #empty(): void {
-    dispatchSetupPatch(this, { configurationImport: false });
-    dispatchSetupGoto(this, "admin");
+    if (!this.isConnected) return;
+    const proceed = () => {
+      if (!this.isConnected) return;
+      dispatchSetupPatch(this, { configurationImport: false });
+      dispatchSetupGoto(this, "admin");
+    };
+    if (this.beforeEmpty) this.beforeEmpty(proceed, this.#choiceAbort.signal);
+    else proceed();
+  }
+
+  acceptImport(submitted: ConfigurationRequestDetail): void {
+    this.#baseline = { ...submitted };
+    this.#scope?.commit(this.#baseline);
+    this.importing = false;
   }
 
   #import(): void {
@@ -107,7 +156,9 @@ export class SetupLiveSourceScreen extends LitElement {
             aria-invalid=${this.#artifactMissing ? "true" : "false"}
             aria-describedby=${this.#artifactMissing ? "configuration-export-error" : nothing}
             @change=${(event: Event) => {
+              if (!this.isConnected) return;
               this.artifact = (event.currentTarget as HTMLInputElement).files?.[0];
+              this.#scope?.changed();
             }}
           />
         </label>
@@ -130,7 +181,9 @@ export class SetupLiveSourceScreen extends LitElement {
           .value=${this.passphrase}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
+            if (!this.isConnected) return;
             this.passphrase = event.detail.value;
+            this.#scope?.changed();
           }}
         >
           <wt-help-tooltip slot="help" aria-label=${t("live_source.passphrase_help_label")}

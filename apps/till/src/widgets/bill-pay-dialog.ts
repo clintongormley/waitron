@@ -11,7 +11,16 @@ import {
   toScale,
   type Decimal,
 } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  leaveCoordinatorFor,
+  type WtDialog,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
@@ -100,6 +109,31 @@ interface Cash {
   preview: CashPreview;
 }
 type TipMode = "none" | "all" | "part";
+interface PaymentDraft {
+  way: PayWay;
+  picks: [number, number][];
+  amount: string;
+  people: string;
+  method: "cash" | "card";
+  tendered: string;
+  cardTip: string;
+  externalRef: string;
+  readerId: string | undefined;
+  simulationOutcome: "captured" | "declined";
+}
+interface TipDraft {
+  mode: TipMode;
+  amount: string;
+}
+function amountKey(value: string): string | { invalid: string } {
+  const amount = typedAmount(value);
+  if (amount === null) return { invalid: value };
+  try {
+    return toScale(decimal(amount), MONEY_SCALE);
+  } catch {
+    return { invalid: value };
+  }
+}
 
 /** The field a refusal is about, or null when it names none the dialog shows. A tip the venue does
  * not take can only come from a card contribution larger than is left, so it is the amount's. */
@@ -415,12 +449,190 @@ export class TillBillPayDialog extends LitElement {
   /** The refusal still shown: it goes when the field it names changes, or at the next request. */
   @state() private shownRefusal: PayRefusal | null = null;
 
+  #leave?: LeaveCoordinator;
+  #entry?: DraftScope<PaymentDraft>;
+  #entryBaseline?: PaymentDraft;
+  readonly #tipId = {};
+  #tip?: DraftScope<TipDraft>;
+  #tipBaseline?: TipDraft;
+  #active = true;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.isConnected &&
+    this.#active &&
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#entry?.dispose();
+    this.#tip?.dispose();
+    this.#entry = undefined;
+    this.#tip = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #draft(): PaymentDraft {
+    return {
+      way: this.chosenWay,
+      picks: [...this.picks],
+      amount: this.typedAmountValue,
+      people: this.people,
+      method: this.method,
+      tendered: this.tendered,
+      cardTip: this.cardTip,
+      externalRef: this.externalRef,
+      readerId: this.chosenReaderId,
+      simulationOutcome: this.simulationOutcome,
+    };
+  }
+
+  #comparable(value: PaymentDraft): string {
+    const choice =
+      value.way === "items"
+        ? [...value.picks].sort((a, b) => a[0] - b[0])
+        : value.way === "contribution"
+          ? amountKey(value.amount)
+          : PEOPLE.test(value.people.trim())
+            ? Number(value.people.trim())
+            : { invalid: value.people };
+    const pay =
+      value.method === "cash"
+        ? { tendered: amountKey(value.tendered) }
+        : {
+            tip: this.tipsEnabled ? amountKey(value.cardTip) : null,
+            card:
+              this.cardReader === "none"
+                ? value.externalRef.trim()
+                : {
+                    readerId: value.readerId,
+                    simulation:
+                      this.cardReader === "simulator" && value.readerId === undefined
+                        ? value.simulationOutcome
+                        : null,
+                  },
+          };
+    return JSON.stringify({ way: value.way, choice, method: value.method, pay });
+  }
+
+  #restore(value: PaymentDraft): void {
+    this.chosenWay = value.way;
+    this.picks = new Map(value.picks);
+    this.typedAmountValue = value.amount;
+    this.people = value.people;
+    this.method = value.method;
+    this.tendered = value.tendered;
+    this.cardTip = value.cardTip;
+    this.externalRef = value.externalRef;
+    this.chosenReaderId = value.readerId;
+    this.simulationOutcome = value.simulationOutcome;
+    this.attempted = false;
+  }
+
+  #syncDrafts(): void {
+    if (!this.isConnected || !this.#active) return;
+    this.#leave ??= leaveCoordinatorFor(this);
+    if (!this.#entry) {
+      this.#entryBaseline ??= this.#draft();
+      this.#entry = this.#leave?.register<PaymentDraft>({
+        id: this,
+        current: () => this.#draft(),
+        snapshot: (value) => ({
+          ...value,
+          picks: value.picks.map(([line, units]) => [line, units]),
+        }),
+        equal: (a, b) => this.#comparable(a) === this.#comparable(b),
+        restore: (value) => this.#restore(value),
+      });
+      this.#entry?.commit(this.#entryBaseline);
+    }
+    if (this.asked && this.preview?.kind === "allocated" && this.asked.pay.method === "cash") {
+      if (!this.#tip) {
+        this.#tipBaseline ??= { mode: this.tipMode, amount: this.tipAmount };
+        this.#tip = this.#leave?.register<TipDraft>({
+          id: this.#tipId,
+          parent: this,
+          current: () => ({ mode: this.tipMode, amount: this.tipAmount }),
+          snapshot: (value) => ({ ...value }),
+          equal: (a, b) =>
+            a.mode === b.mode &&
+            (a.mode !== "part" ||
+              JSON.stringify(amountKey(a.amount)) === JSON.stringify(amountKey(b.amount))),
+          restore: (value) => {
+            this.tipMode = value.mode;
+            this.tipAmount = value.amount;
+            this.tipAttempted = false;
+          },
+        });
+        this.#tip?.commit(this.#tipBaseline);
+      }
+    } else {
+      this.#tip?.dispose();
+      this.#tip = undefined;
+      this.#tipBaseline = undefined;
+    }
+  }
+
+  #changedDraft(): void {
+    this.#entry?.changed();
+    this.#tip?.changed();
+  }
+
+  #close(event?: Event): void {
+    event?.stopPropagation();
+    if (event && event.target !== event.currentTarget) return;
+    if (!this.isConnected || !this.#active || this.busy) return;
+    this.#active = false;
+    this.#entry?.dispose();
+    this.#tip?.dispose();
+    this.#entry = undefined;
+    this.#tip = undefined;
+    this.#emit("bill-pay-close");
+  }
+
+  #requestClose(): void {
+    if (!this.isConnected || !this.#active || this.busy) return;
+    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+  }
+
+  #back(): void {
+    if (!this.isConnected || !this.#active || this.busy) return;
+    const proceed = () => {
+      this.#tip?.dispose();
+      this.#tip = undefined;
+      this.#tipBaseline = undefined;
+      this.#noTip();
+      this.shownRefusal = null;
+      this.#emit("bill-pay-edit");
+    };
+    if (this.#tip) void this.#leave!.request({ scopes: [this.#tipId], reason: "cancel", proceed });
+    else proceed();
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("way")) this.chosenWay = this.way;
     if (changed.has("takesCash")) this.method = this.takesCash ? "cash" : "card";
     if (changed.has("amount")) this.typedAmountValue = this.amount;
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
-    if (changed.has("taken") && this.taken !== null) this.#startAgain();
+    if (changed.has("taken") && this.taken !== null) this.paymentAccepted();
+    if (changed.has("busy") && this.busy) {
+      if (this.#entryBaseline) this.#entry?.commit(this.#entryBaseline);
+      if (this.#tipBaseline) this.#tip?.commit(this.#tipBaseline);
+    }
+    this.#syncDrafts();
+  }
+
+  paymentAccepted(): void {
+    this.#startAgain();
+    this.#entryBaseline = this.#draft();
+    this.#entry?.commit(this.#entryBaseline);
+    this.#tip?.dispose();
+    this.#tip = undefined;
+    this.#tipBaseline = undefined;
   }
 
   #startAgain(): void {
@@ -576,6 +788,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   async #continue(): Promise<void> {
+    if (!this.isConnected || !this.#active || this.busy) return;
     this.attempted = true;
     this.shownRefusal = null;
     if (this.#ownErrors().size > 0) {
@@ -590,10 +803,11 @@ export class TillBillPayDialog extends LitElement {
   override render() {
     return html`<wt-dialog
       ${trackDialog()}
-      .open=${true}
+      .open=${this.#active}
       .heading=${t("bill_pay.title")}
       .dismissible=${!this.busy}
-      @wt-close=${() => this.#emit("bill-pay-close")}
+      .beforeClose=${this.#entry ? this.#beforeClose : undefined}
+      @wt-close=${(event: Event) => this.#close(event)}
     >
       <div class="body">
         ${this.#balance()}
@@ -807,7 +1021,9 @@ export class TillBillPayDialog extends LitElement {
         .checked=${checked}
         @change=${(event: Event) => {
           event.stopPropagation();
+          if (!this.isConnected || !this.#active || this.busy) return;
           pick();
+          this.#changedDraft();
         }}
       />
       <span>${label}</span>
@@ -835,7 +1051,9 @@ export class TillBillPayDialog extends LitElement {
       .error=${opts.error ?? ""}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
+        if (!this.isConnected || !this.#active || this.busy) return;
         set(event.detail.value);
+        this.#changedDraft();
         if (name !== "externalRef") this.#changed(name);
       }}
       @keydown=${(event: KeyboardEvent) => this.#enter(event, opts.submit)}
@@ -864,7 +1082,7 @@ export class TillBillPayDialog extends LitElement {
           variant="secondary"
           data-pay-close
           .disabled=${this.busy}
-          @click=${() => this.#emit("bill-pay-close")}
+          @click=${() => this.#requestClose()}
         >
           ${t("bill_pay.close")}
         </wt-button>
@@ -924,10 +1142,12 @@ export class TillBillPayDialog extends LitElement {
     const quantity = this.#shownQuantity(line, remaining);
     const label = `${line.name} ×${quantity} · ${this.#money(this.#pickAmount(line, remaining))}`;
     const toggle = () => {
+      if (!this.isConnected || !this.#active || this.busy) return;
       const next = new Map(this.picks);
       if (next.has(line.lineNo)) next.delete(line.lineNo);
       else next.set(line.lineNo, remaining);
       this.picks = next;
+      this.#changedDraft();
       this.#changed("lines");
     };
     return html`<div class="line">
@@ -956,9 +1176,11 @@ export class TillBillPayDialog extends LitElement {
 
   #unitsStepper(line: PayLine, units: number, remaining: number): TemplateResult {
     const step = (delta: -1 | 1) => {
+      if (!this.isConnected || !this.#active || this.busy) return;
       const next = new Map(this.picks);
       next.set(line.lineNo, units + delta);
       this.picks = next;
+      this.#changedDraft();
     };
     return html`<span class="units">
       <span>${t("bill_pay.units")}</span>
@@ -1165,6 +1387,7 @@ export class TillBillPayDialog extends LitElement {
   /** Takes the payment shown; with part of the change typed as a tip, first checks it and, when
    * it is not the tip shown, asks the server for the allocation with it. */
   async #take(asked: PayRequest, cash: Cash | null): Promise<void> {
+    if (!this.isConnected || !this.#active || this.busy) return;
     if (cash !== null && this.tipMode === "part") {
       this.tipAttempted = true;
       if (this.#tipErrors(cash).size > 0) {
@@ -1262,10 +1485,7 @@ export class TillBillPayDialog extends LitElement {
       variant="secondary"
       data-pay-back
       .disabled=${this.busy}
-      @click=${() => {
-        this.shownRefusal = null;
-        this.#emit("bill-pay-edit");
-      }}
+      @click=${() => this.#back()}
     >
       ${t("action.back")}
     </wt-button>`;
@@ -1324,6 +1544,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #choose(asked: PayRequest, allocation: AllocationChoice): void {
+    if (!this.isConnected || !this.#active || this.busy) return;
     this.shownRefusal = null;
     this.#noTip();
     this.#emit("bill-pay-preview", { ...asked, allocation } satisfies PayRequest);

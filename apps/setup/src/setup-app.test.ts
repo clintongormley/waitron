@@ -1,3 +1,4 @@
+import { leaveCoordinatorFor } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
@@ -1702,7 +1703,7 @@ describe("setup-app", () => {
       expect(readState(el, ["connectRequest"])).toEqual({ connectRequest: undefined });
     });
 
-    it("is not kept once the operator leaves the connect screen", async () => {
+    it("is not kept once the operator discards changes and leaves the connect screen", async () => {
       const adopt = vi.fn().mockRejectedValue({
         code: "mirror.bundle_fetch_failed",
         params: {},
@@ -1712,6 +1713,18 @@ describe("setup-app", () => {
       await typeAndConnect(el);
       goto(el, "role");
       await el.updateComplete;
+      const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "wt-unsaved-changes",
+      )!;
+      await expect.poll(() => warning.open).toBe(true);
+      warning.dispatchEvent(
+        new CustomEvent("wt-unsaved-choice", {
+          detail: { decision: "discard" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await expect.poll(() => readState(el, ["screen"]).screen).toBe("role");
       goto(el, "connect");
       await el.updateComplete;
       const connect = await screenHost(el, "connect");
@@ -2215,6 +2228,20 @@ describe("resetting a join that stopped partway", () => {
     );
     screen.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
     await el.updateComplete;
+    const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "wt-unsaved-changes",
+    )!;
+    await expect.poll(() => warning.open).toBe(true);
+    warning.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=screen-provisioning]") !== null)
+      .toBe(true);
     await openReset(el);
     expect(await bottomOf(await screenHost(el, "reset"))).toBe("");
     await submitReset(el);
@@ -3352,6 +3379,19 @@ describe("restore from my bucket", () => {
     await flush(el);
     goto(el, "role");
     await flush(el);
+    const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "wt-unsaved-changes",
+    )!;
+    expect(warning.open).toBe(true);
+    expect(el.shadowRoot!.querySelector("setup-restore-bucket-screen")).not.toBeNull();
+    warning.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect((el as unknown as { screen: Screen }).screen).toBe("role"));
     goto(el, "restore-bucket");
     await flush(el);
     const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
@@ -3539,6 +3579,19 @@ describe("restoring a backup file whose old server may still be running", () => 
     await flush(el);
     goto(el, "role");
     await flush(el);
+    const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "wt-unsaved-changes",
+    )!;
+    expect(warning.open).toBe(true);
+    expect(el.shadowRoot!.querySelector("setup-restore-screen")).not.toBeNull();
+    warning.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect((el as unknown as { screen: Screen }).screen).toBe("role"));
     goto(el, "restore");
     await flush(el);
     const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
@@ -4239,4 +4292,65 @@ describe("the wizard's language", () => {
     expect(provision).toHaveBeenCalledOnce();
     expect(provision.mock.calls[0]).toHaveLength(1);
   });
+});
+
+describe("application unsaved changes renderer", () => {
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    for (const decision of ["keep", "discard"] as const) {
+      it(`${locale}: ${decision} uses the shell's single localized confirmation`, async () => {
+        const el = await mountSetupApp();
+        await flush(el);
+        setLocale(locale);
+        await el.updateComplete;
+        const child = el.shadowRoot!.querySelector<HTMLElement>("div, main")!;
+        const coordinator = leaveCoordinatorFor(child);
+        expect(coordinator, "descendant resolves the application registry").toBeDefined();
+        let draft = "Original";
+        const scope = coordinator!.register({
+          id: child,
+          current: () => draft,
+          snapshot: (value) => value,
+          equal: (a, b) => a === b,
+          restore: (value) => {
+            draft = value;
+          },
+        });
+        draft = "Edited";
+        scope.changed();
+        let left = 0;
+        const pending = coordinator!.request({
+          scopes: [scope.id],
+          reason: "cancel",
+          proceed() {
+            left++;
+          },
+        });
+        await el.updateComplete;
+        const questions = el.shadowRoot!.querySelectorAll("wt-unsaved-changes");
+        expect(questions).toHaveLength(1);
+        const question = questions[0]!;
+        await question.updateComplete;
+        const modal = question.shadowRoot!.querySelector("wt-modal")!;
+        await modal.updateComplete;
+        expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+        expect(question.heading).toBe(
+          locale === "en-GB" ? "Discard unsaved changes?" : "¿Descartar los cambios sin guardar?",
+        );
+        expect(question.message).toBe(
+          locale === "en-GB"
+            ? "Your changes have not been saved."
+            : "Tus cambios no se han guardado.",
+        );
+        expect(question.keepLabel).toBe(locale === "en-GB" ? "Keep editing" : "Seguir editando");
+        expect(question.discardLabel).toBe(
+          locale === "en-GB" ? "Discard changes" : "Descartar cambios",
+        );
+        question.shadowRoot!.querySelector<HTMLElement>(`[data-choice="${decision}"]`)!.click();
+        expect(await pending).toBe(decision === "keep" ? "kept" : "proceeded");
+        expect(left).toBe(decision === "keep" ? 0 : 1);
+        expect(draft).toBe(decision === "keep" ? "Edited" : "Original");
+        scope.dispose();
+      });
+    }
+  }
 });

@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  leaveCoordinatorFor,
+  submitOnEnter,
+  type DraftScope,
+  type LeaveCoordinator,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -118,6 +124,8 @@ export class VenueDetailsPanel extends LitElement {
   #previewSequence = 0;
   #expected?: VenueDetailValues;
   #generation = 0;
+  #scope?: DraftScope<VenueDetailValues>;
+  #leave?: LeaveCoordinator;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -132,10 +140,14 @@ export class VenueDetailsPanel extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation += 1;
+    this.#registerDraft();
     void this.#load();
   }
   override disconnectedCallback(): void {
     this.#generation += 1;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
     this.submitting = false;
     this.#previewSequence += 1;
     this.#clockKey = "";
@@ -163,8 +175,46 @@ export class VenueDetailsPanel extends LitElement {
     this.attempted = false;
     this.actionError = "";
     this.acknowledged = "";
+    this.#registerDraft();
+  }
+  #registerDraft(): void {
+    if (!this.isConnected || !this.draft || !this.#expected || this.#scope) return;
+    this.#leave = leaveCoordinatorFor(this);
+    if (!this.#leave) return;
+    this.#scope = this.#leave.register({
+      id: this,
+      current: () => this.draft!,
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => Object.keys(venueDetailPatch(a, b)).length === 0,
+      restore: (value) => {
+        this.draft = value;
+        this.errors = {};
+        this.actionError = "";
+        this.attempted = false;
+        this.acknowledged = "";
+        this.#refreshPreview();
+      },
+    });
+    this.#scope.commit(this.#expected);
+  }
+  #requestCancel(): void {
+    if (this.submitting || !this.isConnected) return;
+    const scope = this.#scope;
+    if (!scope || !this.#leave) {
+      this.#cancel();
+      return;
+    }
+    void this.#leave.request({
+      scopes: [this],
+      reason: "cancel",
+      proceed: () => {
+        if (this.isConnected && this.#scope === scope) this.#cancel();
+      },
+    });
   }
   #cancel(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
     this.draft = undefined;
     this.#expected = undefined;
     this.errors = {};
@@ -305,6 +355,7 @@ export class VenueDetailsPanel extends LitElement {
     if (!this.draft || this.readOnly || this.submitting) return;
     const previousPatch = JSON.stringify(this.#patch());
     this.draft = { ...this.draft, [field]: event.detail.value };
+    this.#scope?.changed();
     if (JSON.stringify(this.#patch()) !== previousPatch) this.acknowledged = "";
     const next = venueDetailProblems(this.#patch());
     const errors = { ...this.errors };
@@ -391,6 +442,12 @@ export class VenueDetailsPanel extends LitElement {
       .join(" ");
   }
   #field(field: VenueDetailField): TemplateResult {
+    const expected = this.#expected;
+    const generation = this.#generation;
+    const change = (event: CustomEvent<{ value: string }>) => {
+      if (this.isConnected && expected === this.#expected && generation === this.#generation)
+        this.#change(field, event);
+    };
     const value = this.draft![field] ?? "";
     const locked = this.model!.policy[field].decision === "refuse";
     if (locked && this.#patch()[field] === undefined)
@@ -413,7 +470,7 @@ export class VenueDetailsPanel extends LitElement {
               ?required=${required}
               ?disabled=${this.submitting}
               .error=${this.errors[field] ?? ""}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
+              @wt-change=${change}
             ></wt-combobox>`
           : html`<wt-input
               name=${nameOf(field)}
@@ -422,7 +479,7 @@ export class VenueDetailsPanel extends LitElement {
               ?required=${required}
               ?disabled=${this.submitting}
               .error=${this.errors[field] ?? ""}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
+              @wt-change=${change}
             ></wt-input>`
       }
       ${locked ? html`<p class="reason" data-test=${`lock-${field}`}>${this.#reason(field)}</p>` : nothing}
@@ -433,6 +490,10 @@ export class VenueDetailsPanel extends LitElement {
   }
   override render(): TemplateResult {
     const model = this.model;
+    const expected = this.#expected;
+    const generation = this.#generation;
+    const current = () =>
+      this.isConnected && expected === this.#expected && generation === this.#generation;
     return html`<h2>${t("venue_details.title")}</h2>
       ${this.readError && !this.actionError ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>` : nothing}
       ${
@@ -452,7 +513,7 @@ export class VenueDetailsPanel extends LitElement {
                   ? html`<form
                       @submit=${(event: Event) => {
                         event.preventDefault();
-                        void this.#save();
+                        if (current()) void this.#save();
                       }}
                       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
                     >
@@ -478,7 +539,7 @@ export class VenueDetailsPanel extends LitElement {
                                       data-test="acknowledge"
                                       ?disabled=${this.submitting || !this.#previewReady()}
                                       @click=${() => {
-                                        if (!this.#previewReady()) return;
+                                        if (!current() || !this.#previewReady()) return;
                                         this.acknowledged = JSON.stringify(this.#patch());
                                       }}
                                       >${t("venue_details.acknowledge")}</wt-button
@@ -493,7 +554,9 @@ export class VenueDetailsPanel extends LitElement {
                           slot="cancel"
                           data-test="cancel"
                           ?disabled=${this.submitting}
-                          @click=${() => this.#cancel()}
+                          @click=${() => {
+                            if (current()) this.#requestCancel();
+                          }}
                           >${t("action.cancel")}</wt-button
                         >
                         <wt-button
@@ -506,7 +569,7 @@ export class VenueDetailsPanel extends LitElement {
                               Object.keys(venueDetailProblems(this.#patch())).length > 0)
                           }
                           @click=${() => {
-                            void this.#save();
+                            if (current()) void this.#save();
                           }}
                           >${t("action.save")}</wt-button
                         >
@@ -521,7 +584,17 @@ export class VenueDetailsPanel extends LitElement {
                               </dd>`,
                         )}
                       </dl>
-                      ${this.readOnly ? nothing : html`<wt-button data-test="edit" @click=${() => this.#begin()}>${t("action.edit")}</wt-button>`}`
+                      ${
+                        this.readOnly
+                          ? nothing
+                          : html`<wt-button
+                              data-test="edit"
+                              @click=${() => {
+                                if (current()) this.#begin();
+                              }}
+                              >${t("action.edit")}</wt-button
+                            >`
+                      }`
               }
             `
       }`;

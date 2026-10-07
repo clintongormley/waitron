@@ -56,6 +56,7 @@ export class PurchasesScreen extends LitElement {
 
   @state() private invoices: PurchaseInvoice[] = [];
   @state() private formOpen = false;
+  #formOpening = {};
   @state() private editingInvoice: PurchaseInvoice | null = null;
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
@@ -67,6 +68,11 @@ export class PurchasesScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+  }
+
+  override disconnectedCallback(): void {
+    this.#formOpening = {};
+    super.disconnectedCallback();
   }
 
   async #load(): Promise<void> {
@@ -97,6 +103,7 @@ export class PurchasesScreen extends LitElement {
   }
 
   #openForm(): void {
+    this.#formOpening = {};
     this.#showError(null);
     this.formErrors = {};
     this.editingInvoice = null;
@@ -107,6 +114,7 @@ export class PurchasesScreen extends LitElement {
     event.stopPropagation();
     const invoice = this.invoices.find((i) => i.id === event.detail.id);
     if (invoice === undefined) return;
+    this.#formOpening = {};
     this.#showError(null);
     this.formErrors = {};
     this.editingInvoice = invoice;
@@ -118,23 +126,25 @@ export class PurchasesScreen extends LitElement {
     if (this.busy) return;
     this.busy = true;
     this.formErrors = {};
+    const opening = this.#formOpening;
+    const completeWrite =
+      this.shadowRoot!.querySelector("dashboard-purchase-form")!.writeCompletion();
     try {
       try {
         await this.api.createPurchaseInvoice(event.detail);
       } catch (error) {
-        this.formErrors = purchaseRefusalErrors(error);
+        if (this.isConnected && opening === this.#formOpening)
+          this.formErrors = purchaseRefusalErrors(error);
         return;
       }
-      await this.#afterWrite();
+      await this.#afterWrite(completeWrite);
     } finally {
       this.busy = false;
     }
   }
 
-  /** The write succeeded, so the form closes whatever the refresh does; a failed refresh is a load
-   * failure. */
-  async #afterWrite(): Promise<void> {
-    this.formOpen = false;
+  async #afterWrite(completeWrite: () => boolean): Promise<void> {
+    if (completeWrite()) this.formOpen = false;
     this.#showError(null);
     try {
       await this.#reload();
@@ -148,14 +158,18 @@ export class PurchasesScreen extends LitElement {
     if (this.busy) return;
     this.busy = true;
     this.formErrors = {};
+    const opening = this.#formOpening;
+    const completeWrite =
+      this.shadowRoot!.querySelector("dashboard-purchase-form")!.writeCompletion();
     try {
       try {
         await this.api.updatePurchaseInvoice(event.detail.id, event.detail.patch);
       } catch (error) {
-        this.formErrors = purchaseRefusalErrors(error);
+        if (this.isConnected && opening === this.#formOpening)
+          this.formErrors = purchaseRefusalErrors(error);
         return;
       }
-      await this.#afterWrite();
+      await this.#afterWrite(completeWrite);
     } finally {
       this.busy = false;
     }
@@ -207,7 +221,10 @@ export class PurchasesScreen extends LitElement {
         .fieldErrors=${this.formErrors}
         @create-purchase=${(e: CustomEvent<PurchaseInvoiceInput>) => void this.#onCreate(e)}
         @update-purchase=${(e: CustomEvent<UpdatePurchaseDetail>) => void this.#onUpdate(e)}
-        @wt-close=${() => (this.formOpen = false)}
+        @wt-close=${() => {
+          this.#formOpening = {};
+          this.formOpen = false;
+        }}
       ></dashboard-purchase-form>
     `;
   }

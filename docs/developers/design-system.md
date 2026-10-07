@@ -1456,6 +1456,72 @@ password manager reads, in two files, and the print agent's setup page, each hel
 lines it draws a field on, so a field swapped for another, a hidden input made visible, or a field
 added on a line that already has one passes.
 
+#### Protect an edited dialog before closing it
+
+When a dialog holds staged edits, give its owner a draft scope from
+the shared coordinator. Resolve it through `@waitron/ui`; that package also exports the
+`DraftScope`, `LeaveCoordinator` and `LeaveReason` types for form owners. Compare the values your
+form would submit with its detached
+starting snapshot. Call `changed()` after edits and reverts, and `commit(submitted)` as soon as
+that write succeeds, before refreshing. Saving a child form commits its child scope; the
+parent's server write still has its own baseline.
+
+Bind the dialog's `beforeClose` property to a scoped coordinator request and return whether its
+outcome is `"proceeded"`. Keep the callback reference stable while that editor is open:
+`WtDialog.requestClose` rejects a pending close if its `beforeClose` callback changes. A background
+render must not replace it while you are answering the question. Route Cancel, close controls and
+an existing backdrop action through `requestClose(reason)`. Native Escape uses the same gate. The
+dialog stays open while asking, and a later answer cannot close a different opening. `closeAfter("saved")` and
+`closeAfter("security")` bypass a pending question for a successful write or forced teardown.
+An owner's `open` binding still controls rendering; it is not a user-dismissal path.
+
+Use one `LeaveController` from `@waitron/ui` in each application shell. Render its confirmation
+with `render(copy)` and resolve that same coordinator from a connected descendant with
+`leaveCoordinatorFor(element)`; the request crosses shadow roots and stops at the nearest shell.
+Dispose each form scope when its owner leaves. The controller disposes its registry on shell
+disconnect and creates a new one on reconnect. Call its `forceReset()` for a forced security exit;
+that call also tolerates a shell whose teardown has already run.
+
+For an action that leaves every registered editor, call
+`coordinator.request({ scopes: "all", reason, proceed })`. Keep editing preserves every selected
+input; Discard restores only dirty inputs before your continuation runs. An explicit ID list
+selects those owners and their descendants, while `[]` selects none. Supply `except: [retainedOwner]`
+when the action keeps an editor mounted; its descendants are retained too. A new or changed
+affected owner invalidates an unanswered question. Application shells use these selections for
+voluntary logout, locale changes and navigation; retained order drafts are explicitly excluded
+from transitions that keep them.
+
+The controller renders one `wt-unsaved-changes` per application, supplying `heading`, `message`,
+`keepLabel` and `discardLabel` from that application's translations. The compact confirmation focuses Keep
+editing, offers a danger-styled Discard changes action and emits `wt-unsaved-choice` with
+`detail: { decision: "keep" | "discard" }`. Escape chooses Keep. Closing its `open` property
+for an aborted request emits no choice. Its message is the inner dialog's accessible description.
+Keep the original editor mounted until the coordinator approves leaving, so Keep restores focus
+and preserves the draft. Read-only and automatically saved forms need no draft scope.
+
+The dashboard, till and setup shells share this controller and the accepted-history adapter.
+Its leave callback receives the destination URL so Account settings can retain underlying
+page drafts. Sidebar and product-link requests defer screen changes until acceptance. Plain
+same-app anchors use the dispatched click's composed path; modified clicks, new-tab targets
+and downloads keep browser handling. Fragment-only form links keep their target's handler,
+which owns any leave request. Preview department changes and same-page receipt Back retain
+staged inputs; a tab or management-link departure asks before leaving them.
+
+Each form owns its comparison and successful-write boundary. Compare membership for selected
+ID sets and preserve order for submitted positions. Nested image forms retain File identity;
+a child save commits that child without committing its parent. Independent receipt, credential
+and inline-row writes commit separately. A failed refresh after a successful write cannot make
+that submitted value dirty again. Read-only views, immediately saved controls and safety
+acknowledgements remain exempt. The [dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md)
+records the coverage and limits of the rollout checks.
+
+The dirty-only unload listener requests the browser's own warning. Activated desktop Chromium
+checks cover reload, external navigation and closing with a Schedule draft. The
+[design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md) records activation and
+platform limits; mobile process termination and every-platform reliability are unverified.
+PIN sign-in compares ephemeral keypad input and asks on voluntary Cancel; explicit submission
+remains direct, and disconnect clears proof without asking.
+
 #### A value saved from its own table row
 
 A few lists edit a value in its own row, saving each change as it is made, with no `wt-modal`

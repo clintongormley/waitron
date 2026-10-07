@@ -234,10 +234,10 @@ export class StaffScreen extends LitElement {
     this.editOpen = true;
   }
 
-  /** Re-reads `editingPerson` from the reloaded list, so a still-open dialog shows the new state. */
-  async #runEditAction(action: () => Promise<void>): Promise<void> {
+  async #runEditAction(id: string, action: () => Promise<void>): Promise<void> {
     if (this.#editing) return;
     this.#editing = true;
+    this.requestUpdate();
     this.#showError(null);
     try {
       await action();
@@ -247,9 +247,10 @@ export class StaffScreen extends LitElement {
         this.editingPerson = this.people.find((p) => p.personId === id) ?? this.editingPerson;
       }
     } catch (error) {
-      this.#fail(error);
+      if (this.editingPerson?.personId === id) this.#fail(error);
     } finally {
       this.#editing = false;
+      this.requestUpdate();
     }
   }
 
@@ -257,7 +258,8 @@ export class StaffScreen extends LitElement {
     event.stopPropagation();
     this.#editWith(async (id) => {
       await this.api.savePerson(id, event.detail);
-      this.#closeEdit();
+      if (this.editingPerson?.personId === id)
+        this.shadowRoot!.querySelector("dashboard-person-edit")!.closeSaved(event.detail);
     });
   }
 
@@ -266,23 +268,26 @@ export class StaffScreen extends LitElement {
     const personId = this.editingPerson?.personId;
     if (personId === undefined || this.#editing) return;
     this.#editing = true;
+    this.requestUpdate();
     this.#showError(null);
     this.invitationStatus = null;
     try {
       const result = await this.api.resendInvitation(personId);
+      if (this.editingPerson?.personId !== personId) return;
       this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
-      this.#closeEdit();
+      this.shadowRoot!.querySelector("dashboard-person-edit")!.closeIfUnchanged();
     } catch (error) {
-      this.#fail(error);
+      if (this.editingPerson?.personId === personId) this.#fail(error);
     } finally {
       this.#editing = false;
+      this.requestUpdate();
     }
   }
 
   #editWith(action: (id: string) => Promise<void>): void {
     const id = this.editingPerson?.personId;
     if (id === undefined) return;
-    void this.#runEditAction(() => action(id));
+    void this.#runEditAction(id, () => action(id));
   }
 
   async #onCreatePerson(
@@ -298,16 +303,20 @@ export class StaffScreen extends LitElement {
     event.stopPropagation();
     if (this.#creating) return;
     this.#creating = true;
+    this.requestUpdate();
     this.#showError(null);
     try {
       const result = await this.api.createPerson(event.detail);
       this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
+      const closed = this.shadowRoot!.querySelector("dashboard-person-form")!.closeSaved(
+        event.detail,
+      );
       const opener = this.#addOpener;
-      this.formOpen = false;
+      if (closed) this.formOpen = false;
       await this.#load();
       await this.updateComplete;
       // The empty table's add button is gone once the person it made is listed.
-      if (opener?.isConnected === false)
+      if (closed && opener?.isConnected === false)
         this.renderRoot.querySelector<HTMLElement>(".header [data-test=add]")?.focus();
     } catch (error) {
       const code = codeOf(error);
@@ -328,6 +337,7 @@ export class StaffScreen extends LitElement {
       }
     } finally {
       this.#creating = false;
+      this.requestUpdate();
     }
   }
 
@@ -464,6 +474,7 @@ export class StaffScreen extends LitElement {
         </wt-form-actions>
       </wt-dialog>
       <dashboard-person-form
+        .busy=${this.#creating}
         .open=${this.formOpen}
         .error=${this.formOpen ? this.errorKey : null}
         .errorField=${this.errorField}
@@ -480,6 +491,7 @@ export class StaffScreen extends LitElement {
         @wt-close=${() => (this.formOpen = false)}
       ></dashboard-person-form>
       <dashboard-person-edit
+        .busy=${this.#editing}
         .person=${this.editingPerson}
         .currentPersonId=${this.currentPersonId}
         .open=${this.editOpen}

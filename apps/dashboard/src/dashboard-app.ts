@@ -1,4 +1,5 @@
-import { dashboardPath } from "./navigation.js";
+import { LeaveController, navigationGuardFor, type LeaveReason } from "@waitron/ui";
+import { dashboardPath, leftToBrowser } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
@@ -828,6 +829,7 @@ export class DashboardApp extends LitElement {
     this.#breakpoint = window.matchMedia(DRAWER_BREAKPOINT);
     this.narrow = this.#breakpoint.matches;
     this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
+    this.addEventListener("click", this.#onAppLink, true);
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.addEventListener("waitron-session-active", this.#onSessionActive);
     window.addEventListener("storage", this.#onSessionStorage);
@@ -835,9 +837,11 @@ export class DashboardApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.sessionGeneration += 1;
     this.liveUpdates?.stop();
     this.#breakpoint?.removeEventListener("change", this.#onBreakpointChange);
     this.#breakpoint = undefined;
+    this.removeEventListener("click", this.#onAppLink, true);
     window.removeEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.removeEventListener("waitron-session-active", this.#onSessionActive);
     window.removeEventListener("storage", this.#onSessionStorage);
@@ -859,7 +863,9 @@ export class DashboardApp extends LitElement {
     const preference = consumeGoogleLoginPreference(googleCallback);
     if (googleCallback) {
       url.searchParams.delete("login");
-      history.replaceState(history.state, "", url);
+      const guard = navigationGuardFor(window);
+      if (guard) await guard.write(url, true);
+      else history.replaceState(history.state, "", url);
     }
     if (url.searchParams.has("token")) {
       await this.#seedLocale();
@@ -1111,6 +1117,8 @@ export class DashboardApp extends LitElement {
   }
 
   #returnToLogin(code: string | null): void {
+    this.leave.forceReset();
+    navigationGuardFor(window)?.reset();
     this.#languageQueries.release("getContentLanguages");
     this.#clearAlerts();
     this.contentLanguagesReady = false;
@@ -1230,19 +1238,21 @@ export class DashboardApp extends LitElement {
   }
 
   async #onLogout(): Promise<void> {
-    try {
-      await this.api.logout();
-    } catch {
-      // A failed logout must still drop to login; the reason it failed is not actionable here.
-    }
-    this.#returnToLogin(null);
+    const generation = this.sessionGeneration;
+    await this.leave.coordinator.request({
+      scopes: "all",
+      reason: "signout",
+      proceed: async () => {
+        try {
+          await this.api.logout();
+        } catch {
+          // The local session is cleared even when the logout request is refused.
+        }
+        if (this.isConnected && generation === this.sessionGeneration) this.#returnToLogin(null);
+      },
+    });
   }
 
-  /**
-   * Before login a pick only switches the UI: there is no session to attach it to. Signed in, the
-   * preference is saved first and the UI switches only after, so a failed save leaves the language
-   * unchanged.
-   */
   async #onLocaleSelected(event: CustomEvent<{ code: string }>): Promise<void> {
     const { code } = event.detail;
     if (this.screen === "login") {
@@ -1250,25 +1260,44 @@ export class DashboardApp extends LitElement {
       setLocale(code);
       return;
     }
-    // Bumped twice on purpose. The first invalidates a probe already in flight; the second
-    // invalidates one that started while the write was still going, whose answer also predates the
-    // choice. Nothing orders the two replies, so without the second the probe can answer last and
-    // put the old language back for good.
-    this.#sessionLocaleChoice += 1;
-    try {
-      await this.api.putLocale(code);
-      if (!this.isConnected) return;
-      this.#sessionLocaleChoice += 1;
-      setLocale(code);
-    } catch {
-      // Leave the language unchanged on a failed save — the switch is gated behind the durable write.
-    }
+    const generation = this.sessionGeneration;
+    await this.leave.coordinator.request({
+      scopes: code === currentLocale() ? [] : "all",
+      except: [this.renderRoot.querySelector("dashboard-profile-screen")].filter(
+        (profile): profile is ProfileScreen => profile !== null,
+      ),
+      reason: "navigation",
+      proceed: async () => {
+        // Probes from before or during this write must not restore the old preference.
+        this.#sessionLocaleChoice += 1;
+        try {
+          await this.api.putLocale(code);
+          if (!this.isConnected || generation !== this.sessionGeneration) return;
+          this.#sessionLocaleChoice += 1;
+          setLocale(code);
+        } catch {
+          // A refused preference write leaves the active language unchanged.
+        }
+      },
+    });
+  }
+
+  private readonly leave = new LeaveController(this);
+
+  private leaveConfirmation() {
+    return this.leave.render({
+      heading: t("unsaved.heading"),
+      message: t("unsaved.message"),
+      keepLabel: t("unsaved.keep"),
+      discardLabel: t("unsaved.discard"),
+    });
   }
 
   override render(): TemplateResult {
     if (this.screen === "login") {
       // The login controller repaints translated text without discarding credentials or account setup.
       return html`
+        ${this.leaveConfirmation()}
         <div
           class="login-page"
           @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
@@ -1285,6 +1314,7 @@ export class DashboardApp extends LitElement {
       `;
     }
     return html`
+      ${this.leaveConfirmation()}
       <div
         class="shell"
         @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}
@@ -1476,13 +1506,41 @@ export class DashboardApp extends LitElement {
     </header>`;
   }
 
+  readonly #onAppLink = (event: MouseEvent): void => {
+    if (event.defaultPrevented || leftToBrowser(event)) return;
+    const anchor = event
+      .composedPath()
+      .find(
+        (node): node is HTMLAnchorElement =>
+          node instanceof HTMLAnchorElement && node.hasAttribute("href"),
+      );
+    if (
+      !anchor ||
+      anchor.hasAttribute("download") ||
+      anchor.getAttribute("href")?.startsWith("#") ||
+      (anchor.target !== "" && anchor.target !== "_self")
+    )
+      return;
+    const url = new URL(anchor.href);
+    if (
+      url.origin !== location.origin ||
+      (url.pathname !== "/manage" && !url.pathname.startsWith("/manage/"))
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    void navigationGuardFor(window)?.write(url);
+  };
+
   #selectScreen(screen: ScreenId): void {
-    diag.record("info", "nav", { screen });
-    this.screen = this.#permittedScreen(screen);
-    // Picking the page already shown changes no `screen`, so `willUpdate` would leave its group shut.
-    this.#openGroupOf(this.screen);
-    this.#writeScreenUrl(this.screen);
-    this.drawerOpen = false;
+    const destination = this.#permittedScreen(screen);
+    void Promise.resolve(this.#writeScreenUrl(destination)).then((outcome) => {
+      if (outcome === "proceeded" && this.isConnected && this.screen === destination) {
+        this.#openGroupOf(destination);
+        this.drawerOpen = false;
+        this.navSearch = "";
+      }
+    });
   }
 
   /** A screen (the units in-use modal) asks to open a product's editor; navigate to the catalogue
@@ -1491,11 +1549,7 @@ export class DashboardApp extends LitElement {
     event.stopPropagation();
     const screen = this.#permittedScreen("catalogue");
     if (screen !== "catalogue") return;
-    // An ordinary screen change (so the previous screen's `view` segment is cleared), then the
-    // product on top of it — `write` merges into what the URL already holds. The second write
-    // REPLACES, so the jump is a single Back-button stop rather than two.
-    this.#selectScreen(screen);
-    this.#url.write({ product: event.detail.productId }, true);
+    void this.#url.write({ dashboard: screen, view: null, product: event.detail.productId });
   }
 
   #mayOpen(item: AccessRule): boolean {
@@ -1557,10 +1611,51 @@ export class DashboardApp extends LitElement {
     return "overview";
   }
 
-  readonly #url = new UrlStateController(this, () => this.#onHistory(), dashboardPath);
+  readonly #url = new UrlStateController(this, () => this.#onHistory(), {
+    ...dashboardPath,
+    leave: {
+      isDirty: () => this.leave.coordinator.isDirty(),
+      request: (proceed, signal, destination) => {
+        const segment = new URL(destination).pathname.split("/")[2];
+        let requested: string | undefined;
+        try {
+          requested = segment === undefined ? undefined : decodeURIComponent(segment);
+        } catch {
+          requested = undefined;
+        }
+        const profile = this.renderRoot.querySelector<ProfileScreen>("dashboard-profile-screen");
+        const scopes =
+          requested === "profile"
+            ? []
+            : this.profileOpen && requested === this.screen && profile
+              ? [profile]
+              : "all";
+        const accepted = new URL(navigationGuardFor(window)?.href ?? location.href);
+        const next = new URL(destination);
+        const receipt = this.renderRoot
+          .querySelector("dashboard-venue-settings-screen")
+          ?.shadowRoot?.querySelector("dashboard-receipts-screen");
+        accepted.searchParams.delete("departmentId");
+        next.searchParams.delete("departmentId");
+        const except =
+          receipt &&
+          accepted.pathname === "/manage/venue-settings/view/receipts" &&
+          accepted.href === next.href
+            ? [receipt]
+            : [];
+        return this.leave.coordinator.request({
+          scopes,
+          except,
+          reason: "navigation",
+          proceed,
+          signal,
+        });
+      },
+    },
+  });
 
-  #writeScreenUrl(screen: ScreenId, replace = false): void {
-    this.#url.write(
+  #writeScreenUrl(screen: ScreenId, replace = false) {
+    return this.#url.write(
       { dashboard: screen, ...(this.#url.read("dashboard") === screen ? {} : { view: null }) },
       replace,
     );
@@ -1591,15 +1686,12 @@ export class DashboardApp extends LitElement {
 
   /** A pushed navigation, so the browser's Back button closes the modal. */
   #openProfile(): void {
-    this.profileOpen = true;
     this.#url.write({ dashboard: "profile" }, false);
-    this.drawerOpen = false;
   }
 
   /** Replaces the current entry, so "profile" does not stay behind as its own Back-button stop. A
    * Back-button close goes through `#onHistory` instead. */
   #closeProfile(): void {
-    this.profileOpen = false;
     this.#writeScreenUrl(this.screen, true);
   }
 
@@ -1607,6 +1699,7 @@ export class DashboardApp extends LitElement {
     if (this.screen === "login" || this.sessionRole === undefined) return;
     this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#writeCurrentUrl(true);
+    this.#openGroupOf(this.screen);
     this.drawerOpen = false;
     diag.record("info", "nav", { screen: this.screen });
   };
@@ -1665,7 +1758,6 @@ export class DashboardApp extends LitElement {
   }
 
   #openFromNav(screen: ScreenId): void {
-    this.navSearch = "";
     this.#selectScreen(screen);
   }
 
@@ -1765,6 +1857,11 @@ export class DashboardApp extends LitElement {
     `;
   }
 
+  readonly #beforeProfileClose = async (reason: LeaveReason): Promise<boolean> => {
+    const profile = this.renderRoot.querySelector<ProfileScreen>("dashboard-profile-screen");
+    return profile ? profile.requestLeave(reason) : true;
+  };
+
   /** profile-screen's per-field edit modals nest inside this one deliberately: this modal is the page,
    * they are its forms. */
   #renderProfileModal(): TemplateResult {
@@ -1773,6 +1870,7 @@ export class DashboardApp extends LitElement {
         size="standard"
         heading=${t("profile.title")}
         .open=${this.profileOpen}
+        .beforeClose=${this.#beforeProfileClose}
         @wt-close=${(e: Event) => {
           // profile-screen's own nested edit modal sends the same composed, bubbling wt-close.
           if (e.target !== e.currentTarget) return;
@@ -1794,7 +1892,11 @@ export class DashboardApp extends LitElement {
             : nothing
         }
         <wt-form-actions slot="footer">
-          <wt-button slot="cancel" data-test="close-profile" @click=${() => this.#closeProfile()}
+          <wt-button
+            slot="cancel"
+            data-test="close-profile"
+            @click=${(event: Event) =>
+              void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("cancel")}
             >${t("action.close")}</wt-button
           >
           ${

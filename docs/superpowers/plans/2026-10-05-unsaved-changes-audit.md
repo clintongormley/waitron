@@ -1,8 +1,378 @@
 # W69 editable-form inventory
 
-> 2026-10-06: Hours (A261 step 5) deleted `station-hours-form` and added the Hours page's own editors (`packages/venue-service/src/dashboard/hours-screen.ts`), which this document does not list.
+## 2026-10-06 receipt language and operation-description checkpoint
+
+The receipt page registers language and operation description independently beneath the page,
+beside its appearance scope. Language compares the selected value; description compares the exact
+existing request text, including whitespace and invalid empty values. Keep retains both controls;
+Discard restores their captured local values. Each accepted write commits its submitted snapshot
+before pending sibling writes settle. A refused part or later input stays dirty; successful writes
+invalidate unanswered leave questions. Disconnect disposes all three scopes and resets their loaded
+values. Replies from an earlier connection cannot update language values or refusal messages.
+
+Clean live values establish their new baseline. Unchanged live values leave a pending question
+open, and dirty live values retain the original baseline. The existing region-fixed-language path
+still drops a pick when that choice becomes read-only; it clears that choice without committing
+another receipt part. Preview selectors and immediate fixed-language correction remain exempt.
+
+The initial owner suite reported 12 failures and 19 passes. The unchanged-live-question cases
+then reported two failures, and the region-fixed exemption reported one failure before their fixes.
+The final command over all seven `receipts-screen*.test.ts` suites reported 223 passes. Dashboard
+typecheck, scoped ESLint, source formatting and `git diff --check` passed; golden huella and
+`inmutabilidad` remained unedited and reported 20 passes. No existing test assertion changed.
+
+Ten independent mutations in an installed disposable clone failed their intended behavior beside
+a passing clean-page control: missing registration, missing write commits, old language results,
+newer language selection replacement, unchanged receipt/description reads and fixed-language
+exemption. The final restored language/owner pair reported 69 passes; both source files matched
+byte for byte before the owned clone was removed. An earlier comparison used files formatted after
+copying and failed; the final comparison copied the final formatted files first. Exact commands,
+logs and outcomes: Lane E `receipts/w69-receipt-parts-20261006/`.
+
+Eight native combobox/description Keep/Discard flows cover EN/ES, light/dark and measured 390/1280
+widths. They reported 16 axe scans; 16 captures were inspected in four contact sheets. These use a
+minimal real LeaveController shell with synthetic API replies. Receipt-page sidebar/history
+integration, actual API writes, hover colours and activated native reload remain unverified.
+Phone captures show the controls and warning but clip some preview content below the form.
+
+Receipt page registration is implemented on the branch; its real route/tab/context coverage and
+the other page/till owners remain open. Tasks 1/4/5/6 remain partial and W69 is not ready for
+finish-branch or landing. This dated entry supersedes the earlier receipt checkpoint's open-scope
+status, preserving its historical receipts.
+
+## 2026-10-06 receipt appearance checkpoint
+
+Receipt header/footer, phone/email, address switch and logo register one appearance scope under
+the page. Comparison uses the existing trimmed/omitted request body, retaining invalid contacts;
+Discard restores the shown loaded values. A fulfilled appearance write commits its captured body
+before the independent location write settles, without clearing later input. Disconnect disposes
+that scope and resets its merge history; a reconnected page takes the loaded appearance again.
+An accepted live snapshot updates a clean scope, keeping automatic reads exempt. Live snapshots
+do not replace an edited scope's baseline. Language and operation-description scopes remain open.
+
+The initial suite reported eleven failures and two passes before implementation. The reconnect
+and clean-live-read cases then failed before their fixes. The final six receipt suites ran 169
+cases; dashboard types, changed-source lint and source formatting passed. Existing assertions
+were unchanged. Seven installed disposable-clone mutations each failed its intended case beside
+a passing clean-page control. Removing the identity condition alone survived because the write
+still targeted its disposed captured scope; targeting the replacement scope instead failed.
+The restored candidate ran eighteen cases and both files matched the feature files before removal.
+Exact commands/output: Lane E `receipts/w69-receipt-trim-20261006/`.
+
+Eight native header-input Keep/Discard flows in EN/ES, light/dark and 390/1280 widths passed
+sixteen axe scans. Sixteen captures were inspected in four contact sheets. The receipts use a
+minimal real LeaveController shell with synthetic API replies; they do not establish receipt-page
+sidebar/history integration, actual receipt writes, hovered colours or activated native reload.
+Phone captures show the form and warning but clip the preview below it. Other W69 owners and
+the final advancing-owner inventory remain open; W69 is not ready for finish-branch.
+
+## 2026-10-06 My schedule page checkpoint
+
+Cover and time-off requests register separate child scopes under the schedule screen. Each scope
+compares the existing request body; the time-off note keeps exact whitespace and empty means null.
+Keep retains both forms, while Discard restores the affected scopes. An accepted request resets
+and commits only its own unchanged form before refreshing lists. Newer input instead compares
+against the submitted snapshot; a failed write remains dirty. Disconnect releases both scopes,
+resets the local forms and invalidates old replies. An unchanged roster refresh does not notify
+a draft change or dismiss a pending question.
+
+The first new browser suite reported 14 failing cases before implementation. A corrected wait in
+the later-input case then produced the same 14 failures. The added unchanged-roster case failed
+before its condition was narrowed. Five independent guard removals in a frozen-installed disposable
+clone each failed their intended assertion while the clean-page control passed. The first stale-reply
+control survived the visible-note assertion; adding a revert-to-empty assertion caught the old
+reply changing the replacement baseline. The restored pair reported 21 passes and the clone was
+removed. Exact commands and outputs: Lane E `receipts/w69-my-schedule-20261006/`.
+
+The real dashboard shell cases fill the native note input and exercise sidebar, voluntary logout,
+language change, history Back and forced expiry. Eight native Keep/Discard flows in EN/ES,
+light/dark and 390/1280 widths passed sixteen axe scans. Sixteen captures were inspected in four
+contact sheets; API reads and writes were synthetic. Activated native reload and actual workforce
+server writes remain unverified. Existing assertions were unchanged. Other page/till/tab/context
+owners and the final advancing-owner inventory remain open; W69 is not ready for finish-branch.
+
+## 2026-10-06 setup mode choices checkpoint
+
+The mode screen now requests a root decision before its existing patch/goto sequence when
+crossing into or out of Demo or choosing Join or recover. Keep preserves the authored root
+and any Live acknowledgement stage. Discard restores the captured root baseline before the
+original choice proceeds. Same-mode choices and Prepare/Live transitions retain the root
+without a question. A clean root keeps the existing immediate choice sequence; a dirty root
+uses the coordinator even for a retained choice so it cannot replace a pending destination.
+Mode replacement, disconnect/reconnect, root changes and cancelling the Live stage invalidate
+old answers before they can restore root values.
+
+This focused command passed 462 cases, retaining every existing assertion.
+
+```sh
+pnpm --filter @waitron/setup exec vitest run \
+  src/setup-app.test.ts src/setup-app.unsaved-changes.test.ts \
+  src/screens/admin-screen.test.ts src/screens/admin-screen.a11y.test.ts \
+  src/screens/mode-screen.test.ts src/screens/mode-screen.a11y.test.ts \
+  src/screens/live-source-screen.test.ts src/screens/configuration-preview-screen.test.ts
+```
+
+The initial six-case mode run failed five missing-warning assertions; the two lifecycle cases
+failed before owner cancellation was connected. Intermediate attempts stayed on Mode after
+Discard, delayed clean navigation and blocked fresh requests after Keep. The final implementation
+uses the coordinator's own pending
+gate and releases its request before emitting goto. Eight independent deletions in a frozen,
+installed candidate each failed the intended case beside a passing unchanged clean-choice
+control. Its restored unsaved suite passed 44 cases; all three source/test files matched the
+working candidate before cleanup. The earlier deletion run's restored suite failed four cases;
+those receipts remain separate from the final passing run.
+
+Setup types, scoped lint, source formatting and diff checks passed. The unedited fiscal
+write-path and inmutabilidad command passed 20 cases. Sixteen EN/ES, light/dark, 390/1280 real-shell
+flows passed 48 axe scans with the pointer over a neutral visible heading; all 48 captures were
+inspected in four contact sheets. The first scan found the shared dark modal danger-button
+hover at 4.49:1. A standard modal using main's dialog reproduced it; the standalone Live card
+did not. The [backlog](../../backlog.md) records the separate shared-button issue. Normal-state
+scans do not establish hover accessibility. Initial attempts to move the pointer outside an
+open dialog timed out; a subsequent selector targeted the wrong shadow root. Failed visual
+receipts were retained. The source/captures were archived outside the product tree.
+
+The shell is real, with initial API reads stubbed and administrator values seeded. Live
+onboarding, the deployment's dark outer canvas and activated native reload remain unverified.
+Start empty's root/child interception and remaining setup children still need implementation,
+along with the final advancing-owner classification, till/child routes and other page owners.
+Tasks 1/4/5/6 remain partial; neither proposed W69 PR is ready for finish-branch. Local receipts:
+Lane E `receipts/w69-setup-mode-20261006`.
+
+## 2026-10-06 setup root draft checkpoint
+
+The root captures a detached baseline before its first accepted child patch or configuration
+import. Child Next leaves the root dirty; Back retains accepted root values without another
+question. Comparison reads the existing `assembleBody` representation and preserves invoice
+language order. Successful provisioning commits its captured body before showing Done;
+pending/refused provisioning and newer accepted patches remain protected. Disconnect releases
+the scope; reconnect registers retained values against the original baseline. Departed patches
+and provision/import replies from an earlier connection cannot change the reconnected wizard.
+
+The command below passed 440 cases.
+
+```sh
+pnpm --filter @waitron/setup exec vitest run \
+  src/setup-app.test.ts src/setup-app.unsaved-changes.test.ts \
+  src/screens/admin-screen.test.ts src/screens/admin-screen.a11y.test.ts \
+  src/screens/mode-screen.test.ts src/screens/live-source-screen.test.ts \
+  src/screens/configuration-preview-screen.test.ts
+```
+
+The initial root run observed eight expected assertion failures. Import and
+provision-refusal reconnect checks observed two more; the later import-reconnect pair observed
+two failures before its generation checks. Setup typechecking, scoped lint, source formatting
+and diff checks are recorded with the checkpoint. The unedited fiscal write-path and
+inmutabilidad suites passed 20 cases.
+
+Eight independent installed-candidate guard deletions each failed the intended assertion while
+the unchanged clean/reverted administrator control passed. The first import-notification deletion
+survived: the fixture imported from Administrator, whose scope disposal refreshed the root's
+unload listener. The corrected test imports from the actual live-source screen and fails with
+that notification removed. Restored candidates passed 28 cases before the import-generation
+addition and 30 afterwards; both source/test files were byte-compared before each owned clone
+was removed. No existing assertion changed.
+
+Eight real-shell EN/ES/light/dark/390/1280 flows passed 24 axe scans; all 24 captures were inspected
+in four contact sheets. They exercise Keep, accepted Next and Back to the retained administrator.
+Initial API reads are stubbed and administrator values seeded; live onboarding, the deployment's
+dark outer canvas and an activated native browser reload remain unverified. These tests check
+`beforeunload` cancellation, not a native dialog. Temporary visual sources and captures are
+archived outside product source. Local receipts: Lane E `receipts/w69-setup-root-20261006`.
+
+This checkpoint does not intercept destructive mode/start-over changes or register the other
+setup children. Those, the final advancing-owner classification, till/child page routes,
+remaining page owners and activated native reload keep Tasks 1/4/5/6 incomplete. No partial PR
+or whole-branch readiness is claimed.
+
+
+## 2026-10-06 advancing Hours owner audit
+
+Hours #1298 is included in the candidate after the rebase onto `ac861b774d9d368d8435b0b06f1467ef89f9386e`.
+It retired `station-hours-form` and the old hours APIs. The baseline row and earlier station-hours
+receipts below are historical; they do not establish protection of the replacement editors.
+The obsolete W69 component suite was removed with its component. The remaining prep-station
+fallback, exception and watcher protection stays in the candidate.
+
+Current source owners in `packages/venue-service/src/dashboard/hours-screen.ts`:
+
+| Owner | Draft and leave boundary | Existing suites; W69 work still required |
+| --- | --- | --- |
+| Weekday cell | `Editor.kind=cell`: selected mode and ordered periods; Cancel/native Escape, ancestor leave/unload. | `hours-screen.test.ts`, `hours-cell-editor.test.ts`, `hours-screen.unsaved.test.ts`; weekday protection implemented and checked below. |
+| Configure hours | `Editor.kind=configure`: seven ordered day drafts. The confirmation stage shares this draft; Back from that stage retains it. | `hours-screen.test.ts`; protect actual dismissal, not the confirmation-stage Back. |
+| Special-date Add/Edit and calendar Create/Edit/Close venue | `Editor.kind=date`: date, trimmed name, colour, whole-venue closure and each shown subject cell. Hidden/stored cells travel with the opening. | `hours-screen.test.ts`, `hours-calendar.test.ts`; keep invalid raw input and commit the captured date payload. |
+| Special-date Duplicate from list/calendar | `Editor.kind=duplicate`: ordered target dates; source/cells identify the opening. | `hours-screen.test.ts`, `hours-calendar.test.ts`; protect target entry through dismissal/ancestor leave. |
+| Clear standard week/Delete special date | Safety confirmations without edited values. | Existing direct cancellation remains exempt. |
+| Week/Dates/Calendar tabs, inactive filter, month navigation | View controls; `#url` restores views and calendar emits actions to the same date editor. | Do not mark filters dirty; intercept replacement before removing an edited owner. |
+
+The weekday-cell owner is now registered against the canonical `wire` cell, comparing its
+mode and ordered period IDs/times by values. Cancel/native Escape and another editor opening
+ask through the shared registry. A successful write commits the captured cell before refreshing;
+newer input stays dirty. Disconnect removes unload protection and invalidates the question/write
+generation; reconnect registers the retained draft against its original baseline and redraws its
+controls. Clear/Delete confirmations stay exempt. Configure/date/duplicate still lack scopes.
+
+The five Hours checks formerly generated in `venue-operations-screen.unsaved.test.ts` are now in
+`hours-screen.unsaved.test.ts`: Keep/Discard with native Escape and actual input, clean/revert,
+exact submitted request with a failed refresh, refusal retains dirty input, and direct Clear
+cancellation without a write. The new body is `HoursApi.saveWeek`'s seven-day request, retaining
+all unchanged days and the edited period ID. The other venue assertions are unchanged. Added
+cases cover newer input, reconnect, departed replies/controls, period property order and guarded
+replacement. The first weekday run observed two expected failures; lifecycle and replacement
+runs observed additional assertion failures before their guards were implemented. Intermediate
+bad API usage and callback identity diagnostics are retained separately rather than called RED.
+
+The focused final family passed 173 cases across five suites. Four separately mutated installed
+candidate checks each failed their intended assertion while Clear's control passed; restoring
+that candidate passed 11 cases, and its four source/test files byte-matched the feature tree before
+removal. Eight rendered EN/ES/light/dark/390/1280 flows passed 16 scoped axe scans; their 16 captures
+were inspected in four contact sheets. Local receipts: Lane E `receipts/w69-reorientation-20261006-next`.
+These scope tests do not establish every Hours owner, page navigation, browser native reload or
+current-head CI. The temporary visual renderer supplies the shell's ES confirmation wording;
+it is a component-host inspection, not an end-to-end dashboard shell flow.
+
+Tasks 1/4 remain partial; this inventory adds owners rather than marking them protected. Task 5
+remaining direct writers/till/setup shells and Task 6 page/setup owners remain pending.
+
+
+## 2026-10-06 dashboard logout and language checkpoint
+
+Dashboard voluntary logout and a language change now request the shared coordinator before their
+API calls. `dashboard-app.unsaved-changes.test.ts` mounts the real profile editor and dispatches the
+shell actions with its telephone field edited. The language cases additionally register a test-only
+input inside the departing main screen; they do not stand in for individual page-owner tests.
+Keep preserves the selected inputs and URL; Discard restores the departing inputs before accepting
+the original action once. A language change leaves the profile editor and its telephone value
+mounted, so that owner is explicitly excluded. The suite checks concurrent attempts,
+reverts, successful child saves, coordinator reset, forced expiry, disconnect and reconnect, and
+late logout/language responses. These profile-based shell cases do not establish every page owner
+or a pointer click through a modal backdrop. The sidebar/link/history and other app shells remain
+unwired.
+
+`LeaveRequest.scopes` now also accepts `"all"` for an action that leaves the entire application.
+An explicit ID list retains its scoped meaning, and `[]` still selects nothing. The optional
+`except` ID list retains those owners and their descendants. Core tests cover
+independent roots and descendants, clean/reverted scopes, one restoration per dirty owner and
+invalidation after an affected owner changes, commits, disposes or registers. Retained-owner
+changes and new retained descendants leave another page’s question valid. The shell uses `[]` when
+you choose its current language, because persisting that preference does not recreate the screen.
+An explicit login language choice still increments its existing choice generation even when the
+language is already active, so a pending browser-default response cannot overwrite your choice.
+
+The final dashboard/profile family ran 460 cases; the final coordinator run passed 45, with focused
+coverage of `unsaved-changes.ts` at 100% statements/lines/functions and 96.36% branches. Thirteen
+independent installed-clone deletions failed their intended case while a clean control passed;
+restoring the clone passed 17 shell and 45 core cases. Sixteen visual flows passed 32 scoped axe
+scans in EN/ES, both themes and 390/1280 px; their 32 final captures were inspected. UI consumers
+passed 48 cases, the packed core consumer passed one, and the unedited fiscal pair passed 20.
+Three types, scoped lint, formatting and diff checks passed. This is focused evidence, not
+package-wide coverage or current-head CI. The two added lifecycle tests cover duplicate disposal
+without unregistering a replacement and an abort after accepted asynchronous work starts; each
+also failed its intended deletion control.
+
+Logs, installed-clone deletion controls and visual captures are retained locally under Lane E's
+`receipts/w69-shell-actions-20261006`. This checkpoint supersedes the logout status in the earlier history receipt. The shared history
+and remaining owner audit described below
+are still incomplete W69 work. No existing test assertion changed in this checkpoint.
+
+## 2026-10-06 shared history checkpoint
+
+`NavigationGuard` and opt-in `UrlStateController` integration are implemented on the W69 branch.
+The application shells have not enabled the adapter. Their direct route mutations, links,
+signout, page/setup owners and native reload remain Task 5/6 work. The focused browser suites
+are `packages/ui/src/navigation-guard.test.ts` and `url-state.unsaved.test.ts`; they use the real
+coordinator and exercise indexed/unindexed Back and Forward, retained routes, stale answers,
+multiple controllers and rapid traversal. Two deliberately delayed replay-report cases use
+synthetic popstate reports; they do not establish browser scheduling by themselves.
+
+The observed first run failed four route assertions before implementation. The abandoned-request
+core case then failed its renderer-abort assertion. A later double-disposal case failed because
+the old adapter rewrote the replacement's namespace; its lifecycle gate made it pass. Five
+independent installed-clone deletions each failed one intended assertion while one unchanged
+control passed. Restoring that clone passed 39 UI and 33 core cases. The driver’s focused UI
+family passed 48 cases; coverage scoped to the adapter and URL controller reported 99.44% statements,
+100% lines/functions and 98.26% branches. This is focused evidence, not package-wide coverage or CI.
+Logs and controls are retained in Lane E's local `receipts/w69-history-20261006` directory.
+The unchanged dashboard, till and setup shell suites passed 323, 672 and 332 cases respectively.
+The packed ui-core consumer passed its independent browser check, all five affected package/app
+typechecks passed, and the unedited fiscal golden-write/immutability suites passed 20 cases.
+
+`LeaveRequest.signal` is an optional cancellation source for the adapter's decision phase.
+Abandoning navigation aborts its question without restoring registered drafts. The adapter’s
+generation also prevents a late continuation changing the route. Existing requests omit the
+signal and retain their original scope rules. The new cancellation cases are in
+`packages/ui-core/src/unsaved-changes.test.ts`; no existing assertion changed.
+
+Lane C’s `feat/venue-hours` diff adds a dated note to this inventory and the implementation plan:
+its Hours page replaces `station-hours-form`. That branch was not landed at this checkpoint.
+Keep its worktree unchanged and reconcile the new editor owners against main when it lands.
+The final advancing-owner audit and shell/page rollout remain pending; neither proposed W69 PR
+is ready for finish-branch.
+
+Rebased 63 commits over main `f048de959`: two patches needed conflict resolution. The Menu suite
+retains both A291's reset-refusal cases and W69's selection cases. Catalogue markup retains A279's
+contents-question gate and W69's connected/busy/change handlers. The combined three-suite run
+passed 553 cases. A new catalogue case then failed at unload protection after fresh counts hid
+the contents choice. The dirty reader now uses the same effective choice as the delete request;
+a summary change updates its registry notification. The final catalogue pair passed 197 cases.
+No existing assertion changed. Logs: `rebase-consumers.log`, `hidden-choice-red.log` and
+`hidden-choice-green.log` in the same local receipt directory.
 
 Baseline: `5597e06923b64acacf9df54ed6e8fb42e7fa411e`, inspected 2026-10-05 in the W69 documentation worktree. This inventory records **observed source owners** and **proposed protection**. None of its rows is a claim that a browser behavior was run or verified. Read it with the [design](../specs/2026-10-05-unsaved-changes-warning-design.md) and [implementation plan](2026-10-05-unsaved-changes-warning.md).
+
+2026-10-06 implementation checkpoint: Product Add/Edit and its nested Variant form now register
+scopes on the W69 branch. The cross-owner suite
+`apps/dashboard/src/widgets/product-editor.unsaved.test.ts` covers Cancel/Escape, Keep/Discard,
+reverts, comparison ordering, child saves and the Catalogue write/refresh boundary. Unit Add/Edit,
+Related Unit and explicit Product colour forms are also wired; their new cross-owner suites
+cover close decisions, submitted-value commits and parent/child boundaries. Category colour
+selection is an automatic-save exemption, reconciled below against the current source. The remaining
+modal rows and all page/navigation rows below remain pending; shared APIs alone do not complete
+them. Follow the [W69 backlog entry](../../backlog.md) for the current rollout boundary.
+
+2026-10-06 selection-owner checkpoint: Add-to-menus and section Add products now register their
+selected ID sets on the W69 branch. Search and category filters stay exempt, with hidden selections
+retained. Section additions commit before close/refresh; partial placement clears only successful
+destinations. `apps/dashboard/src/widgets/menu-selections.unsaved.test.ts` and the Catalogue/Menu
+screen suites exercise the close and write boundaries. Replacement, layout and the remaining
+modal/page owners are still pending.
+
+2026-10-06 staff-create checkpoint: Add staff's normalized details and role now register a scope
+on the W69 branch. Cancel/native Escape, Keep/Discard, normalized reverts, pending/refused writes,
+submitted commits before refresh and delivered newer input are exercised in
+`apps/dashboard/src/widgets/person-form.unsaved.test.ts` and
+`apps/dashboard/src/screens/staff-create.unsaved.test.ts`. Edit staff and credential subforms in
+the staff row below remain pending; this checkpoint covers creation only.
+
+## 2026-10-06 retired Printing rules owner
+
+A261 step 8 removed the Printing rules page in [#1288](https://github.com/clintongormley/waitron/pull/1288),
+main `822d242f499a64dfed359ef52a2c41f6f43609a7`. The baseline's `DS printing-rules-screen`
+row below is historical: it has no remaining form or suite to cover. Its bookmark now goes to
+Prep stations Tickets with manage permission, Prep stations Stations with read-only permission,
+or Overview when the module is unavailable. The existing
+`apps/dashboard/src/dashboard-app.test.ts` retirement cases exercise those three destinations
+and assert that neither the old navigation entry nor the page is drawn.
+
+Keep the surviving station/watch forms, department/zone receipt settings and printer calibration
+in the inventory. The retired location drawer policy adds no draft; device/profile/printer gates
+and the manual drawer command retain their own behavior. This reconciliation does not complete
+bill payment, collection, the other pending modal owners or page/navigation protection.
+
+## 2026-10-06 table-dialog checkpoint
+
+The table screen's send-preview bill choice and serving count now register separate child scopes.
+`apps/till/src/screens/till-table-order-screen.preview-unsaved.test.ts` and
+`apps/till/src/screens/till-table-order-screen.serve-unsaved.test.ts` exercise Back/native Escape,
+Keep/local Discard, unchanged/reverted entry, direct Confirm, reconnect, child close reports and
+replacement openings. Confirm retires its scope before emitting the existing command. These
+suites use the real table screen, shared coordinator and native dialogs.
+
+The preview's station choices and Remove action already change the retained party draft through
+`setLineMakeAt` and `removeLine`; the new suite checks that Back retains those changes without a
+second warning. Discard of the separate bill choice does not restore or delete party draft lines.
+Page-level destination/join selections and inline split/transfer remain for Tasks 5–6; this
+checkpoint does not mark the whole table-screen inventory row complete.
 
 ## How to reproduce discovery
 
@@ -11,7 +381,7 @@ Run each command separately and inspect its exit status. The broad search delibe
 ```sh
 git rev-parse HEAD
 rg --files apps/dashboard/src apps/till/src apps/setup/src packages
-rg -n 'wt-modal|wt-dialog|wt-form-actions|<form|wt-input|wt-textarea|wt-price-input|wt-combobox|wt-number-stepper|wt-switch' apps/dashboard/src apps/till/src apps/setup/src packages --glob '*.ts' --glob '!*.test.ts' --glob '!*.test-helpers.ts'
+rg -n 'wt-modal|wt-dialog|wt-form-actions|<form|wt-input|wt-textarea|wt-price-input|wt-combobox|wt-number-stepper|wt-switch|till-numeric-pad' apps/dashboard/src apps/till/src apps/setup/src packages --glob '*.ts' --glob '!*.test.ts' --glob '!*.test-helpers.ts'
 rg -n 'save|submit|draft|cancel|close|focusout' apps/dashboard/src/screens apps/dashboard/src/widgets apps/till/src/screens apps/till/src/widgets apps/setup/src/screens --glob '*.ts' --glob '!*.test.ts'
 rg -n 'new UrlStateController|history\.|popstate|setup-goto|setup-patch|logout|session\.required|session\.expired' apps packages --glob '*.ts' --glob '!*.test.ts'
 rg -n 'save|submit|draft|persist|flush|dirty|close' apps/till/src/state apps/till/src/till-app.ts --glob '*.ts' --glob '!*.test.ts'
@@ -36,7 +406,7 @@ Every named owner has the `.ts` extension. In the Test column, a named sibling h
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | DS `catalogue-screen`; DW `product-editor`, `product-editor-model`                                                                                                 | **P** product Add/Edit, seeded product or creation defaults. Compare `currentValue` after existing name trimming, blank-to-null and inheritance deletion; include translations, primary/category membership, variants and modifier lists. Membership sets ignore order; persisted display positions retain it. Successful product write commits only the product. | Modal, product switch, related forms, deep links, page                                   | DW `product-editor`; DS `catalogue-screen`                                                 |
 | DW `variant-form`, `variant-table`                                                                                                                                 | **P** standalone Related Product variant and nested variant; seed selected variant/new inherited defaults. Compare effective emitted patch including null inheritance, price, names, image and availability. Child Save copies to product and clears child only; parent remains dirty. Table action/list display itself **E**.                                    | Child modal, enclosing product, standalone related route                                 | DW `variant-form`; DW `product-editor`                                                     |
-| DW `catalogue-browser`, `product-list`, `category-form`, `category-color-form`; DS `catalogue-screen`                                                              | **E** inline category Add/rename automatically commits trimmed name on Enter/focusout; category-form is a path/refusal helper, not an editor. **P** separately explicit-save category color chooser, seeded current color; child Save into a name box does not itself write the category. Compare color/null only and preserve name-box autofiling.               | Color modal and parent catalogue leave; inline name keeps existing Escape/blur semantics | DW `product-list`; DW `catalogue-browser`; DW `category-color-form`; DS `catalogue-screen` |
+| DW `catalogue-browser`, `product-list`, `category-form`, `category-color-form`; DS `catalogue-screen`                                                              | **E** inline category Add/rename automatically commits trimmed name on Enter/focusout; category-form is a path/refusal helper, not an editor. **E** category colour selection immediately emits `wt-choose`: `catalogue-browser.#chooseColor` writes an existing category or assigns the inline name box's colour and closes the chooser. There is no separate Save or staged chooser payload. Preserve the name box's existing automatic write.               | Color modal and parent catalogue leave; inline name keeps existing Escape/blur semantics | DW `product-list`; DW `catalogue-browser`; DW `category-color-form`; DS `catalogue-screen` |
 | DW `catalogue-browser` operation dialog                                                                                                                            | **P** destination and contents disposition until move/delete Confirm; seed operation defaults, compare existing operation payload including selected IDs as sets and disposition scalar. **E** readonly summaries and selection-only browsing. Successful operation commits its scope; Keep makes no move/delete request.                                         | Operation modal Cancel/Escape and parent page                                            | DW `catalogue-browser`                                                                     |
 | DW `product-color-form`; DS `menus-screen`                                                                                                                         | **P** explicit product-color override; seed current override, compare token/null emitted by Save. Commit override write, not containing product/menu metadata.                                                                                                                                                                                                    | Modal, menu/page                                                                         | DW `product-color-form`; DS `menus-screen`                                                 |
 | DW `unit-form`; DS `units-screen`; DW `product-editor`                                                                                                             | **P** both Units Add/Edit and Product Related Unit creation. Seed unit/default precision; compare trimmed names, translations, abbreviation and precision payload. Child creation commits unit, leaving product's selection edit dirty.                                                                                                                           | Modal, related parent, units page                                                        | DW `unit-form`; DS `units-screen`; DW `product-editor`                                     |
@@ -47,7 +417,7 @@ Every named owner has the `.ts` extension. In the Test column, a named sibling h
 | DW `add-content-language`; DS `content-languages-screen`                                                                                                           | **E**, choosing Add/default/remove writes immediately; language choice is navigation/automatic action, not a pending Save payload.                                                                                                                                                                                                                                | Modal/page, existing immediate action                                                    | DW `add-content-language`; DS `content-languages-screen`                                   |
 | DW `add-to-menus`, `section-add-products`                                                                                                                          | **P**, selected IDs until Confirm/Add. Seed empty set; compare membership, not offered order. Successful add commits this choice without saving unrelated menu/product metadata.                                                                                                                                                                                  | Selection modal, parent/page                                                             | DW `add-to-menus`; DW `section-add-products`                                               |
 | DW `section-details-form`; DS `menus-screen`                                                                                                                       | **P**, menu create/rename and section create/edit. Seed current SectionInput/defaults; compare names/internalName/image/color as emitted. Commit corresponding API write.                                                                                                                                                                                         | Modal, ancestor menu/tree navigation, page                                               | DW `section-details-form`; DS `menus-screen`                                               |
-| DS `menus-screen` layout form; DW `home-layout-editor`                                                                                                             | **P** create/duplicate/rename layout name, seed existing/copy/default name and trim exactly as Save. **E** tile add/reorder/replace/default assignment already writes through host events; do not create a new staged layout transaction.                                                                                                                         | Name modal, layout/tab/menu/page                                                         | DS `menus-screen`; DW `home-layout-editor`                                                 |
+| DS `menus-screen` Device Home Page | **E** W93 (#1287, 2026-10-06) retired named layouts and their name dialogs. Display choices and shortcut selection write immediately. | Home tab, shortcut picker | DS `menus-screen` |
 | DW `member-list-editor`                                                                                                                                            | **P** replacement choice until explicit confirmation, seeded no replacement choice and existing member ID. **E** add selection, reorder and remove events that already write immediately. Successful replacement clears only replacement scope.                                                                                                                   | Replacement dialog, list/menu/page                                                       | DW `member-list-editor`; DS `menus-screen`                                                 |
 | DW `menu-prices-table`, `menu-structure-table`, `menu-structure-tree`; DS `menus-screen`                                                                           | **E** price typing commits on Enter/focusout, Escape restores existing stored/sent value. Structure tree expansion/drag is view state or immediate host write; metadata forms are owned by section-details above. Keep refused-save and Undo assertions.                                                                                                          | Existing price blur/Enter and tree/tab routes                                            | DW `menu-prices-table`; DS `menus-screen`                                                  |
 | DW `ingredient-form`; DS `recipe-screen`                                                                                                                           | **P** ingredient create/edit, seeded ingredient/defaults; compare name/active and allergen/dietary sets. Commit ingredient only.                                                                                                                                                                                                                                  | Modal and containing recipe/page                                                         | DW `ingredient-form`; DS `recipe-screen`                                                   |
@@ -58,7 +428,7 @@ Every named owner has the `.ts` extension. In the Test column, a named sibling h
 
 | Owner path(s)                                                                                                                                                                                                                                                                                                                                                                                          | Classification and observed baseline source; proposed comparison/reset                                                                                                                                                                                                                                                                                                                                        | Close/navigation routes                                                                                    | Test                                                                                                                                   |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| DS `staff-screen`; DW `person-form`, `person-edit`                                                                                                                                                                                                                                                                                                                                                     | **P** Add/Edit person and credential input subforms. Seed person details/default roles or empty secret fields; compare emitted trimmed details/role membership and exact secret inputs. Commit only completed write, not other person actions. Suspend/reset confirmation without authored values **E**.                                                                                                      | Modal, credential child, staff page                                                                        | DW `person-form`; DW `person-edit`; DS `staff-screen`                                                                                  |
+| DS `staff-screen`; DW `person-form`, `person-edit`                                                                                                                                                                                                                                                                                                                                                     | **P** Add/Edit person details. Seed normalized details/default role; compare emitted trimmed details and scalar role/status. Commit only completed details write, not invitation/reset actions. **E** Suspend/reset confirmations contain no authored credential values; credential inputs belong to Profile below.                                                                                                      | Modal, staff page                                                                        | DW `person-form`; DW `person-edit`; DS `staff-screen`                                                                                  |
 | DW `shift-dialog`; DS `roster-screen`                                                                                                                                                                                                                                                                                                                                                                  | **P** Add/Edit shift, seed selected person/day/shift; compare request timestamps/offsets/role built by existing submitter, not display spelling alone. Remove confirmation **E**.                                                                                                                                                                                                                             | Shift modal, roster period/person navigation, page                                                         | DW `shift-dialog`; DS `roster-screen`                                                                                                  |
 | DS `my-schedule-screen`                                                                                                                                                                                                                                                                                                                                                                                | **P** independent cover request and absence forms. Seed empty IDs/dates/note and default kind; compare actual requestSwap/requestAbsence body, including null note. Success resets only its submitted form. Date/filter controls **E**.                                                                                                                                                                       | Form cancel/reset if supplied, tabs/page                                                                   | DS `my-schedule-screen`                                                                                                                |
 | DW `purchase-form`; DS `purchases-screen`                                                                                                                                                                                                                                                                                                                                                              | **P** Add/Edit purchase. Seed fetched purchase/defaults; compare actual supplier/invoice/date/regime/Decimal amounts/note and ordered line body. No rounding or fiscal changes.                                                                                                                                                                                                                               | Purchase modal, page                                                                                       | DW `purchase-form`; DS `purchases-screen`                                                                                              |
@@ -66,7 +436,7 @@ Every named owner has the `.ts` extension. In the Test column, a named sibling h
 | DS `canvas-editor-screen`; DS `canvas-editor/canvas-grid-preview`, `canvas-editor/card-preview`, `canvas-editor/card-contracts`                                                                                                                                                                                                                                                                        | **P** canvas name and copied CanvasDef including nested card/property drafts, ordered tabs/cards; seed selected canvas clone. Create/duplicate name dialogs also P. Visual preview tabs retain common draft; page/selection leave protects it. Delete/read-only preview **E**.                                                                                                                                | Name modal, nested settings cancel, editor Back, canvas selection/page                                     | DS `canvas-editor-screen`                                                                                                              |
 | DS `devices-screen`                                                                                                                                                                                                                                                                                                                                                                                    | **P** edit device and Add pairing settings after device is identified: seed name/profile/binding/printer/reader defaults and compare actual patch. Invitation QR/waiting and completed pairing **E**; number proof remains existing immediate verification. Preserve pairing generations/cleanup.                                                                                                             | Add/Edit modal, nested choice, page                                                                        | DS `devices-screen`                                                                                                                    |
 | DS `floor-screen`                                                                                                                                                                                                                                                                                                                                                                                      | **P** new table and each explicit-save label/capacity row, seeded new defaults/fetched row. Commit per row. **E** placement/drag writes and viewing plano.                                                                                                                                                                                                                                                    | Inline Cancel, selected zone/table/tab/page                                                                | DS `floor-screen`                                                                                                                      |
-| DS `service-status-screen`                                                                                                                                                                                                                                                                                                                                                                             | **P** new status and each explicit-save status row; seed label/color/default or fetched row, compare trimmed label/color/order/active body. Commit only written row. Immediate row reorder **E**.                                                                                                                                                                                                             | Inline Cancel, tab/page                                                                                    | DS `service-status-screen`                                                                                                             |
+| DS `service-status-screen`                                                                                                                                                                                                                                                                                                                                                                             | **P** new status and each explicit-save status row; seed label/color/default or fetched row; create compares trimmed label/color, explicit row save compares its raw label/color/order/active body. Commit only written row. Immediate row reorder **E**.                                                                                                                                                                                                             | Inline Cancel, tab/page                                                                                    | DS `service-status-screen`                                                                                                             |
 | DS `printers-screen`                                                                                                                                                                                                                                                                                                                                                                                   | **P** Add/manual network host/port/name, discovered-device naming, agent rename, detail name/connection and calibration settings. Seed existing printer or discovery/manual defaults; compare existing submission bodies, normalized host/port and saved calibration fields, ordered where applicable. Replace local armed-discard logic with shared question. Calibration test results are not saved fields. | Dialog Cancel/Escape, editor change, calibration exit/page; internal steps retaining draft do not reset it | DS `printers-screen`                                                                                                                   |
 | DS `printers-screen` discovery/calibration actions                                                                                                                                                                                                                                                                                                                                                     | **E** discovery waiting, test print/open drawer, ruler result/connection probe output, successful registration; preserve Bluetooth pairing proof/busy behavior. Typed pairing proof before action is **P**, ephemeral only. No new prompt while a hardware command runs.                                                                                                                                      | Existing action, busy and cleanup routes                                                                   | DS `printers-screen`                                                                                                                   |
 | DS `printing-rules-screen`                                                                                                                                                                                                                                                                                                                                                                             | **E**, station/watch/drawer policy changes already save through handlers. No staged form transaction introduced.                                                                                                                                                                                                                                                                                              | Existing tab/page routes                                                                                   | DS `printing-rules-screen`                                                                                                             |
@@ -99,6 +469,7 @@ Every named owner has the `.ts` extension. In the Test column, a named sibling h
 
 | Owner path(s)                                                                                                                       | Classification and observed baseline source; proposed comparison/reset                                                                                                                                                                                                                                                                                                                                                                                                   | Close/navigation routes                                                                          | Test                                                                                                                                              |
 | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TW `invoice-recipient-dialog`; `apps/till/src/till-app.ts` | **P** customer tax ID, name, street, postal code, locality and province until Use full invoice. Seed blank defaults; compare existing trimmed fields and valid normalized Spanish tax ID. Commit bill write before refresh, or accepted local choice before its owner leaves. Retain newer edits and returned bill revision. | Cancel/native Escape, parent/shell/unload | TW `invoice-recipient-dialog`; `apps/till/src/till-app-bill-payments.test.ts`; `apps/till/src/till-app.test.ts` |
 | TW `modifier-picker`                                                                                                                | **P** new/edit line variant, picks, quantities, answers and note; seed original line/product defaults. Compare emitted selection values, list identity and membership, retaining order only where body positions matter. Confirm commits child into store, not a server order/save.                                                                                                                                                                                      | Picker Cancel/Escape, parent counter/table view                                                  | TW `modifier-picker`; TS `till-counter-screen`; TS `till-table-order-screen`                                                                      |
 | TW `party-name-dialog`, `seat-dialog`                                                                                               | **P** typed party name and guest count until explicit action; seed current name/count/default absence, retain guestCount=null meaning no count. Commit accepted existing action.                                                                                                                                                                                                                                                                                         | Modal Cancel, floor/table parent/page                                                            | TW `party-name-dialog`; TW `seat-dialog`                                                                                                          |
 | TW `station-choice-dialog`                                                                                                          | **P** station selected/default current station, compare actual stationId including null rules choice. Commit existing station-chosen action; no station/payment semantics change.                                                                                                                                                                                                                                                                                        | Modal Cancel/Escape, line/parent leave                                                           | TW `station-choice-dialog`; TS `till-table-order-screen`                                                                                          |
@@ -150,3 +521,3673 @@ This source inventory includes Add/Edit modals, related Product variants/units/e
 Text search cannot establish runtime reachability or native browser timing and may miss dynamically constructed markup. The registry and contributor entry points were inspected to widen the path set beyond app screens. This audit is baseline-specific: repeat discovery and inspect diffs for every advancing owner before implementation and PR finishing, particularly W70a #1265, Lane D prep-station tabs, Lane C device dialog edges, Lane A receipt top block, A231 and W41s-10c. Do not modify their branches. Overlap is owner-waived; the second landing rebases.
 
 The classifications above choose minimal behavior consistent with the owner's exemptions. There is no deferred form inventory or unresolved product decision. Runtime evidence, exact Chromium history/unload behavior, package coverage and combined-neighbor validation remain implementation work. Unknown-history document leaving and platform/process-termination prompt reliability are limited as described in the design, not promised as custom-dialog guarantees.
+
+
+## Section/menu metadata rollout checkpoint (2026-10-06)
+
+On the W69 implementation branch, `section-details-form` owns a submitted-value scope for both
+menu metadata and section metadata. The comparison uses the existing trimmed name/translations,
+image id and colour. Names not shown by the current language settings remain in the submitted
+payload. Cancel/native Escape use the shared decision; a replacement section disposes its prior
+scope. The image picker registers beneath this form, so a scoped ancestor request sees its staged
+image-name edits. Menu and section writes commit their submitted body before close/refresh.
+
+Focused browser cases: `apps/dashboard/src/widgets/section-details-form.unsaved.test.ts` and
+`apps/dashboard/src/screens/menu-details.unsaved.test.ts`. Layout metadata, membership selections,
+member replacement and the remaining modal/page inventory are still pending; this checkpoint does
+not establish page navigation protection.
+
+## Replacement/layout rollout checkpoint (2026-10-06)
+
+_2026-10-06 reconciliation: W93 #1287 retired the named layout editor. Its W69 hooks and layout-only suite were removed on rebase; the receipt below records the earlier tree. Member replacement remains covered in its retained widget, which no production screen draws after W93. Current Device Home Page display success/refusal exemptions are checked through `menu-details.unsaved.test.ts`._
+
+The subsequent W69 branch checkpoint wires the inline `member-list-editor` replacement choice and
+the menu screen's layout create/duplicate/rename name dialog. Replacement Cancel asks through the
+shared registry; layout Cancel and native Escape use its dialog gate. A changed replacement scope
+disposes its old draft and invalidates its question. Both owners commit the submitted value after
+acceptance, retaining newer input against that baseline. Layout names compare after trimming.
+
+`apps/dashboard/src/widgets/member-replacement.unsaved.test.ts` and
+`apps/dashboard/src/screens/menu-layout.unsaved.test.ts` exercise the actual owners, their successful
+and refused write boundaries and unload registration. Include menu is **E**: the current
+`menus-screen` invokes `#includeMenu` immediately on a dropdown choice, with no staged confirmation.
+The new controller-hosted cases check both success and refusal without a discard question. Immediate
+member additions and existing tile operations remain exempt. Other audited modal owners and all
+page/navigation owners remain pending. This supersedes the replacement/layout pending status in
+the earlier checkpoints; it does not establish page navigation protection.
+
+## Staff edit rollout checkpoint (2026-10-06)
+
+The W69 branch now wires `person-edit` alongside Add staff. Its scope compares the existing
+trimmed details, null-or-trimmed telephone, role and status. A refreshed summary with the same
+person id retains the current draft; a replacement person disposes the old scope and question.
+Cancel/native Escape use the shared decision and successful saves commit before list refresh.
+Newer delivered input remains compared against the submitted value. Invitation resend is an
+independent command: it leaves an edited form open and does not commit its details. Pending
+writes retain nondismissible controls. Late save/resend results or refusals for another person
+leave that editor's values, baseline and refusal message alone.
+
+`apps/dashboard/src/widgets/person-edit.unsaved.test.ts` and
+`apps/dashboard/src/screens/staff-edit.unsaved.test.ts` exercise those owners in Chromium.
+Staff reset/suspend confirmations contain no secret-entry fields; the earlier staff-row
+credential-subform classification is superseded by the current source. Profile's credential
+modal forms are wired on the W69 branch as of 2026-10-06. Other modal owners and all
+page/navigation owners remain pending.
+
+### Profile modal implementation checkpoint — 2026-10-06
+
+`profile-screen` registers normalized details and exact credential inputs per editor opening.
+Cancel/native Escape use its scoped decision; changed/reverted fields update unload handling.
+Writes commit the captured submission before refresh. A later delivered detail or passkey-name
+edit stays dirty. The authenticator's proof and code stages commit separately; recovery-code
+output is exempt. Google proof disposes its scope before redirect. Disconnect clears passwords,
+proofs and authenticator/recovery output, and invalidates outstanding write replies and ceremonies.
+
+The real-controller cases are in `apps/dashboard/src/screens/profile-screen.unsaved.test.ts`.
+The existing Profile suite remains unchanged. Outer Profile dismissal and page/history navigation
+remain Task 5 work; this checkpoint covers the inner modal owners only.
+
+
+### Purchase modal checkpoint (2026-10-06)
+
+Add/Edit purchase uses the shared registry for its header and ordered VAT lines. Comparison removes
+only insignificant trailing decimal zeroes and applies the existing empty-note-to-null rule;
+request amounts and validation are unchanged. Native Escape is its existing dismissal route.
+Successful writes commit the submitted snapshot before refresh. A same-invoice read preserves
+input, a replacement identity invalidates its question, and a late write cannot close or mark
+a replacement editor. Busy fields and dismissal are disabled.
+
+`purchase-form.unsaved.test.ts` and `purchases-screen.unsaved.test.ts` under `apps/dashboard/src/`
+exercise these cases alongside the existing form, screen and accessibility suites. Purchase modal
+protection is implemented; dashboard navigation and page protection remain Task 5/6 work.
+
+### Print-agent rename checkpoint (2026-10-06)
+
+On the W69 branch, agent rename now registers the trimmed submitted name independently of the
+printer forms. Cancel and native Escape retain that name until Discard; Keep returns focus, and
+changing back to the starting name removes the unload warning. Pending writes disable input and
+close controls. Successful writes commit their captured name before list refresh; a delivered
+newer input remains dirty. Replacement and disconnect dispose the prior scope and invalidate its
+question, and a late successful/refused rename cannot close or mark the replacement editor.
+Reopening survives the previous native close report; successful saves finish without waiting on
+that delayed event.
+`apps/dashboard/src/screens/printer-agent.unsaved.test.ts` exercises these paths alongside the
+unchanged printer behavior/accessibility suites. Synthetic beforeunload cancellation checks the
+listener, not the browser's native reload prompt, which remains Task 5. The printer row above is
+still partial: printer naming, connection, calibration and pairing proof remain to be wired.
+
+
+### Discovered-printer naming checkpoint (2026-10-06)
+
+On the W69 branch, your edited printer name is protected before submission through Cancel, native
+Escape and discovery close. Keep retains the name and focus; Discard restores its opening value.
+The trimmed name is compared independently of scan reports. Registration commits its submitted
+name before refresh, while newer delivered input stays dirty. Replacing the named device or
+removing the screen releases the old scope and question. A disconnected result performs no reads
+or calibration reopening.
+
+In-flight Cancel/Escape retain their existing immediate close and completed calibration result,
+as required by the design's in-flight-work rule. No warning delays the submitted registration.
+Successful registration clears the discovery owner without waiting for a native close report;
+reopening prevents an old report from closing the new name editor.
+`apps/dashboard/src/screens/printer-name.unsaved.test.ts` covers these paths. Synthetic unload
+checks establish listener cancellation, not a native reload prompt. The printer row remains
+partial: manual address entry, detail name/connection, calibration and pairing proof are pending.
+
+### Manual network address checkpoint (2026-10-06)
+
+Your manual printer address stays in discovery until you discard it or register that address.
+Close and native Escape use the shared question; closing a nested naming editor affects only
+its name. An address check submits the existing normalized host/port without committing that
+draft. Registration commits its matching address before refresh. An unrelated address or a
+newer delivered edit stays in discovery while the registered printer's calibration opens.
+Closing discovery during submitted registration retains the earlier immediate close and
+reload without reopening calibration.
+
+`apps/dashboard/src/screens/printer-address.unsaved.test.ts` covers these paths, normalized
+reverts and invalid input, replacement/disconnect, detached input and delayed native close.
+Its synthetic unload event checks listener cancellation; native reload remains Task 5.
+The printer inventory remains partial: Bluetooth proof, detail name/connection and calibration
+settings are still pending.
+
+### Bluetooth pairing proof checkpoint (2026-10-06)
+
+The W69 branch now protects the exact pre-submission Bluetooth PIN, including invalid input,
+through Cancel, native Escape and discovery Close. Keep retains the proof and focus; Discard
+removes only that proof when closing its child dialog, leaving an edited manual address intact.
+An exact revert closes directly. Replacement and disconnect cancel the old question, and detached
+input cannot change a reopened proof.
+
+Submitted requests retain direct Cancel/Escape and discovery Close when no other draft is dirty.
+The existing command result still appears after child dismissal; discovery closed before the
+reply still tracks no command. A successful request commits its captured proof independently of
+the address. A newer delivered PIN remains dirty against that committed value; a departed result
+cannot close or mark a replacement proof. Delayed native close reports cannot clear a reopened
+proof or delay successful proof cleanup.
+
+`apps/dashboard/src/screens/printer-pair.unsaved.test.ts` covers these paths alongside the unchanged
+printer suites. Synthetic unload checks test listener cancellation; the native reload prompt remains
+Task 5. Printer detail name/connection, calibration and the remaining modal/page owners are pending.
+
+### Printer calibration checkpoint (2026-10-06)
+
+Your changed paper width, resolution and attached-drawer settings now ask before Cancel or native
+Escape closes the calibration modal. Keep retains the settings, wizard step and focus; Discard
+closes once. Changing the settings back clears unload protection. A ruler answer that changes the
+paper width is an edit; a ruler answer matching the saved width, wizard steps and hardware output
+alone are exempt.
+
+Successful calibration commits the captured settings before list refresh. Newer delivered input
+stays open, and a second save sends only the settings still changed from the accepted write.
+A refused write retains its draft. Submitted saves and ruler/sample/drawer commands keep their
+existing direct dismissal. Replacing or disconnecting the editor disposes its scope and pending
+question; a departed write cannot close or mark the replacement, and delayed native close reports
+cannot discard a reopened editor.
+
+`apps/dashboard/src/screens/printer-calibration.unsaved.test.ts` exercises these routes alongside
+the unchanged printer behavior/accessibility suites. Its synthetic unload checks establish listener
+cancellation, not the browser's native reload prompt. Printer detail name and connection editors
+are page forms and remain with Tasks 5/6; the other modal and page owners remain pending.
+
+### Device Edit checkpoint (2026-10-06)
+
+Device Edit compares its existing device patch independently of the default card reader's write.
+The device baseline is captured after opening defaults; the reader baseline is captured after its
+own read. Cancel and native Escape ask for changed name, profile, Shows, receipt/slip printer,
+made-here station membership or reader. Keep retains the draft and focus; Discard closes once.
+Normalized reverts close directly. Saving commits each captured write separately before refresh;
+a failed reader write leaves that reader dirty, and newer delivered values remain open and dirty.
+
+Replacement and disconnect dispose the scopes and invalidate a pending answer. Generation checks
+ignore detached control events. Late write replies and delayed native close reports cannot mark
+or close a replacement editor. Existing in-flight nondismissible Escape and disabled Cancel remain.
+Losing reader permission removes its reader scope without clearing a changed device name.
+`apps/dashboard/src/screens/device-edit.unsaved.test.ts` checks these paths and actual sent patches;
+the existing device behavior/accessibility suites remain unchanged. Eight EN/ES, light/dark,
+phone/desktop confirmation renderings also ran with axe. Synthetic unload checks cover listener
+cancellation; the browser reload prompt is still Task 5. Device pairing settings and Payments
+reader dialogs remain pending; the Device/Reader inventory row is not complete.
+
+### Device pairing settings checkpoint (2026-10-06)
+
+On the W69 branch, pairing settings register their existing acceptance payload after number proof
+or a previously claimed request opens its settings. The baseline includes returning-device defaults;
+comparison trims the name and keeps profile and station/watcher IDs. Cancel/native Escape and Add
+Close use the shared decision. Keep preserves settings and the pairing hold; Discard performs the
+existing request cleanup once. Number verification and waiting/QR output remain exempt. Pending
+acceptance retains its existing nondismissible controls.
+
+Acceptance commits the captured payload before list refresh. Newer delivered input remains dirty
+against it, but the completed request cannot be accepted again. A replaced request or removed screen
+disposes its question; late replies, detached inputs and delayed native close reports leave a new
+editor alone. An Add dialog closed during an awaited child opening cannot reopen that child.
+`apps/dashboard/src/screens/device-pair.unsaved.test.ts` exercises these cases alongside the unchanged
+device suites. Eight English/Spanish, light/dark, phone/desktop confirmation renderings ran with axe
+and were inspected. Synthetic unload cases test listener cancellation, not the native reload prompt.
+Device modal owners are wired; Payments reader dialogs and the other modal/page owners remain pending.
+
+
+### Payments attestation checkpoint (2026-10-06)
+
+On the W69 branch, payment and refund attestation forms compare outcome, trimmed note and exact
+PIN with the empty opening values. Cancel and native Escape ask through the shared registry;
+Keep retains the entered values, Discard closes, and normalized reverts close directly. Successful
+attestations commit the submitted values before refreshing recovery lists; newer delivered input
+remains dirty. Refused writes retain their draft. Pending requests keep disabled inputs and
+nondismissible Escape. Provider-check confirmations remain direct-close exemptions.
+
+Disconnect disposes the scope, cancels its question and clears the local fields. Departed replies,
+control events and native close reports leave a replacement form alone. The focused cases are in
+`apps/dashboard/src/screens/payment-attestation.unsaved.test.ts`, alongside the unchanged Payments
+behavior and accessibility suites. English/Spanish, light/dark, phone/desktop editor and confirmation
+renderings ran with axe. Synthetic unload checks cover listener cancellation, not a native reload
+prompt. Reader naming was wired at the preceding checkpoint; the earlier device checkpoints' pending
+reader references are superseded. SumUp/Stripe forms and the other modal/page owners remain pending.
+
+## 2026-10-06 connection-form checkpoint
+
+SumUp and Stripe connection forms register their own exact submitted inputs with the nearest
+application registry. SumUp includes the optional affiliate fields and ambiguous merchant choice;
+Stripe includes both keys and redirect URLs. A scoped request retains the visible draft on Keep,
+restores it on Discard, and skips unchanged values. A submitted request is exempt while waiting;
+a refusal restores draft protection, and an accepted response commits only its submitted values.
+If newer input arrived, the form remains editable instead of calling the host's closing callback.
+Disconnect clears typed values and unregisters the scope; old controls and replies cannot affect
+a reconnected opening. SumUp's restored merchant selection also updates the combobox value.
+
+The new sibling `*-connect-form.unsaved.test.ts` suites exercise these boundaries and the containing
+owner's scope request. They do not establish interception of the Payments page's actual navigation
+or browser reload. Those adapters remain Tasks 5–6. SumUp/Stripe reader forms and other modal owners
+remain pending. Existing provider connect and pairing assertions are unchanged.
+
+## 2026-10-06 Stripe reader checkpoint
+
+Stripe reader registration now compares exact name/reference input and asks through the shared
+registry on Cancel/native Escape. Keep retains the visible fields; Discard closes without an add.
+Clean/reverted values and a submitted registration waiting for its answer close directly. A refused
+registration retains its draft. Acceptance commits before the host notification and keeps newer
+input dirty, while still reporting the reader that was added. A departed successful registration
+still notifies its captured host callback, as the existing detached/pending-close tests require,
+without closing or marking a reconnected form. Departed input/submit/Cancel controls and native close
+reports cannot change that new opening. A host notification that reconnects the form also leaves
+the replacement open. Disconnect unregisters the scope and clears its local fields.
+
+The unchanged Stripe reader suite and `stripe-add-reader.unsaved.test.ts` ran in Chromium, together
+with its connection and panel suites. The visual/accessibility matrix exercised native Escape in
+English/Spanish, light/dark and phone/desktop. SumUp reader pairing and the remaining modal owners
+remain pending. Page/history/native-reload integration remains Tasks 5–6.
+
+
+## 2026-10-06 SumUp reader checkpoint
+
+When you edit a reader name or pairing code, Cancel and native Escape ask before discarding those
+exact inputs. Keep retains them; Discard closes without pairing. Clean/reverted inputs close
+directly. Once you submit Pair, the existing pairing cancellation and cleanup run without another
+question. A refused POST restores input protection. Failed/expired results are exempt; Try again
+keeps the submitted name and clears the old code as the next form's defaults.
+
+Each opening owns its controls and each attempt owns its client, notification, timer and in-flight
+status read. Disconnect clears the input and unregisters its scope. Departed replies cannot finish
+or fail a replacement opening, and a pending old status read cannot block or release its new poll.
+A late accepted POST still notifies the captured callback or cleans up its processing row through
+its captured request, preserving the existing detached/pending-close behavior.
+
+`sumup-add-reader.test.ts` is unchanged. Its new sibling `sumup-add-reader.unsaved.test.ts` ran with
+the full SumUp dashboard family in Chromium. The visual/axe matrix covers EN/ES, light/dark and
+390/1280 widths through native Escape. Deleting close interception, opening identity and poll-reply
+identity in an installed disposable candidate failed their cases; clean controls still passed.
+Synthetic unload events establish listener cancellation only. Other modal owners remain pending,
+and actual page/history/native-reload integration remains Tasks 5–6.
+
+## 2026-10-06 adjustment-reason modal checkpoint
+
+When you edit a reason's names, actions, limits, roles or note setting, Cancel and native Escape
+ask through the shared registry. Keep preserves the visible values and returns focus; Discard
+closes that editor. Names compare after trimming, action choices compare membership and valid
+limit spellings compare their submitted values. Invalid input stays distinct. Accepted Add/Edit
+writes commit their captured values before refresh, while newer delivered input remains dirty.
+A refused write keeps its draft. In-flight writes retain nondismissible Escape and Cancel.
+
+Each editor owns its controls and asynchronous result. Disconnect cancels its pending question;
+departed inputs, Enter, Save, Cancel, deactivation controls and native close reports leave a new
+editor alone. Read-only deactivation remains exempt. The sibling
+`packages/adjustments/src/dashboard/reasons-screen.unsaved.test.ts` exercises these boundaries
+alongside the unchanged reason and report suites. The independent explicit-save discount-limit
+page owner remains Task 6 work; other contributed modal owners remain pending. Synthetic unload
+checks establish listener cancellation only, not a native reload prompt.
+
+## 2026-10-06 Booking Add/Edit checkpoint
+
+When you edit booking date, time, party size, contact details, notes or table choice, native Escape
+asks before discarding those values. Keep preserves the editor; Discard closes it once. The form
+also guards its scoped close API; it has no explicit Cancel button or backdrop close to intercept.
+Clean/reverted values close directly. Party size compares its existing numeric submission; blank
+phone and notes compare as null, while nonblank contact text retains its submitted spelling.
+
+An accepted Add/Edit commits its captured values before list refresh; a rejected write retains the
+draft. Newer delivered input remains visible and dirty against the submitted snapshot. Pending
+writes block dismissal. A same-id booking refresh cannot replace the opening baseline, and departed
+inputs, submits, native reports and write replies leave a replacement editor alone. Disconnect
+unregisters the scope and cancels its question.
+
+`packages/bookings/src/dashboard/booking-form.unsaved.test.ts` exercises these boundaries through
+the real BookingApi and rendered screen, alongside the unchanged Booking dashboard suites.
+The EN/ES, light/dark, 390/1280 matrix covers Add/Edit and the shared confirmation. Calendar filters
+and immediate seat/no-show/cancel/complete commands also have explicit exemption cases. Inline
+seating choices remain page work, as do actual navigation and native reload; synthetic unload checks establish cancellation
+of the listener only. Other contributed and till modal owners remain Task 4 work.
+
+## 2026-10-06 Station Add/Rename checkpoint
+
+When you edit a station's Add name, display order or timing thresholds, Cancel and native Escape
+ask through the shared registry. Rename protects the name after the same trimming its update
+submits. Add compares the existing numeric values and preserves its untrimmed create request.
+Keep preserves the visible fields; Discard restores and closes only that editor. Clean or reverted
+values close directly. Synthetic unload checks cover listener cancellation, not a native reload.
+
+Accepted writes commit their captured values before refresh. Newer delivered input stays visible
+and dirty, refusals retain the draft, and pending writes block dismissal. A connected opening owns
+its dialog and control handlers. Disconnect unregisters its scope and aborts its question; departed
+field events and successful/refused write replies leave a reconnected editor alone.
+
+`packages/venue-service/src/dashboard/prep-stations-screen.unsaved.test.ts` exercises these paths
+alongside the existing prep-station behavior, settings and accessibility suites. The EN/ES,
+light/dark, 390/1280 matrix covers Add/Rename and their shared warning. This is a partial Task 4
+checkpoint: exceptions, hours, watchers, department/zone forms and other audited modal owners still
+need integration. Page/history/native reload remain Tasks 5–6.
+
+
+## 2026-10-06 Station-hours modal checkpoint
+
+When you edit a station's weekday, opening/closing time or interval rows, Cancel and native Escape
+ask through the shared registry. The comparison preserves the emitted list order and exact time
+strings, including invalid blank input. Keep retains the visible rows; Discard closes the editor
+without a write. Clean/reverted rows close directly. Successful writes commit their captured
+intervals before refresh; newer delivered input remains editable against that saved snapshot.
+Refused writes retain the draft and existing field messages. Pending writes block dismissal.
+
+Disconnect aborts the question and unregisters the scope. The station-action opening owns its
+hours form and asynchronous replies, so departed controls/refusals cannot affect a new editor and
+an old reply cannot release a replacement station write. Editors without a registry retain their
+existing direct Cancel behavior. `station-hours-form.unsaved.test.ts` exercises the real prep-station
+host and its submitted bodies alongside the unchanged hours and prep-station suites.
+The EN/ES, light/dark, 390/1280 matrix covers this editor and the shared confirmation. Synthetic
+unload checks establish listener cancellation only; actual navigation/reload and inline hours
+remain Tasks 5–6. Exceptions, watchers, department/zone and remaining modal owners remain Task 4.
+
+## 2026-10-06 Exception Add/Edit modal checkpoint
+
+Exception subject, zone and destination now use the shared scope through Cancel and native Escape.
+Keep retains the fields; Discard closes without a write. Clean/reverted values close directly.
+Add's empty destination compares as unset even though its existing field handler encodes an empty
+station id; the submission guard still refuses that destination. Clearing a saved destination remains
+dirty. No request body or domain validation changed.
+
+The scope survives routing preview. Preview Cancel returns to the edited form without abandoning
+its values or asking a second question. Confirm writes the captured body and commits that snapshot
+before refresh; newer input delivered during the preview read remains dirty and visible. Preview and
+confirmed-write refusals retain the draft. Preview reads and confirmed writes block dismissal. Disconnect aborts the question and invalidates old preview/save replies; detached controls
+and close reports cannot edit or close a replacement form, including the form restored by preview
+Cancel. `packages/venue-service/src/dashboard/prep-exceptions.unsaved.test.ts` checks these paths.
+
+The EN/ES, light/dark, 390/1280 rendered matrix exercises Add/Edit and the shared question. Synthetic
+unload checks establish listener cancellation only. Watchers, department/zone, remaining station
+actions and other modal owners still need Task 4 work; page/history/native reload remain Tasks 5–6.
+
+An additional filtered consumer run failed the existing station keyboard-reorder focus assertion
+at `packages/venue-service/src/dashboard/prep-stations-screen.test.ts:3914`. In an independently
+installed checkout at the preceding checkpoint `f8cbc0caa16baa41d3d798d47c7bfc5b6880ccc9`,
+the following command failed that same assertion:
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.test.ts src/dashboard/prep-stations-screen.settings.test.ts -t 'exception|preview|claim|assignment|routing'
+```
+
+The single-case selection passed in both checkouts. The broader family
+passed before the close-report guard addition; the cause of the filtered focus failure remains
+unverified. Preserve the assertion and investigate it before branch finishing.
+
+## 2026-10-06 Stations focus fixture follow-up
+
+The filtered reproduction below failed the same retained-focus assertion, with 52 passing tests.
+Its screenshot showed Routing selected. `mountToday` did not set a URL, while the screen's URL
+controller reads the retained `view` selection. The reorder handle was in the hidden Stations panel.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.test.ts -t 'exception|preview|claim|assignment|routing'
+```
+
+The fixture now explicitly starts at `/manage/prep-stations/view/stations`. The original focus,
+station order and unchanged routing assertions remain. With that one-line fixture change, the
+following selection passed 74 tests; one completely filtered file was skipped. This receipt concerns
+test initialization, not a production focus change.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.test.ts src/dashboard/prep-stations-screen.settings.test.ts src/dashboard/prep-exceptions.unsaved.test.ts -t 'exception|preview|claim|assignment|routing'
+```
+
+The subsequent unfiltered selection of prep-station, hours and exception suites passed 443 tests
+across six matched files in 184.34 seconds. The requested `station-hours-form.a11y.test.ts` path
+matched no file, so this run supplies no result for a separate hours accessibility suite.
+
+
+## 2026-10-06 follow-up: Watcher Add and seeded form drafts
+
+`watcher-form.unsaved.test.ts` exercises the actual Prep Stations Add host. The initial focused
+run failed nine of eleven cases: edited values neither registered unload protection nor opened a
+leave question, and acceptance removed newer input. After wiring the form scope and host close
+route, the two-file form selection passed 24 cases. Further controls cover refreshed seeded rows,
+reordered offered choices, an accepted write invalidating an open question, and departed write
+acceptance/refusal during another pending write. They passed without another production change;
+these are characterization controls rather than new red results.
+
+A further red case removed the form and pressed its retained Save control. The host still wrote
+its input. The host now checks that the originating form is connected before submitting. The
+five-file form/station/exception/hours selection then passed 84 tests. Existing assertions remain
+unchanged. The seeded Edit control verifies the form contract directly; Prep Stations currently
+opens that form only for Add. Its separate Rename modal and staged inline selections remain open.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/watcher-form.unsaved.test.ts src/dashboard/watcher-form.test.ts src/dashboard/prep-stations-screen.unsaved.test.ts src/dashboard/prep-exceptions.unsaved.test.ts src/dashboard/station-hours-form.unsaved.test.ts
+```
+
+In an independently installed disposable candidate, deleting the Watcher host's close gate failed
+the native Escape question assertion; deleting the submitted-value commit failed the newer-input
+revert's unload assertion; deleting the connected-form check failed the no-write assertion. Each
+mutation failed one focused case. Restoring all three passed all sixteen watcher cases, including
+the clean/revert controls. The temporary candidate was then removed.
+
+The generated visual probe ran eight EN/ES, light/dark, 390/1280 combinations and sixteen axe scans
+covering the editor and confirmation. It retained sixteen screenshots; representative desktop and
+phone renders were inspected. The probe's initial missing health-read stub displayed a load error
+behind the editor. Adding the same empty health response used by the form fixture removed that
+fixture error; the eight visual cases and sixteen scans passed again. Captures and exact commands
+are retained in Lane E's local receipts. This records the Watcher Add/form boundary only, not
+completion of all Watcher controls or the W69 rollout.
+
+A further red case re-rendered the Prep Stations host while its discard question was open.
+Discard restored the draft but left the modal mounted. `WtDialog.requestClose` compares its
+`beforeClose` callback by identity after the answer; the inline render expression had replaced
+that callback. The Watcher host now binds a stable method. The final two-file watcher selection
+passed 30 tests, including the added background-render case.
+
+The broader selection reported the same background-render failure plus the existing clean-Cancel
+case at `prep-stations-screen.test.ts:5740`. That case waited a timer and the host update, which no
+longer waits for the native close report. It now waits until the modal disconnects, keeping its
+original modal-absence and no-create assertions unchanged. This does not change the expected
+clean-close behavior. The latest consumer result is recorded separately in Lane E's checkpoint.
+
+
+After those corrections, the watcher-filtered host/form selection passed 109 tests; its 238 other
+cases were filtered out. The existing clean Cancel and dismiss controls still assert no create
+request and absence of the original modal. An updated independently installed candidate tested
+four final controls: removing the gate, removing the submitted commit, removing connected-form
+validation, and replacing the stable gate with a fresh render callback. Each failed its intended
+case; restoring the candidate passed all seventeen watcher cases. Both owned candidates were
+removed. This supersedes the earlier control receipt for the final gate's shape.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.test.ts src/dashboard/watcher-form.unsaved.test.ts -t 'watcher|Watcher'
+```
+
+
+## 2026-10-06 follow-up: Watcher Rename and current-main reconciliation
+
+The separate Watcher Rename modal now registers its trimmed submitted name. Cancel and native
+Escape keep it mounted while you choose Keep editing or Discard changes. Clean and normalized
+reverted names close directly. Successful writes commit before refresh, and edits delivered during
+that write stay dirty against the submitted name. Refusals retain newer input. Disconnect aborts
+the question and unregisters the scope; late replies cannot release a replacement write. Retained
+input, Enter, Save and native close controls from a departed opening cannot submit its replacement.
+
+The initial rename selection failed all eight new cases. After implementation it passed all
+25 watcher cases. Four additional lifetime cases exposed one failure: Enter from the removed
+input found the replacement Save button. The opening check fixed that failure. The final command
+below passed 121 tests; 238 cases outside its name selection were skipped.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/watcher-form.unsaved.test.ts src/dashboard/prep-stations-screen.test.ts -t 'watcher|Watcher'
+```
+
+The existing standalone Rename Cancel check now waits for the native dialog's delayed close;
+its modal-absence, no-write and reopened stored-name assertions are retained. No historical
+expected value changed. In an independently installed disposable checkout, removing the close
+gate failed the edited Cancel case, removing the submitted commit failed the newer-input revert,
+and removing the Enter opening check failed the departed-control no-write assertion. Each failed
+one selected test. Restoring the candidate passed all 29 watcher unsaved cases.
+
+A temporary Chromium probe passed eight EN/ES, light/dark, 390/1280 flows, including 16 axe scans,
+visible name retention and focus after Keep. Its shell supplied localized warning copy. Sixteen
+screenshots and the probe are retained in Lane E's local receipts. The probe's first screenshot
+attempt was refused because its absolute output path was outside Vite's allowed paths; the final
+run used a package-local path and copied the evidence out afterwards. Synthetic unload assertions
+check cancellation only; native reload remains Task 5.
+
+Rebasing onto main retained both the authority-clock cleanup and the shell's forced dirty-registry
+reset, and kept both test groups. The focused till shell selection passed nine cases, its types
+passed, and the existing dialog/modal suites passed 160 cases, including compact sizing. This is
+reconciliation evidence, not completion of the full W69 rollout.
+
+Current-main source inspection adds `apps/till/src/widgets/invoice-recipient-dialog.ts` to the
+remaining protected modal inventory: its staged tax ID, name and address fields currently cancel
+through `invoice-recipient-cancel`. Cover that form and its till host before PR 1; retain explicit
+submission and fiscal behavior. This entry is a source inventory, not a runtime test of that owner.
+The venue-details page added on main also needs Task 6 reconciliation. Watcher inline selections,
+other modal owners and page/history/navigation coverage remain open.
+
+
+## 2026-10-06 follow-up: staged Watcher cells
+
+You now get the shared warning before Cancel, native Escape or replacement drops an edited
+Watcher station, zone, pass or printer selection on the branch. Choice cells and printer cells
+own independent scopes, so saving one does not commit the other. Each scope compares selected
+membership, captures its opening once, and commits the submitted selection before refreshing.
+An accepted or refused write retains newer input. Disconnect clears these local editors and
+aborts their questions; removed selection and Save controls cannot submit a replacement.
+
+The first inline selection run failed 14 new cases and passed eight controls. After the initial
+implementation, four native Escape cases still failed: the keyboard event reached the selector,
+but its newly opened warning was closed. Preventing Escape's default action passed all 22 cases.
+Six additional membership, independent-refresh, invalidated-answer and printer-replacement cases
+then passed with those cases, giving 28 focused passes. No existing expected value changed.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/watcher-form.unsaved.test.ts -t 'Watcher inline'
+```
+
+In a separately installed disposable checkout, removing the leave gate failed edited Cancel,
+removing the submitted commit failed the newer-input baseline check, removing Escape's default
+prevention failed native Escape, and removing Save's opening check submitted a replacement draft.
+Each control failed one selected case; restoring the code passed all 57 watcher draft cases.
+The candidate and its parent directory were removed after those runs.
+
+A temporary Chromium probe passed eight EN/ES, light/dark, 390/1280 flows with 16 axe scans.
+Its 16 captures show the retained cell and warning; Keep returned focus to the native selector
+trigger. Synthetic unload cases check cancellation only; native reload remains Task 5. Probe
+source, logs and captures live in Lane E's local `receipts/w69-inline-20261006` directory.
+Department/zone forms, station-action drafts and remaining modal owners still need Task 4 work;
+page and history integration remain Tasks 5–6. This checkpoint completes only the staged Watcher
+cell family, not either proposed W69 PR.
+
+The final Watcher host/form selection passed 154 tests across three suites; 246 cases outside
+its name selection were skipped. Venue-service types, changed-file ESLint, Prettier and
+`git diff --check` passed. The documentation paths are Prettier-ignored and were read directly.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/watcher-form.unsaved.test.ts src/dashboard/watcher-form.test.ts src/dashboard/prep-stations-screen.test.ts -t 'watcher|Watcher'
+```
+
+
+## 2026-10-06 department and zone modal checkpoint
+
+The branch now protects Department Add/Edit, zone Add/configuration, hours and menu-assignment
+editors through Cancel and native Escape. Each opening captures its rendered field values once;
+text uses its existing trimming and assignment order uses its existing valid-number conversion.
+Invalid values remain distinct. The native default checkbox belongs to the assignment scope.
+Successful writes commit submitted values before refreshing. Newer delivered input stays dirty,
+and background zone updates keep the opening's defaults. Replacement/disconnect abort a pending
+question; departed Save/Enter and refusals cannot affect the new form. Read-only removal
+confirmations remain exempt.
+
+The initial focused run failed 12 warning assertions and passed 12 clean/save controls. The next
+lifetime run failed the accepted-save/newer-edit case and the background-zone draft assertion.
+The two-suite venue selection passed 220 tests; a subsequent removal exemption case passed
+separately. A reconnection probe then failed its unload assertion: the retained draft had no
+registered scope. Retaining its accepted baseline and scheduling an update on reconnection
+made that probe pass. The final combined venue selection passed 222 tests. Four deletion controls
+in an installed independent checkout each failed
+its intended assertion, and restoring the source passed all 32 cases then present. The candidate
+was removed. A fifth deletion of the reconnect update failed its unload assertion; the final
+restored candidate passed 34 tests and was removed. Temporary visual cases passed in EN/ES, both themes and at 390/1280 widths, with
+16 axe scans and 16 inspected captures. Logs and images are in Lane E's local
+`receipts/w69-resume-20261006-forms` directory. Browser logs contain Lit's development-mode warning.
+
+The existing Cancel helper now polls for native modal removal. Its absence, focus and no-write
+assertions are retained; the initial full suite exposed four assertions running before native
+close completed. The first final family run passed 217 tests before the three additional lifetime
+controls were added. No existing expected value was changed.
+
+Station-action drafts and the remaining dashboard/till modal owners still need Task 4 work.
+Venue inline settings and shell/page/history routes remain Tasks 5–6; this checkpoint completes
+only the venue modal family, not either proposed W69 PR.
+
+
+## 2026-10-06 station-action fallback checkpoint
+
+The Disable station dialog now asks before Cancel, native Escape or another station action drops
+your edited replacement-station selection. Keep preserves that selection. Discard restores its
+accepted baseline and then closes, without a fallback or disable command. Reviewing an unchanged
+selection does not make it dirty. Default-station and Today confirmations retain direct Cancel.
+The existing disabled input and nondismissible pending-command phase remain in place.
+
+The fallback write and disable command have separate outcomes: a successful fallback write commits
+its submitted selection immediately, even when the later disable is refused. Replacement and
+disconnect invalidate old controls and pending replies. A disconnected fallback reply does not
+start the subsequent disable command. The question's callback remains stable across rerenders,
+including the Discard restoration itself.
+
+The corrected initial browser fixture produced six failing behavioral cases and two passing
+controls. The initial implementation passed six cases; two Discard cases exposed callback replacement
+on rerender. Keeping the callback per opening passed those cases. A further replacement-opening
+case failed before its gate was added. The focused final station-action suite in an independently
+installed disposable checkout passed 15 cases. Four deletion controls each failed one intended
+assertion: edited Cancel without its leave gate, partial-save cleanliness without the submitted
+commit, a departed write without its identity check, and replacement values without the old-control
+check. Restoring the candidate passed all 15 cases. The measuring checkout and its parent were
+removed after those runs.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/station-action.unsaved.test.ts
+```
+
+The first five-suite consumer run passed 383 cases and failed the existing immediate Cancel
+assertion in the refused Today confirmation. The implementation was narrowed to retain that
+confirmation's direct Cancel; no existing assertion or fixture changed. The subsequent focused
+consumer selection passed 16 cases, with 327 outside the selection skipped. Temporary visual
+cases passed eight EN/ES, light/dark, 390/1280 flows, with 16 axe scans and 16 inspected editor
+and warning captures. That probe supplied the shell's localized warning copy. Its source and
+captures are kept in Lane E's local `receipts/w69-station-actions-20261006` directory.
+
+Remaining modal owners, including the full-invoice recipient dialog added by A231, still need
+Task 4 work. Venue inline settings and page/history/navigation remain Tasks 5–6. This checkpoint
+covers station-action fallback selection; neither proposed W69 PR is complete.
+
+A later live-update case failed when a background update made the edited station default:
+the choice control disappeared and its scope was disposed. Retaining an already registered scope
+across that metadata change passed the case and the 16-case station-action suite. The opening's
+comparison baseline is retained even when the refreshed metadata changes which controls appear.
+The temporary visual probe initially remained in the package during typechecking and imported
+app icons outside that package's `rootDir`; that check failed. The probe was archived and removed,
+and the package typecheck then passed. These temporary artifacts are not part of the change.
+
+A second background-update case failed when another write had already persisted the selected
+fallback. The dialog's Confirm skipped the redundant fallback request, completed Disable, but
+left the local selection dirty and the editor open. Commit the selection once the fallback is
+known to be accepted, whether this confirmation writes it or the refreshed snapshot already
+holds it. The case keeps its literal single Disable request and clean-close assertions. Its
+initial focused run failed the modal-removal assertion; the same case also failed in the ongoing
+consumer run, which otherwise passed 387 cases. No existing assertion changed.
+
+The final five-suite station/hour consumer run passed 388 tests on the completed candidate.
+The final independently installed deletion controls each failed one selected assertion for all
+five protections, including retaining the opening baseline through a background default change.
+Restoring that checkout passed all 17 station-action cases. Its checkout and parent were removed.
+Package types, changed-file lint, formatting and `git diff --check` passed. Documentation paths
+are Prettier-ignored and were read directly. Generated visual and failure captures were archived
+outside the product source; no existing test assertion or fixture was edited.
+
+
+## 2026-10-06 invoice-recipient modal checkpoint
+
+The till's full-invoice recipient dialog now registers its six staged fields with the shared
+coordinator. Cancel and native Escape ask before dropping edits. Keep retains the entered values
+and Escape's input focus; Discard restores the opening values and emits cancellation once. Each
+field compares its existing trimmed submission spelling, with valid tax identifiers compared
+through the existing Spanish validator. Invalid text remains distinguishable. Same-form refusal
+renders preserve the draft and pending question.
+
+A bill's successful invoice-choice write commits the submitted snapshot before refreshing its
+bills. If newer fields were entered during the write, the dialog stays open and its next request
+uses the revision returned by that accepted write. A refusal leaves its values dirty. Disconnect
+unregisters the scope and invalidates captured completion callbacks. Reconnecting the retained form
+restores dirty tracking against its opening baseline; departed input, Cancel, Save and Enter
+controls cannot issue a new choice or cancellation. The field binding also restores the native
+widget value on reconnection when a detached control changed itself.
+
+Focused cases are in `apps/till/src/widgets/invoice-recipient-dialog.unsaved.test.ts` and the new
+recipient write-completion case in `apps/till/src/till-app-bill-payments.test.ts`. Six installed
+measuring-checkout controls failed the intended assertions after deleting the leave gate,
+submitted commit, reconnect baseline, departed input guard, host completion call or host connection
+lifetime check. Restoring that candidate passed 29 recipient-related cases. An accepted or refused
+reply from a disconnected till lifetime cannot refresh bills or mark the reconnected form. The temporary visual probe passed eight language,
+theme and viewport combinations with 16 axe scans; all 16 editor/warning captures were inspected.
+The initial probe used an unavailable viewport command and failed before inspection; the corrected
+probe uses `page.viewport` and asserts the document width. Synthetic unload events establish
+listener cancellation only. Other till/modal owners and Tasks 5–6 page/history/native reload work
+remain open. Public F1 issuance stays disabled.
+
+### Seating count modal checkpoint, 2026-10-06
+
+The till's seating-count form now uses the shared coordinator for Cancel and native Escape.
+Keep retains the typed count; Discard restores the opening count and reports cancellation without
+seating anyone. Blank counts compare as no count, valid count spellings compare by the number
+already submitted by this form, and invalid input remains distinguishable. Validation and
+`seat-confirm` request values are unchanged. Explicit Seat commits the chosen count at the local
+handoff: `TillFloorScreen.#onSeatConfirm` removes the dialog and emits `open-table` immediately;
+this form owns no pending server operation. That handoff does not ask to discard.
+
+Parent rerenders retain the baseline and pending question. Disconnect cancels a question and
+unregisters the scope; reconnect retains the opening or accepted baseline. Retained departed input,
+Save and Enter controls cannot submit or replace the draft. A submission invalidates a pending
+Discard. The actual Floor screen is exercised through Keep, Discard, reopening and direct seating.
+
+`pnpm --filter @waitron/till exec vitest run src/widgets/seat-dialog.unsaved.test.ts` first failed
+all ten new cases. The final run of both seating suites, both floor suites and
+`src/till-app-table-service.test.ts` passed 187 cases. Four deletions in an installed disposable
+checkout each failed one intended case while the blank/revert control passed: close gate,
+submitted commit, reconnect baseline and departed-input guard. Restoring the source passed 29
+cases. Eight temporary visual flows passed sixteen axe scans, and their sixteen EN/ES,
+light/dark, 390/1280 captures were inspected. Synthetic unload checks establish listener
+cancellation only. Types, changed-file lint, formatting and diff checks passed; existing test
+assertions were not edited. Other till modal owners and Tasks 5–6 remain pending.
+
+
+### Party-name modal checkpoint, 2026-10-06
+
+You can keep a typed party name when cancelling or pressing native Escape. Discard restores the
+starting value and reports cancellation once. Comparisons use the trimmed name already emitted
+by this form; validation and blank-name null submission keep their existing meanings. Explicit
+Save commits the submitted name before reporting `party-name-confirm`. The table screen removes
+the form and hands that action to the existing naming request without another question.
+
+The table screen also passes its stored party name as `savedValue`. When an existing request
+refusal reopens a submitted name, that form compares against the stored value rather than treating
+the refused value as saved. Keep preserves the refused value; Discard sends no naming action.
+Other rerenders keep the existing baseline and pending question. Disconnect aborts a question and
+unregisters unload tracking; reconnect retains the starting or submitted baseline. Detached input,
+Cancel, Save and Enter controls cannot replace the retained draft or submit it.
+
+The initial new widget run failed nine cases. After the close/lifetime implementation, a corrected
+long-name fixture uses a native input event to exercise validation beyond the field's maxlength;
+real typing stops at 40 characters. The refused-name widget and actual table-screen tests each
+failed before adding the stored baseline and its parent binding. The final command was
+`pnpm --filter @waitron/till exec vitest run src/widgets/party-name-dialog.unsaved.test.ts src/widgets/party-name-dialog.test.ts src/screens/party-name.unsaved.test.ts src/screens/till-table-order-screen.test.ts src/till-app-table-service.test.ts`:
+336 cases passed. Existing assertions were not edited.
+
+Five installed disposable-checkout deletions each failed its intended case: close gate, submitted
+commit, reconnect baseline, departed-input guard and table-screen stored-name binding. Restoring
+the candidate passed 19 party-name cases. Eight temporary visual flows passed 16 axe scans;
+their 16 EN/ES, light/dark, 390/1280 editor/warning captures were inspected. Types, changed-file
+lint, formatting and diff checks passed. Synthetic unload events establish listener cancellation
+only. Other till modal owners and Tasks 5–6 remain pending; public F1 issuance stays disabled.
+
+
+### Dead-end routing modal checkpoint, 2026-10-06
+
+You can keep staged destinations and removals when cancelling or pressing native Escape.
+Discard restores the local decision and reports cancellation once; it does not remove a basket
+line or record a sale. Continue commits the captured decision before emitting the existing
+`dead-ends-continue` event. `TillApp.#answerDeadEnds` removes this child and resolves its existing
+routing question. The caller retains responsibility for changing the basket or making a stored
+order request. No server write is performed by this dialog.
+
+Comparison preserves each row key and station ID and compares removals by membership. Incomplete
+choices stay protected; a revert clears dirty tracking. Background answer updates retain the
+baseline and pending question. Disconnect aborts that question; reconnect retains the original
+or accepted baseline. Departed controls cannot edit or emit the decision. Removal on a stored
+bill remains refused. Existing test assertions were not edited.
+
+The new widget run failed eight cases before implementation and then passed all ten alongside
+three existing widget cases. Five installed disposable-checkout controls each failed the intended
+assertion after deleting close interception, change notification, submitted commit, disconnect
+disposal or the departed-choice guard. Restoring the candidate passed 13 cases. The actual till
+shell has destination/removal Keep and Discard cases asserting unchanged basket values and no
+sale submission. Their first run asserted before the native dialog's delayed close report;
+polling for removal passed both cases. Eight temporary visual flows passed 16 axe scans, with all
+16 EN/ES, light/dark, 390/1280 editor/warning captures inspected. Synthetic unload events check
+listener cancellation only. Other modal owners and Tasks 5–6 remain pending.
+
+
+The final focused family command,
+`pnpm --filter @waitron/till exec vitest run src/widgets/dead-ends-dialog.unsaved.test.ts src/widgets/dead-ends-dialog.test.ts src/widgets/dead-ends-section.test.ts src/till-app.test.ts --reporter=dot`,
+passed 681 browser cases. The unedited `write-path.e2e.test.ts` and `inmutabilidad.test.ts` passed
+20 cases. Changed-file lint, till types, formatting and diff checks passed. This verifies the
+dead-end modal family on the branch, not completion of W69 or either proposed PR.
+
+
+## 2026-10-06 modifier-picker checkpoint
+
+Cancel and native Escape now protect your edited variant, extras pick/count, options answer or
+kitchen note. Keep retains the draft. Discard restores this picker before reporting its existing
+cancellation once. A fresh picker captures preselected defaults; a reopened picker captures the
+recorded selections instead. Counts include list identity, and map insertion or offered order
+does not make an otherwise reverted selection dirty. Notes compare their trimmed submitted value.
+
+Add/Save commits this child decision at the existing synchronous parent handoff. It does not
+commit an independent parent draft or make a server order/payment write. Incomplete choices
+remain protected when Confirm refuses them. Background offer updates and reconnects retain the
+baseline; disconnected controls and old warning answers cannot submit or cancel a replacement.
+The actual menu and basket cases exercise Keep/Discard without changing a line, explicit Add/Save,
+and preservation of a basket line's existing note and quantity.
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/modifier-picker.unsaved.test.ts src/widgets/modifier-picker.test.ts src/widgets/menu-browser.test.ts src/widgets/basket.test.ts src/widgets/tender-pay.test.ts src/screens/till-counter-screen.test.ts src/screens/till-table-order-screen.test.ts --reporter=dot
+```
+
+The first new-suite run reported 14 failing cases and one passing clean/revert control. After
+implementation, two new assertions incorrectly read the parent product id as the variant id;
+the existing `productAsVariant` reader puts that identity in `variantId`. The new fixture also
+lacked required variant selling values and extras portion/unit fields. Correcting only that new
+fixture and its assertions passed 63 cases across the picker suites. Additional background,
+list-identity, parent-draft, forced-reset and real-parent controls passed; the final seven-suite
+command above passed 598 browser cases. No existing test assertion was changed. Unedited golden
+write-path and immutability suites passed 20 cases.
+
+Five separate controls in a freshly installed disposable candidate each failed one intended
+assertion after removing the pre-close callback, submitted commit, change notification, departed
+control guard, or reconnect baseline commit. Restoring the candidate passed all 21 new cases.
+Eight temporary visual cases covered EN/ES, both themes and measured 390/1280 iframe widths, with
+16 axe scans and 16 inspected editor/warning captures. Temporary visual source, captures and
+failure screenshots were archived outside the repository; the disposable candidate was removed.
+
+Station choice and the remaining audited modal owners still need Task 4 work. Page/history and
+inline owners remain Tasks 5–6. This checkpoint completes the modifier-picker family; neither
+proposed W69 PR is ready.
+
+
+## 2026-10-06 station-choice dialog checkpoint
+
+The preceding modifier checkpoint's station-choice pending note is superseded by this addition.
+Make at and Move use the shared registry for their actual stationId, including the null rules
+choice. Cancel and native Escape retain the destination on Keep. Discard resets only that local
+selection and closes once, with no station command or basket change. Reverts close directly.
+Make at commits at its existing local basket handoff. Move keeps an uncommitted destination
+after a refused write; its existing successful path removes the dialog before refreshing.
+The opening selection stays captured across current-station updates and offered ordering.
+When the option list removes the selected station, its existing null fallback now notifies the
+registry. Disconnect aborts the question; reconnect retains the baseline, and departed controls
+cannot submit or change a reconnected draft. No existing assertion was changed.
+
+Focused command:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/station-choice-dialog.unsaved.test.ts src/widgets/station-choice-dialog.test.ts src/widgets/station-choice-dialog.a11y.test.ts src/till-app-counter-adjustments.test.ts src/till-app-table-service.test.ts
+```
+
+The initial new-suite run failed all ten cases at warning, dirty-unload or retained-selection
+assertions. An additional option-removal case failed at unload protection before its notification
+was implemented. The new counter-shell fixture initially lacked its move API stub; supplying that
+stub retained all basket assertions. The final five-suite run passed 189 browser cases. Six installed deletion controls each failed
+one intended assertion; restoring that disposable candidate passed all 14 new widget cases.
+The unedited golden write-path and immutability suites passed 20 cases. Logs are retained in the
+lane's station-choice receipts. Eight temporary visual flows passed with
+16 axe scans; all 16 editor/warning captures were inspected in EN/ES, both themes and 390/1280
+widths. The visual probe and captures stay outside product source.
+
+The other audited modal owners and inline/page/history/native-reload work remain pending.
+This is a coherent Task 4 family checkpoint; neither proposed W69 PR is ready.
+
+
+## 2026-10-06 supervisor proof checkpoint
+
+On the W69 branch, supervisor approval protects the typed PIN through Back and native Escape.
+Selecting an authorizer alone is exempt; deleting every digit reverts to the empty baseline.
+Keep retains the exact digits, including leading zeros. Discard clears only this proof; an
+independent action draft remains dirty. Authorize emits the existing selected person/PIN body
+without a question and consumes the PIN. A returned refusal does not restore that consumed secret;
+newly entered retry digits are protected. Roster/error rerenders leave unsubmitted digits intact.
+Disconnect aborts a pending question, clears the PIN and removes unload protection; reconnect
+starts with an empty attempt. Departed keypad events do not seed the reconnected form.
+
+Focused behavioral checks live in `apps/till/src/widgets/supervisor-override-dialog.unsaved.test.ts`.
+The real drawer-approval Escape/Keep/Discard route is exercised in `apps/till/src/till-app.test.ts`,
+retaining the ticket and making no additional drawer request. Existing test assertions are unchanged.
+
+The focused command below passed 936 browser cases, including the unchanged approval consumers:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/supervisor-override-dialog.unsaved.test.ts src/widgets/supervisor-override-dialog.test.ts src/widgets/supervisor-override-dialog.a11y.test.ts src/till-app-counter-adjustments.test.ts src/till-app-adjustments.test.ts src/till-app-counter-cancel-credit.test.ts src/till-app-bill-payments.test.ts src/till-app.test.ts
+```
+
+The unedited golden write-path and immutability suites passed 20 cases. The initial new-suite run
+failed eight cases at missing warning/unload assertions. In an installed
+disposable candidate, removing native pre-close, Back interception, input notification, pending-save
+invalidation, disconnect secret clearing and departed-input protection each failed an intended
+assertion. Removing the departed Authorize check alone did not fail its control: disconnect already
+empties the PIN, and empty proof cannot submit. That result is retained, rather than counted as
+proof of that check. The restored candidate passed all 13 new widget cases.
+Eight temporary visual flows exercised EN/ES, both themes and measured 390/1280 iframe widths, with
+16 axe scans. All 16 editor/warning captures were inspected; the probe and captures are kept outside
+product source. Receipts are in the lane's `w69-supervisor-20261006` directory.
+
+This is a Task 4 family checkpoint. Tender, bill, adjustment, refund, collection and other audited
+modal owners and inline/page/history/native-reload work remain pending. Neither proposed W69 PR
+is ready for finishing.
+
+
+## Unpaid-departure reason checkpoint — 2026-10-06
+
+The branch protects the trimmed reason comparison through Cancel and native Escape while
+retaining the raw input for Keep. Reverting to whitespace is clean. Invalid input and a refused
+request remain protected; bill-summary rerenders do not reset the draft. Busy requests retain
+nondismissible behavior. Continue emits the existing trimmed reason without a discard question;
+a successful departure removes its owner before the table's following refresh.
+
+The real till cases in `apps/till/src/till-app-parties.test.ts` retain the table and complete bill
+list after local Discard, send no departure request from either leave route, and keep the reason
+when a nested PIN approval is discarded. Recording after that dismissal sends the existing
+reason/revision and closes without a warning or drawer request. Existing assertions were retained.
+New approval dismissal explicitly waits for the native dialog's delayed close report.
+
+The widget cases in `apps/till/src/widgets/unpaid-departure-dialog.unsaved.test.ts` cover raw
+value/focus preservation, normalized revert, validation, refusal, busy dismissal, disconnect,
+reconnection, retained departed controls and duplicate native reports. In a frozen-installed
+throwaway checkout, independently deleting the native close binding, dirty notification, local
+restore, disconnect disposal or departed-input guard failed its intended behavioral assertion;
+restoring the source passed all eight widget cases. Deleting the native close binding also failed
+the real till Escape assertion; restoring it passed the four selected till leave cases. The
+temporary visual probe exercised EN/ES,
+light/dark and 390/1280 widths with axe and captured the editor and warning at each combination.
+The campaign's `receipts/w69-departure-20261006` holds logs, probe and inspected images.
+
+This advances Task 4 only. Other modal owners and the page/history/navigation rollout remain open.
+
+
+## Cancel-and-credit reason checkpoint — 2026-10-06
+
+On the W69 branch, Keep the bill and native Escape protect the staged reason. Keep retains its
+raw spelling and focus; Discard restores the local input and reports close once. Comparisons use
+the trimmed reason already submitted by this form. Empty and reverted input close directly.
+Validation, refused submissions and bill-summary rerenders retain the reason. Busy operations
+remain nondismissible. Submission sends the existing reason without a discard question; the
+accepted result unregisters its scope before the shell's following queue/bill refresh.
+
+Disconnect aborts the question and unregisters unload protection; reconnect retains the reason
+against the empty starting baseline. Departed controls cannot submit, close or replace the input.
+Result views remain exempt after reconnect. The real counter and table cases exercise both leave
+routes, preserving the waiting order, separate basket and both table bills without a cancel request.
+The widget suite is `apps/till/src/widgets/cancel-credit-dialog.unsaved.test.ts`.
+
+The first new widget run failed ten cases before implementation. Six independent deletions in an
+installed disposable candidate failed the intended close, change-notification, local-restore,
+result-scope-retirement, disconnect or departed-input assertion while the untouched-form control
+passed. Restoring the source passed eleven cases. Replacing the widget with its previous committed
+version failed all four new counter/table leave cases; restoring the candidate passed them.
+
+A consumer run also failed an unpaid-departure modal-absence assertion, then another run failed
+the clean counter cancel-credit modal-absence assertion. A third run failed the clean departure
+modal-absence assertion. Their expected values are unchanged;
+they now await the native close report. A filtered previous-version departure run passed once,
+so no reproducible baseline failure is claimed. Delaying that report by 100 ms in the disposable
+fixture failed the old departure assertion and passed the awaited assertion. The table's clean
+cancel-credit close assertion also awaits that native report. Carry these wait-only changes into
+the eventual PR's Changed test checks section.
+
+Eight temporary visual flows passed sixteen axe scans. The sixteen editor/warning captures were
+inspected in EN/ES, both themes and measured 390/1280 widths. The probe, captures and control logs
+stay in the lane's `receipts/w69-cancel-credit-20261006` directory. Synthetic unload events check
+listener cancellation only. Other modal owners and the page/history/navigation rollout remain
+open; neither proposed W69 PR is ready for finishing.
+
+
+The acceptance-to-refresh boundary was then measured directly. The new counter case passed at
+first run; the table case failed because unload remained protected at the start of getPartyBills.
+The shell now calls the form's showResult immediately on accepted cancellation, before that read.
+Both boundary cases then passed, preserving their exact existing cancel request bodies. In the
+final installed candidate, the six widget controls were repeated after this restructure, and a
+seventh deletion of the shell's completion handoff failed the table boundary assertion. The
+counter control still passed without that handoff, so it is not claimed as proof of the handoff.
+
+
+The final five-suite browser command passed 393 cases on this completed family candidate:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/cancel-credit-dialog.unsaved.test.ts src/widgets/cancel-credit-dialog.test.ts src/widgets/cancel-credit-dialog.a11y.test.ts src/till-app-counter-cancel-credit.test.ts src/till-app-parties.test.ts --reporter=dot
+```
+
+The unedited golden write-path and immutability suites passed 20 cases. Till types, changed-file
+lint, formatting and diff checks passed. The final candidate was restored byte for byte before
+its owned checkout and parent were removed. The normal push hook, whole-branch review and
+current-head CI remain for the complete W69 modal rollout.
+
+## 2026-10-06 W93 reconciliation and refund entry checkpoint
+
+Rebased W69 over W93 #1287 onto `53c8f1e6d07bec7c9548c1c704507c81457df962`.
+W93 retired the named Home layout editor. Removed its W69 hooks and layout-only suite;
+kept member replacement protection in its retained widget. The ServedMenu fixture in
+`apps/till/src/widgets/modifier-picker.unsaved.test.ts` now uses `home.shortcuts` and the two
+Device Home display settings, without changing its basket or modifier assertions.
+The `menu-details.unsaved.test.ts` Device Home display success/refusal cases run the real
+screen beneath a LeaveController and assert the immediate write stays exempt.
+
+Refund entry scopes compare whole/part choice, existing amount normalization with invalid
+raw input retained, and the trimmed reason; snapshots preserve raw inputs for Keep/restore.
+Cancel and native Escape ask before dismissing. The initial suggested amount belongs to the
+baseline; disconnect disposes its scope and reconnect retains that baseline. Refusal and
+terminal confirmation do not commit a refund. Busy or departed controls cannot submit or edit.
+`TillBillRefundDialog.closeSaved()` releases the scope and closes through the saved bypass;
+the real app calls it after refund acceptance, before its first following table read.
+
+The new widget tests initially failed seven assertions on missing confirmation/unload and
+busy submission protection. The first host probe at `getTabLines` passed: that read follows
+an earlier await, so it did not measure the first read. The corrected probe at
+`getTablesState` failed with `[true]` before the synchronous success cleanup and passed with
+`[false]` after it. A reconnect case then failed with the departed input value still visible;
+`live` bindings restored the retained fields on reconnect. Seven independent installed-candidate
+deletions each failed the selected assertion while the untouched refund control passed;
+the restored selected run passed six tests. The focused final till command ran 1,223 tests:
+refund widget/axe/real-owner, modifier widget/real basket, menu browser, counter cancel-credit,
+till app and table-order screen suites. The unedited golden huella and inmutabilidad suites
+ran 20 tests. Eight EN/ES light/dark 390/1280 visual cases ran 16 axe scans; all 16 captures
+were inspected. These checks cover this checkpoint, not the remaining W69 owners or CI coverage.
+
+Changed existing check: `apps/till/src/till-app-bill-payments.test.ts`, the PIN-cancel/refund-close
+case, now retains the edited refund on Cancel, checks Keep preserves its reason, and checks
+explicit Discard removes only the refund dialog. Its original parent-dialog and no-approved-refund
+assertions remain. W69's approved design, “Closing a dialog,” requires that change.
+This remains a Task 4 milestone; all-modal PR 1 and page/navigation PR 2 are not complete.
+
+## 2026-10-06 adjustment-input checkpoint
+
+`TW adjustment-dialog` now registers its quantity, reason, note, discount kind and typed value.
+Cancel and native Escape retain the editor until Keep or Discard; Keep restores focus, and Discard
+resets local fields and closes once without applying an adjustment. Whitespace-only notes and
+reverted default choices remain clean. Invalid values remain protected after validation.
+
+Preview and Confirm emit their existing exact choices without a discard question. A refusal or
+preview keeps the local input scope, and the accepted adjustment calls `closeSaved()` before the
+counter/table refresh. Disconnect aborts a question and unregisters its scope; reconnect retains
+the opening baseline. Departed controls cannot alter that draft or submit. Nested approval Discard
+retains the parent adjustment, checked through the real counter shell.
+
+Verification at this checkpoint:
+
+- `pnpm --filter @waitron/till exec vitest run src/widgets/adjustment-dialog.unsaved.test.ts
+  src/widgets/adjustment-dialog.test.ts src/widgets/adjustment-dialog.a11y.test.ts
+  src/till-app-counter-adjustments.test.ts src/till-app-adjustments.test.ts
+  src/screens/till-table-order-screen.adjustments.test.ts`: 204 passed in Chromium.
+- Initial new widget run after correcting an invalid leading-zero fixture: eight expected
+  assertion failures. The shell success case failed with unload still dirty at its first
+  basket refresh, then passed after the synchronous scope retirement.
+- Seven separate deletions in an installed disposable candidate failed their intended assertion
+  while the clean no-reasons close control passed: native close gate, edit notification, local
+  note restore, disconnect disposal, retained reconnect baseline, departed input guard and
+  accepted-write retirement. Restoration passed the selected cases. Receipts stay outside git
+  in Lane E's `receipts/w69-adjustment-20261006`.
+- Temporary visual harness: eight EN/ES, light/dark, 390/1280 flows, sixteen axe scans and sixteen
+  inspected editor/warning screenshots. The harness and images are archived outside source.
+- Unedited fiscal golden write-path and inmutabilidad suites: twenty passed.
+
+Changed existing checks in `till-app-adjustments.test.ts`: the edited Give away close case now
+asserts Keep retains the reason and Discard closes without applying anything (design, Closing a
+dialog). The clean cancellation and empty approval close cases now poll their original absence
+assertion for the delayed native close report; the clean cancellation also asserts no warning.
+All original no-write and confirm-step assertions remain. No fiscal or payment amounts changed.
+
+Task 4 remains partial. Tender, bill payment, collection and remaining modal owners still need
+coverage before PR 1; page/history/native reload work remains Tasks 5–6.
+
+
+## Tender entry checkpoint — 2026-10-06
+
+On the W69 branch, Cancel protects local cash and weight entry, park labels and manual card
+references. Keep preserves raw spelling and focus; Discard resets the entry without a sale,
+collection or park command, and leaves the existing basket intact. Zero cash and trimmed-empty
+labels/references revert to the clean baseline. Replacing a staged weighed product asks before
+changing its product or quantity. Disconnect aborts a question and unregisters unload protection;
+reconnect retains the opening baseline. Departed controls cannot alter a later attempt.
+
+Card tip, offline consent and simulator outcome use an independent child scope. Cancelling cash
+entry preserves these retained card inputs. A coordinator navigation request can Keep or locally
+Discard them, but application navigation interception is still Task 5 work. Reader preferences
+retain their existing lifetime; choosing a demo reader hides the instant simulator choice and
+refreshes its dirty state. Cash/card/hold/weight submission emits the existing normalized details
+without a question. Submission releases that input scope before dispatch; provider collection,
+waiting, outcomes and cancellation remain exempt.
+
+The first corrected new widget run failed eight assertions on missing warning/unload protection
+and busy control behavior. A subsequent two-case run failed staged weight replacement and a
+retained departed input; both then passed. A separate reader-preference test failed stale unload
+registration before the preference handler notified its scope. No existing assertion changed.
+The first fixture used a nonexistent OrderLine.productId; correcting it to product.id separated
+that fixture mistake from the expected failures.
+
+The seven-suite final focused command ran 886 browser cases:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/tender-pay.unsaved.test.ts src/widgets/tender-pay.test.ts src/widgets/tender-pay-enter-key.test.ts src/widgets/tender-pay-weighed-dish.test.ts src/widgets/tender-pay.a11y.test.ts src/screens/till-counter-screen.test.ts src/till-app.test.ts --reporter=dot
+```
+
+Its earlier run caught the new collection busy guard refusing an existing retry's spinner while
+an earlier kitchen-station attempt finished. The guard was narrowed to preserve that provider
+path; the unchanged retry case passed, followed by the final family run. The unedited fiscal
+write-path and immutability suites ran 20 cases. Till types, changed-file lint, formatting and
+diff checks passed.
+
+In an independently installed disposable checkout, nine separate removals failed their intended
+assertions alongside a passing clean/reverted control: Cancel gating, entry notification, card
+notification, card local restore, disconnect disposal, retained reconnect baseline, departed input,
+submission retirement and weight replacement. The restored widget ran 14 passing cases. Deleting
+the Cancel gate failed both real counter leave cases; restoring it passed both. The first control
+selector also matched a second test, so the retained final controls use an anchored selector.
+
+Eight temporary EN/ES, light/dark, 390/1280 visual flows ran 16 axe checks, and all 16 editor/warning
+captures were inspected. Logs, visual probe and captures stay outside product source in Lane E's
+`receipts/w69-tender-20261006`. Synthetic unload events establish registration/cancellation, not
+that a browser-native reload prompt appeared. Bill payment, collection, remaining modal owners
+and Tasks 5–6 remain open; neither W69 PR is ready for finishing.
+
+## Find a bill collection checkpoint — 2026-10-06
+
+On the W69 branch, edited collection cash and terminal references share the existing dirty
+registry. Back and native Escape ask before leaving; Keep retains raw input and focus, and
+Discard changes only local entry. Search text and result choices remain exempt. The comparison
+uses the existing cash conversion or trimmed terminal reference, ignoring the dormant method's
+fields. Returning to a selected bill seeds its existing cash default. Invalid cash stays dirty.
+
+Busy collection blocks entry, method changes and dismissal. Starting a request invalidates an
+earlier leave answer without accepting its draft. A refusal retains protection. Disconnect
+aborts an outstanding question; reconnect compares against the opening baseline. Departed
+controls cannot collect or change that retained draft. A successful collection retires the scope
+before the following station read, including when that read fails, without another submission.
+
+The corrected initial widget run failed six assertions and passed the search exemption. The busy
+case initially dereferenced a missing control; an explicit presence check then failed for the
+expected missing busy gate. The successful-close case failed on the missing acceptance API.
+The real till-app case first observed no queue read because the fixture uses prepay; tracing
+`#loadStationQueue` moved the probe to the station-list read. It then observed unload protection
+still active at that read, and passed after the success boundary retired the collection scope.
+A final added case failed because starting collection left an earlier Discard question open.
+No existing assertion changed; the existing tender body checks remain.
+
+The final focused five-suite command ran 808 browser cases:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/find-bill-dialog.unsaved.test.ts src/widgets/find-bill-dialog.test.ts src/widgets/find-bill-dialog.a11y.test.ts src/till-app.test.ts src/till-app-boot-and-counter.test.ts
+```
+
+Six separate removals in an independently installed disposable checkout each failed its targeted
+case while a clean search or existing collection control passed: Back gating, Escape gating,
+input notification, reconnect baseline, busy invalidation and the host success boundary.
+Restoration passed 15 selected cases. Eight temporary EN/ES, light/dark, 390/1280 visual flows
+ran 16 axe checks; all 16 editor/warning captures were inspected. The temporary probe and captures
+are archived outside source in Lane E's `receipts/w69-collection-20261006`. Till types, changed-file
+lint and formatting passed. The unedited fiscal write-path and immutability suites ran 20 cases.
+Synthetic unload events check registration/cancellation, not a browser-native reload prompt.
+
+Task 4 remains partial: bill payment and other audited modal owners are still open. Tasks 5–6
+remain open. Neither W69 PR is ready for finishing.
+
+## Bill payment entry checkpoint — 2026-10-06
+
+On the W69 branch, Close and native Escape protect the payment entry's normalized active request
+values: selected item/unit pairs, contribution/share, cash, card tip/reference and reader choice.
+Keep preserves raw fields and returns focus; Discard restores only local values before closing.
+Back from cash confirmation covers its separate staged tip, retaining the payment entry. Clean
+or reverted entry and a tip-free Back remain exempt. Busy transitions abort outstanding answers;
+refusal and balance refresh retain the draft. Disconnect unregisters scopes, and reconnect keeps
+the original entry baseline. Successful payment clears its entry synchronously in the actual
+app's answer handler, before the following table read. Submission bodies and money checks remain
+unchanged in the focused suites; no fiscal source or golden assertion changed in this checkpoint.
+
+Observed RED: the first widget run failed all eight cases at missing question/dirty-state
+assertions. The actual app's acceptance probe later printed `[true]` for dirty state at its first
+following table read, rather than `[false]`. After the synchronous acceptance boundary, that probe
+passed. Its first green attempt had a wrong new request expectation (it included the bill ID and
+omitted applied/tip amounts); the existing `sent()` helper returns only the request body, so the
+new assertion was corrected without changing production requests.
+
+Focused verification commands:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/bill-pay-dialog.unsaved.test.ts src/widgets/bill-pay-dialog.test.ts src/widgets/bill-pay-dialog.a11y.test.ts src/till-app-bill-payments.test.ts src/till-app.test.ts
+pnpm --filter @waitron/till exec vitest run src/widgets/bill-pay-dialog.unsaved.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/till typecheck
+```
+
+The five-suite run passed 903 tests before the final untouched-form control was added; the final
+widget run passed 13. Both unedited fiscal suites passed 20 tests. Seven separate deletions in an
+independently installed copy each produced one intended failure and one passing untouched-Close
+control: Close, Escape, input notification, tip Back, busy invalidation, reconnect baseline and
+host acceptance. Restoring that copy passed eight selected cases (112 explicitly skipped).
+
+The temporary visual probe passed eight EN/ES, light/dark, 390/1280 flows, with 16 axe scans and
+16 inspected captures of the entry and warning. Artifacts are retained in Lane E's local
+`receipts/w69-bill-pay-20261006`; the probe and its captures were removed from source. Till types,
+changed-file lint and formatting passed after removal of the temporary probe. Initial import,
+probe-unused-helper and request-fixture failures remain in the receipts, not counted as passes.
+
+Changed existing check: `bill-pay-dialog.test.ts`, “closes from its Close button,” retains exactly
+one close event, now waiting for the native close report. The synchronous manually dispatched
+close-event assertion remains unchanged. This is the approved design's request-close route.
+
+Task 4 remains partial. Ingredient entry, Units reassignment and other remaining audited modal
+owners, and Tasks 5–6 pages/history/navigation/native reload, remain open. Existing shift and
+purchase hooks remain on the branch; their host coverage still belongs to the final audit. Neither
+proposed W69 PR is ready.
+
+Reconciliation with W94 #1291: rebase onto `c3339ed99b46fd62aca32837cad1eb209155eb53` kept all
+53 patches unchanged in `git range-diff`. The first eight-suite combined till run passed 630
+cases and failed the refund PIN-cancel test's immediate absent-dialog assertion. The same
+assertion appears on checkpoint `9c1bc9f8637baf386e327e5ea53e873e18618ff4`; supervisor Cancel now
+runs through `requestClose` and the native dialog's delayed close report. It now polls the same
+absence result, retaining the refund Keep/Discard, request-count and no-financial-command checks.
+No assertion was removed. This is the second timing-only check change in this checkpoint and
+belongs in the PR's Changed test checks section. The owner FYI names both checks.
+
+After that timing correction, the eight-suite combined run passed all 631 tests. Till, UI and
+dashboard typechecks and the frozen install passed on the rebased tree. The corrected test's
+formatting/lint and `git diff --check` also passed. These receipts verify this checkpoint, not the
+remaining modal owners, page navigation or required CI.
+
+
+## Ingredient modal checkpoint — 2026-10-06
+
+`ingredient-form` now registers name, active status, allergen declaration and dietary origin with
+the shared coordinator. Native Escape retains them until Keep or Discard. Same-id reads preserve
+the draft and detached baselines; reconnect registers against the retained baseline. Successful
+create/edit commits the submitted value and closes before the Recipes refresh. Refused writes
+retain the edited form, and starting a write invalidates a pending discard question. No request
+body or existing test assertion changed.
+
+Commands run at this checkpoint:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/widgets/ingredient-form.unsaved.test.ts src/widgets/ingredient-form.test.ts src/screens/recipe-screen.test.ts src/widgets/allergen-picker.test.ts src/widgets/dietary-origin-picker.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+```
+
+The first expected red run failed ten assertions with one clean/revert control passing; the later
+busy-answer and detached-controls red run failed two with thirteen passing. Eight separate
+deletions in an independently installed candidate each failed its intended case while the
+untouched Escape control passed: close interception, busy invalidation, both write-success
+boundaries and each field's unload notification. The restored candidate passed fifteen tests.
+The final focused family also checks all field reverts, invalid raw names and Keep focus.
+Both unedited fiscal suites passed twenty tests.
+
+The temporary visual probe passed eight EN/ES, light/dark, 390/1280 flows with sixteen axe scans.
+All sixteen final editor/warning captures were inspected. Earlier attempts used a forbidden
+screenshot path and then omitted the requested theme from the mounting helper; neither is the
+final visual receipt. The corrected probe asserts the theme and translated heading. Artifacts
+and command output are retained locally in `receipts/w69-ingredient-20261006`; the probe and
+captures are removed from source.
+
+Tasks 1/4 remain partial. Units reassignment and the other remaining audited modal owners, followed
+by Tasks 5–6 pages/history/navigation/native reload, still keep both proposed PRs unfinished.
+
+
+## Units reassignment checkpoint — 2026-10-06
+
+The Units reassignment row now has an owner scope on the W69 branch. Its payload compares
+selected product IDs as a set and the target scalar, preserving the existing Each-to-null mapping
+at submission. Cancel and native Escape use requestClose; Keep retains the selections/target,
+and Discard restores only local values. Search and untouched/reverted entry remain exempt.
+A successful reassignment resets/commits that entry; a refused reassignment retains it. Starting
+a write invalidates an older question and holds the selection/target controls unavailable.
+Disconnect disposes the scope; reconnect protects the retained local draft against its empty seed.
+The modal close handler ignores a bubbled child report.
+
+Commands run for this checkpoint:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/screens/units-reassignment.unsaved.test.ts src/screens/units-screen.test.ts src/screens/unit-owners.unsaved.test.ts src/widgets/unit-form.test.ts src/widgets/unit-form.a11y.test.ts src/screens/units-screen.a11y.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/dashboard typecheck
+pnpm exec eslint apps/dashboard/src/screens/units-screen.ts apps/dashboard/src/screens/units-reassignment.unsaved.test.ts
+```
+
+The final focused family passed 120 tests, including 15 new reassignment cases; the unchanged
+fiscal suites passed 20. The initial new suite observed seven missing-behavior failures with two
+controls passing; follow-up busy-control/child-report cases observed two failures. No existing
+assertion changed. In an independently installed disposable candidate, ten separate deletions
+failed their intended case while an untouched usage/search control passed; restoring the
+candidate passed all 15 reassignment cases. The first target-notification deletion also failed
+the original reverted-input control, which depends on that notification; it was retained as a
+diagnostic and all controls were repeated with the independent untouched control.
+
+A temporary visual probe ran eight EN/ES, light/dark, 390/1280 flows and 16 axe scans. All 16
+editor/warning captures were inspected. The probe and captures were archived outside source;
+final dashboard typecheck, changed-file lint, formatting and diff checks passed. Receipt logs
+are in the lane's local `receipts/w69-units-20261006` folder.
+
+Re-discovery still finds protected baseline owners without their own close interception:
+`catalogue-browser` operation destination/disposition (its current close handlers discard the
+operation), and `canvas-editor-screen` Create/Duplicate name dialogs. Source inspection identifies
+these as next candidates, not verified runtime failures. Reconcile their advancing code before
+TDD, preserve A278's current deletion-count contract, and classify every other discovery hit.
+Tasks 1/4 remain partial; page/history/navigation and native reload are still pending. Neither
+proposed W69 PR is ready for finish-branch.
+
+
+## Catalogue operation checkpoint — 2026-10-06
+
+Move destination and delete disposition now register with the shared coordinator on the W69
+branch. Cancel and native Escape ask before discarding changed choices. Keep retains the raw
+choice and returns focus; Discard resets only local operation values, retaining the browsing
+selection and issuing no move/delete request. Untouched/reverted choices close directly.
+Successful requests release their operation scope, while refused requests and changed deletion
+counts retain the staged choice. The existing A278 all-products count remains in the exact
+submitted deletion body. Selection IDs are captured by the existing operation opening path and
+are not editable inside this dialog; the dirty reader compares its staged destination/disposition.
+
+Busy submission invalidates an outstanding question without accepting the choice, and busy controls
+cannot change it. Disconnect aborts the question and unregisters unload protection; reconnect
+retains the initial operation defaults. Child reports and detached Cancel/Confirm/input/close
+controls cannot close, change or submit a replacement operation. In the delayed Cancel test,
+waiting for the native close report exposed the replacement closing after the initial immediate
+check had passed. The final test keeps that wait.
+
+Commands run:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/widgets/catalogue-browser.unsaved.test.ts src/widgets/catalogue-browser.test.ts src/widgets/catalogue-browser.a11y.test.ts src/screens/catalogue-screen.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/dashboard typecheck
+pnpm exec eslint apps/dashboard/src/widgets/catalogue-browser.ts apps/dashboard/src/widgets/catalogue-browser.unsaved.test.ts
+```
+
+The initial suite observed eight missing-behavior failures with four controls passing. The first
+follow-up exposed a detached destination changing the replacement. A later run caught two radio
+handlers referring to an event they had not accepted as an argument; the handlers were corrected,
+with all existing assertions retained. Further expected failures exposed a detached close report
+and, after awaiting native reports, a detached Cancel closing the replacement. The final four-suite
+run passed 330 browser tests, including 18 new cases. The two unedited fiscal suites passed 20.
+Dashboard, till and UI typechecks and scoped lint passed. The family output includes Lit warnings
+and the catalogue screen suite's deliberately rejected marker (`catalogue-screen.test.ts:2320`).
+
+In an independently installed disposable checkout, eleven separate removals each failed their
+intended case alongside a passing untouched/reverted move control: native close interception,
+Cancel, both choice notifications, busy-answer invalidation, disconnect disposal, child close,
+and detached input/Cancel/report/Confirm controls. Restoring that checkout passed all 18 cases.
+Sixteen temporary visual flows covered both operations in EN/ES, light/dark and 390/1280 widths,
+with 32 axe scans. All 32 editor/warning captures were inspected in eight contact sheets. The
+harness, images and logs are retained outside source in Lane E's local
+`receipts/w69-catalogue-20261006`. Synthetic unload events check registration/cancellation only.
+No existing test assertion changed.
+
+Rebase onto `53659aa27965e188a567986c0630fcad9a8a3944` retained 56 equal patches in `git range-diff`;
+the frozen install passed. Tasks 1/4 remain partial: canvas Create/Duplicate name dialogs and the
+remaining modal classification still precede Tasks 5–6 page/history/navigation/native reload.
+Neither proposed W69 PR is ready for finish-branch.
+
+
+## Canvas name-dialog checkpoint, 2026-10-06
+
+Create and Duplicate name dialogs now register separate scopes with the existing coordinator.
+Create compares the raw name and form factor passed into the local editor; Duplicate compares
+its trimmed submitted name, retaining invalid whitespace as a distinguishable value. Native
+Escape and request-close ask about changes; Keep retains the entry and returns native input
+focus, while Discard closes once without a canvas write. Reverts remove unload protection.
+Create transfers its fields into the existing local editor directly. That editor's independent
+page scope remains Task 6 work.
+
+Duplicate stays open and nondismissible while its create request runs. A refusal keeps the name
+and its protection. Success commits and unregisters before the list refresh, including a failing
+refresh. Submission invalidates an earlier question, and detached controls cannot mutate or
+submit retained entry. Parent requests scoped to the screen cover the name dialogs. These
+boundaries are exercised by `apps/dashboard/src/screens/canvas-editor-screen.unsaved.test.ts`.
+
+Receipts from the feature worktree:
+
+- `pnpm --filter @waitron/dashboard exec vitest run src/screens/canvas-editor-screen.unsaved.test.ts`
+  first failed all twelve added cases: missing unload notification, child close propagation,
+  detached input/submission, and the immediate Duplicate close. No production code preceded it.
+- The focused existing behavior, accessibility and expanded unsaved suites passed 110 tests.
+  A refusal test initially sent Escape after disabling its focused input; explicitly refocusing
+  the re-enabled native input exercised its native cancellation. No existing assertion changed.
+- Nine independently removed guards in an installed disposable clone each produced the intended
+  one failing case and one passing untouched Duplicate control. Restoring the clone passed all
+  21 new cases. The controls removed each name dialog's close gate, Create name/form-factor
+  notifications, Create parent association, child-report filtering, busy-question invalidation,
+  Create disconnect disposal and detached-input protection.
+- A temporary browser harness passed 16 flows across English/Spanish, light/dark and 390/1280 px,
+  with 32 axe scans and 32 captures inspected in four contact sheets. The initial screenshot
+  path outside Vite's allowed tree was refused; captures from the corrected path supply the
+  visual receipt. The harness and captures are archived outside product source.
+- Unedited fiscal golden-write and immutability suites passed 20 tests. Dashboard typechecking
+  passed after adding explicit registry type parameters. Scoped lint passed after removing an
+  unused lifecycle parameter; this cleanup leaves the tested guard expressions unchanged.
+
+The command logs, deletion controls, source inventories and visual artifacts live under the
+lane's local `receipts/w69-canvas-20261006/`. This checkpoint does not complete W69 or replace
+current-head CI and the whole-branch review.
+
+### Remaining modal boundary, source inspection on 2026-10-06
+
+Re-ran the literal `<wt-modal`/`<wt-dialog` inventory over dashboard, till, setup and the contributed
+media/bookings/venue-service/adjustment screens. This scan finds literal markup; it does not prove
+that a dynamically constructed dialog is absent. Read the owners without close gates against the
+original P/E classification. The remaining staged modal inputs are:
+
+- `till-table-order-screen` preview (`#previewDialog`) and count (`#serveDialog`), including the
+  `pendingDraft` review choices and `servePending.count`. Their Back and native `wt-close` routes
+  currently remove local entry. Read their command-acceptance boundary before adding scopes.
+- `till-app` line-edit dead-end station choice (`#renderEditDeadEnds`): Cancel and native close
+  currently remove the selected station. This is distinct from the protected standalone
+  `dead-ends-dialog` and remains Task 4 work.
+- The outer profile container in `dashboard-app` still closes through `#closeProfile` without
+  consulting the protected `profile-screen` child. Its native Close/Cancel path and shell
+  profile/history paths remain to be wired. The child scope's ID is the profile-screen element.
+
+Other ungated literal dialogs in that scan match the existing E rows: delete/publish/security
+confirmations, report/detail views, immediate language/colour/device/printer choices, held-order
+move target buttons, table takeover/fire/move-target confirmations, and station-health drilldowns.
+This is source classification, not new runtime verification of every exemption. Existing owner
+suites retain their assertions. Split/transfer selections and other inline table action inputs
+remain staged page work in Tasks 4/6 even though their markup is not a dialog.
+
+Tasks 1/4 remain partial. Shared history/shell integration and all page/setup owners in Tasks 5/6
+remain open. Neither proposed PR is ready for finish-branch.
+
+
+## Line-edit station-choice checkpoint — 2026-10-06
+
+The till shell's `data-edit-dead-ends` question now registers its selected station separately
+from the party draft. Cancel and native Escape use the shared coordinator. Keep retains the
+station, while Discard restores only the local choice and closes without a retry. Confirm
+retires this scope before dispatching the existing line-edit retry with its original quantity,
+revision and selected `makeAt`. A new refused retry gets a separate opening and empty choice.
+Child close reports and departed controls cannot operate on that replacement. Operator lock
+invalidates an outstanding answer and clears the local question immediately.
+
+Commands run in the feature worktree:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app-drafts.test.ts src/widgets/dead-ends-dialog.unsaved.test.ts src/widgets/dead-ends-dialog.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/till typecheck
+pnpm exec eslint apps/till/src/till-app.ts apps/till/src/till-app-drafts.test.ts
+```
+
+The first run observed six missing-behavior failures and one passing untouched-close control.
+The initial implementation left two Discard cases failing because rendering replaced the
+callback that `wt-dialog.requestClose` was awaiting. Retaining one callback per opening passed
+all seven cases. The expanded suite's reconnect experiment found that the existing URL controller
+restores a route outside the order (`UrlStateController.hostConnected` calls `restore`); its new
+case now checks retirement and that detached controls issue no retry. It does not claim a
+retained modal after application reconnect. No existing assertion changed. The final three-suite
+family passed 166 tests, including eleven new line-choice cases. The unedited fiscal suites
+passed 20. Till typechecking, scoped lint and diff checks passed.
+
+Four separate guard deletions in an independently installed disposable clone each produced
+one intended failure and one passing untouched-close control: native close interception,
+choice notification, child-close filtering and parent association. Restoring that clone passed
+all eleven line-choice cases. A temporary visual harness passed eight EN/ES, light/dark,
+390/1280 flows and sixteen axe scans. All sixteen warning/kept-editor captures were inspected
+in four contact sheets. The command logs, disposable-copy results and visual artifacts are
+retained locally in `receipts/w69-line-edit-20261006`; the harness and captures are removed
+from product source. Synthetic unload checks establish listener behavior, not a native reload.
+
+Tasks 1/4 remain partial. Next: the dashboard's outer profile Close/Cancel, inline split/transfer
+choices, then Tasks 5/6 page/setup/history/navigation and native reload. Neither proposed W69
+PR is ready for finish-branch; this checkpoint does not complete the item.
+
+
+## 2026-10-06 outer profile container checkpoint
+
+`dashboard-app` routes the profile footer Close through the outer modal’s `requestClose`, and
+its stable `beforeClose` delegates to `profile-screen.requestLeave`. The child’s existing guard
+retains its busy-write refusal and asks for that child’s scope only. Native outer cancel follows
+the same guard; Keep retains the child, its exact telephone and profile URL, while Discard closes
+the profile and replaces its URL with the underlying screen. Child close reports still cannot
+close the outer container. The profile URL/history navigation paths remain Task 5 work.
+
+Before implementation, `dashboard-app.profile-unsaved.test.ts` had four intended failures and
+two passing controls. Its added shell cases cover exact submitted values, refused writes,
+success before refresh refusal, stale Discard after save/disconnect/security expiry, reverts and
+an unrelated retained draft. A real child Escape case checks preserved focus and values. These
+cases exercise native `cancel` for the outer route; they do not establish keyboard access to an
+outer dialog while its nested editor is topmost.
+
+The existing shell cases for four landing roles, the catalogue return before/after profile save,
+and fresh-reopen readiness now await the native close report. Their destinations, underlying
+screen and readiness expectations remain unchanged. The queue’s FYI notes identify them for the
+future PR’s Changed test checks. No fiscal, monetary, permission or sign-in check changed.
+
+A whole-shell visual scan reported light-theme desktop selected-navigation contrast of 4.32:1.
+A disposable probe using main’s dashboard shell reproduced that result with the profile closed.
+The backlog records it outside W69; warning/editor accessibility scans cover those modal surfaces.
+The new harness also supplies the underlying schedule’s actual roster read, avoiding a fixture-only
+load error. Initial diagnostic logs and final captures remain in the local campaign receipts.
+
+The six-suite family passed 632 browser cases before the final roster-fixture addition; the final
+profile owner suites passed all 32 cases after it. Four independently removed guards each failed
+one intended case beside a passing reverted-close control: native outer interception, footer
+request-close, child busy refusal and child dirty-scope consultation. Restoring the installed
+copy passed all ten new shell cases. An attempted all-scope mutation instead passed an invalid
+request shape and failed structurally; it is not a deletion receipt. The corrected child-guard
+probe supplies the fourth receipt.
+
+Eight final EN/ES, light/dark, 390/1280 visual flows passed sixteen modal accessibility scans;
+all sixteen final warning/kept-editor captures were inspected in four contact sheets. The
+filtered owner/visual run passed 29 selected cases, with 21 deliberately unselected cases; it
+is not a package-wide result. Unedited golden-write/immutability suites passed twenty cases.
+Dashboard types, scoped lint, formatting and diff check passed. Local commands, diagnostics,
+baseline probe and captures are retained under `receipts/w69-profile-container-20261006`.
+The temporary visual source/captures and restored candidate were removed from product source.
+
+Tasks 1/4 remain partial. Inline split/transfer choices and Tasks 5/6 page/setup/history/navigation
+and native reload remain. Neither proposed W69 PR is ready for finish-branch at this checkpoint.
+
+
+## 2026-10-06 inline table action checkpoint
+
+Back now consults the same registry before abandoning split quantities, a transfer destination
+and selected items, or the table selected for Split a table. The scope starts with the action's
+empty defaults. Keep retains the exact raw quantity, selected items and target; Discard restores
+those local inputs before continuing Back. Explicit Confirm retires this scope before dispatching
+the existing command. Immediate Merge bill targets remain exempt. No command-body conversion or
+server write is added by Discard.
+
+The scope is a child of the table screen, so an enclosing leave includes it. Set membership and
+quantity-map keys compare by value. Same-order reads retain its initial defaults. Disconnect
+removes the scope and invalidates the question; reconnect reinstates its original baseline.
+Old controls cannot alter a replacement flow. A busy transition invalidates a pending question
+without restoring its staged inputs. The existing order-identity replacement closes actions and
+invalidates the question; interception before a voluntary bill switch remains Tasks 5/6 work.
+
+`apps/till/src/screens/till-table-order-screen.actions-unsaved.test.ts` uses the actual
+LeaveController and table screen. The initial fixture omitted table signals and failed before
+reaching the feature; that run is not a red receipt. With complete table fixtures, ten intended
+assertions failed and the immediate-merge control passed. The first implementation passed all
+11. Two departed-control cases then failed their assertions; liveness checks made them pass.
+A temporary raw-quantity fixture allowed its parent rerender to overwrite its precision; the
+fixture now supplies the same rows through the parent. The busy-transition case subsequently
+failed because the old question stayed open, then passed after explicit invalidation. A final
+departed-menu case failed when an old Name/Transfer/Split button reset a replacement split;
+the same control-liveness check now covers those menu actions.
+
+The retained receipt directory is `~/waitron-campaign-e/receipts/w69-inline-actions-20261006`.
+Its logs name the exact tests and commands. The seven-suite family passed 711 cases before
+the final departed-menu extension; the final table-screen family passed 273 cases, including
+all 19 new action-owner cases. Eight independent deletions each failed the intended
+assertion beside an unchanged passing control: Back, retirement before each of the three commands,
+synchronous dirty notification, reconnect baseline, ancestor restoration and departed-control
+liveness. The final busy invalidation and parent relationship receive separate deletion controls.
+The unedited fiscal write-path and immutability suites passed 20 cases. No existing behavioral
+assertion changed in this checkpoint.
+
+The temporary visual probe runs Split bill, Transfer items and Split a table in EN/ES, light/dark
+and 390/1280 widths. It passed 24 flows and 48 axe scans. Its first captures left the action below
+the viewport; the final probe scrolls to the action and clicks the actual Back control. The final
+48 question/retained-choice captures were inspected in six contact sheets. The probe source and
+captures are retained outside product source. These are in-app Back and synthetic unload checks;
+native reload, shell interception and remaining page/setup owners still need Tasks 5/6.
+
+Tasks 1/4 remain partial pending the final owner classification and advancing-main audit. Tasks
+2/3 remain complete. Neither proposed W69 PR is ready for finish-branch.
+
+
+## Dashboard route checkpoint — 2026-10-06
+
+The dashboard now installs the accepted-history adapter. Sidebar requests and product deep
+links write their complete destination before the shell changes its screen. Ordinary same-app
+anchors are intercepted through their dispatched click's composed path, including links from a
+child shadow root. Modified clicks, new tabs, downloads and other origins/app paths stay with
+the browser. Account settings keeps the underlying page mounted; closing it selects only the
+profile scope. Forced expiry resets pending traversal before replacing the login URL.
+
+`dashboard-app.unsaved-changes.test.ts` exercises an edited profile's actual telephone input
+through sidebar, indexed Back/Forward, same-app links and product deep links. It also checks
+reverts, old answers after expiry and retained main-page input (the latter is a test-only
+registered owner, not evidence for each page). `navigation-guard.test.ts` checks destination-based
+retained scopes and accepted-route URL normalization. Three existing dashboard shell fixtures
+now disconnect their previous application before mounting the next application in the same
+document; every existing permission/navigation assertion remains unchanged.
+
+Receipts: `~/waitron-campaign-e/receipts/w69-shell-routes-20261006`. The initial sidebar selector
+and retained-route probe failed before their intended assertions; the corrected runs supply
+the RED receipts. The initial family exposed the retained-page close and current-page group
+regressions; their original assertions pass after scoping and accepted-route handling fixes.
+Seven separate installed-candidate deletions failed at the intended assertions beside passing
+controls. The restored candidate passed its shell and adapter/controller suites and its two
+production files byte-matched the feature checkout. Scoped adapter/controller coverage and
+shell/browser checks are recorded in that receipt directory; package-wide CI remains pending.
+
+The rendered Back/Keep/Discard probe covers EN/ES, both themes and 390/1280 widths, with axe on
+the confirmation and retained profile editor and screenshots of both states. Native reload,
+actual pointer navigation through a modal backdrop and individual page owners are not covered
+by that probe. Its initial background Orders read used an incomplete API fixture; the final
+probe supplies those reads and is retained separately.
+
+Tasks 1/4 remain partial, 2/3 complete, and 5/6 incomplete. The remaining Task 5 work includes
+till/setup shells, direct receipt/login writers and screen/tab/context mutations before URL
+writes, plus activated native reload. Task 6 still supplies every page/setup owner. Hours landed
+as #1298, main `bbc14bc0f`, during this checkpoint; rebase and audit its cell/date/calendar
+editors before treating the old station-hours classification as current. No partial PR is ready.
+
+
+The later encoded Profile-link case first failed on a shadow-root fixture's absent parentElement;
+that is not RED evidence. After moving the anchor into the actual shadow root, the intended URL
+assertion failed. Destination scoping now decodes the primary segment, with a malformed-segment
+control retaining its existing fallback. An eighth installed-candidate deletion of that decoding
+failed the encoded-link assertion; the malformed-route control passed. The final restored shell
+suite passed 37 cases. The earlier shell family passed 368 cases before these two added cases;
+scoped adapter/controller checks passed 41, and unedited fiscal checks passed 20. Final visual
+fixture checks passed 43 (35 route cases plus eight visual flows), with 16 scoped axe scans and
+16 inspected final captures before the encoded-link extension. These dated counts are receipts
+for the named stages, not a full-branch completion claim.
+
+
+## Configure hours checkpoint — 2026-10-06
+
+The Hours page's Configure editor now registers its seven-day draft with the shared coordinator.
+Cancel and native Escape ask before closing edited values, including from the compact Save hours
+confirmation. That confirmation's Back returns to the retained draft without a warning. Opening
+another editor asks before replacing the draft. Compare each day's submitted mode and ordered
+period values; periods excluded by the chosen mode do not make that day's payload dirty.
+
+`hours-screen.unsaved.test.ts` exercises all seven days, clean/reverted values, invalid period
+input, exact accepted/refused bodies, failed following refresh, background refresh, reconnect,
+replacement openings and departed write completion. Starting a weekday or Configure write
+invalidates an unanswered question while retaining the dirty draft until acceptance. The initial
+Configure run failed four missing-warning assertions; the lifecycle extension failed its
+unanswered-question assertion before the write-start invalidation was added.
+
+Receipt directory: `~/waitron-campaign-e/receipts/w69-configure-hours-20261006`. The final five-suite
+Hours browser run passed 175 tests; unedited fiscal checks passed 20. Six independent deletions
+in a frozen-installed disposable checkout each failed the intended assertion while the
+clean/reverted control passed. Restoring the source passed all 29 unsaved cases. That candidate's
+three changed source/test files byte-matched the feature checkout before it was removed.
+
+Eight Configure visual flows passed 24 scoped axe scans and captured the question, retained
+seven-day editor and compact save confirmation in EN/ES, light/dark and 390/1280 widths. All 24
+captures were inspected in four contact sheets. This is a component host with shell Spanish copy,
+not a full-dashboard navigation test. Typechecking, scoped lint and formatting checks passed.
+
+The older weekday Cancel/focus case still asserts the same absence, returned focus, original
+value on reopening and zero writes. Its first absence check now polls for the native close report.
+The immediate assertion failed in the preceding signed-off checkpoint `1eee5b10c` too, measured
+in a separately installed checkout (`baseline-close.log`). Copy this timing change into the
+eventual PR's Changed test checks section. No other existing assertion changed in this checkpoint.
+
+Tasks 1/4 still need the special-date/calendar/duplicate owners and final advancing-main audit.
+Tasks 5/6 still need direct receipt/login history consumers, all screen/tab/context interception,
+till/setup shells, the remaining page/setup owners and activated native reload. Tasks 2/3 remain
+complete. Neither proposed W69 PR is ready for finish-branch.
+
+
+## 2026-10-06 special-date Hours editors checkpoint
+
+`hours-screen.ts` now registers Special-date Add/Edit and Duplicate with the shared coordinator.
+The date comparison follows the submitted date, trimmed name, colour, venue-closure flag and
+shown subject cells; period property order is canonicalized, and non-period modes exclude retained
+period input as the sender does. Duplicate compares its ordered target dates, including blank
+invalid entries. Cancel/native Escape, replacement openings and ancestor leave ask before discard.
+An accepted write commits its captured draft before refresh; newer values remain compared with
+that accepted snapshot. Reconnect retains the original opening baseline. Controls retained from a
+removed editor cannot mutate its replacement. Clear/Delete confirmations remain exempt.
+
+`hours-screen.unsaved.test.ts` exercises the Add/Edit/Duplicate list routes, actual calendar day
+panel Create/Edit/Duplicate routes, independent date/name/colour/closure/cell changes, clean/revert,
+exact successful request bodies, refused Edit, newer values after accepted Edit/Duplicate, multiple
+ordered targets, replacement/ancestor leave, reconnect, unanswered question invalidation on write,
+busy Escape and departed successful replies/controls. The final four-suite Hours family passed
+195 tests; the unchanged fiscal write-path/immutability suites passed 20. Six independent deletions
+in a frozen-installed disposable clone each failed the intended case beside an unchanged passing
+Delete-confirmation control: date registration, duplicate registration, close interception, date
+commit, duplicate commit and departed-control checks. Restored clone passed all 58 owner tests.
+
+Temporary visual checks passed 24 flows with 48 scoped axe scans and 48 inspected captures across
+Add/Edit/Duplicate, EN/ES, light/dark and 390/1280 widths. This is a component host with the shared
+confirmation, not full dashboard end-to-end navigation. The temporary source, screenshots and
+control clone were removed from the product tree. Receipts are in Lane E's local
+`receipts/w69-special-dates-20261006` directory. No existing assertion was changed.
+
+The initial new date helper inherited the preceding URL's Dates view and waited for a Week grid;
+it now initializes its own URL before mounting. After adding event-generation checks, a duplicated
+argument in the remove-target handler broke the existing batch-duplicate test; removing that
+argument restored the unchanged assertion. Both failed runs are retained. Contact-sheet generation
+initially used the worktree's Python without Pillow; the existing home virtual environment produced
+the six inspected sheets.
+
+Tasks 1/4 still need the final advancing-owner classification. Tasks 5/6 still need direct receipt
+and login history writers, child tab/context interception before mutation, till/setup shells,
+remaining page/setup owners and activated native reload. Neither proposed W69 PR is ready for
+finish-branch at this checkpoint.
+
+
+## Direct receipt and login history consumers, 2026-10-06
+
+Receipt preview department choices and invalid-department repairs now use the installed
+navigation adapter. The preview subscribes to accepted routes rather than independently
+restoring on raw `popstate`; standalone rendering retains its existing native-history behavior.
+The new cases check choice indexing, repair without an extra history entry, accepted-route
+preview restoration, and the retained preview while the adapter asks about Back.
+
+Account-link cancellation replaces its address through that adapter, preserving its namespace
+and unrelated history state. It waits for approval before clearing the account form. Keep retains
+the staged password and token address; Discard returns to the email screen. Its deferred reset
+checks the connected element and captured account-action identity.
+
+Receipts: Lane E `receipts/w69-direct-history-20261006`. Initial four cases failed on accepted
+address/preview mismatches; two later cases failed because cancellation cleared the password
+form before a decision. The first dirty-case run loaded no tests because the fixture imported
+ui-core directly from a package without that dependency; the corrected fixture uses the existing
+navigation leave seat. An overly broad import edit briefly placed a function in LoginScreen's
+stylesheet list; the retained diagnostic and unchanged control run exposed it, and the edit was
+corrected. The new clean-login case polls its asynchronous form reset without changing any
+existing assertion.
+
+The final four receipt/login/dashboard shell suites passed 338 browser cases. Dashboard types,
+changed-file lint, source formatting and diff checks passed. The unedited fiscal write-path and
+immutability suites passed 20 cases. In a separate frozen-installed candidate, bypassing the
+receipt choice or repair adapter and removing its accepted-route subscription each failed one
+new case beside the unchanged passing Back case. Clearing the login form before approval failed
+both answer cases beside the unchanged passing standalone cancellation case. Restoring that
+candidate passed eight selected cases; all four changed source/test files matched the feature
+checkout before the owned candidate was removed.
+
+These route-owner checks use a controlled navigation decision, not a registered receipt/login
+page draft or the full application warning renderer. They do not establish every intermediate
+preview paint during traversal, same-page preview exemptions with registered drafts, activated
+native reload, or protection in all forms. Task 5 still needs till/setup shells and child
+screen/tab/context changes before mutation. Task 6 still needs receipt/login and the remaining
+page/setup owners. Tasks 1/4 need final advancing-owner classification; Tasks 2/3 remain complete.
+Neither W69 PR is ready for finish-branch.
+
+
+## Setup administrator child and Back route, 2026-10-06
+
+The setup administrator step now compares the exact six values it patches into the wizard,
+including password whitespace and PIN. Its baseline is captured after seeding, remains detached
+from background root-draft updates, and survives a retained child's disconnect/reconnect.
+Back asks before leaving the child. Keep retains its values; Discard restores its child baseline
+and returns to Mode without modifying the wizard's accepted administrator patch. Native Escape
+on the warning keeps the form and returns focus to Back. Reverted values remove unload handling.
+Next retains its validation and exact patch, commits only the child and advances without asking.
+
+The shell tracks the original Back request until it settles. A child commit aborts that question
+synchronously, while its asynchronous request is still pending; an immediate Next route would
+otherwise receive `busy`. When that same child is now clean, its new route awaits the original
+request before proceeding. Dirty repeated routes cannot replace the original pending request.
+Both captured screen and connected child are checked before applying a deferred transition.
+
+Receipts: Lane E `receipts/w69-setup-admin-20261006`. The initial command used the main checkout
+and found no test file; `red-corrected.log`, run in the feature checkout, loaded 13 cases and
+failed 12. `lifecycle.log` failed the new Next-while-asking case; the temporary diagnostic
+observed `stale` for the aborted Back and `busy` for Next before the route assertion failed.
+`repeated-next-red.log` failed Next after a repeated dirty route. Those cases now pass without
+changing any existing assertion. The final setup shell, administrator and administrator axe
+suites passed 387 cases (`family-final.log`); the unedited fiscal write-path and immutability
+suites passed 20 (`fiscal.log`). Source formatting, changed-file lint, setup types and diff checks
+passed. The first final typecheck still saw unused helpers in the temporary visual file; the
+file was archived outside the product tree and `types-clean.log` passed.
+
+In an independent frozen-installed clone, separately disabling child registration, Back
+interception, edit invalidation, child commit, committed-route waiting and original pending
+identity each failed the intended behavior beside an unchanged passing same-step control.
+Restoring the clone passed all 17 new cases; the three source/test files were byte-compared
+before removing the owned clone. Mutation logs name each failing assertion.
+
+The temporary visual fixture mounted the real setup shell with stubbed initial API reads and
+seeded administrator values. Eight English/Spanish, light/dark, 390/1280 flows exercised native
+Back and Keep, passed 16 axe scans, and produced 16 captures inspected in four sheets. Native
+warning Escape/focus is also a permanent browser case. Screenshot paths outside Vite's allowed
+root were initially refused; the corrected probe captured inside its own scratch subdirectory
+and then archived the captures. The dark fixture's host uses dark tokens; its outer body was
+painted before changing the host theme, so these captures do not establish the deployment
+page's complete dark canvas. No live onboarding, provisioning or certificate operation ran.
+
+This completes the administrator child only. The wizard root must remain dirty after Next
+until provisioning succeeds; that root scope, mode/start-over interception, other setup
+children, till shell and remaining page owners, native reload and final advancing-owner
+classification are still pending. Tasks 1/4/5/6 remain partial; Tasks 2/3 remain complete.
+Neither proposed W69 PR is ready for finish-branch. No existing assertion changed here.
+
+
+## 2026-10-06: Start empty and configuration import checkpoint
+
+The setup shell now asks about the root and current import child before Start empty patches
+`configurationImport` or changes the step. Back leaves only the child and retains the root.
+The child compares the actual selected File reference and passphrase, restores the native
+file selection as well as its values, and retains its original baseline across reconnect.
+Import still submits directly. Success commits the captured submitted child before requesting
+navigation, so newer file/passphrase input can Keep editing or Discard. The staged root remains
+dirty until provisioning. A response from a departed submitting form cannot replace the new step.
+
+Receipts: Lane E `receipts/w69-setup-empty-20261006`. The initial Start empty/import cases
+failed five tests (`red.log`), reconnect failed one (`red-lifecycle.log`), acceptance/departed
+replies failed three (`red-acceptance.log`), and restoring an accepted native file failed one
+(`red-native-file.log`). The final eight-suite setup command in `family-final.log` checks these
+routes and the existing shell/admin/mode/import assertions. `deletions.json` and their named
+logs record each installed-candidate deletion beside an unchanged same-step control. No
+existing assertion changed. The first stale-field check asserted before the continuation
+settled; its deletion survived. Waiting through that continuation made the deletion fail.
+
+The visual fixture uses real shell controls and native warning Escape with stubbed initial
+API reads. It covers EN/ES, light/dark and 390/1280px, checking the warning and retained form
+with axe and capturing both states. The captures were inspected in four sheets. Those scans
+move the pointer to the open modal heading or form heading. The separately hovered light Import
+button fails axe at 3.61:1 (`primary-hover.log`); it is recorded in the backlog, not fixed here.
+A first visual command tried to hover the inert background heading while the modal was open;
+its exact process tree was stopped. Neither these flows nor the synthetic unload events verify
+an activated native reload, a live onboarding server or the deployment's dark canvas.
+
+Task 6 still needs the remaining setup children, receipt/login and other page owners. Task 5
+still needs till integration, child screen/tab/context interception and activated native reload.
+Tasks 1/4 need final classification of advancing modal owners. W69 remains in progress and
+neither proposed PR is ready for finish-branch.
+
+
+## 2026-10-06: setup venue child checkpoint
+
+On the W69 branch, the venue form registers its submitted text and language values after
+seeding. Back selects the child, so Keep retains its controls and Discard restores the child
+before returning to Administrator. The accepted wizard draft remains separate. Valid Next
+commits the child before emitting Advance and transfers the unchanged normalized body into
+the root; invalid Next leaves the authored values protected. Reconnect keeps the original
+baseline, and replacement or an affected field change invalidates an unanswered Back.
+
+The comparison retains invalid tax/postcode text, applies the submitter's existing tax ID and
+postcode normalization, resolves province names and treats a whitespace-only optional address
+as null. The seeded Demo case stays clean until a shown field changes.
+A description default arriving after mounting joins only its untouched baseline field; it
+cannot clear another edited field. No validation or request body was changed.
+
+The focused command is `pnpm --filter @waitron/setup exec vitest run
+src/setup-app-venue.unsaved-changes.test.ts`. The first run failed 20 cases because the owner had
+no scope. After correcting two new fixtures (the default's module key is `verifactu`, and only
+Spain is currently offered), the late-default test failed on a false dirty reading. The new
+Next test originally checked after disposal and missed a deleted commit. It now checks the
+scope when the actual Advance event is emitted; deleting the commit fails that assertion.
+No existing assertion changed.
+
+Receipts live in the lane's local `receipts/w69-setup-venue-20261006/`: initial and corrected
+red runs, focused family, source checks, two unedited fiscal suites, installed deletion probes
+with a same-step navigation control, and eight real-shell EN/ES/theme/width visual flows.
+Those flows use native Back, warning Escape and Keep, with full-host axe scans and retained
+form captures. API reads are stubbed and the venue is seeded; live onboarding, deployment
+canvas and an activated native reload are unverified. The body screenshots include capture
+space above the scrolled warning; the modal and retained form are visible. This checkpoint
+completes only the venue child stage. Certificate/connect/reset/restore children, final modal
+classification, remaining page and till routes, and native reload remain open. Tasks 1/4/5/6
+are partial, and neither proposed W69 PR is ready for finish-branch.
+
+Final checkpoint checks: the eight-suite setup command in `family-final.log` passed 602 tests;
+`pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts
+src/inmutabilidad.test.ts` passed 20 unedited tests. Seven installed guard deletions each failed
+the intended assertion beside a passing same-step control. After restoring the source, the
+final candidate passed 29 cases, and both changed source/test files were byte-compared with
+the feature worktree before its owned candidate directory was removed. The visual flows
+passed 16 axe scans; their 16 captures were inspected in four sheets and one original.
+
+## Setup certificate child, 2026-10-06
+
+The certificate step registers its exact passphrase, certificate kind and PFX payload with the
+shared leave coordinator. A pending or unreadable selection compares File identity until bytes
+are available; loaded certificates compare bytes rather than filenames. Back protects only this
+child, while Next commits the captured submitted child before requesting navigation. A newer
+input delivered during the patch stays dirty. Discard restores the native file selection as well
+as the payload; disconnect and replacement invalidate pending file reads and leave answers.
+A selected first file whose read was interrupted remains dirty after reconnect.
+
+Receipts: Lane E `receipts/w69-setup-cert-20261006`. The initial real-shell browser suite failed
+nine of ten cases on missing unload/Back protection or on submitting the previous certificate
+while its replacement was reading. The first green attempt passed 41 cases and failed the new
+reconnect fixture: it appended the child outside the shell's event-listening container. Reconnecting
+the shell in its original host, as the venue suite does, passed all 42. A further submitted-snapshot
+case failed before capturing values before the patch; the later first-file reconnect case failed
+before retaining File identity when no bytes are available. No existing assertion changed.
+
+The six final setup suites passed 475 cases (`family-final2.log`); the unchanged fiscal write-path
+and immutability suites passed 20 (`fiscal.log`). Setup types and changed-file lint passed.
+Seven independent frozen-installed candidate deletions each failed their intended case beside
+an unchanged passing Back control (`deletions-final.json`). The initial disposal mutation survived
+a whole-shell reconnect case; the new child-only removal case caught it. The restored candidate
+passed 49 cases and its two source/test files matched the feature tree before cleanup. A second
+frozen-installed candidate's pending-identity deletion failed the new reconnect case beside the
+unchanged passing Back control; restoring it passed 50 cases and both files were byte-compared
+before cleanup. Source formatting and diff checks are recorded with the checkpoint.
+
+Eight temporary real-shell EN/ES, light/dark, 390/1280 flows passed 16 axe scans and captured
+16 images, inspected in four sheets. Native warning Escape and Keep retained the typed passphrase;
+the permanent native Escape case checks focus returns to Back. Captures use stubbed initial API
+reads and synthetic certificate values. Phone captures contain blank canvas above or below the
+scrolled form; they do not establish the deployment page's complete canvas. Hovered danger and
+primary colours, live onboarding, actual certificate/fiscal operations and activated browser
+reload are not verified by these flows. The earlier shared hover findings remain open.
+
+This finishes the certificate child stage only. Connect/reset/restore/bucket/cloud setup children,
+till shell and page/tab/context routes, receipt/login and other page owners, activated native
+reload and final advancing-owner classification remain open. Tasks 2/3 stay complete and Tasks
+1/4/5/6 stay partial; neither W69 PR is ready for finish-branch.
+
+## Setup Connect child, 2026-10-06
+
+Connect registers its URL, person ID, password and one-time code with the existing leave
+coordinator. Its comparison uses the submission's existing trimming for URL, person ID and
+code, while preserving password whitespace. Back asks for this child only. Keep and warning
+Escape preserve the draft and focus; Discard restores its original fields before leaving.
+A request returned after refusal is not a saved baseline: its credentials stay protected,
+with the one-time code empty under the existing refusal rule. Connect itself submits directly;
+the busy screen removes the child and a successful response has no child unload protection.
+The tests use a synthetic API response; they do not exercise a real adoption or restart.
+
+The initial browser run failed 16 of 17 cases on missing unload/Back protection. After wiring
+the scope, five new assertions failed because two fixtures listened or dispatched outside the
+shell's event container. Dispatching the root patch and capturing adoption on the form itself
+passed all 41 new and existing Connect cases. No production event-routing change was made.
+The broader family then failed the existing Connect-retention test: it requested departure
+without answering the new question. That test now answers Discard before returning, retaining
+every empty-field assertion. This follows the design's failed-write/voluntary-leave contract;
+the changed-test-check FYI is recorded in Lane E questions and must reach the eventual PR.
+
+Receipts: Lane E `receipts/w69-setup-connect-20261006/`. The final seven-suite setup run passed
+491 cases, including the unchanged Connect accessibility cases; the two unedited fiscal
+write-path/immutability suites passed 20. Setup typechecking and changed-file lint passed.
+Six deletions in a separate frozen-installed candidate each failed one intended assertion
+beside a passing clean-Back control: registration, input notification, disposal, restoring the
+original baseline, exact password comparison and replacement-request notification. Restoring
+the candidate passed 41 cases. Both candidate source/test files were byte-compared with the
+feature worktree and its owned temporary parent was removed.
+
+Eight temporary native Back/Keep/Escape flows covered EN/ES, light/dark and 390/1280 widths.
+Their 16 axe scans passed, and 16 captures were inspected in four contact sheets. API reads
+were stubbed and only a synthetic password was typed. These captures establish the warning
+and retained form layouts; hover colours, real adoption, deployment canvas and activated native
+reload remain unverified. Prior shared hover findings stay open. Temporary visual source,
+captures and failure images are archived outside product source.
+
+This completes the Connect child stage only. Reset/archive/bucket/cloud setup children,
+remaining page/tab/context routes, final advancing-owner classification and activated native
+reload remain open. Tasks 2/3 stay complete and Tasks 1/4/5/6 partial; W69 is not ready for
+finish-branch or landing.
+
+
+## 2026-10-06: Reset proof child checkpoint
+
+On the W69 branch, Reset registers its person ID and exact password against its initial empty
+values. Back asks before leaving an edited child; Keep and native warning Escape retain the
+values and return focus to Back. Discard restores only the child, retaining the wizard root.
+Person ID compares the existing trimmed request value; password whitespace stays significant.
+Clean/reverted forms leave directly. Submission sends the existing request without a question.
+A credential refusal stays dirty; a terminal outcome removes the form and its unload scope.
+Reconnect retains the initial baseline. Departed Reset replies cannot change a replacement form.
+Replies from an older shell connection cannot replace its draft; the same retained form releases
+its busy flag when its outstanding request settles.
+
+`pnpm --filter @waitron/setup exec vitest run src/setup-app-reset.unsaved-changes.test.ts`
+initially reported 11 failures and one pass. The added replacement reply cases failed twice;
+the reconnect busy assertion failed once. The final seven-file setup family reported 503 passes.
+Eight independent installed-candidate guard deletions or replacements failed their intended cases
+beside passing clean-Back controls; the restored Reset pair reported 47 passes. The unedited
+fiscal write-path and immutability suites reported 20 passes. Setup types, scoped lint, source
+formatting and diff checks passed. Exact commands and output are in Lane E's local
+`receipts/w69-setup-reset-20261006/`.
+
+Eight native real-shell flows covered EN/ES, light/dark and 390/1280 widths. Sixteen axe scans
+passed and sixteen captures were inspected in four contact sheets. API reads/reset responses
+were synthetic; an actual reset/restart, hovered colours and activated native reload remain
+unverified. The existing Reset refusal-departure test now answers Discard before returning;
+all its refusal-clearing assertions remain. Record that in the eventual PR's Changed test checks.
+Tasks 2/3 stay complete; Tasks 1/4/5/6 remain partial. Archive/bucket/Cloud restore, remaining
+page/till routes, final modal-owner classification and activated native reload remain open.
+W69 is not ready for finish-branch or landing at this checkpoint.
+
+## 2026-10-06: Archive restore child checkpoint
+
+On the W69 branch, archive restore registers the selected File by identity, exact recovery key
+and environment against the initial empty/default values. Back and Cloud recovery navigation ask
+before leaving authored inputs; Keep and native warning Escape retain the values and focus.
+Discard resets the child including its native file input, retaining the wizard root. Reverted
+values leave directly; safety acknowledgements alone remain exempt. Restore submits its existing
+arguments directly. Refusals retain protected values; success removes the child scope. Disconnect
+releases the scope, and reconnect retains the original baseline. The new late-reply cases cover
+a departed form, an older shell connection and an older archive attempt beside a newer pending one.
+
+`pnpm --filter @waitron/setup exec vitest run src/setup-app-restore.unsaved-changes.test.ts`
+initially reported 11 failures and two passes. Four added departed/reconnected reply cases failed
+before their guards. The final eight-file setup family reported 522 passes; the restored final
+archive pair reported 50 passes in a separately installed candidate. Nine independent guard
+deletions or replacements failed their intended assertions, each beside a passing clean-Back
+control. The unedited fiscal write-path and immutability pair reported 20 passes. Setup typecheck,
+scoped lint, source formatting and diff checks passed. Local commands/output: Lane E
+`receipts/w69-setup-archive-20261006/`.
+
+Eight native real-shell EN/ES, light/dark, 390/1280 flows ran sixteen axe scans and produced sixteen
+captures inspected in four contact sheets. API reads and restore replies were synthetic; actual
+archive restore/restart, hovered colours and activated native reload remain unverified. The
+existing archive refusal-departure test now asserts the warning and answers Discard before
+returning; every original refusal-clearing assertion remains. Include it in the eventual PR's
+Changed test checks. Bucket/Cloud restore, remaining page/till routes, final advancing-owner
+classification and activated native reload remain open. Tasks 2/3 stay complete and Tasks 1/4/5/6
+partial. W69 is not ready for finish-branch or landing.
+
+
+## 2026-10-06: Bucket restore child checkpoint
+
+On the W69 branch, Bucket restore compares exact kit text and environment against the initial
+empty/default form. Back asks before leaving edited values; Keep and native warning Escape
+retain the kit and return focus to Back. Discard restores only the child, including its native
+kit-file selection, retaining the wizard root. Reverted forms and safety acknowledgements alone
+leave directly. Restore submits the existing exact body without a question. Refusals retain
+protected values; success removes the child scope. Reconnect retains the initial baseline.
+The new file-read cases cover newer typed text, Discard and disconnect/reconnect. The new shell
+reply cases cover departed forms, older connections and older bucket attempts.
+
+`pnpm --filter @waitron/setup exec vitest run src/setup-app-bucket.unsaved-changes.test.ts`
+initially reported twelve failures and two passes. Four added kit-file cases failed before their
+lifetime checks. The final nine-file setup family reported 548 passes. Nine independent
+installed-candidate guard deletions or replacements failed their selected assertions, each beside
+a passing clean-Back control; the restored bucket pair reported 55 passes. The first disposal
+control survived whole-shell disconnect, so the added child-only disposal case became its control.
+The unedited fiscal write-path and immutability pair reported twenty passes. Setup types, scoped
+lint, source formatting and diff checks passed. Exact commands/output: Lane E's local
+`receipts/w69-setup-bucket-20261006/`.
+
+Eight native real-shell EN/ES, light/dark, 390/1280 flows ran sixteen axe scans and produced sixteen
+captures inspected in four contact sheets. Initial API reads and restore responses were synthetic;
+actual bucket restore/restart, hovered colours and activated native reload remain unverified.
+The existing bucket refusal-departure case now answers Discard before returning; all original
+request/venue-clearing assertions remain. Include it in the eventual PR's Changed test checks.
+Cloud restore, remaining page/till routes, final advancing-owner classification and activated
+native reload remain open. Tasks 2/3 stay complete and Tasks 1/4/5/6 partial. W69 is not ready
+for finish-branch or landing.
+
+
+## 2026-10-06 Cloud restore checkpoint
+
+`cloud-restore-screen` authors no recovery key, source selector or other staged value: its
+acknowledge and old-box controls are safety confirmations. The new shell case ticks both,
+then uses Back without a discard question; a separately edited root draft stays dirty and
+retains its email. The rendered Restore submits the same point id and old-box flag directly.
+No Cloud dirty scope was added, and the existing screen assertions were retained.
+
+The shell now invalidates its pending Cloud attempt on navigation and disconnect. Read replies
+are accepted only for the retained Cloud form and current attempt; restore replies require the
+current provisioning phase. Older completions cannot release a newer attempt's busy state.
+`pnpm --filter @waitron/setup exec vitest run src/setup-app-cloud.unsaved-changes.test.ts`
+first reported eight failures and two passes, including a reconnected restore changing the screen
+to Done and replacement Cloud forms staying busy. The implemented run reported ten passes.
+The focused family command in Lane E's `receipts/w69-setup-cloud-20261006/family.log`
+reported 545 passes across ten suites; it includes `setup-app.test.ts`, the eight setup
+unsaved-change suites and `cloud-restore-screen.test.ts`. Setup typecheck and scoped ESLint
+passed. Golden huella and `inmutabilidad` remained unedited and reported 20 passes.
+
+Four separate guard removals in a disposable clone with a frozen dependency install each
+produced the intended failing case: accepting a departed read, accepting a reconnected restore
+success, accepting its refusal and clearing a newer request's busy state. Each clone mutation
+still passed the acknowledged-Restore control. Restoring both files byte for byte produced 32
+passes across the new shell and existing Cloud screen suites; the owned clone was removed.
+Exact logs and control outcomes are in that same receipt directory.
+
+Eight native checkbox/Back flows cover EN/ES, light/dark and 390/1280 widths. They reported 16
+axe scans and preserve the exemption. Captures show the approved Cloud form and archive form
+after Back. Initial discovery and Cloud replies are synthetic; real Cloud adoption/restore,
+restart, hover colours and activated native reload remain unverified.
+
+This completes the Cloud acknowledgement/exempt-owner stage only. Remaining page/till/tab/context
+routes, final advancing-owner classification and activated native reload remain open. Tasks 2/3
+stay complete and Tasks 1/4/5/6 partial; W69 is not ready for finish-branch or landing.
+
+## Service-status page owners checkpoint — 2026-10-06
+
+The Add form and each explicit-save row register separate scopes under the service-status screen.
+Create keeps its existing trimmed label, selected colour and list-length display order body;
+row update keeps its raw label, colour, order and active body. List length is derived data rather
+than staged input. The owner suite asserts both bodies with literal expected values.
+Successful writes commit their captured snapshot before refreshing; a failed refresh cannot make
+that submitted draft dirty again. Only an unchanged submitted Add label is cleared; newer label
+or colour input remains compared with the accepted values. A refused write retains its draft.
+
+A live snapshot holds each edited row intact, including when that row disappears from the read;
+clean rows adopt incoming values or leave the list. Unchanged rows do not commit again and cannot
+abort a pending warning. An accepted immediate Disable updates the current and saved active value
+without committing other row fields. Disconnect releases every scope, clears local input and
+loads fresh baselines on reconnect; old create/update/Disable success or refusal cannot write into
+that replacement editor. Read-only rows and clean/reverted drafts remain exempt.
+
+Evidence in this checkpoint:
+
+- Initial `pnpm --filter @waitron/dashboard exec vitest run
+  src/screens/service-status-screen.unsaved.test.ts`: **16 failed / 3 passed**. Missing warning and
+  newer Add input erased by a completed request were observed before implementation.
+- Initial two-file family: **42 passed / 1 failed**, at a clean row's incoming live value incorrectly
+  becoming dirty. Capturing dirty identities before applying rows corrected that baseline path.
+- Additional Disable tests: **22 passed / 2 failed**, at unadopted active=false and an old refusal
+  shown in the replacement editor. Minimal owner changes made the tests pass.
+- Final `pnpm --filter @waitron/dashboard exec vitest run
+  src/screens/service-status-screen.unsaved.test.ts src/screens/service-status-screen.test.ts
+  src/screens/service-status-screen.a11y.test.ts src/screens/venue-settings-screen.test.ts
+  src/dashboard-app.test.ts`: **395 passed**. No original assertion changed.
+- In an independent frozen-installed candidate, ten mutations each failed their selected
+  assertion while the two clean/read-only controls passed: row/Add notification, row/Add
+  successful snapshot commit, dirty-row live retention, row disconnect disposal, old Add success
+  gate, Disable's partial baseline commit, disposal before removing clean rows and the fetched-list
+  count used for Add display order. Restoring the candidate ran the new and original
+  status suites: **53 passed**; production file bytes matched the feature copy.
+- Eight native row/Add input Keep/Discard flows used the actual LeaveController and confirmation,
+  EN/ES, both asserted theme roots and measured widths 390/1280. **16 axe scans passed** with the
+  pointer parked; **16 captures inspected** in four sheets. The first visual harness omitted its
+  requested theme; the corrected run asserts `host.dataset.theme` and supplies the mount theme.
+  The first contact-sheet attempt selected an empty root folder; final assembly asserts all 16
+  files from the package's actual screenshot folder. Those early artifacts establish neither theme
+  nor visual coverage.
+
+Two final edge tests failed before their corrections: removing several clean rows produced a
+read-error banner while disposal still read missing values; retaining a removed dirty row made
+Add send displayOrder=1 for a fetched empty list (expected 0). Disposal now runs while those clean
+values exist, and Add derives its position from the fetched count independently of retained drafts.
+Each focused red run failed one case while the two clean/read-only controls passed. The final
+five-file family above includes both regressions. Dashboard typecheck, focused ESLint, source
+Prettier and `git diff --check` passed; unedited fiscal write-path/inmutabilidad suites ran **20 cases**.
+The original fiscal files have no branch diff against `ac861b774d9d368d8435b0b06f1467ef89f9386e`.
+
+The visual fixture uses a minimal shell and synthetic API. Actual service-status API writes,
+sidebar/container tabs/history, hover colours and activated native reload remain unverified.
+At phone width the colour-field labels show an ellipsis; recorded separately in the backlog.
+W69 remains incomplete: remaining page owners, till shell, tab/context paths, activated native
+reload and an advancing-main owner inventory are still required. Receipts:
+`~/waitron-campaign-e/receipts/w69-status-rows-20261006`.
+
+
+## Floor explicit-row checkpoint, 2026-10-06
+
+On the W69 branch, Add compares its trimmed label. Each explicit row compares its raw label and
+its existing integer capacity value; Save still omits null capacity from its request. A successful
+write commits before refresh. Later Add input remains in place against the empty accepted baseline;
+later row input stays compared with the submitted values. Discard restores local fields without
+issuing any table write. Zone, Enable, Disable and placement actions remain immediate writes.
+Retained Plano/zone view tabs keep the row drafts without a question.
+
+Live reads preserve edited fields and their baselines, while adopting new values for clean fields.
+This retains the original floor regression's assertion that a changed label survives recovery while
+a clean capacity updates. Dirty removed rows remain in the editor; clean rows dispose their scope
+before removal. Disconnect releases Add and row scopes. Older create/save/zone/Enable/Disable/
+placement/clear results cannot refresh or mark the reconnected editor as failed.
+
+Receipts in `~/waitron-campaign-e/receipts/w69-floor-20261006-215614`:
+
+- Both initial new-suite runs reported **31 failed / 2 passed**. The first reconnect fixture waited
+  for hidden config rows while Plano was retained; the corrected fixture opens config before its
+  row assertion. Missing unload protection, draft restoration and write lifetime gates failed
+  before implementation. The first green new/original floor pair ran **85 cases**.
+- The final five-file floor/status family ran **155 cases**. The installed, restored candidate's
+  original/new floor pair ran **92 cases**. No existing assertion changed.
+- Ten independent guard replacements/deletions failed their intended case while the clean-page
+  control passed: Add/row notification, Add/row commit, newer Add retention, live label retention,
+  live baseline retention, row disconnect disposal, old create success and old create refusal.
+  The first old-success control survived because its reply-triggered refresh returned identical
+  data. The final test also counts reads across that reply; deleting the success gate then failed
+  at the extra refresh. Both candidate source/test files matched the feature bytes before removal.
+- Eight native input/Escape/Keep/Discard flows covered EN/ES, asserted light/dark theme roots and
+  measured 390/1280 widths. **16 parked-pointer axe scans passed**, and **16 captures** were inspected
+  in four sheets. The warning and restored controls fit those views.
+
+Dashboard typecheck, scoped ESLint, source Prettier and `git diff --check` passed. Unedited fiscal
+write-path/inmutabilidad suites ran **20 cases**. The visual shell uses the real LeaveController,
+confirmation and floor screen with synthetic API reads/writes. Actual floor API writes,
+sidebar/history/container routes, hover colours and activated native reload remain unverified.
+Other page owners, till routes and the advancing-main inventory keep W69 incomplete.
+
+
+## 2026-10-06: Recipe membership and page replacement checkpoint
+
+The recipe editor now registers its fetched ingredient membership with the shared leave registry.
+The comparison ignores switch-toggle order. Cancel and changes to the product/catalogue selection
+request that editor's scope before replacing it; Keep restores the picker's displayed value as
+well as retaining the ingredient switches. Reselecting the current product or catalogue is exempt.
+A product object refreshed under the same id retains edited membership, and a dirty selected
+product removed from the fetched list remains rendered until you leave it.
+
+`setProductRecipe` receives the existing product id and copied ingredient-id array. On acceptance,
+the editor commits those submitted values before `getProductRecipe`. A failed refresh leaves the
+accepted selection clean; toggles delivered during the write remain dirty against the submitted
+membership. Ingredient saves commit their own modal without committing the recipe. Disconnect
+releases the scopes and clears page selection/busy state. The focused deferred-reply cases check
+that old recipe writes/loads and ingredient writes/refreshes cannot change a reconnected form.
+
+Verification from the feature worktree:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/screens/recipe-screen.unsaved.test.ts src/screens/recipe-screen.test.ts src/widgets/recipe-editor.test.ts src/widgets/ingredient-form.unsaved.test.ts src/widgets/ingredient-form.test.ts src/widgets/allergen-picker.test.ts src/widgets/dietary-origin-picker.test.ts src/screens/recipe-screen.a11y.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/claude-md-pointers.test.ts
+pnpm --filter @waitron/dashboard typecheck
+pnpm exec eslint apps/dashboard/src/screens/recipe-screen.ts apps/dashboard/src/widgets/recipe-editor.ts apps/dashboard/src/screens/recipe-screen.unsaved.test.ts
+```
+
+The eight-file browser family reported 162 passing tests; the unedited fiscal pair reported 20,
+and the three root guard suites reported 41. No existing assertion changed. The initial new
+owner run reported 16 failures out of 18, including three invalid reconnect fixtures that queried
+`parentElement` across a shadow root. After correcting them to `parentNode` and removing the
+premature lifecycle guard implementation, the reconnect cases showed three assertion failures;
+the old write replies then showed two failures, extra reads and a replacement error, before their
+guards were added. Deferred ingredient creates/updates showed four assertion failures; departed
+refreshes showed two. The first Keep tests exposed the combobox retaining its rejected value.
+
+Fourteen independent installed-candidate mutations failed their intended checks beside a passing
+clean-recipe control. They covered notification, restore, unordered membership, Cancel/product
+replacement, submitted commit, later input, product refresh/removal, old writes/loads and ingredient
+write/refresh replies. The initial old-load success mutation survived the visible-choice check
+because the dirty editor retained those choices; asserting the later bound recipe ids separately
+made the success control fail. The final restored recipe owner/original screen/original widget
+run reported 77 passing tests; the final three files were byte-compared before removing the owned
+candidate and its empty parent.
+
+A temporary minimal real LeaveController shell exercised native ingredient-switch clicks,
+Cancel at 390px and product selection at 1280px, warning Escape, Keep and Discard. Eight English/
+Spanish, light/dark flows passed with 16 parked-pointer axe scans. All 16 question/kept captures
+were inspected in four contact sheets. The warning and retained native choices were visible in
+both languages and themes. API responses were synthetic. Actual recipe API writes, dashboard
+sidebar/history routes, hover colours and activated browser reload remain unverified here.
+Source, logs, controls and captures are retained locally under Lane E's
+`receipts/w69-recipe-20261006`. The temporary visual test was removed from product source.
+
+This is a partial W69 checkpoint. Configuration/module settings, device profiles after W97,
+remaining shell/tab/context routes, activated native reload and the advancing-owner audit remain
+open. This checkpoint does not make the whole item ready for finish-branch or landing.
+
+## 2026-10-06: Bucket-settings page checkpoint
+
+The bucket form now registers an independent scope while its new/edit fields are shown.
+Cancel asks through the shared coordinator. Its comparison uses `#body()` unchanged: the
+endpoint, region, bucket, prefix and access-key ID are trimmed, and the secret is exact.
+Testing the connection commits nothing. An accepted settings write commits the captured body
+before the recovery-kit read. Later input remains in the editor, compared with that submitted
+body. A refused write retains the draft. Disconnect disposes the scope and clears local
+credentials, messages and busy state. Deferred-reply cases cover old settings-write success and
+refusal, connection-test replies, Turn off replies, kit results and an old kit action completing
+while a newer kit action is pending.
+
+Focused commands on the candidate branch:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/screens/stream-settings-panel.unsaved.test.ts src/screens/stream-settings-panel.test.ts src/screens/stream-settings-panel.a11y.test.ts src/screens/backup-screen.test.ts src/screens/venue-settings-screen.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/server exec vitest run src/stream-api.route.test.ts
+pnpm exec vitest run scripts/module-seams.test.ts scripts/native-form-fields.test.ts scripts/live-subscriptions.test.ts
+pnpm --filter @waitron/dashboard typecheck
+pnpm exec eslint apps/dashboard/src/screens/stream-settings-panel.ts apps/dashboard/src/screens/stream-settings-panel.unsaved.test.ts
+```
+
+The five-file browser family reported 275 passing tests, the unedited fiscal pair 20, the
+stream route suite 38, and the three root guards 2069. The new owner's native cases cover EN/ES, both themes and measured
+390/1280 widths. Sixteen parked-pointer axe scans passed; sixteen captures of the open warning
+and retained draft were inspected. These are synthetic-API cases with the real form and shared
+LeaveController, not evidence of real bucket credentials, writes through a running server,
+settings-container/sidebar/history navigation or an activated native reload. No existing
+behavioral assertion changed.
+
+TDD receipts: the initial twelve cases all failed, including two save fixtures whose following
+read incorrectly returned the old off-state. Correcting that fixture to return the accepted
+settings produced eleven assertion failures and one passing clean-save case. The first
+implementation passed the owner cases except two reconnect fixtures that needed to wait for
+fresh fields. After that correction, old connection-test replies showed two assertion failures;
+old Turn off replies showed two; an old kit action unlocking a new request showed one. Each
+was followed by its implementation and passing focused run. The native matrix passed on the
+implemented form. A live-read case now waits for the remotely switched-off status to be applied,
+rather than using a fixed delay as evidence that a refresh completed.
+
+An independent frozen-installed clone ran deletion controls for input notification, Cancel's
+gate, exact secret comparison, draft restoration, submitted baseline, scope disposal, reconnect
+generation, later-input retention, kit-action busy release and test-reply checks. Each selected
+behavior failed while a pristine new-bucket leave control passed. Restored source and tests are
+checked against the feature worktree byte for byte. The first negative control saved a bucket;
+removing scope disposal also broke that control, so it was replaced with the independent pristine
+form case. A deleted additional settings-read catch guard left its deferred-read case passing.
+The guard was removed from the final change; QueryController releases its observation on
+disconnect, and the behavioral assertion is retained. Full raw controls and screenshots remain
+in the lane's local `receipts/w69-settings-20261006-222211/` directory.
+
+This is a partial W69 checkpoint. Configuration/canvas and contributed explicit-save settings,
+device profiles after W97, settings-container and actual page/till/navigation paths, native reload
+and the final advancing-owner audit remain. Finish-branch and landing are not ready.
+
+
+## 2026-10-06 bill discount limit checkpoint
+
+`AD reasons-screen` now registers the independently saved limit with the shared coordinator.
+The comparison uses the existing `percentBp` parser: 12.50 and 12,50 compare as 1250 basis points,
+blank means uncapped, and invalid text stays distinct. No validation or request-body rule changed.
+Keep retains the draft; Discard restores its baseline without a settings write. The reason modal
+and the limit commit independently so accepting one does not clear the other's changes.
+
+An accepted limit write commits the submitted snapshot before reading settings again. Input
+entered during the write remains dirty against that snapshot. Live reads keep edited input and
+its baseline; a clean limit adopts the new settings. Disconnect releases the limit scope and
+clears its draft, save state and settings. A reconnected page waits for a fresh settings read
+before exposing the field. Older accepted/refused writes cannot refresh or set the new page's
+save/error state in the deferred-reply cases.
+
+Commands and receipts are in Lane E's local `receipts/w69-limit-20261006/`:
+
+- Initial reason unsaved suite: 9 assertion failures and 26 passes before implementation.
+  A separate delayed-reconnect case failed because the stale limit field was still present.
+- `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/reasons-screen.unsaved.test.ts
+src/dashboard/reasons-screen.test.ts src/dashboard/reasons-screen.a11y.test.ts`: 186 passed,
+  recorded in `final-browser.log`.
+- Eight independent installed-candidate mutations each failed its intended assertion beside a
+  passing clean-reason control: registration, accepted baseline, newer input retention, old success,
+  old refusal, disposal, live draft retention and fresh settings on reconnect. `mutation-*.log`
+  names the changed condition and assertion. Restored candidate results and final byte comparison
+  are recorded separately (38 restored tests passed; both source files matched the final driver bytes).
+- Unedited golden huella and immutability suites: 20 passed. Package typecheck and scoped ESLint
+  results are in `types-final.log` and `lint-final.log`.
+- Temporary native input/Keep/Discard/Escape flows: 8 passed, 16 full axe scans and 16 captures.
+  English/Spanish, light/dark and 390/1280px captures were inspected in four contact sheets.
+  The first visual harness used the wrong theme attribute; those light-only captures remain in
+  `incorrect-theme-look/`. The corrected harness pins `data-theme`, checks the computed colour
+  scheme and paints the document canvas from the host's resolved background.
+
+The visual shell uses the real reason screen, coordinator and warning with synthetic API reads.
+Its page-leave action calls the coordinator directly. Actual venue-settings tabs/sidebar/history,
+server settings writes, hover contrast and activated native reload remain unverified. Existing
+behavioral assertions are unchanged; the API fixture's settings return gained its declared type
+so it can represent capped as well as uncapped values. W69 remains partial: configuration/canvas,
+device-profile integration, remaining shell/page routes and the advancing-owner audit are open.
+
+
+## 2026-10-06: Canvas page draft checkpoint
+
+You now get the shared warning when Cancel would leave an edited canvas, including a new
+canvas that has not had its first write. The page compares its trimmed name and detached
+CanvasDef, preserving nested card data and ordered tabs/cards. Reversing existing edits clears
+the scope. Changing preview selection does not itself alter the comparison payload.
+
+The focused cases use real native inputs and the actual Cancel button. Keep retains the edited
+name; Discard restores the local baseline and returns to the list without a write. Reconnect
+retains an existing or new page's baseline. A successful write commits its captured name and
+definition before URL mutation or refresh, while later input remains dirty. Failed writes keep
+protection. A departed success cannot refresh the reconnected owner; a departed refusal cannot
+replace its message, and an old write cannot release a new save's busy gate.
+
+Verification commands:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/screens/canvas-editor-screen.unsaved.test.ts src/screens/canvas-editor-screen.test.ts src/screens/canvas-editor-screen.a11y.test.ts src/screens/canvas-editor/validate-canvas.test.ts
+pnpm --filter @waitron/dashboard typecheck
+pnpm exec eslint apps/dashboard/src/screens/canvas-editor-screen.ts apps/dashboard/src/screens/canvas-editor-screen.unsaved.test.ts
+```
+
+The initial page tests failed on missing dirty protection. Correcting the new fixture to contain
+all sale-critical cards exposed the expected protection failures in both deferred-save cases;
+the first incomplete fixture had stopped at validation. Deferred-reply tests then reproduced a
+stale refusal and a stale refresh. A new-canvas reconnect test failed on the URL restorer clearing
+an unsaved canvas with no persisted id. The first guarded-save test initially checked only the
+rendered list; adding its final URL assertion exposed a discarded route attempt. The original
+history-versus-pending-create assertion caught a regression during that fix and remains unchanged.
+
+Eight EN/ES, light/dark, 390/1280 flows exercised native Cancel, Keep and Discard with two axe
+scans per flow. Four capture sheets were inspected. At phone width the retained name field lies
+below the viewport; the input value is asserted, while the overview capture shows the retained
+page and its warning. These are a minimal LeaveController shell with synthetic API responses.
+Full settings/sidebar/history integration, same-canvas tab changes, actual canvas persistence,
+hover accessibility and activated native reload remain unverified. A final detached-control test
+observed Save submitting after disconnect; the connected-owner gate now refuses that call.
+
+Deletion controls and exact logs live in the lane's local
+`receipts/w69-canvas-page-20261006/`. No existing behavioral assertion changed; the existing
+name-dialog fixture gained valid tabs and required selling cards so the new page-save cases reach
+the writer. W69 remains incomplete: contributed explicit-save settings, device profiles after
+W97, remaining page/till/context routes, native reload and the advancing-owner audit are next.
+
+## 2026-10-06 prep-station Settings cell checkpoint
+
+The branch registers each explicit-save Settings cell separately. Its baseline is the existing
+rest-of-order choice, fallback id or timing override. Blank timing means inherited; nonblank
+finite numbers compare as their submitted number, while invalid text remains distinguishable.
+Cancel, dispatched Escape, replacement by another Settings cell and the screen's tab event
+request a leave decision before changing the accepted editor or tab. Keep retains the value;
+Discard restores its baseline and proceeds without a write. Successful saves commit before
+closing the cell and refreshing. The fallback's existing two-step confirmation is retained.
+
+The new browser suite checks clean/reverted drafts, refused writes and accepted retries, failed
+refresh after an accepted write, in-flight controls, stale input/Save controls, reconnect with
+old successful/refused replies, and pending answers after save or disconnect. It also checks
+the immediate-save service switch remains exempt while writing and after refusal. Existing
+Settings and watcher assertions were retained. No old behavioral assertion changed here.
+
+Focused command:
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.settings-unsaved.test.ts src/dashboard/prep-stations-screen.settings.test.ts src/dashboard/watcher-form.unsaved.test.ts src/dashboard/prep-stations-screen.test.ts src/dashboard/prep-stations-screen.a11y.test.ts src/dashboard/service-settings-panel.test.ts
+```
+
+Initial RED was five failed assertions and two clean/save controls passing. Later RED cases
+caught early tab mutation, stale input controls and an old Save button submitting the replacement
+cell. An independently installed detached measurement copy removed change notifications, the
+leave gate and the reply-lifetime checks separately: each failed the intended assertion while
+the clean/reverted control passed. Removing only the method's stale-save check left the
+handler's check enforcing that case; removing both checks failed the old-Save assertion.
+The restored measurement suite passed. Exact commands, output and candidate inventory are
+local under `~/waitron-campaign-e/receipts/w69-station-settings-20261006/`.
+
+The minimal application shell rendered the actual screen and shared warning in EN/ES, both
+themes, at 390 and 1280 pixels. Eight visual cases passed 16 axe scans; 16 screenshots and
+four inspected contact sheets show the question and retained draft. The new accessibility
+cases scan the active warning and retained cell in both themes. Provider HTTP writes, the
+real dashboard settings container/sidebar, browser history traversal and activated native
+reload remain unverified by this checkpoint. Synthetic beforeunload checks establish
+listener cancellation, not display of a native browser prompt. Other contributed inline
+settings and the advancing device-profile audit keep W69 incomplete.
+
+## Venue inline name cells checkpoint — 2026-10-06
+
+On the W69 branch, your department name, zone name and trading name changes register
+independently. Cancel, dispatched Escape and replacing a cell ask before discarding its draft.
+Keep retains the value; approved Escape discard returns focus to the row name. Trimmed reverts
+are clean. Accepted writes commit their captured value before refresh; newer input and refused
+writes stay protected. Live reads retain edited names, including a removed department or a zone
+whose department disappeared. Reconnect registers retained values against the original baseline
+with a new identity; an older reply cannot close that retained cell.
+
+`packages/venue-service/src/dashboard/venue-operations-screen.unsaved.test.ts` exercises these
+routes through the real table and shared leave coordinator. Existing assertions were unchanged.
+The first inline run failed eleven new cases; later runs caught reconnect, focus and live-removal
+edges before their fixes. Commands, logs, installed deletion controls and visual captures are in
+Lane E's local `receipts/w69-venue-names-20261006/` directory. The eight temporary visual flows
+exercise EN/ES, both themes and 390/1280 widths, with sixteen axe scans. Synthetic unload checks
+establish listener cancellation only; actual sidebar/history/native reload remains Task 5.
+
+The collection-number, paid and receipt-mode controls already submit their change from
+`wt-change`; they remain exempt from staged-draft protection. Their existing behavior tests ran
+unchanged. Station-printer owners, remaining configuration owners, advancing-lane reconciliation
+and the complete shell/navigation/native-reload audit remain pending. W69 is still incomplete.
+
+## 2026-10-06: prep-station printer cells and native inline Escape
+
+On the W69 branch, the Tickets printer cell captures detached printer membership. Changing and
+reverting choices, including a reordered membership, clears its warning. Cancel, native Escape,
+replacement with another station and the actual Tickets tab controls use the shared coordinator.
+Keep retains the original cell and selection; Discard closes or continues without writing. Selecting
+the current tab does not leave. The tab control is reset to the current tab before a decision,
+so Keep leaves its next native click usable. A retained clean Settings cell cannot bypass the
+visible Tickets draft; its newly added case failed before the active-tab check was added.
+
+An accepted write commits the captured submitted membership before refreshing. A later selection
+remains dirty against that snapshot. Refusals retain the choices for retry. Disconnect clears the
+editor, busy state and scope; stale write replies and retained controls cannot alter a replacement.
+The API still submits the original membership through `PrepStationsApi.setStationPrinters`; its
+server consumer, `replaceStationPrinters` in `apps/server/src/station-printers.ts:64`, attaches and
+detaches by membership rather than assigning list positions (source inspection, not runtime
+verification).
+
+The first new browser run failed nine cases before implementation. Native Escape then exposed a
+second edge: a warning could open and immediately close from that keypress's default action. The
+printer handler now prevents that action. The same Settings choice path failed its native case;
+both Settings field handlers now prevent the default. The final native printer check also asserts
+that the actual keydown was cancelled: an initial deletion of `preventDefault` survived the
+visible-warning assertion, so that assertion alone is not a dependable guard of the cancellation.
+
+Commands and full outputs live in Lane E's local `receipts/w69-station-printers-20261006/`.
+The focused printer/Settings pair passed 37 tests; the final five-file browser family passed 490.
+Six independent installed-candidate deletions
+failed the selected behavioral case while the pristine-form control passed. The strengthened
+native-default deletion also failed with that control passing. The corrected temporary visual
+matrix passed eight native EN/ES, light/dark, 390/1280 flows with sixteen axe scans and sixteen
+captures; four contact sheets were inspected. Early temporary fixtures incorrectly set HTMLElement's
+native `lang` in its constructor, used a blocked background heading for pointer parking, and left
+the Spanish Discard label in English. Those fixtures were corrected without changing production
+wording. Their failed outputs are retained. Existing behavioral assertions were unchanged.
+
+API reads/writes use controlled fakes in the browser harness. Actual dashboard sidebar/history,
+server writes, activated native reload and hover accessibility are not established by this check.
+Remaining configuration owners, device-profile reconciliation and the complete shell/navigation
+inventory keep W69 incomplete. Tasks 2/3 remain complete and Tasks 1/4/5/6 partial.
+
+
+## 2026-10-06: Venue details and actual Venue settings container routes
+
+A303 #1312 added `apps/dashboard/src/screens/venue-details-panel.ts` after the original inventory.
+The file's SHA-256 matched origin/main before this checkpoint's edits. It holds a staged
+VenueDetailValues draft and the write's expected values. It is a protected page owner; issuer text,
+clock-preview output and the acknowledgement button are not independent authored entities.
+
+The branch now registers that editor in the existing coordinator and compares values using the
+normalization already used by `venueDetailPatch`. Cancel requests scoped leave. A retained page's
+Discard restores its opening values; successful writes dispose the completed editor before the
+list/read refresh. Refusals leave its values protected. Disconnect disposes the scope, and reconnect
+registers the retained draft against its opening expected values. Input and action closures check
+the opening and connection generation, so removed controls cannot edit or submit its replacement.
+
+Venue settings previously assigned its tab before asking the shared URL guard. The first real
+DashboardApp test observed selected=kitchen while its unsaved warning was still open and
+location remained on Tables. It now restores the tab strip's current selection and renders from
+the accepted URL. The existing navigation guard owns the question; the container adds no second
+coordinator or warning. Real native clicks and keyboard End keep the departing panel visible,
+Keep retains its values, and Discard restores them before showing the accepted destination.
+
+Receipts at `~/waitron-campaign-e/receipts/w69-venue-container-20261006`:
+
+- Container RED: 2 failed/1 passed before the tab fix. The failures observed the wrong selected tab.
+- Venue details RED: 11 failed/1 passed before draft wiring. Detached-control RED: 2 failed before
+  opening identity checks. Existing tests and their assertions were unchanged.
+- `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.venue-settings-unsaved.test.ts
+  src/screens/venue-details-panel.unsaved.test.ts src/screens/venue-details-panel.test.ts
+  src/screens/venue-settings-screen.test.ts src/dashboard-app.test.ts`: 392 passed. Earlier unchanged
+  Venue details a11y/family run: 69 passed, including the original 13-state theme/locale/width checks.
+- Eight installed disposable-candidate deletions failed the intended assertion: tab-strip reset,
+  draft registration, change notification, Cancel request, restored values, input identity, Save
+  identity and Cancel identity. The restored selection passed 20 cases; the final full pair result
+  is recorded separately in `candidate-final.log`.
+- Dashboard typecheck and focused ESLint passed. The initial direct ui-core type import failed
+  resolution; the final import uses ui's existing type re-exports, matching sibling editors.
+  Three root guard suites passed 41 tests. Source formatting and final diff checks are recorded
+  in the checkpoint.
+- Eight native EN/ES, light/dark, measured 390/1280 flows checked the retained Venue details field
+  and completed Keep/Discard. Eight scoped warning axe scans passed. Sixteen captures were inspected
+  in four contact sheets. The first full-shell scan failed two light desktop cases at sidebar
+  selected-row/group-heading contrast (4.32:1); that finding is recorded in the backlog and the
+  original output retained. The scoped confirmation scan is not a full-shell accessibility pass.
+
+The new actual-shell fixture contains synthetic API responses and registers the product's real
+editors. These cases establish that shell/container route integration, not server persistence or
+browser-native reload prompting. Other page/context routes, device-profile reconciliation after
+W97, final advancing-owner classification and activated native reload remain incomplete. Tasks
+2/3 stay complete; Tasks 1/4/5/6 stay partial. No PR, push, finish-branch or landing at this checkpoint.
+
+## 2026-10-07: activated native reload in the dashboard shell
+
+If you cancel Chromium's reload warning while editing a service-status label, the current
+document and your typed label remain. Accepting that warning loads a new document. A clean
+form, a reverted label, an accepted save, a discarded draft and a disconnected application
+each reload without a warning. This measurement used the real DashboardApp, Venue settings
+container and service-status owner with synthetic API replies in headless Chromium
+153.0.8010.12, English and the light theme at 1280 × 720. It changes no production code.
+
+The reproducible probe and logs are in Lane E's local
+`receipts/w69-native-reload-20261007/`. Run `node probe.mjs` there after creating and installing
+the candidate named by `candidate-path.txt`. The probe starts its own loopback Vite server and
+closes that server and Chromium on exit. Its final run reports seven passing checks. The
+assertions inspect the native dialog type, a per-document identity and the native input's value;
+they do not infer a warning from a dispatched beforeunload event.
+
+Removing the coordinator's beforeunload listener registration in the installed disposable
+checkout leaves the clean-reload control passing and fails `dirty native reload must ask`
+with no dialog observed. Restoring the source byte for byte passes all seven checks again.
+The unchanged coordinator suite reports 45 passes; the unchanged dashboard container and
+service-status unsaved suites report 44 passes. The retained-draft capture was inspected.
+
+Early fixture attempts contained a TypeScript annotation in a plain browser script and assumed
+Playwright would always report a cancelled reload the same way. Their failed logs are retained.
+The final probe accepts a cancellation or navigation timeout only after observing and dismissing
+a native beforeunload dialog, then asserts that both the document and draft survived.
+
+This establishes one activated Chromium reload path and its listed exemptions. It does not
+establish native prompting for other form owners, tab close, external navigation, other browsers
+or mobile process termination. The remaining configuration/device-profile owners, page and till
+route matrices and advancing-source inventory still keep Tasks 1/4/5/6 partial. W69 remains
+incomplete and is not ready for finish-branch or landing.
+
+
+## 2026-10-07: advancing Local holidays owner and Hours tab checkpoint
+
+The candidate rebased onto `bb7453d5daad49e51558369e8a40bdd276b41603`. That tree adds
+`packages/venue-service/src/dashboard/local-holidays-editor.ts` beneath Hours' Dates tab.
+Add/Edit is a protected owner: its date compares exactly, and its name compares after the
+existing submitter's trim. The address acknowledgement is not a separately authored value.
+Remove/forget confirmations and the holiday-area choice are exempt; choosing an area writes
+immediately. The new owner uses the existing coordinator, without a second warning mechanism.
+
+Cancel and native Escape keep the entry open until a decision. Keep retains its fields; Discard
+restores only the affected scope and closes or continues. Reverted edits are clean. Accepted writes
+commit the captured date/name before closing and rereading. Refusals retain the entry. A changed
+live holiday list does not replace the opening baseline or cancel its question. Disconnect releases
+and clears the local editor; retained controls and departed write replies cannot change or commit
+its replacement. Busy saves retain their existing nondismissible behavior.
+
+The first actual Hours tab case failed because the view was assigned before the guarded URL write,
+removing the local editor before the question. The tab now restores its accepted value before
+requesting navigation, and reads the accepted URL. The real Hours/URL-guard case asserts the Dates
+selection, connected editor, native dialog and URL through Keep, then Calendar after Discard.
+Its shell uses the real shared controllers with a synthetic API; it is not the full DashboardApp.
+
+Local receipts: `~/waitron-campaign-e/receipts/w69-holidays-20261007/`.
+
+- Initial owner RED: seven failed/one passed. The actual Hours tab RED then failed its missing
+  warning assertion. Existing behavioral assertions remain unchanged.
+- Final five-suite browser command: `pnpm --filter @waitron/venue-service exec vitest run
+  src/dashboard/local-holidays-editor.unsaved.test.ts src/dashboard/local-holidays-editor.test.ts
+  src/dashboard/local-holidays-editor.a11y.test.ts src/dashboard/hours-screen.unsaved.test.ts
+  src/dashboard/hours-screen.test.ts` reports 251 passes. The new owner suite contains 17 cases.
+- Hours' existing unsaved fixture gained holiday coverage/source arrays and separate local/official
+  holiday read responses. The first integration run reported three calendar failures and 87
+  unhandled errors because the fixture returned an HoursModel to the new local-holiday reader.
+  The added fields preserve every existing assertion; they change no production response.
+- Five independent deletions in an installed disposable candidate fail the intended assertions:
+  registration, change notification, native close gate, tab selection reset and input generation.
+  Each final deletion has a passing clean control. The initial registration control also tested an
+  edit and failed; the final run uses a separate unchanged-entry control. The first input-generation
+  replacement matched nothing; its corrected run fails with Old holiday instead of New holiday.
+  Restoring the candidate reports 17 passes, and all four copied source/test files match byte for byte.
+- Eight temporary native Escape/Keep/Discard flows cover EN/ES, light/dark, measured 390/1280
+  viewports. Sixteen axe scans pass; sixteen captures are retained and representative warning and
+  kept-entry images were inspected. The fixture supplies translated warning copy, not DashboardApp.
+  These flows do not establish the full dashboard shell, provider writes or browser-native unload.
+- The rebase retains main's product-image entry points, menu read consolidation and category delete
+  labels beside W69. Five affected dashboard suites report 566 passes. Venue-service/dashboard
+  typechecks, focused ESLint, source formatting and diff checks pass. No migration or fiscal test
+  changed in this checkpoint.
+
+Configuration exemptions, device-profile integration after W97, remaining actual dashboard/till
+route matrices and the final advancing-owner inventory remain open. Inspect A303's newly added
+catalogue colour route's successful-write boundary during that inventory. Tasks 2/3 stay complete;
+Tasks 1/4/5/6 stay partial. W69 is not ready for finish-branch or landing.
+
+
+## 2026-10-07: advancing catalogue colour route checkpoint
+
+A303 added the catalogue row's product-colour entry after the original inventory. The form was
+already protected on this branch; its containing catalogue route now passes the product identity
+and calls `closeSaved` after the colour write succeeds, before starting the product refresh.
+Replacing the target invalidates its question and establishes the replacement colour baseline.
+Disconnect clears this opening. A departed success or refusal cannot close, refuse or release the
+busy gate of a replacement opening. The colour write and its existing payload remain unchanged.
+
+The new route cases are appended to `apps/dashboard/src/screens/catalogue-screen.test.ts` under
+“W69 catalogue colour lifecycle”. Initial RED reported five failures and one clean-control pass:
+missing target identity, dirty state at the refresh boundary, departed success, departed refusal
+and retained opening on reconnect. The first identity test timed out awaiting its uncancelled
+request; it now polls the visible warning before awaiting the outcome. The installed identity
+mutation fails that warning assertion. No existing assertion changed. The new API fixture supplies
+a second product with a distinct name and colour; it does not alter the original fixtures.
+
+Final local receipts are in Lane E `receipts/w69-catalogue-colour-20261007/`:
+
+- The catalogue screen/accessibility, product-colour form/accessibility and catalogue unsaved-form
+  command reports 184 passes in five suites. This includes native Escape and Cancel through
+  Keep/Discard after a real route's refused write, accepted-save invalidation and the replacement
+  write's busy gate. The late-course-close suite deliberately logs its unhandled marker; the
+  retained family log reports every suite passing.
+- In an independently cloned, frozen-installed candidate, six guard deletions each report one
+  failed case and one passing clean control: product identity, successful-save commit, accepted
+  result generation, refused result generation, busy-release generation and disconnect cleanup.
+  The restored ten-case route group passes; its source matches the feature file byte for byte.
+- Eight temporary native Escape/Keep/Discard flows cover EN/ES, light/dark and measured 390/1280
+  widths. Sixteen scoped axe scans pass; sixteen captures were inspected in four contact sheets.
+  The fixture mounts the real catalogue screen and form beside the shared confirmation host with
+  synthetic API responses. This is not a full DashboardApp, server-persistence, hovered-colour or
+  activated browser-unload measurement.
+- Dashboard typecheck, focused ESLint, source formatting and diff checks pass. Root guard results
+  are retained separately in `root.log`.
+
+This reconciles the colour route called out by the preceding checkpoint. Configuration exemptions,
+device-profile integration after W97, other actual dashboard/till/context/history routes and the
+complete advancing-owner inventory remain open. Tasks 2/3 remain complete; Tasks 1/4/5/6 remain
+partial. W69 remains in progress, without a PR, push, finish-branch or landing at this checkpoint.
+
+
+## 2026-10-07: W97 rebase and device approval comparison checkpoint
+
+W97 landed as #1311, merge `7873b97e2`. W69 rebased onto its backlog follow-up
+`d45119d2d`. The till test conflict kept both appended test groups. The Device Edit save conflict
+kept W97's profile-specific binding choices and approval request/storage behavior, plus W69's
+captured device and reader submissions and independent commits. No migration file changed on W69.
+
+The first rebased dashboard command reported 24 failures, 452 passes and 73 errors. The errors
+trace to the W69 Device Edit fixture's missing `approvedProfileIds`; dashboard typecheck also
+identified the six new DeviceProfile fields missing in Edit and Pair fixtures. Adding those fields
+restored their 43 existing cases without changing assertions. The visual fixture also lacked
+`listProfileKitchenLists`, which the new Devices loader calls; its initial captures showed a read
+failure behind the modal. Both fixtures now return that empty list. Initial artifacts are retained;
+final captures no longer show that load failure.
+
+Three new approval cases failed before comparison changed. The Device Edit scope now compares the
+shown compatible approvals as a set and commits that captured set after the device write. The
+actual request still omits unchanged approvals, as W97 does. A reader refusal commits no reader
+selection; reverting that reader leaves the accepted device values clean. Later approval edits
+remain dirty against the captured write. Four new cases preserve exact submitted request bodies,
+including the omission, and exercise the warning and revert without changing existing checks.
+
+Receipts share Lane E `receipts/w69-catalogue-colour-20261007/`:
+
+- The rebased six-suite dashboard run reports 497 passes. The final Edit/Pair command after the
+  omission case and missing-query fixture addition reports 47 passes. The focused till shell
+  run reports 18 passes, including W97 profile switching and W69 shell confirmation cases.
+- Deleting approval equality reports one failure beside a passing name/revert control. The first
+  commit deletion passed because its changed approval request still carried the set. The added
+  unchanged-set case omits that wire field; deleting the captured comparison commit now fails
+  its clean-after-reader-revert assertion beside the passing control. This corrects the earlier
+  probe rather than treating its green result as evidence. The restored final candidate reports
+  29 passes, with all three source/test files matching the feature files.
+- Eight final native checkbox/Escape/Keep/Discard flows cover EN/ES, light/dark and measured
+  390/1280 widths. Sixteen scoped axe scans pass; sixteen final captures were inspected in four
+  contact sheets. These use the real Devices screen and shared confirmation with a synthetic API,
+  not DashboardApp or server persistence. One wrongly located visual run selected zero tests;
+  it is excluded from these counts, and the final candidate run reports eight passing cases.
+- Dashboard/till typechecks, focused source lint/format and root guards are retained locally.
+
+Device Edit's approval field is reconciled; W97's expanded Device profiles editor itself still
+needs shared protection. Its name/canvas/capability/printer/inactivity fields and new service scope,
+sign-in choices, starting screen and kitchen lists are staged inputs; `#cancel` currently calls
+`#clearDraft` and returns to the list. Re-read its accepted-write boundary before implementing
+its scope. Configuration exemptions, remaining dashboard/till/context/history routes and the
+complete advancing-owner inventory also remain open. Tasks 1/4/5/6 remain partial; W69 is not
+ready for finish-branch or landing. The dependency on W97 is now released.
+
+
+## 2026-10-07 Device profiles checkpoint
+
+The expanded W97 Device profiles owner now registers with the shared leave coordinator. Its
+comparison uses the submitted name trimming, canvas, form factor, inactivity value, capability
+membership, ordered printer preferences, department/zone choices, sign-in roles and person rules,
+starting screen and kitchen membership. The wire's existing omission decisions remain separate.
+Cancel asks before returning to the list; Keep preserves input and focus, and Discard returns to
+the list. Clean, trimmed and reverted values leave directly.
+
+An accepted write commits its submitted comparison before reading the list again. Newer input
+stays in the editor; an accepted create supplies the id for its next Update. A refused write keeps
+the draft. A departed reply does not change a replacement editor, and its completion cannot release
+a replacement write's busy gate. Departed write and refresh refusals also leave a reconnected list's
+message alone; both error cases failed before the result-lifetime check was added. Late create defaults commit only their initialized scope values,
+leaving an earlier typed name dirty. Disconnect clears the local editor and unregisters its scope.
+
+Receipts retained by Lane E under `receipts/w69-profiles-20261007`:
+
+- The corrected first browser run reported 16 failing cases and one passing accepted-save case.
+  The reconnect case separately failed because the replacement Save remained disabled. The final
+  five-suite family reports 180 passing cases, including the unchanged Device profiles behavior
+  and accessibility suites and the Device Edit/Pair draft suites. No existing assertion changed.
+- Eight independent deletions report their intended failures beside a passing list-load control:
+  Cancel coordination, submitted-value commit, departed-write check, busy-gate identity, default
+  baseline commit, admission-role comparison, kitchen-set comparison and departed-error lifetime.
+  The last deletion fails both departed-refusal cases; the others each fail one case.
+  Restoring the final candidate reports 26 owner cases
+  passing. The initial commit-deletion run also broke its changed-name save control; that run is
+  not counted as an independent control. The final controlled runs use the unchanged list case.
+- Eight native-input/Cancel/Keep/Discard flows cover EN/ES, light/dark and measured 390/1280
+  viewports. Sixteen scoped axe scans pass; sixteen captures were inspected. These are the real
+  Device profiles screen and shared warning with a synthetic API, without DashboardApp or server
+  persistence. The first visual attempt was refused by Vite's screenshot path check and is not
+  counted; the corrected run saves within the disposable candidate and copies its captures out.
+- The focused root suites report 2112 passes. Dashboard typechecking, focused source lint,
+  formatting and diff checks pass. Full current-head CI and whole-branch review have not run.
+
+This completes the Device profiles owner stage. Configuration exemptions, remaining actual
+DashboardApp/till/context/sidebar/tab/breadcrumb/history routes and the advancing-owner audit
+remain open. Tasks 1/4/5/6 remain partial; W69 is not ready for finish-branch or landing.
+
+## 2026-10-07: Kitchen late flags and immediate configuration settings
+
+Kitchen's explicit-save late flags form now registers its three submitted minute values beneath
+its screen. Cancel and native Escape request the shared warning; Keep retains the input and
+Discard closes without a write. Valid numeric spellings compare by their submitted number;
+invalid/empty input remains distinct. Accepted writes commit their captured snapshot before
+refreshing. Later input remains protected, and a refused write leaves the edited form mounted.
+An opening identity gates input, Cancel, Save and returned write results. Disconnect releases
+that opening and its pending question. Live reads do not replace its draft baseline.
+
+The first focused browser run reported nine failing cases and one passing accepted-save control.
+A subsequent departed-controls case failed with the new opening's field changed from 5 to 6.
+Those failures preceded their implementation fixes. The Kitchen behavior/timing/accessibility
+family and the actual dashboard container suite passed; the final added cases also passed.
+The real shell cases exercise tabs, Back/Forward, sidebar, voluntary logout, language replacement
+and forced expiry with actual native input. API replies remain synthetic; live server persistence
+and a native reload of this particular form were not measured.
+
+The five service-setting controls remain immediate writes: edit sent lines, ticket grouping,
+held-work printing, release reminder and clearing workflow. Their new registry-connected cases
+assert that pending, accepted and refused writes stay exempt and that accepting one cannot clear
+an independent draft's question. Bump mode and fire control have corresponding Kitchen cases.
+These are characterization tests of existing immediate behavior, not a new production change.
+The first characterization attempts clicked under the switch's thumb and assumed optimistic
+values while the service panel still showed its stored model. The corrected cases use native
+keyboard/option activation and check the displayed value after the outcome.
+
+Independent installed-copy deletions of registration, input notification, submitted commit,
+write-start invalidation, native Escape cancellation, disconnect disposal and old-control gates
+each failed their intended case beside a passing accepted-save control. Adding accidental dirty
+registration to immediate service writes failed all five controls in both outcomes beside a
+passing read-only control. Restored suites passed. Logs and exact commands are retained in Lane E
+`receipts/w69-exemptions-20261007/`; they include the additional old-refusal/write-gate probes.
+
+Eight real-dashboard flows cover EN/ES, both token themes and measured 390/1280 viewport widths.
+Their sixteen scoped axe scans passed, and sixteen warning/kept captures were inspected in four
+contact sheets. This does not establish full-shell accessibility: sidebar contrast remains a
+separate backlog item. The dark token captures do not emulate the browser's dark colour-scheme
+media preference, so their logo appearance is not evidence about the production dark logo.
+
+Dashboard and venue-service types, scoped lint, source formatting and the focused root guards
+passed. The first typechecks exposed an unavailable direct ui-core import and obsolete empty
+`devices`/`deviceZones` fixture fields; the final code imports ui's existing public types and removes
+only those retired fixture fields. W97 #1311 (`7873b97e2`) removed them from the client view.
+No existing behavioral assertion changed. Fiscal routines, schema and domain requests were not
+edited in this checkpoint.
+
+The source audit found remaining staged page work in `backup-screen.ts`, `login-screen.ts`,
+`till-schedule-screen.ts` and `till-enrol-screen.ts`. Their lack of registry integration is source
+inspection, not a new runtime failure receipt. Till's UrlStateController still has no leave adapter;
+its existing automatic/retained order lifecycles need the design's acceptance checks. Start with
+Backup/export's actual request fields, then reconcile these owners and the complete advancing
+modal/page inventory. Tasks 2/3 stay complete; Tasks 1/4/5/6 remain partial. W69 is not ready for
+finish-branch or landing.
+
+## 2026-10-07 Backup/export checkpoint
+
+Backup now registers archive inputs and export credentials separately. The archive snapshot uses
+trimmed destinations, weekday set equality and parsed valid retention values, while invalid raw
+retention remains distinguishable. Generated key output, saved-key acknowledgements and status
+remain exempt. Settings Cancel and the switch from rotation to settings use the shared decision.
+Keep preserves native fields; Discard restores only the requested archive snapshot. Export
+credentials remain independent when you enter or cancel archive settings.
+
+Accepted Apply, settings Save and rotation each commit their submitted snapshot. Newer input stays
+in its form; setup keeps its controls when an accepted write or another caller's enabling read
+would otherwise switch to the rotation view. Export clears only credential fields still matching
+the submitted values and leaves newer values protected. Departed writes, key mints, key reveals
+and settings-key reads cannot change a reconnected opening in the focused cases. A settings-key
+read also leaves rotation input alone if that input changed while the read waited.
+
+The real dashboard cases exercise sidebar navigation, indexed Back/Forward, voluntary sign-out,
+language replacement and forced expiry with archive/export inputs. Forced expiry cancels an
+unanswered decision and clears the export fields without calling voluntary logout. The native
+confirmation cases exercise Cancel, Escape, Keep and Discard in EN/ES, both token themes and
+390/1280 viewport settings. Their eight scoped axe scans passed; sixteen warning/kept captures
+were inspected. The capture paths now sit under the ignored `__screenshots__/` directory.
+These fixtures use synthetic API replies. They do not establish server backup behavior,
+full-shell accessibility or a native browser reload prompt. The dark token captures do not emulate
+colour-scheme media, and the whole-screen screenshots include the browser harness's outer canvas.
+
+Receipts and commands are retained in Lane E `receipts/w69-backup-20261007/`. The initial owner
+cases failed before integration. The later setup, key-read/reveal, live-branch and form-switch
+cases each failed before their correction. An initial rotation selector was wrong and corrected
+before the expected failing run. The detached-update case first used a settings transition that
+masked the problem; using the unchanged configure mode exposed the missing registration. Its
+first correction still captured the baseline at the next input, so the final connection path
+registers before that input. The first form-switch wrapper kept the coordinator pending during
+the key read and failed the existing reconnect check; the final wrapper ends the decision before
+starting the read. Existing behavioral assertions were not edited.
+
+Login credentials, till schedule/enrolment, till navigation/retained-order acceptance and the
+complete advancing-owner inventory remain pending. Tasks 2/3 stay complete; Tasks 1/4/5/6 remain
+partial. W69 is not ready for finish-branch or landing.
+
+Focused command `pnpm --filter @waitron/dashboard exec vitest run
+src/screens/backup-screen.unsaved.test.ts src/screens/backup-screen.test.ts
+src/screens/stream-settings-panel.unsaved.test.ts src/screens/stream-settings-panel.test.ts
+src/dashboard-app.backup-unsaved.test.ts` passed 276 cases. Root native-field, token-name,
+module-seam and English-vocabulary guards passed 3404 cases. Dashboard types, scoped ESLint,
+source Prettier and diff checks passed. Ten independent installed-copy deletions failed their
+intended cases beside passing controls; the restored selection passed thirteen cases and the
+three candidate files byte-matched. No existing assertion, fiscal routine or migration changed.
+Full-document Prettier checks find formatting differences in both backlog and this audit on the
+unchanged checkpoint HEAD too; their baseline comparison is retained. This checkpoint leaves
+those unrelated historical formatting differences in place.
+
+## Login owner and dashboard container checkpoint, 2026-10-07
+
+The login owner now registers the active step's submitted inputs through the shared coordinator.
+Email uses the existing Continue normalization; password and PIN remain exact, and code/name use
+their existing input/write normalization. Continue accepts the email step; method selection,
+read-only notices and the native passkey ceremony add no independent draft. A required factor
+starts with an empty code. The existing failed-login code clearing remains unchanged.
+
+Change account, alternative password/passkey/Google paths, the reset link, factor Back/mode,
+optional passkey Skip and account-link Cancel request leave before dropping the current inputs.
+Account-link navigation preserves unrelated history state. A delayed Google authorization reply
+rechecks newer input before redirecting. Account completion and passkey verification commit the
+submitted snapshot and retain later input. Accepted authentication releases its credential scope
+before the authenticated event. Typed values notify during their input event; comparing the last
+notified payload prevents the subsequent render from cancelling the same leave question.
+
+The existing `waitron-session-invalid` producer (`apps/dashboard/src/main.ts`) and shell consumer
+were traced before adding the login owner listener. The listener clears retained controls and
+credentials on expiry, required-session refusal or suspension, cancels ceremonies and invalidates
+older replies. Disconnect releases the registration and clears secrets. A cancelled account read
+and departed login resolve/refusal cannot replace the reconnected draft in the new cases.
+
+Focused command: `pnpm --filter @waitron/dashboard exec vitest run src/screens/login-screen.unsaved.test.ts src/screens/login-screen.test.ts src/dashboard-app.login-unsaved.test.ts src/dashboard-app.test.ts src/dashboard-app.unsaved-changes.test.ts`.
+The final run passes 647 cases across five files, including 39 owner and six actual-container cases.
+The new same-event cases also request navigation before a render and keep that question alive.
+Actual dashboard routes cover action-link Cancel, indexed Back/Forward, retained language input and
+all three forced invalidation codes. None of the existing tests or their assertions changed.
+
+The installed disposable checkout deletes eleven guards separately: registration, notifications,
+method gating, request generation, account commit, passkey commit, preservation of newer passkey
+input, the late Google leave gate, the security listener, control clearing and autofill release.
+Each target fails an assertion beside a passing login/action-link control; restored selection passes
+12. `deletions.json`, verbose logs and byte comparison are under Lane E's
+`receipts/w69-login-20261007`. The measuring checkout is removed after verification.
+
+Eight native EN/ES, light/dark, 390/1280 flows assert Keep/Escape/Discard, initial Keep focus,
+return focus and retained native values. Eight scoped confirmation axe scans pass; sixteen
+warning/kept captures were inspected in contact sheets without clipping. These captures use the
+minimal login host and synthetic API/hardware boundaries; they are not a full-shell accessibility,
+real identity-server, live WebAuthn-device or native reload-prompt receipt.
+
+Initial failures and corrections remain in the receipt folder: render-wide notifications cancelled
+questions; a new refusal assertion used the general code wording instead of the sign-in wording;
+the accepted-account continuation checked the generation it had intentionally reset; and an
+asynchronous method continuation briefly held the coordinator while it attempted a second request.
+One intermediate run was edited before completion and is not used as final evidence. A source
+format check failed before the container suite was formatted again. The registration deletion initially removed an adjacent helper too and loaded no tests;
+its boundary was corrected and the intended assertion then failed beside the passing control.
+Image composition used the
+workspace's installed sharp after the host Python had no Pillow. No repository dependency changed.
+
+Tasks 1/4/5/6 remain partial. Till schedule/enrolment, till shell and retained-order behavior,
+and the final advancing-owner inventory still need work. W69 is not ready for finish/land.
+
+
+## Till schedule and enrolment checkpoint, 2026-10-07
+
+Till Schedule registers independent cover and absence request scopes. All six edited fields notify
+immediately, including a revert. Back asks through the application's shared coordinator before
+emitting its existing return event. Keep retains both drafts; Discard restores their local starting
+values without submitting either request. The actual till-app case checks that the schedule owner
+and URL remain mounted through Keep and return to the counter after Discard.
+
+Accepted writes commit only their captured request, before the following read. Unchanged submitted
+fields keep their existing clear-after-success behavior. Later delivered input remains compared
+with the accepted snapshot. A refusal stays dirty; a failed refresh does not undo the acceptance.
+Accepting an offered swap has no staged form scope and does not cancel a time-off leave question.
+Notifications for dropped choices run only when a nonempty choice actually disappears.
+
+Enrolment registers the name exactly as its existing join call sends it. An accepted join commits
+the captured name; later delivered input stays protected. The verification number, waiting and
+refused messages are output, with no editable proof field in this owner. Discard restores local
+input without starting or cancelling a join. Disconnect disposes both owners' scopes and clears
+their inputs. Connection generations reject old schedule reads, submitted writes, join replies
+and approval polls after reconnect; retained departed controls issue no request in the new cases.
+
+Failing-first receipts: `schedule-red.log` has 15 failures and one clean control; `enrol-red.log`
+has eight failures and one clean/submitted control. `names-red.log` catches the missing semantic
+date-field name. `unrelated-refresh-red.log` catches an unchanged cover choice cancelling the
+absence question. Their final implementation uses semantic date/reason names and notifies only
+actual choice changes. Existing behavioral assertions were preserved; one actual till-app Back
+case was added to its existing suite.
+
+Focused family command:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/screens/till-schedule-screen.unsaved.test.ts src/screens/till-enrol-screen.unsaved.test.ts src/screens/till-schedule-screen.test.ts src/screens/till-enrol-screen.test.ts src/screens/till-schedule-screen.a11y.test.ts src/screens/till-enrol-screen.a11y.test.ts src/till-app.test.ts
+```
+
+`final-family.log` reports 813 passing cases in seven files. Its printer-choice TypeError is the
+existing `does not leave the dialog busy when a step after the switch throws` case, which supplies
+an undefined `printerChoices` and asserts one rejection. `baseline-switch.log` reproduces that
+output and its passing assertion on untouched `b9d732c10870865036a5c6e8e3782d9482c2973e`
+in the installed measuring checkout. No printer production code or assertion was changed.
+
+The four root native-field, token-name, module-seam and English-only suites report 3404 passing
+cases. Till typecheck, scoped ESLint, source formatting and diff checks are retained with the
+checkpoint. Fifteen independent installed deletions each fail their intended assertion beside a
+passing control; restored owner suites report 48 passes, with all five candidate files byte-equal
+to the feature checkout before the baseline experiment. The measuring checkout is then removed.
+All logs and the deletion ledger are local in `receipts/w69-till-pages-20261007`.
+
+Sixteen native flows cover EN/ES, light/dark and 390/1280 widths. Each checks initial Keep focus,
+Escape, Keep, Discard, returned focus and retained native values. Sixteen scoped warning axe scans
+pass. Thirty-two warning/kept captures were inspected in eight contact sheets. These flows use
+minimal hosts and synthetic API boundaries; the enrolment Back action is supplied by its test
+host. The first visual run had a missing test-host button, and its dark theme was not actually
+passed to the mount helper; that run is excluded. The corrected final matrix supplies both.
+These receipts do not verify a live join, full-shell accessibility, till history interception,
+voluntary logout, or an activated native reload prompt.
+
+Tasks 1/4/5/6 remain partial. Next: till shell and UrlState navigation, voluntary sign-out and
+retained-order acceptance, then the complete advancing-owner inventory. W69 remains in progress
+and is not ready for finish-branch or land-branch.
+
+
+## Till shell navigation checkpoint, 2026-10-07
+
+TillApp now supplies the shared history adapter with its leave coordinator. Shell tabs, station,
+expo, Schedule, local Back destinations and voluntary logout ask before their handlers mutate
+page or session state. Language changes ask before saving the preference and recreating the shell.
+The same Schedule destination and a tab absent from the canvas retain the current request without
+asking. Programmatic URL writes suppress their own restore callback; the floor-tab assertion checks
+one additional table-state read, rather than silently doubling the existing loader.
+
+The Schedule request cases use its native note input. Keep retains that exact input, mounted owner
+and URL; Discard navigates once without sending the time-off request. Indexed Chromium Back and
+Forward restore the accepted URL before asking; Keep leaves it there and Discard replays without
+pushing another entry. A second tab request cannot replace the first pending destination. Inactivity
+and server-switch controls immediately lock and invalidate an old Discard control. A counter control
+rings two coffees, retains the basket and label through floor/counter and logout/login, and asserts
+that no sale or park request was made.
+
+Initial command:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t 'W69 till shell leave routes'
+```
+
+The initial run reported six failing warning assertions and one passing revert control. Later red
+runs caught an absent-tab warning and an unnecessary warning on repeated Schedule selection.
+The first wider four-file run reported five failures and 955 passes: the new shell request blocked
+an already-accepted child Back and held clean navigation during a party-draft logout; a lock test
+was using voluntary logout as its forced-exit trigger. The clean handoff correction keeps the old
+Schedule Back and split-bill assertions unchanged. The forced-lock fixture now invokes the actual
+inactivity callback supplied by TillApp, preserving every lock, local-choice, stale-control and
+logout assertion. This is the design's voluntary-versus-forced exit distinction, not a relaxation.
+
+Two existing multi-root comparison fixtures now disconnect their first application after its
+assertions and before mounting the second. The shared history adapter requires one application
+owner per document. Their KDS capability and narrow language-chooser assertions remain unchanged.
+The optional theme, session-activity and requestAbsence fixture additions support the new native
+and security controls; no existing assertion was deleted or weakened.
+
+The installed disposable candidate independently deletes ten guards: tab, station, expo, logout,
+locale, dirty history detection, programmatic-publication suppression, clean child handoff,
+same-destination retention and absent-tab validation. Each run reports one intended assertion
+failure beside one passing retained-basket control. After restoration the shell group reports
+23 passes. The local campaign receipt folder is `receipts/w69-till-shell-20261007/`; its logs retain
+the commands, output, mutation bodies, restored source comparison and candidate cleanup.
+
+Eight native shell tab-click flows cover EN/ES, light/dark and 390/1280 widths. Each checks initial
+Keep focus, native Escape, focus returned to the initiating tab, explicit Keep, then Discard.
+Eight axe scans cover the warning only. Sixteen warning/retained-input captures and four contact
+sheets were inspected. These checks use the real till shell with synthetic API responses; they
+are not full-shell accessibility checks, live time-off writes or activated native reload tests.
+
+Final behavioral command:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts src/till-app-drafts.test.ts src/state/draft-sync.test.ts src/screens/till-schedule-screen.unsaved.test.ts
+```
+
+This run reported 961 passes across four files. The shared adapter command
+`pnpm --filter @waitron/ui exec vitest run src/navigation-guard.test.ts src/url-state.test.ts`
+reported 35 passes across two files. Till typecheck, scoped source/test ESLint,
+source formatting and diff checks passed. New documentation sections were formatted separately;
+no whole-file formatting claim is made for the ignored historical audit/backlog. The restored
+candidate's three changed code/test files matched the feature tree byte for byte before its
+worktree and empty parent were removed.
+
+Next: memory-only basket unload/destructive replacement, retrieved-order local edits, unindexed
+till history, native reload, remaining link/context routes and the complete advancing-owner audit.
+Tasks 2/3 remain complete; Tasks 1/4/5/6 stay partial. W69 is not ready for finish-branch or landing.
+
+
+## 2026-10-07 — retained basket checkpoint
+
+The basket now owns a separate draft scope. Its immutable comparison includes the label,
+ordered lines, quantities, modifier membership and list identity, notes and preparation station.
+Display-only notifications leave an open decision intact. Loaded orders establish a baseline;
+accepted line saves, cash sales and captured card payments commit the submitted snapshot.
+Later local edits remain protected. Counter tabs, indexed/unindexed history and sign-out retain
+the basket without asking; synthetic beforeunload events still see its dirty scope.
+
+Retrieve, waiting-list Pay and New sale ask before replacing a dirty basket. Keep preserves it;
+Discard proceeds once through the existing action. A refused read preserves the local basket,
+and a late read cannot overwrite newer edits. Clean replacements run directly, preserving the
+existing newer-Pay arbitration and allowing New sale while the held-list refresh is pending.
+
+Test-first failures and the consumer fixes are retained in the local campaign receipt folder
+`receipts/w69-basket-20261007/`. Five existing setups now explicitly choose Discard: stale Retrieve,
+Retrieve after declined card payment, unavailable waiting-list Pay, and voluntary logout during
+pending adjustment or credit. Their original assertions remain unchanged. The two logout cases
+also failed on the installed original checkpoint `3adec09d67511b61cb31aaeba2f624afe4ba928d`;
+`prior-checkpoint-boundaries.log` records that experiment.
+
+The six-file till family reported 1187 passes before the final New sale controls. After those
+changes the focused basket/race group reported 24 passes. The shared core reported 46 passes.
+Root vocabulary/token/field/subscription/module/CLAUDE pointer guards reported 3425 passes.
+The unedited fiscal write-path and inmutabilidad suites reported 20 passes. Commands and test
+counts are retained in `final-family.log`, `final-focused.log`, `core-green.log`, `guards.log`
+and `fiscal.log`. The family still prints the malformed printer-choice rejection documented
+in the prior till-pages checkpoint; this run is not a claim of empty stderr.
+
+Thirteen independent deletions in an installed disposable checkout each produced one intended
+assertion failure beside a passing control. Restored basket tests reported 15 passes; all six
+changed source/test files matched the feature tree byte for byte before the measuring checkout
+and its empty parent were removed. `deletions.json` and `candidate-cleanup.txt` retain the receipts.
+
+Eight native Retrieve flows cover English/Spanish, light/dark and 390/1280 widths. Each checks
+initial Keep focus, Escape, return to Retrieve, explicit Keep and Discard. Eight axe scans cover
+the warning only; sixteen captures and four contact sheets were inspected. These are synthetic
+API fixtures, not live venue writes, full-shell accessibility or activated native reload checks.
+The phone background clips the Counter total, and the Spanish fixture quantities look padded;
+those observations still need reproduction through the real venue path before assigning a cause.
+
+Next: audit remaining basket replacement/context commands (including moving a held order),
+dirty unindexed till navigation, native reload and remaining links, then the complete advancing-owner
+inventory. Tasks 2/3 remain complete; Tasks 1/4/5/6 stay partial. W69 is not ready for finish-branch
+or landing.
+
+
+## Held move basket checkpoint, 2026-10-07
+
+Moving the retrieved order can clear its local basket. The held-move event now requests the shared
+basket decision before calling the move handler when its order id is the basket id. Moving another
+held order does not leave the basket and stays direct. After Escape or Keep, the application returns focus to the retained order's Move control. The handler captures the local payload and
+load generation before awaiting; its success clears only the same unchanged basket. Discard here
+allows the move of the stored order, without saving the local edits or deleting an order.
+
+The test-first command was:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t 'W69 held move basket protection'
+```
+
+Initial output: three failures and two passing controls. The missing prompt failed both the edited
+move and refused-move cases; the late-response case observed a new basket id after its local label
+was cleared. After implementation, five passed. The first green attempt additionally exposed an
+incomplete new fixture: `askOrderDeadEnds` was undefined. The corrected fixture supplies that read
+and a target table; the earlier attempt is retained, not counted as a pass.
+
+Consumer command:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts src/till-app-drafts.test.ts src/screens/till-counter-screen.test.ts
+```
+
+Output: three files, 946 tests passed. This ran before the final same-id/new-copy, stale-decision and
+native picker cases were added. Its log also prints the intentionally malformed printer fixture's
+rejection at `printerChoices.receipt`; the earlier till-pages checkpoint retains the installed
+baseline reproduction. This change does not alter that printer path.
+
+Final focused runs cover the pending move's later typing, same-id/new-copy identity, replaced-scope
+stale decision, failure retention, unrelated-order and revert controls. Eight native picker flows
+exercise English and Spanish, light and dark, at 390 and 1280 pixels: the real Move to table button,
+free-table target, warning initial focus, Escape, Keep, return focus and Discard. Warning-only axe scans pass;
+sixteen warning/kept captures and four contact sheets were inspected. These are stub-API flows,
+not live venue moves or full-shell accessibility scans. The Spanish product-button price spelling
+and phone total clipping are visible in these fixtures too; their real-stack cause remains unverified,
+as the earlier basket checkpoint records.
+
+In an installed independent measuring copy, deleting the move event gate makes the edited-move
+case fail beside a passing unrelated-order control. Removing the payload check makes the later-label
+case fail; removing the load-generation check makes the same-id/new-copy case fail. Each deletion
+run reports one failure and one passing control. Restored focused cases pass. Logs, captures and
+byte-comparison receipts remain in the local campaign directory:
+`receipts/w69-move-basket-20261007/`.
+
+The native return-focus assertion initially failed in all eight variants after Escape while seven
+behavioral controls passed. The picker has closed and its target button is no longer retained when
+the warning opens. The held-orders component exposes focus for a specific order; after a kept
+decision and the application update, the event's connected component receives that focus request.
+The final native run passes all fifteen cases, including Escape/Keep focus assertions. Removing the
+kept-decision focus callback fails the phone/light/English case beside its unrelated-order control.
+A separate two-row case selects the second order and leaves focus alone if the requested row vanished.
+
+The final consumer run adds `src/widgets/held-orders.test.ts` and
+`src/widgets/held-orders.a11y.test.ts` to the three files above: five files and 994 tests pass.
+The unedited fiscal `write-path.e2e.test.ts` and `inmutabilidad.test.ts` report twenty passing tests.
+The till typecheck, four-file ESLint and source formatting commands pass; `git diff --check` passes.
+Only these new documentation sections were formatted through Prettier's Markdown stdin parser,
+without claiming that an ignored whole-document check read historical text.
+
+Existing behavioral assertions are unchanged. Remaining basket/context routes, dirty unindexed
+navigation, activated native reload, other links and the advancing-owner audit still keep the
+whole W69 item incomplete. No push, external review, PR, CI or landing is claimed here.
+
+
+## Dirty unindexed till history and activated reload, 2026-10-07
+
+Back/Forward into an unindexed same-document entry now has four real-shell acceptance cases:
+each direction with Keep and Discard. They retain the actual Schedule owner and its typed note
+while asking, check the accepted URL, and verify that Discard preserves the destination's
+unrelated state. The cases assert no history push, no guessed `history.go`, unchanged history
+length, fresh index zero and no absence submission or logout. They passed against the existing
+shared guard on their first run; this checkpoint changes tests and browser-command support,
+not application behavior.
+
+The new `apps/till/src/till-app.unsaved-changes.test.ts` exercises an independent page with the
+real TillApp and Schedule form, a synthetic API and an actual label click before reload.
+The Playwright command in `apps/till/test/native-reload.ts` receives the browser's native
+`beforeunload` dialog. Keep retains the document and native input; accepting changes the document
+without submitting. Clean, reverted and successfully submitted requests reload without a dialog.
+The command closes its independent page in `finally`, including failed setup, and never reloads
+the Vitest runner. It uses Chromium's reload command because the earlier `page.reload` experiment
+waited for a navigation that dismissing the warning prevented; that failed log remains retained.
+Tab closing, external navigation, no-activation behavior and other platforms are not measured.
+
+Commands and results, retained under the local campaign receipt directory
+`receipts/w69-unindexed-20261007/`:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t 'unindexed .* protects the mounted schedule'
+# 4 passed (first-run.log)
+pnpm --filter @waitron/till exec vitest run src/till-app.unsaved-changes.test.ts
+# 5 passed (native-green.log)
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts src/till-app.unsaved-changes.test.ts src/till-app-drafts.test.ts src/screens/till-schedule-screen.test.ts src/screens/till-schedule-screen.unsaved.test.ts
+# 989 passed (family.log)
+```
+
+The family prints the malformed printer-choice rejection at `printerChoices.receipt`. The earlier
+installed baseline experiment in `receipts/w69-till-pages-20261007/baseline-switch.log` records
+the same rejection; this checkpoint changes no printer behavior or historical assertion.
+
+Two independent deletions ran in an installed disposable worktree containing the complete
+candidate. Removing unload listener registration failed both dirty native cases with
+`actual []` versus `expected ["beforeunload"]`; all three clean/revert/save controls passed.
+Removing the till history dirty gate failed all four new unindexed cases; the retained-basket
+traversal control passed. Restoring both source files passed ten cases, and six source/test/config
+files matched the feature tree before the owned candidate and empty parent were removed.
+The logs are `native-deletion.log`, `unindexed-deletion.log`, `restored-controls.log` and
+`candidate-cleanup.txt`. Initial missing-command, wrong-shell-tag, label-actionability and
+cancelled-navigation failures are fixture development records, not product regression receipts.
+
+The till source typecheck and an explicit TypeScript check of its browser command/config passed.
+The first explicit compiler command was refused by TypeScript 7 because it omitted
+`--ignoreConfig`; `command-types-corrected.log` retains the corrected successful command.
+Coverage vocabulary, native-field, style-token and CLAUDE pointer guards passed 46 cases; unedited
+fiscal write-path/inmutabilidad passed twenty. ESLint, source formatting and `git diff --check`
+passed. No new visual styling or application code changed, and no existing assertion changed.
+
+The remaining basket/context and link routes, other native leave paths and advancing-source
+owner audit remain open. Tasks 2/3 remain complete; Tasks 1/4/5/6 remain partial. W69 is not
+ready for finish-branch or landing.
+
+## Till profile context and native document leaving, 2026-10-07
+
+Switching to another device profile can replace the Schedule screen. The new real-shell case
+first failed because no warning opened before that replacement. The profile switch now requests
+the shared coordinator before sending its existing command. Keep retains the Schedule note,
+URL and chooser; Discard continues the switch once without submitting the
+absence request or signing out. The retained counter basket is excluded from that request.
+Choosing the already active profile closes only its chooser and retains the Schedule input.
+
+The existing refusal for an order in progress remains before the warning. A separate failing
+case added a basket line while the warning was open and observed the profile request being sent.
+The accepted continuation now rechecks that refusal. Clean and reverted Schedule controls switch
+directly; a label-only basket survives a successful profile switch and remains unload-protected.
+Disconnect aborts the pending leave and a late Discard sends no profile command. Existing test
+assertions are unchanged. The new Schedule fixture adds the absence request method so the test
+can also check that the command was not sent.
+
+The independent Playwright page now measures cross-origin navigation and tab closing, as well
+as reload. Each route has Keep/Discard cases for the actual Schedule input and clean/revert/save
+controls. The requested destination is locally intercepted, so no outside website or live venue
+is involved. Accepting native leave does not submit the request. The initial ten failures came
+from the browser command not yet implementing those two routes; a later URL expectation used the
+fixture's starting URL instead of Schedule's accepted route. Those are test-support failures,
+not product defect receipts. All fifteen native cases pass with the existing unload registration.
+These measurements use activated desktop Chromium. Mobile process termination, other browsers
+and no-activation behavior remain unverified.
+
+Commands retained in Lane E `receipts/w69-leave-paths-20261007/`:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t "switching the device's profile from the header"
+# 27 passed, including eight native profile flows after fixture corrections
+pnpm --filter @waitron/till exec vitest run src/till-app.test.ts src/till-app.unsaved-changes.test.ts src/till-app-drafts.test.ts src/screens/till-schedule-screen.test.ts src/screens/till-schedule-screen.unsaved.test.ts src/widgets/profile-dialog.test.ts src/widgets/profile-dialog.a11y.test.ts
+# 1043 passed across seven files after the continuation refactor
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+# 20 passed, both suites unedited
+```
+
+The family prints the deliberately incomplete printer-choice fixture's rejection at
+`printerChoices.receipt`; the earlier installed baseline receipt is
+`receipts/w69-till-pages-20261007/baseline-switch.log`. No printer logic changed here.
+Source typechecking, the explicit browser-command/config TypeScript check, ESLint, source
+formatting and `git diff --check` pass. The related family is not package-wide coverage or CI.
+
+Three independent mutations ran in an installed disposable candidate. Removing unload
+registration failed all six dirty native cases while nine clean/revert/save cases passed.
+Removing the profile gate failed the edited-Schedule case with three passing controls.
+Removing its continuation's basket recheck failed the later-line case with its clean control
+passing. Restoring the candidate passed twenty selected cases. Five final source/support files
+matched the feature tree byte for byte; the owned measuring worktree and empty parent were
+removed. Logs: `listener-deletion.log`, `profile-gate-final-deletion.log`,
+`profile-recheck-deletion.log`, `restored-controls.log` and `candidate-byte-comparison.txt`.
+
+Eight actual profile-picker/Switch flows cover EN/ES, light/dark and 390/1280 widths. They check
+initial Keep focus, Escape, focus return to Switch, explicit Keep and Discard. Eight warning-only
+axe scans pass with a neutral pointer, and sixteen captures were inspected in four sheets.
+Initial pointer-sensitive scans reported Discard at 4.21:1 in light and 4.49:1 in dark. The dark
+reading is also recorded in the existing danger-button follow-up; the cause of the new light
+reading and its reproduction on main remain unverified. These neutral-pointer scans do not
+establish hover accessibility or full-shell accessibility. No shared colour was changed.
+The new revert fixture initially tried to change an input behind the open native chooser; it
+now reverts before opening it, as the real user route requires.
+
+This checkpoint closes the measured profile-context and native document-leave cases. The final
+advancing-owner inventory and remaining context/link acceptance still keep W69 incomplete.
+In particular, inspect the separate unassigned table store and its replacement paths during that
+inventory; no runtime defect or exemption is established here for that store. Tasks 2/3 remain
+complete; Tasks 1/4/5/6 remain partial. No external review, push, PR, CI or landing is claimed.
+
+
+## Unassigned table orders, 2026-10-07
+
+The actual till shell's unassigned table draft is a separate `WorkingOrderStore` from the
+counter basket and the automatically saved party draft. Three new cases failed before the fix:
+after adding Beer the unload event was not cancelled; opening another table did not ask before
+replacing the draft; voluntary signout did not ask. The second red run put the replacement
+assertion before the unload assertion, establishing the missing table gate independently.
+
+That store now supplies its own shared draft scope. Its comparison includes order values,
+course overrides and split-row markers; display-only notifications do not cancel an outstanding
+question. Tabs and history that retain the store exclude its scope from the navigation question.
+Opening another table includes it; Keep retains the local lines and Discard continues the read.
+A refused read keeps those lines and the unload listener. Voluntary signout includes this scope,
+while inactivity lock clears the local store immediately and invalidates the old decision.
+The counter basket continues to follow its separate retained lifecycle. Party drafts remain
+exempt and the test observes their normal automatic save after returning to the floor.
+
+Commands retained in Lane E `receipts/w69-partyless-20261007/`:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app-drafts.test.ts -t 'W69 unassigned table draft'
+# initial three cases: 3 failed; expanded final cases: 18 passed
+pnpm --filter @waitron/till exec vitest run src/till-app-drafts.test.ts src/till-app.test.ts src/till-app.unsaved-changes.test.ts
+# 955 passed before adding the fifteen additional controls/visual cases
+pnpm exec vitest run scripts/english-only.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/claude-md-pointers.test.ts
+# 1334 passed
+```
+
+The related till run prints the deliberately incomplete printer-choice fixture's rejection;
+`receipts/w69-till-pages-20261007/baseline-switch.log` holds the earlier installed baseline
+receipt. No printer behavior or existing assertion changed here. The mount helper gained an
+optional theme argument for the new capture matrix.
+
+Eight native table-button/Escape/Keep/Discard flows passed in EN/ES, light/dark and 390/1280 widths.
+They assert initial Keep focus and return focus to the same table button, retained lines and no
+party draft read before Discard. Eight warning-only neutral-pointer axe scans passed. Sixteen
+captures were inspected in four contact sheets. The API is synthetic; its kitchen read refusal
+and unknown clock produce banners behind the warning. This is no live-venue or full-shell
+accessibility measurement, and this owner uses dispatched unload events rather than a new
+activated native reload experiment. Earlier actual-Schedule native leave receipts remain separate.
+
+Five independent mutations ran in a fully installed detached measuring checkout containing the
+complete candidate. Removing the store subscription, table gate, signout inclusion, course
+comparison or inactivity reset each failed its intended case alongside three passing
+clean/revert/automatic-save controls. `deletions.json` records the exact commands and summaries.
+The candidate is restored and its sources compared before removal; cleanup is recorded locally.
+
+This checkpoint covers the measured unassigned table owner. The final advancing-source inventory,
+remaining context/link acceptance, reconciliation with main, whole-branch review and current-head
+CI remain outstanding. Tasks 2/3 stay complete; Tasks 1/4/5/6 stay partial. W69 is not ready for
+finish-branch or landing.
+
+
+## Dashboard local links and bill-payment consumers, 2026-10-07
+
+The branch was rebased from `f88398265c3b546b429c2e674a76473762fe3d52` onto
+`5839b1e4b57a2608ff4621f2b6a37c4c35aa1ce7`, without conflicts. All 109 entries in
+`git range-diff` report unchanged patches. Main adds the actionable `device.profile_changed`
+refusal to the till, alongside new tests; the combined tree retains it. The locked dependency
+install and dashboard/till/setup typechecks passed after the rebase.
+
+A source inventory of application/contributed links found the login's `#fieldLink` family.
+The dashboard capture handler treated those fragment-only form actions as ordinary page links,
+preventing their target handlers from running. Three actual-dashboard reset-link cases failed:
+Dirty/Keep/Discard never reached the reset notice, and clean/reverted resets never reached it
+either. The handler now leaves fragment-only links to their target. The login still owns its
+shared leave request; ordinary same-app URLs with fragments still use the shell's navigation gate.
+The new cases assert the retained password on Keep, one reset for the entered email on Discard,
+no hash change and clean/revert exemptions. Existing assertions are unchanged. The login fixture
+accepts optional API overrides for the new reset command.
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.login-unsaved.test.ts -t 'the real .*login reset link'
+# before the fix: 3 failed
+pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.login-unsaved.test.ts src/dashboard-app.unsaved-changes.test.ts src/dashboard-app.profile-unsaved.test.ts src/screens/login-screen.unsaved.test.ts src/screens/login-screen.test.ts
+# after the fix: 337 passed
+```
+
+In an independently installed detached candidate, deleting only the fragment exemption failed
+all three new cases. Both ordinary same-app anchor controls passed, including full paths with
+query strings and fragments. Restoring the exemption passed all five selected cases. Three
+candidate source/test files were compared with the feature tree before removing the owned
+measuring checkout and its empty parent. Receipts: `link-deletion.log`, `link-restored.log`,
+`link-candidate-comparison.txt` and `link-candidate-cleanup.txt` under the same local receipt directory.
+
+The broader rebased till command added `src/till-app-bill-payments.test.ts` to the earlier
+three-file family. It reported 16 failures and 1064 passes; its other three files passed.
+The failed cases attempted voluntary signout or Back from an edited payment/refund form without
+accepting W69's leave warning. Twelve leave sites now explicitly assert the question is open
+and choose Discard before continuing those cases. Their payment/refund values, permission,
+idempotency, operator-boundary and late-response assertions are unchanged. This follows the
+design's Leaving a page rule requiring a question before voluntary signout or navigation, while
+forced exits stay separate. The cases are listed for the eventual PR's Changed test checks FYI.
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts
+# after the leave-step updates: 109 passed
+```
+
+Those failures are retained in `rebased-family.log`; this is no package-wide or CI green claim.
+The focused payment-consumer rerun is `bill-pay-consumers.log`. The login family, scoped lint,
+source formatting and dashboard/till typechecks pass. No fiscal golden data, money calculation,
+permission or guard assertion was changed.
+
+The inventory also locates contributed image-usage, routing, receipt-context, menu and product
+links, the demo bar, setup help/cloud/done links, and till enrolment's approval guide. It is a
+source candidate list, including a few test helpers, not runtime acceptance for all those paths.
+Finish that route/context matrix and the final full owner/exemption audit against this base,
+retire current rollout wording in the shared contract/backlog where the evidence supports it,
+then perform the one whole-branch run-it review, normal hook and current-head CI. W69 remains
+in progress and is not ready to finish or land.
+
+## Receipt preview navigation and real management link, 2026-10-07
+
+Changing only the receipt preview's department on the actual dashboard first failed:
+`departmentId` stayed `bar` instead of becoming `deli`. Its failure capture showed the shared
+discard warning over the edited Receipts form. `ReceiptsScreen.#choosePreviewDepartment`
+writes through the shared navigation guard; the shell selected all draft owners even though
+this context change retained the Receipts form. The shell now excludes that owner and its
+children only when both URLs identify the same receipt page and become identical after removing
+`departmentId`. Other owners remain selected. No receipt submit or fiscal code changed.
+
+The new actual-shell case changes the heading, selects Deli, traverses Back to Bar and checks
+both preview requests still carry `Edited heading`. It then leaves through the Kitchen tab:
+Keep retains that heading and Discard restores the baseline. Eight variants cover EN/ES,
+light/dark and 390/1280 widths, with a scoped confirmation axe check and two captures each.
+The additional real department-management link case keeps the heading, then discards before
+leaving; its fixture enables no venue-service module, so the existing permission fallback
+lands on Overview. This does not establish that contributed module's destination rendering.
+
+Observed commands and local receipts under `receipts/w69-link-context-20261007/` in Lane E:
+
+- `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.venue-settings-unsaved.test.ts -t 'receipt preview department navigation'`: initial one assertion failure, then one pass (`receipt-red.log`, `receipt-green.log`).
+- The receipt/shell/profile family across eight files passed 221 before expansion to the eight visual variants (`receipt-family.log`).
+- `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.venue-settings-unsaved.test.ts -t 'receipt preview department navigation|the real Receipts'`: nine pass, including eight scoped axe checks (`receipt-matrix.log`). Sixteen captures inspected in four contact sheets. Synthetic API only; no full-shell accessibility or real-venue claim.
+- In a detached measuring checkout with `pnpm install --frozen-lockfile`, removing the preview exemption gives one failure/two controls passing; widening it to receipt departures gives two failures/one control passing. Restored selection gives three passes (`drop-preview-exclusion.log`, `widen-preview-exclusion.log`, `candidate-restored.log`). The application file matches the feature bytes; the final matrix test was copied to the measuring checkout after these controls.
+- `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`: 20 pass, both files unedited (`fiscal.log`).
+- Final eight-file receipt/shell/profile family: 228 pass (`final-family.log`). Root style/native-field/document-pointer/subscription guards: 42 pass (`root.log`). Dashboard types, changed-source lint and formatting, and `git diff --check` pass.
+- Final restored measuring checkout: ten pass (`candidate-final-restored.log`); application and test bytes match the feature, then the owned worktree and empty parent were removed (`candidate-comparison.txt`, `candidate-cleanup.txt`).
+
+Existing behavioral assertions remain unchanged. The new captures write under the ignored
+package `node_modules/.cache/` folder. This checkpoint covers receipt preview context and its
+actual management link. Contributed image-usage/routing links, menu/product links, demo-bar
+links, setup help/cloud/done and till enrolment approval links still need the remaining actual
+route matrix, followed by the advancing-owner audit, whole-branch review and current-head CI.
+W69 remains incomplete; Tasks 1/4/5/6 stay partial and Tasks 2/3 complete.
+
+
+## Rendered management links and browser-owned departures, 2026-10-07
+
+The rendered-link cases now check image usage destinations (receipt, section and product),
+menu inclusion and the preview link's own handler, routing-table device/watcher links and the
+demo bar. They retain an edited profile telephone through Keep and follow the destination
+only after Discard. The device link in the demo bar remains browser-owned and retains unload
+protection. The accepted profile URL preserves the underlying view segment.
+
+Setup checks its rendered trust-help and Cloud approval links with an accepted root draft.
+Both target another tab and leave the draft protected. After successful provisioning, the
+three Done choice links and the backup link leave without a second question. Till checks
+its real enrolment approval link before submission, after a revert and after the join request
+succeeds. Only the edited, unsubmitted name cancels an unload event; the submitted name is
+checked against the exact join argument.
+
+These are acceptance checks of the existing implementation. No production behavior changed.
+The initial missing demo-mode response, incorrect API reference, incomplete menu/email fixtures
+and profile URL expectations were fixture failures, excluded from defect evidence. No existing
+behavioral assertion changed. The mount helper additionally accepts an optional contributed
+request client. The earlier venue-settings captures now write under the ignored package
+`node_modules/.cache/` folder; the surrounding suite is rerun after that path change.
+
+The events are dispatched through the actual rendered elements and shadow roots. The tests
+suppress browser navigation at the document boundary; the contributed-link cases dispatch
+from a source behind a profile modal. They establish interception and draft decisions, not
+physical click reachability through a native modal, another tab opening, or an activated native
+unload prompt. The earlier native leave receipts remain separate. The product destination
+fixture returns `product.not_found`; it checks accepted navigation, not a loaded product editor.
+
+The installed detached measuring checkout removes three boundaries separately. Dropping the
+dashboard link write fails eight leave-question assertions, with the device departure passing.
+Removing native unload cancellation fails the two dirty setup cases and edited enrolment;
+Done, reverted enrolment and submitted enrolment pass. Widening dashboard interception to other
+app paths fails the device-link default-handling assertion, with the same-app link passing.
+All changes are restored before the final selected runs and byte comparison. Exact commands,
+counts and limits are in Lane E `receipts/w69-rendered-links-20261007/checkpoint.md`.
+
+The rendered-link matrix is covered at this checkpoint. The final advancing-owner/exemption
+audit, reconciliation with main, whole-branch run-it review, normal push hook and current-head
+CI remain outstanding. Tasks 2/3 stay complete; Tasks 1/4/5/6 remain partial. W69 is not ready
+for finish-branch or landing.
+
+
+## Final owner discovery: PIN entry, 2026-10-07
+
+The repeated discovery on rebased W69 found the PIN sign-in owner still outside the shared
+registry. It uses `till-numeric-pad`, which the field-tag search omitted. The inventory already
+classified `till-lock-screen` as protected; its implementation remained missing despite the
+previous modal/page checkpoints. Include numeric keypads when repeating discovery and inspect
+the containing credential owner, rather than treating the keypad's primitive exemption as its
+parent's exemption.
+
+Five new actual-control cases failed before registration and Cancel interception. The existing
+41 lock-screen cases and those five then passed. A later-input case failed because excluding
+an in-flight login by a count also excluded digits typed after submission. The submitted-value exemption now leaves later digits protected. The final lock-screen pair
+passes 56 cases; types and changed-source lint pass. Existing assertions are unchanged.
+Five independent installed deletion experiments remove Cancel interception, keypad notifications,
+the pending-submit exemption, connection identity or disposal. Each produces its intended
+assertion failure beside a passing standalone clean-close control. The restored copy passes
+56 cases and matches the three source/test files byte for byte before removal. Exact commands
+and outputs are in Lane E `receipts/w69-final-audit-20261007/`.
+
+The native Cancel/Escape flows passed at measured 390/1280 widths in EN/ES and both themes.
+Eight confirmation-scoped axe scans passed; sixteen captures were inspected. Keep restores
+Cancel focus and retains masked digits. These flows use the actual sign-in screen with a
+synthetic login API, not live authentication or a PIN-specific activated browser warning.
+The first real-shell locale case used the wrong event name and failed before reaching its
+handler; the corrected `wt-locale-selected` case passes and is the runtime receipt.
+
+Main advanced from `5839b1e4b57a2608ff4621f2b6a37c4c35aa1ce7` to
+`34be43393ff99f9e86dd5dbca406f215265ffdc7`, adding demo seed changes and documentation.
+The rebase completed without conflicts. The other lanes' working changes include printer
+and payment screens; the W69 queue explicitly waives that overlap. No foreign source was changed.
+The complete repeated source search is retained in Lane E's
+`receipts/w69-final-audit-20261007/form-discovery.json`. A search result is an inventory,
+not runtime evidence. Whole-branch review and required current-head CI remain outstanding.
+
+
+## Whole-branch review and history corrections, 2026-10-07
+
+The single Claude run-it review used an independently cloned, frozen-installed candidate at
+`a08c20bd611579cfafa83337dd627c57afb5fcbc`, base
+`34be43393ff99f9e86dd5dbca406f215265ffdc7`. Its complete report, 559-second timing and JSON token
+usage are retained in Lane E `receipts/w69-final-audit-20261007/review-report.md*`.
+
+All four findings were accepted at their observed boundary:
+
+- The new catalogue consumer test failed with `?field=name` after closing the linked editor;
+  the Google callback test failed with `?login=google` after a later controller write. Both
+  raw replacements now use guarded updates; path and field-query removal share one controller
+  write. The initial reopened-editor expectation used `null` where its declared default is
+  an empty string; that fixture expectation was corrected, separate from the two actual reds.
+- Opening hours used a copied position tag. The actual venue-operations control's Back/Keep
+  case failed by returning to `before-operations` instead of Operations on a subsequent clean
+  Back. Its guarded write now retains Operations and supports Forward back to Hours.
+- The copied-position approval test failed because the old epoch was reused. Approval now
+  creates a fresh epoch. The unknown-position fallback still replaces the traversed entry;
+  the test's initial single-Forward expectation was corrected to the two actual entries that
+  this documented fallback leaves, without changing the original epoch assertion.
+- `forceReset` intentionally unregisters old handles, as its existing core test requires.
+  The real till server-switch case exposed the retained PIN component after that reset.
+  Its locale/operator-session key now rebuilds the credential form, clears its old PIN and
+  registers fresh input protection. The additional enrolment server-switch case passes
+  without changing enrolment: boot already rebuilds that form.
+
+The reviewer additionally searched for a missing `changed()` in image-upload. That component
+registers an intentionally clean ancestry scope; its image child owns authored values. The
+existing nested child/parent cases pass in the focused dashboard run. No picker change was
+made. Existing dashboard session-invalid cases clear credentials and assert that fresh email
+input again protects unload. The reviewer did not run every editor or live server; its
+read-only claims about exact decimals, child commits, dialog close reports and till navigation
+remain unverified by that review alone, rather than newly established by reading.
+
+Four independent installed candidate mutations each produced one intended regression failure
+beside one passing legitimate control: remove query cleanup, bypass the Hours guard, reuse
+history's epoch, and remove the operator-session key. All four restored pairs passed. Twelve
+changed source/test files matched the feature checkout byte for byte before removing the exact
+candidate. Commands, full outputs and comparison are in `review-controls.json`,
+`review-control-*.log`, `review-restored-*.log` and `review-candidate-match.json` in the same
+local receipt folder. No previous behavioral assertion was changed by these corrections.
+
+Current-head push-hook and CI results still belong to the delivery checkpoint; this review
+receipt does not claim full-package coverage, live venue writes or all-platform native prompts.
+
+
+## CI repairs and incomplete inline printer owners, 2026-10-07
+
+PR #1325's first head, `ee2cfb0652a06689182ccc7e90c71d08518cf19a`, passed the normal
+126-second push hook (5,207 root tests), licence checks and CodeQL. CI run `37564044959`
+finished with dashboard and till failures: 19 jobs succeeded, three failed including the
+summary, and six were skipped. PR #1325 is now a draft; it cannot be landed on these results.
+
+Five till failures reproduced locally. Two lock tests now invoke the injected session activity's
+idle callback, because voluntary logout must ask about an edited form while forced lock must
+clear it. The original absence, no-banner and no-late-read assertions remain. Two voluntary
+leave tests explicitly answer Discard before their original assertions. The paid held-item test
+awaits the completed dialog's removal before reopening Items; its payment and no-sale assertions
+remain. The five corrected cases pass. `pnpm --filter @waitron/till test:coverage` passes
+5,394 tests and the unchanged thresholds: statements 98.04%, branches 95.71%, functions 99.03%
+and lines 99.40%.
+
+Five printer failures reproduced because the shared navigation observer stopped forwarding the
+native popstate event to an unguarded legacy consumer. The observer now forwards that event;
+an accepted guarded write calls the restore callback without an event. The new regression failed
+before the fix. In an independent frozen-installed copy, deleting event forwarding produced
+one failure beside one passing indexed-history control; restoring it passed both cases. Seven
+changed files matched before that copy was removed. All 44 shared navigation cases pass.
+The dashboard history test now counts its one push directly: Chromium's capped history length
+cannot distinguish that push when the suite already has 50 entries. The complete printer and
+app-unsaved suites pass 469 tests; UI, dashboard and till typechecks pass.
+
+These printer failures also exposed unfinished W69 scope. The inline detail name and network
+connection editors still use armed local discard prompts, visible in
+`apps/dashboard/src/screens/printers-screen.ts` at the detail save, breadcrumb and input handlers.
+The inventory's protected printer row requires the shared question. The earlier final-audit
+completion statement is superseded: these two owners still need dirty/revert/unload, Keep/Discard,
+context/history, independent-save, failed-save, newer-input, stale-reply and forced-teardown
+acceptance. Modal printer owners' earlier receipts do not establish this inline behavior.
+
+Exact failed CI logs, local red/green output, full till coverage, observer deletion controls and
+changed-test notes are retained under Lane E `receipts/w69-final-audit-20261007/` as
+`ci-*-failure.log`, `ci-till-repro.log`, `ci-till-corrected.log`, `ci-till-coverage.log`,
+`ci-printer-repro.log`, `ci-observer-*.log`, `ci-observer-control.json` and
+`ci-dashboard-corrected.log`. No fiscal, root guard or coverage threshold was changed.
+Keep the single completed Claude review; do not repeat it solely for these fixes or a rebase.
+
+
+## Inline printer detail draft checkpoint, 2026-10-07
+
+The inline name and network connection in `apps/dashboard/src/screens/printers-screen.ts` now
+register separate normalized snapshots with the shared leave controller. The name compares its
+trimmed submitted value; the connection compares its trimmed host and normalized numeric port.
+Successful writes commit only their submitted snapshot before refresh. Newer delivered input
+remains editable and dirty after either success or refusal. Cancel consults only the requested
+field owner's scope. A scoped name save leaves a changed connection protected.
+
+`pnpm --filter @waitron/dashboard exec vitest run src/screens/printer-inline.unsaved.test.ts`
+passes 15 browser cases using the real leave controller and URL guard with a synthetic API.
+The first four cases failed at missing unload protection; six save cases subsequently failed at
+remaining dirty after success or newer input remaining disabled. Two separate installed-copy
+registration deletions each fail the affected owner's unload assertion with the other owner's
+revert control passing; restoring that copy passes all 15. Both copied source/test files matched
+the feature tree at that point, before the following breadcrumb correction; that copy was removed.
+
+The existing printer suite reported six failures and 417 passes after the first breadcrumb change:
+an unguarded URL write updates history without publishing an accepted route. The breadcrumb now
+keeps its immediate list reset when the write returns no guarded operation. The six failed cases,
+inline consumer cases and new owner suite pass together: 34 passed, 404 skipped. No existing
+assertion or fixture changed. The earlier combined run was interrupted without a Tests count
+while the new test file had been edited; it is excluded from verification evidence.
+
+This is a partial owner checkpoint. The standalone local discard arming remains in the screen
+and must be retired, preserving the existing behavioral assertions through shared-controller
+fixtures where necessary. Remaining acceptance includes the actual dashboard context, sign-out
+and Forward paths; activated native reload; stale input/response and forced teardown; focus and
+EN/ES/light/dark/phone/desktop visual checks. The browser registration assertions do not establish
+activated native prompts or live printer writes. W69 and draft PR #1325 remain incomplete.
+
+The final fixed-source run of `pnpm --filter @waitron/dashboard exec vitest run
+src/screens/printers-screen.test.ts src/screens/printer-inline.unsaved.test.ts --reporter=verbose`
+passes all 438 cases after the breadcrumb correction. Dashboard typechecking, changed-source ESLint,
+source Prettier checking and `git diff --check` also pass. These are local checkpoint checks;
+no new push hook or current-head CI result is claimed.
+
+## Inline printer acceptance and prompt retirement, 2026-10-07
+
+This supersedes the partial inline printer checkpoint above. Inline Cancel uses the shared
+question; breadcrumbs and history use the application's shared navigation guard. The old local
+arming flags and their English/Spanish wording are removed. Existing value, live-refresh,
+refusal and late-write assertions stay in place. Eleven printer tests mount the real shared
+controller and accept explicit Discard instead of pressing the old action twice; the existing
+Cancel-then-Back case first chooses Keep.
+
+Two detached-input cases failed with `stale edit` replacing the reopened name/host. Their input
+handlers now ignore removed controls. An installed independent clone with that guard removed
+reports two intended failures alongside two passing normalized-revert controls; restoration
+reports four passes. Source bytes matched before that measuring copy was removed. A separate
+port-only case checks a changed port, a zero-padded clean revert and an explicit cleared-port
+write of `{ host: "10.0.0.9", port: null }`.
+
+`pnpm --filter @waitron/dashboard exec vitest run src/screens/printers-screen.test.ts
+src/screens/printer-inline.unsaved.test.ts` first reported four failures and 436 passes after
+retiring the standalone prompts. Four additional fixtures still used their old second click or
+local navigation warning. After their shared-controller conversion, the full run reported one
+fixture-readiness failure and 440 passes. Waiting for that fixture's initial read, as its former
+helper did, fixes the missing Edit control. The final focused command with `--testNamePattern
+'inline|unsaved.*printer|next printer.*draft|asks before.*printer|asks before.*connection|starts
+the inline printer'` reports 39 passes and 402 skipped. Current-head CI still owes the package-wide
+result; none of the failed full runs is recorded as green.
+
+A temporary Vite fixture rendered the real `DashboardApp` and printer screen with synthetic
+APIs in Chromium 153.0.8010.12. Sixteen combinations of both editors, EN/ES, light/dark and
+390/1280 widths pass native Escape, Keep/Discard, focus, reopening, scoped axe checks and
+activated reload dismissal/acceptance. Twelve additional cases pass both editors through the
+actual sidebar, language change, sign-out, Forward, printer-context change and forced session
+expiry. The 32 final captures were inspected. Early fixture attempts used an absent manager
+navigation target, a collapsed sidebar group and an unpainted dark canvas; those attempts are
+excluded from the final results. No live printer write or whole-shell accessibility claim is made.
+The previous whole-branch Claude review is retained. Rebase, push and current-head CI remain
+before delivery.
+
+## Current-head coverage repair, 2026-10-07
+
+CI run `37568443521` at `c940a9a26a69088ff51f5c79c6b6ecd484c6a7f4` passed the
+8,338 dashboard tests but refused branch coverage at 94.79%. Running
+`pnpm --filter @waitron/dashboard test:coverage` locally reproduced both results.
+The remaining CI jobs completed successfully. The normal push hook had passed in 111 seconds.
+
+Additional cases exercise disposed printer drafts, replacement reader discovery input and
+adoption replies, departed Profile credential operations, field/form Venue refusals, busy
+Purchase/Ingredient events and nested Product child creation. They assert retained/reverted
+values, exact submitted bodies, write ownership and independent scope cleanup. No production
+code or existing behavioral assertion changed in this coverage repair.
+
+In an independently installed clone, removing the discovery input guard failed one new case
+beside one passing revert control; removing adoption reply guards failed two beside one control.
+Removing Profile's save-operation checks failed six beside one clean-details control. Removing
+inline printer disposal failed four beside two revert controls. Removing child refusal/focus
+checks failed three beside one legitimate-refusal control. The final Google redirect, busy-input,
+detached-origin and already-open-child deletions failed six cases beside three controls. After
+restoring the guards, the seven changed test files passed all 153 cases and their measured source
+files matched the feature checkout byte for byte. The exact measuring directory was removed.
+Logs are retained in Lane E's `receipts/w69-ci-resume-20261007/`.
+
+The final full dashboard coverage command passed 8,371 tests across 262 files, with
+98.43% statements, 95% branches, 99.03% functions and 99.38% lines. Dashboard typechecking and
+changed-test lint passed. Earlier attempts with incomplete fixture return types, incorrect widget
+properties and an incomplete candidate overlay are excluded from those results. The previous
+Claude review remains retained; the next pushed head still needs its normal hook and required CI.

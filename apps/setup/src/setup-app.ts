@@ -1,3 +1,4 @@
+import { LeaveController, type DraftScope } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -9,7 +10,7 @@ import "./screens/connect-screen.js";
 import "./screens/restore-screen.js";
 import "./screens/restore-bucket-screen.js";
 import "./screens/cloud-restore-screen.js";
-import "./screens/live-source-screen.js";
+import { SetupLiveSourceScreen } from "./screens/live-source-screen.js";
 import "./screens/configuration-preview-screen.js";
 import "./screens/fiscal-test-screen.js";
 import "./screens/mode-screen.js";
@@ -31,6 +32,7 @@ import type {
   CloudRecoveryView,
   VenueDefaults,
 } from "./api/client.js";
+import { dispatchSetupGoto } from "./events.js";
 import type {
   BucketRestoreRequestDetail,
   ConfigurationRequestDetail,
@@ -97,6 +99,27 @@ function deepMerge(base: unknown, patch: unknown): unknown {
     out[key] = deepMerge(out[key], value);
   }
   return out;
+}
+
+function sameDraftValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((value, index) => sameDraftValue(value, b[index]))
+    );
+  }
+  if (!isPlainObject(a) || !isPlainObject(b)) return false;
+  const keys = (value: Record<string, unknown>) =>
+    Object.keys(value).filter((key) => value[key] !== undefined);
+  const aKeys = keys(a);
+  const bKeys = keys(b);
+  return (
+    aKeys.length === bKeys.length &&
+    aKeys.every((key) => Object.hasOwn(b, key) && sameDraftValue(a[key], b[key]))
+  );
 }
 
 /**
@@ -427,6 +450,7 @@ export class SetupApp extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     if (!this.#localeChosen) setLocale(matchBrowserLocale(this.browserLanguages));
+    if (this.#rootBaseline) this.#registerRoot();
   }
 
   #onLocaleSelected(event: CustomEvent<{ code: string }>): void {
@@ -460,6 +484,34 @@ export class SetupApp extends LitElement {
     },
   };
 
+  #rootBaseline?: DeepPartial<ProvisionBody>;
+  #rootScope?: DraftScope<DeepPartial<ProvisionBody>>;
+  #rootGeneration = 0;
+
+  override disconnectedCallback(): void {
+    ++this.#rootGeneration;
+    ++this.#cloudRecoveryAttempt;
+    this.cloudRecoveryBusy = false;
+    this.#rootScope?.dispose();
+    this.#rootScope = undefined;
+    super.disconnectedCallback();
+  }
+
+  #registerRoot(): void {
+    if (this.#rootScope || !this.isConnected) return;
+    this.#rootBaseline ??= structuredClone(this.draft);
+    this.#rootScope = this.leave.coordinator.register({
+      id: this,
+      current: () => this.draft,
+      snapshot: (draft) => structuredClone(draft),
+      equal: (a, b) => sameDraftValue(assembleBody(a), assembleBody(b)),
+      restore: (draft) => {
+        this.draft = draft;
+      },
+    });
+    this.#rootScope.commit(this.#rootBaseline);
+  }
+
   @state() private reviewError?: Message;
 
   @state() private venueError?: Message;
@@ -481,6 +533,8 @@ export class SetupApp extends LitElement {
   @state() private restoreLiveUnknown = false;
   /** Handed back to the archive screen with a refusal, so the owner's entries are kept. */
   @state() private restoreRequest?: RestoreRequestDetail;
+  #archiveRestoreAttempt = 0;
+  #bucketRestoreAttempt = 0;
   @state() private bucketRestoreError?: Message;
   @state() private bucketInvalidField?: BucketField;
   @state() private bucketLiveSince?: string;
@@ -494,6 +548,7 @@ export class SetupApp extends LitElement {
   @state() private cloudRecoveryError?: Message;
   @state() private cloudInvalidField?: CloudField;
   @state() private cloudRecoveryBusy = false;
+  #cloudRecoveryAttempt = 0;
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the Cloud path. */
   @state() private cloudLiveSince?: string;
   @state() private cloudLiveUnknown = false;
@@ -591,6 +646,8 @@ export class SetupApp extends LitElement {
 
   #onPatch(event: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>): void {
     event.stopPropagation();
+    if (!this.isConnected) return;
+    this.#registerRoot();
     const mode = event.detail.patch.mode;
     if (
       mode !== undefined &&
@@ -611,16 +668,110 @@ export class SetupApp extends LitElement {
       this.fiscalTestStatus = undefined;
     }
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
+    this.#rootScope?.changed();
   }
 
-  /**
-   * Clears each screen's `*Error` message, so a stale refusal or failure does not reappear when the
-   * operator later steps back onto its screen; outcomes that are not errors, such as the
-   * provisioning message the reset screen's Back returns to, are kept. The refusal routing assigns
-   * `this.screen` directly, not through `setup-goto`, so a refusal is not cleared on its way in.
-   */
+  #pendingGoto?: { owner: HTMLElement; finished: Promise<unknown> };
+
+  #requestModeChoice(
+    mode: "demo" | "prepare" | "live" | undefined,
+    proceed: () => void,
+    signal: AbortSignal,
+  ): void {
+    const owner = this.shadowRoot?.querySelector("setup-mode-screen");
+    if (!this.isConnected || this.screen !== "mode" || !owner) return;
+    const generation = this.#rootGeneration;
+    const abandonsRoot =
+      mode === undefined ||
+      (mode !== this.draft.mode && (mode === "demo" || this.draft.mode === "demo"));
+    if (!this.leave.coordinator.isDirty([this])) {
+      proceed();
+      return;
+    }
+    void this.leave.coordinator
+      .request({
+        scopes: abandonsRoot ? [this] : [],
+        reason: "navigation",
+        signal,
+        proceed: () => {},
+      })
+      .then((outcome) => {
+        if (
+          outcome !== "proceeded" ||
+          signal.aborted ||
+          !this.isConnected ||
+          generation !== this.#rootGeneration ||
+          this.screen !== "mode" ||
+          !owner.isConnected
+        )
+          return;
+        proceed();
+      });
+  }
+
+  #requestStartEmpty(proceed: () => void, signal: AbortSignal): void {
+    const owner = this.shadowRoot?.querySelector("setup-live-source-screen");
+    if (!this.isConnected || this.screen !== "live-source" || !owner) return;
+    const generation = this.#rootGeneration;
+    if (!this.leave.coordinator.isDirty([this, owner])) {
+      proceed();
+      return;
+    }
+    void this.leave.coordinator
+      .request({
+        scopes: [this, owner],
+        reason: "navigation",
+        signal,
+        proceed: () => {},
+      })
+      .then((outcome) => {
+        if (
+          outcome !== "proceeded" ||
+          signal.aborted ||
+          !this.isConnected ||
+          generation !== this.#rootGeneration ||
+          this.screen !== "live-source" ||
+          !owner.isConnected
+        )
+          return;
+        proceed();
+      });
+  }
+
   #onGoto(event: CustomEvent<{ screen: Screen }>): void {
     event.stopPropagation();
+    const destination = event.detail.screen;
+    if (destination === this.screen) return;
+    const origin = this.screen;
+    const owner = this.shadowRoot?.querySelector<HTMLElement>(`[data-test=screen-${origin}]`);
+    const navigate = () => {
+      if (!this.isConnected || this.screen !== origin || (owner && !owner.isConnected)) return;
+      const finished = this.leave.coordinator.request({
+        scopes: owner ? [owner] : [],
+        reason: "navigation",
+        proceed: () => {
+          if (!this.isConnected || this.screen !== origin || (owner && !owner.isConnected)) return;
+          this.#goto(destination);
+        },
+      });
+      if (owner && !this.#pendingGoto) {
+        const pending = { owner, finished };
+        this.#pendingGoto = pending;
+        void finished.finally(() => {
+          if (this.#pendingGoto === pending) this.#pendingGoto = undefined;
+        });
+      }
+    };
+    const previous = this.#pendingGoto;
+    // A child commit aborts its question before the coordinator's async request settles.
+    if (owner && previous?.owner === owner && !this.leave.coordinator.isDirty([owner])) {
+      void previous.finished.then(navigate);
+    } else navigate();
+  }
+
+  #goto(destination: Screen): void {
+    ++this.#cloudRecoveryAttempt;
+    this.cloudRecoveryBusy = false;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
     this.reviewError = undefined;
@@ -645,10 +796,12 @@ export class SetupApp extends LitElement {
     this.cloudLiveUnknown = false;
     this.configurationError = undefined;
     this.fiscalTestError = undefined;
+    this.resetBusy = false;
+    this.resetOutcome = undefined;
     this.resetCredentialsRejected = false;
     this.resetInvalidField = undefined;
     this.resetError = undefined;
-    this.screen = event.detail.screen;
+    this.screen = destination;
   }
 
   /** The venue→`cert`/`review` decision lives in the shell because the shell owns the merged draft. */
@@ -672,15 +825,20 @@ export class SetupApp extends LitElement {
     this.venueError = undefined;
     this.venueInvalidField = undefined;
     this.#clearProvisionOutcome();
+    this.#registerRoot();
+    const submitted = structuredClone(this.draft);
+    const generation = this.#rootGeneration;
     this.screen = "provisioning";
     try {
       await (this.#localeChosen
-        ? this.api.provision(assembleBody(this.draft), currentLocale())
-        : this.api.provision(assembleBody(this.draft)));
-      if (!this.isConnected) return;
+        ? this.api.provision(assembleBody(submitted), currentLocale())
+        : this.api.provision(assembleBody(submitted)));
+      if (!this.isConnected || generation !== this.#rootGeneration) return;
+      this.#rootBaseline = submitted;
+      this.#rootScope?.commit(submitted);
       this.screen = "done";
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!this.isConnected || generation !== this.#rootGeneration) return;
       this.#mapProvisionError(error as ApiError);
     }
   }
@@ -784,6 +942,13 @@ export class SetupApp extends LitElement {
 
   async #onRestoreRequested(event: CustomEvent<{ request: RestoreRequestDetail }>): Promise<void> {
     event.stopPropagation();
+    const attempt = ++this.#archiveRestoreAttempt;
+    const generation = this.#rootGeneration;
+    const current = () =>
+      this.isConnected &&
+      generation === this.#rootGeneration &&
+      attempt === this.#archiveRestoreAttempt &&
+      this.screen === "provisioning";
     this.restoreError = undefined;
     this.restoreInvalidField = undefined;
     this.#clearProvisionOutcome();
@@ -801,11 +966,11 @@ export class SetupApp extends LitElement {
         request.environment,
         request.oldBoxGone,
       );
-      if (!this.isConnected) return;
+      if (!current()) return;
       this.restoreRequest = undefined;
       this.screen = "done";
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!current()) return;
       const { code, params } = (error ?? {}) as {
         code?: unknown;
         params?: { lastChangeAt?: unknown };
@@ -844,6 +1009,13 @@ export class SetupApp extends LitElement {
     event: CustomEvent<{ request: BucketRestoreRequestDetail }>,
   ): Promise<void> {
     event.stopPropagation();
+    const attempt = ++this.#bucketRestoreAttempt;
+    const generation = this.#rootGeneration;
+    const current = () =>
+      this.isConnected &&
+      generation === this.#rootGeneration &&
+      attempt === this.#bucketRestoreAttempt &&
+      this.screen === "provisioning";
     const request = event.detail.request;
     // The server checked the old server and named the copy for the kit it was sent, not for another.
     if (request.kit !== this.bucketRequest?.kit) {
@@ -857,12 +1029,12 @@ export class SetupApp extends LitElement {
     this.screen = "provisioning";
     try {
       await this.api.restoreFromBucket(request);
-      if (!this.isConnected) return;
+      if (!current()) return;
       this.bucketRequest = undefined;
       this.rebuilt = true;
       this.screen = "done";
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!current()) return;
       const { code, params } = (error ?? {}) as {
         code?: unknown;
         params?: Record<string, unknown>;
@@ -905,7 +1077,18 @@ export class SetupApp extends LitElement {
     }>,
   ): Promise<void> {
     event.stopPropagation();
-    if (this.cloudRecoveryBusy) return;
+    if (this.cloudRecoveryBusy || !this.isConnected || this.screen !== "cloud-restore") return;
+    const attempt = ++this.#cloudRecoveryAttempt;
+    const generation = this.#rootGeneration;
+    const owner = this.shadowRoot?.querySelector("setup-cloud-restore-screen");
+    let phase: Screen = "cloud-restore";
+    const ownsBusy = () => attempt === this.#cloudRecoveryAttempt;
+    const current = () =>
+      this.isConnected &&
+      generation === this.#rootGeneration &&
+      ownsBusy() &&
+      this.screen === phase &&
+      (phase === "provisioning" || Boolean(owner?.isConnected));
     this.cloudRecoveryBusy = true;
     this.cloudRecoveryError = undefined;
     this.cloudInvalidField = undefined;
@@ -913,17 +1096,20 @@ export class SetupApp extends LitElement {
       const { action, pointId, oldBoxGone } = event.detail;
       if (action === "restore") {
         if (!pointId || pointId !== this.cloudRecoveryView?.point?.id) throw new Error();
-        this.screen = "provisioning";
+        phase = "provisioning";
+        this.screen = phase;
         await this.api.restoreFromCloud(pointId, oldBoxGone === true);
-        if (this.isConnected) this.screen = "done";
+        if (current()) this.screen = "done";
       } else {
         const shown = this.cloudRecoveryView?.point?.id;
-        this.cloudRecoveryView =
+        const view =
           action === "start"
             ? await this.api.startCloudRecovery()
             : action === "start-again"
               ? await this.api.startCloudRecoveryAgain()
               : await this.api.cloudRecoveryStatus();
+        if (!current()) return;
+        this.cloudRecoveryView = view;
         // The server answered the old-server question for the snapshot it was sent, not for another.
         if (this.cloudRecoveryView.point?.id !== shown) {
           this.cloudLiveSince = undefined;
@@ -931,7 +1117,7 @@ export class SetupApp extends LitElement {
         }
       }
     } catch (error) {
-      if (this.isConnected) {
+      if (current()) {
         const { code, params } = (error ?? {}) as {
           code?: unknown;
           params?: { lastChangeAt?: unknown };
@@ -959,7 +1145,7 @@ export class SetupApp extends LitElement {
         this.screen = "cloud-restore";
       }
     } finally {
-      this.cloudRecoveryBusy = false;
+      if (ownsBusy()) this.cloudRecoveryBusy = false;
     }
   }
 
@@ -967,13 +1153,19 @@ export class SetupApp extends LitElement {
     event: CustomEvent<{ request: ConfigurationRequestDetail }>,
   ): Promise<void> {
     event.stopPropagation();
+    if (!this.isConnected) return;
+    const origin = event.composedPath()[0];
+    const owner = origin instanceof SetupLiveSourceScreen ? origin : undefined;
+    this.#registerRoot();
+    const generation = this.#rootGeneration;
     this.configurationError = undefined;
     try {
       const preview = await this.api.stageConfiguration(
         event.detail.request.artifact,
         event.detail.request.passphrase,
       );
-      if (!this.isConnected) return;
+      if (!this.isConnected || generation !== this.#rootGeneration || (owner && !owner.isConnected))
+        return;
       const location = Object.fromEntries(
         Object.entries(preview.venue.location).filter(([key]) => key !== "id"),
       ) as ProvisionBody["venue"]["location"];
@@ -981,10 +1173,15 @@ export class SetupApp extends LitElement {
         configurationImport: true,
         venue: { ...preview.venue, location },
       }) as DeepPartial<ProvisionBody>;
+      this.#rootScope?.changed();
       this.configurationPreview = preview;
-      this.screen = "configuration-preview";
+      if (owner) {
+        owner.acceptImport(event.detail.request);
+        dispatchSetupGoto(owner, "configuration-preview");
+      } else this.screen = "configuration-preview";
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!this.isConnected || generation !== this.#rootGeneration || (owner && !owner.isConnected))
+        return;
       this.configurationError = describeConfigurationRefusal(error);
       this.screen = "live-source";
     }
@@ -1086,16 +1283,24 @@ export class SetupApp extends LitElement {
   async #onResetRequested(event: CustomEvent<{ credential: ResetCredential }>): Promise<void> {
     event.stopPropagation();
     if (this.resetBusy) return;
+    const owner = this.shadowRoot?.querySelector("setup-reset-screen");
+    const generation = this.#rootGeneration;
+    const ownsBusy = () =>
+      this.isConnected &&
+      this.screen === "reset" &&
+      owner?.isConnected &&
+      this.shadowRoot?.querySelector("setup-reset-screen") === owner;
+    const current = () => ownsBusy() && generation === this.#rootGeneration;
     this.resetBusy = true;
     this.resetCredentialsRejected = false;
     this.resetInvalidField = undefined;
     this.resetError = undefined;
     try {
       await this.api.resetIncompleteAdopt(event.detail.credential);
-      if (!this.isConnected) return;
+      if (!current()) return;
       this.resetOutcome = { kind: "resetting", message: say("shell.reset.resetting") };
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!current()) return;
       const { code, params } = (error ?? {}) as ApiError;
       switch (code) {
         case "password.invalid":
@@ -1122,7 +1327,7 @@ export class SetupApp extends LitElement {
           );
       }
     } finally {
-      if (this.isConnected) this.resetBusy = false;
+      if (ownsBusy()) this.resetBusy = false;
     }
   }
 
@@ -1139,40 +1344,52 @@ export class SetupApp extends LitElement {
     }
   }
 
+  private readonly leave = new LeaveController(this);
+
+  private leaveConfirmation() {
+    return this.leave.render({
+      heading: t("unsaved.heading"),
+      message: t("unsaved.message"),
+      keepLabel: t("unsaved.keep"),
+      discardLabel: t("unsaved.discard"),
+    });
+  }
+
   override render(): TemplateResult {
     // Listening on the container lets each screen talk back without the shell knowing which is mounted.
-    return html`<main
-      @setup-defaults-requested=${(event: CustomEvent) => {
-        event.stopPropagation();
-        void this.#loadVenueDefaults();
-      }}
-      @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
-      @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
-      @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
-      @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
-      @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
-      @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
-        void this.#onRestoreRequested(e)}
-      @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
-        void this.#onBucketRestoreRequested(e)}
-      @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
-      @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
-        void this.#onConfigurationRequested(e)}
-      @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
-      @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
-        void this.#onResetRequested(e)}
-    >
-      <header>
-        <div class="logo" data-test="setup-logo" role="img" aria-label="Waitron">
-          ${unsafeHTML(waitronLockup)}
-        </div>
-        <wt-language-chooser
-          .active=${currentLocale()}
-          @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => this.#onLocaleSelected(e)}
-        ></wt-language-chooser>
-      </header>
-      ${this.#renderScreen()}
-    </main>`;
+    return html`${this.leaveConfirmation()}
+      <main
+        @setup-defaults-requested=${(event: CustomEvent) => {
+          event.stopPropagation();
+          void this.#loadVenueDefaults();
+        }}
+        @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
+        @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
+        @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
+        @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
+        @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
+        @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
+          void this.#onRestoreRequested(e)}
+        @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
+          void this.#onBucketRestoreRequested(e)}
+        @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
+        @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
+          void this.#onConfigurationRequested(e)}
+        @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
+        @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
+          void this.#onResetRequested(e)}
+      >
+        <header>
+          <div class="logo" data-test="setup-logo" role="img" aria-label="Waitron">
+            ${unsafeHTML(waitronLockup)}
+          </div>
+          <wt-language-chooser
+            .active=${currentLocale()}
+            @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => this.#onLocaleSelected(e)}
+          ></wt-language-chooser>
+        </header>
+        ${this.#renderScreen()}
+      </main>`;
   }
 
   #renderScreen(): TemplateResult {
@@ -1220,6 +1437,7 @@ export class SetupApp extends LitElement {
         return html`<setup-live-source-screen
           data-test="screen-live-source"
           .errorMessage=${this.configurationError?.()}
+          .beforeEmpty=${(proceed: () => void, signal: AbortSignal) => this.#requestStartEmpty(proceed, signal)}
         ></setup-live-source-screen>`;
       case "configuration-preview":
         return html`<setup-configuration-preview-screen
@@ -1239,6 +1457,11 @@ export class SetupApp extends LitElement {
           data-test="screen-mode"
           .environment=${this.environment}
           .certificateNote=${!this.connectionAnswered}
+          .beforeChoice=${(
+            mode: "demo" | "prepare" | "live" | undefined,
+            proceed: () => void,
+            signal: AbortSignal,
+          ) => this.#requestModeChoice(mode, proceed, signal)}
         ></setup-mode-screen>`;
       case "connect":
         return html`<setup-connect-screen

@@ -35,6 +35,10 @@ test("a packed release works in an independent browser consumer", { timeout: 170
       "tarball must expose built JavaScript",
     );
     assert.equal(packed.exports["."].types, "./dist/types/index.d.ts");
+    assert.deepEqual(packed.exports["./unsaved-changes"], {
+      types: "./dist/types/unsaved-changes.d.ts",
+      import: "./dist/unsaved-changes.js",
+    });
     assert.deepEqual(packed.dependencies ?? {}, {});
     assert.deepEqual(packed.peerDependencies, { lit: "^3.2.0" });
     const files = (await run("tar", ["-tf", join(dir, tarball)], { timeout: 10000 })).stdout
@@ -131,6 +135,7 @@ test("a packed release works in an independent browser consumer", { timeout: 170
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(origin);
     await page.waitForSelector('body[data-ready="true"]');
+    assert.equal(await page.getAttribute("body", "data-leave-outcomes"), "kept/proceeded/1");
     const email = page.locator("#email input");
     const password = page.locator("#password input");
     assert.equal(await email.getAttribute("name"), "email");

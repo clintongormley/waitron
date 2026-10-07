@@ -1,7 +1,8 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -36,6 +37,7 @@ export class ProductColorForm extends LitElement {
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
   @property() name = "";
+  @property() productId = "";
   /** The product's own colour, or null when it takes its category's. */
   @property({ attribute: false }) color: string | null = null;
   /** What its category gives it: a colour, or null when the category has none. */
@@ -45,13 +47,43 @@ export class ProductColorForm extends LitElement {
   @state() private chosen: string | null = null;
   /** Refusal keys the person has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
+  #scope?: DraftScope<string | null>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
 
   protected override willUpdate(changes: PropertyValues<this>): void {
-    if (changes.has("open") && this.open) {
+    if (this.open && (changes.has("open") || changes.has("productId"))) {
       this.chosen = this.color;
       this.dismissed = new Set();
+      this.#scope?.dispose();
+      this.#scope = undefined;
     }
     if (changes.has("errors")) this.dismissed = new Set();
+    if (!this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<string | null>({
+        id: this,
+        current: () => this.chosen,
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        restore: (value) => {
+          this.chosen = value;
+        },
+      });
+    }
   }
   protected override updated(changes: PropertyValues<this>): void {
     if (changes.has("errors") && this.errors.color) void focusFirstInvalid(this.shadowRoot!);
@@ -70,6 +102,20 @@ export class ProductColorForm extends LitElement {
     this.dismissed = new Set([...this.dismissed, ...Object.keys(this.errors)]);
     this.#emit(event, "wt-submit", { color: this.chosen });
   }
+  commitSaved(submitted: string | null): void {
+    this.#scope?.commit(submitted);
+  }
+  closeSaved(submitted: string | null): void {
+    this.commitSaved(submitted);
+    this.open = false;
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
+  }
+  #cancel(event: Event): void {
+    event.stopPropagation();
+    if (this.busy || !this.open) return;
+    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.#emit(event, "wt-cancel", {});
+  }
   override render() {
     const errors = Object.fromEntries(
       Object.entries(this.errors).filter(([key, message]) => message && !this.dismissed.has(key)),
@@ -83,6 +129,7 @@ export class ProductColorForm extends LitElement {
     return html`<wt-modal
       size="standard"
       .open=${this.open}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       heading=${t("product_color.heading").replace("{name}", this.name)}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
@@ -103,6 +150,7 @@ export class ProductColorForm extends LitElement {
           errorId: "product-color-error",
           change: (color) => {
             this.chosen = color;
+            this.#scope?.changed();
             this.dismissed = new Set([...this.dismissed, "color"]);
           },
         })}
@@ -116,10 +164,7 @@ export class ProductColorForm extends LitElement {
           data-test="cancel"
           variant="secondary"
           .disabled=${this.busy}
-          @click=${(event: Event) => {
-            if (!this.busy) this.#emit(event, "wt-cancel", {});
-            else event.stopPropagation();
-          }}
+          @click=${this.#cancel}
           >${t("action.cancel")}</wt-button
         >
         <wt-button

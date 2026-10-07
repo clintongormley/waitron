@@ -17,6 +17,10 @@ import {
   formMessageStyles,
   submitOnEnter,
   baseStyles,
+  navigationGuardFor,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -63,6 +67,12 @@ const FAILURE_NOTICES: ReadonlySet<string> = new Set([
   "management_session.expired",
   "person.suspended",
 ]);
+
+type LoginDraft = Partial<Record<"email" | "password" | "pin" | "code" | "name", string>>;
+
+function sameLoginDraft(a: LoginDraft, b: LoginDraft): boolean {
+  return (["email", "password", "pin", "code", "name"] as const).every((key) => a[key] === b[key]);
+}
 
 type AccountActionPurpose = "invitation" | "password_reset";
 
@@ -276,6 +286,99 @@ export class LoginScreen extends LitElement {
   @state() private googleConfigured = false;
   @state() private privacyNoticeUrl = "";
 
+  #scope?: DraftScope<LoginDraft>;
+  #leave?: LeaveCoordinator;
+  #draftIdentity = "";
+  #notifiedDraft?: LoginDraft;
+  #generation = 0;
+  #connection = 0;
+
+  #current(generation: number): boolean {
+    return this.isConnected && generation === this.#generation;
+  }
+
+  #identity(): string {
+    return this.token !== null
+      ? `${this.token}:${this.actionPurpose}:${this.actionValidated}`
+      : this.step;
+  }
+
+  #draft(): LoginDraft {
+    if (this.token !== null)
+      return this.actionValidated
+        ? {
+            password: this.password,
+            ...(this.actionPurpose === "invitation" ? { pin: this.pin } : {}),
+          }
+        : {};
+    if (this.step === "email") return { email: this.email.trim() };
+    if (this.step === "password") return { password: this.password };
+    if (this.step === "factor") return { code: this.secondFactor };
+    if (this.step === "setup-passkey")
+      return {
+        name: this.passkeyName.trim(),
+        code: this.passkeyFactorRequired ? this.secondFactor : "",
+      };
+    return {};
+  }
+
+  #trackForm(): void {
+    const identity = this.#identity();
+    if (this.#scope && identity === this.#draftIdentity) return;
+    this.#scope?.dispose();
+    this.#draftIdentity = identity;
+    this.#notifiedDraft = this.#draft();
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<LoginDraft>({
+      id: this,
+      current: () => this.#draft(),
+      snapshot: (draft) => ({ ...draft }),
+      equal: sameLoginDraft,
+      restore: (draft) => {
+        if (draft.email !== undefined) this.email = draft.email;
+        if (draft.password !== undefined) this.password = draft.password;
+        if (draft.pin !== undefined) this.pin = draft.pin;
+        if (draft.code !== undefined) this.secondFactor = draft.code;
+        if (draft.name !== undefined) this.passkeyName = draft.name;
+      },
+    });
+  }
+
+  #draftChanged(): void {
+    const draft = this.#draft();
+    if (this.#notifiedDraft && sameLoginDraft(this.#notifiedDraft, draft)) return;
+    this.#notifiedDraft = draft;
+    this.#scope?.changed();
+  }
+
+  #leaveForm(proceed: () => void | Promise<void>): void {
+    if (this.#leave) {
+      const generation = this.#generation;
+      void this.#leave
+        .request({ scopes: [this], reason: "navigation", proceed() {} })
+        .then((outcome) => {
+          if (outcome === "proceeded" && this.#current(generation)) void proceed();
+        });
+    } else void proceed();
+  }
+
+  readonly #onSessionInvalid = (event: Event): void => {
+    const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
+    if (
+      code !== "management_session.expired" &&
+      code !== "management_session.required" &&
+      code !== "person.suspended"
+    )
+      return;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.token = null;
+    this.actionPurpose = null;
+    this.actionValidated = false;
+    this.actionResent = false;
+    this.#resetLoginForm();
+  };
+
   constructor() {
     super();
     new LocaleChangeController(this);
@@ -283,6 +386,8 @@ export class LoginScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#trackForm();
+    window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
     if (this.token !== null && this.actionPurpose !== null) void this.#inspectAccountAction();
     else if (this.rememberedLogin === null) void this.#conditionalPasskeyLogin();
     else if (this.step === "password") this.#focusField("password");
@@ -299,6 +404,12 @@ export class LoginScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    window.removeEventListener("waitron-session-invalid", this.#onSessionInvalid);
+    this.#generation++;
+    this.#connection++;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
     super.disconnectedCallback();
     clearInterval(this.resetTimer);
     this.#cancelPasskeyCeremony();
@@ -314,6 +425,13 @@ export class LoginScreen extends LitElement {
   }
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    this.#trackForm();
+    if (
+      ["email", "password", "pin", "secondFactor", "passkeyName", "passkeyFactorRequired"].some(
+        (key) => changed.has(key),
+      )
+    )
+      this.#draftChanged();
     if (changed.has("step") || changed.has("token") || changed.has("actionValidated")) {
       this.attempted = false;
       if (this.refusalField !== null) this.errorKey = null;
@@ -456,27 +574,36 @@ export class LoginScreen extends LitElement {
   #onEmailChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.email = event.detail.value;
+    this.#draftChanged();
   }
 
   #onPasswordChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.password = event.detail.value;
+    this.#draftChanged();
     this.#dismissRefusal("new-password");
   }
 
   #onSecondFactorChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.secondFactor = event.detail.value.trim();
+    this.#draftChanged();
     this.#dismissRefusal("one-time-code");
   }
 
   #onPinChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.pin = event.detail.value;
+    this.#draftChanged();
     this.#dismissRefusal("new-pin");
   }
 
   #clearSecrets(): void {
+    this.#notifiedDraft = undefined;
+    for (const input of this.shadowRoot?.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="password"], wt-input[name="new-password"], wt-input[name="new-pin"], wt-input[name="one-time-code"], wt-input[name="passkey-name"]',
+    ) ?? [])
+      input.value = "";
     this.password = "";
     this.secondFactor = "";
     this.factorMode = "totp";
@@ -515,11 +642,14 @@ export class LoginScreen extends LitElement {
   }
 
   #cancelLogin(): void {
-    forgetLoginPreference();
-    this.#resetLoginForm();
+    this.#leaveForm(() => {
+      forgetLoginPreference();
+      this.#resetLoginForm();
+    });
   }
 
   #resetLoginForm(): void {
+    this.#generation++;
     this.#cancelPasskeyCeremony();
     this.email = "";
     this.rememberedEmail = undefined;
@@ -533,47 +663,67 @@ export class LoginScreen extends LitElement {
     void this.#conditionalPasskeyLogin();
   }
 
-  #cancelAccountAction(): void {
-    this.token = null;
-    this.actionPurpose = null;
-    this.actionValidated = false;
-    this.actionResent = false;
+  async #cancelAccountAction(): Promise<void> {
+    const token = this.token;
+    const purpose = this.actionPurpose;
+    const reset = () => {
+      if (!this.isConnected || this.token !== token || this.actionPurpose !== purpose) return;
+      this.token = null;
+      this.actionPurpose = null;
+      this.actionValidated = false;
+      this.actionResent = false;
+      this.#resetLoginForm();
+    };
     if (new URLSearchParams(window.location.search).has("token")) {
-      history.replaceState(null, "", "/manage/");
+      const guard = navigationGuardFor(window);
+      if (guard) {
+        const outcome = await guard.write("/manage/", true);
+        if (outcome === "proceeded") reset();
+        return;
+      }
+      this.#leaveForm(() => {
+        history.replaceState(history.state, "", "/manage/");
+        reset();
+      });
+      return;
     }
-    this.#resetLoginForm();
+    this.#leaveForm(reset);
   }
 
   async #inspectAccountAction(): Promise<void> {
     if (this.busy || this.actionPurpose === null || this.token === null) return;
+    const generation = this.#generation;
     this.busy = true;
     this.errorKey = null;
     try {
       const inspection = await this.api.inspectAccountAction(this.token, this.actionPurpose);
-      if (!this.isConnected) return;
+      if (!this.#current(generation)) return;
       this.email = inspection.email;
       this.actionPurpose = inspection.purpose;
       this.actionValidated = true;
       this.actionResent = false;
       this.#focusField("new-password");
     } catch (error) {
+      if (!this.#current(generation)) return;
       this.errorKey = codeOf(error);
     } finally {
-      this.busy = false;
+      if (this.#current(generation)) this.busy = false;
     }
   }
 
   async #requestAccountLink(): Promise<void> {
     if (this.busy) return;
+    const generation = this.#generation;
     this.busy = true;
     this.errorKey = null;
     try {
       await this.api.requestPasswordReset(this.email);
-      if (this.isConnected) this.actionResent = true;
+      if (this.#current(generation)) this.actionResent = true;
     } catch (error) {
+      if (!this.#current(generation)) return;
       this.errorKey = codeOf(error);
     } finally {
-      this.busy = false;
+      if (this.#current(generation)) this.busy = false;
     }
   }
 
@@ -583,6 +733,7 @@ export class LoginScreen extends LitElement {
     this.refusalField = null;
     if (!this.#check()) return;
     this.#cancelPasskeyCeremony();
+    const generation = this.#generation;
     this.busy = true;
     try {
       const { personId, offerPasskey } = await this.api.login({
@@ -594,7 +745,7 @@ export class LoginScreen extends LitElement {
             ? { totp: this.secondFactor }
             : { recoveryCode: this.secondFactor }),
       });
-      if (!this.isConnected) return;
+      if (!this.#current(generation)) return;
       // Named apart from the rest of the response rather than spread: `offerPasskey` answers this
       // screen's question about which step comes next, and is not part of what a completed sign-in
       // tells the app shell.
@@ -607,6 +758,7 @@ export class LoginScreen extends LitElement {
       if (this.offerAfterLogin || offerPasskey) this.#offerPasskey(detail);
       else this.#announceLogin(detail);
     } catch (error) {
+      if (!this.#current(generation)) return;
       const code = codeOf(error);
       if (code === "totp.required") {
         this.step = "factor";
@@ -614,7 +766,7 @@ export class LoginScreen extends LitElement {
       } else if (code === "password.invalid") this.#loginFailed();
       else this.errorKey = code;
     } finally {
-      this.busy = false;
+      if (this.#current(generation)) this.busy = false;
     }
   }
 
@@ -638,18 +790,21 @@ export class LoginScreen extends LitElement {
       this.step = "reset-sent";
       return;
     }
+    const generation = this.#generation;
     this.busy = true;
     try {
       await this.api.requestPasswordReset(this.email);
+      if (!this.#current(generation)) return;
       this.resetDeadlines.set(this.email.trim().toLowerCase(), Date.now() + 60_000);
       this.#updateResetCountdown();
       clearInterval(this.resetTimer);
       if (this.isConnected) this.resetTimer = setInterval(() => this.#updateResetCountdown(), 1000);
       this.step = "reset-sent";
     } catch (error) {
+      if (!this.#current(generation)) return;
       this.errorKey = codeOf(error);
     } finally {
-      this.busy = false;
+      if (this.#current(generation)) this.busy = false;
     }
   }
 
@@ -663,6 +818,9 @@ export class LoginScreen extends LitElement {
     this.refusalField = null;
     if (!this.#check()) return;
     this.busy = true;
+    const submitted = this.#draft();
+    const generation = this.#generation;
+    const submittedEmail = this.email;
     try {
       const out =
         this.actionPurpose === "invitation"
@@ -673,11 +831,16 @@ export class LoginScreen extends LitElement {
               this.pin,
             )
           : await this.api.completeAccountAction(this.token, this.actionPurpose, this.password);
-      if (!this.isConnected) return;
+      if (!this.#current(generation)) return;
+      this.#scope?.commit(submitted);
+      if (this.#scope?.isDirty()) return;
       const accountSetup = this.actionPurpose === "invitation";
-      const completedEmail = this.email;
-      const completedPassword = this.password;
-      this.#cancelAccountAction();
+      const completedEmail = submittedEmail;
+      const completedPassword = submitted.password ?? this.password;
+      this.busy = false;
+      const connection = this.#connection;
+      await this.#cancelAccountAction();
+      if (!this.isConnected || connection !== this.#connection) return;
       this.email = completedEmail;
       if (out.authenticated) {
         this.password = completedPassword;
@@ -690,19 +853,24 @@ export class LoginScreen extends LitElement {
       } else {
         this.offerAfterLogin = true;
         this.noticeCode = "password.reset_complete";
+        this.#trackForm();
+        this.#scope?.commit(this.#draft());
         this.#focusField("email");
       }
     } catch (error) {
+      if (!this.#current(generation)) return;
       const code = codeOf(error);
       if (code === "password.too_short") this.#refuse(code, "new-password");
       else if (code === "pin.too_short") this.#refuse(code, "new-pin");
       else this.errorKey = code;
     } finally {
-      this.busy = false;
+      if (this.#current(generation)) this.busy = false;
     }
   }
 
   #announceLogin(detail: CompletedLogin): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
     this.#clearSecrets();
     this.errorKey = null;
     this.step = "password";
@@ -712,6 +880,8 @@ export class LoginScreen extends LitElement {
   }
 
   #offerPasskey(detail: CompletedLogin): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
     this.completedLogin = detail;
     this.step = "setup-passkey";
     this.noticeCode = null;
@@ -728,14 +898,16 @@ export class LoginScreen extends LitElement {
    * `busy` keeps a second Skip, or Add on top of a pending Skip, from signing the person in twice.
    */
   async #resolvePasskeyOffer(detail: CompletedLogin): Promise<void> {
+    const generation = this.#generation;
     this.busy = true;
     try {
       await this.api.passkeyOfferSeen();
     } catch {
       // Deliberately swallowed — see above.
     }
+    if (!this.#current(generation)) return;
     this.busy = false;
-    if (this.isConnected) this.#announceLogin(detail);
+    this.#announceLogin(detail);
   }
 
   async #setupPasskey(): Promise<void> {
@@ -745,6 +917,7 @@ export class LoginScreen extends LitElement {
     if (!this.#check()) return;
     this.busy = true;
     const attempt = ++this.passkeyAttempt;
+    const submittedCode = this.#draft().code;
     try {
       const { challengeHandle, options } = await this.api.passkeyRegisterOptions({
         currentPassword: this.password,
@@ -755,12 +928,15 @@ export class LoginScreen extends LitElement {
         optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
       });
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      const submitted = { name: this.passkeyName.trim(), code: submittedCode };
       await this.api.passkeyRegisterVerify({
         challengeHandle,
         response,
-        name: this.passkeyName.trim(),
+        name: submitted.name,
       });
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      this.#scope?.commit(submitted);
+      if (this.#scope?.isDirty()) return;
       await this.#resolvePasskeyOffer(this.completedLogin);
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
@@ -808,6 +984,9 @@ export class LoginScreen extends LitElement {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
       const out = await this.#verifyPasskey(challengeHandle, options, response, attempt);
       if (out === null) return;
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#clearSecrets();
       this.dispatchEvent(
         new CustomEvent("logged-in", {
           detail: {
@@ -900,6 +1079,9 @@ export class LoginScreen extends LitElement {
       this.errorKey = null;
       const out = await this.#verifyPasskey(challengeHandle, options, response, attempt);
       if (out === null) return;
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#clearSecrets();
       this.dispatchEvent(
         new CustomEvent("logged-in", {
           detail: { ...out, loginMethod: "passkey", ...this.#preferenceDetail() },
@@ -918,18 +1100,28 @@ export class LoginScreen extends LitElement {
     if (this.busy) return;
     // The email step's autofill passkey would otherwise sign in after Google was chosen.
     this.#cancelPasskeyCeremony();
+    const generation = this.#generation;
     this.busy = true;
     this.errorKey = null;
     try {
       const { authorizationUrl } = await this.api.beginGoogleLogin();
-      if (!this.isConnected) return;
-      prepareGoogleLoginPreference(this.rememberEmail, this.rememberedEmail);
-      this.navigate(authorizationUrl);
+      if (!this.#current(generation)) return;
+      const proceed = () => {
+        if (!this.#current(generation)) return;
+        this.#scope?.dispose();
+        this.#scope = undefined;
+        this.#clearSecrets();
+        prepareGoogleLoginPreference(this.rememberEmail, this.rememberedEmail);
+        this.navigate(authorizationUrl);
+      };
+      if (this.#leave) await this.#leave.request({ scopes: [this], reason: "navigation", proceed });
+      else proceed();
     } catch (error) {
+      if (!this.#current(generation)) return;
       this.errorKey = codeOf(error);
       if (this.isConnected && this.step === "email") void this.#conditionalPasskeyLogin();
     } finally {
-      this.busy = false;
+      if (this.#current(generation)) this.busy = false;
     }
   }
 
@@ -1011,7 +1203,7 @@ export class LoginScreen extends LitElement {
         <circle cx="7.5" cy="15.5" r="4.5"></circle>
         <path d="m10.7 12.3 9.8-9.8M17 5.8l2.7 2.7M14.6 8.2l2.2 2.2"></path>
       </svg>`,
-      () => this.#showPasswordStep(),
+      () => this.#leaveForm(() => this.#showPasswordStep()),
     );
     const passkey = this.#otherWay(
       "passkey-login",
@@ -1022,7 +1214,7 @@ export class LoginScreen extends LitElement {
         <circle cx="18" cy="14" r="2.5"></circle>
         <path d="M18 16.5V22M18 19.5h2"></path>
       </svg>`,
-      () => void this.#passkeyLogin(),
+      () => this.#leaveForm(() => this.#passkeyLogin()),
     );
     const google = this.googleConfigured
       ? [
@@ -1030,7 +1222,7 @@ export class LoginScreen extends LitElement {
             "google-login",
             t("login.with_google"),
             html`<img src=${GOOGLE_G_URL} alt="" />`,
-            () => void this.#googleLogin(),
+            () => this.#leaveForm(() => this.#googleLogin()),
           ),
         ]
       : [];
@@ -1118,7 +1310,7 @@ export class LoginScreen extends LitElement {
                       variant="secondary"
                       data-test="cancel-account-action"
                       ?disabled=${this.busy}
-                      @click=${() => this.#cancelAccountAction()}
+                      @click=${() => void this.#cancelAccountAction()}
                       >${t("action.cancel")}</wt-button
                     >
                   </wt-form-actions>
@@ -1193,7 +1385,7 @@ export class LoginScreen extends LitElement {
                       variant="secondary"
                       data-test="cancel-account-action"
                       ?disabled=${this.busy}
-                      @click=${() => this.#cancelAccountAction()}
+                      @click=${() => void this.#cancelAccountAction()}
                       >${t("action.cancel")}</wt-button
                     >
                     <wt-button
@@ -1241,6 +1433,7 @@ export class LoginScreen extends LitElement {
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {
                     event.stopPropagation();
                     this.passkeyName = event.detail.value;
+                    this.#draftChanged();
                     this.#dismissRefusal("passkey-name");
                   }}
                   @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
@@ -1268,7 +1461,7 @@ export class LoginScreen extends LitElement {
                     ?disabled=${this.busy}
                     @click=${() => {
                       if (!this.busy && this.completedLogin !== null)
-                        void this.#resolvePasskeyOffer(this.completedLogin);
+                        this.#leaveForm(() => this.#resolvePasskeyOffer(this.completedLogin!));
                     }}
                     >${t("account.skip_passkey")}</wt-button
                   >
@@ -1387,10 +1580,8 @@ export class LoginScreen extends LitElement {
                             >${this.#renderPasswordIcon(this.passwordVisible)}</wt-button
                           >
                         </wt-input>
-                        ${this.#fieldLink(
-                          "reset-by-email",
-                          t("login.reset_by_email"),
-                          () => void this.#requestPasswordReset(),
+                        ${this.#fieldLink("reset-by-email", t("login.reset_by_email"), () =>
+                          this.#leaveForm(() => this.#requestPasswordReset()),
                         )}
                         ${this.#methodActions(
                           html`<wt-button
@@ -1440,9 +1631,11 @@ export class LoginScreen extends LitElement {
                               ? t("login.use_recovery_code")
                               : t("login.use_authenticator_code"),
                             () => {
-                              this.factorMode = this.factorMode === "totp" ? "recovery" : "totp";
-                              this.secondFactor = "";
-                              this.attempted = false;
+                              this.#leaveForm(() => {
+                                this.factorMode = this.factorMode === "totp" ? "recovery" : "totp";
+                                this.secondFactor = "";
+                                this.attempted = false;
+                              });
                             },
                           )}
                           <wt-form-actions .error=${form.bottom}>
@@ -1453,9 +1646,11 @@ export class LoginScreen extends LitElement {
                               ?disabled=${this.busy}
                               @click=${() => {
                                 if (this.busy) return;
-                                this.secondFactor = "";
-                                this.errorKey = null;
-                                this.step = "password";
+                                this.#leaveForm(() => {
+                                  this.secondFactor = "";
+                                  this.errorKey = null;
+                                  this.step = "password";
+                                });
                               }}
                               >${t("action.back")}</wt-button
                             >

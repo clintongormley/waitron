@@ -1,17 +1,21 @@
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
-import type { PersonRole } from "../api/client.js";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
+import { sameValue } from "./product-editor-model.js";
+import type { DashboardApi, PersonRole } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { roleName, rolesByName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
+
+type PersonInput = Parameters<DashboardApi["createPerson"]>[0];
 
 type Field = "firstNames" | "lastNames" | "displayName" | "email" | "telephone";
 const FIELDS: readonly string[] = ["firstNames", "lastNames", "displayName", "email", "telephone"];
@@ -51,6 +55,7 @@ export class PersonForm extends LitElement {
   ];
 
   @property({ type: Boolean, reflect: true }) open = false;
+  @property({ type: Boolean }) busy = false;
   @property() error: string | null = null;
   /** The refused request's `params.field`, when it named one. */
   @property({ attribute: false }) errorField: string | null = null;
@@ -65,11 +70,45 @@ export class PersonForm extends LitElement {
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
 
+  #scope?: DraftScope<PersonInput>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("error")) this.dismissed = new Set();
     if (changed.has("open") && this.open) {
       this.attempted = false;
       this.dismissed = new Set();
+    }
+    if (!this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<PersonInput>({
+        id: this,
+        current: () => this.#submissionValue(),
+        snapshot: (value) => ({ ...value }),
+        equal: sameValue,
+        restore: (value) => {
+          this.firstNames = value.firstNames;
+          this.lastNames = value.lastNames;
+          this.displayName = value.displayName;
+          this.email = value.email;
+          this.telephone = value.telephone ?? "";
+          this.selectedRole = value.role;
+        },
+      });
     }
   }
 
@@ -115,6 +154,7 @@ export class PersonForm extends LitElement {
     } else if (field === "displayName") this.displayName = value;
     else if (field === "email") this.email = value;
     else this.telephone = value;
+    this.#scope?.changed();
     this.#dismiss(field, ...(this.displayName !== prevDisplayName ? ["displayName"] : []));
   }
 
@@ -134,6 +174,7 @@ export class PersonForm extends LitElement {
 
   #confirm(event: Event): void {
     event.stopPropagation();
+    if (this.busy) return;
     this.attempted = true;
     this.#dismiss("_form");
     if (Object.keys(this.#validate()).length > 0) {
@@ -142,18 +183,47 @@ export class PersonForm extends LitElement {
     }
     this.dispatchEvent(
       new CustomEvent("create-person", {
-        detail: {
-          firstNames: this.firstNames.trim(),
-          lastNames: this.lastNames.trim(),
-          displayName: this.displayName.trim(),
-          email: this.email.trim(),
-          telephone: this.telephone.trim() || null,
-          role: this.selectedRole,
-        },
+        detail: this.#submissionValue(),
         bubbles: true,
         composed: true,
       }),
     );
+  }
+
+  #submissionValue(): PersonInput {
+    return {
+      firstNames: this.firstNames.trim(),
+      lastNames: this.lastNames.trim(),
+      displayName: this.displayName.trim(),
+      email: this.email.trim(),
+      telephone: this.telephone.trim() || null,
+      role: this.selectedRole,
+    };
+  }
+
+  commitSaved(submitted: PersonInput): void {
+    this.#scope?.commit(submitted);
+  }
+
+  closeSaved(submitted: PersonInput): boolean {
+    this.commitSaved(submitted);
+    if (this.#scope?.isDirty()) return false;
+    this.#reset();
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
+    return true;
+  }
+
+  #cancel(event: Event): void {
+    event.stopPropagation();
+    if (this.busy || !this.open) return;
+    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.#reportClose();
+  }
+
+  #reportClose(): void {
+    if (!this.open) return;
+    this.#reset();
+    this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   }
 
   #reset(): void {
@@ -182,7 +252,12 @@ export class PersonForm extends LitElement {
         size="standard"
         heading=${t("person.new")}
         .open=${this.open}
-        @wt-close=${() => this.#reset()}
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.#reportClose();
+        }}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}
       >
@@ -197,6 +272,7 @@ export class PersonForm extends LitElement {
           name="role"
           label=${t("person.role")}
           required
+          ?disabled=${this.busy}
           search="auto"
           searchPlaceholder=${t("categories.combobox_search")}
           noResultsLabel=${t("categories.combobox_no_results")}
@@ -205,6 +281,7 @@ export class PersonForm extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.selectedRole = event.detail.value as PersonRole;
+            this.#scope?.changed();
           }}
         ></wt-combobox>
         <wt-form-actions slot="footer" .error=${bottom}>
@@ -212,18 +289,14 @@ export class PersonForm extends LitElement {
             slot="cancel"
             data-test="cancel"
             variant="secondary"
-            @click=${(event: Event) => {
-              event.stopPropagation();
-              this.#reset();
-              this.open = false;
-              this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
-            }}
+            ?disabled=${this.busy}
+            @click=${this.#cancel}
             >${t("action.cancel")}</wt-button
           >
           <wt-button
             variant="primary"
             data-test="confirm"
-            ?disabled=${this.attempted && Object.keys(this.#validate()).length > 0}
+            ?disabled=${this.busy || (this.attempted && Object.keys(this.#validate()).length > 0)}
             @click=${(event: Event) => this.#confirm(event)}
             >${t("action.create")}</wt-button
           >
@@ -249,6 +322,7 @@ export class PersonForm extends LitElement {
         name=${name}
         autocomplete=${name}
         type=${type}
+        ?disabled=${this.busy}
         ?required=${required}
         label=${label}
         error=${errors[field] ?? ""}

@@ -1,6 +1,8 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope } from "@waitron/ui";
+import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -8,7 +10,12 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-kit";
 import { t } from "./strings.js";
-import { SumUpPaymentsClient, ambiguousMerchants, type AmbiguousMerchant } from "./client.js";
+import {
+  SumUpPaymentsClient,
+  ambiguousMerchants,
+  type AmbiguousMerchant,
+  type SumUpConnectPayload,
+} from "./client.js";
 
 // The AppError code the connect route raises when the API key spans several merchants: the form reads
 // the carried `{ merchants }` list and shows a picker rather than surfacing an error.
@@ -69,17 +76,74 @@ export class SumUpConnectForm extends LitElement {
     return new SumUpPaymentsClient(this.request);
   }
 
+  #opening = {};
+  #scope?: DraftScope<Required<SumUpConnectPayload>>;
+
+  #value(): Required<SumUpConnectPayload> {
+    return {
+      apiKey: this.apiKey,
+      affiliateAppId: this.affiliateAppId,
+      affiliateKey: this.affiliateKey,
+      merchantCode: this.merchantCode,
+    };
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#opening = {};
+    this.#scope = leaveCoordinatorFor(this)?.register<Required<SumUpConnectPayload>>({
+      id: this,
+      parent: (this.getRootNode() as ShadowRoot).host,
+      current: () => this.#value(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) =>
+        this.busy ||
+        (a.apiKey === b.apiKey &&
+          a.affiliateAppId === b.affiliateAppId &&
+          a.affiliateKey === b.affiliateKey &&
+          a.merchantCode === b.merchantCode),
+      restore: (value) => {
+        this.apiKey = value.apiKey;
+        this.affiliateAppId = value.affiliateAppId;
+        this.affiliateKey = value.affiliateKey;
+        this.merchantCode = value.merchantCode;
+      },
+    });
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#opening = {};
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.apiKey = "";
+    this.affiliateAppId = "";
+    this.affiliateKey = "";
+    this.merchantCode = "";
+    this.attempted = false;
+    this.refusal = "";
+    this.busy = false;
+    this.connectedName = null;
+    this.merchants = null;
+    super.disconnectedCallback();
+  }
+
   #onField(
     event: CustomEvent<{ value: string }>,
     field: "apiKey" | "affiliateAppId" | "affiliateKey",
+    opening: object,
   ): void {
     event.stopPropagation();
+    if (!this.isConnected || opening !== this.#opening) return;
     this[field] = event.detail.value;
+    this.#scope?.changed();
   }
 
-  #onMerchant(event: CustomEvent<{ value: string }>): void {
+  #onMerchant(event: CustomEvent<{ value: string }>, opening: object): void {
     event.stopPropagation();
+    if (!this.isConnected || opening !== this.#opening) return;
     this.merchantCode = event.detail.value;
+    this.#scope?.changed();
   }
 
   #fieldErrors(): { apiKey: string; merchant: string } {
@@ -101,9 +165,11 @@ export class SumUpConnectForm extends LitElement {
     await focusFirstInvalid(this.shadowRoot!);
   }
 
-  async #connect(event: Event): Promise<void> {
+  async #connect(event: Event, opening: object): Promise<void> {
     event.stopPropagation();
-    if (this.busy) return; // single-flight
+    if (this.busy || !this.isConnected || opening !== this.#opening) return;
+    const scope = this.#scope;
+    const submitted = this.#value();
     this.attempted = true;
     this.refusal = "";
     if (this.#blocked()) {
@@ -111,16 +177,28 @@ export class SumUpConnectForm extends LitElement {
       return;
     }
     this.busy = true;
+    scope?.changed();
     try {
       const result = await this.#client().connect({
-        apiKey: this.apiKey,
-        ...(this.affiliateAppId !== "" ? { affiliateAppId: this.affiliateAppId } : {}),
-        ...(this.affiliateKey !== "" ? { affiliateKey: this.affiliateKey } : {}),
-        ...(this.merchantCode !== "" ? { merchantCode: this.merchantCode } : {}),
+        apiKey: submitted.apiKey,
+        ...(submitted.affiliateAppId !== "" ? { affiliateAppId: submitted.affiliateAppId } : {}),
+        ...(submitted.affiliateKey !== "" ? { affiliateKey: submitted.affiliateKey } : {}),
+        ...(submitted.merchantCode !== "" ? { merchantCode: submitted.merchantCode } : {}),
       });
+      if (!this.isConnected || opening !== this.#opening) return;
+      this.busy = false;
+      scope?.commit(submitted);
+      if (scope?.isDirty()) return;
+      scope?.dispose();
+      this.#scope = undefined;
+      this.apiKey = "";
+      this.affiliateAppId = "";
+      this.affiliateKey = "";
+      this.merchantCode = "";
       this.connectedName = result.merchantName;
       this.onConnected();
     } catch (error) {
+      if (!this.isConnected || opening !== this.#opening) return;
       if (codeOf(error) === MERCHANT_AMBIGUOUS) {
         // The key spans several merchants: switch to the picker, not yet marked as missing.
         this.merchants = ambiguousMerchants(error);
@@ -131,11 +209,19 @@ export class SumUpConnectForm extends LitElement {
         this.refusal = codeMessage(codeOf(error));
       }
     } finally {
-      this.busy = false;
+      if (opening === this.#opening) {
+        this.busy = false;
+        scope?.changed();
+      }
     }
   }
 
   override render(): TemplateResult {
+    return html`${keyed(this.#opening, this.#renderForm())}`;
+  }
+
+  #renderForm(): TemplateResult {
+    const opening = this.#opening;
     if (this.connectedName !== null) {
       return html`<p class="confirm" data-test="connected">
         ${t("payments.sumup.connected_as").replace("{name}", this.connectedName)}
@@ -153,7 +239,7 @@ export class SumUpConnectForm extends LitElement {
         required
         error=${errors.apiKey}
         .value=${this.apiKey}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "apiKey")}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "apiKey", opening)}
       ></wt-input>
 
       <div class="affiliate-label">
@@ -172,7 +258,7 @@ export class SumUpConnectForm extends LitElement {
         data-test="affiliate-app-id"
         label=${t("payments.sumup.affiliate_app_id")}
         .value=${this.affiliateAppId}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "affiliateAppId")}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "affiliateAppId", opening)}
       ></wt-input>
       <wt-input
         class="field"
@@ -181,7 +267,7 @@ export class SumUpConnectForm extends LitElement {
         data-test="affiliate-key"
         label=${t("payments.sumup.affiliate_key")}
         .value=${this.affiliateKey}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "affiliateKey")}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "affiliateKey", opening)}
       ></wt-input>
 
       ${
@@ -193,6 +279,7 @@ export class SumUpConnectForm extends LitElement {
               <wt-combobox
                 data-test="merchant"
                 name="merchantCode"
+                .value=${this.merchantCode}
                 required
                 label=${t("payments.sumup.merchant")}
                 search="auto"
@@ -200,7 +287,7 @@ export class SumUpConnectForm extends LitElement {
                 noResultsLabel=${t("payments.sumup.combobox_no_results")}
                 .options=${this.merchants.map((m) => ({ value: m.code, label: m.name }))}
                 error=${errors.merchant}
-                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onMerchant(e)}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onMerchant(e, opening)}
               ></wt-combobox>
             </div>`
           : nothing
@@ -216,7 +303,7 @@ export class SumUpConnectForm extends LitElement {
           data-test="connect"
           ?loading=${this.busy}
           ?disabled=${blocked}
-          @click=${(e: Event) => void this.#connect(e)}
+          @click=${(e: Event) => void this.#connect(e, opening)}
           >${t("payments.sumup.connect")}</wt-button
         >
       </wt-form-actions>

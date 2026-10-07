@@ -1,6 +1,17 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  leaveCoordinatorFor,
+  type DataTableColumn,
+  type WtDialog,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -61,6 +72,8 @@ function stuckOutcomeText(resolution: StuckPaymentResolution): string | null {
 
 type BillTarget =
   { kind: "payment"; row: StuckBillPaymentRow } | { kind: "refund"; row: StuckBillRefundRow };
+
+type BillDraft = { outcome: string; note: string; pin: string };
 
 function billAmount(target: BillTarget): string {
   return target.kind === "payment"
@@ -375,6 +388,61 @@ export class PaymentsScreen extends LitElement {
     },
   );
 
+  #billLeave?: LeaveCoordinator;
+  #billScope?: DraftScope<BillDraft>;
+  #billOperation?: object;
+  readonly #beforeBillClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.#billLeave ||
+    !this.#billScope ||
+    (await this.#billLeave.request({ scopes: [this.#billScope.id], reason, proceed() {} })) ===
+      "proceeded";
+
+  #billDraft(): BillDraft {
+    return { outcome: this.billOutcome, note: this.billNote.trim(), pin: this.billPin };
+  }
+
+  #closeBillAction(): void {
+    this.#billScope?.dispose();
+    this.#billScope = undefined;
+    this.billAction = null;
+    this.billOutcome = "";
+    this.billNote = "";
+    this.billPin = "";
+  }
+
+  async #requestBillClose(): Promise<void> {
+    const action = this.billAction;
+    if (
+      await this.renderRoot
+        .querySelector<WtDialog>("[data-test=bill-attest-dialog]")
+        ?.requestClose("cancel")
+    ) {
+      if (this.billAction === action) this.#closeBillAction();
+    }
+  }
+
+  #readerLeave?: LeaveCoordinator;
+  #editScope?: DraftScope<string>;
+  readonly #discoveryScopes = new Map<string, DraftScope<string>>();
+  #readerOperation?: object;
+  readonly #beforeEditorClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.#readerLeave ||
+    !this.#editScope ||
+    (await this.#readerLeave.request({ scopes: [this.#editScope.id], reason, proceed() {} })) ===
+      "proceeded";
+  readonly #beforeDiscoveryClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.#readerLeave ||
+    (await this.#readerLeave.request({
+      scopes: [...this.#discoveryScopes.values()].map((scope) => scope.id),
+      reason,
+      proceed() {},
+    })) === "proceeded";
+
+  #disposeDiscoveryDrafts(): void {
+    for (const scope of this.#discoveryScopes.values()) scope.dispose();
+    this.#discoveryScopes.clear();
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     // So each panel's `displayNameKey` resolves even before its module has registered its strings.
@@ -404,6 +472,20 @@ export class PaymentsScreen extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#statusVersion++;
+    this.#billOperation = undefined;
+    this.renderRoot
+      .querySelector<WtDialog>("[data-test=bill-attest-dialog]")
+      ?.closeAfter("security");
+    this.#closeBillAction();
+    this.billBusy = false;
+    this.#readerOperation = undefined;
+    this.#editScope?.dispose();
+    this.#editScope = undefined;
+    this.#disposeDiscoveryDrafts();
+    this.#discoveryVersion++;
+    this.editor = null;
+    this.discoveringId = null;
+    this.busy = false;
   }
 
   #simulator(): boolean {
@@ -523,6 +605,10 @@ export class PaymentsScreen extends LitElement {
   }
 
   async #onAddReader(providerId: string): Promise<void> {
+    this.#disposeDiscoveryDrafts();
+    this.#readerOperation = undefined;
+    this.busy = false;
+    this.#readerLeave = leaveCoordinatorFor(this);
     this.discoveringId = providerId;
     this.addingId = null;
     this.connectingId = null;
@@ -536,20 +622,56 @@ export class PaymentsScreen extends LitElement {
       if (version !== this.#discoveryVersion) return;
       this.available = readers;
       this.drafts = Object.fromEntries(readers.map((reader) => [reader.providerRef, reader.name]));
+      for (const reader of readers) {
+        if (reader.status === "added") continue;
+        const ref = reader.providerRef;
+        const scope = this.#readerLeave?.register({
+          id: {},
+          current: () => (this.drafts[ref] ?? "").trim(),
+          snapshot: (value) => value,
+          equal: (a, b) => a === b,
+          restore: () => {},
+        });
+        if (scope) this.#discoveryScopes.set(ref, scope);
+      }
     } catch {
       if (version === this.#discoveryVersion) this.listingFailed = true;
     }
   }
 
+  async #requestDiscoveryClose(): Promise<void> {
+    const version = this.#discoveryVersion;
+    if (
+      await this.renderRoot
+        .querySelector<WtDialog>("[data-test=reader-discovery]")
+        ?.requestClose("cancel")
+    ) {
+      if (version === this.#discoveryVersion) this.#closeDiscovery();
+    }
+  }
+
   #closeDiscovery(): void {
+    this.#disposeDiscoveryDrafts();
+    this.renderRoot.querySelector<WtDialog>("[data-test=reader-discovery]")?.closeAfter("security");
     this.#discoveryVersion++;
     this.discoveringId = null;
   }
 
   async #pairNew(): Promise<void> {
-    const id = this.discoveringId!;
-    this.#closeDiscovery();
+    const id = this.discoveringId;
+    const version = this.#discoveryVersion;
+    if (
+      !id ||
+      !(await this.renderRoot
+        .querySelector<WtDialog>("[data-test=reader-discovery]")
+        ?.requestClose("cancel"))
+    )
+      return;
+    if (!this.isConnected) return;
+    if (this.discoveringId === id && this.#discoveryVersion === version) this.#closeDiscovery();
     await this.updateComplete;
+    if (!this.isConnected || this.discoveringId !== null || this.#discoveryVersion !== version + 1)
+      return;
     this.#pairSucceeded = false;
     this.addingId = id;
   }
@@ -567,6 +689,10 @@ export class PaymentsScreen extends LitElement {
       this.#focusFirstInvalid("[data-test=reader-discovery]");
       return;
     }
+    const version = this.#discoveryVersion;
+    const scope = this.#discoveryScopes.get(reader.providerRef);
+    const operation = {};
+    this.#readerOperation = operation;
     this.busy = true;
     try {
       await this.api.adoptReader({
@@ -574,25 +700,61 @@ export class PaymentsScreen extends LitElement {
         providerRef: reader.providerRef,
         name,
       });
-      this.#closeDiscovery();
+      if (!this.isConnected || version !== this.#discoveryVersion) return;
+      scope?.commit(name);
+      if (![...this.#discoveryScopes.values()].some((draft) => draft.isDirty()))
+        this.#closeDiscovery();
+      else if (!scope?.isDirty())
+        this.available = this.available?.map((row) =>
+          row.providerRef === reader.providerRef ? { ...row, name, status: "added" } : row,
+        );
       await this.#load();
     } catch (error) {
-      this.dialogError = codeOf(error);
+      if (this.isConnected && version === this.#discoveryVersion) this.dialogError = codeOf(error);
     } finally {
-      this.busy = false;
+      if (this.#readerOperation === operation) {
+        this.#readerOperation = undefined;
+        this.busy = false;
+      }
     }
   }
 
   #openEditor(reader: ReaderRow, mode: "edit" | "details" | "unpair", event: Event): void {
     const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
     this.#opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+    this.#editScope?.dispose();
+    this.#editScope = undefined;
+    this.#readerOperation = undefined;
+    this.busy = false;
     this.editor = { reader, mode };
     this.editName = reader.name;
+    this.#readerLeave = leaveCoordinatorFor(this);
+    if (mode === "edit")
+      this.#editScope = this.#readerLeave?.register({
+        id: {},
+        current: () => this.editName.trim(),
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        restore: () => {},
+      });
     this.editAttempted = false;
     this.dialogError = null;
   }
 
+  async #requestEditorClose(): Promise<void> {
+    const editor = this.editor;
+    if (
+      await this.renderRoot
+        .querySelector<WtDialog>("[data-test=reader-editor]")
+        ?.requestClose("cancel")
+    ) {
+      if (this.editor === editor) await this.#closeEditor();
+    }
+  }
+
   async #closeEditor(): Promise<void> {
+    this.#editScope?.dispose();
+    this.#editScope = undefined;
     this.editor = null;
     await this.updateComplete;
     if (this.#opener?.isConnected) this.#opener.focus();
@@ -600,7 +762,9 @@ export class PaymentsScreen extends LitElement {
 
   async #saveEditor(): Promise<void> {
     if (this.busy || this.editor === null) return;
-    const { reader, mode } = this.editor;
+    const editor = this.editor;
+    const scope = this.#editScope;
+    const { reader, mode } = editor;
     const name = this.editName.trim();
     this.dialogError = null;
     if (mode === "edit") this.editAttempted = true;
@@ -608,16 +772,29 @@ export class PaymentsScreen extends LitElement {
       this.#focusFirstInvalid("[data-test=reader-editor]");
       return;
     }
+    const operation = {};
+    this.#readerOperation = operation;
     this.busy = true;
     try {
       if (mode === "edit") await this.api.renameReader(reader.id, name);
       else await this.api.unpairReader(reader.id);
-      await this.#closeEditor();
+      if (!this.isConnected || this.editor !== editor) {
+        if (this.isConnected && mode === "unpair") await this.#load();
+        return;
+      }
+      scope?.commit(name);
+      if (!scope?.isDirty()) {
+        this.renderRoot.querySelector<WtDialog>("[data-test=reader-editor]")?.closeAfter("saved");
+        await this.#closeEditor();
+      }
       await this.#load();
     } catch (error) {
-      this.dialogError = codeOf(error);
+      if (this.isConnected && this.editor === editor) this.dialogError = codeOf(error);
     } finally {
-      this.busy = false;
+      if (this.#readerOperation === operation) {
+        this.#readerOperation = undefined;
+        this.busy = false;
+      }
     }
   }
 
@@ -649,6 +826,7 @@ export class PaymentsScreen extends LitElement {
 
   #openBillAction(target: BillTarget, mode: "check" | "attest"): void {
     if (this.billBusy) return;
+    this.#closeBillAction();
     this.billAction = { target, mode };
     this.billOutcome = "";
     this.billNote = "";
@@ -656,6 +834,15 @@ export class PaymentsScreen extends LitElement {
     this.billAttempted = false;
     this.billFormError = null;
     this.billFormErrorText = null;
+    this.#billLeave = leaveCoordinatorFor(this);
+    if (mode === "attest")
+      this.#billScope = this.#billLeave?.register({
+        id: {},
+        current: () => this.#billDraft(),
+        snapshot: (value) => ({ ...value }),
+        equal: (a, b) => a.outcome === b.outcome && a.note === b.note && a.pin === b.pin,
+        restore: () => {},
+      });
   }
 
   #billOutcomeText(answer: BillRecoveryOutcome): string | null {
@@ -709,6 +896,8 @@ export class PaymentsScreen extends LitElement {
     const outcome = this.billOutcome;
     const note = this.billNote.trim();
     const pin = this.billPin;
+    const scope = this.#billScope;
+    const operation = {};
     this.billAttempted = true;
     this.billFormError = null;
     this.billFormErrorText = null;
@@ -716,6 +905,7 @@ export class PaymentsScreen extends LitElement {
       this.#focusFirstInvalid("[data-test=bill-attest-dialog]");
       return;
     }
+    this.#billOperation = operation;
     this.billBusy = true;
     try {
       const target = action.target;
@@ -731,14 +921,22 @@ export class PaymentsScreen extends LitElement {
               note,
               pin,
             });
+      if (!this.isConnected || this.billAction !== action) return;
+      scope?.commit({ outcome, note, pin });
       const message = this.#billOutcomeText(answer);
       this.billResult = {
         text: `${this.#billOrder(target.row)}: ${message ?? t("payments.bill.check_failed")}`,
         refused: message === null,
       };
-      this.billAction = null;
+      if (!scope?.isDirty()) {
+        this.renderRoot
+          .querySelector<WtDialog>("[data-test=bill-attest-dialog]")
+          ?.closeAfter("saved");
+        this.#closeBillAction();
+      }
       await this.#loadBillRecovery(true);
     } catch (error) {
+      if (!this.isConnected || this.billAction !== action) return;
       const code = codeOf(error);
       if (
         code === "bill.payment_not_stuck" ||
@@ -746,7 +944,10 @@ export class PaymentsScreen extends LitElement {
         code === "bill.payment_not_found" ||
         code === "bill.refund_not_found"
       ) {
-        this.billAction = null;
+        this.renderRoot
+          .querySelector<WtDialog>("[data-test=bill-attest-dialog]")
+          ?.closeAfter("security");
+        this.#closeBillAction();
         this.billResult = {
           text: `${this.#billOrder(action.target.row)}: ${billRefusalText(error)}`,
           refused: true,
@@ -757,7 +958,10 @@ export class PaymentsScreen extends LitElement {
         this.billFormErrorText = billRefusalText(error);
       }
     } finally {
-      this.billBusy = false;
+      if (this.#billOperation === operation) {
+        this.#billOperation = undefined;
+        this.billBusy = false;
+      }
     }
     if (this.#billPinRefused()) this.#focusFirstInvalid("[data-test=bill-attest-dialog]");
   }
@@ -949,10 +1153,12 @@ export class PaymentsScreen extends LitElement {
     return html`<wt-dialog
       data-test="bill-attest-dialog"
       .open=${true}
+      .beforeClose=${this.#billScope ? this.#beforeBillClose : undefined}
       ?dismissible=${!this.billBusy}
       heading=${t("payments.bill.attest_heading")}
-      @wt-close=${() => {
-        if (!this.billBusy) this.billAction = null;
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (!this.billBusy && this.billAction === action) this.#closeBillAction();
       }}
     >
       <p>
@@ -984,7 +1190,9 @@ export class PaymentsScreen extends LitElement {
         error=${errors.outcome ?? ""}
         ?disabled=${this.billBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          if (!this.isConnected || this.billAction !== action) return;
           this.billOutcome = event.detail.value;
+          this.#billScope?.changed();
         }}
       ></wt-combobox>
       <wt-input
@@ -996,7 +1204,9 @@ export class PaymentsScreen extends LitElement {
         .error=${errors.note ?? ""}
         ?disabled=${this.billBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          if (!this.isConnected || this.billAction !== action) return;
           this.billNote = event.detail.value;
+          this.#billScope?.changed();
         }}
       ></wt-input>
       <wt-input
@@ -1010,7 +1220,9 @@ export class PaymentsScreen extends LitElement {
         .error=${errors.pin ?? ""}
         ?disabled=${this.billBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          if (!this.isConnected || this.billAction !== action) return;
           this.billPin = event.detail.value;
+          this.#billScope?.changed();
           if (this.#billPinRefused()) {
             this.billFormError = null;
             this.billFormErrorText = null;
@@ -1022,9 +1234,7 @@ export class PaymentsScreen extends LitElement {
           slot="cancel"
           variant="secondary"
           ?disabled=${this.billBusy}
-          @click=${() => {
-            this.billAction = null;
-          }}
+          @click=${() => void this.#requestBillClose()}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
@@ -1366,6 +1576,7 @@ export class PaymentsScreen extends LitElement {
 
   #renderDiscovery(): TemplateResult | typeof nothing {
     if (this.discoveringId === null) return nothing;
+    const version = this.#discoveryVersion;
     const invalid = (this.available ?? []).some(
       (reader) => reader.status !== "added" && this.#nameInvalid(reader.providerRef),
     );
@@ -1376,8 +1587,13 @@ export class PaymentsScreen extends LitElement {
     return html`<wt-dialog
       data-test="reader-discovery"
       .open=${true}
+      .dismissible=${!this.busy}
+      .beforeClose=${this.#discoveryScopes.size ? this.#beforeDiscoveryClose : undefined}
       heading=${t("payments.discovery_heading")}
-      @wt-close=${() => this.#closeDiscovery()}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (version === this.#discoveryVersion) this.#closeDiscovery();
+      }}
     >
       <p>
         ${t("payments.discovery_intro").replace("{provider}", this.#providerName(this.discoveringId))}
@@ -1406,10 +1622,17 @@ export class PaymentsScreen extends LitElement {
                                 ?disabled=${this.busy}
                                 @keydown=${(event: KeyboardEvent) => submitOnEnter(event, (event.currentTarget as HTMLElement).closest(".discovery-row")!.querySelector("wt-button"))}
                                 @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                                  if (
+                                    !this.isConnected ||
+                                    !(event.currentTarget as HTMLElement).isConnected ||
+                                    version !== this.#discoveryVersion
+                                  )
+                                    return;
                                   this.drafts = {
                                     ...this.drafts,
                                     [reader.providerRef]: event.detail.value,
                                   };
+                                  this.#discoveryScopes.get(reader.providerRef)?.changed();
                                 }}
                               ></wt-input>`
                         }
@@ -1436,7 +1659,8 @@ export class PaymentsScreen extends LitElement {
           slot="cancel"
           variant="secondary"
           data-test="cancel-discovery"
-          @click=${() => this.#closeDiscovery()}
+          ?disabled=${this.busy}
+          @click=${() => void this.#requestDiscoveryClose()}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
@@ -1451,7 +1675,8 @@ export class PaymentsScreen extends LitElement {
 
   #renderEditor(): TemplateResult | typeof nothing {
     if (this.editor === null) return nothing;
-    const { reader, mode } = this.editor;
+    const editor = this.editor;
+    const { reader, mode } = editor;
     const unpair = t("payments.unpair").replace("{provider}", this.#providerName(reader.provider));
     const heading =
       mode === "edit"
@@ -1479,8 +1704,13 @@ export class PaymentsScreen extends LitElement {
     return html`<wt-dialog
       data-test="reader-editor"
       .open=${true}
+      .dismissible=${mode !== "edit" || !this.busy}
+      .beforeClose=${this.#editScope ? this.#beforeEditorClose : undefined}
       heading=${`${heading}: ${reader.name}`}
-      @wt-close=${() => void this.#closeEditor()}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (this.editor === editor) void this.#closeEditor();
+      }}
     >
       ${
         mode === "edit"
@@ -1494,7 +1724,14 @@ export class PaymentsScreen extends LitElement {
               ?disabled=${this.busy}
               @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=save-reader]"))}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                if (
+                  !this.isConnected ||
+                  !(event.currentTarget as HTMLElement).isConnected ||
+                  this.editor !== editor
+                )
+                  return;
                 this.editName = event.detail.value;
+                this.#editScope?.changed();
               }}
             ></wt-input>`
           : mode === "unpair"
@@ -1517,7 +1754,8 @@ export class PaymentsScreen extends LitElement {
           slot="cancel"
           variant="secondary"
           data-test="close-reader-editor"
-          @click=${() => void this.#closeEditor()}
+          ?disabled=${mode === "edit" && this.busy}
+          @click=${() => void this.#requestEditorClose()}
           >${t(mode === "details" ? "action.close" : "action.cancel")}</wt-button
         >
         ${
@@ -1605,8 +1843,9 @@ export class PaymentsScreen extends LitElement {
         .rowKey=${(reader: ReaderRow) => reader.id}
         .emptyMessage=${this.readers?.length ? tableNoMatches() : t("payments.readers_empty")}
       ></wt-data-table>
-      ${this.#renderDiscovery()} ${this.#renderEditor()} ${this.#renderResolveDialog()}
-      ${this.#renderBillDialog()}
+      ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
+      ${keyed(this.editor, this.#renderEditor())} ${this.#renderResolveDialog()}
+      ${keyed(this.billAction, this.#renderBillDialog())}
     `;
   }
 }

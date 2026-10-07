@@ -1,6 +1,13 @@
 import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  leaveCoordinatorFor,
+  submitOnEnter,
+  type DraftScope,
+  type LeaveCoordinator,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -279,6 +286,41 @@ export class StreamSettingsPanel extends LitElement {
   #kitRequest = 0;
   #reissueFailed = false;
   #blobUrls = new Map<string, string>();
+  #scope?: DraftScope<StreamBucketBody>;
+  #leave?: LeaveCoordinator;
+  #generation = 0;
+
+  #trackForm(): void {
+    if (this.#scope) return;
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<StreamBucketBody>({
+      id: this,
+      current: () => this.#body(),
+      snapshot: (body) => ({ ...body }),
+      equal: (a, b) => (Object.keys(EMPTY) as Field[]).every((field) => a[field] === b[field]),
+      restore: (body) => {
+        this.draft = { ...body };
+      },
+    });
+  }
+
+  #releaseForm(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+  }
+
+  #cancel(): void {
+    const proceed = () => {
+      this.editing = false;
+      this.draft = { ...EMPTY };
+      this.#releaseForm();
+      this.#resetForm();
+      this.#clearMessages();
+    };
+    if (this.#leave) void this.#leave.request({ scopes: [this], reason: "cancel", proceed });
+    else proceed();
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -286,6 +328,24 @@ export class StreamSettingsPanel extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#generation++;
+    this.#kitRequest++;
+    this.#releaseForm();
+    this.settings = undefined;
+    this.draft = { ...EMPTY };
+    this.editing = false;
+    this.submitting = false;
+    this.busy = false;
+    this.secretVisible = false;
+    this.#knownFingerprint = undefined;
+    this.#reissue = null;
+    this.#reissueFailed = false;
+    this.readFailure = null;
+    this.kit = null;
+    this.kitFingerprint = null;
+    this.kitReissued = false;
+    this.#resetForm();
+    this.#clearMessages();
     for (const url of this.#blobUrls.values()) URL.revokeObjectURL(url);
     this.#blobUrls.clear();
     super.disconnectedCallback();
@@ -303,6 +363,7 @@ export class StreamSettingsPanel extends LitElement {
   #arrived(value: StreamSettingsView): void {
     const before = this.settings;
     this.settings = value;
+    if (value.isPrimary && (!value.configured || this.editing)) this.#trackForm();
     if (before !== undefined && bucketKey(before.bucket) !== bucketKey(value.bucket))
       this.#dropKit();
     if (!value.configured) this.turnOffArmed = false;
@@ -423,32 +484,45 @@ export class StreamSettingsPanel extends LitElement {
     this.submitting = true;
     const body = this.#body();
     const tested = JSON.stringify(body);
+    const generation = this.#generation;
+    const current = () => this.isConnected && generation === this.#generation;
     try {
       await this.api.testStreamBucket(body);
-      this.testPassed = JSON.stringify(this.#body()) === tested;
+      if (current()) this.testPassed = JSON.stringify(this.#body()) === tested;
     } catch (error) {
-      this.#fail(error);
+      if (current()) this.#fail(error);
     } finally {
-      this.submitting = false;
+      if (current()) this.submitting = false;
     }
   }
 
   async #save(): Promise<void> {
     if (!this.#ready()) return;
     this.submitting = true;
+    const generation = this.#generation;
+    const current = () => this.isConnected && generation === this.#generation;
+    const submitted = this.#body();
     try {
-      this.settings = await this.api.saveStreamSettings(this.#body());
+      const settings = await this.api.saveStreamSettings(submitted);
+      if (!current()) return;
+      this.settings = settings;
+      this.#scope?.commit(submitted);
       // Save can give the box its first recovery key; the Backups screen must stop offering its own.
       this.api.liveData.invalidate([{ type: "backup_status" }]);
-      this.editing = false;
-      this.draft = { ...EMPTY };
+      this.editing = (Object.keys(EMPTY) as Field[]).some(
+        (field) => this.#body()[field] !== submitted[field],
+      );
+      if (!this.editing) {
+        this.draft = { ...EMPTY };
+        this.#releaseForm();
+      }
       this.#resetForm();
       this.#dropKit();
       await this.#loadKit();
     } catch (error) {
-      this.#fail(error);
+      if (current()) this.#fail(error);
     } finally {
-      this.submitting = false;
+      if (current()) this.submitting = false;
     }
   }
 
@@ -463,13 +537,17 @@ export class StreamSettingsPanel extends LitElement {
       return;
     }
     this.busy = true;
+    const generation = this.#generation;
+    const current = () => this.isConnected && generation === this.#generation;
     try {
-      this.settings = await this.api.turnOffStream();
+      const settings = await this.api.turnOffStream();
+      if (!current()) return;
+      this.settings = settings;
       this.#dropKit();
     } catch (error) {
-      this.#fail(error);
+      if (current()) this.#fail(error);
     } finally {
-      this.busy = false;
+      if (current()) this.busy = false;
     }
   }
 
@@ -477,10 +555,11 @@ export class StreamSettingsPanel extends LitElement {
     if (this.busy) return;
     this.#clearMessages();
     this.busy = true;
+    const generation = this.#generation;
     try {
       await this.#loadKit();
     } finally {
-      this.busy = false;
+      if (this.isConnected && generation === this.#generation) this.busy = false;
     }
   }
 
@@ -510,6 +589,7 @@ export class StreamSettingsPanel extends LitElement {
     this.#resetForm();
     this.#clearMessages();
     this.editing = true;
+    this.#trackForm();
   }
 
   #downloadHref(kit: string): string {
@@ -677,11 +757,7 @@ export class StreamSettingsPanel extends LitElement {
                   slot="cancel"
                   variant="ghost"
                   data-test="cancel"
-                  @click=${() => {
-                    this.editing = false;
-                    this.#resetForm();
-                    this.#clearMessages();
-                  }}
+                  @click=${() => this.#cancel()}
                   >${t("stream.form.cancel")}</wt-button
                 >`
               : nothing
@@ -722,6 +798,7 @@ export class StreamSettingsPanel extends LitElement {
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         this.draft = { ...this.draft, [f.field]: event.detail.value };
+        this.#scope?.changed();
         const refused = { ...this.refused };
         delete refused[f.field];
         this.refused = refused;

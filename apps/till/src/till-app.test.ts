@@ -1,5 +1,6 @@
-import { page } from "vitest/browser";
-import { type WtCombobox, applyTokens, currentContentLanguages } from "@waitron/ui";
+import { leaveCoordinatorFor } from "@waitron/ui";
+import { commands, page, userEvent } from "vitest/browser";
+import { type WtInput, type WtCombobox, applyTokens, currentContentLanguages } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import indexHtml from "../index.html?raw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +9,7 @@ import {
   adjustmentStubs,
   cancelThroughDialog,
   cleanupWidgets,
+  expectNoA11yViolations,
   draftServer,
   mountWidget,
   servedMenus,
@@ -15,6 +17,7 @@ import {
 } from "./widgets/test-helpers.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import { productUnit } from "./widgets/product-name.js";
+import type { TillDeadEndsSection } from "./widgets/dead-ends-section.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
@@ -634,9 +637,9 @@ async function toTableOrder(el: TillApp, table: TableState): Promise<TillTableOr
 }
 
 let currentApi: TillApi;
-async function mountApp(overrides: Record<string, unknown> = {}) {
+async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
   currentApi = stubApi(overrides);
-  return mountWidget<TillApp>("till-app", { api: currentApi });
+  return mountWidget<TillApp>("till-app", { api: currentApi }, theme);
 }
 
 // Force a deterministic es-ES baseline before each test — DELIBERATELY not the module default (en-GB),
@@ -1351,6 +1354,72 @@ describe("till-app", () => {
     expect(lock(el)).not.toBeNull();
     expect(counter(el)).toBeNull();
     expect(ticket(el)).toBeNull();
+  });
+
+  it("a server switch rebuilds a mounted PIN owner and protects later input", async () => {
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    currentApi = stubApi();
+    const { el } = await mountWidget<TillApp>("till-app", { api: currentApi, router });
+    await flush(el);
+    const before = lock(el)!;
+    before.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await before.updateComplete;
+    const pad = before.shadowRoot!.querySelector("till-numeric-pad")!;
+    await pad.updateComplete;
+    pad.shadowRoot!.querySelector<HTMLElement>("[data-key='0']")!.click();
+    await before.updateComplete;
+    router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }));
+    await flush(el);
+    const after = lock(el)!;
+    expect(after).not.toBe(before);
+    expect(after.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    after.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await after.updateComplete;
+    const newPad = after.shadowRoot!.querySelector("till-numeric-pad")!;
+    await newPad.updateComplete;
+    newPad.shadowRoot!.querySelector<HTMLElement>("[data-key='0']")!.click();
+    await after.updateComplete;
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(currentApi.login).not.toHaveBeenCalled();
+  });
+
+  it("changing the lock screen language asks before dropping its typed PIN", async () => {
+    const { el } = await mountApp();
+    await flush(el);
+    const screen = lock(el)!;
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await screen.updateComplete;
+    const pad = screen.shadowRoot!.querySelector("till-numeric-pad")!;
+    await pad.updateComplete;
+    pad.shadowRoot!.querySelector<HTMLElement>("[data-key='0']")!.click();
+    await screen.updateComplete;
+    const original = currentLocale();
+    const next = original === "en" ? "es" : "en";
+    emit(screen, "wt-locale-selected", { code: next });
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    expect(question.open).toBe(true);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question.open).toBe(false);
+    expect(lock(el)).toBe(screen);
+    expect(pad.value).toBe("0");
+    expect(currentLocale()).toBe(original);
+    emit(screen, "wt-locale-selected", { code: next });
+    await flush(el);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => currentLocale()).toBe(next);
+    await flush(el);
+    expect(lock(el)).not.toBe(screen);
+    expect(lock(el)!.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+    expect(currentApi.login).not.toHaveBeenCalled();
   });
 
   it("boots: getTill sets the active locale", async () => {
@@ -2518,6 +2587,94 @@ describe("till-app", () => {
     expect(lock(el)).toBeNull();
     expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("enrol");
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it.each(["edited", "reverted", "submitted"] as const)(
+    "the real enrolment approval link leaves %s input to native document navigation",
+    async (state) => {
+      const { el } = await mountApp({
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      await flush(el);
+      const screen = enrolScreen(el)!;
+      const field =
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-name]")!;
+      field.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "Counter edited" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      if (state === "reverted")
+        field.dispatchEvent(
+          new CustomEvent("wt-change", {
+            detail: { value: "" },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      await (screen as HTMLElementTagNameMap["till-enrol-screen"]).updateComplete;
+      if (state === "submitted") {
+        screen.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+        await expect
+          .poll(() => screen.shadowRoot!.querySelector("[data-number]")?.textContent?.trim())
+          .toBe("47");
+      }
+      const link = screen.shadowRoot!.querySelector<HTMLAnchorElement>("[data-approval-guide]")!;
+      expect(link.pathname).toBe("/manage/devices");
+      const click = new MouseEvent("click", { bubbles: true, composed: true, cancelable: true });
+      let browserDefault = false;
+      const blockNavigation = (event: MouseEvent) => {
+        browserDefault = !event.defaultPrevented;
+        event.preventDefault();
+      };
+      document.addEventListener("click", blockNavigation, { once: true });
+      try {
+        link.dispatchEvent(click);
+      } finally {
+        document.removeEventListener("click", blockNavigation);
+      }
+      expect(browserDefault).toBe(true);
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(state === "edited");
+      expect(currentApi.join).toHaveBeenCalledTimes(state === "submitted" ? 1 : 0);
+      if (state === "submitted") expect(currentApi.join).toHaveBeenCalledWith("Counter edited");
+      else expect(field.value).toBe(state === "edited" ? "Counter edited" : "");
+      expect(enrolScreen(el)).toBe(screen);
+    },
+  );
+
+  it("a server switch rebuilds enrolment and protects a new device name", async () => {
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    currentApi = stubApi({
+      getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api: currentApi, router });
+    await flush(el);
+    const before = enrolScreen(el)!;
+    expect(before).not.toBeNull();
+    const name =
+      before.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-name]")!;
+    emit(name, "wt-change", { value: "Old server name" });
+    router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }));
+    await expect.poll(() => enrolScreen(el)).not.toBe(before);
+    await expect.poll(() => enrolScreen(el)).not.toBeNull();
+    const after = enrolScreen(el)!;
+    await (after as HTMLElementTagNameMap["till-enrol-screen"]).updateComplete;
+    const next = after.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-name]")!;
+    expect(next.value).toBe("");
+    emit(next, "wt-change", { value: "New server name" });
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(currentApi.join).not.toHaveBeenCalled();
   });
 
   it("a NON-401 identity-probe failure (transient) stays on the LOGIN screen, never the enrol front door", async () => {
@@ -4130,6 +4287,39 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it("drawer approval Escape keeps an unsubmitted PIN, then discards without another drawer request", async () => {
+    const openDrawer = vi.fn().mockRejectedValue({ code: "authorization.not_permitted" });
+    const { el } = await mountApp({ openDrawer });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    const proof = el.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
+    proof.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await proof.updateComplete;
+    const pad = proof.shadowRoot!.querySelector("till-numeric-pad")!;
+    await pad.updateComplete;
+    pad.shadowRoot!.querySelector<HTMLElement>("[data-key='0']")!.click();
+    await proof.updateComplete;
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    expect(question.open).toBe(true);
+    expect(overrideDialog(el)).toBe(proof);
+    expect(openDrawer).toHaveBeenCalledTimes(1);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question.open).toBe(false);
+    expect(pad.value).toBe("0");
+    expect(overrideDialog(el)).toBe(proof);
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => overrideDialog(el)).toBeNull();
+    expect(openDrawer).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(ticket(el)).not.toBeNull();
+  });
+
   it("a failed authorizers fetch degrades to the drawer.error banner, opening no dialog", async () => {
     const { el } = await mountApp({
       openDrawer: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
@@ -5590,7 +5780,7 @@ describe("till-app", () => {
     await el.updateComplete;
 
     emit(c, "retrieve-order", { id: "wo-1" });
-    await flush(el);
+    await discardBasketChanges(el);
 
     // non-fatal, translated banner — never the raw code
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
@@ -7794,7 +7984,7 @@ describe("till-app", () => {
 
       // Retrieve a DIFFERENT order (wo-1) into the basket instead of retrying the card.
       emit(counter(el)!, "retrieve-order", { id: "wo-1" });
-      await flush(el);
+      await discardBasketChanges(el);
 
       // loadFrom swapped in wo-1's lines — the decline described the basket that was just replaced,
       // not this one.
@@ -9003,6 +9193,79 @@ describe("till-app", () => {
       },
     );
 
+    it("commits collection before a failed following refresh while retaining the exact tender", async () => {
+      let answer!: (result: TillSaleResult) => void;
+      const { el } = await mountApp({
+        lookUpBills: vi.fn().mockResolvedValue({
+          bills: [
+            {
+              workingOrderId: "wo-debt",
+              orderNumber: 12,
+              label: null,
+              partyName: null,
+              tables: [],
+              invoiceNumber: "A/12",
+              openedAt: "2026-10-01T18:00:00.000Z",
+              departedAt: null,
+              status: "waiting_for_payment",
+              stillOwed: "30.00",
+            },
+          ],
+        }),
+        collectOrder: vi.fn(
+          () =>
+            new Promise<TillSaleResult>((resolve) => {
+              answer = resolve;
+            }),
+        ),
+      });
+      await toCounter(el);
+      el.shadowRoot!.querySelector("till-tab-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      const form = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      await form.updateComplete;
+      const fill = async (name: string, value: string) => {
+        const field = form.shadowRoot!.querySelector<WtInput>(`[name=${name}]`)!;
+        await field.updateComplete;
+        const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+        await userEvent.fill(page.elementLocator(input), value);
+        await form.updateComplete;
+      };
+      await fill("bill-search", "A/12");
+      form.shadowRoot!.querySelector<HTMLElement>("[data-search]")!.click();
+      await expect.poll(() => form.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
+      form.shadowRoot!.querySelector<HTMLElement>("[data-bill]")!.click();
+      await form.updateComplete;
+      await fill("cash-received", "40.00");
+      const unload = () => {
+        const event = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      expect(unload()).toBe(true);
+      form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
+      await el.updateComplete;
+      expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
+        method: "cash",
+        amount: "40.00",
+      });
+      const protectionAtRefresh: boolean[] = [];
+      vi.mocked(currentApi.listStations).mockImplementationOnce(async () => {
+        protectionAtRefresh.push(unload());
+        throw new Error("refresh refused");
+      });
+      answer(saleResult);
+      await flush(el);
+      expect(protectionAtRefresh).toEqual([false]);
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+      expect(ticket(el)!.originalReceiptAvailable).toBe(false);
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+      expect(unload()).toBe(false);
+      expect(currentApi.collectOrder).toHaveBeenCalledOnce();
+    });
+
     it("keeps Find a bill open with a refusal when collection fails", async () => {
       const { el } = await mountApp({
         collectOrder: vi.fn().mockRejectedValue({ code: "fiscal.foreign_recipient_unsupported" }),
@@ -9795,6 +10058,7 @@ describe("till-app", () => {
       expect(hiddenGrid).not.toBeNull();
       // The kds-board card is hidden (its required `act-as-kds` is absent), so no station screen mounts.
       expect(hiddenGrid.shadowRoot!.querySelector("till-station-screen")).toBeNull();
+      hidden.el.remove();
 
       // Profile grants `act-as-kds` → the same card renders its embedded station screen.
       const shown = await mountApp({
@@ -10089,6 +10353,42 @@ describe("till-app", () => {
       expect(drill(el)).not.toBeNull();
       expect(schedule(el)).not.toBeNull();
       expect(schedule(el)!.getAttribute("slot")).toBe("drill");
+    });
+
+    it("W69 schedule Back keeps the real drill and URL until its staged request is discarded", async () => {
+      const el = await toShellCounter();
+      currentApi.listMyShifts = vi.fn().mockResolvedValue([]);
+      currentApi.listMySwaps = vi.fn().mockResolvedValue([]);
+      currentApi.listMyAbsences = vi.fn().mockResolvedValue([]);
+      emit(shell(el)!, "show-schedule");
+      await flush(el);
+      const owner = schedule(el)!;
+      const input = owner.shadowRoot!.querySelector<WtInput>(".abs-note")!;
+      await input.updateComplete;
+      await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Family visit");
+      const originalUrl = window.location.href;
+      const back = owner.shadowRoot!.querySelector<HTMLElement>(".back")!;
+      back.click();
+      await flush(el);
+      const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      await question.updateComplete;
+      expect(question.open).toBe(true);
+      expect(schedule(el)).toBe(owner);
+      expect(window.location.href).toBe(originalUrl);
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+      await expect.poll(() => question.open).toBe(false);
+      expect(input.value).toBe("Family visit");
+      expect(schedule(el)).toBe(owner);
+      expect(window.location.href).toBe(originalUrl);
+      back.click();
+      await expect.poll(() => question.open).toBe(true);
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await expect.poll(() => schedule(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(window.location.href).not.toBe(originalUrl);
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(false);
     });
 
     it("pushes the station drill-in from the shell's Station affordance", async () => {
@@ -11132,6 +11432,7 @@ it("leaves login and pairing actions clear of the language chooser on a narrow s
       .shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!
       .getBoundingClientRect();
     expect(trigger.right).toBeLessThanOrEqual(window.innerWidth);
+    el.remove();
     // The device front door: a FRESH browser (401 identity probe) renders the
     // join screen — its own language chooser must sit clear of the Ask to join action.
     const fresh = await mountApp({
@@ -13928,7 +14229,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     await el.updateComplete;
 
     emit(waitingList(el)!, "pay-waiting-order", { id: "wo-sent" });
-    await flush(el);
+    await discardBasketChanges(el);
 
     expect(c.store.id).toBe(id);
     expect(tenderPay(el).stage).toBe("order");
@@ -14741,21 +15042,257 @@ describe("switching the device's profile from the header", () => {
   const profileButton = (el: TillApp) =>
     shell(el)!.shadowRoot!.querySelector<HTMLElement>("wt-button.profile");
 
-  async function openProfile(overrides: Record<string, unknown> = {}) {
-    const { el } = await mountApp({
-      getDeviceIdentity: vi.fn().mockResolvedValue(identity),
-      switchDeviceProfile: vi.fn().mockResolvedValue({
-        activeProfileId: BAR.id,
-        receiptPrinterId: null,
-        paymentSlipPrinterId: null,
-      }),
-      ...overrides,
-    });
+  async function openProfile(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
+    const { el } = await mountApp(
+      {
+        getDeviceIdentity: vi.fn().mockResolvedValue(identity),
+        switchDeviceProfile: vi.fn().mockResolvedValue({
+          activeProfileId: BAR.id,
+          receiptPrinterId: null,
+          paymentSlipPrinterId: null,
+        }),
+        ...overrides,
+      },
+      theme,
+    );
     const c = await toCounter(el);
     profileButton(el)!.click();
     await flush(el);
     return { el, c };
   }
+
+  async function scheduleWithProfile(
+    note: string,
+    overrides: Record<string, unknown> = {},
+    theme?: "light" | "dark",
+    reverted = false,
+  ) {
+    const { el, c } = await openProfile(
+      {
+        listMyShifts: vi.fn().mockResolvedValue([]),
+        listMySwaps: vi.fn().mockResolvedValue([]),
+        listMyAbsences: vi.fn().mockResolvedValue([]),
+        requestAbsence: vi.fn().mockResolvedValue(undefined),
+        ...overrides,
+      },
+      theme,
+    );
+    emit(profileDialog(el)!, "close");
+    await flush(el);
+    emit(shell(el)!, "show-schedule");
+    await flush(el);
+    const owner = schedule(el)!;
+    const input = owner.shadowRoot!.querySelector<WtInput>(".abs-note")!;
+    await input.updateComplete;
+    if (note !== "") await userEvent.fill(input.shadowRoot!.querySelector("input")!, note);
+    if (reverted) await userEvent.fill(input.shadowRoot!.querySelector("input")!, "");
+    profileButton(el)!.click();
+    await flush(el);
+    return { el, c, owner, input, href: location.href };
+  }
+
+  it("a profile switch protects a staged Schedule request before changing context", async () => {
+    const { el, owner, input, href } = await scheduleWithProfile("Family visit");
+    const dialog = profileDialog(el)!;
+    emit(dialog, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    expect(question.open).toBe(true);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+    expect(schedule(el)).toBe(owner);
+    expect(location.href).toBe(href);
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question.open).toBe(false);
+    expect(profileDialog(el)).toBe(dialog);
+    expect(input.value).toBe("Family visit");
+    expect(schedule(el)).toBe(owner);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+
+    emit(dialog, "profile-switch", { profileId: BAR.id });
+    await expect.poll(() => question.open).toBe(true);
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => schedule(el)).toBeNull();
+    await expect.poll(() => profileDialog(el)).toBeNull();
+    expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+    expect(currentApi.requestAbsence).not.toHaveBeenCalled();
+    expect(currentApi.logout).not.toHaveBeenCalled();
+    expect(counter(el)).not.toBeNull();
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+  });
+
+  it.each(["clean", "reverted"])(
+    "a %s Schedule allows the profile switch without asking",
+    async (state) => {
+      const { el } = await scheduleWithProfile(
+        state === "clean" ? "" : "Family visit",
+        {},
+        undefined,
+        state === "reverted",
+      );
+      emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+      await expect.poll(() => profileDialog(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+      expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+      expect(currentApi.requestAbsence).not.toHaveBeenCalled();
+      expect(counter(el)).not.toBeNull();
+    },
+  );
+
+  it("keeping the active profile retains the edited Schedule without asking", async () => {
+    const { el, owner, input, href } = await scheduleWithProfile("Family visit");
+    emit(profileDialog(el)!, "profile-switch", { profileId: COUNTER.id });
+    await flush(el);
+    expect(profileDialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(schedule(el)).toBe(owner);
+    expect(input.value).toBe("Family visit");
+    expect(location.href).toBe(href);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+  });
+
+  it("profile refusal for an active basket keeps the Schedule draft without another question", async () => {
+    const { el, c, owner, input } = await scheduleWithProfile("Family visit");
+    c.store.addProduct(cafe, "2");
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    expect(profileDialog(el)!.notice).toBe("order_open");
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(schedule(el)).toBe(owner);
+    expect(input.value).toBe("Family visit");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+  });
+
+  it("a profile switch retains a label-only counter basket and its unload protection", async () => {
+    const { el, c } = await openProfile();
+    const id = c.store.id;
+    c.store.label = "Lunch";
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await expect.poll(() => profileDialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+    expect(counter(el)!.store.id).toBe(id);
+    expect(counter(el)!.store.label).toBe("Lunch");
+    expect(counter(el)!.store.lines).toEqual([]);
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    expect(currentApi.parkOrder).not.toHaveBeenCalled();
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+  });
+
+  it("a profile switch rechecks a basket filled while its leave question was open", async () => {
+    const { el, c } = await scheduleWithProfile("Family visit");
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    c.store.addProduct(cafe, "2");
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await flush(el);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+    expect(profileDialog(el)!.notice).toBe("order_open");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+  });
+
+  it("disconnect aborts a pending profile leave and cannot send the old switch", async () => {
+    const { el } = await scheduleWithProfile("Family visit");
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    el.remove();
+    await flush(el);
+    question.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+  });
+
+  for (const locale of ["en-GB", "es-ES"])
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`native profile context Keep/Escape/Discard, ${locale}, ${theme}, ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const { el, owner, input, href } = await scheduleWithProfile(
+              "Family visit",
+              { getTill: vi.fn().mockResolvedValue({ ...till, locale }) },
+              theme,
+            );
+            expect(currentLocale()).toBe(locale);
+            const dialog = profileDialog(el)!;
+            await dialog.updateComplete;
+            const picker = dialog.shadowRoot!.querySelector<WtCombobox>("wt-combobox")!;
+            await chooseOption(picker, BAR.id);
+            await dialog.updateComplete;
+            const switchHost = dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+              "[data-test=profile-switch]",
+            )!;
+            await switchHost.updateComplete;
+            const button = switchHost.shadowRoot!.querySelector("button")!;
+            await userEvent.click(button);
+            const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+            await expect.poll(() => question.open).toBe(true);
+            const keep = question
+              .shadowRoot!.querySelector("[data-choice=keep]")!
+              .shadowRoot!.querySelector("button")!;
+            await expect.poll(() => keep.matches(":focus")).toBe(true);
+            await commands.parkPointer();
+            await expectNoA11yViolations(question);
+            await page.screenshot({
+              path: `__screenshots__/w69-profile-context/${locale}-${theme}-${width}-warning.png`,
+            });
+            await userEvent.keyboard("{Escape}");
+            await expect.poll(() => question.open).toBe(false);
+            expect(schedule(el)).toBe(owner);
+            expect(input.value).toBe("Family visit");
+            expect(location.href).toBe(href);
+            await expect.poll(() => button.matches(":focus")).toBe(true);
+            await page.screenshot({
+              path: `__screenshots__/w69-profile-context/${locale}-${theme}-${width}-kept.png`,
+            });
+            await userEvent.click(button);
+            await expect.poll(() => question.open).toBe(true);
+            await question.updateComplete;
+            await userEvent.click(
+              question
+                .shadowRoot!.querySelector("[data-choice=keep]")!
+                .shadowRoot!.querySelector("button")!,
+            );
+            await expect.poll(() => question.open).toBe(false);
+            expect(input.value).toBe("Family visit");
+            expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+            await userEvent.click(button);
+            await expect.poll(() => question.open).toBe(true);
+            await question.updateComplete;
+            await userEvent.click(
+              question
+                .shadowRoot!.querySelector("[data-choice=discard]")!
+                .shadowRoot!.querySelector("button")!,
+            );
+            await expect.poll(() => profileDialog(el)).toBeNull();
+            expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+            expect(currentApi.requestAbsence).not.toHaveBeenCalled();
+          } finally {
+            await page.viewport(size.width, size.height);
+          }
+        });
 
   it("offers no Profile button on a device approved for one profile", async () => {
     const { el } = await mountApp({
@@ -14978,4 +15515,1227 @@ describe("switching the device's profile from the header", () => {
     expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
     expect(profileDialog(el)).toBeNull();
   });
+});
+
+describe("application unsaved changes renderer", () => {
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    for (const decision of ["keep", "discard"] as const) {
+      it(`${locale}: ${decision} uses the shell's single localized confirmation`, async () => {
+        const { el } = await mountApp();
+        await flush(el);
+        setLocale(locale);
+        await el.updateComplete;
+        const child = el.shadowRoot!.querySelector<HTMLElement>("div, main")!;
+        const coordinator = leaveCoordinatorFor(child);
+        expect(coordinator, "descendant resolves the application registry").toBeDefined();
+        let draft = "Original";
+        const scope = coordinator!.register({
+          id: child,
+          current: () => draft,
+          snapshot: (value) => value,
+          equal: (a, b) => a === b,
+          restore: (value) => {
+            draft = value;
+          },
+        });
+        draft = "Edited";
+        scope.changed();
+        let left = 0;
+        const pending = coordinator!.request({
+          scopes: [scope.id],
+          reason: "cancel",
+          proceed() {
+            left++;
+          },
+        });
+        await el.updateComplete;
+        const questions = el.shadowRoot!.querySelectorAll("wt-unsaved-changes");
+        expect(questions).toHaveLength(1);
+        const question = questions[0]!;
+        await question.updateComplete;
+        const modal = question.shadowRoot!.querySelector("wt-modal")!;
+        await modal.updateComplete;
+        expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+        expect(question.heading).toBe(
+          locale === "en-GB" ? "Discard unsaved changes?" : "¿Descartar los cambios sin guardar?",
+        );
+        expect(question.message).toBe(
+          locale === "en-GB"
+            ? "Your changes have not been saved."
+            : "Tus cambios no se han guardado.",
+        );
+        expect(question.keepLabel).toBe(locale === "en-GB" ? "Keep editing" : "Seguir editando");
+        expect(question.discardLabel).toBe(
+          locale === "en-GB" ? "Discard changes" : "Descartar cambios",
+        );
+        question.shadowRoot!.querySelector<HTMLElement>(`[data-choice="${decision}"]`)!.click();
+        expect(await pending).toBe(decision === "keep" ? "kept" : "proceeded");
+        expect(left).toBe(decision === "keep" ? 0 : 1);
+        expect(draft).toBe(decision === "keep" ? "Edited" : "Original");
+        scope.dispose();
+      });
+    }
+  }
+});
+
+it("forced session exit aborts an open unsaved question and clears its registry immediately", async () => {
+  const router = new ServerRouter({
+    origin: BOX,
+    fetchImpl: probeFetch(),
+    storage: memoryStorage(),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api: stubApi(), router });
+  await toCounter(el);
+  const child = el.shadowRoot!.querySelector<HTMLElement>("div")!;
+  const coordinator = leaveCoordinatorFor(child)!;
+  let value = "Original";
+  const scope = coordinator.register({
+    id: child,
+    current: () => value,
+    snapshot: (v) => v,
+    equal: (a, b) => a === b,
+    restore: (v) => {
+      value = v;
+    },
+  });
+  value = "Typed secret";
+  scope.changed();
+  let left = 0;
+  const pending = coordinator.request({
+    scopes: [scope.id],
+    reason: "cancel",
+    proceed() {
+      left++;
+    },
+  });
+  await el.updateComplete;
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await question.updateComplete;
+  expect(question.open).toBe(true);
+  router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }));
+  await flush(el);
+  expect(lock(el)).not.toBeNull();
+  expect(coordinator.isDirty()).toBe(false);
+  expect(await pending).toBe("stale");
+  const activeQuestion = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await activeQuestion.updateComplete;
+  expect(activeQuestion.open).toBe(false);
+  question.dispatchEvent(
+    new CustomEvent("wt-unsaved-choice", {
+      detail: { decision: "discard" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  expect(left).toBe(0);
+  expect(value).toBe("Typed secret");
+});
+
+describe("dead-end unsaved choices in the till shell", () => {
+  it.each(["destination", "removal"])(
+    "Keep and Discard retain the counter basket after a staged %s",
+    async (edit) => {
+      const askSaleDeadEnds = vi.fn().mockResolvedValue({
+        sends: true,
+        deadEnds: [
+          {
+            key: "0",
+            name: "Café",
+            quantity: "1",
+            stationId: "bar",
+            stationName: "Bar",
+            why: "closed",
+          },
+        ],
+        stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+      });
+      const recordSale = vi.fn().mockResolvedValue(saleResult);
+      const { el } = await mountApp({ askSaleDeadEnds, recordSale });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1");
+      await flush(el);
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+      await flush(el);
+      const dialog = el.shadowRoot!.querySelector("till-dead-ends-dialog")!;
+      const section =
+        dialog.shadowRoot!.querySelector<TillDeadEndsSection>("till-dead-ends-section")!;
+      await section.updateComplete;
+      if (edit === "destination") {
+        await chooseOption(
+          section.shadowRoot!.querySelector<WtCombobox>("wt-combobox")!,
+          "kitchen",
+        );
+      } else {
+        section.shadowRoot!.querySelector<HTMLElement>(".remove")!.click();
+      }
+      await dialog.updateComplete;
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+      await flush(el);
+      const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      expect(q.open).toBe(true);
+      expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBe(dialog);
+      expect(
+        c.store.lines.map((line) => ({
+          id: line.product.id,
+          quantity: line.quantity,
+          makeAt: line.makeAt ?? null,
+        })),
+      ).toEqual([{ id: "cafe", quantity: "1", makeAt: null }]);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+      await flush(el);
+      expect(q.open).toBe(false);
+      if (edit === "destination") expect(section.choices.get("0")).toBe("kitchen");
+      else expect(section.answer.deadEnds).toEqual([]);
+      expect(recordSale).not.toHaveBeenCalled();
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+      await flush(el);
+      expect(q.open).toBe(true);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await flush(el);
+      await expect.poll(() => el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBeNull();
+      expect(
+        c.store.lines.map((line) => ({
+          id: line.product.id,
+          quantity: line.quantity,
+          makeAt: line.makeAt ?? null,
+        })),
+      ).toEqual([{ id: "cafe", quantity: "1", makeAt: null }]);
+      expect(recordSale).not.toHaveBeenCalled();
+    },
+  );
+});
+
+it.each(["cash", "reference"] as const)(
+  "W69 counter %s Cancel keeps tender and basket until local Discard without a sale",
+  async (kind) => {
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ recordSale });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await flush(el);
+    const form = tenderPay(el);
+    form.shadowRoot!.querySelector<HTMLElement>(kind === "cash" ? ".pay" : ".pay-card")!.click();
+    await flush(el);
+    if (kind === "cash") {
+      const pad = form.shadowRoot!.querySelector("till-numeric-pad")!;
+      await pad.updateComplete;
+      pad.shadowRoot!.querySelector<HTMLElement>('[data-key="5"]')!.click();
+    } else {
+      const field = form.shadowRoot!.querySelector<WtInput>(".ref-input")!;
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+      await userEvent.fill(page.elementLocator(input), "  TX-007  ");
+    }
+    await flush(el);
+    form.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+    await flush(el);
+    const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await flush(el);
+    expect(q.open).toBe(false);
+    if (kind === "cash")
+      expect(form.shadowRoot!.querySelector("till-numeric-pad")!.value).toBe("5");
+    else expect(form.shadowRoot!.querySelector<WtInput>(".ref-input")!.value).toBe("  TX-007  ");
+    form.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+    await flush(el);
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await flush(el);
+    expect(form.shadowRoot!.querySelector(".pay")).not.toBeNull();
+    expect(
+      c.store.lines.map((line) => ({ product: line.product.id, quantity: line.quantity })),
+    ).toEqual([{ product: "cafe", quantity: "1" }]);
+    expect(recordSale).not.toHaveBeenCalled();
+  },
+);
+
+describe("W69 till shell leave routes", () => {
+  async function editedSchedule(
+    options: Record<string, unknown> = {},
+    activity?: ReturnType<typeof fakeSessionActivity>,
+    theme?: "light" | "dark",
+  ) {
+    const { el } = await mountApp(
+      {
+        listMyShifts: vi.fn().mockResolvedValue([]),
+        listMySwaps: vi.fn().mockResolvedValue([]),
+        listMyAbsences: vi.fn().mockResolvedValue([]),
+        requestAbsence: vi.fn().mockResolvedValue(undefined),
+        ...options,
+      },
+      theme,
+    );
+    if (activity) el.sessionActivity = activity as never;
+    await toCounter(el);
+    emit(shell(el)!, "show-schedule");
+    await flush(el);
+    const owner = schedule(el)!;
+    const input = owner.shadowRoot!.querySelector<WtInput>(".abs-note")!;
+    await input.updateComplete;
+    await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Family visit");
+    return { el, owner, input, href: location.href };
+  }
+  function question(el: TillApp) {
+    return el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  }
+  async function answer(el: TillApp, decision: "keep" | "discard") {
+    const q = question(el);
+    await q.updateComplete;
+    q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
+    await expect.poll(() => q.open).toBe(false);
+  }
+  const routes = ["tab", "station", "expo", "locale", "logout"] as const;
+  function leave(el: TillApp, route: (typeof routes)[number]) {
+    if (route === "tab") selectTab(el, "floor");
+    else if (route === "locale") emit(shell(el)!, "wt-locale-selected", { code: "en-GB" });
+    else
+      emit(
+        shell(el)!,
+        route === "station" ? "show-station" : route === "expo" ? "show-expo" : "logout",
+      );
+  }
+  it.each(routes)(
+    "holds %s and its side effects through Keep, then Discard leaves once",
+    async (route) => {
+      const { el, owner, input, href } = await editedSchedule();
+      const pushes = vi.spyOn(history, "pushState");
+      leave(el, route);
+      await flush(el);
+      expect(question(el).open).toBe(true);
+      expect(schedule(el)).toBe(owner);
+      expect(location.href).toBe(href);
+      expect(currentApi.logout).not.toHaveBeenCalled();
+      expect(currentApi.putLocale).not.toHaveBeenCalled();
+      await answer(el, "keep");
+      expect(input.value).toBe("Family visit");
+      expect(schedule(el)).toBe(owner);
+      expect(location.href).toBe(href);
+      expect(currentApi.logout).not.toHaveBeenCalled();
+      expect(currentApi.putLocale).not.toHaveBeenCalled();
+      expect(pushes).not.toHaveBeenCalled();
+      leave(el, route);
+      await expect.poll(() => question(el).open).toBe(true);
+      await answer(el, "discard");
+      if (route === "locale") await expect.poll(() => schedule(el)).not.toBe(owner);
+      else await expect.poll(() => schedule(el)).toBeNull();
+      if (route === "logout") {
+        expect(lock(el)).not.toBeNull();
+        await expect.poll(() => vi.mocked(currentApi.logout).mock.calls.length).toBe(1);
+      } else if (route === "locale") {
+        await expect.poll(() => currentLocale()).toBe("en-GB");
+        expect(currentApi.putLocale).toHaveBeenCalledExactlyOnceWith("en-GB");
+        expect(input.value).toBe("");
+      } else {
+        expect(location.href).not.toBe(href);
+        expect(pushes).toHaveBeenCalledOnce();
+        if (route === "tab") expect(shell(el)!.activeTabKey).toBe("floor");
+        else expect(el.shadowRoot!.querySelector(`till-${route}-screen`)).not.toBeNull();
+      }
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(false);
+    },
+  );
+  it("restores browser Back before asking and keeps the mounted request on Keep", async () => {
+    const { el, owner, input, href } = await editedSchedule();
+    history.back();
+    await expect.poll(() => question(el).open).toBe(true);
+    expect(location.href).toBe(href);
+    expect(schedule(el)).toBe(owner);
+    await answer(el, "keep");
+    expect(input.value).toBe("Family visit");
+    expect(location.href).toBe(href);
+    history.back();
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "discard");
+    await expect.poll(() => schedule(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+    expect(location.href).not.toBe(href);
+  });
+  it("a reverted request leaves by tab without asking", async () => {
+    const { el, input } = await editedSchedule();
+    await userEvent.fill(input.shadowRoot!.querySelector("input")!, "");
+    selectTab(el, "floor");
+    await flush(el);
+    expect(schedule(el)).toBeNull();
+    expect(shell(el)!.activeTabKey).toBe("floor");
+    expect(question(el).open).toBe(false);
+  });
+
+  for (const direction of ["back", "forward"] as const)
+    for (const decision of ["keep", "discard"] as const)
+      it(`unindexed ${direction} ${decision} protects the mounted schedule without adding history`, async () => {
+        const { el, owner, input, href } = await editedSchedule();
+        await userEvent.fill(input.shadowRoot!.querySelector("input")!, "");
+        const acceptedState: unknown = history.state;
+        const destination = new URL("/tabs/floor?source=legacy#table", location.origin).href;
+        history.pushState({ external: "legacy", unrelated: 7 }, "", destination);
+        if (direction === "back") history.pushState(acceptedState, "", href);
+        else {
+          const arrived = new Promise<void>((resolve) =>
+            window.addEventListener("popstate", () => resolve(), { once: true }),
+          );
+          history.back();
+          await arrived;
+          await flush(el);
+        }
+        expect(schedule(el)).toBe(owner);
+        await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Legacy request");
+        const length = history.length;
+        const pushes = vi.spyOn(history, "pushState");
+        const go = vi.spyOn(history, "go");
+        try {
+          history[direction]();
+          await expect.poll(() => question(el).open).toBe(true);
+          expect(location.href).toBe(href);
+          expect(schedule(el)).toBe(owner);
+          expect(input.value).toBe("Legacy request");
+          await answer(el, decision);
+          if (decision === "keep") {
+            expect(location.href).toBe(href);
+            expect(schedule(el)).toBe(owner);
+            expect(input.value).toBe("Legacy request");
+            const unload = new Event("beforeunload", { cancelable: true });
+            window.dispatchEvent(unload);
+            expect(unload.defaultPrevented).toBe(true);
+          } else {
+            await expect.poll(() => shell(el)!.activeTabKey).toBe("floor");
+            expect(schedule(el)).toBeNull();
+            expect(location.href).toBe(destination);
+            expect(history.state).toMatchObject({ external: "legacy", unrelated: 7 });
+            const unload = new Event("beforeunload", { cancelable: true });
+            window.dispatchEvent(unload);
+            expect(unload.defaultPrevented).toBe(false);
+          }
+          expect(history.state.__wtNavigation.index).toBe(0);
+          expect(history.length).toBe(length);
+          expect(pushes).not.toHaveBeenCalled();
+          expect(go).not.toHaveBeenCalled();
+          expect(currentApi.requestAbsence).not.toHaveBeenCalled();
+          expect(currentApi.logout).not.toHaveBeenCalled();
+        } finally {
+          go.mockRestore();
+        }
+      });
+
+  it.each(["idle", "server"])(
+    "%s security exit cancels a pending signout decision without asking again",
+    async (boundary) => {
+      const activity = fakeSessionActivity();
+      const router = new ServerRouter({
+        origin: location.origin,
+        fetchImpl: vi.fn().mockRejectedValue(new Error("offline")),
+      });
+      const { el, owner } = await editedSchedule({}, activity);
+      el.router = router;
+      await flush(el);
+      emit(shell(el)!, "logout");
+      await expect.poll(() => question(el).open).toBe(true);
+      const stale = question(el).shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+      expect(schedule(el)).toBe(owner);
+      if (boundary === "idle") {
+        const config = activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void };
+        config.onIdle();
+      } else {
+        router.dispatchEvent(
+          new CustomEvent("server-changed", { detail: { from: "old", to: "new" } }),
+        );
+      }
+      await expect.poll(() => lock(el)).not.toBeNull();
+      await expect.poll(() => question(el).open).toBe(false);
+      stale.click();
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(schedule(el)).toBeNull();
+      expect(currentApi.logout).toHaveBeenCalledTimes(boundary === "idle" ? 1 : 0);
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(false);
+    },
+  );
+  it("holds the first requested destination while another tab request arrives", async () => {
+    const { el, owner } = await editedSchedule();
+    const pushes = vi.spyOn(history, "pushState");
+    emit(shell(el)!, "show-expo");
+    await expect.poll(() => question(el).open).toBe(true);
+    selectTab(el, "floor");
+    await flush(el);
+    expect(schedule(el)).toBe(owner);
+    await answer(el, "discard");
+    await expect.poll(() => el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+    expect(shell(el)!.activeTabKey).toBe("counter");
+    expect(pushes).toHaveBeenCalledOnce();
+  });
+  it("counter tab changes and logout retain the same basket without a form warning", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    c.store.label = "Lunch";
+    const lines = c.store.lines;
+    selectTab(el, "floor");
+    await flush(el);
+    expect(question(el).open).toBe(false);
+    selectTab(el, "counter");
+    await flush(el);
+    expect(counter(el)!.store.lines).toEqual(lines);
+    expect(counter(el)!.store.label).toBe("Lunch");
+    emit(shell(el)!, "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(question(el).open).toBe(false);
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    expect(counter(el)!.store.lines).toEqual(lines);
+    expect(counter(el)!.store.label).toBe("Lunch");
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+    expect(currentApi.parkOrder).not.toHaveBeenCalled();
+  });
+
+  it("browser Forward retains the request on Keep and replays the destination once on Discard", async () => {
+    const { el, input } = await editedSchedule();
+    await userEvent.fill(input.shadowRoot!.querySelector("input")!, "");
+    emit(shell(el)!, "show-expo");
+    await expect.poll(() => schedule(el)).toBeNull();
+    history.back();
+    await expect.poll(() => schedule(el)).not.toBeNull();
+    const owner = schedule(el)!;
+    const note = owner.shadowRoot!.querySelector<WtInput>(".abs-note")!;
+    await note.updateComplete;
+    await userEvent.fill(note.shadowRoot!.querySelector("input")!, "Forward draft");
+    const href = location.href;
+    const pushes = vi.spyOn(history, "pushState");
+    history.forward();
+    await expect.poll(() => question(el).open).toBe(true);
+    expect(schedule(el)).toBe(owner);
+    expect(location.href).toBe(href);
+    await answer(el, "keep");
+    expect(note.value).toBe("Forward draft");
+    history.forward();
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "discard");
+    await expect.poll(() => el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+    expect(pushes).not.toHaveBeenCalled();
+  });
+  it("an explicit floor tab loads its data only once when the accepted URL is published", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    const reads = vi.mocked(currentApi.getTablesState).mock.calls.length;
+    selectTab(el, "floor");
+    await flush(el);
+    expect(shell(el)!.activeTabKey).toBe("floor");
+    expect(currentApi.getTablesState).toHaveBeenCalledTimes(reads + 1);
+    expect(question(el).open).toBe(false);
+  });
+  it("a tab absent from the canvas does not discard or ask about the current request", async () => {
+    const { el, owner, href } = await editedSchedule();
+    selectTab(el, "missing-tab");
+    await flush(el);
+    expect(question(el).open).toBe(false);
+    expect(schedule(el)).toBe(owner);
+    expect(location.href).toBe(href);
+  });
+
+  for (const locale of ["en-GB", "es-ES"])
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`native shell tab/Keep/Escape/Discard, ${locale}, ${theme}, ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const { el, owner, input, href } = await editedSchedule(
+              {
+                getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+              },
+              undefined,
+              theme,
+            );
+            expect(currentLocale()).toBe(locale);
+            const tab =
+              shell(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button:last-of-type")!;
+            expect(tab.textContent?.trim()).toBe("Floor");
+            await userEvent.click(tab);
+            await expect.poll(() => question(el).open).toBe(true);
+            const q = question(el);
+            const keep = q
+              .shadowRoot!.querySelector("[data-choice=keep]")!
+              .shadowRoot!.querySelector("button")!;
+            await expect.poll(() => keep.matches(":focus")).toBe(true);
+            await expectNoA11yViolations(q);
+            await page.screenshot({
+              path: `__screenshots__/w69-till-shell-look/${locale}-${theme}-${width}-warning.png`,
+            });
+            await userEvent.keyboard("{Escape}");
+            await expect.poll(() => q.open).toBe(false);
+            expect(schedule(el)).toBe(owner);
+            expect(input.value).toBe("Family visit");
+            expect(location.href).toBe(href);
+            await expect.poll(() => tab.matches(":focus")).toBe(true);
+            await page.screenshot({
+              path: `__screenshots__/w69-till-shell-look/${locale}-${theme}-${width}-kept.png`,
+            });
+            await userEvent.click(tab);
+            await answer(el, "keep");
+            expect(input.value).toBe("Family visit");
+            await userEvent.click(tab);
+            await answer(el, "discard");
+            await expect.poll(() => schedule(el)).toBeNull();
+            expect(shell(el)!.activeTabKey).toBe("floor");
+            expect(currentApi.requestAbsence).not.toHaveBeenCalled();
+          } finally {
+            await page.viewport(size.width, size.height);
+          }
+        });
+
+  it("opening the same Schedule destination retains its request without asking", async () => {
+    const { el, owner, input, href } = await editedSchedule();
+    emit(shell(el)!, "show-schedule");
+    await flush(el);
+    expect(question(el).open).toBe(false);
+    expect(schedule(el)).toBe(owner);
+    expect(input.value).toBe("Family visit");
+    expect(location.href).toBe(href);
+  });
+});
+
+describe("W69 held move basket protection", () => {
+  async function loaded(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
+    const { el } = await mountApp(
+      {
+        getTablesState: vi.fn().mockResolvedValue([{ ...freeTable, id: "t9", label: "Mesa 9" }]),
+        askOrderDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [] }),
+        moveBill: vi
+          .fn()
+          .mockResolvedValue({ partyId: "party-new", billId: "wo-1", merged: false }),
+        ...overrides,
+      },
+      theme,
+    );
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => c.store.id).toBe("wo-1");
+    return { el, c };
+  }
+  function move(c: TillCounterScreen, orderId = "wo-1") {
+    emit(c, "move-held-order", { orderId, tableId: "t9", seated: null, bills: "merge" });
+  }
+  function warning(el: TillApp) {
+    return el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  }
+  async function choose(el: TillApp, choice: "keep" | "discard") {
+    const q = warning(el);
+    await q.updateComplete;
+    q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${choice}]`)!.click();
+    await expect.poll(() => q.open).toBe(false);
+  }
+  function unloadCancelled() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  it("asks before moving the edited basket; Keep retains values and Discard moves once", async () => {
+    const { el, c } = await loaded();
+    c.store.setLineQuantity(0, "3");
+    c.store.label = "Local lunch";
+    move(c);
+    await flush(el);
+    expect(warning(el).open).toBe(true);
+    expect(currentApi.askOrderDeadEnds).not.toHaveBeenCalled();
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+    await choose(el, "keep");
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.label).toBe("Local lunch");
+    expect(c.store.lines[0]!.quantity).toBe("3");
+    move(c);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => c.store.lines.length).toBe(0);
+    expect(currentApi.moveBill).toHaveBeenCalledExactlyOnceWith(
+      "wo-1",
+      { tableId: "t9" },
+      "merge",
+      { partyId: null, otherPartyId: null },
+    );
+    expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("moving another held order retains the dirty basket without asking", async () => {
+    const { el, c } = await loaded();
+    c.store.setLineQuantity(0, "3");
+    move(c, "other-held");
+    await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
+    expect(warning(el).open).toBe(false);
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.lines[0]!.quantity).toBe("3");
+    expect(unloadCancelled()).toBe(true);
+  });
+  it("a reverted retrieved basket moves directly and clears unload protection", async () => {
+    const { el, c } = await loaded();
+    c.store.setLineQuantity(0, "3");
+    c.store.setLineQuantity(0, "2");
+    move(c);
+    await expect.poll(() => c.store.lines.length).toBe(0);
+    expect(warning(el).open).toBe(false);
+    expect(currentApi.moveBill).toHaveBeenCalledOnce();
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("a move refusal after Discard keeps the edited basket and unload warning", async () => {
+    const { el, c } = await loaded({
+      moveBill: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    c.store.label = "Local lunch";
+    move(c);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
+    await flush(el);
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.label).toBe("Local lunch");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    expect(unloadCancelled()).toBe(true);
+  });
+  it("a pending move cannot clear a later local basket edit", async () => {
+    let release!: (value: { partyId: string; billId: string; merged: boolean }) => void;
+    const { el, c } = await loaded({
+      moveBill: vi.fn(() => new Promise((resolve) => (release = resolve))),
+    });
+    move(c);
+    await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
+    c.store.label = "Typed during move";
+    release({ partyId: "party-new", billId: "wo-1", merged: false });
+    await flush(el);
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.label).toBe("Typed during move");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    expect(unloadCancelled()).toBe(true);
+  });
+  it("a pending move cannot clear a newly loaded copy with the same id and values", async () => {
+    let release!: (value: { partyId: string; billId: string; merged: boolean }) => void;
+    const { el, c } = await loaded({
+      moveBill: vi.fn(() => new Promise((resolve) => (release = resolve))),
+    });
+    move(c);
+    await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
+    c.store.loadFrom("wo-1", [...c.store.lines], "Mesa 4", 3);
+    release({ partyId: "party-new", billId: "wo-1", merged: false });
+    await flush(el);
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.label).toBe("Mesa 4");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+  });
+  it("a replaced basket makes its pending move decision inert", async () => {
+    const { el, c } = await loaded();
+    c.store.label = "Local lunch";
+    move(c);
+    await expect.poll(() => warning(el).open).toBe(true);
+    const stale = warning(el).shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    c.store.loadFrom("other", [{ product: jamon, quantity: "1" }], "Other", 1);
+    await expect.poll(() => warning(el).open).toBe(false);
+    stale.click();
+    await flush(el);
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+    expect(c.store.id).toBe("other");
+    expect(c.store.lines[0]!.product.id).toBe("jamon");
+  });
+  for (const locale of ["en-GB", "es-ES"])
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`native held move Keep/Escape/Discard ${locale} ${theme} ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const { el, c } = await loaded(
+              {
+                getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+                listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+              },
+              theme,
+            );
+            c.store.label = "Local lunch";
+            const held = counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")!;
+            async function pick() {
+              await held.updateComplete;
+              await userEvent.click(
+                held.shadowRoot!.querySelector(".move")!.shadowRoot!.querySelector("button")!,
+              );
+              await expect
+                .poll(() => held.shadowRoot!.querySelector('[data-target="t9"]'))
+                .not.toBeNull();
+              await userEvent.click(
+                held
+                  .shadowRoot!.querySelector('[data-target="t9"]')!
+                  .shadowRoot!.querySelector("button")!,
+              );
+              await expect.poll(() => warning(el).open).toBe(true);
+            }
+            await pick();
+            const q = warning(el);
+            const keep = q
+              .shadowRoot!.querySelector("[data-choice=keep]")!
+              .shadowRoot!.querySelector("button")!;
+            await expect.poll(() => keep.matches(":focus")).toBe(true);
+            expect(currentApi.moveBill).not.toHaveBeenCalled();
+            await expectNoA11yViolations(q);
+            await page.screenshot({
+              path: `__screenshots__/w69-held-move-look/${locale}-${theme}-${width}-warning.png`,
+            });
+            await userEvent.keyboard("{Escape}");
+            await expect.poll(() => q.open).toBe(false);
+            expect(c.store.label).toBe("Local lunch");
+            await expect
+              .poll(() =>
+                held
+                  .shadowRoot!.querySelector(".move")!
+                  .shadowRoot!.querySelector("button")!
+                  .matches(":focus"),
+              )
+              .toBe(true);
+            await pick();
+            await choose(el, "keep");
+            expect(c.store.label).toBe("Local lunch");
+            await expect
+              .poll(() =>
+                held
+                  .shadowRoot!.querySelector(".move")!
+                  .shadowRoot!.querySelector("button")!
+                  .matches(":focus"),
+              )
+              .toBe(true);
+            expect(currentApi.moveBill).not.toHaveBeenCalled();
+            await page.screenshot({
+              path: `__screenshots__/w69-held-move-look/${locale}-${theme}-${width}-kept.png`,
+            });
+            await pick();
+            await choose(el, "discard");
+            await expect.poll(() => c.store.lines.length).toBe(0);
+            expect(currentApi.moveBill).toHaveBeenCalledOnce();
+            expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+          } finally {
+            await page.viewport(size.width, size.height);
+          }
+        });
+});
+
+describe("basket unsaved replacement", () => {
+  function unloadCancelled() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  function question(el: TillApp) {
+    return el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  }
+  async function answer(el: TillApp, decision: "keep" | "discard") {
+    const q = question(el);
+    await q.updateComplete;
+    q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
+    await expect.poll(() => q.open).toBe(false);
+  }
+  it("registers memory-only lines and label for unload, including reverts", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    expect(unloadCancelled()).toBe(false);
+    c.store.label = "Lunch";
+    expect(unloadCancelled()).toBe(true);
+    c.store.label = undefined;
+    expect(unloadCancelled()).toBe(false);
+    c.store.addProduct(cafe, "2");
+    expect(unloadCancelled()).toBe(true);
+    c.store.removeLine(0);
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("Keep retains the basket; Discard retrieves once without abandoning or paying it", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(jamon, "1");
+    c.store.label = "Lunch";
+    const id = c.store.id;
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(question(el).open).toBe(true);
+    expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+    await answer(el, "keep");
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines[0]!.product.id).toBe("jamon");
+    expect(c.store.label).toBe("Lunch");
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "discard");
+    await expect.poll(() => c.store.id).toBe("wo-1");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1");
+    expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+    expect(currentApi.parkOrder).not.toHaveBeenCalled();
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("retrieved label and line edits warn, and reverting to the loaded values clears unload", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => c.store.id).toBe("wo-1");
+    expect(unloadCancelled()).toBe(false);
+    c.store.label = "New label";
+    expect(c.store.dirty).toBe(false);
+    expect(unloadCancelled()).toBe(true);
+    c.store.label = "Mesa 4";
+    expect(unloadCancelled()).toBe(false);
+    c.store.setLineQuantity(0, "3");
+    expect(unloadCancelled()).toBe(true);
+    c.store.setLineQuantity(0, "2");
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("an approved failed retrieval preserves the local basket and unload warning", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(jamon, "1");
+    const id = c.store.id;
+    emit(c, "retrieve-order", { id: "gone" });
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "discard");
+    await expect.poll(() => currentApi.retrieveWorkingOrder).toHaveBeenCalledOnce();
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines[0]!.product.id).toBe("jamon");
+    expect(unloadCancelled()).toBe(true);
+    expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+  });
+  it("retained basket remains unload-protected through tabs and logout without asking", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    selectTab(el, "floor");
+    await flush(el);
+    expect(question(el).open).toBe(false);
+    expect(unloadCancelled()).toBe(true);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(question(el).open).toBe(false);
+    expect(unloadCancelled()).toBe(true);
+    expect(c.store.lines[0]!.quantity).toBe("2");
+  });
+  it("a successful sale clears basket unload protection without asking before payment", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    expect(unloadCancelled()).toBe(true);
+    emit(c, "confirm-payment", { method: "cash", amount: "3" });
+    await expect.poll(() => ticket(el)).not.toBeNull();
+    expect(question(el).open).toBe(false);
+    expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    expect(unloadCancelled()).toBe(false);
+    emit(ticket(el)!, "new-sale");
+    await flush(el);
+    expect(counter(el)!.store.lines).toEqual([]);
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("a clean retrieval answered after another local edit cannot overwrite that edit", async () => {
+    const saved = await stubApi().retrieveWorkingOrder("wo-1");
+    let resolve!: (value: typeof saved) => void;
+    const pending = new Promise<typeof saved>((answer) => {
+      resolve = answer;
+    });
+    const { el } = await mountApp({ retrieveWorkingOrder: vi.fn().mockReturnValue(pending) });
+    const c = await toCounter(el);
+    const id = c.store.id;
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => currentApi.retrieveWorkingOrder).toHaveBeenCalledOnce();
+    c.store.addProduct(jamon, "1");
+    c.store.label = "Newer basket";
+    resolve(saved);
+    await flush(el);
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines[0]!.product.id).toBe("jamon");
+    expect(c.store.label).toBe("Newer basket");
+    expect(unloadCancelled()).toBe(true);
+  });
+  it("opening Pay from the waiting list asks before replacing a memory-only basket", async () => {
+    const saved = await stubApi().retrieveWorkingOrder("wo-1");
+    const { el } = await mountApp({ retrievePlacedOrder: vi.fn().mockResolvedValue(saved) });
+    const c = await toCounter(el);
+    c.store.addProduct(jamon, "1");
+    const id = c.store.id;
+    emit(c, "pay-waiting-order", { id: "wo-1" });
+    await flush(el);
+    expect(question(el).open).toBe(true);
+    expect(currentApi.retrievePlacedOrder).not.toHaveBeenCalled();
+    await answer(el, "keep");
+    expect(c.store.id).toBe(id);
+    emit(c, "pay-waiting-order", { id: "wo-1" });
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "discard");
+    await expect.poll(() => c.store.id).toBe("wo-1");
+    expect(currentApi.retrievePlacedOrder).toHaveBeenCalledOnce();
+    expect(currentApi.collectOrder).not.toHaveBeenCalled();
+    expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+    expect(unloadCancelled()).toBe(false);
+  });
+});
+
+describe("basket protection lifetimes", () => {
+  function unloadCancelled() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  it("display-only basket notifications leave a pending replacement decision open", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "retrieve-order", { id: "wo-1" });
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    c.store.setBlocked(["removed"]);
+    await flush(el);
+    expect(question.open).toBe(true);
+    expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+    await discardBasketChanges(el);
+    await expect.poll(() => c.store.id).toBe("wo-1");
+  });
+  it("a captured card payment clears basket unload protection without another confirmation", async () => {
+    const { el } = await mountApp({
+      pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "collect-card", {});
+    await expect.poll(() => ticket(el)).not.toBeNull();
+    expect(currentApi.pay).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(unloadCancelled()).toBe(false);
+  });
+  it("an accepted line save stays clean when the subsequent payment is refused", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+    });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => c.store.id).toBe("wo-1");
+    c.store.setLineExtras(0, { note: "No sugar" });
+    expect(unloadCancelled()).toBe(true);
+    emit(c, "confirm-payment", { method: "cash", amount: "3" });
+    await expect.poll(() => currentApi.recordSale).toHaveBeenCalledOnce();
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1", {
+      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2", makeAt: null, note: "No sugar" }],
+      label: "Mesa 4",
+      revision: 3,
+    });
+    expect(unloadCancelled()).toBe(false);
+    expect(c.store.lines[0]!.note).toBe("No sugar");
+  });
+  it("compares modifier membership without offered order while retaining line positions", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    const extras = [
+      { listId: "x1", productId: "e1", quantity: 1, name: "First", price: "1.00" },
+      { listId: "x2", productId: "e2", quantity: 2, name: "Second", price: "2.00" },
+    ];
+    const options = [
+      { listId: "o1", labelId: "l1" },
+      { listId: "o2", labelId: "l2" },
+    ];
+    c.store.loadFrom(
+      "stored",
+      [{ product: cafe, quantity: "2.000", extras, options }],
+      "Stored",
+      2,
+    );
+    expect(unloadCancelled()).toBe(false);
+    c.store.setLineModifiers(0, { extras: [...extras].reverse(), options: [...options].reverse() });
+    expect(unloadCancelled()).toBe(false);
+    c.store.setLineModifiers(0, {
+      extras: [{ ...extras[0]!, listId: "another-list" }, extras[1]!],
+      options,
+    });
+    expect(unloadCancelled()).toBe(true);
+    c.store.setLineModifiers(0, { extras, options });
+    expect(unloadCancelled()).toBe(false);
+    c.store.setLineExtras(0, { note: "No sugar" });
+    expect(unloadCancelled()).toBe(true);
+    c.store.setLineExtras(0, { note: "" });
+    expect(unloadCancelled()).toBe(false);
+    c.store.setLineMakeAt(0, "kitchen");
+    expect(unloadCancelled()).toBe(true);
+    c.store.setLineMakeAt(0, undefined);
+    expect(unloadCancelled()).toBe(false);
+    c.store.addProduct(jamon, "1");
+    expect(unloadCancelled()).toBe(true);
+    c.store.removeLine(1);
+    expect(unloadCancelled()).toBe(false);
+    el.remove();
+    expect(unloadCancelled()).toBe(false);
+  });
+});
+
+async function discardBasketChanges(el: TillApp): Promise<void> {
+  await flush(el);
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  expect(question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await flush(el);
+}
+
+describe("basket native replacement warning", () => {
+  for (const locale of ["en-GB", "es-ES"])
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`Retrieve / Keep / Escape / Discard, ${locale}, ${theme}, ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const { el } = await mountApp(
+              {
+                getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+                listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+              },
+              theme,
+            );
+            const c = await toCounter(el);
+            c.store.addProduct(jamon, "1");
+            c.store.label = "Lunch";
+            const id = c.store.id;
+            const held = counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")!;
+            await held.updateComplete;
+            const retrieve = held
+              .shadowRoot!.querySelector(".retrieve")!
+              .shadowRoot!.querySelector("button")!;
+            await userEvent.click(retrieve);
+            const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+            await expect.poll(() => question.open).toBe(true);
+            expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+            const keep = question
+              .shadowRoot!.querySelector("[data-choice=keep]")!
+              .shadowRoot!.querySelector("button")!;
+            await expect.poll(() => keep.matches(":focus")).toBe(true);
+            expect(question.heading).toBe(
+              locale === "en-GB"
+                ? "Discard unsaved changes?"
+                : "¿Descartar los cambios sin guardar?",
+            );
+            await expectNoA11yViolations(question);
+            await page.screenshot({
+              path: `__screenshots__/w69-basket-look/${locale}-${theme}-${width}-warning.png`,
+            });
+            await userEvent.keyboard("{Escape}");
+            await expect.poll(() => question.open).toBe(false);
+            expect(c.store.id).toBe(id);
+            expect(c.store.label).toBe("Lunch");
+            await expect.poll(() => retrieve.matches(":focus")).toBe(true);
+            await userEvent.click(retrieve);
+            await expect.poll(() => question.open).toBe(true);
+            await userEvent.click(
+              question
+                .shadowRoot!.querySelector("[data-choice=keep]")!
+                .shadowRoot!.querySelector("button")!,
+            );
+            await expect.poll(() => question.open).toBe(false);
+            expect(c.store.lines[0]!.product.id).toBe("jamon");
+            expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+            await page.screenshot({
+              path: `__screenshots__/w69-basket-look/${locale}-${theme}-${width}-kept.png`,
+            });
+            await userEvent.click(retrieve);
+            await discardBasketChanges(el);
+            await expect.poll(() => c.store.id).toBe("wo-1");
+            expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1");
+            expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+            expect(currentApi.recordSale).not.toHaveBeenCalled();
+          } finally {
+            await page.viewport(size.width, size.height);
+          }
+        });
+});
+
+it("retained basket traverses indexed and unindexed history without a discard warning", async () => {
+  const { el } = await mountApp();
+  const c = await toCounter(el);
+  c.store.addProduct(cafe, "2");
+  c.store.label = "History basket";
+  const id = c.store.id;
+  selectTab(el, "floor");
+  await flush(el);
+  history.back();
+  await expect.poll(() => counter(el)).not.toBeNull();
+  expect(counter(el)!.store.id).toBe(id);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  history.forward();
+  await expect.poll(() => shell(el)!.activeTabKey).toBe("floor");
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  const accepted = location.href;
+  history.pushState({ external: "retained" }, "", accepted);
+  history.back();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  history.forward();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  selectTab(el, "counter");
+  await flush(el);
+  expect(counter(el)!.store.id).toBe(id);
+  expect(counter(el)!.store.label).toBe("History basket");
+  const unload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+});
+
+it("New sale keeps edits made during payment until you explicitly discard them", async () => {
+  let answer!: (value: TillSaleResult) => void;
+  const paid = new Promise<TillSaleResult>((resolve) => (answer = resolve));
+  const { el } = await mountApp({ recordSale: vi.fn().mockReturnValue(paid) });
+  const c = await toCounter(el);
+  c.store.addProduct(cafe, "2");
+  const id = c.store.id;
+  emit(c, "confirm-payment", { method: "cash", amount: "3" });
+  await expect.poll(() => currentApi.recordSale).toHaveBeenCalledOnce();
+  c.store.label = "Later label";
+  answer(saleResult);
+  await expect.poll(() => ticket(el)).not.toBeNull();
+  const unload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+  emit(ticket(el)!, "new-sale");
+  await flush(el);
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  expect(question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => question.open).toBe(false);
+  expect(ticket(el)).not.toBeNull();
+  expect(c.store.id).toBe(id);
+  expect(c.store.label).toBe("Later label");
+  emit(ticket(el)!, "new-sale");
+  await discardBasketChanges(el);
+  await expect.poll(() => counter(el)).not.toBeNull();
+  expect(counter(el)!.store.id).not.toBe(id);
+  expect(counter(el)!.store.lines).toEqual([]);
+  expect(currentApi.recordSale).toHaveBeenCalledOnce();
+  expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+});
+
+it("a completed sale can start the next basket while its held-list refresh is still pending", async () => {
+  let release!: (rows: HeldOrderSummary[]) => void;
+  const pending = new Promise<HeldOrderSummary[]>((resolve) => (release = resolve));
+  const { el } = await mountApp({
+    listWorkingOrders: vi.fn().mockResolvedValueOnce([]).mockReturnValue(pending),
+  });
+  const c = await toCounter(el);
+  c.store.addProduct(cafe, "2");
+  const id = c.store.id;
+  emit(c, "confirm-payment", { method: "cash", amount: "3" });
+  await expect.poll(() => ticket(el)).not.toBeNull();
+  emit(ticket(el)!, "new-sale");
+  await flush(el);
+  const next = counter(el);
+  expect(next).not.toBeNull();
+  expect(next!.store.id).not.toBe(id);
+  expect(next!.store.lines).toEqual([]);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  release([]);
+  await flush(el);
+  expect(counter(el)!.store.id).toBe(next!.store.id);
+  expect(currentApi.recordSale).toHaveBeenCalledOnce();
 });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import {
@@ -6584,13 +6585,81 @@ describe("till-app: recording an unpaid departure", () => {
     ]);
   });
 
+  for (const action of ["Cancel", "Escape"]) {
+    it(`unpaid departure ${action} retains the reason and bills until local Discard`, async () => {
+      const { el } = await openDeparture();
+      const order = tableOrder(el)!;
+      const bills = structuredClone(order.bills);
+      const form = dialog(el)!;
+      await typeReason(el, "  Left during clearing  ");
+      const input = form.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+      input.focus();
+      if (action === "Cancel")
+        form.shadowRoot!.querySelector<HTMLElement>("[data-departure-close]")!.click();
+      else await userEvent.keyboard("{Escape}");
+      await flush(el);
+      const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      expect(question.open).toBe(true);
+      expect(dialog(el)).toBe(form);
+      expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+      await flush(el);
+      expect(question.open).toBe(false);
+      expect(input.value).toBe("  Left during clearing  ");
+      expect(tableOrder(el)!.bills).toEqual(bills);
+      form.shadowRoot!.querySelector<HTMLElement>("[data-departure-close]")!.click();
+      await flush(el);
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await expect.poll(() => dialog(el)).toBeNull();
+      expect(tableOrder(el)).toBe(order);
+      expect(tableOrder(el)!.bills).toEqual(bills);
+      expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
+    });
+  }
+
+  it("discarding departure approval keeps the reason; recording afterwards closes without a warning", async () => {
+    const recordUnpaidDeparture = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted", status: 403 })
+      .mockResolvedValue(recorded);
+    const { el } = await openDeparture({ recordUnpaidDeparture, openDrawer: vi.fn() });
+    await typeReason(el, "Ran off");
+    await confirmDeparture(el);
+    const parent = dialog(el)!;
+    const child = approval(el)!;
+    child.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await child.updateComplete;
+    const pad = child.shadowRoot!.querySelector("till-numeric-pad")!;
+    pad.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "0042" }, bubbles: true, composed: true }),
+    );
+    await child.updateComplete;
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    expect(question.open).toBe(true);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await flush(el);
+    await expect.poll(() => approval(el)).toBeNull();
+    expect(dialog(el)).toBe(parent);
+    expect(parent.shadowRoot!.querySelector("wt-input")!.value).toBe("Ran off");
+    expect(recordUnpaidDeparture).toHaveBeenCalledTimes(1);
+    await confirmDeparture(el);
+    expect(recordUnpaidDeparture.mock.calls[1]!.slice(0, 2)).toEqual([
+      "v1",
+      { expectedPartyRevision: 3, reason: "Ran off" },
+    ]);
+    expect(question.open).toBe(false);
+    expect(dialog(el)).toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(api.openDrawer).not.toHaveBeenCalled();
+  });
+
   it("Cancel closes the dialog and sends nothing", async () => {
     const { el } = await openDeparture();
 
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-departure-close]")!.click();
-    await flush(el);
-
-    expect(dialog(el)).toBeNull();
+    await expect.poll(() => dialog(el)).toBeNull();
     expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
     expect(tableOrder(el)!.finishRefused).toBe(true);
   });
@@ -6967,6 +7036,11 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     await typeReason(el, "Wrong table");
     await confirmCancel(el);
     emit(tableOrder(el)!, "logout");
+    const warning = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => warning.open).toBe(true);
+    await warning.updateComplete;
+    warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => warning.open).toBe(false);
     await flush(el);
     expect(dialog(el)).toBeNull();
     emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
@@ -7046,13 +7120,63 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     });
   });
 
+  it("an accepted table credit clears unload protection before its bill refresh starts", async () => {
+    const { el } = await openCancel();
+    await typeReason(el, "  Wrong table  ");
+    let protectedAtRefresh: boolean | undefined;
+    vi.mocked(api.getPartyBills).mockImplementation(() => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      protectedAtRefresh = event.defaultPrevented;
+      return new Promise(() => {});
+    });
+    await confirmCancel(el);
+    expect(protectedAtRefresh).toBe(false);
+    expect(vi.mocked(api.cancelOrder).mock.calls).toEqual([
+      ["wo-check", "Wrong table", undefined, { signal: expect.any(AbortSignal) }],
+    ]);
+    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-finished]")!.click();
+    await expect.poll(() => dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  });
+
+  for (const action of ["Keep the bill", "Escape"]) {
+    it(`table cancel-credit ${action} discards only the local reason and keeps both bills`, async () => {
+      const { el } = await openCancel();
+      await typeReason(el, "  Wrong table  ");
+      if (action === "Escape") {
+        dialog(el)!
+          .shadowRoot!.querySelector("wt-input")!
+          .shadowRoot!.querySelector("input")!
+          .focus();
+        await userEvent.keyboard("{Escape}");
+      } else
+        dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
+      await flush(el);
+      const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      await q.updateComplete;
+      expect(q.open).toBe(true);
+      expect(api.cancelOrder).not.toHaveBeenCalled();
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+      await expect.poll(() => q.open).toBe(false);
+      expect(dialog(el)!.shadowRoot!.querySelector("wt-input")!.value).toBe("  Wrong table  ");
+      dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
+      await flush(el);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await expect.poll(() => dialog(el)).toBeNull();
+      expect(tableOrder(el)).not.toBeNull();
+      expect(tableOrder(el)!.bills).toEqual([tabBill, invoiced]);
+      expect(api.cancelOrder).not.toHaveBeenCalled();
+      expect(api.listCancelCreditAuthorizers).not.toHaveBeenCalled();
+    });
+  }
+
   it("Cancel closes the dialog and sends nothing", async () => {
     const { el } = await openCancel();
 
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
-    await flush(el);
-
-    expect(dialog(el)).toBeNull();
+    await expect.poll(() => dialog(el)).toBeNull();
     expect(api.cancelOrder).not.toHaveBeenCalled();
   });
 });

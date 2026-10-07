@@ -26,6 +26,7 @@ import type {
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import "../widgets/product-color-form.js";
 import { fieldOf } from "../widgets/section-writes.js";
+import type { ProductEditorDraft } from "../widgets/product-editor-model.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { dashboardPath } from "../navigation.js";
@@ -144,6 +145,7 @@ export class CatalogueScreen extends LitElement {
   @state() private editorInitialField = "";
   @state() private colouring: Product | null = null;
   @state() private colourBusy = false;
+  #colourGeneration = 0;
   @state() private colourErrors: Record<string, string> = {};
   /** Rebuilt only when a new refusal arrives: a form takes a new `fieldErrors` object as a new
    * refusal and shows again the ones the operator had since dismissed. */
@@ -222,6 +224,14 @@ export class CatalogueScreen extends LitElement {
     super.connectedCallback();
     this.#showError(null);
     void this.#load();
+  }
+
+  override disconnectedCallback(): void {
+    this.#colourGeneration++;
+    this.colouring = null;
+    this.colourBusy = false;
+    this.colourErrors = {};
+    super.disconnectedCallback();
   }
 
   async #load(): Promise<void> {
@@ -367,19 +377,24 @@ export class CatalogueScreen extends LitElement {
   async #saveColour(color: string | null): Promise<void> {
     const product = this.colouring;
     if (!product || this.colourBusy) return;
+    const generation = this.#colourGeneration;
+    const form = this.shadowRoot!.querySelector("dashboard-product-color-form")!;
     this.colourBusy = true;
     this.colourErrors = {};
     try {
       await this.api.setProductColor(product.id, color);
+      if (generation !== this.#colourGeneration) return;
+      form.closeSaved(color);
       this.colouring = null;
     } catch (error) {
+      if (generation !== this.#colourGeneration) return;
       this.colourErrors =
         fieldOf(error) === "color"
           ? { color: t("editor.field_rejected") }
           : { _form: codeMessage(codeOf(error)) };
       return;
     } finally {
-      this.colourBusy = false;
+      if (generation === this.#colourGeneration) this.colourBusy = false;
     }
     await this.#reloadProducts().catch(() => undefined);
   }
@@ -462,14 +477,11 @@ export class CatalogueScreen extends LitElement {
     this.editorValue = null;
     this.#linkedProduct = null;
     if (writeUrl) {
-      const url = new URL(location.href);
-      url.searchParams.delete("field");
-      history.replaceState(history.state, "", url);
-      if (this.#url.read("product") !== null) this.#url.write({ product: null }, true);
+      void this.#url.write({ product: null }, true, ["field"]);
     }
   }
 
-  async #save(event: CustomEvent<{ value: ProductEditorInput }>): Promise<void> {
+  async #save(event: CustomEvent<{ value: ProductEditorDraft }>): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
@@ -482,6 +494,7 @@ export class CatalogueScreen extends LitElement {
         created = await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value);
       else await this.api.updateProductEditor(this.editorValue.id, event.detail.value);
       written = true;
+      this.#editor()?.closeSaved(event.detail.value);
       this.#closeEditor();
       if (created) void this.#openPlacement(created);
       await this.#reloadProducts();
@@ -542,6 +555,9 @@ export class CatalogueScreen extends LitElement {
     );
     this.placementBusy = false;
     if (this.placing !== placing) return;
+    this.shadowRoot!.querySelector("dashboard-add-to-menus")!.commitAdded(
+      sectionIds.filter((_id, index) => settled[index]!.status === "fulfilled"),
+    );
     if (failures.length) this.placementFailures = failures;
     else this.#closePlacement();
   }
@@ -643,36 +659,46 @@ export class CatalogueScreen extends LitElement {
   }
 
   /** Every submission is a new refusal, even one the API answers with an identical error object. */
-  #submitChild(write: () => Promise<{ id: string }>): Promise<void> {
+  #submitChild(write: () => Promise<{ id: string }>, committed?: () => void): Promise<void> {
     this.#childRefusals = null;
-    return this.#child.submit(write);
+    return this.#child.submit(write, committed);
   }
 
   #submitUnit(event: CustomEvent<{ value: UnitInput }>): void {
     event.stopPropagation();
-    void this.#submitChild(async () => {
-      const value = await this.api.createUnit(event.detail.value);
-      return { id: value.id, name: value.name };
-    });
+    const form = this.shadowRoot!.querySelector("dashboard-unit-form")!;
+    void this.#submitChild(
+      async () => {
+        const value = await this.api.createUnit(event.detail.value);
+        return { id: value.id, name: value.name };
+      },
+      () => form.closeSaved(event.detail.value),
+    );
   }
 
   #submitExtraList(event: CustomEvent<{ value: ExtraListInput }>): void {
     event.stopPropagation();
     const editing = this.editingList?.kind === "extras" ? this.editingList.value : null;
-    void this.#submitChild(async () =>
-      editing
-        ? await this.api.updateExtraList(editing.id, event.detail.value)
-        : await this.api.createExtraList(event.detail.value),
+    const form = this.shadowRoot!.querySelector("dashboard-extra-list-form")!;
+    void this.#submitChild(
+      async () =>
+        editing
+          ? await this.api.updateExtraList(editing.id, event.detail.value)
+          : await this.api.createExtraList(event.detail.value),
+      () => form.closeSaved(event.detail.value),
     );
   }
 
   #submitOptionList(event: CustomEvent<{ value: OptionListInput }>): void {
     event.stopPropagation();
     const editing = this.editingList?.kind === "options" ? this.editingList.value : null;
-    void this.#submitChild(async () =>
-      editing
-        ? await this.api.updateOptionList(editing.id, event.detail.value)
-        : await this.api.createOptionList(event.detail.value),
+    const form = this.shadowRoot!.querySelector("dashboard-option-list-form")!;
+    void this.#submitChild(
+      async () =>
+        editing
+          ? await this.api.updateOptionList(editing.id, event.detail.value)
+          : await this.api.createOptionList(event.detail.value),
+      () => form.closeSaved(event.detail.value),
     );
   }
 
@@ -740,6 +766,8 @@ export class CatalogueScreen extends LitElement {
               }}
               @product-colour=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
+                this.#colourGeneration++;
+                this.colourBusy = false;
                 this.colouring =
                   this.products.find((product) => product.id === event.detail.productId) ?? null;
                 this.colourErrors = {};
@@ -767,6 +795,7 @@ export class CatalogueScreen extends LitElement {
       <dashboard-product-color-form
         .open=${this.colouring !== null}
         .busy=${this.colourBusy}
+        .productId=${this.colouring?.id ?? ""}
         .name=${this.colouring?.name ?? ""}
         .color=${this.colouring?.color ?? null}
         .categoryColor=${categoryColor(this.colouring?.primaryCategoryId ?? null, new Map(this.categories.map((category) => [category.id, category])))}
@@ -777,6 +806,7 @@ export class CatalogueScreen extends LitElement {
         }}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
+          this.#colourGeneration++;
           this.colouring = null;
         }}
       ></dashboard-product-color-form>
@@ -798,7 +828,7 @@ export class CatalogueScreen extends LitElement {
         .optionLists=${this.optionLists}
         .courses=${this.courses}
         .api=${this.api}
-        @wt-submit=${(event: CustomEvent<{ value: ProductEditorInput }>) => void this.#save(event)}
+        @wt-submit=${(event: CustomEvent<{ value: ProductEditorDraft }>) => void this.#save(event)}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
           this.#closeEditor();
@@ -896,6 +926,7 @@ export class CatalogueScreen extends LitElement {
       </wt-modal>
       <dashboard-unit-form
         .open=${this.#child.kind === "unit"}
+        .draftParent=${this.#editor() ?? undefined}
         .busy=${this.#child.busy}
         .locales=${locales}
         .fieldErrors=${refusals.unit}
@@ -907,6 +938,7 @@ export class CatalogueScreen extends LitElement {
         // rather than offering a field in a guessed language.
         this.contentLanguages
           ? html`<dashboard-extra-list-form
+                .draftParent=${this.#editor() ?? undefined}
                 .open=${this.#child.kind === "extras"}
                 .busy=${this.#child.busy}
                 .languages=${this.contentLanguages}
@@ -917,6 +949,7 @@ export class CatalogueScreen extends LitElement {
                 @wt-cancel=${() => this.#cancelChild("extras")}
               ></dashboard-extra-list-form>
               <dashboard-option-list-form
+                .draftParent=${this.#editor() ?? undefined}
                 .open=${this.#child.kind === "options"}
                 .busy=${this.#child.busy}
                 .languages=${this.contentLanguages}

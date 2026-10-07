@@ -2,7 +2,12 @@ import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles } from "@waitron/ui";
+import {
+  baseStyles,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+} from "@waitron/ui";
 import type { MenuStructureNode } from "../api/client.js";
 import type { MemberRef, SectionMember, TileRef } from "@waitron/catalogue/src/section-types.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -155,14 +160,61 @@ export class MemberListEditor extends LitElement {
   @state() private replacementError = "";
   @state() private replacementFieldError = "";
   @state() private addedMessage = "";
+  #replacementDraft?: DraftScope<string>;
+  #leave?: LeaveCoordinator;
+
+  override disconnectedCallback(): void {
+    this.#replacementDraft?.dispose();
+    this.#replacementDraft = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #registerReplacement(): void {
+    this.#replacementDraft?.dispose();
+    this.#leave = leaveCoordinatorFor(this);
+    this.#replacementDraft = this.#leave?.register<string>({
+      id: this,
+      current: () => this.choice,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.choice = value;
+      },
+    });
+  }
+
+  #clearReplacement(): void {
+    this.#replacementDraft?.dispose();
+    this.#replacementDraft = undefined;
+    this.#replacementGeneration++;
+    this.replacementAttempted = false;
+    this.replacementError = "";
+    this.replacementFieldError = "";
+    this.replacing = null;
+    this.choice = "";
+    this.addError = false;
+  }
+
+  async #cancelReplacement(): Promise<void> {
+    if (this.busy) return;
+    const generation = this.#replacementGeneration;
+    const proceed = () => {
+      if (generation === this.#replacementGeneration && !this.busy) this.#clearReplacement();
+    };
+    if (this.#replacementDraft)
+      await this.#leave!.request({ scopes: [this], reason: "cancel", proceed });
+    else proceed();
+  }
 
   replacementCompletion(memberId: string): (message: string, field?: boolean) => void {
     const generation = this.#replacementGeneration;
+    const submitted = this.choice;
     return (message, field = false) => {
       if (generation !== this.#replacementGeneration || this.replacing !== memberId) return;
       if (message === "") {
-        this.replacing = null;
-        this.choice = "";
+        this.#replacementDraft?.commit(submitted);
+        if (this.choice === submitted) this.#clearReplacement();
         this.addError = false;
         this.replacementAttempted = false;
         this.replacementError = "";
@@ -209,6 +261,8 @@ export class MemberListEditor extends LitElement {
         target.ref.kind !== "missing" ||
         target.ref.name !== this.#replacementName
       ) {
+        this.#replacementDraft?.dispose();
+        this.#replacementDraft = undefined;
         this.replacing = null;
         this.#replacementGeneration++;
         this.replacementAttempted = false;
@@ -240,7 +294,10 @@ export class MemberListEditor extends LitElement {
       this.#offer = this.#choices();
       // A choice the list now holds, or that is now excluded, is no longer on offer.
       const offered = [...this.#offer.products, ...this.#offer.sections];
-      if (!offered.some((choice) => choice.value === this.choice)) this.choice = "";
+      if (this.choice && !offered.some((choice) => choice.value === this.choice)) {
+        this.choice = "";
+        this.#replacementDraft?.changed();
+      }
       if (this.replacing !== null && this.replacementAttempted) this.addError = this.choice === "";
     }
   }
@@ -418,6 +475,7 @@ export class MemberListEditor extends LitElement {
                     this.#replacementName = member.ref.kind === "missing" ? member.ref.name : "";
                     this.choice = "";
                     this.addError = false;
+                    this.#registerReplacement();
                     await this.updateComplete;
                     this.shadowRoot!.querySelector<HTMLElement>(
                       'wt-combobox[name="member-ref"]',
@@ -498,6 +556,7 @@ export class MemberListEditor extends LitElement {
             event.stopPropagation();
             if (this.busy) return;
             this.choice = event.detail.value;
+            this.#replacementDraft?.changed();
             if (this.replacing === null && this.choice) {
               const label = [...this.#offer.products, ...this.#offer.sections].find(
                 (option) => option.value === this.choice,
@@ -524,13 +583,7 @@ export class MemberListEditor extends LitElement {
                   .disabled=${this.busy}
                   @click=${(event: Event) => {
                     event.stopPropagation();
-                    this.#replacementGeneration++;
-                    this.replacementAttempted = false;
-                    this.replacementError = "";
-                    this.replacementFieldError = "";
-                    this.replacing = null;
-                    this.choice = "";
-                    this.addError = false;
+                    void this.#cancelReplacement();
                   }}
                   >${t("action.cancel")}</wt-button
                 >

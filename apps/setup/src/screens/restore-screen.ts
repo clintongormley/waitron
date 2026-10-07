@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -16,6 +16,12 @@ import {
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
+
+interface RestoreForm {
+  artifact?: File;
+  recoveryKey: string;
+  environment: "production" | "preproduction";
+}
 
 export type RestoreField = "artifact" | "recoveryKey" | "environment";
 
@@ -58,12 +64,61 @@ export class SetupRestoreScreen extends LitElement {
   @state() private refusalDismissed = false;
   @state() private fieldRefusalDismissed = false;
 
+  #baseline?: RestoreForm;
+  #scope?: DraftScope<RestoreForm>;
+
+  #form(): RestoreForm {
+    return {
+      artifact: this.artifact,
+      recoveryKey: this.recoveryKey,
+      environment: this.environment,
+    };
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#registerScope();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    super.disconnectedCallback();
+  }
+
+  #registerScope(): void {
+    if (!this.isConnected || !this.#baseline || this.#scope) return;
+    this.#scope = leaveCoordinatorFor(this)?.register({
+      id: this,
+      current: () => this.#form(),
+      snapshot: (form) => ({ ...form }),
+      equal: (a, b) =>
+        a.artifact === b.artifact &&
+        a.recoveryKey === b.recoveryKey &&
+        a.environment === b.environment,
+      restore: (form) => {
+        this.artifact = form.artifact;
+        this.recoveryKey = form.recoveryKey;
+        this.environment = form.environment;
+        this.acknowledged = false;
+        this.oldBoxGone = false;
+        this.attempted = false;
+        const files = new DataTransfer();
+        if (form.artifact) files.items.add(form.artifact);
+        this.shadowRoot!.querySelector<HTMLInputElement>("[data-test=artifact]")!.files =
+          files.files;
+      },
+    });
+    this.#scope?.commit(this.#baseline);
+  }
+
   constructor() {
     super();
     new LocaleChangeController(this);
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    this.#baseline ??= this.#form();
     if (changed.has("errorMessage")) this.refusalDismissed = false;
     if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     if (changed.has("request") && this.request !== undefined) {
@@ -73,10 +128,12 @@ export class SetupRestoreScreen extends LitElement {
       // A request is only sent once the owner has ticked this.
       this.acknowledged = true;
       this.oldBoxGone = this.request.oldBoxGone;
+      this.#scope?.changed();
     }
   }
 
   override updated(changed: PropertyValues<this>): void {
+    this.#registerScope();
     // A file input cannot be bound; without this it would read "No file chosen" beside a kept file.
     if (changed.has("request") && this.request !== undefined) {
       const files = new DataTransfer();
@@ -96,6 +153,7 @@ export class SetupRestoreScreen extends LitElement {
   }
 
   #edited(field: RestoreField): void {
+    this.#scope?.changed();
     if (field === this.invalidField) this.fieldRefusalDismissed = true;
   }
 

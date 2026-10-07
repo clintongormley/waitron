@@ -1,7 +1,8 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -12,6 +13,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
 import { refusedField } from "./person-form.js";
+import { sameValue } from "./product-editor-model.js";
 
 type EditableField = "displayName" | "firstNames" | "lastNames" | "email";
 const FIELDS: readonly string[] = ["firstNames", "lastNames", "displayName", "email", "telephone"];
@@ -21,8 +23,6 @@ export class PersonEdit extends LitElement {
   static override styles = [
     baseStyles,
     css`
-      /* Same field-list shape as the profile screen's "Your details" edit form: one grid gap for
-         every field's spacing, rather than each field carrying its own margin. */
       .fields {
         display: grid;
         gap: var(--wt-space-4);
@@ -40,6 +40,7 @@ export class PersonEdit extends LitElement {
   @property({ attribute: false }) person: PersonSummary | null = null;
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean, reflect: true }) open = false;
+  @property({ type: Boolean }) busy = false;
   @property() error: string | null = null;
   /** The refused request's `params.field`, when it named one. */
   @property({ attribute: false }) errorField: string | null = null;
@@ -57,15 +58,45 @@ export class PersonEdit extends LitElement {
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
   #personId: string | null = null;
+  #scope?: DraftScope<PersonEditDetails>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("person") && this.person?.personId !== this.#personId) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
       this.#loadPerson();
     }
     if (changed.has("error")) this.dismissed = new Set();
     if (changed.has("open") && this.open) {
       this.attempted = false;
       this.dismissed = new Set();
+    }
+    if (!this.open || !this.person) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<PersonEditDetails>({
+        id: this,
+        current: () => this.#submissionValue(),
+        snapshot: (value) => ({ ...value }),
+        equal: sameValue,
+        restore: (value) => {
+          this.details = { ...value };
+        },
+      });
     }
   }
 
@@ -126,6 +157,7 @@ export class PersonEdit extends LitElement {
       this.details = { ...this.details, [field]: field === "telephone" ? value || null : value };
     }
     this.#dismiss(field, ...(this.details.displayName !== prevDisplayName ? ["displayName"] : []));
+    this.#scope?.changed();
   }
 
   #validate(): Partial<Record<EditableField | "telephone", string>> {
@@ -146,13 +178,18 @@ export class PersonEdit extends LitElement {
 
   #save(event: Event): void {
     event.stopPropagation();
+    if (this.busy) return;
     this.attempted = true;
     this.#dismiss("_form");
     if (Object.keys(this.#validate()).length > 0) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    this.#emit("save-person", {
+    this.#emit("save-person", { ...this.#submissionValue() });
+  }
+
+  #submissionValue(): PersonEditDetails {
+    return {
       displayName: this.details.displayName.trim(),
       firstNames: this.details.firstNames.trim(),
       lastNames: this.details.lastNames.trim(),
@@ -160,7 +197,33 @@ export class PersonEdit extends LitElement {
       email: this.details.email.trim(),
       role: this.details.role,
       status: this.details.status,
-    });
+    };
+  }
+
+  closeSaved(submitted: PersonEditDetails): boolean {
+    this.#scope?.commit(submitted);
+    return this.closeIfUnchanged();
+  }
+
+  closeIfUnchanged(): boolean {
+    if (this.#scope?.isDirty()) return false;
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
+    this.#reportClose();
+    return true;
+  }
+
+  #cancel(event: Event): void {
+    event.stopPropagation();
+    if (this.busy || !this.open) return;
+    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.#reportClose();
+  }
+
+  #reportClose(): void {
+    if (!this.open) return;
+    this.open = false;
+    this.#loadPerson();
+    this.#emit("wt-close");
   }
 
   #emit(type: string, detail: Record<string, unknown> = {}): void {
@@ -189,6 +252,7 @@ export class PersonEdit extends LitElement {
         label=${label}
         .value=${value}
         error=${errors[field] ?? ""}
+        ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
       ></wt-input>
     `;
@@ -209,10 +273,12 @@ export class PersonEdit extends LitElement {
         size="standard"
         heading=${person ? `${t("action.edit")} ${person.displayName}` : t("person.edit")}
         .open=${this.open}
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
-        @wt-close=${() => {
-          this.open = false;
-          this.#loadPerson();
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.#reportClose();
         }}
       >
         ${
@@ -252,9 +318,11 @@ export class PersonEdit extends LitElement {
                     noResultsLabel=${t("categories.combobox_no_results")}
                     .options=${rolesByName().map((role) => ({ value: role, label: roleName(role) }))}
                     .value=${this.details.role}
+                    ?disabled=${this.busy}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       event.stopPropagation();
                       this.details = { ...this.details, role: event.detail.value as PersonRole };
+                      this.#scope?.changed();
                     }}
                   ></wt-combobox>
                   <wt-combobox
@@ -265,7 +333,7 @@ export class PersonEdit extends LitElement {
                     search="auto"
                     searchPlaceholder=${t("categories.combobox_search")}
                     noResultsLabel=${t("categories.combobox_no_results")}
-                    ?disabled=${person.personId === this.currentPersonId}
+                    ?disabled=${this.busy || person.personId === this.currentPersonId}
                     .options=${this.#statusOptions(person).map((status) => ({
                       value: status,
                       label: statusName(status),
@@ -277,6 +345,7 @@ export class PersonEdit extends LitElement {
                         ...this.details,
                         status: event.detail.value as PersonEditDetails["status"],
                       };
+                      this.#scope?.changed();
                     }}
                   ></wt-combobox>
                 </div>
@@ -286,6 +355,7 @@ export class PersonEdit extends LitElement {
                         <wt-button
                           data-test="resend-invitation"
                           variant="secondary"
+                          ?disabled=${this.busy}
                           @click=${() => this.#emit("resend-invitation")}
                           >${t("person.resend_invitation")}</wt-button
                         >
@@ -300,18 +370,14 @@ export class PersonEdit extends LitElement {
             slot="cancel"
             data-test="cancel"
             variant="secondary"
-            @click=${(event: Event) => {
-              event.stopPropagation();
-              this.#loadPerson();
-              this.open = false;
-              this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
-            }}
+            ?disabled=${this.busy}
+            @click=${(event: Event) => this.#cancel(event)}
             >${t("action.cancel")}</wt-button
           >
           <wt-button
             data-test="save"
             variant="primary"
-            ?disabled=${this.attempted && Object.keys(this.#validate()).length > 0}
+            ?disabled=${this.busy || (this.attempted && Object.keys(this.#validate()).length > 0)}
             @click=${(event: Event) => this.#save(event)}
             >${t("action.save")}</wt-button
           >

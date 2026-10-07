@@ -2,7 +2,16 @@ import { codeOf } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, UrlStateController } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  UrlStateController,
+  leaveCoordinatorFor,
+  type LeaveCoordinator,
+  type DraftScope,
+  type LeaveReason,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -268,6 +277,14 @@ export class HoursScreen extends LitElement {
   #sentCells: DateHoursCell[] = [];
   /** The subject a link asked for, focused once the hours are read. */
   #linked?: string;
+  #weekScope?: DraftScope<CellDraft[]>;
+  #weekBaseline?: CellDraft[];
+  #dateScope?: DraftScope<DateDraft>;
+  #dateBaseline?: DateDraft;
+  #duplicateScope?: DraftScope<string[]>;
+  #duplicateBaseline?: string[];
+  #leave?: LeaveCoordinator;
+  #editorBeforeClose?: (reason: LeaveReason) => Promise<boolean>;
 
   readonly #url = new UrlStateController(
     this,
@@ -294,6 +311,9 @@ export class HoursScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#registerWeekScope();
+    this.#registerDateScope();
+    this.requestUpdate();
     this.#detach = this.api.watchHours(
       this.#from,
       this.#to,
@@ -308,6 +328,15 @@ export class HoursScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#generation++;
+    this.#weekScope?.dispose();
+    this.#weekScope = undefined;
+    this.#dateScope?.dispose();
+    this.#dateScope = undefined;
+    this.#duplicateScope?.dispose();
+    this.#duplicateScope = undefined;
+    this.#leave = undefined;
+    this.busy = false;
     super.disconnectedCallback();
     this.#detach?.();
   }
@@ -353,6 +382,17 @@ export class HoursScreen extends LitElement {
   // --- Editors -------------------------------------------------------------------------------
 
   #open(editor: Editor, returnTo: () => HTMLElement | null | undefined): void {
+    const generation = this.#generation;
+    const proceed = () => {
+      if (!this.isConnected || generation !== this.#generation || this.busy) return;
+      this.#acceptEditor(editor, returnTo);
+    };
+    const scope = this.#activeScope();
+    if (!scope) proceed();
+    else void this.#leave!.request({ scopes: [scope.id], reason: "navigation", proceed });
+  }
+
+  #acceptEditor(editor: Editor, returnTo: () => HTMLElement | null | undefined): void {
     this.#generation++;
     this.#returnTo = returnTo;
     this.editor = editor;
@@ -360,9 +400,139 @@ export class HoursScreen extends LitElement {
     this.refused = {};
     this.bottomRefusal = "";
     this.busy = false;
+    this.#weekScope?.dispose();
+    this.#weekScope = undefined;
+    this.#dateScope?.dispose();
+    this.#dateScope = undefined;
+    this.#duplicateScope?.dispose();
+    this.#duplicateScope = undefined;
+    this.#weekBaseline =
+      editor.kind === "cell"
+        ? [structuredClone(editor.draft)]
+        : editor.kind === "configure"
+          ? structuredClone(editor.drafts)
+          : undefined;
+    this.#dateBaseline = editor.kind === "date" ? structuredClone(editor.draft) : undefined;
+    this.#duplicateBaseline = editor.kind === "duplicate" ? [...editor.dates] : undefined;
+    this.#registerWeekScope();
+    this.#registerDateScope();
+  }
+
+  #registerWeekScope(): void {
+    const generation = this.#generation;
+    this.#editorBeforeClose = (reason) => this.#beforeClose(reason, generation);
+    const editor = this.editor;
+    if (!editor || this.#weekScope) return;
+    if (editor.kind === "cell" || editor.kind === "configure") {
+      this.#leave = leaveCoordinatorFor(this);
+      let registering = true;
+      this.#weekScope = this.#leave?.register({
+        id: {},
+        parent: this,
+        current: () =>
+          registering
+            ? this.#weekBaseline!
+            : this.editor?.kind === "cell"
+              ? [this.editor.draft]
+              : this.editor?.kind === "configure"
+                ? this.editor.drafts
+                : this.#weekBaseline!,
+        snapshot: (value) => structuredClone(value),
+        equal: (a, b) =>
+          a.length === b.length &&
+          a.every((cell, weekday) => {
+            const first = wire(cell),
+              second = wire(b[weekday]!);
+            return (
+              first.mode === second.mode &&
+              first.periods.length === second.periods.length &&
+              first.periods.every((period, index) => {
+                const other = second.periods[index]!;
+                return (
+                  period.id === other.id &&
+                  period.opensAt === other.opensAt &&
+                  period.closesAt === other.closesAt
+                );
+              })
+            );
+          }),
+        restore: (drafts) => {
+          if (this.editor?.kind === "cell") this.editor = { ...this.editor, draft: drafts[0]! };
+          else if (this.editor?.kind === "configure") this.editor = { ...this.editor, drafts };
+        },
+      });
+      registering = false;
+      this.#weekScope?.changed();
+    }
+  }
+
+  #activeScope() {
+    return this.#weekScope ?? this.#dateScope ?? this.#duplicateScope;
+  }
+
+  #registerDateScope(): void {
+    const editor = this.editor;
+    if (!editor || this.#activeScope()) return;
+    this.#leave = leaveCoordinatorFor(this);
+    let registering = true;
+    if (editor.kind === "date") {
+      const payload = (draft: DateDraft) => ({
+        date: draft.date,
+        name: draft.name.trim(),
+        colour: draft.colour,
+        closeWholeVenue: draft.closeWholeVenue,
+        cells: draft.cells
+          .filter(({ cell }) => cell.mode !== "inherit")
+          .map(({ subject, cell }) => ({
+            subject: { kind: subject.kind, id: subject.id },
+            mode: cell.mode,
+            periods: wire(cell).periods.map(({ id, opensAt, closesAt }) => ({
+              id,
+              opensAt,
+              closesAt,
+            })),
+          })),
+      });
+      this.#dateScope = this.#leave?.register({
+        id: {},
+        parent: this,
+        current: () =>
+          registering || this.editor?.kind !== "date" ? this.#dateBaseline! : this.editor.draft,
+        snapshot: (value) => structuredClone(value),
+        equal: (a, b) => JSON.stringify(payload(a)) === JSON.stringify(payload(b)),
+        restore: (draft) => {
+          if (this.editor?.kind === "date") this.editor = { ...this.editor, draft };
+        },
+      });
+    } else if (editor.kind === "duplicate") {
+      this.#duplicateScope = this.#leave?.register({
+        id: {},
+        parent: this,
+        current: () =>
+          registering || this.editor?.kind !== "duplicate"
+            ? this.#duplicateBaseline!
+            : this.editor.dates,
+        snapshot: (value) => [...value],
+        equal: (a, b) => a.length === b.length && a.every((date, index) => date === b[index]),
+        restore: (dates) => {
+          if (this.editor?.kind === "duplicate") this.editor = { ...this.editor, dates };
+        },
+      });
+    }
+    registering = false;
+    this.#activeScope()?.changed();
   }
 
   #close(): void {
+    this.#weekScope?.dispose();
+    this.#weekScope = undefined;
+    this.#dateScope?.dispose();
+    this.#dateScope = undefined;
+    this.#duplicateScope?.dispose();
+    this.#duplicateScope = undefined;
+    this.#weekBaseline = undefined;
+    this.#dateBaseline = undefined;
+    this.#duplicateBaseline = undefined;
     this.#generation++;
     this.editor = undefined;
     this.attempted = false;
@@ -371,6 +541,16 @@ export class HoursScreen extends LitElement {
     this.busy = false;
     const returnTo = this.#returnTo;
     void this.updateComplete.then(() => returnTo?.()?.focus());
+  }
+
+  async #beforeClose(reason: LeaveReason, generation: number): Promise<boolean> {
+    if (!this.isConnected || generation !== this.#generation || this.busy) return false;
+    const scope = this.#activeScope();
+    if (!scope) return true;
+    return (
+      (await this.#leave!.request({ scopes: [scope.id], reason, proceed: () => {} })) ===
+      "proceeded"
+    );
   }
 
   #cellButton(key: string, weekday: number): HTMLElement | null {
@@ -585,17 +765,47 @@ export class HoursScreen extends LitElement {
     }
   }
 
-  /** The editor cannot be closed or replaced while `busy`, so the answer always belongs to it. */
   async #write(editor: Editor): Promise<void> {
+    const generation = this.#generation;
+    const current = () => this.isConnected && generation === this.#generation;
+    const scope = this.#weekScope;
+    const dateScope = this.#dateScope;
+    const duplicateScope = this.#duplicateScope;
+    const submittedDate = editor.kind === "date" ? structuredClone(editor.draft) : undefined;
+    const submittedDates = editor.kind === "duplicate" ? [...editor.dates] : undefined;
+    const submitted =
+      editor.kind === "cell"
+        ? [structuredClone(editor.draft)]
+        : editor.kind === "configure"
+          ? structuredClone(editor.drafts)
+          : undefined;
     this.busy = true;
+    if (scope) scope.commit(this.#weekBaseline!);
+    dateScope?.commit(this.#dateBaseline!);
+    duplicateScope?.commit(this.#duplicateBaseline!);
     try {
       await this.#send(editor);
     } catch (error) {
+      if (!current()) return;
       this.busy = false;
       this.#refuse(editor, error);
       return;
     }
-    this.#close();
+    if (!current()) return;
+    if (scope && submitted) {
+      scope.commit(submitted);
+      this.#weekBaseline = submitted;
+    }
+    if (dateScope && submittedDate) {
+      dateScope.commit(submittedDate);
+      this.#dateBaseline = submittedDate;
+    }
+    if (duplicateScope && submittedDates) {
+      duplicateScope.commit(submittedDates);
+      this.#duplicateBaseline = submittedDates;
+    }
+    this.busy = false;
+    if (!this.#activeScope()?.isDirty()) this.#close();
     this.api.rereadWatches();
   }
 
@@ -710,6 +920,7 @@ export class HoursScreen extends LitElement {
     );
     if (Object.keys(refused).length !== Object.keys(this.refused).length) this.refused = refused;
     this.editor = editor;
+    this.#activeScope()?.changed();
   }
 
   #cellChanged(event: CustomEvent<{ cell: CellDraft }>): void {
@@ -854,6 +1065,15 @@ export class HoursScreen extends LitElement {
     }
   }
 
+  #currentControl(event: Event, generation: number): boolean {
+    return (
+      this.isConnected &&
+      generation === this.#generation &&
+      event.currentTarget instanceof Element &&
+      this.renderRoot.contains(event.currentTarget)
+    );
+  }
+
   #dateForm(
     editor: Extract<Editor, { kind: "date" }>,
     errors: Record<string, string>,
@@ -867,6 +1087,11 @@ export class HoursScreen extends LitElement {
     ) => TemplateResult,
   ) {
     const { draft } = editor;
+    const generation = this.#generation;
+    const set = (event: Event, patch: Partial<DateDraft>, name: string) => {
+      if (!this.#currentControl(event, generation)) return;
+      this.#setDate(patch, name);
+    };
     const weekday = draft.date === "" ? null : weekdayOf(draft.date);
     const defaults = this.model!.subjects.filter(
       (subject) => subject.active && isDefaultStation(subject),
@@ -880,7 +1105,7 @@ export class HoursScreen extends LitElement {
         error=${errors.date ?? ""}
         ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ value: string }>) =>
-          this.#setDate({ date: event.detail.value }, "date")}
+          set(event, { date: event.detail.value }, "date")}
       ></wt-input>
       <wt-input
         name="name"
@@ -890,7 +1115,7 @@ export class HoursScreen extends LitElement {
         error=${errors.name ?? ""}
         ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ value: string }>) =>
-          this.#setDate({ name: event.detail.value }, "name")}
+          set(event, { name: event.detail.value }, "name")}
       ></wt-input>
       <wt-combobox
         name="colour"
@@ -905,7 +1130,7 @@ export class HoursScreen extends LitElement {
         error=${errors.colour ?? ""}
         ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ value: string }>) =>
-          this.#setDate({ colour: event.detail.value }, "colour")}
+          set(event, { colour: event.detail.value }, "colour")}
       ></wt-combobox>
       <wt-switch
         name="closeWholeVenue"
@@ -913,7 +1138,7 @@ export class HoursScreen extends LitElement {
         ?checked=${draft.closeWholeVenue}
         ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ checked: boolean }>) =>
-          this.#setClosure(event.detail.checked)}
+          this.#currentControl(event, generation) && this.#setClosure(event.detail.checked)}
       ></wt-switch>
       ${
         draft.closeWholeVenue
@@ -982,7 +1207,10 @@ export class HoursScreen extends LitElement {
   }
 
   #duplicateForm(editor: Extract<Editor, { kind: "duplicate" }>, errors: Record<string, string>) {
-    const set = (dates: string[], name: string) => this.#changed(name, { ...editor, dates });
+    const generation = this.#generation;
+    const set = (event: Event, dates: string[], name: string) => {
+      if (this.#currentControl(event, generation)) this.#changed(name, { ...editor, dates });
+    };
     return html`<p class="note" data-test="duplicate-note">${t("hours.duplicate_note")}</p>
       <div class="targets">
         ${editor.dates.map(
@@ -998,6 +1226,7 @@ export class HoursScreen extends LitElement {
                   ?disabled=${this.busy}
                   @wt-change=${(event: CustomEvent<{ value: string }>) =>
                     set(
+                      event,
                       editor.dates.map((value, at) => (at === index ? event.detail.value : value)),
                       `dates.${index}`,
                     )}
@@ -1009,9 +1238,11 @@ export class HoursScreen extends LitElement {
                         data-test=${`remove-target-${index}`}
                         aria-label=${format("hours.remove_target", { n: String(index + 1) })}
                         ?disabled=${this.busy}
-                        @click=${() => {
+                        @click=${(event: Event) => {
+                          if (!this.#currentControl(event, generation)) return;
                           this.refused = {};
                           set(
+                            event,
                             editor.dates.filter((_, at) => at !== index),
                             "dates",
                           );
@@ -1028,7 +1259,7 @@ export class HoursScreen extends LitElement {
             variant="secondary"
             data-test="add-target"
             ?disabled=${this.busy}
-            @click=${() => set([...editor.dates, ""], "dates")}
+            @click=${(event: Event) => set(event, [...editor.dates, ""], "dates")}
             >${t("hours.add_target")}</wt-button
           >
         </div>
@@ -1042,6 +1273,7 @@ export class HoursScreen extends LitElement {
     const errors = { ...this.refused, ...own };
     const content = this.#content(editor, errors);
     const marked = Object.keys(errors).length > 0;
+    const generation = this.#generation;
     return keyed(
       this.#generation,
       html`<wt-modal
@@ -1055,10 +1287,15 @@ export class HoursScreen extends LitElement {
         }
         heading=${content.heading}
         .dismissible=${!this.busy}
-        @wt-close=${() => this.#close()}
+        .beforeClose=${this.#editorBeforeClose}
+        @wt-close=${() => {
+          if (this.isConnected && generation === this.#generation) this.#close();
+        }}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'))}
-        @hours-cell-change=${this.#cellChanged}
+        @hours-cell-change=${(event: CustomEvent<{ cell: CellDraft }>) => {
+          if (this.isConnected && generation === this.#generation) this.#cellChanged(event);
+        }}
       >
         <div class="form">${content.body}</div>
         <wt-form-actions
@@ -1073,10 +1310,10 @@ export class HoursScreen extends LitElement {
             data-test="cancel-editor"
             ?disabled=${this.busy}
             @click=${() => {
-              if (this.busy) return;
+              if (!this.isConnected || generation !== this.#generation || this.busy) return;
               if (editor.kind === "configure" && editor.confirming)
                 this.editor = { ...editor, confirming: false };
-              else this.#close();
+              else void this.renderRoot.querySelector("wt-modal")?.requestClose("cancel");
             }}
             >${content.cancel ?? t("hours.cancel")}</wt-button
           >
@@ -1084,7 +1321,9 @@ export class HoursScreen extends LitElement {
             data-test="save-editor"
             variant=${content.danger ? "danger" : "primary"}
             ?disabled=${this.busy || Object.keys(own).length > 0}
-            @click=${() => this.#submit()}
+            @click=${() => {
+              if (this.isConnected && generation === this.#generation) this.#submit();
+            }}
             >${content.save}</wt-button
           >
         </wt-form-actions>
@@ -1307,8 +1546,11 @@ export class HoursScreen extends LitElement {
                   { key: "calendar", label: t("hours.tab.calendar") },
                 ]}
                 @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
-                  this.view = event.detail.value;
-                  this.#url.write({ dashboard: "hours", view: this.view });
+                  if (event.target !== event.currentTarget) return;
+                  (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.view;
+                  void this.#url.write({ dashboard: "hours", view: event.detail.value });
+                  const view = this.#url.read("view");
+                  this.view = view === "dates" || view === "calendar" ? view : "week";
                 }}
               >
                 <div slot="week">${this.view === "week" ? this.#week() : nothing}</div>

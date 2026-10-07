@@ -8,6 +8,8 @@ import {
   baseStyles,
   iconButtonStyles,
   trackIconTooltip,
+  leaveCoordinatorFor,
+  type LeaveReason,
   focusFirstInvalid,
   setContentLanguages,
   currentContentLanguages,
@@ -662,6 +664,7 @@ export class MenusScreen extends LitElement {
   /** The coloured product as last read, so the colour dialog still names it after the product has
    * left the library, until the dialog closes. */
   #colouredSeen: Product | null = null;
+  #colorGeneration = 0;
   /** The tree row whose ⋮ gets focus back once its window has closed and nothing is out. */
   #focusReturn: { menuId: string; key: string } | null = null;
   #windowShut = false;
@@ -1239,6 +1242,9 @@ export class MenusScreen extends LitElement {
       this.busy = false;
       return;
     }
+    this.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+      '[data-test="menu-form"]',
+    )!.closeSaved(input);
     const opener = form.id === null ? this.#addOpener : null;
     this.busy = false;
     this.menuForm = null;
@@ -1430,6 +1436,9 @@ export class MenusScreen extends LitElement {
         this.busy = false;
         return;
       }
+      this.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+        '[data-test="section-form"]',
+      )!.closeSaved(input);
       this.creatingSection = null;
       this.editingSection = null;
       await this.#refresh();
@@ -1477,9 +1486,21 @@ export class MenusScreen extends LitElement {
     this.busy = false;
   }
 
+  readonly #beforeProductsClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.busy) return false;
+    const picker = this.shadowRoot!.querySelector("dashboard-section-add-products");
+    const leave = leaveCoordinatorFor(this);
+    return (
+      !picker ||
+      !leave ||
+      (await leave.request({ scopes: [picker], reason, proceed() {} })) === "proceeded"
+    );
+  };
+
   #addProducts(productIds: string[]): void {
     if (this.addingProducts === null || this.busy || this.#closeLostList()) return;
     const target = this.addingProducts;
+    const picker = this.shadowRoot!.querySelector("dashboard-section-add-products");
     const { listId } = target;
     this.busy = true;
     this.addProductsError = null;
@@ -1492,6 +1513,10 @@ export class MenusScreen extends LitElement {
         this.busy = false;
         return;
       }
+      picker?.commitSaved(productIds);
+      this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+        '[data-test="add-products"]',
+      )!.closeAfter("saved");
       this.addingProducts = null;
       await this.#refresh();
       this.#reportSavedToLost(target);
@@ -2147,6 +2172,7 @@ export class MenusScreen extends LitElement {
         }}
         @wt-product-color=${(event: CustomEvent<{ productId: string }>) => {
           event.stopPropagation();
+          this.#colorGeneration++;
           this.colouring = event.detail.productId;
           this.colorErrors = {};
         }}
@@ -2485,11 +2511,15 @@ export class MenusScreen extends LitElement {
     const product = this.#colouredProduct();
     if (!product) return;
     const menuId = this.menuId;
+    const generation = this.#colorGeneration;
     this.colorBusy = true;
     try {
       await this.api.setProductColor(product.id, color);
+      if (generation !== this.#colorGeneration) return;
+      this.shadowRoot!.querySelector("dashboard-product-color-form")!.closeSaved(color);
       this.colouring = null;
     } catch (error) {
+      if (generation !== this.#colorGeneration) return;
       if (menuId !== this.menuId) {
         this.memberError = t("menus.change_not_saved")
           .replace("{name}", product.name)
@@ -2518,6 +2548,7 @@ export class MenusScreen extends LitElement {
       .open=${product !== null}
       .busy=${this.colorBusy}
       .name=${product?.name ?? ""}
+      .productId=${product?.id ?? ""}
       .color=${product?.color ?? null}
       .categoryColor=${inherited}
       .errors=${this.colorErrors}
@@ -2654,10 +2685,12 @@ export class MenusScreen extends LitElement {
       size="standard"
       data-test="add-products"
       .open=${target !== null}
+      .beforeClose=${leaveCoordinatorFor(this) ? this.#beforeProductsClose : undefined}
       heading=${t("sections.add_products_heading").replace("{name}", target?.name ?? "")}
       @keydown=${this.#guardEscape}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
+        if (event.target !== event.currentTarget) return;
         if (!this.busy) this.addingProducts = null;
         this.#windowClosed();
       }}
@@ -2687,7 +2720,11 @@ export class MenusScreen extends LitElement {
                   data-test="add-products-cancel"
                   .disabled=${this.busy}
                   @click=${() => {
-                    this.addingProducts = null;
+                    if (leaveCoordinatorFor(this))
+                      void this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+                        '[data-test="add-products"]',
+                      )!.requestClose("cancel");
+                    else this.addingProducts = null;
                   }}
                   >${t("action.cancel")}</wt-button
                 ></dashboard-section-add-products

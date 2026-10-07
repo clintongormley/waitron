@@ -47,6 +47,15 @@ import type {
 // A table's bill paid in parts through the bill payment dialog (plan Task 15, design §12): the
 // dialog asks the server for each allocation, shows it, takes it, and the bill's balance follows.
 
+async function discardUnsavedLeave(el: TillApp): Promise<void> {
+  await flush(el);
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  expect(question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await flush(el);
+}
+
 const zone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
 
 function partyOf(over: Partial<TableParty> = {}): TableParty {
@@ -558,6 +567,119 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
   });
 
+  it("recipient write completion retains newer edits and retries with the accepted revision", async () => {
+    let accept!: (value: { revision: number }) => void;
+    const setOrderInvoiceChoice = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<{ revision: number }>((resolve) => {
+            accept = resolve;
+          }),
+      )
+      .mockResolvedValue({ revision: 9 });
+    const { el } = await mountApp({ setOrderInvoiceChoice });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    for (const [name, value] of [
+      ["taxId", "12345678Z"],
+      ["legalName", "Ana García"],
+      ["address", "Calle Mayor 1"],
+      ["postalCode", "28013"],
+      ["locality", "Madrid"],
+      ["province", "Madrid"],
+    ]) {
+      const input = form
+        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+      input.value = value!;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await form.updateComplete;
+    }
+    form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+    await flush(el);
+    const name = form
+      .shadowRoot!.querySelector("wt-input[name=legalName]")!
+      .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    name.value = "Newer name";
+    name.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await form.updateComplete;
+    accept({ revision: 8 });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBe(form);
+    expect(name.value).toBe("Newer name");
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+    await flush(el);
+    expect(setOrderInvoiceChoice).toHaveBeenLastCalledWith("wo-4", {
+      revision: 8,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "12345678Z",
+        legalName: "Newer name",
+        address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+  });
+
+  it.each(["accepted", "refused"])(
+    "a disconnected recipient save's %s reply leaves the reconnected draft alone",
+    async (outcome) => {
+      let accept!: (value: { revision: number }) => void;
+      let refuse!: (error: unknown) => void;
+      const setOrderInvoiceChoice = vi.fn().mockImplementation(
+        () =>
+          new Promise<{ revision: number }>((resolve, reject) => {
+            accept = resolve;
+            refuse = reject;
+          }),
+      );
+      const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
+      const { el, host } = await mountApp({ setOrderInvoiceChoice, getPartyBills });
+      const order = await openTable(el);
+      order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+      await flush(el);
+      const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+      const name = form.shadowRoot!.querySelector("wt-input[name=legalName]")!;
+      emit(name, "wt-change", { value: "Retained draft" });
+      await flush(el);
+      emit(form, "invoice-recipient-confirm", {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Retained draft",
+          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      });
+      await flush(el);
+      el.remove();
+      host.appendChild(el);
+      await flush(el);
+      const reads = getPartyBills.mock.calls.length;
+      if (outcome === "accepted") accept({ revision: 8 });
+      else refuse({ code: "invoice.recipient_invalid", field: "legalName" });
+      await flush(el);
+      expect(getPartyBills).toHaveBeenCalledTimes(reads);
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBe(form);
+      expect(form.refusal).toBe("");
+      expect(
+        form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+          "wt-input[name=legalName]",
+        )!.value,
+      ).toBe("Retained draft");
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(true);
+    },
+  );
+
   it("asks where to make a bill dish before previewing a payment", async () => {
     const askOrderDeadEnds = vi.fn().mockResolvedValue({
       sends: true,
@@ -602,6 +724,48 @@ describe("till-app: the three ways to pay part of a bill", () => {
       previewBillPayment.mock.invocationCallOrder[0]!,
     );
   });
+  it("accepted bill payment retires dirty entry before the following table read", async () => {
+    let accepted = false;
+    const dirtyAtRead: boolean[] = [];
+    const { el } = await mountApp({
+      previewBillPayment: vi.fn().mockResolvedValue(cash("40.00", "10.00")),
+      takeBillPayment: vi.fn(async () => {
+        accepted = true;
+        return takenOf(
+          { applied: "40.00", change: "10.00" },
+          { received: "40.00", outstanding: "80.00" },
+        );
+      }),
+      getTablesState: vi.fn(async () => {
+        if (accepted) {
+          const event = new Event("beforeunload", { cancelable: true });
+          window.dispatchEvent(event);
+          dirtyAtRead.push(event.defaultPrevented);
+        }
+        return [mesa()];
+      }),
+    });
+    await openTable(el);
+    await openDialog(el, "items");
+    await press(el, 'input[name="line"][value="1"]');
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect.poll(() => dirtyAtRead.length).toBeGreaterThan(0);
+    expect(dirtyAtRead).toEqual([false]);
+    expect(sent()).toEqual([
+      {
+        kind: "items",
+        lines: [{ lineNo: 1 }],
+        method: "cash",
+        tendered: "50",
+        applied: "40.00",
+        tip: "0.00",
+        submissionId: expect.any(String),
+      },
+    ]);
+  });
+
   it("pays for chosen items, then a contribution, then an equal share, showing the balance after each", async () => {
     const paidPaella = [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }];
     const answers = [
@@ -1146,6 +1310,7 @@ describe("till-app: the bill payment dialog's own steps", () => {
       const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
 
       emit(tableOrder(el), "logout");
+      await discardUnsavedLeave(el);
       await flush(el);
       if (settle === "resolve") answer.resolve(cash("40.00", "10.00"));
       else answer.reject({ code: "bill.nothing_outstanding" });
@@ -1173,6 +1338,7 @@ describe("till-app: the bill payment dialog's own steps", () => {
     await press(el, "[data-pay-confirm]");
 
     emit(tableOrder(el), "back-to-floor");
+    await discardUnsavedLeave(el);
     await flush(el);
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
     const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
@@ -1812,6 +1978,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(takeBillPayment).toHaveBeenCalledOnce();
 
     emit(counter(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     const orderReads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
     answer(
@@ -1834,6 +2001,7 @@ describe("till-app: a partly paid order at the counter", () => {
     const el = await retrieved({ takeBillPayment });
     await payTheRest(el);
     emit(counter(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
@@ -1862,6 +2030,7 @@ describe("till-app: a partly paid order at the counter", () => {
     const el = await retrieved({ takeBillPayment });
     await payTheRest(el);
     emit(counter(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
@@ -1906,6 +2075,7 @@ describe("till-app: a partly paid order at the counter", () => {
     const el = await retrieved({ takeBillPayment });
     await payTheRest(el);
     emit(counter(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
@@ -1948,6 +2118,7 @@ describe("till-app: a partly paid order at the counter", () => {
     const el = await retrieved({ takeBillPayment });
     await payTheRest(el);
     emit(counter(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     failEarlier(new TypeError("Failed to fetch"));
     // The send waits one retry pause, then sees the session has ended and gives up.
@@ -2314,6 +2485,7 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
     expect(sent()[0]!.lines).toEqual([{ lineNo: 6 }]);
     expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="6"]')).toBeNull();
     await press(el, "[data-pay-close]");
+    await expect.poll(() => dialog(el)).toBeNull();
     const group = tableOrder(el).shadowRoot!.querySelector<HTMLElement>('[data-group="g-2"]')!;
     expect(group.dataset.groupState).toBe("held");
     expect(text(group.querySelector(`[data-group-line="${tiramisu.id}"] [data-line-paid]`))).toBe(
@@ -2966,6 +3138,45 @@ describe("till-app: giving back a bill payment", () => {
     await flush(el);
   }
 
+  it("an accepted refund clears dirty input before the following bill read starts", async () => {
+    const refunded = givenBack(cashPaid, refundOf());
+    let accepted = false;
+    const dirtyAtRead: boolean[] = [];
+    const getTablesState = vi.fn(async () => {
+      if (accepted) {
+        const event = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(event);
+        dirtyAtRead.push(event.defaultPrevented);
+      }
+      return [mesa()];
+    });
+    const el = await askRefund(
+      {
+        getTablesState,
+        refundBillPayment: vi.fn(async () => {
+          accepted = true;
+          return refunded;
+        }),
+      },
+      cashPaid,
+    );
+    await expect.poll(() => dirtyAtRead.length).toBeGreaterThan(0);
+    expect(dirtyAtRead).toEqual([false]);
+    expect(refundDialog(el)).toBeNull();
+    expect(refunds()).toEqual([
+      {
+        billId: "wo-4",
+        paymentId: "pay-1",
+        request: {
+          submissionId: expect.any(String),
+          appliedAmount: "50.00",
+          tipAmount: "0.00",
+          reason: "Charged twice",
+        },
+      },
+    ]);
+  });
+
   it("gives back the cash payment of an operator who can give refunds with no PIN, and asks for none", async () => {
     const refundBillPayment = vi.fn().mockResolvedValue(givenBack(cashPaid, refundOf()));
     const el = await askRefund({ refundBillPayment }, cashPaid);
@@ -3349,6 +3560,7 @@ describe("till-app: giving back a bill payment", () => {
       const reads = getBillBalance.mock.calls.length;
 
       emit(tableOrder(el), "logout");
+      await discardUnsavedLeave(el);
       await flush(el);
       if (settle === "resolve")
         answer.resolve(request === "approvers" ? manager : givenBack(cashPaid, refundOf()));
@@ -3370,6 +3582,7 @@ describe("till-app: giving back a bill payment", () => {
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await askRefund({ refundBillPayment }, cashPaid);
     emit(tableOrder(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     await signInAndAskRefund(el, cashPaid);
     await expect
@@ -3400,6 +3613,7 @@ describe("till-app: giving back a bill payment", () => {
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await askRefund({ refundBillPayment }, cashPaid);
     emit(tableOrder(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     await signInAndAskRefund(el, cashPaid);
     const [earlier, next] = refunds().map(({ request }) => request.submissionId);
@@ -3428,6 +3642,7 @@ describe("till-app: giving back a bill payment", () => {
       .mockResolvedValue(givenBack(cashPaid, refundOf()));
     const el = await askRefund({ refundBillPayment }, cashPaid);
     emit(tableOrder(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     failEarlier(new TypeError("Failed to fetch"));
     // The send waits one retry pause, then sees the session has ended and gives up.
@@ -3447,6 +3662,7 @@ describe("till-app: giving back a bill payment", () => {
     const el = await askRefund({ refundBillPayment }, cashPaid);
 
     emit(tableOrder(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     refuse(notPermitted);
     await flush(el);
@@ -3456,17 +3672,32 @@ describe("till-app: giving back a bill payment", () => {
     expect(refundDialog(el)).toBeNull();
   });
 
-  it("goes back to the refund when the PIN prompt is cancelled, and closes it on Cancel", async () => {
+  it("goes back to the refund when the PIN prompt is cancelled, and retains it until Discard", async () => {
     const withPin = vi.fn();
     const el = await askRefund({ refundBillPayment: needsApproval(withPin) }, cashPaid);
     approval(el)!.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
     await flush(el);
 
-    expect(approval(el)).toBeNull();
+    await expect.poll(() => approval(el)).toBeNull();
     expect(refundDialog(el)).not.toBeNull();
     inRefund(el, "[data-refund-close]")!.click();
     await flush(el);
-    expect(refundDialog(el)).toBeNull();
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    expect(question.open).toBe(true);
+    expect(refundDialog(el)).not.toBeNull();
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question.open).toBe(false);
+    expect(
+      refundDialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        '[name="reason"]',
+      )!.value,
+    ).toBe("Charged twice");
+    inRefund(el, "[data-refund-close]")!.click();
+    await flush(el);
+    expect(question.open).toBe(true);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => refundDialog(el)).toBeNull();
     expect(dialog(el)).not.toBeNull();
     expect(withPin).not.toHaveBeenCalled();
   });

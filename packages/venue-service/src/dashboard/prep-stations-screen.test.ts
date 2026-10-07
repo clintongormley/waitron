@@ -3584,6 +3584,7 @@ async function mountToday(
   overrides: Partial<PrepStationsApi> = {},
   theme?: "light" | "dark",
 ) {
+  history.replaceState(null, "", "/manage/prep-stations/view/stations");
   const a = api({
     load: vi.fn().mockResolvedValue(next),
     readStationHealth: vi.fn().mockResolvedValue({
@@ -5557,7 +5558,7 @@ it.each(["cancel", "dismiss"])(
     if (how === "cancel") (modal.querySelector('wt-button[slot="cancel"]') as HTMLElement).click();
     else modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await settle(el);
-    expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
+    await vi.waitFor(() => expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull());
     expect(save).not.toHaveBeenCalled();
     watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
     await settle(el);
@@ -5788,7 +5789,7 @@ it.each(["cancel", "dismiss"])("%s abandons new watcher creation without writing
   expect(modal).not.toBeNull();
   if (how === "dismiss") modal.dispatchEvent(new CustomEvent("wt-close"));
   else modal.querySelector("watcher-form")!.dispatchEvent(new CustomEvent("watcher-cancel"));
-  await settle(el);
+  await expect.poll(() => modal.isConnected).toBe(false);
   expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
   expect(create).not.toHaveBeenCalled();
 });

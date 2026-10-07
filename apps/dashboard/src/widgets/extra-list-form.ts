@@ -1,3 +1,10 @@
+import { sameValue } from "./product-editor-model.js";
+import {
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
 import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -6,7 +13,7 @@ import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { priceForExtraPortion } from "@waitron/catalogue/src/extra-contract.js";
 import { assertQuantityPrecision, EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
-import { resolveContentText, type ContentLanguages } from "@waitron/shared";
+import { decimal, toScale, resolveContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
@@ -30,6 +37,11 @@ import { currentLocale, t } from "../i18n/t.js";
 
 const decreaseLabel = (label: string) => t("action.decrease").replace("{label}", label);
 const increaseLabel = (label: string) => t("action.increase").replace("{label}", label);
+
+interface ExtraDraft {
+  value: ExtraListInput;
+  invalid: Record<string, string>;
+}
 
 interface DraftItem {
   id: string;
@@ -185,6 +197,7 @@ export class ExtraListForm extends LitElement {
   ];
 
   @property({ type: Boolean }) open = false;
+  @property({ attribute: false }) draftParent?: object;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) languages: ContentLanguages = {
     defaultLanguage: "en",
@@ -209,6 +222,37 @@ export class ExtraListForm extends LitElement {
    * held against the item's ID rather than the position the server named, so moving an item
    * carries its message with it. */
   @state() private serverErrors: Record<string, string> = {};
+
+  #scope?: DraftScope<ExtraDraft>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #registerDraft(): void {
+    if (!this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<ExtraDraft>({
+        id: this,
+        parent: this.draftParent,
+        current: () => this.#comparisonValue(),
+        snapshot: (value) => structuredClone(value),
+        equal: (a, b) => sameValue(this.#canonicalDraft(a), this.#canonicalDraft(b)),
+        restore: (value) => this.#restoreDraft(value),
+      });
+    }
+  }
 
   readonly #reorder = new ReorderController(
     this,
@@ -235,6 +279,8 @@ export class ExtraListForm extends LitElement {
       (changes.has("value") &&
         this.value?.id !== (changes.get("value") as ExtraList | null | undefined)?.id)
     ) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
       this.#reseed();
     }
     // After the reseed, so an item path resolves against the items now on screen.
@@ -242,6 +288,7 @@ export class ExtraListForm extends LitElement {
       this.serverErrors = this.#mapFieldErrors();
       this.dismissed = new Set();
     }
+    this.#registerDraft();
   }
 
   protected override updated(changes: PropertyValues<this>): void {
@@ -454,6 +501,7 @@ export class ExtraListForm extends LitElement {
 
   #edit(change: () => void, ...keys: string[]): void {
     change();
+    this.#scope?.changed();
     this.dismissed = new Set([...this.dismissed, ...keys]);
   }
 
@@ -582,7 +630,6 @@ export class ExtraListForm extends LitElement {
     return this.maxPicks.trim() === "" ? null : wholeWithin(this.maxPicks.trim(), 0);
   }
 
-  /** The list to send; only called once `#validate` finds nothing wrong. */
   #value(): ExtraListInput {
     return {
       name: this.name.trim(),
@@ -605,6 +652,61 @@ export class ExtraListForm extends LitElement {
     };
   }
 
+  #comparisonValue(): ExtraDraft {
+    const invalid: Record<string, string> = {};
+    if (this.#minPicks() === null) invalid["min-picks"] = this.minPicks;
+    if (this.maxPicks.trim() !== "" && this.#maxPicks() === null)
+      invalid["max-picks"] = this.maxPicks;
+    this.items.forEach((item) => {
+      if (item.maxQuantity.trim() !== "" && wholeWithin(item.maxQuantity.trim(), 1) === null)
+        invalid[`quantity:${item.id}`] = item.maxQuantity;
+    });
+    return { value: this.#value(), invalid };
+  }
+
+  #canonicalDraft(draft: ExtraDraft): ExtraDraft {
+    return {
+      ...draft,
+      value: {
+        ...draft.value,
+        items: draft.value.items.map((item) => ({
+          ...item,
+          price:
+            item.price !== null && isProductPrice(item.price)
+              ? toScale(decimal(item.price), 2)
+              : item.price,
+        })),
+      },
+    };
+  }
+
+  #restoreDraft(draft: ExtraDraft): void {
+    const { value, invalid } = draft;
+    this.name = value.name;
+    this.customerName = { ...value.customerName };
+    this.kitchenName = value.kitchenName ?? "";
+    this.minPicks = invalid["min-picks"] ?? (value.minPicks ? String(value.minPicks) : "");
+    this.maxPicks = invalid["max-picks"] ?? (value.maxPicks === null ? "" : String(value.maxPicks));
+    this.active = value.active;
+    this.items = value.items.map((item) => ({
+      ...item,
+      id: item.id!,
+      maxQuantity:
+        invalid[`quantity:${item.id}`] ??
+        (item.maxQuantity === null ? "" : String(item.maxQuantity)),
+      price: item.price ?? "",
+    }));
+  }
+
+  commitSaved(submitted: ExtraListInput): void {
+    this.#scope?.commit({ value: submitted, invalid: {} });
+  }
+  closeSaved(submitted: ExtraListInput): void {
+    this.commitSaved(submitted);
+    this.open = false;
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
+  }
+
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
@@ -618,13 +720,15 @@ export class ExtraListForm extends LitElement {
   }
 
   #cancel(event: Event): void {
-    // The dialog also reports a close it was told to make, a task later; by then the screen has
-    // closed this form and a second cancel would be about nothing.
-    if (this.busy || !this.open) {
-      event.stopPropagation();
-      return;
-    }
-    this.#emit(event, "wt-cancel", {});
+    event.stopPropagation();
+    if (this.busy || !this.open) return;
+    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.#reportCancel();
+  }
+
+  #reportCancel(): void {
+    if (this.busy || !this.open) return;
+    this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
 
   #fields(errors: Record<string, string>): FieldContext {
@@ -879,11 +983,15 @@ export class ExtraListForm extends LitElement {
     return html`<wt-modal
       size="wide"
       .open=${this.open}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       heading=${t(this.value ? "extras.edit" : "extras.create")}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
       }}
-      @wt-close=${(event: Event) => this.#cancel(event)}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.#reportCancel();
+      }}
     >
       <div
         ?inert=${this.busy}

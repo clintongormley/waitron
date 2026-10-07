@@ -6,6 +6,8 @@ import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 // The `@waitron/ui` barrel registers `<wt-floor-canvas>` and `<wt-table-token>`, used here by tag.
 import {
+  leaveCoordinatorFor,
+  type DraftScope,
   submitOnEnter,
   baseStyles,
   UrlStateController,
@@ -38,11 +40,19 @@ interface EditableTable {
   rotation: number | null;
 }
 
-/**
- * Dining tables: a config tab of per-row forms and a Plano tab with the floor canvas.
- * Every mutation reloads afterwards. A row's save reads its values from state at click time, not
- * from a render closure, so an edit made just before the click is the one that persists.
- */
+interface TableDraft {
+  label: string;
+  capacity: number | null;
+}
+
+function tableDraft(row: EditableTable): TableDraft {
+  return { label: row.label, capacity: row.capacity };
+}
+
+function sameDraft(a: TableDraft, b: TableDraft): boolean {
+  return a.label === b.label && a.capacity === b.capacity;
+}
+
 @customElement("dashboard-floor-screen")
 export class FloorScreen extends LitElement {
   static override styles = [
@@ -126,7 +136,81 @@ export class FloorScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  readonly #tablesDrafts = new DraftRows<EditableTable>();
+  #tablesDrafts = new DraftRows<EditableTable>();
+  readonly #rowScopes = new Map<string, { scope: DraftScope<TableDraft>; saved: TableDraft }>();
+  #newScope?: DraftScope<string>;
+  #connection = 0;
+
+  #registerNew(): void {
+    if (this.#newScope) return;
+    this.#newScope = leaveCoordinatorFor(this)?.register({
+      id: {},
+      parent: this,
+      current: () => this.newTable,
+      snapshot: (value) => value,
+      equal: (a, b) => a.trim() === b.trim(),
+      restore: (value) => {
+        this.newTable = value;
+      },
+    });
+  }
+
+  #acceptTables(rows: EditableTable[]): void {
+    const current = new Map(this.tables.map((row) => [row.id, row]));
+    const dirty = new Set(
+      [...this.#rowScopes].filter(([, entry]) => entry.scope.isDirty()).map(([id]) => id),
+    );
+    const merged = this.#tablesDrafts.merge(this.tables, rows);
+    for (const [id, entry] of this.#rowScopes) {
+      if (!rows.some((row) => row.id === id) && !dirty.has(id)) {
+        entry.scope.dispose();
+        this.#rowScopes.delete(id);
+      }
+    }
+    this.tables = rows.map((row, index) => {
+      const entry = this.#rowScopes.get(row.id);
+      if (!entry) return merged[index]!;
+      const draft = current.get(row.id)!;
+      return {
+        ...row,
+        label: draft.label === entry.saved.label ? row.label : draft.label,
+        capacity: draft.capacity === entry.saved.capacity ? row.capacity : draft.capacity,
+      };
+    });
+    for (const id of dirty) {
+      if (!rows.some((row) => row.id === id)) this.tables = [...this.tables, current.get(id)!];
+    }
+    const coordinator = leaveCoordinatorFor(this);
+    if (!coordinator) return;
+    for (const row of this.tables) {
+      const entry = this.#rowScopes.get(row.id);
+      if (entry) {
+        const before = current.get(row.id)!;
+        const saved = {
+          label: before.label === entry.saved.label ? row.label : entry.saved.label,
+          capacity: before.capacity === entry.saved.capacity ? row.capacity : entry.saved.capacity,
+        };
+        if (!sameDraft(saved, entry.saved)) {
+          entry.saved = saved;
+          entry.scope.commit(saved);
+        }
+      } else {
+        const scope = coordinator.register({
+          id: {},
+          parent: this,
+          current: () => tableDraft(this.tables.find((value) => value.id === row.id)!),
+          snapshot: (value) => ({ ...value }),
+          equal: sameDraft,
+          restore: (value) => {
+            this.tables = this.tables.map((draft) =>
+              draft.id === row.id ? { ...draft, ...value } : draft,
+            );
+          },
+        });
+        this.#rowScopes.set(row.id, { scope, saved: tableDraft(row) });
+      }
+    }
+  }
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -180,7 +264,21 @@ export class FloorScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#showError(null);
+    this.#registerNew();
     void this.#load();
+  }
+
+  override disconnectedCallback(): void {
+    this.#connection++;
+    this.#newScope?.dispose();
+    this.#newScope = undefined;
+    for (const entry of this.#rowScopes.values()) entry.scope.dispose();
+    this.#rowScopes.clear();
+    this.tables = [];
+    this.#tablesDrafts = new DraftRows<EditableTable>();
+    this.newTable = "";
+    this.submitting = false;
+    super.disconnectedCallback();
   }
 
   #toEditableTables(tables: DashboardTable[]): EditableTable[] {
@@ -198,6 +296,7 @@ export class FloorScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
+    const connection = this.#connection;
     if (this.#readErrorShown) this.#showError(null);
     try {
       await Promise.all([
@@ -205,23 +304,24 @@ export class FloorScreen extends LitElement {
           this.zones = rows;
         }),
         this.#queries.watch("listTables", [{ includeDisabled: true }], (rows) => {
-          this.tables = this.#tablesDrafts.merge(this.tables, this.#toEditableTables(rows));
+          this.#acceptTables(this.#toEditableTables(rows));
         }),
       ]);
     } catch (error) {
-      this.#showReadError(error);
+      if (connection === this.#connection) this.#showReadError(error);
     }
   }
 
   /** For placement writes, which cannot change the zone list. */
   async #loadTables(): Promise<void> {
+    const connection = this.#connection;
     if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listTables", [{ includeDisabled: true }], (rows) => {
-        this.tables = this.#tablesDrafts.merge(this.tables, this.#toEditableTables(rows));
+        this.#acceptTables(this.#toEditableTables(rows));
       });
     } catch (error) {
-      this.#showReadError(error);
+      if (connection === this.#connection) this.#showReadError(error);
     }
   }
 
@@ -230,6 +330,7 @@ export class FloorScreen extends LitElement {
   #onNewTable(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.newTable = event.detail.value;
+    this.#newScope?.changed();
   }
 
   async #createTable(): Promise<void> {
@@ -237,20 +338,25 @@ export class FloorScreen extends LitElement {
     this.#showError(null);
     const label = this.newTable.trim();
     if (label === "") return;
+    const connection = this.#connection;
+    const scope = this.#newScope;
     this.submitting = true;
     try {
       await this.api.createTable({ label });
-      this.newTable = "";
+      if (connection !== this.#connection) return;
+      if (this.newTable.trim() === label) this.newTable = "";
+      scope?.commit("");
       await this.#load();
     } catch (error) {
-      this.#showError(codeOf(error));
+      if (connection === this.#connection) this.#showError(codeOf(error));
     } finally {
-      this.submitting = false;
+      if (connection === this.#connection) this.submitting = false;
     }
   }
 
   #editTable(id: string, patch: Partial<EditableTable>): void {
     this.tables = this.tables.map((tbl) => (tbl.id === id ? { ...tbl, ...patch } : tbl));
+    this.#rowScopes.get(id)?.scope.changed();
   }
 
   async #saveTable(id: string): Promise<void> {
@@ -260,14 +366,22 @@ export class FloorScreen extends LitElement {
     if (row === undefined) return;
     const patch: { label: string; capacity?: number } = { label: row.label };
     if (row.capacity !== null) patch.capacity = row.capacity;
+    const submitted = tableDraft(row);
+    const entry = this.#rowScopes.get(id);
+    const connection = this.#connection;
     this.submitting = true;
     try {
       await this.api.updateTable(row.id, patch);
+      if (connection !== this.#connection) return;
+      if (entry) {
+        entry.saved = submitted;
+        entry.scope.commit(submitted);
+      }
       await this.#load();
     } catch (error) {
-      this.#showError(codeOf(error));
+      if (connection === this.#connection) this.#showError(codeOf(error));
     } finally {
-      this.submitting = false;
+      if (connection === this.#connection) this.submitting = false;
     }
   }
 
@@ -279,32 +393,38 @@ export class FloorScreen extends LitElement {
   }
 
   async #assignZone(id: string, zoneId: string): Promise<void> {
+    const connection = this.#connection;
     this.#showError(null);
     try {
       await this.api.updateTable(id, { zoneId });
+      if (connection !== this.#connection) return;
       await this.#load();
     } catch (error) {
-      this.#showError(codeOf(error));
+      if (connection === this.#connection) this.#showError(codeOf(error));
     }
   }
 
   async #deactivateTable(id: string): Promise<void> {
+    const connection = this.#connection;
     this.#showError(null);
     try {
       await this.api.deactivateTable(id);
+      if (connection !== this.#connection) return;
       await this.#load();
     } catch (error) {
-      this.#showError(codeOf(error));
+      if (connection === this.#connection) this.#showError(codeOf(error));
     }
   }
 
   async #enableTable(id: string): Promise<void> {
+    const connection = this.#connection;
     this.#showError(null);
     try {
       await this.api.updateTable(id, { active: true });
+      if (connection !== this.#connection) return;
       await this.#load();
     } catch (error) {
-      this.#showError(codeOf(error));
+      if (connection === this.#connection) this.#showError(codeOf(error));
     }
   }
 
@@ -317,6 +437,7 @@ export class FloorScreen extends LitElement {
           <wt-input
             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="table-save-${tbl.id}"]`))}
             label=${t("floor.table_label")}
+            name="table-label"
             data-test="table-label-${tbl.id}"
             .value=${tbl.label}
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
@@ -328,6 +449,7 @@ export class FloorScreen extends LitElement {
             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="table-save-${tbl.id}"]`))}
             type="number"
             label=${t("floor.table_capacity")}
+            name="table-capacity"
             data-test="table-capacity-${tbl.id}"
             .value=${tbl.capacity === null ? "" : String(tbl.capacity)}
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
@@ -396,13 +518,15 @@ export class FloorScreen extends LitElement {
   // ── Plano ─────────────────────────────────────────────────────────────────────────────────────────
 
   async #setPlacement(detail: PlacementChange): Promise<void> {
+    const connection = this.#connection;
     this.#showError(null);
     const { tableId, posX, posY, shape, rotation, zoneId } = detail;
     try {
       await this.api.setTablePlacement(tableId, { posX, posY, shape, rotation, zoneId });
+      if (connection !== this.#connection) return;
       await this.#loadTables();
     } catch (error) {
-      this.#showError(codeOf(error));
+      if (connection === this.#connection) this.#showError(codeOf(error));
     }
   }
 
@@ -412,12 +536,14 @@ export class FloorScreen extends LitElement {
   }
 
   async #clearTablePlacement(tableId: string): Promise<void> {
+    const connection = this.#connection;
     this.#showError(null);
     try {
       await this.api.clearPlacement(tableId);
+      if (connection !== this.#connection) return;
       await this.#loadTables();
     } catch (error) {
-      this.#showError(codeOf(error));
+      if (connection === this.#connection) this.#showError(codeOf(error));
     }
   }
 
@@ -512,6 +638,7 @@ export class FloorScreen extends LitElement {
             <wt-input
               @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-add-table]"))}
               label=${t("floor.table_label")}
+              name="new-table-label"
               data-new-table
               .value=${this.newTable}
               @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewTable(e)}
