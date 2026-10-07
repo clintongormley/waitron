@@ -2248,6 +2248,8 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
 - **Tablet widths (641–1024 px): the counter basket's remove button is still cut off.** A310 changed
   only widths below 40rem. In the test harness the × was 0% on screen at 720 px and 75% at 1024 px.
 - **At 1280 px a three-digit line total pushes the × about 11 px past the basket** (harness only).
+  On CI's Linux runner a two-digit total (2 × 7.80) put it 11 px past too; on a Mac it sits exactly
+  at the basket's edge.
 - **Desktop till, 1280 px: the total and the Cash/Card/Hold buttons sit below a large empty area**
   and need scrolling. Harness screenshots are identical before and after A310, so A310 did not cause it.
 - **Phone till: the top bar (clock notice and about eight buttons) keeps about 440 of 844 px**,
