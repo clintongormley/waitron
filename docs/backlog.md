@@ -944,6 +944,13 @@ unused `units` property is gone (it closes W75's leftover).
     leave while a printer is saving, which the app's handling would skip. Five other self-handled
     links read as going where the app would send them anyway. Next: a test mounting that
     breadcrumb under the real app while a save is out; if it navigates, mark it `data-own-click`.
+- **A328, owner 2026-10-07 — DONE (the category name box keeps the swatch in place):** while a
+  category is renamed or added in the Products tree, its colour square stays in the row's square
+  slot and the name box starts where the name did; the box no longer carries a square at its end.
+  At phone width, where a resting category shows no square, the square shows on the row's first
+  line while the box is open, above the box. `wt-data-table` gained `rowToggleParts`, so the
+  Products list gives only a product's toggle A221's small, muted look; a category's arrow no longer
+  shrinks and greys while it is renamed.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
