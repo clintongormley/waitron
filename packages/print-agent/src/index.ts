@@ -31,6 +31,7 @@ export type {
   BluetoothCommandOutcome,
   Failure,
   JobOutcome,
+  InvoicePrintClaim,
   JoinReply,
   JoinStatus,
   NodeProbe,

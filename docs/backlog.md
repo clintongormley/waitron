@@ -2153,9 +2153,16 @@ print-job claim. At helper expiry the linked job loses automatic claim eligibili
 email retry is reserved; a historical report leaves that job unchanged. Current and latest
 late reports project the outcome onto the existing job without another handover snapshot.
 The focused tests and independent guard deletions cover these helper paths.
-The helpers are not wired into a worker or public route yet. API/agent receipt-token transport
-and stale-report fencing, bill staging, A4 printer references, SMTP, office transport,
-delivery UI and image/box checks remain. It settles A3's open "Printing A4 invoices on an office
+The print pull/result routes and demo printer now attach and return the delivery's token and
+generation for correlated receipt jobs. The real agent/client integration tests cover successful
+and failed sends, malformed claims, another job or holder, expiry without automatic replay,
+and old same-agent success/failure reports during each newer receipt-retry state. The generic
+local runtime leaves correlated jobs for this adapter, and the generic reporter refuses them.
+Nineteen disposable guard deletions each failed the intended assertion beside a valid passing
+control. This applies to jobs already enrolled in delivery metadata; the existing F1 original
+and resend paths still need enrollment. Printer unpairing and unavailable-Bluetooth endings
+still need delivery-state projection. Bill staging, A4 printer references, restart/retry
+workers, SMTP, office transport, delivery UI and image/box checks remain. It settles A3's open "Printing A4 invoices on an office
 printer" work when complete.
 Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe
 throws when embedding the current Google Sans WOFF2 for “í”; Noto Sans rendered the same probe

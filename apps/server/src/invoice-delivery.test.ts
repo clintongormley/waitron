@@ -755,6 +755,7 @@ describe("receipt delivery reservation", () => {
       claimPrintJobs(tx, ctx.agentId, {
         locationId: ctx.locationId,
         visibleKeys: [],
+        invoiceReceiptsAt: start.toISOString(),
       }),
     );
   }
@@ -789,6 +790,7 @@ describe("receipt delivery reservation", () => {
       claimPrintJobs(tx, ctx.agentId, {
         locationId: ctx.locationId,
         visibleKeys: [],
+        invoiceReceiptsAt: start.toISOString(),
         printerId: job!.printerId,
       }),
     );
