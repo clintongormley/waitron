@@ -984,6 +984,8 @@ unused `units` property is gone (it closes W75's leftover).
     the end of its tab row ("Print A…"), and in Spanish "Añadir un agente de impresión" runs off the
     right edge; a menu's prices table shows only a sliver of the price box before its pinned Resolve
     column (whether it scrolls into view was not checked).
+  - Open: at 640 px or less a table's own search is drawn under Customise while Tab reaches it
+    first — the same order W83 left open on Products, now on every searchable table.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is

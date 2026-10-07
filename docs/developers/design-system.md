@@ -965,7 +965,7 @@ Select and Filters cases in `apps/dashboard/src/widgets/catalogue-browser.test.t
 `catalogue-browser.a11y.test.ts`.
 A table's own search box (`searchable`) does the same at 640px (`STACKED_SEARCH_WIDTH`):
 while the table is that wide or narrower the search takes the whole line under the toolbar's
-buttons, and above it Filters, the search and the buttons after it share one line where they fit.
+buttons. Wider than that, Filters, the search and the buttons after it share one line where they fit.
 A container query whose width condition reads a token did not match in Chromium (a probe,
 2026-10-07), and a `packages/ui` component may hold no literal breakpoint, so the table measures its own width in code and, a frame after each change, sets a
 `stacked-search` attribute on itself; a hidden table, measured 0 wide, does not carry it. Guards:
