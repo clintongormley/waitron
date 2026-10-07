@@ -2293,7 +2293,7 @@ DONE (W88a, #1228, 2026-10-05); left open:** A drag no longer sends a move once 
 the category; one deleted elsewhere before this screen refreshed is still sent, and what the server
 answers to it is not checked.
 
-**Unused editing code in the two widgets the Menus screen no longer edits with — DONE (A299,
+**Unused editing code in the two widgets the Menus screen no longer edits with — DONE (A299, #1328,
 2026-10-07).** `dashboard-member-list-editor` (drawn by nothing since W93) and
 `dashboard-menu-structure-tree` (no longer drawn by Preview since W95) are deleted with their tests;
 the name helpers the Menus screen and `menu-structure-table.ts` still use moved to
