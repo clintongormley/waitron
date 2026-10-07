@@ -92,10 +92,12 @@ import {
 } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
 import {
+  configureZone,
   createDepartment,
   setDepartmentTransferSettings,
   setProfileServiceScope,
   createServiceZone,
+  deactivateDepartment,
   departmentSalePolicies,
   departments,
   readHolidays,
@@ -111,6 +113,7 @@ import {
   setDepartmentAllDayMenu,
   setDepartmentMenus,
   setProfileServiceAccess,
+  setRoutingCell,
   setStationToday,
   setZoneAllDayMenu,
   stationStates,
@@ -3295,6 +3298,152 @@ it("transfers a department's menu list, its all-day menu and a zone's own all-da
   const row = zone.rows[0]!;
   for (const id of [row.zone_id, row.department_id, row.menu_id])
     expect(sourceIds).not.toContain(id);
+});
+
+it("exports and imports all five cell classes into another venue, remapping every id and the location", async () => {
+  const source = await applyVenue(planVenue(venue("B24681359"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const scope = { locationId: brandLocationId(source.locationId) };
+  const sourceIds = await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, scope, {
+      name: "Comedor de rutas",
+      defaultServiceMode: "table_tab",
+    });
+    const terraza = await createServiceZone(tx, scope, {
+      name: "Terraza de rutas",
+      departmentId: department.id,
+    });
+    const salon = await createServiceZone(tx, scope, {
+      name: "Salón de rutas",
+      departmentId: department.id,
+    });
+    const [barra, plancha] = await tx
+      .insert(kitchenStations)
+      .values([
+        { locationId: scope.locationId, name: "Barra de rutas" },
+        { locationId: scope.locationId, name: "Plancha de rutas" },
+      ])
+      .returning();
+    const category = await createCategory(tx, { name: "Bebidas de rutas" });
+    const menu = await createCatalogue(tx, { name: "Carta de rutas" });
+    const product = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: category.id,
+      name: "Mojito de rutas",
+      pricingUnit: "each",
+      unitPrice: "7",
+      vatClass: "general",
+    });
+    const atStation = (id: string) => ({ kind: "station" as const, stationId: id });
+    const categoryRow = { kind: "category" as const, categoryId: category.id };
+    const productRow = { kind: "product" as const, productId: product.id };
+    await setRoutingCell(tx, scope, { row: categoryRow, zoneId: null }, atStation(barra!.id));
+    await setRoutingCell(
+      tx,
+      scope,
+      { row: categoryRow, zoneId: terraza.id },
+      {
+        kind: "no_preparation",
+      },
+    );
+    await setRoutingCell(tx, scope, { row: productRow, zoneId: null }, atStation(plancha!.id));
+    await setRoutingCell(tx, scope, { row: productRow, zoneId: salon.id }, atStation(barra!.id));
+    await setRoutingCell(
+      tx,
+      scope,
+      { row: { kind: "all" }, zoneId: terraza.id },
+      atStation(plancha!.id),
+    );
+    // A disabled station keeps its cells, and a zone moved into a switched-off department keeps its own.
+    await tx
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, plancha!.id));
+    const closed = await createDepartment(tx, scope, {
+      name: "Comedor cerrado de rutas",
+      defaultServiceMode: "table_tab",
+    });
+    await deactivateDepartment(tx, scope, closed.id);
+    await configureZone(tx, scope, { zoneId: salon.id, departmentId: closed.id });
+    return [
+      source.locationId,
+      department.id,
+      closed.id,
+      terraza.id,
+      salon.id,
+      barra!.id,
+      plancha!.id,
+      category.id,
+      product.id,
+    ];
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const decoded = decodeConfigurationBundle(
+    encodeConfigurationBundle(
+      await buildConfigurationBundle(
+        suite.db,
+        source,
+        ALL_MODULES,
+        new Date("2026-10-07T10:00:00Z"),
+        versions,
+      ),
+      "a strong passphrase",
+    ),
+    "a strong passphrase",
+  );
+  expect(decoded.tables.routing_cells).toHaveLength(5);
+  const target = await applyVenue(planVenue(venue("B24681360"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: async (tx, result) =>
+      importConfigurationTables(
+        tx,
+        decoded,
+        { locationId: result.locationId },
+        ALL_MODULES,
+        versions,
+      ),
+  });
+  const idOf = async (table: string, name: string) => {
+    const result = await targetSuite.db.execute<{ id: string }>(
+      sql`select id from ${sql.identifier(table)} where name = ${name}`,
+    );
+    expect(result.rows).toHaveLength(1);
+    return result.rows[0]!.id;
+  };
+  const terraza = await idOf("floor_zones", "Terraza de rutas");
+  const salon = await idOf("floor_zones", "Salón de rutas");
+  const barra = await idOf("kitchen_stations", "Barra de rutas");
+  const plancha = await idOf("kitchen_stations", "Plancha de rutas");
+  const category = await idOf("categories", "Bebidas de rutas");
+  const product = await idOf("products", "Mojito de rutas");
+  for (const id of [terraza, salon, barra, plancha, category, product])
+    expect(sourceIds).not.toContain(id);
+  expect(sourceIds).not.toContain(target.locationId);
+  const cells = await targetSuite.db.execute<Record<string, unknown>>(sql`
+    select location_id, category_id, product_id, zone_id, station_id, no_preparation
+    from routing_cells`);
+  const cell = (values: Record<string, unknown>) => ({
+    location_id: target.locationId,
+    category_id: null,
+    product_id: null,
+    zone_id: null,
+    station_id: null,
+    no_preparation: 0,
+    ...values,
+  });
+  expect(cells.rows).toEqual(
+    expect.arrayContaining([
+      cell({ category_id: category, station_id: barra }),
+      cell({ category_id: category, zone_id: terraza, no_preparation: 1 }),
+      cell({ product_id: product, station_id: plancha }),
+      cell({ product_id: product, zone_id: salon, station_id: barra }),
+      cell({ zone_id: terraza, station_id: plancha }),
+    ]),
+  );
+  expect(cells.rows).toHaveLength(5);
 });
 
 describe("opening hours in a configuration transfer", () => {

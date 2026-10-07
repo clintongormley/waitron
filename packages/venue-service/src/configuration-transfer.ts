@@ -470,6 +470,48 @@ function validateDepartmentTransfers(tables: Tables): void {
   }
 }
 
+/**
+ * Refuses (`setup.request_invalid`, `field` naming `routing_cells.<column>`) routing cells a save
+ * could not have written: a bad coordinate or target shape, the All categories × Every zone cell, a
+ * second cell at one coordinate, a variant or a product, category, zone or station the bundle does
+ * not hold, and a zone that is switched off or has no service configuration. A disabled station
+ * target is kept, as a save keeps it. A zone whose department is switched off is accepted, because
+ * `configureZone` moves a zone holding cells into one.
+ */
+export function validateRoutingConfiguration(tables: Tables): void {
+  const categories = ids(tables.categories);
+  const products = new Set(
+    (tables.products ?? []).filter((row) => (row.parent_id ?? null) === null).map((row) => row.id),
+  );
+  const stations = ids(tables.kitchen_stations);
+  const configured = new Set((tables.zone_service_policies ?? []).map((row) => row.zone_id));
+  const zones = new Set(
+    (tables.floor_zones ?? [])
+      .filter((row) => row.active === 1 && configured.has(row.id))
+      .map((row) => row.id),
+  );
+  const taken = new Set<string>();
+  for (const row of tables.routing_cells ?? []) {
+    const category = row.category_id ?? null;
+    const product = row.product_id ?? null;
+    const zone = row.zone_id ?? null;
+    const station = row.station_id ?? null;
+    if (category !== null && product !== null) refuse("routing_cells.category_id");
+    if (category === null && product === null && zone === null) refuse("routing_cells.zone_id");
+    if (row.no_preparation !== 0 && row.no_preparation !== 1)
+      refuse("routing_cells.no_preparation");
+    if ((station === null) !== (row.no_preparation === 1)) refuse("routing_cells.station_id");
+    if (category !== null && !categories.has(category)) refuse("routing_cells.category_id");
+    if (product !== null && !products.has(product)) refuse("routing_cells.product_id");
+    if (zone !== null && !zones.has(zone)) refuse("routing_cells.zone_id");
+    if (station !== null && !stations.has(station)) refuse("routing_cells.station_id");
+    const subject = category !== null ? "category" : product !== null ? "product" : "zone";
+    const key = JSON.stringify([subject, category ?? product, zone]);
+    if (taken.has(key)) refuse(`routing_cells.${subject}_id`);
+    taken.add(key);
+  }
+}
+
 function validateVenueServiceConfiguration(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string },
@@ -479,6 +521,7 @@ function validateVenueServiceConfiguration(
   validateDepartmentMenus(tables);
   validateMenuTimetables(tables, bundle);
   validateDepartmentTransfers(tables);
+  validateRoutingConfiguration(tables);
 }
 
 export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {

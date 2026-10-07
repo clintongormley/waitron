@@ -7,13 +7,30 @@ import { readFileSync } from "node:fs";
 import { Hono } from "hono";
 import { mountSetup } from "./setup-api.js";
 import type { WaitronModule } from "@waitron/module";
+import { sql } from "drizzle-orm";
+import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { loadKeyRing } from "@waitron/credentials";
-import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "@waitron/venue-service";
+import { kitchenStations, products, withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin } from "@waitron/identity";
+import { expectedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
+import { locationId } from "@waitron/shared";
 import {
+  createDepartment,
+  createServiceZone,
+  setRoutingCell,
+  VENUE_SERVICE_CONFIGURATION_TRANSFER,
+} from "@waitron/venue-service";
+import { schemaVersionsByModule } from "./backup-manifest.js";
+import {
+  buildConfigurationBundle,
   encodeConfigurationBundle,
+  importConfigurationTables,
   validateConfigurationBundle,
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
+import { ALL_MODULES } from "./modules.js";
 import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
@@ -393,5 +410,209 @@ describe("staged configuration import", () => {
     await expect(readStagedConfigurationImport(stateDir, ring)).rejects.toThrow(
       "invalid staged configuration import key",
     );
+  });
+});
+
+describe("routing cells in a staged import", () => {
+  const source = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+  const target = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+
+  function venue(taxId: string): VenueRequest {
+    return {
+      country: "ES",
+      taxId,
+      legalName: "Prepared SL",
+      taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
+      location: {
+        name: "Prepared",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurant",
+        fiscalTerritory: "ES-common",
+        addressLine1: "Calle 1",
+        addressLine2: null,
+        postalCode: "28001",
+        city: "Madrid",
+        province: "Madrid",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+      },
+      seriesCode: "F",
+      fullSeriesCode: "FF",
+      rectificativeSeriesCode: "R",
+      admin: {
+        displayName: "Admin",
+        email: `${taxId.toLowerCase()}@example.test`,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword("a secure password"),
+      },
+    };
+  }
+
+  let prepared:
+    | Promise<{ bundle: ConfigurationBundle; versions: Record<string, number>; variant: string }>
+    | undefined;
+  /** A fresh export holding a category's Every zone cell and a product's zone cell. */
+  function exported() {
+    prepared ??= (async () => {
+      const venueResult = await applyVenue(planVenue(venue("B24681361"), ALL_MODULES), {
+        db: source.db,
+        modules: ALL_MODULES,
+      });
+      const cfg = { locationId: locationId(venueResult.locationId) };
+      const variant = await withTransaction(source.db, async (tx) => {
+        const department = await createDepartment(tx, cfg, {
+          name: "Comedor",
+          defaultServiceMode: "table_tab",
+        });
+        const zone = await createServiceZone(tx, cfg, {
+          name: "Terraza",
+          departmentId: department.id,
+        });
+        const [station] = await tx
+          .insert(kitchenStations)
+          .values({ locationId: cfg.locationId, name: "Barra" })
+          .returning();
+        const category = await createCategory(tx, { name: "Bebidas" });
+        const menu = await createCatalogue(tx, { name: "Carta" });
+        const product = await createProduct(tx, {
+          catalogueId: menu.id,
+          categoryId: category.id,
+          name: "Mojito",
+          pricingUnit: "each",
+          unitPrice: "7",
+          vatClass: "general",
+        });
+        const [large] = await tx
+          .insert(products)
+          .values({ catalogueId: menu.id, parentId: product.id, name: "Grande", categoryId: null })
+          .returning();
+        await setRoutingCell(
+          tx,
+          cfg,
+          { row: { kind: "category", categoryId: category.id }, zoneId: null },
+          { kind: "no_preparation" },
+        );
+        await setRoutingCell(
+          tx,
+          cfg,
+          { row: { kind: "product", productId: product.id }, zoneId: zone.id },
+          { kind: "station", stationId: station!.id },
+        );
+        return large!.id;
+      });
+      const versions = await schemaVersionsByModule(source.db, ALL_MODULES);
+      const bundle = await buildConfigurationBundle(
+        source.db,
+        venueResult,
+        ALL_MODULES,
+        new Date("2026-10-07T10:00:00Z"),
+        versions,
+      );
+      return { bundle, versions, variant };
+    })();
+    return prepared;
+  }
+
+  async function staged(candidate: ConfigurationBundle, versions: Record<string, number>) {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
+    dirs.push(stateDir);
+    const result = stageConfigurationImport(
+      stateDir,
+      ring,
+      encodeConfigurationBundle(candidate, "a strong passphrase"),
+      "a strong passphrase",
+      (bundle) => {
+        validateConfigurationBundle(bundle, ALL_MODULES, versions);
+        return Promise.resolve();
+      },
+    );
+    return { stateDir, result };
+  }
+
+  it("a refused routing bundle leaves no venue or cells", async () => {
+    const { bundle, versions, variant } = await exported();
+    expect(bundle.tables.routing_cells).toHaveLength(2);
+    const control = await staged(bundle, versions);
+    await expect(control.result).resolves.toMatchObject({ counts: { routing_cells: 2 } });
+
+    const refused: ConfigurationBundle = {
+      ...bundle,
+      tables: {
+        ...bundle.tables,
+        routing_cells: bundle.tables.routing_cells!.map((row) =>
+          row.product_id === null ? row : { ...row, product_id: variant },
+        ),
+      },
+    };
+    const refusal = {
+      code: "setup.request_invalid",
+      params: { field: "routing_cells.product_id" },
+    };
+    const { stateDir, result } = await staged(refused, versions);
+    await expect(result).rejects.toMatchObject(refusal);
+    expect(await readdir(stateDir)).toEqual([]);
+
+    const request = venue("B24681362");
+    await expect(
+      applyVenue(planVenue(request, ALL_MODULES), {
+        db: target.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, created) =>
+          importConfigurationTables(
+            tx,
+            refused,
+            { locationId: created.locationId },
+            ALL_MODULES,
+            versions,
+          ),
+      }),
+    ).rejects.toMatchObject(refusal);
+    const tenants = await target.db.execute<{ count: number }>(
+      sql`select count(*) as count from tenants where tax_id = ${request.taxId}`,
+    );
+    expect(tenants.rows[0]!.count).toBe(0);
+    const cells = await target.db.execute<{ count: number }>(
+      sql`select count(*) as count from routing_cells`,
+    );
+    expect(cells.rows[0]!.count).toBe(0);
+  });
+
+  it("refuses a bundle exported before the routing grid by its venue-service version, before any write", async () => {
+    const { bundle, versions } = await exported();
+    const journal = JSON.parse(
+      await readFile(
+        new URL("../../../packages/venue-service/drizzle/meta/_journal.json", import.meta.url),
+        "utf8",
+      ),
+    ) as { entries: { tag: string }[] };
+    const routingMigration = journal.entries.findIndex((entry) =>
+      entry.tag.endsWith("_routing_cells"),
+    );
+    expect(routingMigration).toBeGreaterThan(0);
+    expect(versions["venue-service"]).toBe(journal.entries.length);
+    const older: ConfigurationBundle = {
+      ...bundle,
+      modules: { ...bundle.modules, "venue-service": versions["venue-service"]! - 1 },
+    };
+    const { stateDir, result } = await staged(older, versions);
+    await expect(result).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "module:venue-service" },
+    });
+    expect(await readdir(stateDir)).toEqual([]);
+  });
+
+  it("accepts a fresh bundle whose versions match the journal", async () => {
+    const { bundle, versions } = await exported();
+    const venueService = ALL_MODULES.find((module) => module.name === "venue-service")!;
+    expect(versions["venue-service"]).toBe(expectedSchemaVersion(venueService.migrations, null));
+    expect(bundle.modules["venue-service"]).toBe(versions["venue-service"]);
+    const { stateDir, result } = await staged(bundle, versions);
+    await expect(result).resolves.toMatchObject({ counts: { routing_cells: 2 } });
+    expect((await readdir(stateDir)).sort()).toEqual([
+      "configuration-import.artifact",
+      "configuration-import.json",
+      "configuration-import.key",
+    ]);
   });
 });

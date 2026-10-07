@@ -25,7 +25,12 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { configureZone, createDepartment, deactivateServiceZone } from "./operations.js";
+import {
+  configureZone,
+  createDepartment,
+  deactivateDepartment,
+  deactivateServiceZone,
+} from "./operations.js";
 import type { RouteTarget } from "./routing.js";
 import type { CellAddress } from "./routing-types.js";
 import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
@@ -416,6 +421,31 @@ describe("setRoutingCell / clearRoutingCell", () => {
         scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar))),
       ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId } });
     }
+    expect(await readStoredCells(f)).toEqual([]);
+  });
+
+  it("keeps a zone's cell when the zone moves into a switched-off department, and clears it once the zone is back in an enabled one", async () => {
+    const f = await setup();
+    const address: CellAddress = {
+      row: { kind: "category", categoryId: f.drinks },
+      zoneId: f.terrace,
+    };
+    await scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar)));
+    const closed = await scoped((tx) =>
+      createDepartment(tx, f.cfg, { name: "Closed", defaultServiceMode: "table_tab" }),
+    );
+    await scoped((tx) => deactivateDepartment(tx, f.cfg, closed.id));
+    await scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: closed.id }));
+    expect(await readStoredCells(f)).toHaveLength(1);
+    await expect(scoped((tx) => clearRoutingCell(tx, f.cfg, address))).rejects.toMatchObject({
+      code: "service_zone.not_found",
+      params: { zoneId: f.terrace },
+    });
+    const open = await scoped((tx) =>
+      createDepartment(tx, f.cfg, { name: "Open", defaultServiceMode: "table_tab" }),
+    );
+    await scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: open.id }));
+    await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
     expect(await readStoredCells(f)).toEqual([]);
   });
 
