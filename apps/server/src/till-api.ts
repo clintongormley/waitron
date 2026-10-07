@@ -251,6 +251,7 @@ export interface TillApiDeps {
   onboardingIntent?: OnboardingIntent;
   /** Injected by tests; production gets one `createPinThrottle()` per mount. */
   pinThrottle?: PinThrottle;
+  invoiceEmailAvailable?: () => Promise<boolean>;
 }
 
 async function resolveHttpOrderZone(
@@ -439,6 +440,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "fiscal.taxpayer_domicile_missing": 409,
   "invoice.recipient_invalid": 400,
   "invoice.choice_locked": 409,
+  "invoice_delivery.email_unavailable": 409,
+  "invoice_delivery.printer_invalid": 409,
   "sale.voided": 409,
   "sale.already_settled": 409,
   "working_order.not_settled": 409,
@@ -1717,6 +1720,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         revision?: unknown;
         invoiceType: "F1" | "F2";
+        delivery?: unknown;
         recipient: {
           taxId: string;
           legalName: string;
@@ -1724,11 +1728,27 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           countryCode: string;
         } | null;
       }>(c);
-      const revision = await setOrderInvoiceChoice(deps.db, deps.backend, cfg, id, {
-        revision: requireRevision(body.revision),
-        invoiceType: body.invoiceType,
-        recipient: body.recipient,
-      });
+      const delivery = body.delivery;
+      const emailAvailable =
+        delivery !== null &&
+        typeof delivery === "object" &&
+        "medium" in delivery &&
+        delivery.medium === "email"
+          ? (await deps.invoiceEmailAvailable?.()) === true
+          : false;
+      const revision = await setOrderInvoiceChoice(
+        deps.db,
+        deps.backend,
+        cfg,
+        id,
+        {
+          revision: requireRevision(body.revision),
+          invoiceType: body.invoiceType,
+          recipient: body.recipient,
+          delivery,
+        },
+        { personId: session.personId, emailAvailable, now: deps.clock.now().instant },
+      );
       return c.json({ revision });
     }),
   );

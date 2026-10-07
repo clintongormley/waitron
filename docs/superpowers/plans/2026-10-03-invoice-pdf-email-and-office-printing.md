@@ -211,6 +211,17 @@ alongside a valid pre-issuance revision advance. HTTP forwarding and server-cont
 composition, bill read projections, issuance reservation and automatic-receipt suppression
 remain pending. This is an internal staging checkpoint, not a completed Task 2/4.
 
+**2026-10-07 HTTP context checkpoint.** The invoice-choice route forwards `delivery` and
+supplies the authenticated staff member and server clock to the staging writer. Trading boot
+resolves invoice-mail availability for each email choice through the existing current-settings
+resolver. Real boot cases cover demo capture, prepare capture, development capture, configured
+live SMTP and an unconfigured live refusal. The bill-list projection returns an explicit saved
+draft; absent drafts leave the optional field absent. HTTP cases cover explicit null, authenticated
+attribution despite client-forged values, SMTP removal without restart, and active-local A4
+selection versus disabled, absent or other-location printers. No issuance or public F1 gate
+changed. Issuance reservation, receipt suppression, SMTP setup/settings, printer registration,
+location selection and delivery UI remain pending.
+
 ## 3. Set up email for a live venue, without a terminal
 
 **Inspect/change:** `apps/setup/src/setup-app.ts` (venue advances to certificate or review at `:807`; `apps/setup/src/screens/cert-screen.ts:276` advances to fiscal test, and `fiscal-test-screen.ts:66` to review), a new Email screen beside those screens, `apps/setup/src/api/client.ts`, `apps/server/src/setup-api.ts` and `setup-operation.ts`, `apps/server/src/email-delivery.ts`, `packages/credentials/src/purposes.ts` (read only: `email.smtp` keeps its `url` and `from` fields), a settings card on `apps/dashboard/src/screens/email-screen.ts` and its server route, the setup and dashboard translations. Keep the existing CLI path in Task 0.
