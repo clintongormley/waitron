@@ -4862,7 +4862,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       triggers it. The owner decided on 2026-10-06 not to queue these, or the clear-area control
       above.
     [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) — DONE (A261-4,
-    branch `feat/routing-grid`). Prep stations' Routing tab is a grid of categories, products, No
+    #1363). Prep stations' Routing tab is a grid of categories, products, No
     category and All categories against Every zone and each active service zone, stored one cell
     per coordinate in `routing_cells`; `station_claims` and `route_exceptions` are dropped
     (venue-service `0031_retire_routing_lists`), with no conversion, so a venue is reset and its
