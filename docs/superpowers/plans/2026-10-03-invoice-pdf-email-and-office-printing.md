@@ -136,6 +136,19 @@ ordinary printable jobs, authenticated late email success/failure, and a read-on
 that leaves the inherited receipt claim unchanged. Bill staging, A4 references and
 transport/retry workers remain. No Task 2 completion claim.
 
+**2026-10-07 email-attempt checkpoint.** Certain email refusals now reserve a new
+metadata generation with the prior recipient, consent and designation. Due times use the
+four approved gaps; claim counts carry across automatic retries and stop at five. An
+explicit retry starts a new count. The previous refusal and claim hash stay recorded;
+repeated or historical reports cannot reserve another automatic retry. The worker pass
+commits its claim, reads through an injected projection in a separate transaction, closes
+that transaction before transport, and records the outcome with the claim identity. It
+expires abandoned claims and derives the duplicate marker from delivery metadata. Synthetic
+database cases use an injected sender and a stored-sale projection of the issue time; they
+cover another real sale committing during a held send, competing passes, due eligibility,
+late outcomes and sanitised throws. Production invoice projection, SMTP composition and
+worker lifecycle remain pending. This does not complete Tasks 2 or 4.
+
 ## 3. Set up email for a live venue, without a terminal
 
 **Inspect/change:** `apps/setup/src/setup-app.ts` (venue advances to certificate or review at `:807`; `apps/setup/src/screens/cert-screen.ts:276` advances to fiscal test, and `fiscal-test-screen.ts:66` to review), a new Email screen beside those screens, `apps/setup/src/api/client.ts`, `apps/server/src/setup-api.ts` and `setup-operation.ts`, `apps/server/src/email-delivery.ts`, `packages/credentials/src/purposes.ts` (read only: `email.smtp` keeps its `url` and `from` fields), a settings card on `apps/dashboard/src/screens/email-screen.ts` and its server route, the setup and dashboard translations. Keep the existing CLI path in Task 0.
