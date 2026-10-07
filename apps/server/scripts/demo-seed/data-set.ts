@@ -20,7 +20,7 @@ export type StaffText = Readonly<Record<StaffLanguage, string>>;
 
 /** A customer-facing text in every language `L` of its data set. English and Spanish are always
  * among them, because the writers take staff names out of these maps by the seed's language, and
- * with no `noUncheckedIndexedAccess` a missing one would compile and store undefined. */
+ * with no `noUncheckedIndexedAccess` a missing one would still compile. */
 export type DemoText<L extends string> = Readonly<Record<L | SeedLocale, string>>;
 
 /** Where `staffName` is given it DELIBERATELY differs from the customer-facing name, so a screen
@@ -130,7 +130,6 @@ export function demoDataSet(id: string): DemoDataSet {
   return DEMO_DATA_SETS[id]!;
 }
 
-/** The demo's content languages; `required` is for `writeContentLanguages`' check. */
 export type DemoLanguages = StartingContentLanguages;
 
 /** Exactly the languages setup gives a new venue in this area. */

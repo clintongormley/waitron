@@ -15,7 +15,12 @@ export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage> = {
     deli: DELI_TAKEAWAY,
     lunch: MENU_DEL_DIA,
     drinksName: { en: "Drinks", es: "Bebidas" },
-    drinksCustomerName: { en: "Drinks", es: "Bebidas", ca: "Begudes", gl: "Bebidas" },
+    drinksCustomerName: {
+      en: "Drinks menu",
+      es: "Carta de bebidas",
+      ca: "Carta de begudes",
+      gl: "Carta de bebidas",
+    },
   },
   productOptionLists: PRODUCT_OPTION_LISTS,
   floor: {

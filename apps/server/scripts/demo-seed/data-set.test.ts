@@ -12,7 +12,7 @@ import {
   inLanguages,
   type DemoDataSet,
 } from "./data-set.js";
-import { CASA_DELGADO_ES, CASA_DELGADO_LANGUAGES } from "./data-sets/casa-delgado-es.js";
+import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 type Text = Readonly<Record<string, string>>;
 
@@ -51,20 +51,11 @@ function customerTexts(set: DemoDataSet): [string, Text][] {
   return texts;
 }
 
-/** Catalan or Galician values a speaker writes exactly as in Spanish or English: proper names, a
- * dish known by its own name, and words both languages spell alike. */
+/** Catalan or Galician values this data set writes the same as in Spanish or English: proper names,
+ * a dish known by its own name, and words both languages spell alike. */
 const SAME_AS_SPANISH_OR_ENGLISH: Readonly<Record<string, readonly string[]>> = {
-  ca: [
-    "Casa Delgado",
-    "Negroni",
-    "Crema catalana",
-    "Torta del Casar (per kg)",
-    "Conserves",
-    "Postres",
-    "rac",
-  ],
+  ca: ["Negroni", "Crema catalana", "Torta del Casar (per kg)", "Conserves", "Postres", "rac"],
   gl: [
-    "Casa Delgado",
     "Negroni",
     "Torta del Casar (por kg)",
     "Cecina de León (por kg)",
@@ -79,6 +70,7 @@ const SAME_AS_SPANISH_OR_ENGLISH: Readonly<Record<string, readonly string[]>> = 
     "Tapas",
     "Segundos",
     "Bebidas",
+    "Carta de bebidas",
     "Café",
     "ración",
     "rac",
@@ -174,14 +166,15 @@ describe("demo data sets", () => {
   });
 
   it("gives every Casa Delgado customer-facing text a value of its own in every language", () => {
-    expect(CASA_DELGADO_ES.contentLanguages).toEqual(CASA_DELGADO_LANGUAGES);
     const texts = customerTexts(CASA_DELGADO_ES);
     expect(texts.length).toBeGreaterThan(70);
     for (const [where, text] of texts) {
-      for (const language of CASA_DELGADO_LANGUAGES) {
+      for (const language of CASA_DELGADO_ES.contentLanguages) {
         expect(text[language]?.trim(), `${where} in ${language}`).toBeTruthy();
       }
-      for (const language of CASA_DELGADO_LANGUAGES.filter((l) => l !== "en" && l !== "es")) {
+      for (const language of CASA_DELGADO_ES.contentLanguages.filter(
+        (l) => l !== "en" && l !== "es",
+      )) {
         const value = text[language]!;
         if (SAME_AS_SPANISH_OR_ENGLISH[language]!.includes(value)) continue;
         expect([text.en, text.es], `${where} in ${language} copies another language`).not.toContain(
@@ -191,11 +184,30 @@ describe("demo data sets", () => {
     }
   });
 
+  it("gives every Casa Delgado menu a customer name that differs from its staff name", () => {
+    const { restaurant, deli, lunch, drinksName, drinksCustomerName } = CASA_DELGADO_ES.menus;
+    const menus: [string, Text, Text][] = [
+      ["restaurant", restaurant.name, restaurant.customerName],
+      ["deli", deli.name, deli.customerName],
+      ["lunch", lunch.name, lunch.customerName],
+      ["drinks", drinksName, drinksCustomerName],
+    ];
+    for (const [menu, staff, customer] of menus) {
+      for (const language of ["en", "es"] as const) {
+        expect
+          .soft(customer[language]!.toLowerCase(), `${menu} menu in ${language}`)
+          .not.toBe(staff[language]!.toLowerCase());
+      }
+    }
+  });
+
   it("allows only copies the data set actually makes", () => {
-    const values = customerTexts(CASA_DELGADO_ES).flatMap(([, text]) => [
-      ...(text.ca === text.en || text.ca === text.es ? [`ca:${text.ca}`] : []),
-      ...(text.gl === text.en || text.gl === text.es ? [`gl:${text.gl}`] : []),
-    ]);
+    const values = customerTexts(CASA_DELGADO_ES).flatMap(([, text]) =>
+      Object.keys(SAME_AS_SPANISH_OR_ENGLISH).flatMap((language) => {
+        const value = text[language];
+        return value === text.en || value === text.es ? [`${language}:${value}`] : [];
+      }),
+    );
     const allowed = Object.entries(SAME_AS_SPANISH_OR_ENGLISH).flatMap(([language, list]) =>
       list.map((value) => `${language}:${value}`),
     );
