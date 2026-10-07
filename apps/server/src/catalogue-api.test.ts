@@ -41,6 +41,20 @@ import "./errors.js";
 // staff refusal over every write route is in `catalogue-api.full-manifest.test.ts`.
 const noopLog: Logger = () => {};
 
+it("does not expose the retired product PATCH route or change a product through it", async () => {
+  const app = mountApp();
+  const productId = await createNamedProductVia(app, `Retired route ${crypto.randomUUID()}`);
+  const before = (await suite.db.execute(sql`select * from products where id = ${productId}`)).rows;
+  const response = await send(app, "PATCH", `/management-api/products/${productId}`, {
+    body: { name: "Changed through retired route", unitPrice: "99.00" },
+  });
+  expect(response.status).toBe(404);
+  expect(
+    (await suite.db.execute(sql`select * from products where id = ${productId}`)).rows,
+  ).toEqual(before);
+  expect((await send(app, "GET", `/management-api/products/${productId}/editor`)).status).toBe(200);
+});
+
 describe("folder selection routes", () => {
   async function folder(app: Hono, name: string, parentId: string | null = null) {
     const response = await send(app, "POST", "/management-api/categories", {
@@ -1205,7 +1219,7 @@ describe("unique category and product names", () => {
     expect((await send(app, "GET", `/management-api/categories/${first}`)).status).toBe(200);
   });
 
-  it("answers a duplicate Active product on create, rename and reactivation with product.name_taken (409)", async () => {
+  it("answers a duplicate Active product on create with product.name_taken (409)", async () => {
     const app = mountApp();
     const name = `Café ${tag()}`;
     await createNamedProductVia(app, name);
@@ -1220,24 +1234,6 @@ describe("unique category and product names", () => {
     };
     await refused(
       await send(app, "POST", "/management-api/products", { body }),
-      "product.name_taken",
-      { field: "name", name: name.toLowerCase() },
-    );
-    const other = await createNamedProductVia(app, `Té ${tag()}`);
-    await refused(
-      await send(app, "PATCH", `/management-api/products/${other}`, { body: { name } }),
-      "product.name_taken",
-      { field: "name", name },
-    );
-    const inactive = await send(app, "POST", "/management-api/products", {
-      body: { ...body, active: false },
-    });
-    expect(inactive.status).toBe(201);
-    const inactiveId = ((await inactive.json()) as { id: string }).id;
-    await refused(
-      await send(app, "PATCH", `/management-api/products/${inactiveId}`, {
-        body: { active: true },
-      }),
       "product.name_taken",
       { field: "name", name: name.toLowerCase() },
     );
@@ -1847,22 +1843,6 @@ describe("mountCatalogueApi — products", () => {
       (await suite.db.execute(sql`select id from products where parent_id = ${variantId}`)).rows,
     ).toEqual([]);
 
-    const patchVariant = await send(app, "PATCH", `/management-api/products/${variantId}`, {
-      body: { vatClass: "general" },
-    });
-    expect(patchVariant.status).toBe(403);
-    expect(await patchVariant.json()).toMatchObject({
-      error: { code: "authorization.not_permitted" },
-    });
-    expect(await variantRow()).toEqual({ vat_class: null, category_id: null });
-    expect(
-      (
-        await send(app, "PATCH", `/management-api/products/${parent.id}`, {
-          body: { vatClass: "general" },
-        })
-      ).status,
-    ).toBe(204);
-
     expect(await variantRow()).toEqual({ vat_class: null, category_id: null });
 
     const saveParent = await send(app, "PUT", `/management-api/products/${parent.id}/editor`, {
@@ -1919,69 +1899,6 @@ describe("mountCatalogueApi — products", () => {
       ownCategoryId,
     };
   }
-
-  describe("a product's own colour, by PATCH", () => {
-    const listedColor = async (app: Hono, id: string) =>
-      (
-        (await (await send(app, "GET", "/management-api/products")).json()) as {
-          id: string;
-          color: string | null;
-        }[]
-      ).find((product) => product.id === id)!.color;
-    const storedColor = async (id: string) =>
-      (
-        await suite.db.execute<{ color: string | null }>(
-          sql`select color from products where id = ${id}`,
-        )
-      ).rows[0]!.color;
-
-    it("sets and clears it, and keeps it when its category is recoloured", async () => {
-      const app = mountApp("es-ES");
-      const { parentId, categoryId } = await parentWithVariant(app);
-      const path = `/management-api/products/${parentId}`;
-      expect((await send(app, "PATCH", path, { body: { color: "#256bb1" } })).status).toBe(204);
-      expect(await listedColor(app, parentId)).toBe("#256bb1");
-      const recoloured = await send(app, "PATCH", `/management-api/categories/${categoryId}`, {
-        body: { color: "#b12525" },
-      });
-      expect(recoloured.status).toBe(200);
-      expect(await listedColor(app, parentId)).toBe("#256bb1");
-      expect((await send(app, "PATCH", path, { body: { color: null } })).status).toBe(204);
-      expect(await listedColor(app, parentId)).toBeNull();
-    });
-
-    it("refuses a colour of the wrong type or spelling, leaving the stored one", async () => {
-      const app = mountApp("es-ES");
-      const { parentId } = await parentWithVariant(app);
-      const path = `/management-api/products/${parentId}`;
-      await send(app, "PATCH", path, { body: { color: "#256bb1" } });
-      const wrongType = await send(app, "PATCH", path, { body: { color: 1 } });
-      expect(wrongType.status).toBe(400);
-      expect(await wrongType.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "color" } },
-      });
-      const wrongSpelling = await send(app, "PATCH", path, { body: { color: "#B12525" } });
-      expect(wrongSpelling.status).toBe(400);
-      expect(await wrongSpelling.json()).toMatchObject({
-        error: { code: "product.invalid", params: { field: "color" } },
-      });
-      expect(await storedColor(parentId)).toBe("#256bb1");
-    });
-
-    it("answers a variant's id as an id that names no product, and stores nothing", async () => {
-      const app = mountApp("es-ES");
-      const { variantId } = await parentWithVariant(app);
-      const variant = await send(app, "PATCH", `/management-api/products/${variantId}`, {
-        body: { color: "#b12525" },
-      });
-      const unknown = await send(app, "PATCH", `/management-api/products/${crypto.randomUUID()}`, {
-        body: { color: "#b12525" },
-      });
-      expect(variant.status).toBe(unknown.status);
-      expect(await variant.json()).toEqual(await unknown.json());
-      expect(await storedColor(variantId)).toBeNull();
-    });
-  });
 
   it("reads a variant's own page: its own names, its blanks blank, its parent's values beside", async () => {
     const app = mountApp("es-ES");
@@ -2652,31 +2569,6 @@ describe("mountCatalogueApi — products", () => {
     expect(await res.json()).toMatchObject({ active: true, available: false });
   });
 
-  it("PATCH /management-api/products/:id with available:false stores it and leaves active unchanged", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Patch-unavailable catalogue");
-    const createRes = await send(app, "POST", "/management-api/products", {
-      body: {
-        catalogueId,
-        categoryId: null,
-        name: "Se agota",
-        pricingUnit: "each",
-        unitPrice: "1.00",
-        vatClass: "general",
-      },
-    });
-    const productId = ((await createRes.json()) as { id: string }).id;
-
-    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { available: false },
-    });
-    expect(res.status).toBe(204);
-    const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
-    expect(await list.json()).toEqual([
-      expect.objectContaining({ id: productId, active: true, available: false }),
-    ]);
-  });
-
   it("POST /management-api/products with active:true (and with it omitted) → an active product", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Create-active catalogue");
@@ -2708,7 +2600,7 @@ describe("mountCatalogueApi — products", () => {
     expect((await omitted.json()) as { active: boolean }).toMatchObject({ active: true });
   });
 
-  it("POST/PATCH /management-api/products carries ordering, defaulting to public and round-tripping", async () => {
+  it("POST /management-api/products carries ordering, defaulting to public", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Ordering catalogue");
     const referenced = await send(app, "POST", "/management-api/products", {
@@ -2725,7 +2617,6 @@ describe("mountCatalogueApi — products", () => {
     expect(referenced.status).toBe(201);
     const referencedBody = (await referenced.json()) as { id: string; ordering: string };
     expect(referencedBody).toMatchObject({ ordering: "not_sold_separately" });
-    const referencedId = referencedBody.id;
     // Omitting ordering preserves the column default.
     const omitted = await send(app, "POST", "/management-api/products", {
       body: {
@@ -2739,83 +2630,74 @@ describe("mountCatalogueApi — products", () => {
     });
     expect(omitted.status).toBe(201);
     expect((await omitted.json()) as { ordering: string }).toMatchObject({ ordering: "public" });
-    const patched = await send(app, "PATCH", `/management-api/products/${referencedId}`, {
-      body: { ordering: "staff_only" },
-    });
-    expect(patched.status).toBe(204);
-    const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
-    const row = ((await list.json()) as { id: string; ordering: string }[]).find(
-      (r) => r.id === referencedId,
-    )!;
-    expect(row).toMatchObject({ ordering: "staff_only" });
   });
 
-  describe.each([
-    ["POST", "/management-api/products"],
-    ["PATCH", "/management-api/products/:id"],
-  ] as const)("%s /management-api/products", (method, template) => {
-    async function sendOrdering(fields: Record<string, unknown>) {
-      const app = mountApp();
-      const catalogueId = await createCatalogueVia(app, `Bad-ordering ${method} catalogue`);
-      const created = await send(app, "POST", "/management-api/products", {
-        body: {
-          catalogueId,
-          categoryId: null,
-          name: "Base",
-          pricingUnit: "each",
-          unitPrice: "1.00",
-          vatClass: "general",
+  describe.each([["POST", "/management-api/products"]] as const)(
+    "%s /management-api/products",
+    (method, template) => {
+      async function sendOrdering(fields: Record<string, unknown>) {
+        const app = mountApp();
+        const catalogueId = await createCatalogueVia(app, `Bad-ordering ${method} catalogue`);
+        const created = await send(app, "POST", "/management-api/products", {
+          body: {
+            catalogueId,
+            categoryId: null,
+            name: "Base",
+            pricingUnit: "each",
+            unitPrice: "1.00",
+            vatClass: "general",
+          },
+        });
+        const productId = ((await created.json()) as { id: string }).id;
+        const path = template.replace(":id", productId);
+        const body =
+          method === "POST"
+            ? {
+                catalogueId,
+                categoryId: null,
+                name: "Malformado",
+                pricingUnit: "each",
+                unitPrice: "1.00",
+                vatClass: "general",
+                ...fields,
+              }
+            : fields;
+        const res = await send(app, method, path, { body });
+        const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+        return { res, products: (await list.json()) as { name: string; ordering: string }[] };
+      }
+
+      it.each(["secret", "Public", "", true, null, 1])(
+        "rejects the ordering %j → management.request_invalid 400, writing nothing",
+        async (ordering) => {
+          const { res, products } = await sendOrdering({ ordering });
+          expect(res.status).toBe(400);
+          expect(
+            (await res.json()) as { error: { code: string; params: { field: string } } },
+          ).toMatchObject({
+            error: { code: "management.request_invalid", params: { field: "ordering" } },
+          });
+          expect(products.map(({ name, ordering }) => ({ name, ordering }))).toEqual([
+            { name: "Base", ordering: "public" },
+          ]);
         },
-      });
-      const productId = ((await created.json()) as { id: string }).id;
-      const path = template.replace(":id", productId);
-      const body =
-        method === "POST"
-          ? {
-              catalogueId,
-              categoryId: null,
-              name: "Malformado",
-              pricingUnit: "each",
-              unitPrice: "1.00",
-              vatClass: "general",
-              ...fields,
-            }
-          : fields;
-      const res = await send(app, method, path, { body });
-      const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
-      return { res, products: (await list.json()) as { name: string; ordering: string }[] };
-    }
+      );
 
-    it.each(["secret", "Public", "", true, null, 1])(
-      "rejects the ordering %j → management.request_invalid 400, writing nothing",
-      async (ordering) => {
-        const { res, products } = await sendOrdering({ ordering });
-        expect(res.status).toBe(400);
-        expect(
-          (await res.json()) as { error: { code: string; params: { field: string } } },
-        ).toMatchObject({
-          error: { code: "management.request_invalid", params: { field: "ordering" } },
-        });
-        expect(products.map(({ name, ordering }) => ({ name, ordering }))).toEqual([
-          { name: "Base", ordering: "public" },
-        ]);
-      },
-    );
-
-    // `ordering` replaced it; ignoring it would tell a caller still sending it that it was saved.
-    it.each([true, false])(
-      "rejects the retired soldAlone (%j) → management.request_invalid 400",
-      async (soldAlone) => {
-        const { res } = await sendOrdering({ soldAlone });
-        expect(res.status).toBe(400);
-        expect(
-          (await res.json()) as { error: { code: string; params: { field: string } } },
-        ).toMatchObject({
-          error: { code: "management.request_invalid", params: { field: "soldAlone" } },
-        });
-      },
-    );
-  });
+      // `ordering` replaced it; ignoring it would tell a caller still sending it that it was saved.
+      it.each([true, false])(
+        "rejects the retired soldAlone (%j) → management.request_invalid 400",
+        async (soldAlone) => {
+          const { res } = await sendOrdering({ soldAlone });
+          expect(res.status).toBe(400);
+          expect(
+            (await res.json()) as { error: { code: string; params: { field: string } } },
+          ).toMatchObject({
+            error: { code: "management.request_invalid", params: { field: "soldAlone" } },
+          });
+        },
+      );
+    },
+  );
 
   it("POST /management-api/products with a missing required field → management.request_invalid 400", async () => {
     const app = mountApp();
@@ -2938,165 +2820,6 @@ describe("mountCatalogueApi — products", () => {
       error: { code: "management.request_invalid", params: { field: "dietOverride" } },
     });
   });
-
-  it("PATCH /management-api/products/:id with a bad dietOverride label → diet.invalid_label 400", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Patch-diet catalogue");
-    const created = await send(app, "POST", "/management-api/products", {
-      body: {
-        catalogueId,
-        categoryId: null,
-        name: "x",
-        pricingUnit: "each",
-        unitPrice: "1.00",
-        vatClass: "general",
-      },
-    });
-    const productId = ((await created.json()) as { id: string }).id;
-    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { dietOverride: { vegetarian: "perhaps" } },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "diet.invalid_label" },
-    });
-  });
-
-  it("PATCH /management-api/products/:id updates unitPrice / active / image (204 each)", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Patchable catalogue");
-    const createRes = await send(app, "POST", "/management-api/products", {
-      body: {
-        catalogueId,
-        categoryId: null,
-        name: "Editar",
-        pricingUnit: "each",
-        unitPrice: "2.00",
-        vatClass: "general",
-        image: "before.png",
-      },
-    });
-    const productId = ((await createRes.json()) as { id: string }).id;
-
-    for (const patch of [{ unitPrice: "3.50" }, { active: false }, { image: null }]) {
-      const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-        body: patch,
-      });
-      expect(res.status).toBe(204);
-    }
-
-    // Read the product back through the list route: the three patches landed.
-    const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
-    const row = (
-      (await list.json()) as {
-        id: string;
-        unitPrice: string;
-        active: boolean;
-        image: string | null;
-      }[]
-    ).find((r) => r.id === productId)!;
-    expect(row).toMatchObject({ unitPrice: "3.50", active: false, image: null });
-  });
-
-  it("PATCH /management-api/products/:id sets the customer-facing name and clears it with null", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Customer-name catalogue");
-    const createRes = await send(app, "POST", "/management-api/products", {
-      body: {
-        catalogueId,
-        categoryId: null,
-        name: "Café solo",
-        pricingUnit: "each",
-        unitPrice: "1.00",
-        vatClass: "general",
-      },
-    });
-    const productId = ((await createRes.json()) as { id: string }).id;
-    const readBack = async (): Promise<{ name: string; customerName: unknown }> => {
-      const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
-      return ((await list.json()) as { id: string; name: string; customerName: unknown }[]).find(
-        (r) => r.id === productId,
-      )!;
-    };
-    // Created without one: the staff name is what a receipt would fall back to.
-    expect(await readBack()).toMatchObject({ name: "Café solo", customerName: null });
-
-    const set = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { customerName: { es: "Café recién molido" } },
-    });
-    expect(set.status).toBe(204);
-    expect(await readBack()).toMatchObject({
-      name: "Café solo",
-      customerName: { es: "Café recién molido" },
-    });
-
-    // Explicit null clears it back to "no customer name", leaving the staff name untouched.
-    const cleared = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { customerName: null },
-    });
-    expect(cleared.status).toBe(204);
-    expect(await readBack()).toMatchObject({ name: "Café solo", customerName: null });
-
-    // A customer name with no text in the venue's default content language is a translation gap,
-    // not a clear.
-    const partial = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { customerName: { fr: "Café frais" } },
-    });
-    expect(partial.status).toBe(400);
-    expect(await partial.json()).toMatchObject({
-      error: { code: "content.translation_required" },
-    });
-    expect(await readBack()).toMatchObject({ customerName: null });
-  });
-
-  it("PATCH /management-api/products/:id with a non-uuid id → shared.invalid_id 400", async () => {
-    const res = await send(mountApp(), "PATCH", "/management-api/products/not-a-uuid", {
-      body: { unitPrice: "1.00" },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
-
-  it("PATCH /management-api/products/:id naming no stored product → authorization.not_permitted 403", async () => {
-    // The refusal is the pre-read's alone: for this price-only patch, `updateProduct` reports
-    // nothing when no row matches.
-    const res = await send(
-      mountApp(),
-      "PATCH",
-      `/management-api/products/11111111-1111-4111-8111-111111111111`,
-      { body: { unitPrice: "1.00" } },
-    );
-    expect(res.status).toBe(403);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "authorization.not_permitted" },
-    });
-  });
-
-  it("PATCH /management-api/products/:id with a bad allergen map → allergen.* 400", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Patch-allergen catalogue");
-    const createRes = await send(app, "POST", "/management-api/products", {
-      body: {
-        catalogueId,
-        categoryId: null,
-        name: "Editar alérgeno",
-        pricingUnit: "each",
-        unitPrice: "2.00",
-        vatClass: "general",
-      },
-    });
-    const productId = ((await createRes.json()) as { id: string }).id;
-
-    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { allergens: { notacode: { presence: "contains" } } },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "allergen.invalid_code" },
-    });
-  });
 });
 
 const DUMMY_UUID = "00000000-0000-0000-0000-000000000000";
@@ -3148,106 +2871,9 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       error: { code: "product.invalid", params: { field: "pricingUnit" } },
     });
   });
-
-  it.each([
-    ["name", { name: 123 }],
-    ["name", { name: "   " }],
-    ["customerName", { customerName: "nope" }],
-    ["customerName", { customerName: ["arr"] }],
-    ["unitPrice", { unitPrice: 5 }],
-    ["vatClass", { vatClass: 5 }],
-    ["pricingUnit", { pricingUnit: 5 }],
-    ["categoryId", { categoryId: 5 }],
-    ["image", { image: 5 }],
-    ["active", { active: "yes" }],
-    ["available", { available: "yes" }],
-  ])(
-    "PATCH /products/:id rejects a wrong-typed %s → management.request_invalid 400",
-    async (field, body) => {
-      const res = await send(mountApp(), "PATCH", `/management-api/products/${DUMMY_UUID}`, {
-        body,
-      });
-      expect(res.status).toBe(400);
-      expect(
-        (await res.json()) as { error: { code: string; params: { field: string } } },
-      ).toMatchObject({ error: { code: "management.request_invalid", params: { field } } });
-    },
-  );
-
-  it("PATCH /products/:id applies name/vatClass/pricingUnit/categoryId/image (204) and they land", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Full-patch catalogue");
-    const catRes = await send(app, "POST", "/management-api/categories", {
-      body: { name: "Tapas" },
-    });
-    const categoryId = ((await catRes.json()) as { id: string }).id;
-    const createRes = await send(app, "POST", "/management-api/products", {
-      body: {
-        catalogueId,
-        categoryId: null,
-        name: "antes",
-        pricingUnit: "each",
-        unitPrice: "1.00",
-        vatClass: "general",
-      },
-    });
-    const productId = ((await createRes.json()) as { id: string }).id;
-
-    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: {
-        name: "después",
-        vatClass: "reduced",
-        pricingUnit: "weight",
-        categoryId,
-        image: "pic.png",
-      },
-    });
-    expect(res.status).toBe(204);
-
-    const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
-    const row = (
-      (await list.json()) as {
-        id: string;
-        name: string;
-        vatClass: string;
-        pricingUnit: string;
-        categoryId: string | null;
-        primaryCategoryId: string | null;
-        image: string | null;
-      }[]
-    ).find((r) => r.id === productId)!;
-    expect(row).toMatchObject({
-      name: "después",
-      vatClass: "reduced",
-      pricingUnit: "weight",
-      categoryId,
-      primaryCategoryId: categoryId,
-      image: "pic.png",
-    });
-  });
-
-  it("PATCH /products/:id with an empty body is a 204 no-op", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Empty-patch catalogue");
-    const createRes = await send(app, "POST", "/management-api/products", {
-      body: {
-        catalogueId,
-        categoryId: null,
-        name: "sin cambios",
-        pricingUnit: "each",
-        unitPrice: "1.00",
-        vatClass: "general",
-      },
-    });
-    const productId = ((await createRes.json()) as { id: string }).id;
-    const res = await send(app, "PATCH", `/management-api/products/${productId}`, { body: {} });
-    expect(res.status).toBe(204);
-  });
 });
 
 describe("mountCatalogueApi — null request bodies map to the route's own 4xx, never a 500", () => {
-  // `readJsonBody` turns a literal `null` body into `{}`, so each write route answers its own 4xx
-  // (or, for PATCH, the empty-body 204).
   it("POST /catalogues null body → 400 management.request_invalid", async () => {
     const res = await send(mountApp(), "POST", "/management-api/catalogues", { body: null });
     expect(res.status).toBe(400);
@@ -3271,18 +2897,9 @@ describe("mountCatalogueApi — null request bodies map to the route's own 4xx, 
     });
   });
 
-  it("PATCH /products/:id null body → 204 no-op", async () => {
-    const app = mountApp();
-    const productId = await createProductVia(app, await createCatalogueVia(app, "Null body"));
-    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: null,
-    });
-    expect(res.status).toBe(204);
-  });
-
   // `readJsonBody` coerces a malformed body to `{}` too. Sent raw — `send` would JSON.stringify a
   // valid body.
-  it("POST /products and PATCH /products/:id with a malformed body → 400 / 204 (never a 500)", async () => {
+  it("POST /products with a malformed body → 400 (never a 500)", async () => {
     const app = mountApp();
     const headers = { "content-type": "application/json", cookie: managerCookie };
 
@@ -3297,16 +2914,16 @@ describe("mountCatalogueApi — null request bodies map to the route's own 4xx, 
     ).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "catalogueId" } },
     });
-
-    const productId = await createProductVia(app, await createCatalogueVia(app, "Malformed body"));
-    const patch = await app.request(`/management-api/products/${productId}`, {
-      method: "PATCH",
-      headers,
-      body: "{ not json",
-    });
-    expect(patch.status).toBe(204);
   });
 });
+
+async function saveEditorFixture(app: Hono, productId: string, changes: Record<string, unknown>) {
+  const read = await send(app, "GET", `/management-api/products/${productId}/editor`);
+  expect(read.status).toBe(200);
+  return send(app, "PUT", `/management-api/products/${productId}/editor`, {
+    body: { ...(await read.json()), ...changes },
+  });
+}
 
 async function createProductVia(app: Hono, catalogueId: string): Promise<string> {
   const res = await send(app, "POST", "/management-api/products", {
@@ -3416,45 +3033,6 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
     expect(await readModifiers(app, catalogueId, created.id)).toEqual(created.modifiers);
   });
 
-  it("PATCH /products/:id with modifiers re-orders and detaches (the attach is a full replace)", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Reorder menu");
-    const a = await createOptionsListVia(app, { name: "A", labels: [{ name: "a1" }] });
-    const b = await createOptionsListVia(app, { name: "B", labels: [{ name: "b1" }] });
-    const productId = await createProductVia(app, catalogueId);
-    const ref = (id: string) => ({ kind: "options", id });
-
-    for (const wanted of [[ref(a.id), ref(b.id)], [ref(b.id), ref(a.id)], [ref(b.id)], []]) {
-      const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-        body: { modifiers: wanted },
-      });
-      expect(res.status).toBe(204);
-      expect(await readModifiers(app, catalogueId, productId)).toEqual(wanted);
-    }
-  });
-
-  it("PATCH /products/:id refuses a repeated attachment rather than colliding in the insert", async () => {
-    // A repeat is REFUSED, not collapsed: `product.invalid` naming the entry, so the caller is told
-    // rather than quietly saved something it did not send.
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Dupe attach menu");
-    const a = await createOptionsListVia(app, { name: "Repetida", labels: [{ name: "a1" }] });
-    const productId = await createProductVia(app, catalogueId);
-    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: {
-        modifiers: [
-          { kind: "options", id: a.id },
-          { kind: "options", id: a.id },
-        ],
-      },
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "product.invalid", params: { field: "modifiers.1.id" } },
-    });
-    expect(await readModifiers(app, catalogueId, productId)).toEqual([]);
-  });
-
   it("POST /products refuses an attachment naming no stored list", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Lista inexistente");
@@ -3534,32 +3112,24 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
     },
   );
 
-  it.each(["POST", "PATCH"])(
+  it.each(["POST"])(
     "%s /products rejects a malformed uuid in modifiers → shared.invalid_id 400",
     async (method) => {
       // Same treatment `requireUuidParam` gives a path id.
       const app = mountApp();
       const catalogueId = await createCatalogueVia(app, `Bad uuid attach ${method}`);
       const modifiers = [{ kind: "extras", id: "not-a-uuid" }];
-      const res =
-        method === "POST"
-          ? await send(app, "POST", "/management-api/products", {
-              body: {
-                catalogueId,
-                categoryId: null,
-                name: "x",
-                pricingUnit: "each",
-                unitPrice: "1.00",
-                vatClass: "general",
-                modifiers,
-              },
-            })
-          : await send(
-              app,
-              "PATCH",
-              `/management-api/products/${await createProductVia(app, catalogueId)}`,
-              { body: { modifiers } },
-            );
+      const res = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId,
+          categoryId: null,
+          name: "x",
+          pricingUnit: "each",
+          unitPrice: "1.00",
+          vatClass: "general",
+          modifiers,
+        },
+      });
       expect(res.status).toBe(400);
       expect((await res.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "shared.invalid_id" },
@@ -3624,10 +3194,10 @@ describe("mountCatalogueApi — option lists", () => {
     const app = mountApp();
     const list = await createListVia(app, { ...doneness(), name: "Lista listada" });
     const productId = await createNamedProductVia(app, `Filete ${crypto.randomUUID()}`);
-    const attached = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { modifiers: [{ kind: "options", id: list.id }] },
+    const attached = await saveEditorFixture(app, productId, {
+      modifiers: [{ kind: "options", id: list.id }],
     });
-    expect(attached.status).toBe(204);
+    expect(attached.status).toBe(200);
     const res = await send(app, "GET", "/management-api/modifiers/options");
     expect(res.status).toBe(200);
     const { optionLists } = (await res.json()) as { optionLists: OptionListRow[] };
@@ -3857,10 +3427,10 @@ describe("mountCatalogueApi — extras lists", () => {
     const [alioli] = await twoProducts(app);
     const list = await createListVia(app, { ...sauces([alioli]), name: "Lista listada" });
     const productId = await createNamedProductVia(app, `Patatas ${crypto.randomUUID()}`);
-    const attached = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { modifiers: [{ kind: "extras", id: list.id }] },
+    const attached = await saveEditorFixture(app, productId, {
+      modifiers: [{ kind: "extras", id: list.id }],
     });
-    expect(attached.status).toBe(204);
+    expect(attached.status).toBe(200);
     const res = await send(app, "GET", "/management-api/modifiers/extras");
     expect(res.status).toBe(200);
     const { extraLists } = (await res.json()) as { extraLists: ExtraListRow[] };
@@ -4062,10 +3632,10 @@ describe("mountCatalogueApi — extras lists", () => {
     const list = await createListVia(app, { ...sauces([alioli]), name: "Lista con dependientes" });
     const catalogueId = await createCatalogueVia(app, "Menú con extras");
     const productId = await createProductVia(app, catalogueId);
-    const attached = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { modifiers: [{ kind: "extras", id: list.id }] },
+    const attached = await saveEditorFixture(app, productId, {
+      modifiers: [{ kind: "extras", id: list.id }],
     });
-    expect(attached.status).toBe(204);
+    expect(attached.status).toBe(200);
     const res = await send(app, "GET", `/management-api/modifiers/extras/${list.id}/dependants`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -4197,12 +3767,6 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
       error: { code: "product.offered_as_extra", params: { field: "active", extraLists } },
     });
 
-    // The product PATCH route refuses a variant's id before it writes anything.
-    const patched = await send(app, "PATCH", `/management-api/products/${variantId}`, {
-      body: { active: true },
-    });
-    expect(patched.status).toBe(403);
-    expect(await patched.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     expect(
       (await suite.db.execute(sql`select active from products where id = ${variantId}`)).rows,
     ).toEqual([{ active: 0 }]);
@@ -4594,13 +4158,7 @@ describe("publishing a menu", () => {
       const version = (await published.json()) as { versionId: string; number: number };
       const current = await preview(app, menuId);
       expect(current.live).toEqual({ versionId: version.versionId, document: initial.document });
-      expect(
-        (
-          await send(app, "PATCH", `/management-api/products/${productId}`, {
-            body: { unitPrice: "3.75" },
-          })
-        ).status,
-      ).toBe(204);
+      expect((await saveEditorFixture(app, productId, { unitPrice: "3.75" })).status).toBe(200);
       const updated = await preview(app, menuId);
       expect(updated.live).toEqual(current.live);
       expect(updated.hash).not.toBe(current.hash);
@@ -4920,40 +4478,6 @@ describe("a negative price is refused at the catalogue request boundary", () => 
         })
       ).status,
     ).toBe(201);
-  });
-
-  it("PATCH /management-api/products/:id refuses a negative unitPrice and leaves the price alone", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Negative patch catalogue");
-    const created = await send(app, "POST", "/management-api/products", {
-      body: {
-        catalogueId,
-        categoryId: null,
-        name: "Precio bueno",
-        pricingUnit: "each",
-        unitPrice: "2.00",
-        vatClass: "general",
-      },
-    });
-    const productId = ((await created.json()) as { id: string }).id;
-    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { unitPrice: "-1.00" },
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "unitPrice" } },
-    });
-    const rows = (await (
-      await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`)
-    ).json()) as { id: string; unitPrice: string }[];
-    expect(rows.find((r) => r.id === productId)?.unitPrice).toBe("2.00");
-    expect(
-      (
-        await send(app, "PATCH", `/management-api/products/${productId}`, {
-          body: { unitPrice: "0.00" },
-        })
-      ).status,
-    ).toBe(204);
   });
 
   it("the menu-item write refuses a negative grossPrice with a 400, not a 500", async () => {

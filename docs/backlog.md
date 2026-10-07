@@ -928,9 +928,9 @@ unused `units` property is gone (it closes W75's leftover).
   Colour… and Change photo… is gone. A product's colour is set in that dialog. The product colour
   dialog (`product-color-form.ts`), which only that menu opened, is retired with the dashboard
   client's `setProductColor`.
-  - Open: `PATCH /management-api/products/:id` (`apps/server/src/catalogue-api.ts`) now has no
-    caller in `apps/` outside tests; the dashboard's `setProductColor` was its only one. Deleting
-    the route, or keeping it on purpose, is not decided.
+  - A358 — DONE: retired `PATCH /management-api/products/:id` and its ownership helper. Product
+    edits use the existing editor save route. Modifier-usage and frozen menu-preview fixtures
+    now save through that editor; their stored-content assertions remain.
   - Open: `wt-row-actions` (`packages/ui/src/components/wt-row-actions.ts`) keeps the `disabled`
     property and the `trigger` slot and part that A303 added for the retired menu. Nothing outside
     its own tests uses them now, and those tests still name Colour… and Change photo…. Retiring
