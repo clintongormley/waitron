@@ -75,6 +75,7 @@ export class WtDialog extends LitElement {
       h2 {
         margin: 0 0 var(--wt-space-3);
         font-size: var(--wt-font-size-lg);
+        overflow-wrap: anywhere;
       }
 
       .description {

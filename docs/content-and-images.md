@@ -120,7 +120,7 @@ Editing this shared record changes the metadata wherever that photograph is reus
 
 **Remove image** clears the association when you save. On a product's or a variant's own page it is
 at the bottom of the library window the photo opens, shown when there is a photo of its own; in a
-variant's small window it sits beside **Choose image**, shown when there is a photo. The photograph
+variant's small window it sits beside **Choose image** whenever a photo is shown, and is greyed out while that photo is the main product's, because the variant has no photo of its own to remove. The photograph
 stays in the library for your other products.
 
 To remove the photograph itself, choose **Delete** in the library and confirm. If any product,

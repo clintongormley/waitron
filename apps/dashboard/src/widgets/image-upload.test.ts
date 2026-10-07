@@ -162,10 +162,64 @@ describe("image-upload", () => {
       expect(inherited.getAttribute("src")).toBe("/media/parent.png");
       expect(inherited.alt).toBe(t("editor.inherited_image_alt"));
       expect(el.shadowRoot!.querySelector("[data-test=inherited-hint]")).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
     },
   );
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "shows Remove disabled beside the inherited photo, with its reason for a screen reader, in %s",
+    async (locale) => {
+      setLocale(locale);
+      const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+        api: stubApi(),
+        inheritedImage: "parent.png",
+      });
+      const changed = vi.fn();
+      el.addEventListener("image-changed", changed);
+      const remove = el.shadowRoot!.querySelector<
+        HTMLElement & { disabled: boolean; updateComplete: Promise<unknown> }
+      >("[data-test=remove-image]")!;
+      await remove.updateComplete;
+      expect(remove.textContent!.trim()).toBe(t("image.remove"));
+      expect(remove.disabled).toBe(true);
+      expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+      const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-image-hint]")!;
+      expect(hint.textContent!.trim()).toBe(t("image.remove_inherited_hint"));
+      expect(hint.textContent!.trim()).toBe(
+        locale === "en-GB" ? "Uses the product's image" : "Usa la imagen del producto",
+      );
+      // Read straight after the button, and drawn nowhere: the inherited photo carries no caption.
+      expect(remove.nextElementSibling).toBe(hint);
+      expect(hint.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+      remove.click();
+      remove.shadowRoot!.querySelector("button")!.click();
+      await el.updateComplete;
+      expect(changed).not.toHaveBeenCalled();
+      expect(el.image).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=inherited-preview]")).not.toBeNull();
+    },
+  );
+
+  it("lays Remove for an inherited photo out where Remove sits for a photo of the variant's own", async () => {
+    const place = async (props: Partial<ImageUpload>) => {
+      const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+        api: stubApi(),
+        ...props,
+      });
+      const box = el.shadowRoot!.querySelector("[data-test=remove-image]")!.getBoundingClientRect();
+      cleanupWidgets();
+      return { left: box.left, top: box.top, width: box.width, height: box.height };
+    };
+    expect(await place({ inheritedImage: "parent.png" })).toEqual(
+      await place({ image: "own.png" }),
+    );
+  });
+
+  it("offers no Remove and no reason when there is no photo at all", async () => {
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api: stubApi() });
+    expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=remove-image-hint]")).toBeNull();
+  });
 
   it("drops the inherited photo once the variant has one of its own", async () => {
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
@@ -178,6 +232,11 @@ describe("image-upload", () => {
     expect(el.shadowRoot!.querySelector("[data-test=preview]")!.getAttribute("src")).toBe(
       "/media/own.png",
     );
+    const remove = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-test=remove-image]",
+    )!;
+    expect(remove.disabled).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=remove-image-hint]")).toBeNull();
   });
 
   it("marks Choose image invalid in the danger colour, where focusFirstInvalid finds it", async () => {

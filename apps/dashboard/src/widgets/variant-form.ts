@@ -45,6 +45,8 @@ export class VariantForm extends LitElement {
   @property({ attribute: false }) draftParent?: object;
   @property({ attribute: false }) locales: string[] = [];
   @property({ attribute: false }) value: ProductEditorVariant | null = null;
+  /** The product's staff name as its form holds it now, saved or not; blank leaves the plain heading. */
+  @property({ attribute: false }) productName = "";
   @property() unitLabel = "";
   /** The product's price, which a blank price sells at. */
   @property() basePrice = "";
@@ -220,6 +222,15 @@ export class VariantForm extends LitElement {
     ></dashboard-image-upload>`;
   }
 
+  #heading(): string {
+    const product = this.productName.trim();
+    if (!product) return t(this.value ? "editor.edit_variant" : "editor.add_variant");
+    return t(this.value ? "editor.edit_variant_of" : "editor.add_variant_to").replace(
+      "{name}",
+      () => product,
+    );
+  }
+
   override render() {
     const errors = this.attempted ? this.#validate() : {};
     const invalid = Object.keys(errors).length > 0;
@@ -229,7 +240,7 @@ export class VariantForm extends LitElement {
       .open=${this.open}
       .dismissible=${!this.busy}
       .beforeClose=${this.#scope ? this.#beforeClose : undefined}
-      heading=${this.value ? t("editor.edit_variant") : t("editor.add_variant")}
+      heading=${this.#heading()}
       @wt-close=${(event: Event) => {
         if (event.target !== event.currentTarget) return;
         event.stopPropagation();

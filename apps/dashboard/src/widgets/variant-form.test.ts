@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -182,6 +182,78 @@ it.each([
     }
   },
 );
+
+async function headingOf(el: VariantForm): Promise<HTMLElement> {
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  await modal.updateComplete;
+  return modal.shadowRoot!.querySelector<HTMLElement>("h2")!;
+}
+
+it.each([
+  { locale: "en-GB", editing: true, heading: "Edit variant of: Tortilla" },
+  { locale: "en-GB", editing: false, heading: "Add variant to: Tortilla" },
+  { locale: "es-ES", editing: true, heading: "Editar variante de: Tortilla" },
+  { locale: "es-ES", editing: false, heading: "Añadir variante a: Tortilla" },
+])(
+  "heads the window $heading in $locale, naming its product",
+  async ({ locale, editing, heading }) => {
+    setLocale(locale);
+    try {
+      const el = await mountForm({
+        value: editing ? halfPortion : null,
+        productName: "Tortilla",
+      });
+      expect((await headingOf(el)).textContent).toBe(heading);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("names the product exactly as typed, whatever characters it holds", async () => {
+  setLocale("en-GB");
+  try {
+    const el = await mountForm({ productName: "Caña $& tapa $1" });
+    expect((await headingOf(el)).textContent).toBe("Add variant to: Caña $& tapa $1");
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it.each(["", "   "])(
+  "keeps the plain heading while the product's name is blank (%j)",
+  async (productName) => {
+    setLocale("en-GB");
+    try {
+      const adding = await mountForm({ productName });
+      expect((await headingOf(adding)).textContent).toBe("Add variant");
+      cleanupWidgets();
+      const editing = await mountForm({ value: halfPortion, productName });
+      expect((await headingOf(editing)).textContent).toBe("Edit variant");
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("wraps a long product name onto more lines rather than widening the window at phone width", async () => {
+  await page.viewport(390, 844);
+  try {
+    const name = "Tortilla".repeat(12);
+    const el = await mountForm({ productName: name });
+    const heading = await headingOf(el);
+    const dialog = el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
+    expect(heading.textContent).toContain(name);
+    expect(dialog.getBoundingClientRect().width).toBeLessThanOrEqual(390);
+    expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
+    const body = dialog.querySelector<HTMLElement>(".body")!;
+    expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+    const fontSize = parseFloat(getComputedStyle(heading).fontSize);
+    expect(heading.getBoundingClientRect().height).toBeGreaterThan(fontSize * 2);
+  } finally {
+    await page.viewport(1280, 800);
+  }
+});
 
 it("refuses a blank name, explains it beside the field and above Save, and keeps the draft", async () => {
   const el = await mountForm({ value: halfPortion });
