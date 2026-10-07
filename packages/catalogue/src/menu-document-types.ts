@@ -156,7 +156,8 @@ export type MenuField =
         | "allergens"
         | "diet"
         | "vat"
-        | "ordering";
+        | "ordering"
+        | "direct";
     }
   | { kind: "variants" | "extras" | "options" }
   | { kind: "portion" | "maxQuantity" | "limits" | "default" | "members" };
@@ -267,7 +268,7 @@ export type ProductChangeField =
   | "extras"
   | "options";
 
-export type SectionChangeField = "names" | "image" | "color";
+export type SectionChangeField = "names" | "image" | "color" | "direct";
 
 export type MenuStatus =
   | { state: "unpublished"; clashes: number }

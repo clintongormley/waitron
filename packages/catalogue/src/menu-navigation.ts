@@ -480,28 +480,37 @@ export function navigateMenuChanges(
           }
         break;
       case "section_changed": {
-        const before = beforeOccurrences.find(
-          (t) => t.kind === "section" && t.sectionIds.at(-1) === change.sectionId,
-        );
-        const after = afterOccurrences.find(
-          (t) => t.kind === "section" && t.sectionIds.at(-1) === change.sectionId,
-        );
-        if (before?.kind !== "section" || after?.kind !== "section" || live === null) break;
-        const was = sectionAt(live, before.sectionIds),
-          node = sectionAt(proposed, after.sectionIds);
-        for (const field of change.fields) {
-          const changed =
-            field === "names"
-              ? changedNames(
-                  { name: was.internalName, customerName: was.names },
-                  { name: node.internalName, customerName: node.names },
-                )
-              : same(was[field], node[field])
-                ? { before: [], after: [] }
-                : { before: [{ kind: field }], after: [{ kind: field }] };
-          for (const side of ["before", "after"] as const)
-            for (const value of changed[side]) sections(side, change.sectionId, value as MenuField);
-        }
+        if (live === null) break;
+        const copies = (occurrences: readonly MenuTarget[]) =>
+          occurrences.flatMap((t) =>
+            t.kind === "section" && t.sectionIds.at(-1) === change.sectionId ? [t.sectionIds] : [],
+          );
+        const before = copies(beforeOccurrences),
+          after = copies(afterOccurrences);
+        const compare = (from: string[], to: string[], parent?: readonly string[]) => {
+          const was = sectionAt(live, from),
+            node = sectionAt(proposed, to);
+          for (const field of change.fields) {
+            const changed =
+              field === "names"
+                ? changedNames(
+                    { name: was.internalName, customerName: was.names },
+                    { name: node.internalName, customerName: node.names },
+                  )
+                : same(was[field], node[field])
+                  ? { before: [], after: [] }
+                  : { before: [{ kind: field }], after: [{ kind: field }] };
+            for (const side of ["before", "after"] as const)
+              for (const value of changed[side])
+                sections(side, change.sectionId, value as MenuField, parent);
+          }
+        };
+        const held = new Set(before.map((path) => JSON.stringify(path)));
+        const paired = after.filter((path) => held.has(JSON.stringify(path)));
+        for (const path of paired) compare(path, path, path.slice(0, -1));
+        // A section that moved holds no path it held before: its first copies are compared.
+        if (paired.length === 0 && before[0] !== undefined && after[0] !== undefined)
+          compare(before[0], after[0]);
         break;
       }
       case "price_changed":

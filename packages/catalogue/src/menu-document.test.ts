@@ -1798,6 +1798,156 @@ describe("an include shown as a folder or directly", () => {
     });
     expect(nested).not.toHaveProperty("direct");
   });
+
+  describe("diffMenuDocuments", () => {
+    const drinksChanged = (f: Awaited<ReturnType<typeof menusFixture>>) => ({
+      kind: "section_changed" as const,
+      sectionId: f.drinks,
+      name: "Drinks",
+    });
+    const fromDrinks = (f: Awaited<ReturnType<typeof menusFixture>>) => ({
+      source: "included_menu" as const,
+      includedMenu: { id: f.drinksMenu, name: "Drinks" },
+    });
+
+    it("switching an include to direct is one change this menu made, named direct", async () => {
+      const f = await menusFixture(fx.db);
+      const live = await build(f.lunch);
+      await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
+        showAsFolder: false,
+      });
+      expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
+        { ...drinksChanged(f), fields: ["direct"], source: "this_menu" },
+      ]);
+    });
+
+    it("fixing a folder name is this menu's change; renaming the included menu is the included menu's", async () => {
+      const f = await menusFixture(fx.db);
+      const memberId = await includeIn(f.lunch, f.lunchRoot, f.drinks);
+      const live = await build(f.lunch);
+      await setFolder(f.lunchRoot, memberId, {
+        showAsFolder: true,
+        overrides: { names: { en: "Bar" } },
+      });
+      const fixed = await build(f.lunch);
+      expect(changeBodies(diffMenuDocuments(live, fixed))).toEqual([
+        { ...drinksChanged(f), fields: ["names"], source: "this_menu" },
+      ]);
+      await app((tx) =>
+        updateMenuDetails(tx, f.drinksMenu, {
+          names: { en: "Something to drink", es: "Bebidas" },
+        }),
+      );
+      const renamed = await build(f.lunch);
+      expect(changeBodies(diffMenuDocuments(fixed, renamed))).toEqual([
+        { ...drinksChanged(f), fields: ["names"], ...fromDrinks(f) },
+      ]);
+      await setFolder(f.lunchRoot, memberId, {
+        showAsFolder: true,
+        overrides: { names: { en: "Bar" }, color: "#112233" },
+      });
+      await app((tx) =>
+        tx.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.drinks)),
+      );
+      expect(changeBodies(diffMenuDocuments(renamed, await build(f.lunch)))).toEqual([
+        { ...drinksChanged(f), fields: ["color"], source: "this_menu" },
+        { ...drinksChanged(f), fields: ["image"], ...fromDrinks(f) },
+      ]);
+    });
+
+    it("an include's names read back with their keys in another order are no change", async () => {
+      const f = await menusFixture(fx.db);
+      await app((tx) =>
+        updateMenuDetails(tx, f.drinksMenu, {
+          names: { en: "Something to drink", es: "Bebidas", fr: "Boissons" },
+        }),
+      );
+      await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
+        showAsFolder: true,
+        overrides: { names: { es: "Barra" } },
+      });
+      const document = await build(f.lunch);
+      expect(diffMenuDocuments(reversedKeys(document) as MenuDocument, document)).toEqual([]);
+    });
+
+    it("a change to the second include of the same menu is listed", async () => {
+      const f = await menusFixture(fx.db);
+      const bar = await app(async (tx) => {
+        const id = (
+          await createSectionIn(tx, f.lunchRoot, {
+            internalName: "Bar",
+            names: { en: "At the bar" },
+          })
+        ).id;
+        await addMember(tx, id, section(f.drinks));
+        return id;
+      });
+      const live = await build(f.lunch);
+      await setFolder(bar, await includeIn(f.lunch, bar, f.drinks), { showAsFolder: false });
+      expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
+        { ...drinksChanged(f), fields: ["direct"], source: "this_menu" },
+      ]);
+    });
+
+    it("a section renamed while its menu moved to another list is still named, at both paths", async () => {
+      const f = await menusFixture(fx.db);
+      const bar = await app(
+        async (tx) =>
+          (
+            await createSectionIn(tx, f.lunchRoot, {
+              internalName: "Bar",
+              names: { en: "At the bar" },
+            })
+          ).id,
+      );
+      const live = await build(f.lunch);
+      await app(async (tx) => {
+        await removeMember(tx, f.lunchRoot, await memberOf(f.lunchRoot, { sectionId: f.drinks }));
+        await addMember(tx, bar, section(f.drinks));
+        await updateSection(tx, f.beer, { names: { en: "Cold beers" } });
+      });
+      const changed = diffMenuDocuments(live, await build(f.lunch)).filter(
+        (change) => change.kind === "section_changed",
+      );
+      expect(changeBodies(changed)).toEqual([
+        {
+          kind: "section_changed",
+          sectionId: f.beer,
+          name: "Beer",
+          fields: ["names"],
+          ...fromDrinks(f),
+        },
+      ]);
+      const customerName = { kind: "name", audience: "customer", language: "en" };
+      expect(changed[0]!.targets).toEqual({
+        before: [{ kind: "section", sectionIds: [f.drinks, f.beer], field: customerName }],
+        after: [{ kind: "section", sectionIds: [bar, f.drinks, f.beer], field: customerName }],
+      });
+    });
+
+    it("an include's setting changed inside an included menu is that menu's change", async () => {
+      const f = await menusFixture(fx.db);
+      const wineRoot = await app(async (tx) => {
+        const wine = await createCatalogue(tx, { name: "Wine", names: { en: "Something red" } });
+        const root = (await readMenuStructure(tx, wine.id)).rootSectionId;
+        await addMember(tx, root, product(f.burger));
+        await addMember(tx, f.drinks, section(root));
+        return root;
+      });
+      const lunch = await build(f.lunch);
+      const drinks = await build(f.drinksMenu);
+      await setFolder(f.drinks, await includeIn(f.drinksMenu, f.drinks, wineRoot), {
+        showAsFolder: false,
+      });
+      const wineChanged = { kind: "section_changed", sectionId: wineRoot, name: "Wine" };
+      expect(changeBodies(diffMenuDocuments(lunch, await build(f.lunch)))).toEqual([
+        { ...wineChanged, fields: ["direct"], ...fromDrinks(f) },
+      ]);
+      expect(changeBodies(diffMenuDocuments(drinks, await build(f.drinksMenu)))).toEqual([
+        { ...wineChanged, fields: ["direct"], source: "this_menu" },
+      ]);
+    });
+  });
 });
 
 function changeBodies(changes: readonly MenuChange[]): MenuChangeBody[] {

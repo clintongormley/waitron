@@ -591,6 +591,8 @@ interface Shape {
   document: MenuDocument;
   /** Each section in menu order, with every path of section ids to a list holding it. */
   sections: Map<string, { node: SectionNode; parents: string[][] }>;
+  /** Every copy of every section, by the path of section ids ending at it. */
+  copies: Map<string, SectionNode>;
   /** Each offer in menu order, by product id. */
   offers: Map<string, FrozenOffer>;
   /** Each extras item's product, at its first appearance. */
@@ -602,6 +604,7 @@ type FrozenExtraItemFacts = Extract<FrozenOfferedModifier, { kind: "extras" }>["
 
 function shapeOf(document: MenuDocument): Shape {
   const sections = new Map<string, { node: SectionNode; parents: string[][] }>();
+  const copies = new Map<string, SectionNode>();
   const walk = (members: readonly DocumentMember[], path: string[]): void => {
     for (const member of members) {
       if (member.kind !== "section") continue;
@@ -609,6 +612,7 @@ function shapeOf(document: MenuDocument): Shape {
       const known = sections.get(member.sectionId);
       if (known !== undefined) known.parents.push(path);
       else sections.set(member.sectionId, { node: member, parents: [path] });
+      copies.set(pathKey([...path, member.sectionId]), member);
       walk(member.members, [...path, member.sectionId]);
     }
   };
@@ -630,7 +634,7 @@ function shapeOf(document: MenuDocument): Shape {
             item,
           });
         }
-  return { document, sections, offers, extras, extraItemsByList };
+  return { document, sections, copies, offers, extras, extraItemsByList };
 }
 
 /** Products that disappeared from this menu's extras and were not dishes in its live version. */
@@ -665,6 +669,47 @@ function listSource(
       if (includedMenu !== undefined) return { source: "included_menu", section, includedMenu };
     }
   return { source: "this_menu" };
+}
+
+const SECTION_FIELD_ORDER: readonly SectionChangeField[] = ["names", "image", "color", "direct"];
+
+/**
+ * The fields that differ between two copies of a section at one path, each with the path whose
+ * source it takes. What an include fixes, and whether it is shown directly, is the change of the
+ * list holding it; a name, photo or colour it follows is the included menu's.
+ */
+function changedSectionFields(
+  was: SectionNode,
+  node: SectionNode,
+  parent: readonly string[],
+): { field: SectionChangeField; path: readonly string[] }[] {
+  const own = [...parent, node.sectionId];
+  if (node.includedMenu === undefined)
+    return [
+      ...(was.internalName !== node.internalName || !same(was.names, node.names)
+        ? [{ field: "names" as const, path: own }]
+        : []),
+      ...(was.image !== node.image ? [{ field: "image" as const, path: own }] : []),
+      ...(was.color !== node.color ? [{ field: "color" as const, path: own }] : []),
+    ];
+  const before = was.fixed ?? {},
+    after = node.fixed ?? {};
+  const changes: { field: SectionChangeField; path: readonly string[] }[] = [];
+  if (!same(before.names, after.names)) changes.push({ field: "names", path: parent });
+  const fixedLanguages = new Set([
+    ...Object.keys(before.names ?? {}),
+    ...Object.keys(after.names ?? {}),
+  ]);
+  const followed = (names: Record<string, string>) =>
+    Object.fromEntries(Object.entries(names).filter(([language]) => !fixedLanguages.has(language)));
+  if (was.internalName !== node.internalName || !same(followed(was.names), followed(node.names)))
+    changes.push({ field: "names", path: own });
+  for (const field of ["image", "color"] as const)
+    if (!same(before[field], after[field])) changes.push({ field, path: parent });
+    else if (after[field] === undefined && was[field] !== node[field])
+      changes.push({ field, path: own });
+  if (was.direct !== node.direct) changes.push({ field: "direct", path: parent });
+  return changes;
 }
 
 const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
@@ -863,29 +908,43 @@ export function diffEntries(
         );
       }
   }
-  for (const [sectionId, { node }] of next.sections) {
-    const was = prev.sections.get(sectionId)?.node;
-    if (was === undefined) continue;
-    const fields: SectionChangeField[] = [];
-    if (was.internalName !== node.internalName || !same(was.names, node.names))
-      fields.push("names");
-    if (was.image !== node.image) fields.push("image");
-    if (was.color !== node.color) fields.push("color");
-    if (fields.length > 0)
+  for (const [sectionId, { node, parents }] of next.sections) {
+    const first = prev.sections.get(sectionId)?.node;
+    if (first === undefined) continue;
+    const pairs = parents.flatMap((parent) => {
+      const key = pathKey([...parent, sectionId]);
+      const was = prev.copies.get(key);
+      return was === undefined ? [] : [{ was, now: next.copies.get(key)!, parent }];
+    });
+    // A section that moved holds no path it held before; comparing its first copies keeps a
+    // change made with the move listed.
+    if (pairs.length === 0) pairs.push({ was: first, now: node, parent: parents[0]! });
+    const bySource = new Map<
+      MenuChangeSource,
+      { fields: Set<SectionChangeField>; includedMenu?: { id: string; name: string } }
+    >();
+    for (const { was, now, parent } of pairs)
+      for (const { field, path } of changedSectionFields(was, now, parent)) {
+        const { source, includedMenu } = listSource(path, next, prev);
+        const found = bySource.get(source) ?? { fields: new Set(), includedMenu };
+        bySource.set(source, found);
+        found.fields.add(field);
+      }
+    for (const source of ["this_menu", "included_menu"] as const) {
+      const found = bySource.get(source);
+      if (found === undefined) continue;
       push(
         {
           kind: "section_changed",
           sectionId,
           name: node.internalName,
-          fields,
-          source: listSource(
-            [...(next.sections.get(sectionId)?.parents[0] ?? []), sectionId],
-            next,
-            prev,
-          ).source,
+          fields: SECTION_FIELD_ORDER.filter((field) => found.fields.has(field)),
+          source,
+          ...(found.includedMenu === undefined ? {} : { includedMenu: found.includedMenu }),
         },
         sectionId,
       );
+    }
   }
 
   for (const [productId, was] of prev.offers) {
