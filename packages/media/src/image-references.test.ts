@@ -28,9 +28,10 @@ import { mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**
- * `products.image`, `sections.image` and `menu_version_images.filename` may only name a photo
- * that exists, and a photo one of the first two still names cannot be deleted or renamed. Nor can a
- * photo a LIVE menu version or a queued edition names. The rules are triggers, not keys
+ * `products.image`, `sections.image`, `section_members.folder_overrides`'s `image` key and
+ * `menu_version_images.filename` may only name a photo that exists, and a photo one of the first
+ * three still names cannot be deleted or renamed. Nor can a photo a LIVE menu version or a queued
+ * edition names. The rules are triggers, not keys
  * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why,
  * `0002_section_image_references.sql` for `sections.image`,
  * `0003_published_image_references.sql` for a published version's photos,
@@ -304,27 +305,30 @@ describe("an image an include's folder names", () => {
   });
 
   it("refuses an include inserted with a folder image that is not in the library", async () => {
-    const [extra] = await suite.db
-      .insert(sections)
-      .values({ internalName: "Extra", ownerMenuId: ids.catalogueId })
-      .returning({ id: sections.id });
-    const insert = async (image: string | null): Promise<void> => {
+    /** Includes a new section with `image` as its folder photo, and answers that section's id. */
+    const insert = async (image: string | null): Promise<string> => {
+      const [extra] = await suite.db
+        .insert(sections)
+        .values({ internalName: "Extra", ownerMenuId: ids.catalogueId })
+        .returning({ id: sections.id });
       await suite.db.insert(sectionMembers).values({
         sectionId: ids.sectionId,
         position: 0,
         childSectionId: extra!.id,
         folderOverrides: { image },
       });
+      return extra!.id;
     };
+    const stored = async (childId: string): Promise<unknown> =>
+      suite.db
+        .select({ overrides: sectionMembers.folderOverrides })
+        .from(sectionMembers)
+        .where(sql`${sectionMembers.childSectionId} = ${childId}`);
     await expect(insert(ABSENT)).rejects.toMatchObject({
       message: "section_members_media_image_fk",
     });
-    await insert(PRESENT);
-    const rows = await suite.db
-      .select({ overrides: sectionMembers.folderOverrides })
-      .from(sectionMembers)
-      .where(sql`${sectionMembers.childSectionId} = ${extra!.id}`);
-    expect(rows).toEqual([{ overrides: { image: PRESENT } }]);
+    expect(await stored(await insert(PRESENT))).toEqual([{ overrides: { image: PRESENT } }]);
+    expect(await stored(await insert(null))).toEqual([{ overrides: { image: null } }]);
   });
 
   it("refuses deleting or renaming a photo a folder names, and allows it once the folder stops naming it", async () => {
