@@ -705,6 +705,29 @@ const en = {
   "menu.department_gone": "This department no longer exists.",
   "menu.date_gone": "This special date no longer exists.",
   "menu.normal_week_clash": "The normal week would overlap the menus on {date} past midnight.",
+  "routing.grid": "Routing grid",
+  "routing.row_heading": "Category or product",
+  "routing.every_zone": "Every zone",
+  "routing.all_categories": "All categories",
+  "routing.no_category": "No category",
+  "routing.expand_all": "Expand all",
+  "routing.collapse_all": "Collapse all",
+  "routing.more_product": "1 more product",
+  "routing.more_products": "{count} more products",
+  "routing.more_category": "1 more category",
+  "routing.more_categories": "{count} more categories",
+  "routing.clear": "Clear setting",
+  "routing.cell_label": "{row}, {zone}: {value}, {state}",
+  "routing.set_here": "set here",
+  "routing.inherited": "inherited",
+  "routing.default_state": "the default station",
+  "routing.no_station": "No station",
+  "routing.disabled_station": "{station} (Disabled)",
+  "routing.disabled_target": "{station}: Disabled.",
+  "routing.default_read_only":
+    "Only someone who can configure the venue can change the default station.",
+  "routing.default_repair":
+    "There is no default station. Choose one so that work no other cell sends anywhere has somewhere to go.",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -1434,6 +1457,30 @@ const es: Record<keyof typeof en, string> = {
   "menu.date_gone": "Esta fecha especial ya no existe.",
   "menu.normal_week_clash":
     "La semana normal se solaparía pasada la medianoche con las cartas del {date}.",
+
+  "routing.grid": "Cuadrícula de asignación",
+  "routing.row_heading": "Categoría o producto",
+  "routing.every_zone": "Todas las zonas",
+  "routing.all_categories": "Todas las categorías",
+  "routing.no_category": "Sin categoría",
+  "routing.expand_all": "Desplegar todo",
+  "routing.collapse_all": "Plegar todo",
+  "routing.more_product": "1 producto más",
+  "routing.more_products": "{count} productos más",
+  "routing.more_category": "1 categoría más",
+  "routing.more_categories": "{count} categorías más",
+  "routing.clear": "Borrar el ajuste",
+  "routing.cell_label": "{row}, {zone}: {value}, {state}",
+  "routing.set_here": "fijado aquí",
+  "routing.inherited": "heredado",
+  "routing.default_state": "la estación predeterminada",
+  "routing.no_station": "Sin estación",
+  "routing.disabled_station": "{station} (Deshabilitada)",
+  "routing.disabled_target": "{station}: Deshabilitada.",
+  "routing.default_read_only":
+    "Solo quien puede configurar el local puede cambiar la estación predeterminada.",
+  "routing.default_repair":
+    "No hay estación predeterminada. Elige una para que el trabajo que ninguna otra celda envía a ningún sitio tenga adónde ir.",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };
