@@ -309,6 +309,11 @@ export class PrepStationsScreen extends LitElement {
   /** The grid shows this choice at its address until the preview or save settles. */
   @state() private cellChoice: RoutingPending | null = null;
   @state() private cellRefusal: RoutingRefusal | null = null;
+  /**
+   * The refusal `#dropChoice` set, which a refresh that puts its row and zone back in the grid
+   * clears.
+   */
+  #droppedRefusal?: RoutingRefusal;
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -729,8 +734,8 @@ export class PrepStationsScreen extends LitElement {
       !this.busy &&
       !this.#addressShown(this.pending.change.address)
     ) {
+      this.#dropChoice(this.pending.change.address);
       this.pending = undefined;
-      this.cellChoice = null;
     }
     this.#syncStationDrafts();
     this.#syncWatcherInlineDrafts();
@@ -852,6 +857,12 @@ export class PrepStationsScreen extends LitElement {
         },
         (value) => {
           this.view = value;
+          if (
+            this.cellRefusal !== null &&
+            this.cellRefusal === this.#droppedRefusal &&
+            this.#addressShown(this.cellRefusal.address)
+          )
+            this.cellRefusal = null;
           const editor = this.watcherPrinterEditor;
           if (
             editor?.conflictPrinterId &&
@@ -969,7 +980,29 @@ export class PrepStationsScreen extends LitElement {
     const pending = { change, moves, save, isCurrent };
     if (moves.length > 0) this.pending = pending;
     else if (this.#addressShown(change.address)) await this.#saveCell(pending);
-    else this.cellChoice = null;
+    else this.#dropChoice(change.address);
+  }
+  /**
+   * A refresh removed the choice's row or zone before it could be saved. The All categories row
+   * is always drawn, so only its zone can be gone.
+   */
+  #dropChoice(address: CellAddress): void {
+    const { row, zoneId } = address;
+    this.cellChoice = null;
+    const zoneGone =
+      zoneId !== null && !this.view?.routing.zones.some((zone) => zone.id === zoneId);
+    this.cellRefusal = this.#droppedRefusal = {
+      address,
+      message: t(
+        zoneGone
+          ? "routing.dropped_zone"
+          : row.kind === "category"
+            ? "routing.dropped_category"
+            : row.kind === "product"
+              ? "routing.dropped_product"
+              : "routing.dropped_no_category",
+      ),
+    };
   }
   #refuseCell(address: CellAddress, error: unknown): void {
     this.cellChoice = null;

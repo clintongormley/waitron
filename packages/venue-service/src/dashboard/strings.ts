@@ -709,6 +709,11 @@ const en = {
   "routing.preview_change": "{row}, {zone}: this changes {from} to {to}.",
   "routing.target_unavailable":
     "This row or zone is no longer in the grid. Cancel, then choose again.",
+  "routing.dropped_zone": "Your choice was not saved: its zone is no longer in the grid.",
+  "routing.dropped_category": "Your choice was not saved: its category is no longer in the grid.",
+  "routing.dropped_product": "Your choice was not saved: its product is no longer in the grid.",
+  "routing.dropped_no_category":
+    "Your choice was not saved: the No category row is no longer in the grid.",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -1443,6 +1448,13 @@ const es: Record<keyof typeof en, string> = {
   "routing.preview_change": "{row}, {zone}: esto cambia {from} por {to}.",
   "routing.target_unavailable":
     "Esta fila o zona ya no está en la cuadrícula. Cancela y vuelve a elegir.",
+  "routing.dropped_zone": "Tu elección no se ha guardado: su zona ya no está en la cuadrícula.",
+  "routing.dropped_category":
+    "Tu elección no se ha guardado: su categoría ya no está en la cuadrícula.",
+  "routing.dropped_product":
+    "Tu elección no se ha guardado: su producto ya no está en la cuadrícula.",
+  "routing.dropped_no_category":
+    "Tu elección no se ha guardado: la fila Sin categoría ya no está en la cuadrícula.",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };
