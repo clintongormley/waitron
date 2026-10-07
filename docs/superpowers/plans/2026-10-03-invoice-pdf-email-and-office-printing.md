@@ -124,11 +124,13 @@ job/audit left behind, expired-email original retry and the F2/no-printer contro
 independent deletions fail the intended case beside a valid passing control. The automatic
 receipt hook now enrolls F1 originals with the operator recorded on the sale, including under
 `on_request` and `never` receipt policies. Synthetic cases cover original replay, cross-medium
-refusal and rollback, absent printers and sales with no recorded operator. Such unattributed
-sales still print without delivery metadata; no staff identity is invented. Removing the
-forwarded operator makes the attributed-original case fail beside the unattributed-sale
-control. Enrollment for unattributed sales, bill staging, A4 references and restart/retry
-workers remain. No Task 2 completion claim.
+refusal and rollback, absent printers and sales with no recorded operator. Receipt delivery
+metadata now allows an absent issuing operator, without inventing staff attribution; email
+and A4 metadata still require a staff identity. Synthetic tests cover unattributed receipt
+reservation/replay, automatic enrollment and token-checked print completion, plus refusal
+of unattributed email/A4 rows. The schema-conformance and stepwise upgrade checks passed
+with generated core migration 0119. Bill staging, A4 references and restart/retry workers
+remain. No Task 2 completion claim.
 
 ## 3. Set up email for a live venue, without a terminal
 

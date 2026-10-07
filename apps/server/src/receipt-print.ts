@@ -219,7 +219,7 @@ export async function enqueueSaleReceipt(
     ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
     : "auto";
   if (ticket.invoiceType !== "F1" && mode !== "auto") return;
-  await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers, sale?.operatorId ?? undefined);
+  await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers, sale?.operatorId ?? null);
 }
 
 /** A collection number is a separate document, never a fiscal receipt or a drawer command. */
@@ -290,7 +290,7 @@ async function enrollExplicitInvoiceReceipt(
   ticket: TillSaleResult,
   saleId: string,
   jobId: string,
-  personId: string | undefined,
+  personId: string | null | undefined,
 ): Promise<void> {
   if (ticket.invoiceType !== "F1" || personId === undefined) return;
   await expireInvoiceDeliveryClaims(tx);
@@ -393,7 +393,7 @@ export async function enqueueOriginalReceipt(
   ticket: TillSaleResult,
   saleId: string,
   printers: PrinterLookup = printerLookup(tx, cfg.origin),
-  personId?: string,
+  personId?: string | null,
 ): Promise<void> {
   if (ticket.invoiceType === "F1") {
     const [original] = await tx

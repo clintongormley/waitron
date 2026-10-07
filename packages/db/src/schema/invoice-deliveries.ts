@@ -44,8 +44,8 @@ export const invoiceDeliveries = table(
     attempts: count("attempts").notNull().default(0),
     recipient: label("recipient"),
     consent: json<InvoiceEmailConsent>("consent"),
-    // Identity owns persons; the request's authenticated operator establishes this attribution.
-    personId: id("person_id").notNull(),
+    // Identity owns persons; request actions carry their operator, automatic receipts may lack one.
+    personId: id("person_id"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     nextAttemptAt: tsString("next_attempt_at").notNull().$defaultFn(nowIso),
     completedAt: tsString("completed_at"),
@@ -78,6 +78,10 @@ export const invoiceDeliveries = table(
     check("invoice_deliveries_status_ck", enumCheck(t.status)),
     check("invoice_deliveries_generation_ck", sql`${t.generation} > 0`),
     check("invoice_deliveries_attempts_ck", sql`${t.attempts} >= 0`),
+    check(
+      "invoice_deliveries_person_ck",
+      sql`${t.personId} is not null or ${t.medium} = 'receipt'`,
+    ),
     check(
       "invoice_deliveries_email_ck",
       sql`(${t.medium} = 'email') = (${t.recipient} is not null and ${t.consent} is not null)`,

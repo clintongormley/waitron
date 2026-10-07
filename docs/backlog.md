@@ -1834,8 +1834,11 @@ a valid passing control. The automatic receipt hook now enrolls F1 originals usi
 operator recorded on the sale, including when optional receipt printing is off. Synthetic
 cases cover replay, cross-medium refusal and rollback, absent printers, and sales with no
 recorded operator. Removing the forwarded operator makes the attributed-original test fail
-while the unattributed-sale control still passes. Sales without a recorded operator continue
-to print without delivery metadata; their enrollment is still open. No whole-Task-2 claim.
+while the unattributed-sale control still passes. The next checkpoint enrolls unattributed
+paper originals with a null staff attribution. Synthetic tests cover reservation/replay,
+automatic enrollment and token-checked completion without a handover snapshot; email/A4
+rows without staff attribution are refused. Generated core migration 0119, schema
+conformance and stepwise upgrade checks passed. No whole-Task-2 claim.
 For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain

@@ -19,6 +19,7 @@ import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
 import { jobOrigin, locationId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
+import { claimInvoicePrintJobs, reportInvoicePrintJob } from "./invoice-print.js";
 import { venueModuleConfig } from "./provision.js";
 import {
   reserveInvoiceDelivery,
@@ -570,6 +571,75 @@ describe("receipt delivery reservation", () => {
     printJobId,
   });
 
+  it("tracks an unattributed paper original without fabricating an operator", async () => {
+    const sale = await issue();
+    const job = await receiptJob(sale.saleId);
+    const input = { ...request(job.jobId), personId: null };
+    const delivery = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, input),
+    );
+    expect(delivery).toMatchObject({
+      saleId: sale.saleId,
+      printJobId: job.jobId,
+      personId: null,
+      medium: "receipt",
+      designation: "original",
+      status: "queued",
+    });
+    expect(
+      await withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, input)),
+    ).toEqual(delivery);
+    expect(await rows()).toHaveLength(1);
+    expect(await suite.db.select().from(printJobs)).toHaveLength(1);
+    await expect(
+      withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, email())),
+    ).rejects.toMatchObject({ code: "invoice_delivery.active" });
+    const [location] = await suite.db.select().from(locations);
+    const [agent] = await suite.db
+      .insert(printAgents)
+      .values({
+        locationId: location!.id,
+        name: "Receipt agent",
+        tokenHash: "scrypt$fixture",
+      })
+      .returning();
+    const now = new Date();
+    const [claimed] = await withTransaction(suite.db, (tx) =>
+      claimInvoicePrintJobs(tx, agent!.id, { locationId: location!.id, visibleKeys: [] }, now),
+    );
+    expect(claimed!.invoiceClaim).toMatchObject({ deliveryId: delivery.id, generation: 1 });
+    await withTransaction(suite.db, (tx) =>
+      reportInvoicePrintJob(
+        tx,
+        {
+          agentId: agent!.id,
+          jobId: job.jobId,
+          outcome: { status: "done" },
+        },
+        now,
+      ),
+    );
+    expect((await rows())[0]).toMatchObject({ status: "sending", person_id: null });
+    await withTransaction(suite.db, (tx) =>
+      reportInvoicePrintJob(
+        tx,
+        {
+          agentId: agent!.id,
+          jobId: job.jobId,
+          invoiceClaim: claimed!.invoiceClaim,
+          outcome: { status: "done" },
+        },
+        now,
+      ),
+    );
+    expect((await rows())[0]).toMatchObject({ status: "sent", person_id: null });
+    expect((await suite.db.select().from(printJobs))[0]).toMatchObject({
+      status: "done",
+      receiptCopy: false,
+      receiptHandover: null,
+    });
+  });
+
   it("correlates the existing queued original without another job or handover snapshot", async () => {
     const sale = await issue();
     const job = await receiptJob(sale.saleId);
@@ -940,6 +1010,26 @@ describe("receipt delivery reservation", () => {
       ),
     ).toEqual({ updated: true, historical: false });
     expect((await suite.db.select().from(printJobs))[0]!.status).toBe("done");
+  });
+});
+
+describe("invoice delivery staff attribution", () => {
+  it.each(["email", "a4"] as const)("refuses unattributed %s delivery rows", async (medium) => {
+    const sale = await issue();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        tx.insert(invoiceDeliveries).values({
+          saleId: sale.saleId,
+          requestKey: randomUUID(),
+          medium,
+          designation: "original",
+          generation: 1,
+          personId: null,
+          ...(medium === "email" ? { recipient: "customer@example.test", consent } : {}),
+        }),
+      ),
+    ).rejects.toThrow("CHECK constraint failed: invoice_deliveries_person_ck");
+    expect(await rows()).toEqual([]);
   });
 });
 
