@@ -2119,6 +2119,8 @@ export const en = {
   "menus.include_show_as_folder": "Show as a folder",
   "menus.include_direct_hint":
     "Off: its sections and products appear in this list directly, in their own order.",
+  "menus.include_names_required":
+    "Add the folder's customer-facing name in the default content language, or remove all of the folder's customer-facing names.",
 
   "menus.new_section_heading": "New section in {list}",
   "menus.section_not_added":
@@ -4576,6 +4578,8 @@ export const es: Record<StringKey, string> = {
   "menus.include_show_as_folder": "Mostrar como carpeta",
   "menus.include_direct_hint":
     "Desactivado: sus secciones y productos aparecen directamente en esta lista, en su propio orden.",
+  "menus.include_names_required":
+    "Añade el nombre de la carpeta para el cliente en el idioma de contenido predeterminado, o quita todos los nombres de la carpeta para el cliente.",
 
   "menus.new_section_heading": "Nueva sección en {list}",
   "menus.section_not_added":

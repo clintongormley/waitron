@@ -1448,7 +1448,10 @@ export class MenusScreen extends LitElement {
       try {
         await this.api.setIncludeFolder(listId, memberId, input);
       } catch (error) {
-        this.includeErrors = refusal(error);
+        this.includeErrors =
+          codeOf(error) === "menu_section.translation_required"
+            ? { [fieldOf(error)]: t("menus.include_names_required") }
+            : refusal(error);
         this.busy = false;
         return;
       }

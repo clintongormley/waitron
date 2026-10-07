@@ -4191,7 +4191,10 @@ describe("an include's Edit dialog", () => {
     );
   });
 
-  it("puts a translation refusal beside the name field and keeps the dialog open", async () => {
+  it("puts a translation refusal about the folder beside the name field and keeps the dialog open", async () => {
+    const before = currentLocale();
+    setLocale("en");
+    onTestFinished(() => setLocale(before));
     const { client } = winesClient(
       { showAsFolder: true, overrides: {} },
       {
@@ -4206,7 +4209,7 @@ describe("an include's Edit dialog", () => {
     includeSave(el).click();
     await vi.waitFor(() =>
       expect(includeField(el, "names-en").error).toBe(
-        codeMessage("menu_section.translation_required"),
+        "Add the folder's customer-facing name in the default content language, or remove all of the folder's customer-facing names.",
       ),
     );
     expect(await bottomIn(includeModal(el))).toBe(t("form.fix_fields"));
