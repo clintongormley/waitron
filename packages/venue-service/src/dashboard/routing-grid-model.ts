@@ -12,16 +12,21 @@ function append<T>(lists: Map<string, T[]>, key: string, value: T): void {
   else list.push(value);
 }
 
+function hasNoCategoryCell(model: RoutingModel): boolean {
+  return model.cells.some((cell) => cell.row.kind === "no_category");
+}
+
 /**
  * The grid's rows in tree order: All categories, the root categories, every row whose ancestors
  * are all expanded, every category or product holding a cell (at its own place, without its
- * hidden ancestors), then the No category row and the products with no category under it. A
- * shown category's children are shown exactly when its id is in `expanded`, so a category shown
- * only for its cell opens too. A category whose children are not shown counts the rows of its
- * subtree that are absent. Siblings are sorted by name with the shared label comparison, equal
- * names keeping the model's order. A category that is its own parent is sorted with the roots.
- * Categories on or below a longer parent cycle follow the roots, and the cycle members placed at
- * the top level are not sorted by name; a category's subcategories come before its products.
+ * hidden ancestors), then the No category row — while a product has no category or the row holds
+ * a cell — and the products with no category under it. A shown category's children are shown
+ * exactly when its id is in `expanded`, so a category shown only for its cell opens too. A
+ * category whose children are not shown counts the rows of its subtree that are absent. Siblings
+ * are sorted by name with the shared label comparison, equal names keeping the model's order. A
+ * category that is its own parent is sorted with the roots. Categories on or below a longer parent
+ * cycle follow the roots, and the cycle members placed at the top level are not sorted by name; a
+ * category's subcategories come before its products.
  */
 export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<string>): GridRow[] {
   const known = new Map(model.categories.map((category) => [category.id, category]));
@@ -120,7 +125,7 @@ export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<st
     place(member, [], true);
   }
 
-  if (uncategorised.length > 0) {
+  if (uncategorised.length > 0 || hasNoCategoryCell(model)) {
     entries.push({
       row: { kind: "no_category" },
       name: "",
@@ -181,8 +186,11 @@ export function rowInModel(model: RoutingModel, row: RoutingRow): boolean {
       return model.products.some((product) => product.id === row.productId);
     case "no_category": {
       const known = new Set(model.categories.map((category) => category.id));
-      return model.products.some(
-        (product) => product.categoryId === null || !known.has(product.categoryId),
+      return (
+        hasNoCategoryCell(model) ||
+        model.products.some(
+          (product) => product.categoryId === null || !known.has(product.categoryId),
+        )
       );
     }
   }

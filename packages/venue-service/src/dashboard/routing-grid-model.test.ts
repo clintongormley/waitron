@@ -227,7 +227,7 @@ describe("visibleRoutingRows", () => {
     ]);
   });
 
-  it("the No category row lists every active uncategorised product at the bottom, carries the no_category address and counts nothing", () => {
+  it("the No category row lists every active uncategorised product at the bottom, carries the no_category address and counts nothing, and a saved No category cell keeps it with no products", () => {
     const venue = model(
       [folder("food")],
       [item("bread", "food"), item("menu-card", null), item("water", null)],
@@ -260,13 +260,24 @@ describe("visibleRoutingRows", () => {
     expect(visibleRoutingRows(filed, none).some((entry) => entry.row.kind === "no_category")).toBe(
       false,
     );
-    // A stored No category cell does not bring the row back without an uncategorised product.
+    // A stored No category cell keeps the row, with no products under it.
     const storedOnly = model(
       [folder("food")],
       [item("bread", "food")],
       [{ row: { kind: "no_category" }, zoneId: "terrace", target: bar }],
     );
-    expect(outline(visibleRoutingRows(storedOnly, none))).toEqual(["[All]", "  C:food {0,1}"]);
+    expect(outline(visibleRoutingRows(storedOnly, none))).toEqual([
+      "[All]",
+      "  C:food {0,1}",
+      "[No category]",
+    ]);
+    expect(visibleRoutingRows(storedOnly, none).at(-1)).toEqual(noCategory);
+    expect(outline(visibleRoutingRows(storedOnly, expandAll(storedOnly)))).toEqual([
+      "[All]",
+      "  C:food",
+      "    P:bread <food>",
+      "[No category]",
+    ]);
   });
 
   it("a product cell five category levels down stays visible under a collapsed root, once, with its path", () => {
@@ -648,6 +659,11 @@ describe("rowInModel", () => {
       model(nested, [item("sour", "sours"), item("stray", "gone")]),
       model(nested, [item("sour", "sours"), item("looped", "loop-b")]),
       model([], []),
+      model(
+        nested,
+        [item("sour", "sours")],
+        [{ row: { kind: "no_category" }, zoneId: "terrace", target: bar }],
+      ),
     ];
     for (const routing of models) {
       const shown = new Set(
@@ -663,5 +679,7 @@ describe("rowInModel", () => {
     expect(rowInModel(models[3]!, { kind: "no_category" })).toBe(false);
     expect(rowInModel(models[1]!, { kind: "no_category" })).toBe(true);
     expect(rowInModel(models[2]!, { kind: "no_category" })).toBe(true);
+    expect(rowInModel(models[5]!, { kind: "no_category" })).toBe(true);
+    expect(rowInModel(models[4]!, { kind: "no_category" })).toBe(false);
   });
 });

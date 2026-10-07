@@ -6262,7 +6262,7 @@ describe("Routing grid", () => {
     },
   );
 
-  it("a refresh that gives the last uncategorised product a category removes the No category row while a No category choice is pending: the screen cancels that draft, and nothing is saved to All categories or any other row", async () => {
+  it("a refresh that gives the last uncategorised product a category removes the No category row, which holds no saved choice, while a No category choice is pending: the screen cancels that draft, and nothing is saved to All categories or any other row", async () => {
     const liveData = new LiveData();
     const categorised = gridView();
     categorised.routing.products = categorised.routing.products.map((product) => ({
