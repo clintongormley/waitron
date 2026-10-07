@@ -609,3 +609,29 @@ it("a discarded draft leaves Save quiet and disabled when the editor is opened a
   expect(editor.currentValue.name).toBe("Coffee");
   expect(await saveState(editor)).toEqual(quietSave);
 });
+it("a nested Variant opens with its Save quiet and disabled, and one edit enables it", async () => {
+  const { app, editor } = await mount();
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
+  await editor.updateComplete;
+  const child = editor.shadowRoot!.querySelector("dashboard-variant-form")!;
+  await child.updateComplete;
+  const childSave = async () => {
+    await child.updateComplete;
+    const save = child.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "wt-button[data-test=variant-save]",
+    )!;
+    await save.updateComplete;
+    return {
+      variant: save.variant,
+      disabled: save.disabled,
+      innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+    };
+  };
+  expect(await childSave()).toEqual(quietSave);
+  const field =
+    child.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!;
+  await field.updateComplete;
+  await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), "Half cup");
+  expect(app.leave.coordinator.isDirty([child])).toBe(true);
+  expect(await childSave()).toEqual({ variant: "primary", disabled: false, innerDisabled: false });
+});

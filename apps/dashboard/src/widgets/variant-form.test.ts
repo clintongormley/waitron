@@ -417,7 +417,11 @@ it("does not report a cancel when it is closed by the form that opened it", asyn
 });
 
 it("does nothing while the save it already started is in flight", async () => {
-  const el = await mountForm({ value: halfPortion, busy: true });
+  const el = await mountForm({ value: halfPortion });
+  // Changed first, so it is the save in flight, not an unchanged form, that holds Save.
+  await change(el, "kitchenName", "MEDIA");
+  el.busy = true;
+  await el.updateComplete;
   const submit = vi.fn();
   const cancel = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -446,6 +450,7 @@ it("puts focus in the first field a refused submit reported", async () => {
   const el = await mountForm({ value: null });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
+  await change(el, "unitPrice", "3.00");
   await click(el, "variant-save");
   expect(submit).not.toHaveBeenCalled();
   expect(field(el, "name").error).toBe(t("editor.variant_name_required"));
@@ -466,6 +471,7 @@ async function focusName(el: VariantForm) {
 
 it("saves on Enter and cancels on Escape from a focused field", async () => {
   const el = await mountForm({ value: halfPortion });
+  await change(el, "kitchenName", "MEDIA");
   await focusName(el);
   const submit = vi.fn();
   const cancel = vi.fn();
@@ -579,9 +585,11 @@ it("re-checks every change after a failed submission, and Save works again once 
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
-it("starts again when reopened: no messages and Save working", async () => {
+it("starts again when reopened: no messages and Save quiet", async () => {
   const el = await mountForm({ value: null });
+  await change(el, "unitPrice", "3.00");
   await click(el, "variant-save");
+  expect(field(el, "name").error).toBe(t("editor.variant_name_required"));
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
   el.open = false;
   await el.updateComplete;
@@ -590,5 +598,11 @@ it("starts again when reopened: no messages and Save working", async () => {
 
   expect(field(el, "name").error).toBe("");
   expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).getAttribute("variant")).toBe("secondary");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  // One edit frees Save: the failed press before the reopen is forgotten, or the blank name would
+  // hold it.
+  await change(el, "unitPrice", "3.00");
+  expect(saveOf(el).getAttribute("variant")).toBe("primary");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
