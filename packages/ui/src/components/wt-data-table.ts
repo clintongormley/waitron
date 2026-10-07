@@ -394,7 +394,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
 
       :host([stacked-search]) .table-search {
-        order: 1;
         flex-basis: 100%;
       }
 
@@ -2064,12 +2063,30 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const slotted = (name: string) => this.querySelector(`:scope > [slot="${name}"]`) !== null;
     const start = slotted("toolbar-start");
     const end = slotted("toolbar-end");
+    const search = slotted("toolbar-search");
     const expandAll = this.#renderExpandAll();
-    if (!this.searchable && !hasFilters && !chooser && !start && !end && expandAll === nothing)
+    if (
+      !this.searchable &&
+      !hasFilters &&
+      !chooser &&
+      !start &&
+      !end &&
+      !search &&
+      expandAll === nothing
+    )
       return nothing;
     return html`<div class="table-toolbar">
       ${hasFilters ? this.#renderFiltersTrigger(activeCount) : nothing}
       <slot name="toolbar-start"></slot>
+      ${
+        expandAll !== nothing || end || chooser
+          ? html`<div class="table-end">
+              ${expandAll}<slot name="toolbar-end"></slot>${
+                chooser ? this.#renderChooser() : nothing
+              }
+            </div>`
+          : nothing
+      }
       ${
         this.searchable
           ? html`<input
@@ -2086,15 +2103,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
             />`
           : nothing
       }
-      ${
-        expandAll !== nothing || end || chooser
-          ? html`<div class="table-end">
-              ${expandAll}<slot name="toolbar-end"></slot>${
-                chooser ? this.#renderChooser() : nothing
-              }
-            </div>`
-          : nothing
-      }
+      <slot name="toolbar-search"></slot>
     </div>`;
   }
 

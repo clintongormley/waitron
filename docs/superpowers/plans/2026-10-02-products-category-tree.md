@@ -3782,6 +3782,9 @@ the category whose menu added it, that category opens to show it, and focus retu
 ---
 ## Task 8: One toolbar — search, filters, Expand all, Select, Columns
 
+_2026-10-08, A368: toolbar search now follows the buttons through `toolbar-search`. See the
+current contract in [design-system.md](../../developers/design-system.md#remembered-searchable-filterable-tables)._
+
 **Files:**
 - Modify: `apps/dashboard/src/widgets/catalogue-browser.ts` (its controls move into the list's slots; `.toolbar` and `.action-bar` CSS go)
 - Modify: `apps/dashboard/src/widgets/product-list.ts` (forwards two slots; passes the Expand all labels)

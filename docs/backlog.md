@@ -1017,9 +1017,16 @@ unused `units` property is gone (it closes W75's leftover).
     A menu's prices table showing only a sliver of the price box at 390 px — DONE (A344):
     the Resolve column is gone and a name wraps under a phone-width cap, so each price box is whole
     on screen in English and Spanish.
-  - Open: at 640 px or less a searchable table draws its own search under the controls that follow
-    it (Expand all, the `toolbar-end` slot, Customise) while Tab reaches the search first — the
-    order W83 left open on Products.
+  - DONE (A368): search follows the toolbar buttons in markup at both widths, so Tab follows
+    the drawn controls at 390 and 1280 px. Products uses the shared `toolbar-search` slot;
+    its English/Spanish cases cover both themes.
+  - Open (A368 review, reproduced on base `825fc59ae` and candidate `a1133dddb`): type a
+    search with no matches in Products, then resize 1280 → 390 → 1280 → 390. The browser
+    reports `Cannot read properties of null (reading 'scrollLeft')` from
+    `apps/dashboard/src/widgets/product-list.ts:796` (`#fitNames`), where the no-matches table
+    has no `.scroll` element. Both disposable-checkout probes failed their no-error assertion.
+    Next: retain a no-match resize regression and handle that table state before measuring names;
+    A368 changes toolbar order only.
   - Open, by reading only (#1362's review, not tested): `wt-row-actions`, `wt-combobox` and
     `wt-help-tooltip` set their open state only from the popover's toggle events, so one taken off
     the page while open may come back with its button still marked open — the bug #1362 fixed in
@@ -2713,6 +2720,9 @@ through, and the Structure tab's Reorder toggle is a second hand-built icon butt
 reason (a review probe confirmed `wt-button` drops `aria-pressed` on 2026-10-06);
 (3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
 above the table's 440px narrow-tree width).
+
+_2026-10-08, A368: the search/Tab-order point above is closed. Search now follows Expand all
+and Customise in markup at both widths; the remaining W83 points stay open._
 
 **Products at phone width: the toolbar takes two lines, not three — DONE (W85d, #1249, owner
 2026-10-05).** Not covered: Select mode's extra controls at the middle widths.

@@ -88,12 +88,10 @@ export class CatalogueBrowser extends LitElement {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
         min-width: min(100%, calc(var(--wt-tap-min) * 7));
       }
-      /* At 40rem or less the search takes a whole line under the buttons, even where all five
-         would fit on one; Tab still reaches it before Expand all. The list's width decides, since
-         the sidebar can leave a wide window a narrow list. */
+      /* The list's width decides when search wraps, since a sidebar can leave a wide window
+         a narrow list. */
       @container (max-width: 40rem) {
         wt-input {
-          order: 1;
           flex-basis: 100%;
         }
       }
@@ -888,7 +886,7 @@ export class CatalogueBrowser extends LitElement {
           ><span class="icon-tooltip" aria-hidden="true">${t("folders.select")}</span>
         </button>
         <wt-input
-          slot="toolbar-start"
+          slot="toolbar-search"
           name="catalogue-search"
           type="search"
           label=${t("folders.search")}

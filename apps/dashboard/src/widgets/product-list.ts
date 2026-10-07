@@ -1498,6 +1498,7 @@ export class ProductList extends LitElement {
         @pointerdown=${this.#pointerDown}
         @wt-expand-change=${this.#expandChange}
         ><slot name="toolbar-start" slot="toolbar-start"></slot
+        ><slot name="toolbar-search" slot="toolbar-search"></slot
         ><slot name="toolbar-end" slot="toolbar-end"></slot
         ><slot name="toolbar-bottom" slot="toolbar-bottom"></slot></wt-data-table
       >${dragGhost(this.ghost)}`;
