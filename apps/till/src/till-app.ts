@@ -228,6 +228,7 @@ import type {
   DeviceIdentity,
   DevicePrintersChange,
   ProfileChoice,
+  ReadOptions,
 } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -2044,53 +2045,74 @@ export class TillApp extends LitElement {
    * never reaches the write's own error handling.
    */
   #refreshAfterWrite(list: RefreshList, messageKey: StringKey): Promise<void> {
-    return this.#refreshList(list, messageKey);
+    return this.#refreshList(list, messageKey, TABLE_REQUEST_LIMIT_MS);
+  }
+
+  /**
+   * The lists a counter write changed, read in turn after its result is shown. The write's busy
+   * flag is already cleared, so a read that never answers cannot hold the basket.
+   */
+  async #refreshListsAfterWrite(
+    session: number,
+    reads: readonly (readonly [RefreshList, StringKey])[],
+  ): Promise<void> {
+    for (const [list, messageKey] of reads) {
+      if (session !== this.#operatorSession) return;
+      await this.#refreshAfterWrite(list, messageKey);
+    }
   }
 
   /**
    * Only the newest refresh of a list may install the list's rows (`heldOrders`, `stationQueue`,
    * `counterWaiting`) or start, change or end its retry, and
    * {@link TillApp.#abandonListRefreshes} makes every earlier request stale. Without a `messageKey`
-   * a failure is also thrown to the caller.
+   * a failure is also thrown to the caller. A read still out after `limitMs` is cancelled and fails
+   * like any other failed read.
    */
-  async #refreshList(list: RefreshList, messageKey?: StringKey): Promise<void> {
+  async #refreshList(list: RefreshList, messageKey?: StringKey, limitMs?: number): Promise<void> {
     const request = ++this.#refreshGeneration[list];
+    const limit = limitMs === undefined ? undefined : limited(limitMs);
+    const options: [] | [ReadOptions] = limit === undefined ? [] : [{ signal: limit.signal }];
     let install: () => void;
     try {
-      install = await this.#loadList(list);
+      install = await this.#loadList(list, ...options);
     } catch (error) {
       if (request === this.#refreshGeneration[list]) this.#onRefreshFailed(list, messageKey);
       if (messageKey === undefined) throw error;
       return;
+    } finally {
+      limit?.done();
     }
     if (request !== this.#refreshGeneration[list]) return;
     install();
     this.#endRefreshRetry(list);
   }
 
-  async #loadList(list: RefreshList): Promise<() => void> {
-    if (list === "station") return this.#loadStationQueue();
+  async #loadList(list: RefreshList, ...options: [] | [ReadOptions]): Promise<() => void> {
+    if (list === "station") return this.#loadStationQueue(...options);
     if (list === "waiting") {
-      const waiting = await this.api.listCounterWaiting();
+      const waiting = await this.api.listCounterWaiting(...options);
       return () => (this.counterWaiting = waiting);
     }
-    const rows = await this.api.listWorkingOrders();
+    const rows = await this.api.listWorkingOrders(...options);
     return () => (this.heldOrders = rows);
   }
 
-  async #loadStationQueue(): Promise<() => void> {
-    await this.#loadStations(true);
+  async #loadStationQueue(...options: [] | [ReadOptions]): Promise<() => void> {
+    await this.#loadStations(true, ...options);
     if (this.orderFlow === "prepay") return () => (this.stationQueue = []);
     const defaultStation = this.stations.find((station) => station.isDefault);
     const queue =
-      defaultStation === undefined ? [] : (await this.api.getStationQueue(defaultStation.id)).items;
+      defaultStation === undefined
+        ? []
+        : (await this.api.getStationQueue(defaultStation.id, ...options)).items;
     return () => (this.stationQueue = queue);
   }
 
-  async #loadStations(throwOnFailure = false): Promise<void> {
+  async #loadStations(throwOnFailure = false, ...options: [] | [ReadOptions]): Promise<void> {
     const read = ++this.#stationsRead;
     try {
-      const stations = await this.api.listStations();
+      const stations = await this.api.listStations(...options);
       if (read === this.#stationsRead) {
         this.stations = stations;
         this.#stationsLoaded = true;
@@ -2634,6 +2656,7 @@ export class TillApp extends LitElement {
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let recheck = false;
     let inactiveChoice = false;
+    let paid = false;
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
@@ -2647,12 +2670,7 @@ export class TillApp extends LitElement {
       if (session !== this.#operatorSession) return;
       this.result = result;
       this.#showTicket(id);
-      // A just-paid retrieved order must drop off the held list.
-      await this.#refreshAfterWrite("held", "refresh.held_after_sale");
-      if (session !== this.#operatorSession) return;
-      if (sendsToKitchen) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
-      if (session !== this.#operatorSession) return;
-      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
+      paid = true;
     } catch (error) {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
@@ -2681,6 +2699,7 @@ export class TillApp extends LitElement {
       this.submitting = false;
     }
     if (session !== this.#operatorSession) return;
+    if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
@@ -2698,6 +2717,15 @@ export class TillApp extends LitElement {
    * its pay card offers to take the rest as a bill payment. A failed read leaves the list. */
   async #readHeldAfterPaidMeanwhile(): Promise<void> {
     await this.#refreshHeldOrders().catch(() => undefined);
+  }
+
+  #afterSaleReads(sendsToKitchen: boolean): (readonly [RefreshList, StringKey])[] {
+    return [
+      // A just-paid retrieved order must drop off the held list.
+      ["held", "refresh.held_after_sale"],
+      ...(sendsToKitchen ? [["station", "refresh.station_after_sale"] as const] : []),
+      ["waiting", "refresh.waiting_after_sale"],
+    ];
   }
 
   async #onCollectCard(event: Event): Promise<void> {
@@ -2741,6 +2769,7 @@ export class TillApp extends LitElement {
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let recheck = false;
     let inactiveChoice = false;
+    let paid = false;
     try {
       if (!(await this.#syncIfDirty(id, lines, label))) return;
       if (session !== this.#operatorSession) return;
@@ -2763,11 +2792,7 @@ export class TillApp extends LitElement {
       if (out.outcome === "captured") {
         this.result = out.ticket;
         this.#showTicket(id);
-        await this.#refreshAfterWrite("held", "refresh.held_after_sale");
-        if (session !== this.#operatorSession) return;
-        if (sendsToKitchen) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
-        if (session !== this.#operatorSession) return;
-        await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
+        paid = true;
       } else {
         if (!this.#cancelledDemoReaderOrders.has(id)) this.cardOutcome = out.outcome;
       }
@@ -2801,6 +2826,7 @@ export class TillApp extends LitElement {
       this.submitting = false;
     }
     if (session !== this.#operatorSession) return;
+    if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#collectCard(event, true));
@@ -3028,6 +3054,7 @@ export class TillApp extends LitElement {
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let recheck = false;
     let inactiveChoice = false;
+    let placed = false;
     try {
       if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
       if (session !== this.#operatorSession) return;
@@ -3052,9 +3079,7 @@ export class TillApp extends LitElement {
       await this.api.placeOrder(id);
       if (session !== this.#operatorSession) return;
       this.stage = "collect";
-      await this.#refreshAfterWrite("station", "refresh.station_after_place");
-      if (session !== this.#operatorSession) return;
-      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_place");
+      placed = true;
     } catch (error) {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
@@ -3078,6 +3103,11 @@ export class TillApp extends LitElement {
       this.placing = false;
     }
     if (session !== this.#operatorSession) return;
+    if (placed)
+      void this.#refreshListsAfterWrite(session, [
+        ["station", "refresh.station_after_place"],
+        ["waiting", "refresh.waiting_after_place"],
+      ]);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onPlaceOrder(true));
     if (recheck) {
@@ -3099,17 +3129,13 @@ export class TillApp extends LitElement {
     const id = this.#store.id;
     const fromWaitingList = this.collectFlow !== undefined;
     this.errorKey = undefined;
+    let collected = false;
     try {
       const result = await this.api.collectOrder(id, tender);
       if (session !== this.#operatorSession) return;
       this.result = result;
       this.#showTicket(id);
-      // A collect settles the order, and the counter's prep-queue card offers Collect only on a
-      // settled order. Only a collect opened from the waiting list re-reads the queue
-      // (docs/backlog.md, B16).
-      if (fromWaitingList) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
-      if (session !== this.#operatorSession) return;
-      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
+      collected = true;
     } catch (error) {
       // No preliminary save, so any network failure may have filed. Collect carries a tender, so a
       // permanent refusal takes `sale.refused`.
@@ -3124,6 +3150,14 @@ export class TillApp extends LitElement {
     } finally {
       this.submitting = false;
     }
+    if (!collected || session !== this.#operatorSession) return;
+    // A collect settles the order, and the counter's prep-queue card offers Collect only on a
+    // settled order. Only a collect opened from the waiting list re-reads the queue
+    // (docs/backlog.md, B16).
+    void this.#refreshListsAfterWrite(session, [
+      ...(fromWaitingList ? [["station", "refresh.station_after_sale"] as const] : []),
+      ["waiting", "refresh.waiting_after_sale"],
+    ]);
   }
 
   async #onFindInvoiceOpen(event: Event): Promise<void> {
@@ -3164,15 +3198,14 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     this.findBillBusy = true;
     this.findBillError = undefined;
+    let collected = false;
     try {
       const result = await this.api.collectOrder(workingOrderId, tender);
       if (session !== this.#operatorSession) return;
       this.result = result;
       this.findingBill = false;
       this.#showTicket(workingOrderId, !invoiced);
-      await this.#refreshAfterWrite("station", "refresh.station_after_sale");
-      if (session !== this.#operatorSession) return;
-      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
+      collected = true;
     } catch (error) {
       if (session !== this.#operatorSession) return;
       this.findBillError = isPermanentSaleRefusal(error)
@@ -3186,6 +3219,11 @@ export class TillApp extends LitElement {
       this.submitting = false;
       this.findBillBusy = false;
     }
+    if (!collected || session !== this.#operatorSession) return;
+    void this.#refreshListsAfterWrite(session, [
+      ["station", "refresh.station_after_sale"],
+      ["waiting", "refresh.waiting_after_sale"],
+    ]);
   }
 
   /** Refreshes on both paths, so a rejected advance (a race with another till) still corrects the queue. */

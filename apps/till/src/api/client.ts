@@ -2196,8 +2196,13 @@ export class TillApi {
   }
 
   /** The cross-till held list → `GET /api/working-orders`: every OPEN working order in the venue. */
-  listWorkingOrders(): Promise<HeldOrderSummary[]> {
-    return this.#request<HeldOrderSummary[]>("/api/working-orders", "GET");
+  listWorkingOrders(options: ReadOptions = {}): Promise<HeldOrderSummary[]> {
+    return this.#request<HeldOrderSummary[]>(
+      "/api/working-orders",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /**
@@ -2283,8 +2288,8 @@ export class TillApi {
   }
 
   /** The venue's ACTIVE kitchen stations → `GET /api/stations`, by display order then name. */
-  listStations(): Promise<Station[]> {
-    return this.#request<Station[]>("/api/stations", "GET");
+  listStations(options: ReadOptions = {}): Promise<Station[]> {
+    return this.#request<Station[]>("/api/stations", "GET", undefined, options.signal);
   }
 
   moveDishStation(
@@ -2467,8 +2472,13 @@ export class TillApi {
 
   /** The counter orders sent and not paid, or paid and not handed over, oldest first →
    * `GET /api/orders/counter-waiting`. */
-  listCounterWaiting(): Promise<CounterWaitingOrder[]> {
-    return this.#request<CounterWaitingOrder[]>("/api/orders/counter-waiting", "GET");
+  listCounterWaiting(options: ReadOptions = {}): Promise<CounterWaitingOrder[]> {
+    return this.#request<CounterWaitingOrder[]>(
+      "/api/orders/counter-waiting",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /**

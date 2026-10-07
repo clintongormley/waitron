@@ -12518,6 +12518,191 @@ describe("a failed list refresh after a successful write", () => {
     expect(tryNow(el, "station")).toBeNull();
     expect(getStationQueue).toHaveBeenCalledTimes(3);
   });
+
+  describe("a list read after a write that never answers leaves the basket usable", () => {
+    /** Like fetch, the read rejects only when its signal aborts. */
+    function unanswered(...args: unknown[]): Promise<never> {
+      const options = args.at(-1) as { signal?: AbortSignal } | undefined;
+      return new Promise((_, reject) =>
+        options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+      );
+    }
+
+    /** The login's own read answers; every read after it stays out. */
+    function unansweredAfterLogin<T>(first: T) {
+      return vi.fn().mockResolvedValueOnce(first).mockImplementation(unanswered);
+    }
+
+    async function payNextSale(el: TillApp): Promise<void> {
+      emit(ticket(el)!, "new-sale");
+      await settle(el);
+      expect(counter(el)!.busy).toBe(false);
+      counter(el)!.store.addProduct(cafe, "1");
+      await el.updateComplete;
+      emit(counter(el)!, "confirm-payment", { method: "cash", amount: "5" });
+      await settle(el);
+    }
+
+    const ticketThenPay = {
+      zonePolicy: { serviceMode: "ticket_then_pay" },
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+    };
+
+    it("a cash sale shows its ticket and the next sale can be paid", async () => {
+      const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
+      const { el } = await mountApp({ listWorkingOrders });
+      const c = await toCounterFake(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await settle(el);
+
+      expect(ticket(el)).not.toBeNull();
+      expect(listWorkingOrders).toHaveBeenCalledTimes(2);
+      await payNextSale(el);
+      expect(currentApi.recordSale).toHaveBeenCalledTimes(2);
+    });
+
+    it("a card sale shows its ticket and the next sale can be paid", async () => {
+      const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
+      const { el } = await mountApp({ listWorkingOrders });
+      const c = await toCounterFake(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await settle(el);
+
+      expect(ticket(el)).not.toBeNull();
+      expect(listWorkingOrders).toHaveBeenCalledTimes(2);
+      await payNextSale(el);
+      expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    });
+
+    it("a place moves to the collect stage with the basket free, and the order can be collected", async () => {
+      const getStationQueue = unansweredAfterLogin<StationQueue>({
+        items: [],
+        notices: [],
+        printersDown: [],
+      });
+      const { el } = await mountApp({ ...ticketThenPay, getStationQueue });
+      const c = await toCounterFake(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await settle(el);
+
+      expect(getStationQueue).toHaveBeenCalledTimes(2);
+      expect(tenderPay(el).stage).toBe("collect");
+      expect(counter(el)!.busy).toBe(false);
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await settle(el);
+      expect(currentApi.collectOrder).toHaveBeenCalledOnce();
+      expect(ticket(el)).not.toBeNull();
+    });
+
+    it("a collect shows its ticket and the next sale can be paid", async () => {
+      const listCounterWaiting = vi.fn().mockResolvedValue([]);
+      const { el } = await mountApp({ ...ticketThenPay, listCounterWaiting });
+      const c = await toCounterFake(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await settle(el);
+      listCounterWaiting.mockImplementation(unanswered);
+      const reads = listCounterWaiting.mock.calls.length;
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await settle(el);
+
+      expect(ticket(el)).not.toBeNull();
+      expect(listCounterWaiting).toHaveBeenCalledTimes(reads + 1);
+      await payNextSale(el);
+      expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    });
+
+    it("a Find a bill payment shows its ticket and the next sale can be paid", async () => {
+      const listCounterWaiting = unansweredAfterLogin<unknown[]>([]);
+      const { el } = await mountApp({ listCounterWaiting });
+      await toCounterFake(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      emit(el.shadowRoot!.querySelector("till-find-bill-dialog")!, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "cash", amount: "30.00" },
+        invoiced: true,
+      });
+      await settle(el);
+
+      expect(ticket(el)).not.toBeNull();
+      expect(listCounterWaiting).toHaveBeenCalledTimes(2);
+      await payNextSale(el);
+      expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    });
+
+    it("a read still out when the till's request limit passes is cancelled, said in the list's retry notice, and retried", async () => {
+      const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
+      const { el } = await mountApp({ listWorkingOrders });
+      const c = await toCounterFake(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await settle(el);
+      const [options] = listWorkingOrders.mock.lastCall as [{ signal?: AbortSignal }?];
+
+      // TABLE_REQUEST_LIMIT_MS in till-app.ts.
+      await tick(el, 149_999);
+      expect(options?.signal?.aborted).toBe(false);
+      expect(message(el, "held")).toBe("");
+      await tick(el, 1);
+      expect(options?.signal?.aborted).toBe(true);
+      expect(message(el, "held")).toBe(t("refresh.held_after_sale"));
+      expect(countdown(el, "held")).toBe(secondsLeft(5));
+
+      listWorkingOrders.mockResolvedValue([heldSummary]);
+      await tick(el, 5000);
+      expect(message(el, "held")).toBe("");
+      emit(ticket(el)!, "new-sale");
+      await settle(el);
+      expect(counter(el)!.heldOrders).toEqual([heldSummary]);
+    });
+
+    it.each([
+      ["the waiting list", "waiting", "listCounterWaiting", "refresh.waiting_after_place"],
+      ["the kitchen stations", "station", "listStations", "refresh.station_after_place"],
+      ["the kitchen queue", "station", "getStationQueue", "refresh.station_after_place"],
+    ] as const)(
+      "a read of %s after a place still out when the till's request limit passes is cancelled and said in the list's retry notice",
+      async (_read, list, method, key) => {
+        const { el } = await mountApp(ticketThenPay);
+        const c = await toCounterFake(el);
+        c.store.addProduct(cafe, "2");
+        await el.updateComplete;
+        const read = vi.mocked(currentApi[method] as (...args: unknown[]) => Promise<unknown>);
+        read.mockImplementation(unanswered);
+        const reads = read.mock.calls.length;
+
+        emit(c, "place-order");
+        await settle(el);
+        expect(read).toHaveBeenCalledTimes(reads + 1);
+        const options = read.mock.lastCall!.at(-1) as { signal?: AbortSignal } | undefined;
+        const said = () =>
+          el.shadowRoot!.querySelector(`[data-refresh-notice="${list}"]`)?.textContent ?? "";
+
+        // TABLE_REQUEST_LIMIT_MS in till-app.ts.
+        await tick(el, 149_999);
+        expect(options?.signal?.aborted).toBe(false);
+        expect(said()).not.toContain(t(key));
+        await tick(el, 1);
+        expect(options?.signal?.aborted).toBe(true);
+        expect(said()).toContain(t(key));
+      },
+    );
+  });
 });
 
 describe("a counter pay, place or hold refused for a reason the operator can act on", () => {

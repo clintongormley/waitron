@@ -3272,12 +3272,20 @@ The original walkthrough is retained under _Detail → Setup wizard_.
         new sentence, `cancel_credit.unconfirmed_counter`). The dialog shows this first, and then the
         till reads the waiting list again.
       - **Done by A234 (#1100, 2026-10-03): the named counter actions check their starting operator session before a later list read.**
-      - **The busy-state defect in these counter paths remains open.** `#onConfirmPayment`,
-        `#collectCard`, `#onPlaceOrder`, `#onCollectOrder` and `#onFindBillPay` wait for their list
-        reads before clearing the flag that marks the basket busy (`submitting` or `placing`), and
-        the reads have no time limit, so a read that never answers would leave the basket blocked:
-        no next sale, no Pay, no Cancel and credit. The B34 cancel path was changed in #1077
-        to show its result before reading the lists.
+      - **Done by A287 (2026-10-07): five counter paths free the basket before reading the lists.**
+        `#onConfirmPayment`, `#collectCard`, `#onPlaceOrder`, `#onCollectOrder` and `#onFindBillPay`
+        (`apps/till/src/till-app.ts`) clear `submitting` / `placing` and show their result once the
+        action itself has answered, as the B34 cancel path does (#1077), then re-read the lists
+        without holding the basket, checking the operator session before each read (the A234
+        check). The time limit sits in `#refreshAfterWrite`, so the reads it makes after other writes
+        have it too: after hold, mark collected, hand over, moving a bill or a held order, cancel
+        and credit, and a counter bill payment. A read still out after the till's request
+        limit (`TABLE_REQUEST_LIMIT_MS`) is cancelled and counts as failed: the list's existing
+        could-not-refresh notice shows and its countdown retries. Left open: the hold path
+        (`#onParkOrder`) still keeps the basket busy (`parking`) while it reads the held list,
+        though that read now has the same limit; and a retry (`#retryRefresh`) or "Try now" that
+        never answers leaves the notice on "Retrying…" with no limit, until a read of that list
+        started after it ends or the operator's session ends; the basket stays usable.
         Unlike the table's button, the counter's does not check for a payment on the order. Two ways
         of giving a placed counter order a bill payment were tried while building B34 and both were
         refused: taking the payment on the placed order (`working_order.not_open`), and placing an
