@@ -921,7 +921,7 @@ unused `units` property is gone (it closes W75's leftover).
   its photo with an own-or-inherited colour ring, or its colour square; it opens Colour… and
   Change photo…, which opens the existing editor with the photo field focused. Category and
   section squares still open their colour picker directly.
-- **Products maker-link contrast on a focused row, found during A303 — DONE (A306):** the link
+- **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
   not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the bottom
@@ -1226,10 +1226,10 @@ EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell
 unverified. W69 changes no field sizing. Next action: reproduce in Venue settings → Tables and
 adjust the colour-field width using the shared field contract without changing status colour data.
 
-**Sidebar contrast (found during W69, 2026-10-06) — DONE (A306).** The group headings and the
+**Sidebar contrast (found during W69, 2026-10-06) — DONE (A306, #1336).** The group headings and the
 selected item read `--wt-color-primary-text`.
 
-**Hover contrast A306 measured but did not fix — OPEN.** A306's axe probes in real Chromium
+**Hover contrast A306 (#1336) measured but did not fix — OPEN.** A306's axe probes in real Chromium
 (2026-10-07) also measured two hovered treatments that do not use the filled buttons it fixed:
 (1) card actions drawn as a secondary button with coloured text and the opacity dip — the Account
 settings screen's pending-email "Confirmar" (`apps/dashboard/src/screens/profile-screen.ts`) 3.66:1 light, 4.19:1 dark, and the content-languages page's primary-coloured
@@ -1244,7 +1244,7 @@ disappear into the row; A306's review saw the same in a screenshot of the base c
 from A306.
 
 **Dark modal danger-button hover contrast (found during W69, 2026-10-06), and its light reading of
-2026-10-07 — DONE (A306).** Primary and danger buttons hover onto their own fill tokens instead of
+2026-10-07 — DONE (A306, #1336).** Primary and danger buttons hover onto their own fill tokens instead of
 dipping in opacity.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
@@ -2160,7 +2160,7 @@ uncovered while the other columns scroll sideways" in
 Status column, and on a phone the Name column, hold the Unpublished changes link but do not set
 `activatesRow: false`, so a click beside the link opens the menu; the design system records this as
 a deviation from its `activatesRow` rule, and whether it stays is the owner's call. The contrast of
-that link, and of the product list's maker link, on a highlighted row is fixed (A306). The product
+that link, and of the product list's maker link, on a highlighted row is fixed (A306, #1336). The product
 list's "Made at" column (`apps/dashboard/src/widgets/product-list.ts`) also does not set `activatesRow:
 false`, so, judging by the code (not run), a click beside a short station name opens the product
 editor, which the `activatesRow` rule in `docs/developers/design-system.md` forbids. Both predate
@@ -7885,5 +7885,5 @@ Update it in the change that makes it stale (CLAUDE.md §7). In particular:
   deletion", what a review seat caught), that belongs in the PR thread, not here.
 
 
-**Setup Import button hover contrast (found during W69, 2026-10-06) — DONE (A306)**, with the
+**Setup Import button hover contrast (found during W69, 2026-10-06) — DONE (A306, #1336)**, with the
 dark modal danger-button entry: primary and danger buttons no longer dip in opacity on hover.
