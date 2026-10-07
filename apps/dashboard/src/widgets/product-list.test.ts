@@ -3723,7 +3723,8 @@ describe("the Products tree's Name column", () => {
       const photos = [
         ...root.querySelectorAll<HTMLElement>('[part~="thumb-frame"], [part~="thumb-placeholder"]'),
       ];
-      expect(photos.length).toBe(PRODUCTS.size);
+      // Each product's slot, and the one of loin's opened variant.
+      expect(photos.length).toBe(PRODUCTS.size + 1);
       for (const photo of photos) expect(photo.getBoundingClientRect().width).toBe(0);
       for (const key of PRODUCTS) {
         const grip = root.querySelector(`tr[data-row-key="${key}"] .drag-grip`)!;
@@ -4794,5 +4795,100 @@ describe("product media link", () => {
     await page.viewport(390, 844);
     await expect.poll(() => media!.getBoundingClientRect().width).toBe(0);
     expect((await tableRoot(el)).querySelector('[data-test="edit-plain"]')).not.toBeNull();
+  });
+});
+
+describe("variant media slot", () => {
+  const pollo = () =>
+    product({
+      id: "pollo",
+      name: "Pollo asado",
+      primaryCategoryId: "f",
+      image: "pollo.webp",
+      color: "#256bb1",
+      variants: [
+        { ...bunVariant, id: "half", name: "1/2 Pollo", image: "half.webp" },
+        { ...bunVariant, id: "quarter", name: "1/4 Pollo", image: null },
+      ],
+    });
+  const tortilla = () =>
+    product({
+      id: "tortilla",
+      name: "Tortilla",
+      primaryCategoryId: "f",
+      color: "#b12525",
+      variants: [{ ...bunVariant, id: "pincho", name: "Pincho", image: null }],
+    });
+
+  async function mountOpen() {
+    const { el, table, root } = await mountTree({
+      categories: [food],
+      products: [pollo(), tortilla()],
+    });
+    await openRow(el, "folder:f");
+    for (const key of ["pollo", "tortilla"]) {
+      root.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-toggle`)!.click();
+      await table.updateComplete;
+    }
+    return { el, table, root };
+  }
+
+  it("shows a variant's own photo, else its product's, else its product's colour", async () => {
+    const { root } = await mountOpen();
+    const photo = (id: string) =>
+      root.querySelector(`[data-test="color-${id}"] img[part="thumbnail"]`)?.getAttribute("src");
+    expect(photo("half")).toBe("/media/half.webp");
+    expect(photo("quarter")).toBe("/media/pollo.webp");
+    const placeholder = root.querySelector<HTMLElement>(
+      '[data-test="color-pincho"] [data-test="thumb-placeholder"]',
+    );
+    expect(placeholder).not.toBeNull();
+    expect(root.querySelector('[data-test="color-pincho"] img')).toBeNull();
+    expect(getComputedStyle(placeholder!).backgroundColor).toBe("rgb(177, 37, 37)");
+    const ring = root.querySelector<HTMLElement>(
+      '[data-test="color-quarter"] [data-test="thumb"]',
+    )!;
+    expect(getComputedStyle(ring).borderTopColor).toBe("rgb(37, 107, 177)");
+  });
+
+  it("opens the variant's own Edit at its photo from its swatch, without reaching the row", async () => {
+    const { el, root } = await mountOpen();
+    const media = root.querySelector<HTMLAnchorElement>('[data-test="color-quarter"]')!;
+    expect(media).not.toBeNull();
+    expect(media.tagName).toBe("A");
+    expect(media.getAttribute("href")).toBe("/manage/catalogue/product/quarter?field=image");
+    expect(media.getAttribute("aria-label")).toBe(
+      t("product.edit_named").replace("{name}", "1/4 Pollo"),
+    );
+    const sent: unknown[] = [];
+    for (const type of ["edit-product", "product-colour"])
+      el.addEventListener(type, (e) => sent.push([type, (e as CustomEvent).detail]));
+    const reachedRow: Event[] = [];
+    media.closest("tr")!.addEventListener("click", (e) => reachedRow.push(e));
+    await userEvent.click(media);
+    expect(reachedRow).toEqual([]);
+    expect(sent).toEqual([["edit-product", { productId: "quarter", field: "image" }]]);
+    media.focus();
+    expect(root.activeElement).toBe(media);
+    await userEvent.keyboard("{Enter}");
+    expect(sent).toEqual([
+      ["edit-product", { productId: "quarter", field: "image" }],
+      ["edit-product", { productId: "quarter", field: "image" }],
+    ]);
+    expect(root.querySelector("[popover]:popover-open")).toBeNull();
+  });
+
+  it("puts a variant's swatch in its product's column, and hides it at phone width", async () => {
+    const { root } = await mountOpen();
+    const box = (id: string) =>
+      root.querySelector<HTMLElement>(`[data-test="color-${id}"]`)!.getBoundingClientRect();
+    for (const id of ["half", "quarter"]) {
+      expect(Math.abs(box(id).left - box("pollo").left), id).toBeLessThanOrEqual(0.5);
+      expect(box(id).width, id).toBe(box("pollo").width);
+    }
+    expect(box("pollo").width).toBeGreaterThan(0);
+    await page.viewport(390, 844);
+    await expect.poll(() => box("pollo").width).toBe(0);
+    expect(box("half").width).toBe(0);
   });
 });

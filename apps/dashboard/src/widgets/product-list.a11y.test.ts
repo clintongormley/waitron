@@ -127,7 +127,7 @@ const products: Product[] = [
         name: "Vino 175",
         customerName: { es: "Copa grande" },
         kitchenName: "V175",
-        image: null,
+        image: "v1.webp",
         unitPrice: "4.50",
         available: false,
         active: true,
