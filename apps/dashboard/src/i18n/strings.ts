@@ -1060,10 +1060,6 @@ export const en = {
   "printers.list_title": "Printers",
   "printers.no_printers": "No printers yet.",
   "printers.name": "Name",
-  "printers.discard": "Discard changes",
-  "printers.discard_name_prompt": "Press Discard changes again to lose the edited name.",
-  "printers.discard_connection_prompt":
-    "Press Discard changes again to lose the edited connection.",
   "printers.transport": "Connection type",
   "printers.host": "Host / IP",
   "printers.port": "Port",
@@ -3433,10 +3429,6 @@ export const es: Record<StringKey, string> = {
   "printers.list_title": "Impresoras",
   "printers.no_printers": "Todavía no hay impresoras.",
   "printers.name": "Nombre",
-  "printers.discard": "Descartar cambios",
-  "printers.discard_name_prompt": "Pulsa Descartar cambios otra vez para perder el nombre editado.",
-  "printers.discard_connection_prompt":
-    "Pulsa Descartar cambios otra vez para perder la conexión editada.",
   "printers.transport": "Tipo de conexión",
   "printers.host": "Host / IP",
   "printers.port": "Puerto",

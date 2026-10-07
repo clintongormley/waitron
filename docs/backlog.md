@@ -1193,10 +1193,13 @@ locally; the next pushed head still needs its normal hook and required CI.
 The printer detail's inline name and network connection now register independent drafts with
 the shared leave controller. Focused browser cases cover Cancel, breadcrumb and Back decisions,
 normalized reverts, browser-leaving registration, successful and refused writes, newer input and
-independent saves. Standalone local discard arming remains to be retired; actual dashboard
-context/sign-out/Forward, activated native reload, stale input/response, forced teardown, focus and
-language/theme/width acceptance still need their remaining checks before W69 can finish. The dated
-audit records this checkpoint and the earlier correction to the final-audit completion claim.
+independent saves. The old local discard prompts have been replaced by the shared question.
+Removed inputs from an earlier opening cannot change a reopened editor. Actual dashboard tests
+cover both editors through sidebar navigation, language change, sign-out, Forward, printer
+switching and forced session expiry. Sixteen EN/ES, light/dark, phone/desktop cases cover native
+focus, scoped accessibility and activated Chromium reload; 32 captures were inspected. The APIs
+in these checks are synthetic. The dated audit records the commands and fixture corrections.
+The remaining delivery steps are the rebased focused checks, normal push hook and current-head CI.
 
 Activated desktop Chromium checks cover reload, external navigation and closing with the
 Schedule owner; the implementation does not promise prompts on every browser or after mobile

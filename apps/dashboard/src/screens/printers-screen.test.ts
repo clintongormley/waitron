@@ -1,3 +1,6 @@
+import { LitElement, html } from "lit";
+import { LeaveController, UrlStateController } from "@waitron/ui";
+import { dashboardPath } from "../navigation.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -25,6 +28,41 @@ import {
   SCAN_POLL_MS,
 } from "./printers-screen.js";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
+
+class PrinterLeaveFixture extends LitElement {
+  readonly leave = new LeaveController(this);
+  readonly url = new UrlStateController(this, () => {}, {
+    ...dashboardPath,
+    leave: {
+      isDirty: () => this.leave.coordinator.isDirty(),
+      request: (proceed, signal) =>
+        this.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    },
+  });
+  override render() {
+    return html`<slot></slot
+      >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
+  }
+}
+customElements.define("printer-leave-fixture", PrinterLeaveFixture);
+async function mountSharedPrinter(api: DashboardApi) {
+  const { el: app } = await mountWidget<PrinterLeaveFixture>("printer-leave-fixture", {});
+  const el = document.createElement("dashboard-printers-screen");
+  el.api = api;
+  app.append(el);
+  await el.updateComplete;
+  return { el, app };
+}
+function questionOf(el: PrintersScreen) {
+  return (el.parentElement as PrinterLeaveFixture).shadowRoot!.querySelector("wt-unsaved-changes")!;
+}
+async function choosePrinter(el: PrintersScreen, choice: "keep" | "discard") {
+  const question = questionOf(el);
+  await expect.poll(() => question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${choice}]`)!.click();
+  await expect.poll(() => question.open).toBe(false);
+}
 
 beforeEach(() => {
   localStorage.removeItem("printers:agents:columns");
@@ -1297,7 +1335,7 @@ describe("printers-screen", () => {
   it("updates a printer and its recent jobs after a data event while preserving an inline name draft", async () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    const { el } = await mountSharedPrinter(api);
     await flush(el);
     q(el, "[data-test=printer-row-p1]")!.click();
     await flush(el);
@@ -1329,7 +1367,7 @@ describe("printers-screen", () => {
     expect(api.listPrinterProfiles).toHaveBeenCalledTimes(1);
     q(el, "[data-test=cancel-printer-name]")!.click();
     await flush(el);
-    q(el, "[data-test=cancel-printer-name]")!.click();
+    await choosePrinter(el, "discard");
     await flush(el);
     q(el, "[data-test=all-printers-link]")!.click();
     await flush(el);
@@ -3452,14 +3490,14 @@ it("keeps a successfully added printer registered when refreshing discovery fail
 it("cancel discards printer name and connection edits and reopening restores saved values", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const api = stubApi();
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  const { el } = await mountSharedPrinter(api);
   await flush(el);
   q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
   typeField(el, '[name="printer-detail-name"]', "Unsaved");
   q(el, "[data-test=cancel-printer-name]")!.click();
   await flush(el);
-  q(el, "[data-test=cancel-printer-name]")!.click();
+  await choosePrinter(el, "discard");
   await flush(el);
   q(el, "[data-test=printer-section-connection]")!
     .shadowRoot!.querySelector<HTMLButtonElement>("button")!
@@ -3470,7 +3508,7 @@ it("cancel discards printer name and connection edits and reopening restores sav
   typeField(el, '[name="printer-detail-host"]', "10.0.0.100");
   q(el, "[data-test=cancel-printer-connection]")!.click();
   await flush(el);
-  q(el, "[data-test=cancel-printer-connection]")!.click();
+  await choosePrinter(el, "discard");
   await flush(el);
   expect(api.updatePrinter).not.toHaveBeenCalled();
   q(el, "[data-test=edit-printer-name]")!.click();
@@ -4181,7 +4219,7 @@ it("keeps the next printer's name draft when an earlier save finishes", async ()
       }),
     ),
   });
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  const { el } = await mountSharedPrinter(api);
   await flush(el);
   q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
@@ -4195,6 +4233,7 @@ it("keeps the next printer's name draft when an earlier save finishes", async ()
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Cocina");
+  await choosePrinter(el, "discard");
   history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
@@ -4212,9 +4251,7 @@ it("keeps the next printer's name draft when an earlier save finishes", async ()
 
 it("asks before discarding an edited printer name", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-    api: stubApi(),
-  });
+  const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
@@ -4222,17 +4259,15 @@ it("asks before discarding an edited printer name", async () => {
   q(el, "[data-test=cancel-printer-name]")!.click();
   await flush(el);
   expect(q(el, '[name="printer-detail-name"]')).not.toBeNull();
-  expect(q(el, "[data-test=discard-printer-name]")).not.toBeNull();
-  q(el, "[data-test=cancel-printer-name]")!.click();
+  await expect.poll(() => questionOf(el).open).toBe(true);
+  await choosePrinter(el, "discard");
   await flush(el);
   expect(q(el, '[name="printer-detail-name"]')).toBeNull();
 });
 
 it("asks before leaving a printer with an unsaved name through All printers", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-    api: stubApi(),
-  });
+  const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
@@ -4242,8 +4277,8 @@ it("asks before leaving a printer with an unsaved name through All printers", as
   await flush(el);
   expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
   expect(q(el, '[name="printer-detail-name"]')).not.toBeNull();
-  expect(q(el, "[data-test=discard-printer-name]")).not.toBeNull();
-  link.click();
+  await expect.poll(() => questionOf(el).open).toBe(true);
+  await choosePrinter(el, "discard");
   await flush(el);
   expect(location.pathname).toBe("/manage/printers/view/printers");
 });
@@ -4251,9 +4286,7 @@ it("asks before leaving a printer with an unsaved name through All printers", as
 it("keeps an unsaved printer name when browser Back first leaves its details", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers");
   history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-    api: stubApi(),
-  });
+  const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
@@ -4269,27 +4302,27 @@ it("keeps an unsaved printer name when browser Back first leaves its details", a
   expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
     "Unsaved kitchen",
   );
-  expect(q(el, "[data-test=discard-printer-name]")).not.toBeNull();
+  await expect.poll(() => questionOf(el).open).toBe(true);
 
-  history.back();
+  await choosePrinter(el, "discard");
   await vi.waitFor(() => expect(location.pathname).toBe("/manage/printers/view/printers"));
   await flush(el);
   expect(q(el, "[data-test=printer-status]")).toBeNull();
 });
 
-it("still asks on browser Back after Cancel has armed an unsaved name", async () => {
+it("still asks on browser Back after keeping an unsaved name on Cancel", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers");
   history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-    api: stubApi(),
-  });
+  const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
   typeField(el, '[name="printer-detail-name"]', "Unsaved kitchen");
   q(el, "[data-test=cancel-printer-name]")!.click();
   await flush(el);
-  expect(q(el, "[data-test=discard-printer-name]")).not.toBeNull();
+  await expect.poll(() => questionOf(el).open).toBe(true);
+
+  await choosePrinter(el, "keep");
 
   const firstPop = new Promise<void>((resolve) =>
     window.addEventListener("popstate", () => resolve(), { once: true }),
@@ -4306,9 +4339,7 @@ it("still asks on browser Back after Cancel has armed an unsaved name", async ()
 it("keeps an unsaved printer connection when browser Back first leaves its details", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers");
   history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-    api: stubApi(),
-  });
+  const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   q(el, "[data-test=printer-section-connection]")!
     .shadowRoot!.querySelector<HTMLButtonElement>("button")!
@@ -4327,9 +4358,9 @@ it("keeps an unsaved printer connection when browser Back first leaves its detai
   expect((q(el, '[name="printer-detail-host"]') as import("@waitron/ui").WtInput).value).toBe(
     "10.0.0.88",
   );
-  expect(q(el, "[data-test=discard-printer-connection-navigation]")).not.toBeNull();
+  await expect.poll(() => questionOf(el).open).toBe(true);
 
-  history.back();
+  await choosePrinter(el, "discard");
   await vi.waitFor(() => expect(location.pathname).toBe("/manage/printers/view/printers"));
   await flush(el);
   expect(q(el, "[data-test=printer-status]")).toBeNull();
@@ -4472,7 +4503,7 @@ it("keeps the next printer's connection draft when an earlier save finishes", as
       }),
     ),
   });
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  const { el } = await mountSharedPrinter(api);
   await flush(el);
   q(el, "[data-test=printer-section-connection]")!
     .shadowRoot!.querySelector<HTMLButtonElement>("button")!
@@ -4488,7 +4519,8 @@ it("keeps the next printer's connection draft when an earlier save finishes", as
   history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
-  expect(q(el, "[data-test=discard-printer-connection-navigation]")).not.toBeNull();
+  await expect.poll(() => questionOf(el).open).toBe(true);
+  await choosePrinter(el, "discard");
   history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
@@ -4513,9 +4545,7 @@ it("keeps the next printer's connection draft when an earlier save finishes", as
 
 it("asks before discarding a changed network connection or leaving its printer", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-    api: stubApi(),
-  });
+  const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   q(el, "[data-test=printer-section-connection]")!
     .shadowRoot!.querySelector<HTMLButtonElement>("button")!
@@ -4527,13 +4557,12 @@ it("asks before discarding a changed network connection or leaving its printer",
   q(el, "[data-test=cancel-printer-connection]")!.click();
   await flush(el);
   expect(q(el, '[name="printer-detail-host"]')).not.toBeNull();
-  expect(text(el, "[data-test=discard-printer-connection]")).toBe(
-    t("printers.discard_connection_prompt"),
-  );
+  await expect.poll(() => questionOf(el).open).toBe(true);
+  expect(questionOf(el).message).toBe(t("unsaved.message"));
   q(el, "[data-test=all-printers-link]")!.click();
   await flush(el);
   expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
-  q(el, "[data-test=cancel-printer-connection]")!.click();
+  await choosePrinter(el, "discard");
   await flush(el);
   q(el, "[data-test=edit-printer-connection]")!.click();
   await flush(el);
@@ -4541,7 +4570,7 @@ it("asks before discarding a changed network connection or leaving its printer",
   q(el, "[data-test=all-printers-link]")!.click();
   await flush(el);
   expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
-  q(el, "[data-test=all-printers-link]")!.click();
+  await choosePrinter(el, "discard");
   await flush(el);
   expect(location.pathname).toBe("/manage/printers/view/printers");
 });
@@ -6544,7 +6573,8 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
 
   it("starts the inline printer name form again when it is reopened", async () => {
     history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
-    const { el } = await mounted();
+    const { el } = await mountSharedPrinter(stubApi());
+    await flush(el);
     q(el, "[data-test=edit-printer-name]")!.click();
     await flush(el);
     typeField(el, '[name="printer-detail-name"]', " ");
@@ -6552,7 +6582,7 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     expect(errorOf(el, '[name="printer-detail-name"]')).toBe(t("form.name_required"));
     q(el, "[data-test=cancel-printer-name]")!.click();
     await flush(el);
-    q(el, "[data-test=cancel-printer-name]")!.click();
+    await choosePrinter(el, "discard");
     await flush(el);
     expect(q(el, '[name="printer-detail-name"]')).toBeNull();
 

@@ -243,3 +243,43 @@ for (const owner of ["name", "connection"] as const) {
     });
   }
 }
+
+for (const owner of ["name", "connection"] as const) {
+  it(`inline ${owner} ignores a detached field from an earlier opening of the same printer`, async () => {
+    const { screen } = await mount();
+    await open(screen, owner);
+    const old = field(screen, owner);
+    q(screen, `[data-test=cancel-printer-${owner}]`)!.click();
+    await expect.poll(() => field(screen, owner)).toBeNull();
+    await open(screen, owner);
+    old.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "stale edit" } }));
+    await screen.updateComplete;
+    expect(field(screen, owner).value).toBe(owner === "name" ? "Kitchen" : "10.0.0.9");
+    expect(unload()).toBe(false);
+  });
+}
+
+it("an inline port-only edit protects leaving, normalizes a revert and sends an explicit cleared port", async () => {
+  let submitted: unknown;
+  const { screen } = await mount({
+    updatePrinter: async (_id, body) => {
+      submitted = body;
+    },
+  });
+  await open(screen, "connection");
+  const port = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "[name=printer-detail-port]",
+  )!;
+  const changePort = (value: string) =>
+    port.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  changePort("9101");
+  expect(unload()).toBe(true);
+  changePort("09100");
+  expect(unload()).toBe(false);
+  changePort("");
+  expect(unload()).toBe(true);
+  q(screen, "[data-test=save-printer-connection]")!.click();
+  await expect.poll(() => submitted).toEqual({ host: "10.0.0.9", port: null });
+  await expect.poll(() => field(screen, "connection")).toBeNull();
+  expect(unload()).toBe(false);
+});

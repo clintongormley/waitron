@@ -4125,3 +4125,40 @@ src/screens/printers-screen.test.ts src/screens/printer-inline.unsaved.test.ts -
 passes all 438 cases after the breadcrumb correction. Dashboard typechecking, changed-source ESLint,
 source Prettier checking and `git diff --check` also pass. These are local checkpoint checks;
 no new push hook or current-head CI result is claimed.
+
+## Inline printer acceptance and prompt retirement, 2026-10-07
+
+This supersedes the partial inline printer checkpoint above. Inline Cancel uses the shared
+question; breadcrumbs and history use the application's shared navigation guard. The old local
+arming flags and their English/Spanish wording are removed. Existing value, live-refresh,
+refusal and late-write assertions stay in place. Eleven printer tests mount the real shared
+controller and accept explicit Discard instead of pressing the old action twice; the existing
+Cancel-then-Back case first chooses Keep.
+
+Two detached-input cases failed with `stale edit` replacing the reopened name/host. Their input
+handlers now ignore removed controls. An installed independent clone with that guard removed
+reports two intended failures alongside two passing normalized-revert controls; restoration
+reports four passes. Source bytes matched before that measuring copy was removed. A separate
+port-only case checks a changed port, a zero-padded clean revert and an explicit cleared-port
+write of `{ host: "10.0.0.9", port: null }`.
+
+`pnpm --filter @waitron/dashboard exec vitest run src/screens/printers-screen.test.ts
+src/screens/printer-inline.unsaved.test.ts` first reported four failures and 436 passes after
+retiring the standalone prompts. Four additional fixtures still used their old second click or
+local navigation warning. After their shared-controller conversion, the full run reported one
+fixture-readiness failure and 440 passes. Waiting for that fixture's initial read, as its former
+helper did, fixes the missing Edit control. The final focused command with `--testNamePattern
+'inline|unsaved.*printer|next printer.*draft|asks before.*printer|asks before.*connection|starts
+the inline printer'` reports 39 passes and 402 skipped. Current-head CI still owes the package-wide
+result; none of the failed full runs is recorded as green.
+
+A temporary Vite fixture rendered the real `DashboardApp` and printer screen with synthetic
+APIs in Chromium 153.0.8010.12. Sixteen combinations of both editors, EN/ES, light/dark and
+390/1280 widths pass native Escape, Keep/Discard, focus, reopening, scoped axe checks and
+activated reload dismissal/acceptance. Twelve additional cases pass both editors through the
+actual sidebar, language change, sign-out, Forward, printer-context change and forced session
+expiry. The 32 final captures were inspected. Early fixture attempts used an absent manager
+navigation target, a collapsed sidebar group and an unpainted dark canvas; those attempts are
+excluded from the final results. No live printer write or whole-shell accessibility claim is made.
+The previous whole-branch Claude review is retained. Rebase, push and current-head CI remain
+before delivery.
