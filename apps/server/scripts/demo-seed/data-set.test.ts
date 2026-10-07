@@ -168,7 +168,7 @@ describe("demo data sets", () => {
         if (resolveFiscalJurisdiction(pack, area.code)?.supported !== true) continue;
         const { languages } = demoContentLanguages({ country: pack.countryCode, area: area.code });
         const missing = languages.filter((language) => !set.contentLanguages.includes(language));
-        expect(missing, `${pack.countryCode} ${area.name}`).toEqual([]);
+        expect.soft(missing, `${pack.countryCode} ${area.name}`).toEqual([]);
       }
     }
   });
@@ -181,7 +181,7 @@ describe("demo data sets", () => {
       for (const language of CASA_DELGADO_LANGUAGES) {
         expect(text[language]?.trim(), `${where} in ${language}`).toBeTruthy();
       }
-      for (const language of ["ca", "gl"]) {
+      for (const language of CASA_DELGADO_LANGUAGES.filter((l) => l !== "en" && l !== "es")) {
         const value = text[language]!;
         if (SAME_AS_SPANISH_OR_ENGLISH[language]!.includes(value)) continue;
         expect([text.en, text.es], `${where} in ${language} copies another language`).not.toContain(
