@@ -1003,6 +1003,11 @@ unused `units` property is gone (it closes W75's leftover).
   - Not changed, single-choice dropdowns outside `wt-data-table`: the Add products dialog's
     Category, the Staff screen's Role and the Orders screen's Status (a server query). Each could
     take several values later if wanted.
+  - Open, from #1366's review (read, not measured): Units, Products and Content languages build a
+    new column list on every redraw, so each filter dropdown works out its hidden width texts again
+    each time; #1366 made a dropdown redo that only when its options or wording change, which these
+    three screens defeat. Next: keep their column lists between redraws when nothing they read
+    changed.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
